@@ -70,16 +70,24 @@ Schemas = "https://questfoundry.liesdonk.nl/schemas/"
 [tool.hatch.version]
 source = "versioningit"
 
+[tool.hatch.envs.default.scripts]
+bundle = "python scripts/bundle_resources.py"
+test = "pytest {args:tests}"
+test-cov = "pytest --cov=questfoundry --cov-report=term-missing {args:tests}"
+lint = "ruff check src tests"
+format = "ruff format src tests"
+format-check = "ruff format --check src tests"
+typecheck = "mypy src"
+all-checks = ["format-check", "lint", "typecheck", "test"]
+
 [tool.versioningit]
 default-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/questfoundry"]
-include = [
-    "src/questfoundry/resources/prompts/**/*.md",
-    "src/questfoundry/resources/prompts/**/*.json",
-    "src/questfoundry/resources/schemas/*.json",
-]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/questfoundry/resources" = "questfoundry/resources"
 
 [tool.hatch.build.targets.sdist]
 include = [

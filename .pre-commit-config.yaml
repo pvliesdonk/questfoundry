@@ -1,0 +1,75 @@
+# Pre-commit hooks for QuestFoundry mono-repo
+# See https://pre-commit.com for more information
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(spec/|lib/python/src/questfoundry/resources/)
+      - id: end-of-file-fixer
+        exclude: ^(spec/|lib/python/src/questfoundry/resources/)
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+
+  # Python: Ruff (linting and formatting)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.15
+    hooks:
+      # Linting
+      - id: ruff
+        args: [--fix]
+        files: ^(lib/python/|cli/python/)
+      # Formatting
+      - id: ruff-format
+        files: ^(lib/python/|cli/python/)
+
+  # Python: Type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        files: ^lib/python/src/
+        args: [--config-file=lib/python/pyproject.toml]
+        additional_dependencies:
+          - pydantic>=2.0
+          - types-jsonschema>=4.0
+          - types-pyyaml>=6.0
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: [--fix, --disable, MD013, MD033, MD041]
+        exclude: ^(lib/python/src/questfoundry/resources/|CHANGELOG.md)
+
+  # Commitizen for commit message format
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+# Configuration
+default_language_version:
+  python: python3.11
+
+ci:
+  autofix_commit_msg: |
+    chore: auto-fix pre-commit hooks
+
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: 'chore: pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

@@ -117,10 +117,25 @@ practices, including full type annotations and generics.
 
 ### Resource Loading
 
-- **Never bundle or duplicate resources** from the spec into this library.
-- Always use the resource loading utilities in `src/questfoundry/utils/resources.py` to load
-  schemas and prompts from `../../spec/`.
-- The spec directory is the single source of truth.
+- Resources (schemas and prompts) are **bundled** from the spec into the library package during
+  the build process.
+- The bundling script (`scripts/bundle_resources.py`) copies files from `../../spec/` into
+  `src/questfoundry/resources/`.
+- The library uses `importlib.resources` to load bundled resources at runtime.
+- Always use the resource loading utilities in `src/questfoundry/utils/resources.py` to access
+  schemas and prompts.
+- The spec directory (`../../spec/`) is the single source of truth. Bundled resources are
+  synchronized via the bundling script.
+
+**To bundle resources:**
+
+```shell
+# From lib/python/ directory:
+uv run hatch run bundle
+
+# Or run the script directly:
+python scripts/bundle_resources.py
+```
 
 ### Testing
 
@@ -184,10 +199,15 @@ practices, including full type annotations and generics.
 
 ## Working Directory
 
-All Python code assumes it is run **from the mono-repo root** (i.e., from `/home/user/questfoundry/`
-if working locally).
+Python commands should typically be run from **the library directory** (`lib/python/`) when using
+`uv` or `hatch` commands.
 
-This is because the resource loading utilities in `src/questfoundry/utils/resources.py` use
-relative paths to load files from `spec/03-schemas/` and `spec/05-prompts/`.
+The resource loading utilities in `src/questfoundry/utils/resources.py` use `importlib.resources`
+to load bundled resources from the package at runtime.
 
-If you need to run commands or tests, make sure you are in the mono-repo root directory.
+**Before running tests or building**, ensure resources are bundled:
+
+```shell
+cd lib/python
+uv run hatch run bundle
+```

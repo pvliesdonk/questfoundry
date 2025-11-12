@@ -1,0 +1,121 @@
+name: Release Spec
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec_type:
+        description: 'Spec type to release'
+        required: true
+        type: choice
+        options:
+          - schemas
+          - prompts
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release-schemas:
+    name: Release Schemas
+    if: ${{ inputs.spec_type == 'schemas' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Commitizen
+        run: pip install commitizen
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        working-directory: spec/03-schemas
+        run: |
+          cz bump --increment ${{ inputs.bump_type }} --yes
+          echo "NEW_VERSION=$(cat SCHEMA_VERSION.txt)" >> $GITHUB_ENV
+
+      - name: Push changes
+        run: |
+          git push
+          git push --tags
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: schemas-v${{ env.NEW_VERSION }}
+          release_name: Schemas v${{ env.NEW_VERSION }}
+          body: |
+            ## QuestFoundry Schemas v${{ env.NEW_VERSION }}
+
+            See [CHANGELOG.md](spec/03-schemas/CHANGELOG.md) for details.
+          draft: false
+          prerelease: false
+
+  release-prompts:
+    name: Release Prompts
+    if: ${{ inputs.spec_type == 'prompts' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Commitizen
+        run: pip install commitizen
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        working-directory: spec/05-prompts
+        run: |
+          cz bump --increment ${{ inputs.bump_type }} --yes
+          echo "NEW_VERSION=$(cat PROMPTS_VERSION.txt)" >> $GITHUB_ENV
+
+      - name: Push changes
+        run: |
+          git push
+          git push --tags
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: prompts-v${{ env.NEW_VERSION }}
+          release_name: Prompts v${{ env.NEW_VERSION }}
+          body: |
+            ## QuestFoundry Prompts v${{ env.NEW_VERSION }}
+
+            See [CHANGELOG.md](spec/05-prompts/CHANGELOG.md) for details.
+          draft: false
+          prerelease: false

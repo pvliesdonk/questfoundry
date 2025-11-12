@@ -7,6 +7,21 @@
 *.pyc
 __pycache__/
 .venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+
+# Bundled resources (auto-generated from spec/)
+lib/python/src/questfoundry/resources/schemas/*.json
+lib/python/src/questfoundry/resources/prompts/*/
+
+# MkDocs
+lib/python/site/
 
 # Temporary clone directories (used during mono-repo setup)
 spec-repo/
