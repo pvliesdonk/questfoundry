@@ -32,14 +32,6 @@ def mock_provider():
 
 
 @pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent
-    return repo_root / "spec"
-
-
-@pytest.fixture
 def orchestrator(temp_workspace, spec_path):
     """Fixture providing an orchestrator instance."""
     orch = Orchestrator(

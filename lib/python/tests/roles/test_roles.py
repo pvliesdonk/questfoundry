@@ -19,15 +19,6 @@ def mock_provider():
 
 
 @pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    # Find spec relative to test file
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent.parent
-    return repo_root / "spec"
-
-
-@pytest.fixture
 def sample_context():
     """Fixture providing a sample role context."""
     return RoleContext(

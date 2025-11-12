@@ -38,14 +38,6 @@ def mock_provider():
 
 
 @pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent.parent
-    return repo_root / "spec"
-
-
-@pytest.fixture
 def loop_context(temp_workspace, mock_provider, spec_path):
     """Fixture providing a loop context with roles."""
     # Create role instances

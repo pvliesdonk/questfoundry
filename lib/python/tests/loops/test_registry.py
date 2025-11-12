@@ -8,14 +8,6 @@ from questfoundry.loops.registry import LoopMetadata, LoopRegistry
 
 
 @pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent.parent
-    return repo_root / "spec"
-
-
-@pytest.fixture
 def registry(spec_path):
     """Fixture providing a loop registry."""
     return LoopRegistry(spec_path=spec_path)
