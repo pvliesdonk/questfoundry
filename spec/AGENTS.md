@@ -69,6 +69,47 @@ When editing prompts in `05-prompts/`:
 - Maintain consistency with role charters in `01-roles/`
 - Test prompts with actual AI agents when possible
 
+## Conventional Commit Types for Spec Changes
+
+When working in the `spec/` directory, use these **custom conventional commit types** to trigger the appropriate CI/CD workflows:
+
+### `docs(spec): ...`
+
+- **Use for**: Documentation changes in Layers 0-2 (principles, roles, dictionary)
+- **Examples**:
+  - Updating `00-north-star/WORKING_MODEL.md`
+  - Editing role charters in `01-roles/charters/`
+  - Modifying artifact documentation in `02-dictionary/`
+- **Version impact**: Does NOT trigger a spec version bump
+- **Workflow**: Does not trigger `release-spec.yml`
+
+### `schema(spec): ...`
+
+- **Use for**: Any changes to schemas (Layer 3) or protocol (Layer 4)
+- **Examples**:
+  - Adding/modifying schemas in `03-schemas/*.schema.json`
+  - Changing protocol definitions in `04-protocol/`
+  - Updating schema validation rules
+- **Version impact**: Triggers a spec version bump
+- **Workflow**: Triggers `release-spec.yml` workflow
+
+### `prompt(spec): ...`
+
+- **Use for**: Any changes to AI prompts (Layer 5)
+- **Examples**:
+  - Updating role prompts in `05-prompts/*/system_prompt.md`
+  - Modifying intent handlers in `05-prompts/*/intent_handlers/`
+  - Changing loop playbooks
+- **Version impact**: Triggers a spec version bump
+- **Workflow**: Triggers `release-spec.yml` workflow
+
+### Important Notes
+
+- Use `schema(spec)` or `prompt(spec)` to trigger automated spec releases
+- Documentation-only changes use `docs(spec)` and don't create new versions
+- These types are specific to the spec/ workspace
+- For Python library changes, use standard types: `feat`, `fix`, `refactor`, etc.
+
 ## Essential Reading
 
 Before making significant changes, review:
@@ -97,9 +138,10 @@ All specification files must:
 
 ## Working with the Implementation
 
-The Python library in `lib/python/` loads resources from this spec directory:
+The Python library in `lib/python/` bundles resources from this spec directory at build time:
 
-- Schemas are loaded from `03-schemas/`
-- Prompts are loaded from `05-prompts/`
+- Schemas from `03-schemas/` are bundled into the library package
+- Prompts from `05-prompts/` are bundled into the library package
+- The bundling script `lib/python/scripts/bundle_resources.py` copies files from spec/
 
-**Never duplicate these resources** into the library code. The spec is the single source of truth.
+**The spec is the single source of truth**. Never manually edit files in `lib/python/src/questfoundry/resources/` - always edit files in `spec/` and re-run the bundling script.

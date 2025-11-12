@@ -1,6 +1,6 @@
 # Agent Guidelines (Python Library)
 
-> **Parent Guidelines:** See [`../../agents.md`](../../agents.md) for:
+> **Parent Guidelines:** See [`../../AGENTS.md`](../../AGENTS.md) for:
 >
 > - Universal assistant rules (clarity, conciseness, expert opinions)
 > - QuestFoundry mono-repo context (layered architecture)
@@ -32,7 +32,7 @@ lib/python/
 │       └── orchestrator.py  # Main orchestrator
 ├── tests/                # Pytest test suite
 ├── pyproject.toml        # Dependencies and configuration
-├── agents.md             # <-- This file (Python coding standards)
+├── AGENTS.md             # <-- This file (Python coding standards)
 └── README.md             # Library documentation
 ```
 
@@ -40,13 +40,13 @@ lib/python/
 
 This library **implements** the specification defined in `../../spec/`:
 
-- Loads schemas from `../../spec/03-schemas/`
-- Loads prompts from `../../spec/05-prompts/`
+- Bundles schemas from `../../spec/03-schemas/` into the package at build time
+- Bundles prompts from `../../spec/05-prompts/` into the package at build time
 - Implements roles defined in `../../spec/01-roles/`
 - Follows protocols defined in `../../spec/04-protocol/`
 
 **Important**: This library reads from the spec but **never modifies** it. The spec is the single
-source of truth.
+source of truth. Always edit files in `spec/` and re-run the bundling script.
 
 ---
 
@@ -194,6 +194,55 @@ python scripts/bundle_resources.py
 
 - If a change to an API or library will break backward compatibility, MENTION THIS.
 - DO NOT implement backward-compatibility code unless explicitly confirmed.
+
+---
+
+## Conventional Commit Types for Python Library
+
+When working in the `lib/python/` directory, use **standard conventional commit types** to trigger the `publish-python.yml` workflow:
+
+### Standard Types
+
+- **`feat(lib)`**: New features or capabilities
+  - Example: `feat(lib): add support for Anthropic provider`
+  - Triggers: Minor version bump (0.x.0)
+
+- **`fix(lib)`**: Bug fixes
+  - Example: `fix(lib): resolve resource loading on Windows`
+  - Triggers: Patch version bump (0.0.x)
+
+- **`refactor(lib)`**: Code refactoring without behavior changes
+  - Example: `refactor(lib): simplify validation logic`
+  - Triggers: Patch version bump
+
+- **`test(lib)`**: Adding or updating tests
+  - Example: `test(lib): add tests for prompt loading`
+  - Triggers: No version bump
+
+- **`docs(lib)`**: Documentation changes
+  - Example: `docs(lib): update API documentation`
+  - Triggers: No version bump
+
+- **`chore(lib)`**: Maintenance tasks
+  - Example: `chore(lib): update dependencies`
+  - Triggers: No version bump
+
+- **`ci(lib)`**: CI/CD changes
+  - Example: `ci(lib): update GitHub Actions workflow`
+  - Triggers: No version bump
+
+### Breaking Changes
+
+Use `!` suffix to indicate breaking changes:
+
+- `feat(lib)!: change resource API to use async/await`
+- Triggers: Major version bump (x.0.0)
+
+### Important Notes
+
+- All library code changes must pass linting, type checking, and tests
+- Version bumps are handled automatically by the CI/CD pipeline
+- For spec changes, see `../../spec/AGENTS.md` for custom commit types
 
 ---
 
