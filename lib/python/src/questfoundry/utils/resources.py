@@ -42,13 +42,14 @@ def get_schema(schema_name: str) -> dict[str, Any]:
     schema_file = f"{schema_name}.schema.json"
     schemas_package = files("questfoundry.resources.schemas")
 
+    resource = schemas_package.joinpath(schema_file)
     try:
-        resource = schemas_package.joinpath(schema_file)
         schema_text = resource.read_text(encoding="utf-8")
-        schema: dict[str, Any] = json.loads(schema_text)
-        return schema
-    except (FileNotFoundError, AttributeError):
-        raise FileNotFoundError(f"Schema not found: {schema_name}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Schema not found: {schema_name}") from e
+
+    schema: dict[str, Any] = json.loads(schema_text)
+    return schema
 
 
 def get_prompt(role_name: str) -> str:
@@ -68,36 +69,46 @@ def get_prompt(role_name: str) -> str:
     _validate_safe_name(role_name, "prompt")
 
     prompts_package = files("questfoundry.resources.prompts")
+    role_dir = prompts_package.joinpath(role_name)
+    prompt_file = role_dir.joinpath("system_prompt.md")
 
     try:
-        role_dir = prompts_package.joinpath(role_name)
-        prompt_file = role_dir.joinpath("system_prompt.md")
         return prompt_file.read_text(encoding="utf-8")
-    except (FileNotFoundError, AttributeError):
-        raise FileNotFoundError(f"Prompt not found: {role_name}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Prompt not found: {role_name}") from e
 
 
 def list_schemas() -> list[str]:
-    """List available schemas"""
+    """
+    List available schemas.
+
+    Returns:
+        List of schema names (without .schema.json extension)
+
+    Raises:
+        FileNotFoundError: If resources package is not properly installed
+    """
     schemas_package = files("questfoundry.resources.schemas")
-    try:
-        return [
-            f.name.replace(".schema.json", "")
-            for f in schemas_package.iterdir()
-            if f.name.endswith(".schema.json")
-        ]
-    except (FileNotFoundError, AttributeError):
-        return []
+    return [
+        f.name.replace(".schema.json", "")
+        for f in schemas_package.iterdir()
+        if f.name.endswith(".schema.json")
+    ]
 
 
 def list_prompts() -> list[str]:
-    """List available prompt roles"""
+    """
+    List available prompt roles.
+
+    Returns:
+        List of role names
+
+    Raises:
+        FileNotFoundError: If resources package is not properly installed
+    """
     prompts_package = files("questfoundry.resources.prompts")
-    try:
-        return [
-            d.name
-            for d in prompts_package.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        ]
-    except (FileNotFoundError, AttributeError):
-        return []
+    return [
+        d.name
+        for d in prompts_package.iterdir()
+        if d.is_dir() and not d.name.startswith("_")
+    ]

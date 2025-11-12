@@ -29,16 +29,19 @@ def main() -> None:
     if not spec_prompts.exists():
         raise FileNotFoundError(f"Prompts directory not found: {spec_prompts}")
 
+    # Ensure target directories exist
+    target_schemas.mkdir(parents=True, exist_ok=True)
+    target_prompts.mkdir(parents=True, exist_ok=True)
+
     # Clean existing bundled resources (except __init__.py)
     print(f"Cleaning target directories...")
     for target_dir in [target_schemas, target_prompts]:
-        if target_dir.exists():
-            for item in target_dir.iterdir():
-                if item.name != "__init__.py":
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
+        for item in target_dir.iterdir():
+            if item.name != "__init__.py":
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
 
     # Bundle schemas
     print(f"Bundling schemas from {spec_schemas}...")

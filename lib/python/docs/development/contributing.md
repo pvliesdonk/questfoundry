@@ -96,7 +96,7 @@ Use conventional commit prefixes:
 
 ### 2. Make Your Changes
 
-- Follow the coding guidelines in `lib/python/agents.md`
+- Follow the coding guidelines in `lib/python/AGENTS.md`
 - Add tests for new functionality
 - Update documentation as needed
 - Bundle resources if you modified schemas or prompts
@@ -152,10 +152,10 @@ lib/python/
 - Full type annotations
 - Follow Ruff linting rules
 - Use modern Python idioms
-- See `lib/python/agents.md` for detailed guidelines
+- See `lib/python/AGENTS.md` for detailed guidelines
 
 ## Questions?
 
 - Open a [Discussion](https://github.com/pvliesdonk/questfoundry/discussions)
 - Create an [Issue](https://github.com/pvliesdonk/questfoundry/issues)
-- Review the [agents.md](../../agents.md) guidelines
+- Review the [AGENTS.md](../../AGENTS.md) guidelines
