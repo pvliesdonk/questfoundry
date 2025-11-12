@@ -7,3 +7,7 @@
 *.pyc
 __pycache__/
 .venv/
+
+# Temporary clone directories (used during mono-repo setup)
+spec-repo/
+py-repo/
