@@ -1,0 +1,67 @@
+{
+  "protocol": {
+    "name": "qf-protocol",
+    "version": "1.0.0"
+  },
+  "id": "urn:uuid:f6a7b8c9-d0e1-4234-f567-890abcdef012",
+  "time": "2025-10-30T18:00:00Z",
+  "sender": {
+    "role": "BB",
+    "agent": "bot:binder-v2"
+  },
+  "receiver": {
+    "role": "PN"
+  },
+  "intent": "view.export.result",
+  "context": {
+    "hot_cold": "cold",
+    "tu": "TU-2025-10-30-BB01",
+    "snapshot": "Cold @ 2025-10-28",
+    "loop": "Binding Run"
+  },
+  "safety": {
+    "player_safe": true,
+    "spoilers": "forbidden"
+  },
+  "payload": {
+    "type": "view_log",
+    "data": {
+      "title": "milestone-chapter-3-export",
+      "bound": "2025-10-30",
+      "binder": "bot:binder-v2",
+      "tu": "TU-2025-10-30-BB01",
+      "cold_snapshot": "Cold @ 2025-10-28",
+      "targets": ["markdown", "html", "epub", "pdf"],
+      "options_and_coverage": "Export includes manuscript sections 1-12, codex entries (24 total). No art or audio included. Single language (English). Print-friendly layout enabled.",
+      "anchor_map": "Manuscript: 45 anchors, Codex: 24 anchors, Crosslinks: 89 total, Orphans: 0, Collisions: 0",
+      "presentation_status": "green",
+      "presentation_notes": "All surfaces player-safe; no spoilers detected",
+      "accessibility_status": "green",
+      "accessibility_notes": "Alt text present for all images; heading structure valid; high contrast enabled",
+      "gatekeeper": "human:charlie",
+      "gatecheck_id": "GATE-2025-10-30-001",
+      "export_artifacts": [
+        {
+          "kind": "markdown",
+          "path": "exports/milestone-chapter-3/manuscript.md"
+        },
+        {
+          "kind": "html",
+          "path": "exports/milestone-chapter-3/index.html"
+        },
+        {
+          "kind": "epub",
+          "path": "exports/milestone-chapter-3/book.epub"
+        },
+        {
+          "kind": "pdf",
+          "path": "exports/milestone-chapter-3/book.pdf"
+        }
+      ],
+      "gatecheck_report": "GK-2025-10-30-01: All bars green; approved for PN distribution"
+    }
+  },
+  "refs": ["TU-2025-10-30-BB01"],
+  "correlation_id": "corr-binding-2025-10-30",
+  "reply_to": "urn:uuid:e5f6a7b8-c9d0-4123-e456-7890abcdef01"
+}

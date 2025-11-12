@@ -1,0 +1,69 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:bb-to-pn-0001",
+    "time": "2025-11-04T18:30:00Z",
+    "sender": { "role": "BB", "agent": "bot:binder-v2" },
+    "receiver": { "role": "PN" },
+    "intent": "view.export.result",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-04-BB12",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Binding Run"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "view_log",
+      "data": {
+        "title": "milestone-ch3-dryrun",
+        "targets": ["markdown"],
+        "cold_snapshot": "Cold @ 2025-10-28",
+        "tu": "TU-2025-11-04-BB12",
+        "export_artifacts": [{ "kind": "markdown", "path": "exports/milestone-ch3/manuscript.md" }]
+      }
+    },
+    "correlation_id": "corr-pn-dryrun-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:pn-notes-0001",
+    "time": "2025-11-04T19:00:00Z",
+    "sender": { "role": "PN", "agent": "bot:pn" },
+    "receiver": { "role": "SR" },
+    "intent": "pn.playtest.submit",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-04-PN10",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Narration Dry-Run"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "pn_playtest_notes",
+      "data": {
+        "title": "Dry-run milestone chapter 3",
+        "run": "2025-11-04 18:45",
+        "pn": "bot:pn",
+        "tu": "TU-2025-11-04-PN10",
+        "snapshot": "Cold @ 2025-10-28",
+        "targets": ["markdown"],
+        "mode": "dry-run (no improv)",
+        "pace": "normal",
+        "log": [
+          {
+            "when": "00:45",
+            "location": "manuscript#A1",
+            "tags": ["choice-ambiguity"],
+            "severity": "med",
+            "snippet": "Do you go left or proceed?",
+            "smallest_viable_fix": "Clarify contrast: 'duck into the cargo bay' vs 'stride through the toll gate'",
+            "owner": "SS"
+          }
+        ]
+      }
+    },
+    "correlation_id": "corr-pn-dryrun-2025-11-04",
+    "reply_to": "urn:uuid:bb-to-pn-0001"
+  }
+]

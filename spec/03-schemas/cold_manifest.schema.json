@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cold_manifest.schema.json",
+  "title": "Cold Manifest",
+  "description": "Top-level index of all Cold SoT files with SHA-256 hashes for deterministic builds. Every file referenced in Cold must be listed here with its hash and size. STORAGE-AGNOSTIC: This schema defines logical structure only; Layer 6 implementations may use JSON files, SQLite, Redis, or other backends as long as they validate against this schema. RECOMMENDED: Include cold/project_metadata.json in files array for Binder to consume for front matter generation.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference",
+      "const": "https://questfoundry.liesdonk.nl/schemas/cold_manifest.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "Manifest format version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "created_at": {
+      "$ref": "#/$defs/iso8601_timestamp",
+      "description": "Manifest creation timestamp"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "description": "Unique snapshot identifier (format: cold-YYYYMMDD or custom)",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "minLength": 3,
+      "maxLength": 64
+    },
+    "files": {
+      "type": "array",
+      "description": "Complete list of Cold files with hashes (must include at minimum: book.json, art_manifest.json). RECOMMENDED: Include project_metadata.json for Binder front matter generation.",
+      "items": {
+        "$ref": "#/$defs/file_entry"
+      },
+      "minItems": 2
+    }
+  },
+  "required": ["$schema", "version", "created_at", "snapshot_id", "files"],
+  "allOf": [
+    {
+      "description": "Manifest must include book.json",
+      "contains": {
+        "properties": {
+          "files": {
+            "contains": {
+              "properties": {
+                "path": {
+                  "pattern": "cold/book\\.json$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Manifest must include art_manifest.json",
+      "contains": {
+        "properties": {
+          "files": {
+            "contains": {
+              "properties": {
+                "path": {
+                  "pattern": "cold/art_manifest\\.json$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "file_entry": {
+      "type": "object",
+      "description": "Single file entry with path, hash, and size",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path from project root (e.g., 'cold/book.json', 'sections/001.md')",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256_hash",
+          "description": "SHA-256 hash of file contents (hex lowercase)"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "description": "File size in bytes",
+          "minimum": 0
+        }
+      },
+      "required": ["path", "sha256", "size_bytes"]
+    },
+    "sha256_hash": {
+      "type": "string",
+      "description": "SHA-256 hash in hexadecimal (64 lowercase hex chars)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "iso8601_timestamp": {
+      "type": "string",
+      "description": "ISO 8601 timestamp with timezone (e.g., 2025-11-05T12:00:00Z)",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-il-0001",
+    "time": "2025-11-04T12:30:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "IL" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-IL10",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "reason": "Generate images for A1–A2 shotlist" }
+    },
+    "correlation_id": "corr-il-gen-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:il-ckpt-0001",
+    "time": "2025-11-04T13:00:00Z",
+    "sender": { "role": "IL", "agent": "bot:il" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-IL10",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Built prompts for A1–A2; generated first pass; logging params.",
+        "details": {
+          "A1": {
+            "prompt": "Medium shot, Kestrel at Dockside, smoke haze, sardonic tone.",
+            "model": "stable-vx",
+            "size": "1024x768",
+            "seed": 12345
+          },
+          "A2": {
+            "prompt": "Wide shot, Toll Gate crowd, cold palette, looming structure.",
+            "model": "stable-vx",
+            "size": "1024x768"
+          }
+        }
+      }
+    },
+    "correlation_id": "corr-il-gen-2025-11-04"
+  }
+]

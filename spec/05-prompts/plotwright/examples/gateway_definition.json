@@ -1,0 +1,45 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:pw-ckpt-1001",
+    "time": "2025-11-03T22:45:00Z",
+    "sender": { "role": "PW", "agent": "bot:pw" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-PW10",
+      "loop": "Story Spark"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Gateway definition: Toll Gate requires 'Vouched by Dock Foreman'. PN phrasing: 'If the foreman vouched for you, the gate swings aside.' Obtainability via Dockside branch tasks; fallback path loops back with cost."
+      }
+    },
+    "correlation_id": "corr-pw-gateway-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-a-1001",
+    "time": "2025-11-03T22:46:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "PW" },
+    "intent": "human.response",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-PW10",
+      "loop": "Story Spark"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "answer": "Approved phrasing; ensure fallback returns with difference (resource cost)."
+      }
+    },
+    "correlation_id": "corr-pw-gateway-2025-11-03",
+    "reply_to": "urn:uuid:pw-ckpt-1001"
+  }
+]

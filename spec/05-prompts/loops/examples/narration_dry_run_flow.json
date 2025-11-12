@@ -1,0 +1,474 @@
+{
+  "loop": "Narration Dry-Run",
+  "description": "Complete Narration Dry-Run session where PN plays through Chapter 3 export from Binding Run. Shows full flow: route planning, live read with issue logging (choice ambiguity, gate friction, recap needed, codex invite), spot-checks, and handoff packaging to downstream loops.",
+  "messages": [
+    {
+      "step": 1,
+      "description": "Showrunner opens Narration Dry-Run TU",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-tu-open-001",
+        "time": "2025-11-05T19:00:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.open",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-PN01",
+            "opened": "2025-11-05",
+            "owner_a": "SR",
+            "responsible_r": ["PN"],
+            "loop": "Narration Dry-Run",
+            "slice": "Playtest Chapter 3 export from Binding Run TU-2025-11-05-BB01",
+            "snapshot_context": "Cold @ 2025-11-05",
+            "awake": ["SR", "PN", "GK", "ST", "BB", "CC"],
+            "dormant": ["AD", "IL", "AuD", "AuP", "TR", "RS", "PW", "SS", "LW"],
+            "press": ["Presentation", "Style", "Accessibility"],
+            "pre_gate_risks": ["Wormhole 3 hub new; may have choice ambiguity or gate friction"],
+            "inputs": [
+              "Chapter 3 export bundle from TU-2025-11-05-BB01",
+              "PN Principles (in-world, diegetic gates, spoiler-safe)",
+              "Style guardrails (voice, register, motifs)"
+            ],
+            "deliverables": [
+              "PN Playtest Notes with issue tags and remedies",
+              "Summary Sheet: count by issue type and severity",
+              "Handoff tickets to Style Tune-up, Codex Expansion, Binder"
+            ],
+            "bars_green": ["Presentation", "Style", "Accessibility"],
+            "merge_view": "No merge (playtest only); handoffs to follow-up loops",
+            "timebox": "90 min",
+            "gatecheck": "No gatecheck; issues logged and routed",
+            "linkage": "Validates TU-2025-11-05-BB01 export; handoffs to Style, Codex, Binder based on findings"
+          }
+        },
+        "refs": ["TU-2025-11-05-BB01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05"
+      }
+    },
+    {
+      "step": 2,
+      "description": "PN and Showrunner plan routes to test",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-route-plan-001",
+        "time": "2025-11-05T19:05:00Z",
+        "sender": {
+          "role": "PN",
+          "agent": "human:dana"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Route plan: hub arrival → Dock 7 descent → Kestrel dialogue → salvage choice (both branches) → terminals A and B; will test toll gateway enforcement and codex invites"
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-tu-open-001"
+      }
+    },
+    {
+      "step": 3,
+      "description": "PN performs live read and logs issue #1 (choice ambiguity)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-issue-001",
+        "time": "2025-11-05T19:25:00Z",
+        "sender": {
+          "role": "PN",
+          "agent": "human:dana"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "issue.log",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "pn_playtest_notes",
+          "data": {
+            "issue_type": "choice-ambiguity",
+            "context": "Section 04: salvage choice",
+            "path_snippet": "Hub arrival → Dock 7 descent → Kestrel dialogue → salvage choice",
+            "finding": "Two choice options read similarly: 'Accept the salvage job' vs 'Take the salvage contract'. Player may not perceive meaningful difference.",
+            "suggested_remedy": "Distinguish outcomes: 'Accept salvage job (quick cash)' vs 'Negotiate contract terms (better cut, slower)'",
+            "severity": "medium",
+            "target": "manuscript/chapter3/section-04-salvage-choice.md"
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-route-plan-001"
+      }
+    },
+    {
+      "step": 4,
+      "description": "PN logs issue #2 (gate friction at toll gateway)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-issue-002",
+        "time": "2025-11-05T19:30:00Z",
+        "sender": {
+          "role": "PN",
+          "agent": "human:dana"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "issue.log",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "pn_playtest_notes",
+          "data": {
+            "issue_type": "gate-friction",
+            "context": "Wormhole 3 hub: toll gateway",
+            "path_snippet": "Kestrel dialogue → Wormhole 3 hub → toll gateway attempt (no permit)",
+            "finding": "Gateway enforcement reads awkwardly: 'You lack the required transit permit (ITEM_ID: permit_wh3)'. Internal label leaked; breaks immersion.",
+            "suggested_remedy": "Replace with diegetic phrasing: 'The attendant scans your credentials. No transit permit—she waves you aside.'",
+            "severity": "high",
+            "target": "manuscript/chapter3/wormhole3-gateway.md"
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-issue-001"
+      }
+    },
+    {
+      "step": 5,
+      "description": "PN logs issue #3 (recap needed after detours)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-issue-003",
+        "time": "2025-11-05T19:35:00Z",
+        "sender": {
+          "role": "PN",
+          "agent": "human:dana"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "issue.log",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "pn_playtest_notes",
+          "data": {
+            "issue_type": "recap-needed",
+            "context": "Terminal A (after salvage job completion)",
+            "path_snippet": "Salvage choice → Dock 7 → side detour to refinery → Terminal A",
+            "finding": "After three side detours (refinery, storage bay, security checkpoint), stakes feel vague upon reaching Terminal A. Player may have lost thread of why they're here.",
+            "suggested_remedy": "Add 2-sentence recap before Terminal A: 'You're back at the hub—permit in hand, salvage pay transferred. Kestrel's waiting at the relay, but the refinery rumor nags at you.'",
+            "severity": "medium",
+            "target": "manuscript/chapter3/section-05-terminal-a.md"
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-issue-002"
+      }
+    },
+    {
+      "step": 6,
+      "description": "PN logs issue #4 (codex invite for Helion Corp)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-issue-004",
+        "time": "2025-11-05T19:40:00Z",
+        "sender": {
+          "role": "PN",
+          "agent": "human:dana"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "issue.log",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "pn_playtest_notes",
+          "data": {
+            "issue_type": "codex-invite",
+            "context": "Kestrel dialogue: mentions 'Helion work'",
+            "path_snippet": "Dock 7 descent → Kestrel dialogue",
+            "finding": "Kestrel uses term 'Helion work' (cheap and questionable) without context. Player may stumble on unfamiliar faction reference.",
+            "suggested_remedy": "Add codex invite: 'Kestrel mutters about Helion work. [You can recall what Helion Corp does on this station.]' → link to codex/helion-corp.md",
+            "severity": "low",
+            "target": "manuscript/chapter3/section-03-kestrel-dialogue.md"
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-issue-003"
+      }
+    },
+    {
+      "step": 7,
+      "description": "Gatekeeper classifies issues and routes to owners",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-gk-classify-001",
+        "time": "2025-11-05T19:50:00Z",
+        "sender": {
+          "role": "GK",
+          "agent": "bot:gk-validator"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "issue.classify",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "pn_playtest_notes",
+          "data": {
+            "summary": "4 issues logged; 1 high severity (gate friction), 2 medium (choice ambiguity, recap needed), 1 low (codex invite)",
+            "classification": [
+              {
+                "issue_id": "ndr-issue-001",
+                "type": "choice-ambiguity",
+                "severity": "medium",
+                "bar": "Style",
+                "owner": "SS",
+                "next_loop": "Style Tune-up",
+                "due": "before next export"
+              },
+              {
+                "issue_id": "ndr-issue-002",
+                "type": "gate-friction",
+                "severity": "high",
+                "bar": "Presentation",
+                "owner": "SS",
+                "next_loop": "Style Tune-up",
+                "due": "immediate (blocks export)"
+              },
+              {
+                "issue_id": "ndr-issue-003",
+                "type": "recap-needed",
+                "severity": "medium",
+                "bar": "Style",
+                "owner": "SS",
+                "next_loop": "Style Tune-up",
+                "due": "before next export"
+              },
+              {
+                "issue_id": "ndr-issue-004",
+                "type": "codex-invite",
+                "severity": "low",
+                "bar": "Accessibility",
+                "owner": "CC",
+                "next_loop": "Codex Expansion",
+                "due": "deferred (nice-to-have)"
+              }
+            ]
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-issue-004"
+      }
+    },
+    {
+      "step": 8,
+      "description": "Style Lead confirms phrasing pattern guidance for gate friction fix",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-st-confirm-001",
+        "time": "2025-11-05T19:55:00Z",
+        "sender": {
+          "role": "ST",
+          "agent": "human:claire"
+        },
+        "receiver": {
+          "role": "SS"
+        },
+        "intent": "style.guidance",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "style_addendum",
+          "data": {
+            "title": "PN Gate Phrasing Pattern",
+            "guidance": "Gate enforcement MUST use diegetic language: character actions, observable world state, reputation/item checks—NEVER internal labels like 'ITEM_ID' or 'STATE_FLAG'. Example pattern: 'The attendant [checks visible thing]. [Result: nod / shake head].' Avoid exposing mechanics.",
+            "examples": [
+              {
+                "before": "You lack the required transit permit (ITEM_ID: permit_wh3)",
+                "after": "The attendant scans your credentials. No transit permit—she waves you aside."
+              },
+              {
+                "before": "Access denied: REPUTATION_HELION < 5",
+                "after": "The foreman glances at your record. 'Not enough Helion vouches. Move along.'"
+              }
+            ]
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01", "ndr-issue-002"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:ndr-gk-classify-001"
+      }
+    },
+    {
+      "step": 9,
+      "description": "Showrunner packages playtest notes and creates handoff TUs",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ndr-handoff-001",
+        "time": "2025-11-05T20:00:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.update",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-PN01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Narration Dry-Run"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-PN01",
+            "opened": "2025-11-05",
+            "owner_a": "SR",
+            "responsible_r": ["PN"],
+            "loop": "Narration Dry-Run",
+            "slice": "Chapter 3 playtest complete; 4 issues logged and routed",
+            "snapshot_context": "Cold @ 2025-11-05",
+            "awake": ["SR", "PN", "GK", "ST", "BB", "CC", "SS"],
+            "dormant": ["AD", "IL", "AuD", "AuP", "TR", "RS", "PW", "LW"],
+            "press": ["Presentation", "Style", "Accessibility"],
+            "pre_gate_risks": [],
+            "inputs": ["Chapter 3 export bundle from TU-2025-11-05-BB01"],
+            "deliverables": [
+              "PN Playtest Notes: 4 issues (1 high gate friction, 2 medium choice/recap, 1 low codex invite)",
+              "Summary Sheet: high priority: gate friction (SS fix immediate); medium: choice ambiguity + recap (SS before next export); low: codex invite (CC deferred)",
+              "Handoff TUs created: TU-2025-11-05-SS04 (Style Tune-up for gate friction + choice + recap), TU-2025-11-06-CC04 (Codex invite deferred)"
+            ],
+            "bars_green": [],
+            "merge_view": "No merge (playtest only); handoffs to Style Tune-up (SS) and Codex Expansion (CC)",
+            "timebox": "90 min",
+            "gatecheck": "Issues classified by GK; routed to owners with severity and due dates",
+            "linkage": "Validates TU-2025-11-05-BB01 export; high-priority gate friction blocks next export until fixed; handoffs: SS (immediate), CC (deferred)"
+          }
+        },
+        "refs": ["TU-2025-11-05-PN01", "TU-2025-11-05-BB01"],
+        "correlation_id": "corr-narration-dryrun-chapter3-2025-11-05"
+      }
+    }
+  ]
+}

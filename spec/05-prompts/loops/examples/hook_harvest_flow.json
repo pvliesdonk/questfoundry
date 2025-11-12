@@ -1,0 +1,555 @@
+{
+  "loop": "Hook Harvest",
+  "description": "Complete Hook Harvest session triaging 15 hooks from Story Spark: 8 accepted (routed to Lore Deepening, Codex Expansion, Style Tune-up), 5 deferred (research dormant), 2 rejected (duplicates). Demonstrates full triage workflow with accept/defer/reject decisions.",
+  "messages": [
+    {
+      "step": 1,
+      "description": "Showrunner opens Hook Harvest TU",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-tu-open-001",
+        "time": "2025-11-05T14:00:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.open",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-SR01",
+            "opened": "2025-11-05",
+            "owner_a": "SR",
+            "responsible_r": ["SR"],
+            "loop": "Hook Harvest",
+            "slice": "Triage 15 hooks from Story Spark session (space station expansion)",
+            "snapshot_context": "Cold @ 2025-11-01",
+            "awake": ["SR", "LW", "PW", "SS", "CC", "GK"],
+            "dormant": ["AD", "IL", "AuD", "AuP", "TR", "BB", "PN", "RS"],
+            "press": ["Integrity"],
+            "pre_gate_risks": ["Research dormant: factual hooks may need deferral"],
+            "inputs": [
+              "15 hook cards in proposed state",
+              "Prior harvest decisions for consistency"
+            ],
+            "deliverables": [
+              "Harvest Sheet with decisions",
+              "Updated hook cards with status and triage tags"
+            ],
+            "bars_green": ["Integrity"],
+            "merge_view": "No merge (triage only); handoffs to downstream loops",
+            "timebox": "60 min",
+            "gatecheck": "Quick integrity check on triage decisions",
+            "linkage": "Hooks accepted/deferred/rejected; handoffs to loops"
+          }
+        },
+        "refs": [],
+        "correlation_id": "corr-hook-harvest-2025-11-05"
+      }
+    },
+    {
+      "step": 2,
+      "description": "Lore Weaver acknowledges TU open",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-ack-lw-001",
+        "time": "2025-11-05T14:01:00Z",
+        "sender": {
+          "role": "LW",
+          "agent": "bot:lw-v1.5"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Hook Harvest TU received; ready for triage"
+          }
+        },
+        "refs": ["TU-2025-11-05-SR01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05",
+        "reply_to": "urn:uuid:hh-tu-open-001"
+      }
+    },
+    {
+      "step": 3,
+      "description": "Showrunner accepts Hook #01 (narrative hook → Lore Deepening)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-accept-01",
+        "time": "2025-11-05T14:15:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "LW"
+        },
+        "intent": "hook.accept",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "hook_card",
+          "data": {
+            "header": {
+              "short_name": "Dock 7 fire causality backstory",
+              "id": "HK-20251105-01",
+              "status": "accepted",
+              "raised_by": "PW",
+              "tu": "TU-2025-11-05-PW01",
+              "edited": "2025-11-05",
+              "slice": "Clarify historical event referenced in Act 2",
+              "snapshot_context": "Cold @ 2025-11-01"
+            },
+            "classification": {
+              "type_primary": "narrative",
+              "bars_affected": ["Integrity", "Nonlinearity"],
+              "blocking": "no"
+            },
+            "player_safe_summary": "Add canon backstory for Dock 7 fire mentioned in dialogue",
+            "proposed_next_step": {
+              "loop": "Lore Deepening",
+              "owner_r": "LW",
+              "accountable_a": "SR",
+              "consult": ["PW", "SS"]
+            },
+            "acceptance_criteria": [
+              "Canon entry for Dock 7 fire completed",
+              "Timeline consistency verified",
+              "Scene Smith has callback notes"
+            ],
+            "locations_links": {
+              "locations": ["manuscript/act2/section-12.md"],
+              "related_hooks": [],
+              "lineage": "TU-2025-11-05-PW01"
+            }
+          }
+        },
+        "refs": ["HK-20251105-01", "TU-2025-11-05-SR01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05"
+      }
+    },
+    {
+      "step": 4,
+      "description": "Lore Weaver acknowledges accepted hook",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-ack-accept-01",
+        "time": "2025-11-05T14:15:30Z",
+        "sender": {
+          "role": "LW",
+          "agent": "bot:lw-v1.5"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Hook HK-20251105-01 accepted and queued for Lore Deepening"
+          }
+        },
+        "refs": ["HK-20251105-01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05",
+        "reply_to": "urn:uuid:hh-accept-01"
+      }
+    },
+    {
+      "step": 5,
+      "description": "Showrunner accepts Hook #02 (taxonomy hook → Codex Expansion)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-accept-02",
+        "time": "2025-11-05T14:20:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "CC"
+        },
+        "intent": "hook.accept",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "hook_card",
+          "data": {
+            "header": {
+              "short_name": "Salvage permit terminology coverage",
+              "id": "HK-20251105-02",
+              "status": "accepted",
+              "raised_by": "SS",
+              "tu": "TU-2025-11-05-SS02",
+              "edited": "2025-11-05",
+              "slice": "Add codex entry for salvage law basics",
+              "snapshot_context": "Cold @ 2025-11-01"
+            },
+            "classification": {
+              "type_primary": "taxonomy",
+              "bars_affected": ["Presentation", "Accessibility"],
+              "blocking": "no"
+            },
+            "player_safe_summary": "Create codex entry explaining salvage permit system",
+            "proposed_next_step": {
+              "loop": "Codex Expansion",
+              "owner_r": "CC",
+              "accountable_a": "SR",
+              "consult": ["LW", "ST"]
+            },
+            "acceptance_criteria": [
+              "Codex entry for salvage permits completed",
+              "Cross-references to related station law entries added",
+              "Player-safe phrasing verified"
+            ],
+            "locations_links": {
+              "locations": ["manuscript/act1/section-05.md", "manuscript/act2/section-14.md"],
+              "related_hooks": [],
+              "lineage": "TU-2025-11-05-SS02"
+            }
+          }
+        },
+        "refs": ["HK-20251105-02", "TU-2025-11-05-SR01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05"
+      }
+    },
+    {
+      "step": 6,
+      "description": "Codex Curator acknowledges accepted hook",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-ack-accept-02",
+        "time": "2025-11-05T14:20:30Z",
+        "sender": {
+          "role": "CC",
+          "agent": "bot:cc-v1.0"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Hook HK-20251105-02 accepted and queued for Codex Expansion"
+          }
+        },
+        "refs": ["HK-20251105-02"],
+        "correlation_id": "corr-hook-harvest-2025-11-05",
+        "reply_to": "urn:uuid:hh-accept-02"
+      }
+    },
+    {
+      "step": 7,
+      "description": "Showrunner defers Hook #07 (factual hook, Researcher dormant)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-defer-07",
+        "time": "2025-11-05T14:25:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "RS"
+        },
+        "intent": "hook.defer",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "hook_card",
+          "data": {
+            "header": {
+              "short_name": "Low-G refinery combustion plausibility",
+              "id": "HK-20251105-07",
+              "status": "deferred",
+              "raised_by": "LW",
+              "tu": "TU-2025-11-05-LW01",
+              "edited": "2025-11-05",
+              "slice": "Verify fire propagation science in low-G environment",
+              "snapshot_context": "Cold @ 2025-11-01"
+            },
+            "classification": {
+              "type_primary": "factual",
+              "type_secondary": "research",
+              "bars_affected": ["Integrity", "Style"],
+              "blocking": "no"
+            },
+            "player_safe_summary": "Validate technical accuracy of Dock 7 fire mechanics",
+            "dormancy_deferrals": {
+              "deferral_tags": ["deferred:research"],
+              "fallback": "Neutral phrasing used; no hard claims about fire spread rate or oxygen behavior",
+              "revisit": "When Researcher role wakes or Q1 2026"
+            },
+            "proposed_next_step": {
+              "loop": "Lore Deepening",
+              "owner_r": "RS",
+              "accountable_a": "SR",
+              "consult": ["LW"]
+            },
+            "acceptance_criteria": [
+              "Research memo validates fire propagation model OR provides alternate neutral phrasing",
+              "Citations attached if hard claims made"
+            ],
+            "locations_links": {
+              "locations": ["canon/dock7_fire.md"],
+              "related_hooks": ["HK-20251105-01"],
+              "lineage": "TU-2025-11-05-LW01"
+            }
+          }
+        },
+        "refs": ["HK-20251105-07", "TU-2025-11-05-SR01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05"
+      }
+    },
+    {
+      "step": 8,
+      "description": "Researcher (dormant) acknowledges deferred hook",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-ack-defer-07",
+        "time": "2025-11-05T14:25:30Z",
+        "sender": {
+          "role": "RS"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Hook HK-20251105-07 deferred; will revisit when Researcher role wakes"
+          }
+        },
+        "refs": ["HK-20251105-07"],
+        "correlation_id": "corr-hook-harvest-2025-11-05",
+        "reply_to": "urn:uuid:hh-defer-07"
+      }
+    },
+    {
+      "step": 9,
+      "description": "Showrunner rejects Hook #14 (duplicate)",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-reject-14",
+        "time": "2025-11-05T14:30:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "hook.reject",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "hook_card",
+          "data": {
+            "header": {
+              "short_name": "Station security patrol density",
+              "id": "HK-20251105-14",
+              "status": "rejected",
+              "raised_by": "PW",
+              "tu": "TU-2025-11-05-PW01",
+              "edited": "2025-11-05",
+              "slice": "Clarify security presence in shadow decks",
+              "snapshot_context": "Cold @ 2025-11-01"
+            },
+            "classification": {
+              "type_primary": "canon",
+              "bars_affected": ["Integrity"],
+              "blocking": "no"
+            },
+            "player_safe_summary": "Define station security deployment patterns",
+            "resolution": {
+              "decision": "Duplicate of HK-20251103-08; linked for provenance",
+              "resolved_date": "2025-11-05",
+              "resolved_by": "SR"
+            },
+            "locations_links": {
+              "locations": ["canon/station_security.md"],
+              "related_hooks": ["HK-20251103-08"],
+              "lineage": "TU-2025-11-05-PW01"
+            }
+          }
+        },
+        "refs": ["HK-20251105-14", "HK-20251103-08", "TU-2025-11-05-SR01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05"
+      }
+    },
+    {
+      "step": 10,
+      "description": "Showrunner closes Hook Harvest TU with summary",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:hh-tu-close-001",
+        "time": "2025-11-05T14:55:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.update",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-SR01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Hook Harvest"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-SR01",
+            "opened": "2025-11-05",
+            "owner_a": "SR",
+            "responsible_r": ["SR"],
+            "loop": "Hook Harvest",
+            "slice": "Triaged 15 hooks from Story Spark: 8 accepted, 5 deferred, 2 rejected",
+            "snapshot_context": "Cold @ 2025-11-01",
+            "awake": ["SR", "LW", "PW", "SS", "CC", "GK"],
+            "dormant": ["AD", "IL", "AuD", "AuP", "TR", "BB", "PN", "RS"],
+            "press": ["Integrity"],
+            "pre_gate_risks": ["Research dormant: 5 factual hooks deferred"],
+            "inputs": ["15 hook cards in proposed state"],
+            "deliverables": [
+              "Harvest Sheet: 8 accepted (5 → Lore Deepening, 2 → Codex Expansion, 1 → Style Tune-up), 5 deferred (research), 2 rejected (duplicates)",
+              "Updated hook cards in Hot with status and triage tags"
+            ],
+            "bars_green": ["Integrity"],
+            "merge_view": "No merge; handoffs to Lore Deepening (LW), Codex Expansion (CC), Style Tune-up (ST)",
+            "timebox": "60 min",
+            "gatecheck": "Integrity check passed; triage decisions traced to hooks",
+            "linkage": "Accepted hooks → downstream loops; deferred hooks → revisit on Researcher wake; rejected hooks → linked to surviving duplicates"
+          }
+        },
+        "refs": ["TU-2025-11-05-SR01"],
+        "correlation_id": "corr-hook-harvest-2025-11-05"
+      }
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "protocol": {
+    "name": "qf-protocol",
+    "version": "1.0.0"
+  },
+  "id": "urn:uuid:a7b8c9d0-e1f2-4345-a678-90abcdef0123",
+  "time": "2025-10-30T19:30:00Z",
+  "sender": {
+    "role": "PN",
+    "agent": "human:dana"
+  },
+  "receiver": {
+    "role": "SR"
+  },
+  "intent": "pn.playtest.submit",
+  "context": {
+    "hot_cold": "cold",
+    "tu": "TU-2025-10-30-BB01",
+    "snapshot": "Cold @ 2025-10-28",
+    "loop": "Narration Dry-Run"
+  },
+  "safety": {
+    "player_safe": true,
+    "spoilers": "forbidden"
+  },
+  "payload": {
+    "type": "pn_playtest_notes",
+    "data": {
+      "title": "milestone-chapter-3-export dry-run",
+      "run": "2025-10-30 19:00",
+      "pn": "human:dana",
+      "tu": "TU-2025-10-30-BB01",
+      "snapshot": "Cold @ 2025-10-28",
+      "targets": ["html", "pdf"],
+      "mode": "dry-run (no improv)",
+      "pace": "normal",
+      "log": [
+        {
+          "when": "12:35",
+          "location": "manuscript/section-05.md#choice-negotiate",
+          "tags": ["choice-ambiguity"],
+          "severity": "med",
+          "snippet": "Choice between 'Negotiate terms' and 'Walk away'. Both feel similar; player may not understand consequences.",
+          "smallest_viable_fix": "Add micro-context: 'Negotiate terms (risky but rewarding)' vs 'Walk away (safe but limiting)'",
+          "owner": "Style Tune-up"
+        },
+        {
+          "when": "23:15",
+          "location": "manuscript/section-09.md#gate-union-token",
+          "tags": ["gate-friction"],
+          "severity": "high",
+          "snippet": "Gate text: 'Access denied without CODEWORD: ASH'. This leaks internal plumbing.",
+          "smallest_viable_fix": "Replace with diegetic enforcement: 'The foreman scans your lapel. No union token—he shakes his head.'",
+          "owner": "Style Tune-up"
+        },
+        {
+          "when": "34:20",
+          "location": "manuscript/section-11.md#before-hub-return",
+          "tags": ["pace"],
+          "severity": "low",
+          "snippet": "After three side quests, player may forget main stakes. Consider recap.",
+          "smallest_viable_fix": "Add 2-sentence recap before hub return: where we are, what's at risk.",
+          "owner": "Style Tune-up"
+        }
+      ]
+    }
+  },
+  "refs": ["TU-2025-10-30-BB01"],
+  "correlation_id": "corr-binding-2025-10-30",
+  "reply_to": "urn:uuid:f6a7b8c9-d0e1-4234-f567-890abcdef012"
+}

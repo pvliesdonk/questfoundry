@@ -1,0 +1,101 @@
+{
+  "protocol": {
+    "name": "qf-protocol",
+    "version": "1.0.0"
+  },
+  "id": "urn:uuid:c3d4e5f6-a7b8-4901-c234-567890abcdef",
+  "time": "2025-10-30T15:30:00Z",
+  "sender": {
+    "role": "LW",
+    "agent": "human:bob"
+  },
+  "receiver": {
+    "role": "GK"
+  },
+  "intent": "gate.report.submit",
+  "context": {
+    "hot_cold": "hot",
+    "tu": "TU-2025-10-30-LW01",
+    "snapshot": "Cold @ 2025-10-28",
+    "loop": "Lore Deepening"
+  },
+  "safety": {
+    "player_safe": false,
+    "spoilers": "allowed"
+  },
+  "payload": {
+    "type": "gatecheck_report",
+    "data": {
+      "title": "TU-2025-10-30-LW01 Pre-Gate",
+      "checked": "2025-10-30",
+      "gatekeeper": "human:charlie",
+      "scope": "Canon entry for Shadow Toll faction mechanic",
+      "mode": "pre-gate",
+      "cold_snapshot": "Cold @ 2025-10-28",
+      "artifacts_samples": [
+        "canon_pack/shadow_toll_faction.json",
+        "manuscript/sections/wormhole3.md"
+      ],
+      "decision": "conditional pass",
+      "why": "Canon pack complete, but manuscript integration needs clarity on toll trigger conditions",
+      "next_actions": "LW to add toll trigger conditions to manuscript integration notes; resubmit for final gate",
+      "bars": [
+        {
+          "bar": "Integrity",
+          "status": "yellow",
+          "evidence": "Toll mechanism referenced but trigger conditions not explicit",
+          "smallest_viable_fix": "Add 2-3 sentences clarifying when toll is triggered",
+          "owner": "LW"
+        },
+        {
+          "bar": "Reachability",
+          "status": "green",
+          "evidence": "All canon entries reachable from hub navigation"
+        },
+        {
+          "bar": "Nonlinearity",
+          "status": "green",
+          "evidence": "Toll creates new branch at hub; choices clear"
+        },
+        {
+          "bar": "Gateways",
+          "status": "green",
+          "evidence": "Hub connections properly gated with toll mechanism"
+        },
+        {
+          "bar": "Style",
+          "status": "green",
+          "evidence": "Faction lore matches established voice and tone"
+        },
+        {
+          "bar": "Determinism",
+          "status": "green",
+          "evidence": "Toll mechanics deterministic; no random elements"
+        },
+        {
+          "bar": "Presentation",
+          "status": "green",
+          "evidence": "All surfaces player-safe; no spoilers or internals"
+        },
+        {
+          "bar": "Accessibility",
+          "status": "green",
+          "evidence": "Faction descriptions include alt text; reading order clear"
+        }
+      ],
+      "handoffs": [
+        "LW: Add toll trigger conditions to manuscript integration notes in TU-2025-10-30-LW01 by 2025-10-30 EOD"
+      ],
+      "checklist": [
+        "Decision conditional pass is consistent with yellow bar (Integrity)",
+        "Smallest viable fixes documented for yellow bar with owner LW",
+        "Player safety verified across all content surfaces",
+        "Dormancy state recorded (no deferrals)",
+        "Handoffs documented with owners and deadlines",
+        "Trace links updated in canon_pack lineage"
+      ]
+    }
+  },
+  "refs": ["TU-2025-10-30-LW01"],
+  "correlation_id": "corr-lore-deepening-2025-10-30"
+}

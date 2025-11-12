@@ -1,0 +1,76 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:st-style-stable-0001",
+    "time": "2025-11-04T16:00:00Z",
+    "sender": { "role": "ST", "agent": "bot:st" },
+    "receiver": { "role": "BB" },
+    "intent": "style.stabilized",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-04-ST05",
+      "loop": "Style Tune-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "style_manifest",
+      "data": {
+        "typography": {
+          "prose": {
+            "font_family": "Source Serif 4",
+            "fallback": "Georgia, Times New Roman, serif",
+            "font_size": "1em",
+            "line_height": "1.6",
+            "paragraph_spacing": "1em"
+          },
+          "display": {
+            "font_family": "Cormorant Garamond",
+            "fallback": "Georgia, serif",
+            "h1_size": "2.5em",
+            "h2_size": "2em",
+            "h3_size": "1.5em"
+          },
+          "cover": {
+            "title_font": "Cormorant Garamond Bold",
+            "author_font": "Source Serif 4 Italic",
+            "fallback": "Georgia, serif"
+          },
+          "ui": {
+            "link_color": "#2c5aa0",
+            "link_underline": true,
+            "caption_font": "Source Serif 4 Italic",
+            "caption_size": "0.9em"
+          }
+        },
+        "fonts_required": [
+          "Source Serif 4 (Regular, Italic, Bold, BoldItalic)",
+          "Cormorant Garamond (Regular, Italic, Bold)"
+        ],
+        "embed_in_epub": true
+      }
+    },
+    "correlation_id": "corr-style-stable-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:bb-ack-0001",
+    "time": "2025-11-04T16:01:00Z",
+    "sender": { "role": "BB", "agent": "bot:bb" },
+    "receiver": { "role": "ST" },
+    "intent": "ack",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-04-ST05",
+      "loop": "Style Tune-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "message": "Typography manifest received. Fonts availability: Source Serif 4 ✓, Cormorant Garamond ✓. Will embed in EPUB exports."
+      }
+    },
+    "correlation_id": "corr-style-stable-2025-11-04",
+    "reply_to": "urn:uuid:st-style-stable-0001"
+  }
+]

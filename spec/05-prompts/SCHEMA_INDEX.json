@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuestFoundry Schema Index",
+  "description": "Index of all Layer 3 schemas with integrity hashes and role mappings",
+  "version": "0.3.0",
+  "generated": "2025-11-10",
+  "schemas": {
+    "art_manifest": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/art_manifest.schema.json",
+      "title": "Art Manifest",
+      "description": "Generated from 02-dictionary/artifacts/art_manifest.md. Art Director's inventory of all visual assets (covers, plates, thumbnails, scene art) with filenames, captions, prompts, hashes, and approval status.",
+      "path": "03-schemas/art_manifest.schema.json",
+      "draft": "2020-12",
+      "sha256": "abec899a6f76d09773285d6795e09f4b2a8714c539d115cd0f4627c0075a033b",
+      "roles": [],
+      "intent": []
+    },
+    "art_plan": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/art_plan.schema.json",
+      "title": "Art Plan",
+      "description": "Generated from 02-dictionary/artifacts/art_plan_ENRICHED.md. Specifies an illustration slot so an Illustrator can execute without guessing while keeping player surfaces safe.",
+      "path": "03-schemas/art_plan.schema.json",
+      "draft": "2020-12",
+      "sha256": "d849ff4adb8f2b1c0d5e55d64005bf9140380bae72efa5855dbd4ca744d0070c",
+      "roles": [],
+      "intent": []
+    },
+    "audio_plan": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/audio_plan.schema.json",
+      "title": "Audio Plan",
+      "description": "Generated from 02-dictionary/artifacts/audio_plan_ENRICHED.md. Specifies an audio cue so an Audio Producer can realize it without guessing while keeping player surfaces safe.",
+      "path": "03-schemas/audio_plan.schema.json",
+      "draft": "2020-12",
+      "sha256": "28b995e498367ea133ba9f7e18a0d1a19dbc25baa1c09fb89650cf3ce3e883b4",
+      "roles": [],
+      "intent": []
+    },
+    "canon_pack": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/canon_pack.schema.json",
+      "title": "Canon Pack",
+      "description": "Generated from 02-dictionary/artifacts/canon_pack_ENRICHED.md. Bundles Hot canon answers with player-safe summaries, downstream effects, and lineage references.",
+      "path": "03-schemas/canon_pack.schema.json",
+      "draft": "2020-12",
+      "sha256": "0187c181a18a455d8f834752c2224b58ffc6d3d0b7413aa8fd0321d92f0c3f42",
+      "roles": [],
+      "intent": []
+    },
+    "codex_entry": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/codex_entry.schema.json",
+      "title": "Codex Entry",
+      "description": "Generated from 02-dictionary/artifacts/codex_entry_ENRICHED.md. Provides player-safe lore and terminology guidance with lineage, variants, relations, and accessibility notes.",
+      "path": "03-schemas/codex_entry.schema.json",
+      "draft": "2020-12",
+      "sha256": "feb229c6a2a3bf62fd0a363080f7efa30764a05b5ba7df64d02a1e4fecaced94",
+      "roles": ["codex_curator"],
+      "intent": ["codex.expand", "codex.summarize"]
+    },
+    "cold_art_manifest": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/cold_art_manifest.schema.json",
+      "title": "Cold Art Manifest",
+      "description": "Asset mappings, SHA-256 hashes, and provenance tracking for deterministic builds. Every asset must have matching hash and approval metadata.",
+      "path": "03-schemas/cold_art_manifest.schema.json",
+      "draft": "2020-12",
+      "sha256": "64cf6ec781fb632f6c6a4b6f1cac7e10a449273d6fd2661e11bf6f0ac34689d2",
+      "roles": ["illustrator"],
+      "intent": ["art.deliver"]
+    },
+    "cold_book": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/cold_book.schema.json",
+      "title": "Cold Book",
+      "description": "Story structure, section order, and metadata for deterministic book builds. Defines the canonical reading order and bibliographic information.",
+      "path": "03-schemas/cold_book.schema.json",
+      "draft": "2020-12",
+      "sha256": "1776287159324047fd533b8d952fe6db6fe343bf71af3bf6696bc7dbedb0e03e",
+      "roles": ["book_binder"],
+      "intent": ["bind.request"]
+    },
+    "cold_build_lock": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/cold_build_lock.schema.json",
+      "title": "Cold Build Lock",
+      "description": "Tool version pinning for reproducible builds. Optional manifest to lock tool versions and build flags.",
+      "path": "03-schemas/cold_build_lock.schema.json",
+      "draft": "2020-12",
+      "sha256": "cd670483f33bb97487e662791494ca92aaef77069cbe7a3d6254b6475e0065e6",
+      "roles": [],
+      "intent": []
+    },
+    "cold_fonts": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/cold_fonts.schema.json",
+      "title": "Cold Fonts",
+      "description": "Font file mappings for consistent typography across exports. Optional manifest for projects using custom fonts.",
+      "path": "03-schemas/cold_fonts.schema.json",
+      "draft": "2020-12",
+      "sha256": "8fcbed01c2f8c47fd7fc408529870651df45a433dfe467c7583788a73ff108ed",
+      "roles": [],
+      "intent": []
+    },
+    "cold_manifest": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/cold_manifest.schema.json",
+      "title": "Cold Manifest",
+      "description": "Top-level index of all Cold SoT files with SHA-256 hashes for deterministic builds. Every file referenced in Cold must be listed here with its hash and size. STORAGE-AGNOSTIC: This schema defines logical structure only; Layer 6 implementations may use JSON files, SQLite, Redis, or other backends as long as they validate against this schema. RECOMMENDED: Include cold/project_metadata.json in files array for Binder to consume for front matter generation.",
+      "path": "03-schemas/cold_manifest.schema.json",
+      "draft": "2020-12",
+      "sha256": "f779853018435dd38370334f775bd283e065d2a057d5b4455f03be9c7af66ab8",
+      "roles": ["book_binder"],
+      "intent": ["bind.request"]
+    },
+    "cuelist": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/cuelist.schema.json",
+      "title": "Cuelist",
+      "description": "Generated from 02-dictionary/artifacts/cuelist_ENRICHED.md. Audio Director's slice-level index of audio cues, each linked to its Audio Plan while keeping player-facing surfaces safe.",
+      "path": "03-schemas/cuelist.schema.json",
+      "draft": "2020-12",
+      "sha256": "fcc79d8824d77491b0a763b71b68a64905cdc8c285707fdea3758bfde16acf41",
+      "roles": [],
+      "intent": []
+    },
+    "edit_notes": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/edit_notes.schema.json",
+      "title": "Edit Notes",
+      "description": "Generated from 02-dictionary/artifacts/edit_notes_ENRICHED.md. Proposes line-level fixes that remain player-safe and keep structure and canon intact while owners apply the changes in their lanes.",
+      "path": "03-schemas/edit_notes.schema.json",
+      "draft": "2020-12",
+      "sha256": "93bfe53efb2e6014d62a340b528f087811d0059bbff4fa71ebb3d7a51bd9bc31",
+      "roles": [],
+      "intent": []
+    },
+    "front_matter": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/front_matter.schema.json",
+      "title": "Front Matter",
+      "description": "Generated from 02-dictionary/artifacts/front_matter_ENRICHED.md. Book Binder's player-facing header that introduces a bound View and reflects its Cold snapshot and coverage.",
+      "path": "03-schemas/front_matter.schema.json",
+      "draft": "2020-12",
+      "sha256": "c1fe0acd146b52fb828229f40dda2edeeddfb38ce901829ea2f9bd4b8ef48db5",
+      "roles": [],
+      "intent": []
+    },
+    "gatecheck_report": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/gatecheck_report.schema.json",
+      "title": "Gatecheck Report",
+      "description": "Generated from 02-dictionary/artifacts/gatecheck_report_ENRICHED.md. Records gatekeeper decisions, bar statuses, smallest viable fixes, and downstream handoffs while staying player-safe.",
+      "path": "03-schemas/gatecheck_report.schema.json",
+      "draft": "2020-12",
+      "sha256": "7e3b5fffabe3170cfc1a497dc3a989bb6dc673238bd865fc9b86230e44e870c1",
+      "roles": ["gatekeeper"],
+      "intent": ["gate.request"]
+    },
+    "hook_card": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/hook_card.schema.json",
+      "title": "Hook Card",
+      "description": "Small, traceable follow-up for new needs or uncertainties. Generated from 02-dictionary/artifacts/hook_card_ENRICHED.md. Hooks are classified, routed to appropriate loops, and kept player-safe.",
+      "path": "03-schemas/hook_card.schema.json",
+      "draft": "2020-12",
+      "sha256": "ba7352756407fe9193f11113f5106176b0d87244b3155fbcdca503a7156d3f16",
+      "roles": ["plotwright"],
+      "intent": ["hook.classify", "hook.integrate", "hook.propose"]
+    },
+    "hot_manifest": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/hot_manifest.schema.json",
+      "title": "Hot Manifest",
+      "description": "Master index of all Hot discovery space artifacts. Tracks in-progress work, proposals, hooks, TUs, and Hot artifacts before they stabilize and merge to Cold. STORAGE-AGNOSTIC: This schema defines logical structure only; Layer 6 implementations may use JSON files, SQLite, Redis, or other backends as long as they validate against this schema. Real-time collaboration tools may prefer Redis/database backends for queryability and concurrent access.",
+      "path": "03-schemas/hot_manifest.schema.json",
+      "draft": "2020-12",
+      "sha256": "7aabacb4546e20a1f055926dc27625b58bc114d32d7e57a1017ef24091607979",
+      "roles": ["showrunner"],
+      "intent": []
+    },
+    "language_pack": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/language_pack.schema.json",
+      "title": "Language Pack",
+      "description": "Generated from 02-dictionary/artifacts/language_pack_ENRICHED.md. Translator's bundled deliverable capturing localized coverage, register guidance, PN patterns, and glossary slice for a specific locale.",
+      "path": "03-schemas/language_pack.schema.json",
+      "draft": "2020-12",
+      "sha256": "23af83322cd689a0b919eaa8ad566033af75c1c3a37348ceabe44692b45cbb95",
+      "roles": [],
+      "intent": []
+    },
+    "pn_playtest_notes": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/pn_playtest_notes.schema.json",
+      "title": "PN Playtest Notes",
+      "description": "Generated from 02-dictionary/artifacts/pn_playtest_notes_ENRICHED.md. Logs dry-run observations from Player Narrator sessions while keeping all examples player-safe.",
+      "path": "03-schemas/pn_playtest_notes.schema.json",
+      "draft": "2020-12",
+      "sha256": "77153e7a98fb8f592391033a950dc73024125bc9135b50944bd8265c65f967ec",
+      "roles": [],
+      "intent": []
+    },
+    "project_metadata": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/project_metadata.schema.json",
+      "title": "Project Metadata",
+      "description": "Generated from 02-dictionary/artifacts/project_metadata.md. Showrunner's project configuration established during initialization and updated throughout project lifecycle. Drives creative decisions across all roles.",
+      "path": "03-schemas/project_metadata.schema.json",
+      "draft": "2020-12",
+      "sha256": "a878535f122b7ba68f3fc784f4757d706bba74d0e8722fc55e48c9ba65f59406",
+      "roles": ["showrunner"],
+      "intent": []
+    },
+    "register_map": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/register_map.schema.json",
+      "title": "Register Map",
+      "description": "Generated from 02-dictionary/artifacts/register_map_ENRICHED.md. Pins locale-specific voice, register, punctuation, idioms, and accessibility guidance for translators and adjacent roles.",
+      "path": "03-schemas/register_map.schema.json",
+      "draft": "2020-12",
+      "sha256": "c50e8b22025c243b4250c04758e06d18f85868f61b05b8e9eff63252e3e6ffd1",
+      "roles": [],
+      "intent": []
+    },
+    "research_memo": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/research_memo.schema.json",
+      "title": "Research Memo",
+      "description": "Generated from 02-dictionary/artifacts/research_memo_ENRICHED.md. Answers the smallest useful question with sourced evidence, posture, neutral phrasing, and creative implications while keeping player surfaces safe.",
+      "path": "03-schemas/research_memo.schema.json",
+      "draft": "2020-12",
+      "sha256": "b9a97ebca3ef61fa302880b3ae81a2b12dd7b4cc05531a03d22b696b493c303d",
+      "roles": [],
+      "intent": []
+    },
+    "shotlist": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/shotlist.schema.json",
+      "title": "Shotlist",
+      "description": "Generated from 02-dictionary/artifacts/shotlist_ENRICHED.md. Art Director's index of illustration slots for a slice, linking each slot to its Art Plan while keeping player-facing surfaces safe.",
+      "path": "03-schemas/shotlist.schema.json",
+      "draft": "2020-12",
+      "sha256": "5d40220a7a09513b7be9aabc1ac5f3f9005e7c74ffa10a18d9e9512c262f0afd",
+      "roles": [],
+      "intent": []
+    },
+    "style_addendum": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/style_addendum.schema.json",
+      "title": "Style Addendum",
+      "description": "Generated from 02-dictionary/artifacts/style_addendum_ENRICHED.md. Captures slice-specific style guidance, patterns, and examples that remain player-safe while aligning with global house style.",
+      "path": "03-schemas/style_addendum.schema.json",
+      "draft": "2020-12",
+      "sha256": "e902f0074cd5a01214b059a993c7ead093065fd8ec19a8c31fcdddb7b49c7af4",
+      "roles": [],
+      "intent": []
+    },
+    "style_manifest": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/style_manifest.schema.json",
+      "title": "Style Manifest",
+      "description": "Generated from 02-dictionary/artifacts/style_manifest.md. Style Lead's typography and style decisions for Book Binder export formatting. Defines font families, sizes, line heights, and other typographic parameters.",
+      "path": "03-schemas/style_manifest.schema.json",
+      "draft": "2020-12",
+      "sha256": "923cc661600e9953e584341c6dc220c242b767dbec8a146a4380b375ab79870d",
+      "roles": [],
+      "intent": []
+    },
+    "tu_brief": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/tu_brief.schema.json",
+      "title": "TU Brief",
+      "description": "Generated from 02-dictionary/artifacts/tu_brief_ENRICHED.md. Opens a focused timeboxed task unit, specifying scope, roles, bars, deliverables, and escalation paths while keeping player surfaces tied to Cold snapshots.",
+      "path": "03-schemas/tu_brief.schema.json",
+      "draft": "2020-12",
+      "sha256": "39383d52bb66af0a870b3ad3da8459f0320eb9b1aa90682e7c36f3fbb634567e",
+      "roles": [],
+      "intent": []
+    },
+    "view_log": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/view_log.schema.json",
+      "title": "View Log",
+      "description": "Generated from 02-dictionary/artifacts/view_log_ENRICHED.md. Records a bound player-safe view with coverage, anchor health, gatecheck results, and export artifacts.",
+      "path": "03-schemas/view_log.schema.json",
+      "draft": "2020-12",
+      "sha256": "b85bb54d7c281369d9014320026b510f58e64a6eb790eee624b19936d60f677e",
+      "roles": [],
+      "intent": []
+    },
+    "canon_transfer_package": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/canon_transfer_package.schema.json",
+      "title": "Canon Transfer Package",
+      "description": "Canon export/import for shared universes",
+      "path": "03-schemas/canon_transfer_package.schema.json",
+      "draft": "2020-12",
+      "sha256": "cba14f35cd8b788ef9ee25b841945175b39b89cf003f4cb3201c8ee54a8aecd8",
+      "roles": ["lore_weaver"],
+      "intent": ["canon.transfer.export", "canon.transfer.import"]
+    },
+    "world_genesis_manifest": {
+      "$id": "https://questfoundry.liesdonk.nl/schemas/world_genesis_manifest.schema.json",
+      "title": "World Genesis Manifest",
+      "description": "World Genesis loop execution tracking",
+      "path": "03-schemas/world_genesis_manifest.schema.json",
+      "draft": "2020-12",
+      "sha256": "5775434231df8dbd65a519e88b07e73576310aa74e20ac515c104fa35701987b",
+      "roles": ["lore_weaver"],
+      "intent": ["canon.genesis.create"]
+    }
+  }
+}

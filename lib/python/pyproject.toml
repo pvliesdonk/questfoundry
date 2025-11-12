@@ -1,0 +1,135 @@
+[build-system]
+requires = ["hatchling", "versioningit"]
+build-backend = "hatchling.build"
+
+[project]
+name = "questfoundry-py"
+
+dynamic = ["version"]
+
+description = "Python library for QuestFoundry protocol and artifact management"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [{name = "Peter Liesdonk", email = "peter@liesdonk.nl"} ]
+keywords = ["questfoundry", "protocol", "artifacts", "interactive-fiction", "narrative"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "pydantic>=2.0",
+    "jsonschema>=4.0",
+    "httpx>=0.25",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+ollama = ["ollama>=0.1"]
+google = ["google-generativeai>=0.3"]
+all-providers = [
+    "openai>=1.0",
+    "ollama>=0.1",
+    "google-generativeai>=0.3",
+]
+
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "pre-commit>=3.0",
+    "types-jsonschema>=4.0",
+    "types-pyyaml>=6.0",
+    "commitizen>=3.12.0",
+]
+
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.23.0",
+    "pymdown-extensions>=10.0",
+    "markdown>=3.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/pvliesdonk/questfoundry-py"
+Documentation = "https://github.com/pvliesdonk/questfoundry-spec"
+Specification = "https://github.com/pvliesdonk/questfoundry-spec"
+Schemas = "https://questfoundry.liesdonk.nl/schemas/"
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.versioningit]
+default-version = "0.0.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/questfoundry"]
+include = [
+    "src/questfoundry/resources/prompts/**/*.md",
+    "src/questfoundry/resources/prompts/**/*.json",
+    "src/questfoundry/resources/schemas/*.json",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = true
+disable_error_code = ["misc", "no-any-return", "attr-defined"]
+
+[[tool.mypy.overrides]]
+module = ["pydantic", "jsonschema.*", "yaml.*", "openai.*", "ollama.*", "httpx.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+exclude = ["spec"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.5.0"
+version_files = [
+    "src/questfoundry/version.py:__version__",
+    "pyproject.toml:version"
+]
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"
+tag_format = "v$version"
+bump_message = "bump: version $current_version → $new_version"
+annotated_tag = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "types-jsonschema>=4.25.1.20251009",
+]

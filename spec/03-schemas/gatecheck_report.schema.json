@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/gatecheck_report.schema.json",
+  "title": "Gatecheck Report",
+  "description": "Generated from 02-dictionary/artifacts/gatecheck_report_ENRICHED.md. Records gatekeeper decisions, bar statuses, smallest viable fixes, and downstream handoffs while staying player-safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "TU ID or View name being gatechecked.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "checked": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date the gatecheck was performed."
+    },
+    "gatekeeper": {
+      "type": "string",
+      "description": "Human name or agent identifier of the gatekeeper.",
+      "minLength": 2,
+      "maxLength": 160
+    },
+    "scope": {
+      "type": "string",
+      "description": "Slice or export target reviewed during the gatecheck.",
+      "minLength": 5,
+      "maxLength": 240
+    },
+    "mode": {
+      "type": "string",
+      "description": "Gatecheck mode.",
+      "enum": ["pre-gate", "gatecheck"]
+    },
+    "cold_snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "artifacts_samples": {
+      "type": "array",
+      "description": "Paths or short descriptions of artifacts sampled during the gatecheck.",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "dormancy_state": {
+      "type": "array",
+      "description": "Optional deferral tags representing dormant tracks.",
+      "items": {
+        "$ref": "#/$defs/deferral_tag"
+      },
+      "uniqueItems": true
+    },
+    "decision": {
+      "type": "string",
+      "description": "Gate decision outcome.",
+      "enum": ["pass", "conditional pass", "block"]
+    },
+    "why": {
+      "type": "string",
+      "description": "1-2 lines explaining the decision and tying it to bar status.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "next_actions": {
+      "type": "string",
+      "description": "Smallest viable fixes and responsible owners.",
+      "minLength": 10,
+      "maxLength": 400
+    },
+    "bars": {
+      "type": "array",
+      "description": "Bar-by-bar status breakdown.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bar": {
+            "type": "string",
+            "description": "Quality bar being evaluated.",
+            "enum": [
+              "Integrity",
+              "Reachability",
+              "Nonlinearity",
+              "Gateways",
+              "Style",
+              "Determinism",
+              "Presentation",
+              "Accessibility"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Bar status after review.",
+            "enum": ["green", "yellow", "red"]
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Player-safe evidence supporting the status. For Nonlinearity/Determinism when branches converge, cite choice integrity evidence: diegetic bridge, first-paragraph reflection of chosen path (not necessarily literal echo), and a state-aware affordance. See 02-dictionary/conventions/choice_integrity.md.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "smallest_viable_fix": {
+            "type": "string",
+            "description": "Smallest fix needed to move the bar to green. For \"fake agency\" issues, propose: add a micro-beat between scenes to set a visible state flag; add a diegetic bridge; reflect the chosen path in the next scene's first paragraph; condition one affordance by state.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "owner": {
+            "$ref": "#/$defs/role_name",
+            "description": "Responsible role for the fix."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional brief context or reminders.",
+            "maxLength": 200
+          }
+        },
+        "required": ["bar", "status", "evidence"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": ["yellow", "red"]
+                }
+              }
+            },
+            "then": {
+              "required": ["smallest_viable_fix", "owner"]
+            }
+          }
+        ]
+      },
+      "minItems": 8
+    },
+    "incidents": {
+      "type": "array",
+      "description": "Optional list of incidents observed during the gatecheck.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Optional export coverage summary.",
+      "properties": {
+        "art": {
+          "type": "string",
+          "description": "Art coverage state.",
+          "enum": ["none", "plans-only", "renders-included"]
+        },
+        "audio": {
+          "type": "string",
+          "description": "Audio coverage state.",
+          "enum": ["none", "plans-only", "cues-included"]
+        },
+        "locales": {
+          "type": "string",
+          "description": "Locale coverage percentages.",
+          "maxLength": 240
+        },
+        "accessibility_snapshot": {
+          "type": "string",
+          "description": "Accessibility snapshot covering alt, captions, and reading order.",
+          "maxLength": 240
+        }
+      }
+    },
+    "handoffs": {
+      "type": "array",
+      "description": "Required handoff list with bar, fix, owner, TU, and due date.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "escalation": {
+      "type": "object",
+      "description": "Optional escalation plan details.",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "Escalation topic or trigger condition.",
+          "maxLength": 240
+        },
+        "lane": {
+          "$ref": "#/$defs/role_name",
+          "description": "Escalation owner per escalation rules."
+        },
+        "level": {
+          "type": "string",
+          "description": "Escalation level.",
+          "enum": ["L1", "L2", "L3"]
+        },
+        "bundle_attached": {
+          "type": "string",
+          "description": "Whether escalation bundle is attached.",
+          "enum": ["yes", "no"]
+        }
+      }
+    },
+    "checklist": {
+      "type": "array",
+      "description": "Gatekeeper checklist confirming decision, fixes, safety, dormancy, handoffs, and trace updates.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 6
+    }
+  },
+  "required": [
+    "title",
+    "checked",
+    "gatekeeper",
+    "scope",
+    "mode",
+    "cold_snapshot",
+    "artifacts_samples",
+    "decision",
+    "why",
+    "next_actions",
+    "bars",
+    "handoffs",
+    "checklist"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "conditional pass"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "bars": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "const": "yellow"
+                }
+              },
+              "required": ["status"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "block"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "bars": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "const": "red"
+                }
+              },
+              "required": ["status"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

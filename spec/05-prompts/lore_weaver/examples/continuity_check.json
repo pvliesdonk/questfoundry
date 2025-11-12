@@ -1,0 +1,69 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:lw-ckpt-0101",
+    "time": "2025-11-03T19:00:00Z",
+    "sender": { "role": "LW", "agent": "bot:lw" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW11",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Continuity risk: timeline anchor T1 conflicts with Cold entry CE-042; propose shifting event to T2 and adding invariant."
+      }
+    },
+    "refs": ["CE-042"],
+    "correlation_id": "corr-lw-continuity-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-q-0101",
+    "time": "2025-11-03T19:02:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "LW" },
+    "intent": "human.question",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW11",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "question": "Prefer shift to T2 or reframe CE-042?",
+        "suggestions": ["shift_T2", "reframe_CE042"]
+      }
+    },
+    "correlation_id": "corr-lw-continuity-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-a-0101",
+    "time": "2025-11-03T19:02:20Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "LW" },
+    "intent": "human.response",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW11",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "choice": "shift_T2",
+        "answer": "Shift to T2 and record invariant"
+      }
+    },
+    "correlation_id": "corr-lw-continuity-2025-11-03",
+    "reply_to": "urn:uuid:sr-q-0101"
+  }
+]

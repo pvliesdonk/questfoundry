@@ -1,0 +1,233 @@
+{
+  "loop": "Art Touch-up",
+  "description": "Simplified Art Touch-up flow planning cover illustration for Chapter 3. Shows TU open, art plan creation with composition intent and caption, style alignment, Illustrator dormant (plan-only merge), and pre-gate approval.",
+  "messages": [
+    {
+      "step": 1,
+      "description": "Showrunner opens Art Touch-up TU",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:at-tu-open-001",
+        "time": "2025-11-05T14:30:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.open",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-AD01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Art Touch-up"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-AD01",
+            "opened": "2025-11-05",
+            "owner_a": "SR",
+            "responsible_r": ["AD"],
+            "loop": "Art Touch-up",
+            "slice": "Plan cover illustration for Chapter 3 milestone (Illustrator dormant: plan-only)",
+            "snapshot_context": "Cold @ 2025-11-05",
+            "awake": ["SR", "AD", "ST", "GK"],
+            "dormant": ["IL", "AuD", "AuP", "TR", "BB", "PN", "RS", "PW", "SS", "LW", "CC"],
+            "deferral_tags": ["deferred:art"],
+            "press": ["Presentation", "Style"],
+            "pre_gate_risks": ["Caption may leak spoilers"],
+            "inputs": ["Chapter 3 manuscript", "Style guardrails", "Scene: Dock 7 descent"],
+            "deliverables": ["Art plan for Chapter 3 cover illustration (plan-only, no render)"],
+            "bars_green": ["Presentation", "Style"],
+            "merge_view": "Merge plan to Cold with deferred tag; render when Illustrator wakes",
+            "timebox": "45 min",
+            "gatecheck": "Pre-gate for Presentation Safety and Style",
+            "linkage": "Art plan merged; deferred render; Binder can include plan in exports"
+          }
+        },
+        "refs": [],
+        "correlation_id": "corr-art-touchup-chapter3-2025-11-05"
+      }
+    },
+    {
+      "step": 2,
+      "description": "Art Director creates art plan",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:at-plan-001",
+        "time": "2025-11-05T14:45:00Z",
+        "sender": {
+          "role": "AD",
+          "agent": "human:elise"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "art.plan",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-AD01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Art Touch-up"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "art_plan",
+          "data": {
+            "subject": "Dock 7 descent view from shadow-side catwalk",
+            "scene_anchor": "manuscript/chapter3/section-02-dock7-descent.md",
+            "purpose": "Establish mood and setting for Chapter 3; anchor Dock 7 as industrial, low-light environment",
+            "composition_intent": "Low angle, looking down catwalk toward refinery glow. Foreground: grated metal floor, low-G dust motes. Midground: descent railing, shadow-side neon. Background: refinery amber glow, hull curve.",
+            "caption": "Dock 7 — Shadow-side maintenance access",
+            "constraints": {
+              "aspect": "16:9 landscape",
+              "palette": "Amber/orange (refinery glow), deep blue/purple (shadow-side neon), dark grays (metal)",
+              "motifs": ["low-G dust", "industrial decay", "shadow-side neon"],
+              "negative": "Avoid pristine tech; avoid bright lighting; no characters visible (focus on environment)"
+            },
+            "accessibility_notes": "Alt text: 'Industrial catwalk descending into Dock 7, lit by amber refinery glow and blue neon'",
+            "spoiler_risk": "low"
+          }
+        },
+        "refs": ["TU-2025-11-05-AD01"],
+        "correlation_id": "corr-art-touchup-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:at-tu-open-001"
+      }
+    },
+    {
+      "step": 3,
+      "description": "Style Lead confirms motif and tone alignment",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:at-st-check-001",
+        "time": "2025-11-05T14:50:00Z",
+        "sender": {
+          "role": "ST",
+          "agent": "human:claire"
+        },
+        "receiver": {
+          "role": "AD"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-AD01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Art Touch-up"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Style approved; motifs match ('low-G dust', 'shadow-side neon', 'industrial decay'); caption is player-safe and atmospheric; tone fits station cynicism"
+          }
+        },
+        "refs": ["TU-2025-11-05-AD01"],
+        "correlation_id": "corr-art-touchup-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:at-plan-001"
+      }
+    },
+    {
+      "step": 4,
+      "description": "Gatekeeper pre-checks Presentation and Style",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:at-pregate-001",
+        "time": "2025-11-05T14:55:00Z",
+        "sender": {
+          "role": "GK",
+          "agent": "bot:gk-validator"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "gate.pregate",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-AD01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Art Touch-up"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Presentation green (caption player-safe; no spoilers); Style green (motifs and tone consistent); Accessibility green (alt text provided); plan ready for merge with deferred render tag"
+          }
+        },
+        "refs": ["TU-2025-11-05-AD01"],
+        "correlation_id": "corr-art-touchup-chapter3-2025-11-05",
+        "reply_to": "urn:uuid:at-st-check-001"
+      }
+    },
+    {
+      "step": 5,
+      "description": "Showrunner merges art plan with deferred render",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:at-merge-001",
+        "time": "2025-11-05T15:00:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "merge.approve",
+        "context": {
+          "hot_cold": "cold",
+          "tu": "TU-2025-11-05-AD01",
+          "snapshot": "Cold @ 2025-11-05",
+          "loop": "Art Touch-up"
+        },
+        "safety": {
+          "player_safe": true,
+          "spoilers": "forbidden"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-AD01",
+            "deliverables": [
+              "Art plan for Chapter 3 cover (Dock 7 descent) merged to Cold with deferred:art tag"
+            ],
+            "linkage": "Art plan available for Binder exports; render deferred until Illustrator wakes; plan-only merge complete"
+          }
+        },
+        "refs": ["TU-2025-11-05-AD01"],
+        "correlation_id": "corr-art-touchup-chapter3-2025-11-05"
+      }
+    }
+  ]
+}

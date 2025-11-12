@@ -1,0 +1,40 @@
+{
+  "protocol": {
+    "name": "qf-protocol",
+    "version": "1.0.0"
+  },
+  "id": "urn:uuid:c9d0e1f2-a3b4-4567-c890-abcdef012345",
+  "time": "2025-10-30T12:25:00Z",
+  "sender": {
+    "role": "GK",
+    "agent": "bot:gk-validator"
+  },
+  "receiver": {
+    "role": "LW"
+  },
+  "intent": "error",
+  "context": {
+    "hot_cold": "hot",
+    "loop": "Gatecheck"
+  },
+  "safety": {
+    "player_safe": false,
+    "spoilers": "allowed"
+  },
+  "payload": {
+    "type": "none",
+    "data": {
+      "code": "validation_error",
+      "message": "Payload data does not validate against schema",
+      "details": {
+        "schema_path": "../03-schemas/hook_card.schema.json",
+        "validation_errors": [
+          "header.id: does not match pattern ^HK-\\d{8}-(0[1-9]|[1-9]\\d{1,2})$",
+          "classification.bars_affected: must have at least 1 item"
+        ]
+      }
+    }
+  },
+  "correlation_id": "corr-hook-harvest-2025-10-30",
+  "reply_to": "urn:uuid:550e8400-e29b-41d4-a716-446655440000"
+}

@@ -1,0 +1,84 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:ad-manifest-init-0001",
+    "time": "2025-10-28T10:00:00Z",
+    "sender": { "role": "AD", "agent": "bot:ad" },
+    "receiver": { "role": "IL" },
+    "intent": "art.manifest.updated",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-10-28-AD03",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "art_manifest",
+      "data": {
+        "manifest_version": "1.0",
+        "project": "Midnight Deposition",
+        "created": "2025-10-28T10:00:00Z",
+        "last_updated": "2025-10-28T10:00:00Z",
+        "assets": [
+          {
+            "id": "cover_titled",
+            "role": "cover",
+            "filename": "cover_titled.png",
+            "format": "PNG",
+            "dimensions": "1600x2400",
+            "title_bearing": true,
+            "caption": "Midnight Deposition - A rain-soaked detective story",
+            "prompt": "Film noir book cover, rain-soaked city street at midnight, detective silhouette under streetlight, art deco title typography, high contrast black and white with amber accents",
+            "section_anchor": null,
+            "sha256": null,
+            "status": "planned",
+            "rendered_date": null,
+            "notes": "Priority cover for Phase 1 - title must be rendered on image"
+          },
+          {
+            "id": "plate_A2_K",
+            "role": "interior_plate",
+            "filename": "plate_A2_K.png",
+            "format": "PNG",
+            "dimensions": "1024x1024",
+            "title_bearing": false,
+            "caption": "Rain-slicked alley with distant figure under flickering streetlight",
+            "prompt": "Film noir scene, narrow rain-slicked alley, distant figure in trench coat under single flickering streetlight, puddles reflecting neon signs, high contrast black and white, cinematic composition",
+            "section_anchor": "A2_K",
+            "sha256": null,
+            "status": "planned",
+            "rendered_date": null,
+            "notes": "Interior plate for key investigation scene"
+          }
+        ]
+      }
+    },
+    "correlation_id": "corr-art-manifest-2025-10-28"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:il-render-complete-0001",
+    "time": "2025-10-29T14:20:00Z",
+    "sender": { "role": "IL", "agent": "bot:il" },
+    "receiver": { "role": "AD" },
+    "intent": "art.render.complete",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-10-29-IL02",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "asset_id": "cover_titled",
+        "filename": "cover_titled.png",
+        "sha256": "a3f5e8b2c9d1f4a7e6b8c3d5f2a9e1b7c4d6f3a8e5b2c9d1f4a7e6b8c3d5f2a9",
+        "rendered_date": "2025-10-29T14:20:00Z",
+        "status": "rendered",
+        "message": "Cover rendered successfully with title text"
+      }
+    },
+    "correlation_id": "corr-art-manifest-2025-10-28"
+  }
+]

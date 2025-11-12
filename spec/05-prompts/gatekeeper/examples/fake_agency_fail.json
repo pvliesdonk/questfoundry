@@ -1,0 +1,60 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-submit-gate-fake-01",
+    "time": "2025-11-05T20:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "GK" },
+    "intent": "gate.report.submit",
+    "context": { "hot_cold": "hot", "tu": "TU-2025-11-05-SS10", "loop": "Gatecheck" },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "gatecheck_report",
+      "data": {
+        "title": "Early Funnel Check",
+        "mode": "pre-gate",
+        "cold_snapshot": "Cold @ 2025-11-05",
+        "bars": []
+      }
+    },
+    "correlation_id": "corr-fake-agency-01"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:gk-decision-fake-01",
+    "time": "2025-11-05T20:15:00Z",
+    "sender": { "role": "GK", "agent": "human:charlie" },
+    "receiver": { "role": "SR" },
+    "intent": "gate.decision",
+    "context": { "hot_cold": "hot", "tu": "TU-2025-11-05-SS10", "loop": "Gatecheck" },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "gatecheck_report",
+      "data": {
+        "title": "Gate Decision",
+        "mode": "gatecheck",
+        "decision": "block",
+        "why": "Fake agency: S1 choices converge with no reflection in S2’s first paragraph; no diegetic bridge.",
+        "bars": [
+          {
+            "bar": "Nonlinearity",
+            "status": "red",
+            "evidence": "S1 two choices → S2 identical opening; no perceivable difference by first paragraph.",
+            "smallest_viable_fix": "Insert a micro-beat between scenes that sets a state flag; make S2 open with a reflection of that state; condition one affordance by state.",
+            "owner": "PW"
+          },
+          {
+            "bar": "Presentation",
+            "status": "yellow",
+            "evidence": "Anchor jump reads like a teleport; no transit line.",
+            "smallest_viable_fix": "Add a one-line diegetic bridge when moving from S1 to S2.",
+            "owner": "SS"
+          }
+        ],
+        "next_actions": "Apply fixes and resubmit pre-gate."
+      }
+    },
+    "correlation_id": "corr-fake-agency-01",
+    "reply_to": "urn:uuid:sr-submit-gate-fake-01"
+  }
+]

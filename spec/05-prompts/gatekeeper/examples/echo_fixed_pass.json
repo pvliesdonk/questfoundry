@@ -1,0 +1,64 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-submit-gate-echo-01",
+    "time": "2025-11-05T21:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "GK" },
+    "intent": "gate.report.submit",
+    "context": { "hot_cold": "hot", "tu": "TU-2025-11-05-SS11", "loop": "Gatecheck" },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "gatecheck_report",
+      "data": {
+        "title": "Echo Fix Check",
+        "mode": "pre-gate",
+        "cold_snapshot": "Cold @ 2025-11-05",
+        "bars": []
+      }
+    },
+    "correlation_id": "corr-echo-pass-01"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:gk-decision-echo-01",
+    "time": "2025-11-05T21:15:00Z",
+    "sender": { "role": "GK", "agent": "human:charlie" },
+    "receiver": { "role": "SR" },
+    "intent": "gate.decision",
+    "context": { "hot_cold": "hot", "tu": "TU-2025-11-05-SS11", "loop": "Gatecheck" },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "gatecheck_report",
+      "data": {
+        "title": "Gate Decision",
+        "mode": "gatecheck",
+        "decision": "pass",
+        "why": "Immediate reflection present and diegetic bridge added; state-aware affordance visible.",
+        "bars": [
+          {
+            "bar": "Nonlinearity",
+            "status": "green",
+            "evidence": "S2 first paragraph reflects entering state (stamped vs cadence-only) via clerk behavior and crowd flow.",
+            "owner": "PW"
+          },
+          {
+            "bar": "Presentation",
+            "status": "green",
+            "evidence": "Transit line added between S1 and S2 (diegetic movement).",
+            "owner": "SS"
+          },
+          {
+            "bar": "Determinism",
+            "status": "green",
+            "evidence": "One S2 option reads differently conditioned on state (waved through vs set aside).",
+            "owner": "SS"
+          }
+        ],
+        "next_actions": "Proceed to binding run."
+      }
+    },
+    "correlation_id": "corr-echo-pass-01",
+    "reply_to": "urn:uuid:sr-submit-gate-echo-01"
+  }
+]

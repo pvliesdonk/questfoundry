@@ -1,0 +1,40 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:bb-result-0100",
+    "time": "2025-11-05T13:00:00Z",
+    "sender": { "role": "BB", "agent": "bot:binder-v2" },
+    "receiver": { "role": "PN" },
+    "intent": "view.export.result",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-05-BB10",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Binding Run"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "view_log",
+      "data": {
+        "title": "milestone-ch3",
+        "bound": "2025-11-05",
+        "binder": "bot:binder-v2",
+        "tu": "TU-2025-11-05-BB10",
+        "cold_snapshot": "Cold @ 2025-10-28",
+        "targets": ["html", "markdown"],
+        "options_and_coverage": "Art partial, audio none, locales en-GB only; accessibility pass expected.",
+        "anchor_map": "Manuscript 125 anchors, codex 45, locales 1; orphans 0; collisions 0.",
+        "presentation_status": "green",
+        "accessibility_status": "green",
+        "gatekeeper": "human:charlie",
+        "gatecheck_id": "gk-LW13-2025-11-05",
+        "export_artifacts": [
+          { "kind": "html", "path": "exports/milestone-ch3/index.html" },
+          { "kind": "markdown", "path": "exports/milestone-ch3/manuscript.md" }
+        ]
+      }
+    },
+    "correlation_id": "corr-bb-req-0100",
+    "reply_to": "urn:uuid:sr-req-bb-0100"
+  }
+]

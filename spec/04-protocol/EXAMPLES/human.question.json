@@ -1,0 +1,36 @@
+{
+  "protocol": {
+    "name": "qf-protocol",
+    "version": "1.0.0"
+  },
+  "id": "urn:uuid:humq-1111-2222-3333-4444",
+  "time": "2025-11-03T10:00:00Z",
+  "sender": {
+    "role": "LW",
+    "agent": "bot:lw"
+  },
+  "receiver": {
+    "role": "SR"
+  },
+  "intent": "human.question",
+  "context": {
+    "hot_cold": "hot",
+    "loop": "Lore Deepening",
+    "tu": "TU-2025-11-03-LW01"
+  },
+  "safety": {
+    "player_safe": false,
+    "spoilers": "allowed"
+  },
+  "payload": {
+    "type": "none",
+    "data": {
+      "question": "Should the toll faction be morally gray or clearly antagonistic?",
+      "context": {
+        "hook_id": "HK-20251030-01"
+      },
+      "suggestions": ["morally_gray", "antagonistic"]
+    }
+  },
+  "correlation_id": "corr-toll-faction-01"
+}

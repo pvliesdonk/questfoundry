@@ -1,0 +1,54 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-aup-0001",
+    "time": "2025-11-04T15:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "AuP" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AUP10",
+      "loop": "Audio Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "reason": "Render cues A1-M1 (music) and A1-S1 (SFX) from cuelist"
+      }
+    },
+    "correlation_id": "corr-aup-render-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:aup-ckpt-0001",
+    "time": "2025-11-04T15:30:00Z",
+    "sender": { "role": "AuP", "agent": "bot:aup" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AUP10",
+      "loop": "Audio Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Rendered A1-M1 (minor motif, 64s, loopable) and A1-S1 (gate clank, -8dB). Logged params.",
+        "details": {
+          "A1-M1": {
+            "provider": "elevenlabs-music",
+            "version": "1.2",
+            "tempo": 84,
+            "key": "A minor",
+            "seed": 4242
+          },
+          "A1-S1": { "provider": "sfx-gen", "version": "0.9", "gain": -8 }
+        }
+      }
+    },
+    "correlation_id": "corr-aup-render-2025-11-04"
+  }
+]

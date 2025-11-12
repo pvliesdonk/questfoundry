@@ -1,0 +1,44 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-ad-0001",
+    "time": "2025-11-04T11:30:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "AD" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AD10",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "reason": "Create shotlist for scenes A1–A2 with consistent style"
+      }
+    },
+    "correlation_id": "corr-ad-shotlist-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:ad-ckpt-0001",
+    "time": "2025-11-04T12:00:00Z",
+    "sender": { "role": "AD", "agent": "bot:ad" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AD10",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Shotlist drafted for A1–A2: subjects, composition, mood; prompts guidance attached; no determinism promised."
+      }
+    },
+    "correlation_id": "corr-ad-shotlist-2025-11-04"
+  }
+]

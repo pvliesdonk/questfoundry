@@ -1,0 +1,42 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:ss-ckpt-2001",
+    "time": "2025-11-03T21:00:00Z",
+    "sender": { "role": "SS", "agent": "bot:ss" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-SS11",
+      "loop": "Style Tune-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Tone wobble detected in A1 paragraphs 3–4; requesting Style Lead audit."
+      }
+    },
+    "correlation_id": "corr-ss-style-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-st-2001",
+    "time": "2025-11-03T21:01:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "ST" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-SS11",
+      "loop": "Style Tune-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "reason": "Audit A1 tone wobble in paragraphs 3–4" }
+    },
+    "correlation_id": "corr-ss-style-2025-11-03"
+  }
+]

@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/shotlist.schema.json",
+  "title": "Shotlist",
+  "description": "Generated from 02-dictionary/artifacts/shotlist_ENRICHED.md. Art Director's index of illustration slots for a slice, linking each slot to its Art Plan while keeping player-facing surfaces safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slice name for this shotlist.",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this shotlist was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the shotlist; fixed to Art Director.",
+      "enum": ["Art Director"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "Player-safe slice description (1-2 lines) detailing which sections this shotlist covers.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "dormancy": {
+      "type": "string",
+      "description": "Dormancy state, including deferral tagging when plan-only.",
+      "enum": ["active", "plan-only (deferred:art)", "dormant"]
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Origin TU Brief identifier in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "neighbors": {
+      "type": "array",
+      "description": "Roles affected by this shotlist; must include illustrator, style, translator, binder, and gatekeeper.",
+      "items": {
+        "type": "string",
+        "enum": ["@illustrator", "@style", "@translator", "@binder", "@gatekeeper"]
+      },
+      "minItems": 5,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "@illustrator"
+          }
+        },
+        {
+          "contains": {
+            "const": "@style"
+          }
+        },
+        {
+          "contains": {
+            "const": "@translator"
+          }
+        },
+        {
+          "contains": {
+            "const": "@binder"
+          }
+        },
+        {
+          "contains": {
+            "const": "@gatekeeper"
+          }
+        }
+      ]
+    },
+    "purpose_mix": {
+      "type": "string",
+      "description": "Purpose distribution summary (counts for clarify, recall, mood, signpost) matching the slot table.",
+      "minLength": 15,
+      "maxLength": 200
+    },
+    "inclusion_policy": {
+      "type": "string",
+      "description": "Player-safe summary of where images appear within the slice.",
+      "minLength": 15,
+      "maxLength": 200
+    },
+    "accessibility_summary": {
+      "type": "string",
+      "description": "Slice-level accessibility confirmation covering captions and alt text readiness.",
+      "minLength": 15,
+      "maxLength": 200
+    },
+    "slots": {
+      "type": "array",
+      "description": "Table of art slots, one per planned illustration, with player-safe surface content.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "description": "Kebab-case slot identifier that links to the Art Plan.",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "art_plan_reference": {
+            "type": "string",
+            "description": "Relative path or identifier for the corresponding Art Plan artifact.",
+            "pattern": "^(\\.?/)?[A-Za-z0-9._\\-/]+$"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "Primary art purpose for this slot.",
+            "enum": ["clarify", "recall", "mood", "signpost"]
+          },
+          "subject": {
+            "type": "string",
+            "description": "Short subject description using concrete nouns.",
+            "minLength": 5,
+            "maxLength": 160
+          },
+          "focal_affordance": {
+            "type": "string",
+            "description": "What must remain readable or legible in the composition.",
+            "minLength": 5,
+            "maxLength": 160
+          },
+          "caption": {
+            "type": "string",
+            "description": "Player-safe caption shown to players (single line).",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "alt_text": {
+            "type": "string",
+            "description": "Player-safe alt text (one sentence covering subject, relation, and location).",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "anchor_targets": {
+            "type": "array",
+            "description": "List of manuscript paths anchored by this slot.",
+            "items": {
+              "type": "string",
+              "pattern": "^/[A-Za-z0-9._\\-/]+#[A-Za-z0-9._\\-]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Current production status for the slot.",
+            "enum": ["planned", "rendering", "done", "deferred"]
+          }
+        },
+        "required": [
+          "slot_id",
+          "art_plan_reference",
+          "purpose",
+          "subject",
+          "focal_affordance",
+          "caption",
+          "alt_text",
+          "anchor_targets",
+          "status"
+        ]
+      },
+      "minItems": 1
+    },
+    "inclusion_exclusion_rules": {
+      "type": "string",
+      "description": "Optional notes capturing any non-obvious placement rules for specific slots.",
+      "maxLength": 400
+    },
+    "localization_style_notes": {
+      "type": "array",
+      "description": "Slice-level localization and style guidance bullets that align with Style Addendum and Codex entries.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "accessibility_checklist": {
+      "type": "array",
+      "description": "Accessibility checklist items that must be confirmed before handoff.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "binder_note": {
+      "type": "string",
+      "description": "Binder instructions for anchor verification and dry bind planning.",
+      "maxLength": 400
+    },
+    "gatekeeper_note": {
+      "type": "string",
+      "description": "Gatekeeper guidance for presentation/accessibility spot-checks.",
+      "maxLength": 400
+    },
+    "hooks_filed": {
+      "type": "array",
+      "description": "Optional follow-up hooks filed from this shotlist.",
+      "items": {
+        "type": "string",
+        "pattern": "^hook://[a-z0-9\\-]+/[a-z0-9\\-]+.*$"
+      }
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist verifying readiness before handing off to the illustrator.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 7,
+      "maxItems": 7
+    }
+  },
+  "required": [
+    "title",
+    "edited",
+    "owner",
+    "scope",
+    "snapshot",
+    "tu",
+    "neighbors",
+    "purpose_mix",
+    "inclusion_policy",
+    "accessibility_summary",
+    "slots",
+    "accessibility_checklist",
+    "done_checklist"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

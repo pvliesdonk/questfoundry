@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/protocol/envelope.schema.json",
+  "title": "QuestFoundry Protocol Envelope",
+  "description": "Transport-agnostic message envelope for Layer 4. Enforces PN safety boundaries. Payload validation against Layer 3 schemas is handled separately by validation tools.",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "const": "qf-protocol" },
+        "version": {
+          "type": "string",
+          "description": "SemVer string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+        }
+      },
+      "required": ["name", "version"]
+    },
+    "id": { "type": "string", "description": "Message id (UUID/URN/ULID)", "minLength": 8 },
+    "time": { "type": "string", "format": "date-time" },
+    "sender": {
+      "type": "object",
+      "properties": {
+        "role": { "$ref": "#/$defs/role_name" },
+        "agent": { "type": "string", "description": "Optional human/agent identifier" }
+      },
+      "required": ["role"]
+    },
+    "receiver": {
+      "type": "object",
+      "properties": {
+        "role": { "$ref": "#/$defs/role_name" }
+      },
+      "required": ["role"]
+    },
+    "intent": {
+      "type": "string",
+      "description": "Verb.catalog (e.g., hook.create)",
+      "pattern": "^[a-z]+([._-][a-z]+)*$"
+    },
+    "correlation_id": { "type": "string" },
+    "reply_to": { "type": "string" },
+    "context": {
+      "type": "object",
+      "properties": {
+        "hot_cold": { "type": "string", "enum": ["hot", "cold"] },
+        "tu": { "type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$" },
+        "snapshot": { "type": "string", "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$" },
+        "loop": { "$ref": "#/$defs/loop_name" }
+      },
+      "required": ["hot_cold"]
+    },
+    "safety": {
+      "type": "object",
+      "properties": {
+        "player_safe": { "type": "boolean" },
+        "spoilers": { "type": "string", "enum": ["allowed", "forbidden"] }
+      },
+      "required": ["player_safe", "spoilers"]
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "type": { "$ref": "#/$defs/payload_type" },
+        "data": {
+          "type": "object",
+          "description": "Payload data validated separately against Layer 3 schemas based on payload.type"
+        }
+      },
+      "required": ["type", "data"]
+    },
+    "refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "protocol",
+    "id",
+    "time",
+    "sender",
+    "receiver",
+    "intent",
+    "context",
+    "safety",
+    "payload"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "receiver": { "properties": { "role": { "const": "PN" } }, "required": ["role"] }
+        },
+        "required": ["receiver"]
+      },
+      "then": {
+        "properties": {
+          "context": {
+            "properties": { "hot_cold": { "const": "cold" } },
+            "required": ["hot_cold", "snapshot"]
+          },
+          "safety": { "properties": { "player_safe": { "const": true } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "intent": { "const": "ack" } }, "required": ["intent"] },
+      "then": { "properties": { "payload": { "properties": { "type": { "const": "none" } } } } }
+    },
+    {
+      "if": { "properties": { "intent": { "const": "error" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "properties": {
+              "type": { "const": "none" },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "validation_error",
+                      "business_rule_violation",
+                      "not_authorized",
+                      "not_found",
+                      "conflict"
+                    ]
+                  },
+                  "message": { "type": "string", "minLength": 5 },
+                  "details": { "type": "object" }
+                },
+                "required": ["code", "message"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "Role abbreviation from 02-dictionary/role_abbreviations.md (Layer 2), or '*' for broadcast",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS",
+        "*"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "Loop display name from 02-dictionary/loop_names.md (Layer 2)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "payload_type": {
+      "type": "string",
+      "description": "Artifact type from Layer 3 schemas. Payload data validation is handled separately by validation tools.",
+      "enum": [
+        "art_plan",
+        "audio_plan",
+        "canon_pack",
+        "codex_entry",
+        "cuelist",
+        "edit_notes",
+        "front_matter",
+        "gatecheck_report",
+        "hook_card",
+        "language_pack",
+        "pn_playtest_notes",
+        "register_map",
+        "research_memo",
+        "shotlist",
+        "style_addendum",
+        "tu_brief",
+        "view_log",
+        "none"
+      ]
+    }
+  }
+}

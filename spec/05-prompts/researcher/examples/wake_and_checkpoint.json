@@ -1,0 +1,44 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-rs-0001",
+    "time": "2025-11-04T10:30:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "RS" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-RS10",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "reason": "Verify plausibility of toll mechanism historical analog"
+      }
+    },
+    "correlation_id": "corr-rs-wake-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:rs-ckpt-0001",
+    "time": "2025-11-04T11:00:00Z",
+    "sender": { "role": "RS", "agent": "bot:rs" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-RS10",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Collected 3 sources on historical toll embargo patterns; posture plausible; drafting neutral phrasing and memo."
+      }
+    },
+    "correlation_id": "corr-rs-wake-2025-11-04"
+  }
+]

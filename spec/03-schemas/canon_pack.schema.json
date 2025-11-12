@@ -1,0 +1,358 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/canon_pack.schema.json",
+  "title": "Canon Pack",
+  "description": "Generated from 02-dictionary/artifacts/canon_pack_ENRICHED.md. Bundles Hot canon answers with player-safe summaries, downstream effects, and lineage references.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Player-safe canon pack title.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this canon pack was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the pack; fixed to Lore Weaver.",
+      "enum": ["Lore Weaver"]
+    },
+    "slice": {
+      "type": "string",
+      "description": "Player-safe scope description (1-2 lines).",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "hooks_answered": {
+      "type": "array",
+      "description": "List of hook IDs or short names resolved by this pack.",
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 80
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "research_posture_touched": {
+      "type": "string",
+      "description": "Highest research posture level touched.",
+      "enum": [
+        "corroborated",
+        "plausible",
+        "disputed",
+        "uncorroborated:low",
+        "uncorroborated:medium",
+        "uncorroborated:high"
+      ]
+    },
+    "sensitivity": {
+      "type": "string",
+      "description": "Optional sensitivity notes or content note references.",
+      "maxLength": 200
+    },
+    "canon_answers_hot": {
+      "type": "array",
+      "description": "Spoiler-allowed hook answers with evidence and consequences.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hook_id": {
+            "type": "string",
+            "description": "Hook ID or short name (must match hooks_answered list).",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "answer": {
+            "type": "string",
+            "description": "Crisp answer text (2-6 lines).",
+            "minLength": 20,
+            "maxLength": 600
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Optional evidence or reasoning summary.",
+            "maxLength": 400
+          },
+          "consequences": {
+            "type": "string",
+            "description": "Consequences or unlocks resulting from the answer.",
+            "minLength": 10,
+            "maxLength": 400
+          }
+        },
+        "required": ["hook_id", "answer", "consequences"]
+      },
+      "minItems": 1
+    },
+    "timeline_anchors_hot": {
+      "type": "array",
+      "description": "Timeline anchors (T0/T1/T2/T3) describing event progression.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "type": "string",
+            "description": "Timeline anchor label (T0/T1/T2/T3).",
+            "enum": ["T0", "T1", "T2", "T3"]
+          },
+          "description": {
+            "type": "string",
+            "description": "Event description tied to the anchor.",
+            "minLength": 10,
+            "maxLength": 400
+          }
+        },
+        "required": ["anchor", "description"]
+      },
+      "minItems": 2
+    },
+    "invariants_constraints_hot": {
+      "type": "array",
+      "description": "Hot invariants and constraints that must remain true.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string",
+            "description": "Invariant or constraint statement.",
+            "minLength": 10,
+            "maxLength": 400
+          },
+          "owner": {
+            "type": "string",
+            "description": "Owner responsible (Lore, Plot, Curator).",
+            "minLength": 2,
+            "maxLength": 40
+          },
+          "reason": {
+            "type": "string",
+            "description": "One-line reasoning for the invariant or constraint.",
+            "minLength": 5,
+            "maxLength": 240
+          }
+        },
+        "required": ["statement", "owner", "reason"]
+      },
+      "minItems": 1
+    },
+    "entity_state_deltas_hot": {
+      "type": "array",
+      "description": "Optional state changes per entity caused by this canon.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string",
+            "description": "Entity name.",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "before": {
+            "type": "string",
+            "description": "State before the canon change.",
+            "minLength": 5,
+            "maxLength": 240
+          },
+          "after": {
+            "type": "string",
+            "description": "State after the canon change.",
+            "minLength": 5,
+            "maxLength": 240
+          },
+          "visibility": {
+            "type": "string",
+            "description": "Who could know about this change.",
+            "minLength": 2,
+            "maxLength": 80
+          }
+        },
+        "required": ["entity", "before", "after", "visibility"]
+      }
+    },
+    "knowledge_ledger_hot": {
+      "type": "array",
+      "description": "Knowledge ledger showing who knows what at different timeline points.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "actor": {
+            "type": "string",
+            "description": "Actor or group being tracked.",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "knows_at_t0": {
+            "type": "string",
+            "description": "Knowledge held at T0.",
+            "minLength": 5,
+            "maxLength": 300
+          },
+          "gains_by_t1_t2": {
+            "type": "string",
+            "description": "Knowledge gained by T1/T2.",
+            "minLength": 5,
+            "maxLength": 300
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes on expression or limitations.",
+            "maxLength": 200
+          }
+        },
+        "required": ["actor", "knows_at_t0", "gains_by_t1_t2"]
+      },
+      "minItems": 1
+    },
+    "player_safe_summary": {
+      "type": "string",
+      "description": "Player-safe summary covering exposed concepts without spoilers.",
+      "minLength": 20,
+      "maxLength": 800
+    },
+    "downstream_effects": {
+      "type": "array",
+      "description": "Actionable downstream steps for creative roles (Plotwright, Scene Smith, Style Lead, Codex Curator, etc.).",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 400
+      },
+      "minItems": 4
+    },
+    "hooks_filed": {
+      "type": "array",
+      "description": "Optional follow-up hooks filed as a result of this canon pack.",
+      "items": {
+        "type": "string",
+        "pattern": "^hook://[a-z0-9\\-]+/[a-z0-9\\-]+.*$"
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "Checklist confirming all required tasks before approval.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 7,
+      "maxItems": 7
+    },
+    "lineage": {
+      "type": "string",
+      "description": "Lineage references (TU, Research Memos, prior Canon Packs, ADRs).",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "neighbors_notified": {
+      "type": "array",
+      "description": "Roles notified of this canon update.",
+      "items": {
+        "$ref": "#/$defs/role_name"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "snapshot_impact": {
+      "type": "string",
+      "description": "Impact on Cold snapshots or upcoming exports.",
+      "minLength": 10,
+      "maxLength": 400
+    }
+  },
+  "required": [
+    "title",
+    "tu",
+    "edited",
+    "owner",
+    "slice",
+    "hooks_answered",
+    "research_posture_touched",
+    "canon_answers_hot",
+    "timeline_anchors_hot",
+    "invariants_constraints_hot",
+    "knowledge_ledger_hot",
+    "player_safe_summary",
+    "downstream_effects",
+    "checks",
+    "lineage",
+    "neighbors_notified",
+    "snapshot_impact"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

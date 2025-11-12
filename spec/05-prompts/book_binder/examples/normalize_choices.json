@@ -1,0 +1,22 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:bb-norm-0001",
+    "time": "2025-11-05T22:00:00Z",
+    "sender": { "role": "BB", "agent": "bot:binder" },
+    "receiver": { "role": "SR" },
+    "intent": "view.export.result",
+    "context": { "hot_cold": "cold", "snapshot": "Cold @ 2025-11-05", "loop": "Binding Run" },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "view_log",
+      "data": {
+        "title": "normalize-choices-demo",
+        "targets": ["markdown"],
+        "cold_snapshot": "Cold @ 2025-11-05",
+        "anchor_map": "Aliases S1′ → s1-return; bullets normalized to link-only lines",
+        "export_artifacts": [{ "kind": "markdown", "path": "exports/demo/normalize-choices.md" }]
+      }
+    }
+  }
+]

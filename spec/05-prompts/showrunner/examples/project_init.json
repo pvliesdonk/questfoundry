@@ -1,0 +1,87 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-init-0001",
+    "time": "2025-11-04T12:00:00Z",
+    "sender": { "role": "SR", "agent": "bot:sr" },
+    "receiver": { "role": "SR", "agent": "human:author" },
+    "intent": "project.init.request",
+    "context": {
+      "hot_cold": "cold"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "step": "genre",
+        "question": "Let's set up your interactive story. What genre or theme are you exploring?",
+        "suggestions": [
+          "detective-noir",
+          "fantasy-adventure",
+          "sci-fi-thriller",
+          "horror-survival",
+          "historical-drama",
+          "other"
+        ]
+      }
+    },
+    "correlation_id": "corr-init-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:user-resp-0001",
+    "time": "2025-11-04T12:01:00Z",
+    "sender": { "role": "SR", "agent": "human:peter" },
+    "receiver": { "role": "SR", "agent": "bot:sr" },
+    "intent": "human.response",
+    "context": {
+      "hot_cold": "cold"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "choice": "detective-noir"
+      }
+    },
+    "correlation_id": "corr-init-2025-11-04",
+    "reply_to": "urn:uuid:sr-init-0001"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-init-complete-0001",
+    "time": "2025-11-04T12:15:00Z",
+    "sender": { "role": "SR", "agent": "bot:sr" },
+    "receiver": { "role": "SR", "agent": "human:author" },
+    "intent": "project.init.complete",
+    "context": {
+      "hot_cold": "cold"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "project_metadata",
+      "data": {
+        "title": "Midnight Deposition",
+        "genre": "detective-noir",
+        "author": "Peter van Liesdonk",
+        "license": "CC BY-NC 4.0",
+        "description": "A rain-soaked detective story where choices shape the investigation and every lead has a cost.",
+        "subjects": ["noir", "detective", "mystery", "interactive fiction"],
+        "language": "en",
+        "target_sections": 30,
+        "target_length": "medium",
+        "branching_style": "moderate",
+        "style": {
+          "writing_style": "pulp",
+          "paragraph_density": "rich",
+          "tone": "gritty",
+          "pov": "second-person"
+        },
+        "created": "2025-11-04T12:00:00Z",
+        "last_modified": "2025-11-04T12:15:00Z",
+        "version": "0.1.0"
+      }
+    },
+    "correlation_id": "corr-init-2025-11-04"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-aud-0001",
+    "time": "2025-11-04T14:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "AuD" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AUD10",
+      "loop": "Audio Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "reason": "Create cuelist for scenes A1–A2 with leitmotif plan"
+      }
+    },
+    "correlation_id": "corr-aud-cuelist-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:aud-ckpt-0001",
+    "time": "2025-11-04T14:30:00Z",
+    "sender": { "role": "AuD", "agent": "bot:aud" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AUD10",
+      "loop": "Audio Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Cuelist drafted A1–A2: music cues with minor key motif; SFX list; voice cue placeholders; transitions noted; render guidance prepared."
+      }
+    },
+    "correlation_id": "corr-aud-cuelist-2025-11-04"
+  }
+]

@@ -1,0 +1,53 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-open-cc-0001",
+    "time": "2025-11-03T23:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "CC" },
+    "intent": "tu.open",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-CC10",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Codex Expansion"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "tu_brief",
+      "data": {
+        "id": "TU-2025-11-03-CC10",
+        "opened": "2025-11-03",
+        "owner_a": "SR",
+        "responsible_r": ["CC"],
+        "loop": "Codex Expansion",
+        "slice": "Publish player-safe entry for Shadow Toll",
+        "snapshot_context": "Cold @ 2025-10-28"
+      }
+    },
+    "refs": ["TU-2025-11-03-LW10"],
+    "correlation_id": "corr-cc-codex-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:cc-ckpt-0001",
+    "time": "2025-11-03T23:20:00Z",
+    "sender": { "role": "CC", "agent": "bot:cc" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-CC10",
+      "loop": "Codex Expansion"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Drafted codex entry 'Shadow Toll' (player-safe); added crosslinks to 'Wormhole 3' and 'Kestrel'; unlock: after Dock Foreman vouches. No spoilers present."
+      }
+    },
+    "refs": ["TU-2025-11-03-LW10"],
+    "correlation_id": "corr-cc-codex-2025-11-03"
+  }
+]

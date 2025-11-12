@@ -1,0 +1,24 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:rs-memo-0001",
+    "time": "2025-11-04T11:15:00Z",
+    "sender": { "role": "RS", "agent": "bot:rs" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-RS10",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Research memo drafted: toll embargo analogs; posture plausible; neutral phrasing and implications recorded.",
+        "details": { "memo_path": "research/memos/toll_embargo.json" }
+      }
+    },
+    "correlation_id": "corr-rs-memo-2025-11-04"
+  }
+]

@@ -1,0 +1,66 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:ss-ckpt-0001",
+    "time": "2025-11-03T14:00:00Z",
+    "sender": { "role": "SS", "agent": "bot:ss" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-SS01",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "summary": "Drafted scene A1 complete; awaiting style review" }
+    },
+    "correlation_id": "corr-ckpt-approve-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-q-0001",
+    "time": "2025-11-03T14:01:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "SR" },
+    "intent": "human.question",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-SS01",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "question": "Approve A1 to proceed to GK pre-gate?",
+        "suggestions": ["approve", "revise"]
+      }
+    },
+    "correlation_id": "corr-ckpt-approve-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-a-0002",
+    "time": "2025-11-03T14:01:20Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "SS" },
+    "intent": "human.response",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-SS01",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "choice": "approve",
+        "answer": "Looks good—proceed to GK pre-gate"
+      }
+    },
+    "correlation_id": "corr-ckpt-approve-2025-11-03",
+    "reply_to": "urn:uuid:sr-q-0001"
+  }
+]

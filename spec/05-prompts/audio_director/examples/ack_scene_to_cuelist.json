@@ -1,0 +1,22 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:aud-ack-0001",
+    "time": "2025-11-04T14:01:00Z",
+    "sender": { "role": "AuD", "agent": "bot:aud" },
+    "receiver": { "role": "SR" },
+    "intent": "ack",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AUD10",
+      "loop": "Audio Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "message": "Waking, drafting cuelist for A1–A2." }
+    },
+    "correlation_id": "corr-aud-cuelist-2025-11-04",
+    "reply_to": "urn:uuid:sr-wake-aud-0001"
+  }
+]

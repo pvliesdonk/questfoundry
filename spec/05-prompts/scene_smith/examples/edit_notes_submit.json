@@ -1,0 +1,42 @@
+{
+  "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+  "id": "urn:uuid:ss-edit-0001",
+  "time": "2025-11-04T20:20:00Z",
+  "sender": { "role": "SS", "agent": "bot:ss" },
+  "receiver": { "role": "SR" },
+  "intent": "scene.revise",
+  "context": {
+    "hot_cold": "hot",
+    "tu": "TU-2025-11-03-SS10",
+    "snapshot": "Cold @ 2025-10-28",
+    "loop": "Style Tune-up"
+  },
+  "safety": { "player_safe": false, "spoilers": "allowed" },
+  "payload": {
+    "type": "edit_notes",
+    "data": {
+      "title": "A1 Choice Clarity Fixes",
+      "tu": "TU-2025-11-03-SS10",
+      "opened": "2025-11-04",
+      "snapshot": "Cold @ 2025-10-28",
+      "author": "SS",
+      "owners_to_apply": ["SS"],
+      "bars_pressed": ["Presentation"],
+      "summary": [
+        "Clarify contrast between two A1 choices",
+        "Keep register sardonic; avoid meta phrasing"
+      ],
+      "before_after": [
+        {
+          "location": "manuscript#A1",
+          "issue_tag": "choice-ambiguity",
+          "before_text": "Do you go left or proceed?",
+          "after_text": "1) Duck into the cargo bay  2) Stride through the toll gate",
+          "owner": "SS",
+          "rationale": "Sharpen labels and avoid meta words to improve contrast"
+        }
+      ]
+    }
+  },
+  "correlation_id": "corr-ss-edit-2025-11-04"
+}

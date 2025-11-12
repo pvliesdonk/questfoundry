@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cold_art_manifest.schema.json",
+  "title": "Cold Art Manifest",
+  "description": "Asset mappings, SHA-256 hashes, and provenance tracking for deterministic builds. Every asset must have matching hash and approval metadata.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference",
+      "const": "https://questfoundry.liesdonk.nl/schemas/cold_art_manifest.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "Art manifest format version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "assets": {
+      "type": "array",
+      "description": "Complete list of assets with hashes and provenance",
+      "items": {
+        "$ref": "#/$defs/asset_entry"
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["$schema", "version", "assets"],
+  "$defs": {
+    "asset_entry": {
+      "type": "object",
+      "description": "Single asset with complete metadata, hash, and provenance",
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "description": "Section anchor (e.g., 'anchor001') or special anchor (e.g., 'cover')",
+          "pattern": "^(anchor\\d{3,}|cover|icon|logo)$"
+        },
+        "type": {
+          "type": "string",
+          "description": "Asset type (plate=illustration, cover, icon, etc.)",
+          "enum": ["plate", "cover", "icon", "logo", "ornament", "diagram"]
+        },
+        "filename": {
+          "type": "string",
+          "description": "Deterministic filename (format: <anchor>__<type>__v<version>.<ext> or special names like cover.png)",
+          "pattern": "^([a-z0-9]+(__[a-z]+)?(__v\\d+)?\\.(png|jpg|jpeg|svg|webp))$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256_hash",
+          "description": "SHA-256 hash of asset file (hex lowercase)"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "description": "File size in bytes",
+          "minimum": 1
+        },
+        "width_px": {
+          "type": "integer",
+          "description": "Image width in pixels",
+          "minimum": 1
+        },
+        "height_px": {
+          "type": "integer",
+          "description": "Image height in pixels",
+          "minimum": 1
+        },
+        "format": {
+          "type": "string",
+          "description": "Image format (PNG, JPG, SVG, WEBP)",
+          "enum": ["PNG", "JPG", "JPEG", "SVG", "WEBP"]
+        },
+        "approved_at": {
+          "$ref": "#/$defs/iso8601_timestamp",
+          "description": "Approval timestamp (when asset was reviewed and accepted)"
+        },
+        "approved_by": {
+          "$ref": "#/$defs/role_name",
+          "description": "Role that approved the asset (usually Art Director or Illustrator)"
+        },
+        "provenance": {
+          "$ref": "#/$defs/asset_provenance",
+          "description": "Creation and policy metadata for asset"
+        }
+      },
+      "required": [
+        "anchor",
+        "type",
+        "filename",
+        "sha256",
+        "size_bytes",
+        "width_px",
+        "height_px",
+        "format",
+        "approved_at",
+        "approved_by",
+        "provenance"
+      ]
+    },
+    "asset_provenance": {
+      "type": "object",
+      "description": "Asset creation metadata and policy compliance",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/role_name",
+          "description": "Role that created the asset (Illustrator, Art Director)"
+        },
+        "prompt_snippet": {
+          "type": "string",
+          "description": "Brief description of generation prompt or creative direction (player-safe)",
+          "minLength": 10,
+          "maxLength": 500
+        },
+        "version": {
+          "type": "integer",
+          "description": "Asset version number (1, 2, 3, ...). Increment on re-approval.",
+          "minimum": 1
+        },
+        "policy_notes": {
+          "type": "string",
+          "description": "Policy compliance notes (e.g., 'Child depicted from back per likeness policy'). Empty string if none.",
+          "maxLength": 500
+        },
+        "source": {
+          "type": "string",
+          "description": "Optional creation source (e.g., 'DALL-E 3', 'Midjourney v6', 'Manual illustration')",
+          "maxLength": 100
+        }
+      },
+      "required": ["role", "prompt_snippet", "version", "policy_notes"]
+    },
+    "sha256_hash": {
+      "type": "string",
+      "description": "SHA-256 hash in hexadecimal (64 lowercase hex chars)",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "iso8601_timestamp": {
+      "type": "string",
+      "description": "ISO 8601 timestamp with timezone (e.g., 2025-11-05T12:00:00Z)",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    }
+  }
+}

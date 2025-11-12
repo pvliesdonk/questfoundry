@@ -1,0 +1,32 @@
+{
+  "protocol": {
+    "name": "qf-protocol",
+    "version": "1.0.0"
+  },
+  "id": "urn:uuid:b8c9d0e1-f2a3-4456-b789-0abcdef01234",
+  "time": "2025-10-30T12:20:00Z",
+  "sender": {
+    "role": "LW",
+    "agent": "bot:lw-v1.5"
+  },
+  "receiver": {
+    "role": "SR"
+  },
+  "intent": "ack",
+  "context": {
+    "hot_cold": "hot",
+    "loop": "Hook Harvest"
+  },
+  "safety": {
+    "player_safe": false,
+    "spoilers": "allowed"
+  },
+  "payload": {
+    "type": "none",
+    "data": {
+      "message": "Hook HK-20251030-01 received and queued for review"
+    }
+  },
+  "correlation_id": "corr-hook-harvest-2025-10-30",
+  "reply_to": "urn:uuid:550e8400-e29b-41d4-a716-446655440000"
+}

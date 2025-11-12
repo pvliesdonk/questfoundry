@@ -1,0 +1,22 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:aup-ack-0001",
+    "time": "2025-11-04T15:01:00Z",
+    "sender": { "role": "AuP", "agent": "bot:aup" },
+    "receiver": { "role": "SR" },
+    "intent": "ack",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-AUP10",
+      "loop": "Audio Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "message": "Waking, rendering A1-M1 and A1-S1." }
+    },
+    "correlation_id": "corr-aup-render-2025-11-04",
+    "reply_to": "urn:uuid:sr-wake-aup-0001"
+  }
+]

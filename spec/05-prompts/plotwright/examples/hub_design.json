@@ -1,0 +1,51 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-open-pw-0001",
+    "time": "2025-11-03T22:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "PW" },
+    "intent": "tu.open",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-PW10",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Story Spark"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "tu_brief",
+      "data": {
+        "id": "TU-2025-11-03-PW10",
+        "opened": "2025-11-03",
+        "owner_a": "SR",
+        "responsible_r": ["PW"],
+        "loop": "Story Spark",
+        "slice": "Design hub topology for Wormhole 3",
+        "snapshot_context": "Cold @ 2025-10-28"
+      }
+    },
+    "correlation_id": "corr-pw-hub-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:pw-ckpt-0001",
+    "time": "2025-11-03T22:30:00Z",
+    "sender": { "role": "PW", "agent": "bot:pw" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-PW10",
+      "loop": "Story Spark"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Hub topology drafted: 3 branches (Dockside, Syndicate Office, Toll Gate). Return-with-difference via codeword 'Vouched'. Keystone path to Gatekeeper scene proven via Dockside→Office."
+      }
+    },
+    "correlation_id": "corr-pw-hub-2025-11-03"
+  }
+]

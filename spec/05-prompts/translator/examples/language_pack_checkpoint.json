@@ -1,0 +1,43 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-tr-0001",
+    "time": "2025-11-04T16:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "TR" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-TR10",
+      "loop": "Translation Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "reason": "Prepare EN→DE language pack for Cold @ 2025-10-28" }
+    },
+    "correlation_id": "corr-tr-pack-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:tr-ckpt-0001",
+    "time": "2025-11-04T16:30:00Z",
+    "sender": { "role": "TR", "agent": "bot:tr" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-TR10",
+      "loop": "Translation Pass"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Language pack DE initialized: manuscript 40%, codex 20%, captions 10%. PN patterns drafted; glossary slice started; register_map deltas prepared.",
+        "details": { "locale": "DE", "pack_path": "packs/de/pack.json" }
+      }
+    },
+    "correlation_id": "corr-tr-pack-2025-11-04"
+  }
+]

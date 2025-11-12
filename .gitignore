@@ -1,0 +1,9 @@
+# General
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+*.pyc
+__pycache__/
+.venv/

@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cuelist.schema.json",
+  "title": "Cuelist",
+  "description": "Generated from 02-dictionary/artifacts/cuelist_ENRICHED.md. Audio Director's slice-level index of audio cues, each linked to its Audio Plan while keeping player-facing surfaces safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slice name for this cuelist.",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this cuelist was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the cuelist; fixed to Audio Director.",
+      "enum": ["Audio Director"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "Player-safe slice description (1-2 lines) detailing coverage for this cuelist.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "dormancy": {
+      "type": "string",
+      "description": "Dormancy state, including deferral tagging when plan-only.",
+      "enum": ["active", "plan-only (deferred:audio)", "dormant"]
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Origin TU Brief identifier in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "neighbors": {
+      "type": "array",
+      "description": "Roles impacted by this cuelist; must include audioproducer, style, translator, pn, gatekeeper, and binder.",
+      "items": {
+        "type": "string",
+        "enum": ["@audioproducer", "@style", "@translator", "@pn", "@gatekeeper", "@binder"]
+      },
+      "minItems": 6,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "@audioproducer"
+          }
+        },
+        {
+          "contains": {
+            "const": "@style"
+          }
+        },
+        {
+          "contains": {
+            "const": "@translator"
+          }
+        },
+        {
+          "contains": {
+            "const": "@pn"
+          }
+        },
+        {
+          "contains": {
+            "const": "@gatekeeper"
+          }
+        },
+        {
+          "contains": {
+            "const": "@binder"
+          }
+        }
+      ]
+    },
+    "purpose_mix": {
+      "type": "string",
+      "description": "Purpose distribution summary (counts for clarify, recall, mood, signpost, pace) matching the cue table.",
+      "minLength": 20,
+      "maxLength": 220
+    },
+    "placement_policy": {
+      "type": "string",
+      "description": "Player-safe summary of where cues enter or exit relative to prose.",
+      "minLength": 15,
+      "maxLength": 200
+    },
+    "accessibility_summary": {
+      "type": "string",
+      "description": "Slice-level accessibility confirmation covering captions and onset safety.",
+      "minLength": 15,
+      "maxLength": 200
+    },
+    "cues": {
+      "type": "array",
+      "description": "Table of audio cues, one per slot, with player-safe descriptors.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cue_id": {
+            "type": "string",
+            "description": "Kebab-case cue identifier that links to the Audio Plan.",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "audio_plan_reference": {
+            "type": "string",
+            "description": "Relative path or identifier for the corresponding Audio Plan artifact.",
+            "pattern": "^(\\.?/)?[A-Za-z0-9._\\-/]+$"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "Primary audio purpose for this cue.",
+            "enum": ["clarify", "recall", "mood", "signpost", "pace"]
+          },
+          "placement": {
+            "type": "string",
+            "description": "Short description of cue timing relative to prose or choices.",
+            "minLength": 5,
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "description": "Plain-language cue description with no production technique details.",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "caption": {
+            "type": "string",
+            "description": "Player-safe caption or text equivalent enclosed in square brackets.",
+            "pattern": "^\\[[^\\[\\]]+\\]$",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "anchor_targets": {
+            "type": "array",
+            "description": "List of manuscript paths anchored by this cue.",
+            "items": {
+              "type": "string",
+              "pattern": "^/[A-Za-z0-9._\\-/]+#[A-Za-z0-9._\\-]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Current production status for the cue.",
+            "enum": ["planned", "producing", "done", "deferred"]
+          }
+        },
+        "required": [
+          "cue_id",
+          "audio_plan_reference",
+          "purpose",
+          "placement",
+          "description",
+          "caption",
+          "anchor_targets",
+          "status"
+        ]
+      },
+      "minItems": 1
+    },
+    "inclusion_exclusion_rules": {
+      "type": "string",
+      "description": "Optional notes capturing non-obvious placement rules or masking risks.",
+      "maxLength": 400
+    },
+    "localization_style_notes": {
+      "type": "array",
+      "description": "Slice-level localization and style guidance bullets aligned with Style Addendum and Codex entries.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "accessibility_checklist": {
+      "type": "array",
+      "description": "Accessibility checklist items that must be confirmed before handoff.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "binder_note": {
+      "type": "string",
+      "description": "Binder instructions covering View updates and cue options.",
+      "maxLength": 400
+    },
+    "gatekeeper_note": {
+      "type": "string",
+      "description": "Gatekeeper guidance for presentation/accessibility spot-checks.",
+      "maxLength": 400
+    },
+    "pn_note": {
+      "type": "string",
+      "description": "PN coordination note on narration cadence and breath timing.",
+      "maxLength": 400
+    },
+    "hooks_filed": {
+      "type": "array",
+      "description": "Optional follow-up hooks filed from this cuelist.",
+      "items": {
+        "type": "string",
+        "pattern": "^hook://[a-z0-9\\-]+/[a-z0-9\\-]+.*$"
+      }
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist verifying readiness before handing off to the Audio Producer.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 7,
+      "maxItems": 7
+    }
+  },
+  "required": [
+    "title",
+    "edited",
+    "owner",
+    "scope",
+    "snapshot",
+    "tu",
+    "neighbors",
+    "purpose_mix",
+    "placement_policy",
+    "accessibility_summary",
+    "cues",
+    "accessibility_checklist",
+    "done_checklist"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

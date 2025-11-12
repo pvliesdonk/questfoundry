@@ -1,0 +1,29 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:il-ckpt-1001",
+    "time": "2025-11-04T13:20:00Z",
+    "sender": { "role": "IL", "agent": "bot:il" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-IL10",
+      "loop": "Art Touch-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Iterated A1 for stronger smoke haze; kept set consistency.",
+        "details": {
+          "A1": {
+            "prompt_delta": "+ haze density, + vignette",
+            "params_delta": { "seed": 12345, "style_strength": 0.7 }
+          }
+        }
+      }
+    },
+    "correlation_id": "corr-il-iter-2025-11-04"
+  }
+]

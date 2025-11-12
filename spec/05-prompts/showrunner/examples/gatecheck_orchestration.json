@@ -1,0 +1,73 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-submit-gate-0001",
+    "time": "2025-11-03T13:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "GK" },
+    "intent": "gate.report.submit",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "gatecheck_report",
+      "data": {
+        "title": "TU-2025-11-03-LW01 Pre-Gate",
+        "checked": "2025-11-03",
+        "gatekeeper": "human:charlie",
+        "scope": "Canon entry for Shadow Toll faction mechanism",
+        "mode": "pre-gate",
+        "cold_snapshot": "Cold @ 2025-10-28",
+        "artifacts_samples": ["canon_pack/shadow_toll_faction.json"],
+        "decision": "submit",
+        "why": "Requesting pre-gate review",
+        "bars": []
+      }
+    },
+    "refs": ["TU-2025-11-03-LW01"],
+    "correlation_id": "corr-gatecheck-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:gk-decision-0001",
+    "time": "2025-11-03T13:25:00Z",
+    "sender": { "role": "GK", "agent": "human:charlie" },
+    "receiver": { "role": "SR" },
+    "intent": "gate.decision",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Lore Deepening"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "gatecheck_report",
+      "data": {
+        "title": "TU-2025-11-03-LW01 Gate Decision",
+        "checked": "2025-11-03",
+        "gatekeeper": "human:charlie",
+        "scope": "Canon entry for Shadow Toll faction mechanism",
+        "mode": "gatecheck",
+        "cold_snapshot": "Cold @ 2025-10-28",
+        "artifacts_samples": ["canon_pack/shadow_toll_faction.json"],
+        "decision": "pass",
+        "why": "All bars green",
+        "bars": [
+          { "bar": "Integrity", "status": "green", "evidence": "Refs resolve" },
+          {
+            "bar": "Presentation",
+            "status": "green",
+            "evidence": "Player-safe surfaces"
+          }
+        ]
+      }
+    },
+    "correlation_id": "corr-gatecheck-2025-11-03",
+    "reply_to": "urn:uuid:sr-submit-gate-0001"
+  }
+]

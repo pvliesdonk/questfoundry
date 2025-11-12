@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/language_pack.schema.json",
+  "title": "Language Pack",
+  "description": "Generated from 02-dictionary/artifacts/language_pack_ENRICHED.md. Translator's bundled deliverable capturing localized coverage, register guidance, PN patterns, and glossary slice for a specific locale.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Locale code headline for the pack (e.g., EN-GB, NL, DE).",
+      "pattern": "^[A-Z]{2}(?:-[A-Z]{2})?$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this language pack was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the pack; fixed to Translator.",
+      "enum": ["Translator"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "Player-safe book or slice name covered by this language pack.",
+      "minLength": 5,
+      "maxLength": 200
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "neighbors": {
+      "type": "array",
+      "description": "Roles paired on this pack; must include style, binder, PN, gatekeeper, curator.",
+      "items": {
+        "type": "string",
+        "enum": ["@style", "@binder", "@pn", "@gatekeeper", "@curator"]
+      },
+      "minItems": 5,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "@style"
+          }
+        },
+        {
+          "contains": {
+            "const": "@binder"
+          }
+        },
+        {
+          "contains": {
+            "const": "@pn"
+          }
+        },
+        {
+          "contains": {
+            "const": "@gatekeeper"
+          }
+        },
+        {
+          "contains": {
+            "const": "@curator"
+          }
+        }
+      ]
+    },
+    "locale": {
+      "type": "string",
+      "description": "ISO locale code for this pack.",
+      "pattern": "^[A-Z]{2}(?:-[A-Z]{2})?$"
+    },
+    "coverage_report": {
+      "type": "string",
+      "description": "Narrative summary of what is localized now versus deferred.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "coverage_granularity": {
+      "type": "string",
+      "description": "Granularity used when reporting localization coverage.",
+      "enum": ["characters", "sections"]
+    },
+    "manuscript_coverage": {
+      "type": "string",
+      "description": "Manuscript coverage percentage with notes.",
+      "pattern": "^\\d{1,3}%.*$"
+    },
+    "codex_coverage": {
+      "type": "string",
+      "description": "Codex coverage percentage with notes.",
+      "pattern": "^\\d{1,3}%.*$"
+    },
+    "captions_alt_coverage": {
+      "type": "string",
+      "description": "Captions and alt-text coverage percentage with notes.",
+      "pattern": "^\\d{1,3}%.*$"
+    },
+    "ui_labels_front_matter": {
+      "type": "string",
+      "description": "Coverage status for UI labels and front matter.",
+      "enum": ["done", "partial"]
+    },
+    "deferrals": {
+      "type": "array",
+      "description": "Optional list of translation deferral tags.",
+      "items": {
+        "$ref": "#/$defs/deferral_tag"
+      },
+      "uniqueItems": true
+    },
+    "register_map_pointer": {
+      "type": "string",
+      "description": "Path to the associated register map file.",
+      "pattern": "^(\\.?/)?[A-Za-z0-9._\\-/]+$"
+    },
+    "register_map_delta": {
+      "type": "string",
+      "description": "Optional pack-specific register adjustments.",
+      "maxLength": 400
+    },
+    "pn_patterns": {
+      "type": "array",
+      "description": "Localized PN patterns with player-safe examples.",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 240
+      },
+      "minItems": 3
+    },
+    "glossary_slice": {
+      "type": "array",
+      "description": "Bilingual glossary slice entries.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_term": {
+            "type": "string",
+            "description": "Source language term.",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "target_term": {
+            "type": "string",
+            "description": "Localized term.",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "usage_notes": {
+            "type": "string",
+            "description": "Notes for usage or ambiguity in the target locale.",
+            "minLength": 5,
+            "maxLength": 200
+          }
+        },
+        "required": ["source_term", "target_term", "usage_notes"]
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "title",
+    "edited",
+    "owner",
+    "scope",
+    "snapshot",
+    "tu",
+    "neighbors",
+    "locale",
+    "coverage_report",
+    "coverage_granularity",
+    "manuscript_coverage",
+    "codex_coverage",
+    "captions_alt_coverage",
+    "ui_labels_front_matter",
+    "register_map_pointer",
+    "pn_patterns",
+    "glossary_slice"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

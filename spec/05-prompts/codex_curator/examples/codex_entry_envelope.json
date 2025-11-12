@@ -1,0 +1,62 @@
+{
+  "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+  "id": "urn:uuid:cc-codex-0001",
+  "time": "2025-11-04T20:10:00Z",
+  "sender": { "role": "CC", "agent": "bot:cc" },
+  "receiver": { "role": "SR" },
+  "intent": "codex.create",
+  "context": {
+    "hot_cold": "hot",
+    "tu": "TU-2025-11-03-CC10",
+    "snapshot": "Cold @ 2025-10-28",
+    "loop": "Codex Expansion"
+  },
+  "safety": { "player_safe": false, "spoilers": "allowed" },
+  "payload": {
+    "type": "codex_entry",
+    "data": {
+      "title": "Shadow Toll",
+      "slug": "shadow-toll",
+      "locale": "EN",
+      "owner": "Codex Curator",
+      "edited": "2025-11-04",
+      "snapshot": "Cold @ 2025-10-28",
+      "tu": "TU-2025-11-03-CC10",
+      "lineage": "From canon TU-2025-11-03-LW10; posture plausible",
+      "register": "neutral",
+      "overview": "A guild-controlled levy at Wormhole 3 that fluctuates with station tensions, known to favor vouched crews.",
+      "where_to_link": "Manuscript hub section; Codex: Wormhole 3",
+      "when_not_to_link": "Hidden lore sections",
+      "pn_cue": "The toll shifts when favors are owed.",
+      "context": "Merchants whisper that the gate narrows when a favor is owed. The toll foreman balances faction pressures and station needs.",
+      "variants": [
+        {
+          "variant": "Gate Fee",
+          "register_region": "neutral",
+          "translator_notes": "Prefer in-world phrasing over technical terms"
+        }
+      ],
+      "relations": ["wormhole-3", "kestrel"],
+      "reading_level": "plain",
+      "alt_guidance": "Dock gate toll signage at foreman’s booth",
+      "link_text": "Shadow Toll",
+      "anchor_slug": "/codex/shadow-toll",
+      "collision_risks": "Hyphen vs space",
+      "binder_note": "Group under 'Factions and Customs'",
+      "notes_to_avoid": ["Tax jargon", "Breaking diegesis"],
+      "from_canon": "Fluctuating non-lethal pressure mechanism controlled by station leadership and guild interests.",
+      "research_posture_touched": "plausible",
+      "done_checklist": [
+        "Player-safe",
+        "Links resolve",
+        "Variants listed",
+        "Relations noted",
+        "Register chosen",
+        "Anchor set",
+        "Canon distilled",
+        "Posture logged"
+      ]
+    }
+  },
+  "correlation_id": "corr-cc-codex-2025-11-04"
+}

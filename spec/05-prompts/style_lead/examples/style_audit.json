@@ -1,0 +1,42 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-st-3001",
+    "time": "2025-11-04T09:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "ST" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-SS20",
+      "loop": "Style Tune-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "reason": "Audit A1 tone drift and gateway phrasing" }
+    },
+    "correlation_id": "corr-st-audit-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:st-ckpt-3001",
+    "time": "2025-11-04T09:20:00Z",
+    "sender": { "role": "ST", "agent": "bot:st" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-04-SS20",
+      "loop": "Style Tune-up"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "Audit: A1 para 3–4 drift from sardonic to earnest; rewrite suggestions attached; PN gateway phrasing adjusted to in-world line."
+      }
+    },
+    "correlation_id": "corr-st-audit-2025-11-04"
+  }
+]

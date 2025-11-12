@@ -1,0 +1,133 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-open-0001",
+    "time": "2025-11-03T12:00:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "LW" },
+    "intent": "tu.open",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Hook Harvest"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "tu_brief",
+      "data": {
+        "id": "TU-2025-11-03-LW01",
+        "opened": "2025-11-03",
+        "owner_a": "SR",
+        "responsible_r": ["LW", "PW"],
+        "loop": "Hook Harvest",
+        "slice": "Triage and select hooks for next lore pass",
+        "snapshot_context": "Cold @ 2025-10-28",
+        "awake": ["SR", "LW", "PW"],
+        "dormant": ["GK", "CC", "PN"],
+        "press": ["Integrity", "Nonlinearity"],
+        "monitor": ["Presentation"]
+      }
+    },
+    "refs": ["HK-20251103-01"],
+    "correlation_id": "corr-hook-harvest-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-wake-lw-0001",
+    "time": "2025-11-03T12:00:10Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "LW" },
+    "intent": "role.wake",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "loop": "Hook Harvest"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "reason": "Begin hook triage and canon fit checks" }
+    },
+    "correlation_id": "corr-hook-harvest-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:lw-ack-wake-0001",
+    "time": "2025-11-03T12:00:12Z",
+    "sender": { "role": "LW", "agent": "bot:lw" },
+    "receiver": { "role": "SR" },
+    "intent": "ack",
+    "context": { "hot_cold": "hot", "loop": "Hook Harvest" },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "message": "LW awake for Hook Harvest" }
+    },
+    "correlation_id": "corr-hook-harvest-2025-11-03",
+    "reply_to": "urn:uuid:sr-wake-lw-0001"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:lw-q-0001",
+    "time": "2025-11-03T12:05:00Z",
+    "sender": { "role": "LW", "agent": "bot:lw" },
+    "receiver": { "role": "SR" },
+    "intent": "human.question",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "loop": "Hook Harvest"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "question": "Prioritize mystery hooks or action hooks this pass?",
+        "suggestions": ["mystery", "action", "balanced"]
+      }
+    },
+    "correlation_id": "corr-hook-harvest-2025-11-03"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-a-0001",
+    "time": "2025-11-03T12:05:30Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "LW" },
+    "intent": "human.response",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "loop": "Hook Harvest"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": { "choice": "balanced", "answer": "Aim for balanced selection" }
+    },
+    "correlation_id": "corr-hook-harvest-2025-11-03",
+    "reply_to": "urn:uuid:lw-q-0001"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:sr-ckpt-0001",
+    "time": "2025-11-03T12:10:00Z",
+    "sender": { "role": "SR", "agent": "human:alice" },
+    "receiver": { "role": "SR" },
+    "intent": "tu.checkpoint",
+    "context": {
+      "hot_cold": "hot",
+      "tu": "TU-2025-11-03-LW01",
+      "loop": "Hook Harvest"
+    },
+    "safety": { "player_safe": false, "spoilers": "allowed" },
+    "payload": {
+      "type": "none",
+      "data": {
+        "summary": "LW awake; selection policy set to balanced; proceeding with triage"
+      }
+    },
+    "correlation_id": "corr-hook-harvest-2025-11-03"
+  }
+]

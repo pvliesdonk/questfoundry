@@ -1,0 +1,292 @@
+{
+  "loop": "Story Spark",
+  "description": "Simplified Story Spark flow creating new hub and gateway for space station expansion. Shows TU open, topology draft, section briefs, hook generation, style check, and handoff to Hook Harvest.",
+  "messages": [
+    {
+      "step": 1,
+      "description": "Showrunner opens Story Spark TU",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ss-tu-open-001",
+        "time": "2025-11-05T10:00:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.open",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-PW01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Story Spark"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-PW01",
+            "opened": "2025-11-05",
+            "owner_a": "SR",
+            "responsible_r": ["PW", "SS"],
+            "loop": "Story Spark",
+            "slice": "Add station expansion hub with faction pressure gateway",
+            "snapshot_context": "Cold @ 2025-11-01",
+            "awake": ["SR", "PW", "SS", "ST", "LW", "CC", "GK"],
+            "dormant": ["AD", "IL", "AuD", "AuP", "TR", "BB", "PN", "RS"],
+            "press": ["Reachability", "Nonlinearity", "Gateways"],
+            "pre_gate_risks": ["Gateway condition may leak internal state"],
+            "inputs": ["Cold topology notes", "Hook HK-20251104-05 (expansion pressure)"],
+            "deliverables": ["Topology update with new hub", "Section briefs", "Hook list"],
+            "bars_green": ["Reachability", "Nonlinearity"],
+            "merge_view": "Merge after gatecheck; hooks to Hook Harvest first",
+            "timebox": "120 min",
+            "gatecheck": "Full gatecheck after hooks processed",
+            "linkage": "Resolves HK-20251104-05; hooks to Hook Harvest; topology to Cold after gate"
+          }
+        },
+        "refs": ["HK-20251104-05"],
+        "correlation_id": "corr-story-spark-expansion-2025-11-05"
+      }
+    },
+    {
+      "step": 2,
+      "description": "Plotwright drafts topology and section briefs",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ss-topology-001",
+        "time": "2025-11-05T10:30:00Z",
+        "sender": {
+          "role": "PW",
+          "agent": "human:bob"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "topology.draft",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-PW01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Story Spark"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "topology_update": "New hub: Expansion Airlock (3 branches). Gateway: faction clearance (diegetic: union token or favor). Loop: return via service corridor with different access level.",
+            "section_briefs": [
+              "Section A01: Arrival at Expansion Airlock (hub fan-out)",
+              "Section A02: Union checkpoint (gateway: token check)",
+              "Section A03: Service corridor loop (return with access badge state)"
+            ],
+            "gateway_conditions": "Union token (item) OR favor-trade reputation (Helion Corp vouches)"
+          }
+        },
+        "refs": ["TU-2025-11-05-PW01"],
+        "correlation_id": "corr-story-spark-expansion-2025-11-05",
+        "reply_to": "urn:uuid:ss-tu-open-001"
+      }
+    },
+    {
+      "step": 3,
+      "description": "Scene Smith drafts prose and generates hooks",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ss-prose-hooks-001",
+        "time": "2025-11-05T11:00:00Z",
+        "sender": {
+          "role": "SS",
+          "agent": "bot:ss-v1.2"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "hook.create",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-PW01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Story Spark"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "hook_card",
+          "data": {
+            "header": {
+              "short_name": "Union faction backstory",
+              "id": "HK-20251105-15",
+              "status": "proposed",
+              "raised_by": "SS",
+              "tu": "TU-2025-11-05-PW01",
+              "edited": "2025-11-05",
+              "slice": "Clarify union's role in station governance",
+              "snapshot_context": "Cold @ 2025-11-01"
+            },
+            "classification": {
+              "type_primary": "narrative",
+              "bars_affected": ["Integrity", "Gateways"],
+              "blocking": "no"
+            },
+            "player_safe_summary": "Add canon for station union faction and token system",
+            "proposed_next_step": {
+              "loop": "Lore Deepening",
+              "owner_r": "LW",
+              "accountable_a": "SR"
+            },
+            "acceptance_criteria": ["Canon entry for union completed", "Gateway logic validated"],
+            "locations_links": {
+              "locations": ["manuscript/expansion/section-a02.md"],
+              "related_hooks": []
+            }
+          }
+        },
+        "refs": ["TU-2025-11-05-PW01"],
+        "correlation_id": "corr-story-spark-expansion-2025-11-05",
+        "reply_to": "urn:uuid:ss-topology-001"
+      }
+    },
+    {
+      "step": 4,
+      "description": "Style Lead reviews and flags tone consistency",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ss-style-check-001",
+        "time": "2025-11-05T11:30:00Z",
+        "sender": {
+          "role": "ST",
+          "agent": "human:claire"
+        },
+        "receiver": {
+          "role": "SS"
+        },
+        "intent": "ack",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-PW01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Story Spark"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Prose tone consistent; 'union token' and 'favor-trade' fit station cynicism register; motifs present (industrial noise, low-G)"
+          }
+        },
+        "refs": ["TU-2025-11-05-PW01"],
+        "correlation_id": "corr-story-spark-expansion-2025-11-05",
+        "reply_to": "urn:uuid:ss-prose-hooks-001"
+      }
+    },
+    {
+      "step": 5,
+      "description": "Gatekeeper performs preview check",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ss-preview-gate-001",
+        "time": "2025-11-05T12:00:00Z",
+        "sender": {
+          "role": "GK",
+          "agent": "bot:gk-validator"
+        },
+        "receiver": {
+          "role": "SR"
+        },
+        "intent": "gate.pregate",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-PW01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Story Spark"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "ack",
+          "data": {
+            "message": "Pre-gate preview: Reachability green (hub reachable); Nonlinearity green (3 branches, loop with state difference); Gateways green (diegetic token/favor); ready for Hook Harvest handoff and full gatecheck after hooks processed"
+          }
+        },
+        "refs": ["TU-2025-11-05-PW01"],
+        "correlation_id": "corr-story-spark-expansion-2025-11-05",
+        "reply_to": "urn:uuid:ss-style-check-001"
+      }
+    },
+    {
+      "step": 6,
+      "description": "Showrunner hands off to Hook Harvest",
+      "envelope": {
+        "protocol": {
+          "name": "qf-protocol",
+          "version": "1.0.0"
+        },
+        "id": "urn:uuid:ss-handoff-001",
+        "time": "2025-11-05T12:15:00Z",
+        "sender": {
+          "role": "SR",
+          "agent": "human:alice"
+        },
+        "receiver": {
+          "role": "*"
+        },
+        "intent": "tu.update",
+        "context": {
+          "hot_cold": "hot",
+          "tu": "TU-2025-11-05-PW01",
+          "snapshot": "Cold @ 2025-11-01",
+          "loop": "Story Spark"
+        },
+        "safety": {
+          "player_safe": false,
+          "spoilers": "allowed"
+        },
+        "payload": {
+          "type": "tu_brief",
+          "data": {
+            "id": "TU-2025-11-05-PW01",
+            "deliverables": [
+              "Topology update (Expansion Airlock hub)",
+              "Section briefs (3 sections)",
+              "Hooks: 3 proposed (union canon, token system, favor mechanics)"
+            ],
+            "linkage": "Topology in Hot; hooks handed to Hook Harvest for triage; full gatecheck after Hook Harvest completes"
+          }
+        },
+        "refs": ["TU-2025-11-05-PW01"],
+        "correlation_id": "corr-story-spark-expansion-2025-11-05"
+      }
+    }
+  ]
+}

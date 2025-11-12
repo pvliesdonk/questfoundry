@@ -1,0 +1,67 @@
+[
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:bb-to-pn-0002",
+    "time": "2025-11-04T19:10:00Z",
+    "sender": { "role": "BB", "agent": "bot:binder-v2" },
+    "receiver": { "role": "PN" },
+    "intent": "view.export.result",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-04-BB13",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Binding Run"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "view_log",
+      "data": {
+        "title": "milestone-ch3-gateway",
+        "targets": ["markdown"],
+        "cold_snapshot": "Cold @ 2025-10-28",
+        "tu": "TU-2025-11-04-BB13"
+      }
+    },
+    "correlation_id": "corr-pn-gate-2025-11-04"
+  },
+  {
+    "protocol": { "name": "qf-protocol", "version": "1.0.0" },
+    "id": "urn:uuid:pn-notes-0002",
+    "time": "2025-11-04T19:30:00Z",
+    "sender": { "role": "PN", "agent": "bot:pn" },
+    "receiver": { "role": "SR" },
+    "intent": "pn.playtest.submit",
+    "context": {
+      "hot_cold": "cold",
+      "tu": "TU-2025-11-04-PN11",
+      "snapshot": "Cold @ 2025-10-28",
+      "loop": "Narration Dry-Run"
+    },
+    "safety": { "player_safe": true, "spoilers": "forbidden" },
+    "payload": {
+      "type": "pn_playtest_notes",
+      "data": {
+        "title": "Gateway enforcement spot-check",
+        "run": "2025-11-04 19:20",
+        "pn": "bot:pn",
+        "tu": "TU-2025-11-04-PN11",
+        "snapshot": "Cold @ 2025-10-28",
+        "targets": ["markdown"],
+        "mode": "dry-run (no improv)",
+        "log": [
+          {
+            "when": "02:10",
+            "location": "manuscript#Gate-1",
+            "tags": ["gate-friction"],
+            "severity": "med",
+            "snippet": "If the foreman vouched for you, the gate swings aside.",
+            "smallest_viable_fix": "Add failure line: 'If not, you can ask him at the Dock Office.'",
+            "owner": "PW"
+          }
+        ]
+      }
+    },
+    "correlation_id": "corr-pn-gate-2025-11-04",
+    "reply_to": "urn:uuid:bb-to-pn-0002"
+  }
+]
