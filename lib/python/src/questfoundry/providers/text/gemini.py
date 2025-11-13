@@ -52,7 +52,7 @@ class GeminiProvider(TextProvider):
 
         # Import and configure genai once during initialization
         try:
-            import google.generativeai as genai  # type: ignore[import-untyped]
+            import google.generativeai as genai  # type: ignore[import-not-found]
 
             self._genai = genai
             self._genai.configure(api_key=self.api_key)
