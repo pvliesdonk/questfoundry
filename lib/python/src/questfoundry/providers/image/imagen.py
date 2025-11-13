@@ -59,8 +59,8 @@ class ImagenProvider(ImageProvider):
 
         # Import and initialize Vertex AI once during initialization
         try:
-            from google.cloud import aiplatform  # type: ignore[import-not-found]
-            from vertexai.preview.vision_models import (  # type: ignore[import-not-found]
+            from google.cloud import aiplatform  # type: ignore[import-untyped]
+            from vertexai.preview.vision_models import (  # type: ignore[import-untyped]
                 ImageGenerationModel,
             )
 

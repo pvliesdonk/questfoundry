@@ -52,7 +52,7 @@ class GeminiProvider(TextProvider):
 
         # Import and configure genai once during initialization
         try:
-            import google.generativeai as genai  # type: ignore
+            import google.generativeai as genai  # type: ignore[import-untyped]
 
             self._genai = genai
             self._genai.configure(api_key=self.api_key)
@@ -104,7 +104,7 @@ class GeminiProvider(TextProvider):
         try:
             response = gen_model.generate_content(
                 prompt,
-                generation_config=generation_config,
+                generation_config=generation_config,  # type: ignore[arg-type]
             )
 
             # Extract text from response
