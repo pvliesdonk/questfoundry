@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from questfoundry.validators.schema import (
     validate_instance,
     validate_instance_detailed,

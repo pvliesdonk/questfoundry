@@ -34,7 +34,7 @@ def main() -> None:
     target_prompts.mkdir(parents=True, exist_ok=True)
 
     # Clean existing bundled resources (except __init__.py)
-    print(f"Cleaning target directories...")
+    print("Cleaning target directories...")
     for target_dir in [target_schemas, target_prompts]:
         for item in target_dir.iterdir():
             if item.name != "__init__.py":
@@ -73,7 +73,7 @@ def main() -> None:
         if target_shared.exists():
             shutil.rmtree(target_shared)
         shutil.copytree(shared_dir, target_shared)
-        print(f"  ✓ Bundled shared prompt resources")
+        print("  ✓ Bundled shared prompt resources")
 
     print("\n✅ Resource bundling completed successfully!")
     print(f"   Schemas: {target_schemas}")

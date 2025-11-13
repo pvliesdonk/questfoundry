@@ -4,7 +4,6 @@ import wave
 from io import BytesIO
 
 import pytest
-
 from questfoundry.providers.audio.mock import MockAudioProvider
 
 

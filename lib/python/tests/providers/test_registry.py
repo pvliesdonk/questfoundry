@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from questfoundry.providers import ProviderConfig, ProviderRegistry, TextProvider
 
 
@@ -53,13 +52,15 @@ def temp_config():
     """Create temporary configuration"""
     with tempfile.TemporaryDirectory() as tmpdir:
         config_path = Path(tmpdir) / "config.yml"
-        config_path.write_text("""
+        config_path.write_text(
+            """
 providers:
   text:
     default: mock
     mock:
       required_key: test_value
-""")
+"""
+        )
         yield ProviderConfig(config_path)
 
 
@@ -162,10 +163,12 @@ def test_registry_no_default_configured():
     # Create config with no default
     with tempfile.TemporaryDirectory() as tmpdir:
         config_path = Path(tmpdir) / "config.yml"
-        config_path.write_text("""
+        config_path.write_text(
+            """
 providers:
   text: {}
-""")
+"""
+        )
         config = ProviderConfig(config_path)
         registry = ProviderRegistry(config)
 

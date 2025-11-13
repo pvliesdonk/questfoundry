@@ -274,7 +274,7 @@ class TimelineManager:
         Returns:
             List of validation issues (empty if valid)
         """
-        issues = []
+        issues: list[str] = []
         anchors = self.get_all_anchors()
 
         if not anchors:

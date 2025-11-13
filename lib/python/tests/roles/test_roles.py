@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from conftest import MockTextProvider
-
 from questfoundry.models.artifact import Artifact
 from questfoundry.roles.base import RoleContext
 from questfoundry.roles.gatekeeper import Gatekeeper

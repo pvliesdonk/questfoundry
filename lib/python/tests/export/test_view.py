@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-
 from questfoundry.export import ViewGenerator
 from questfoundry.models.artifact import Artifact
 from questfoundry.state import ProjectInfo, SQLiteStore

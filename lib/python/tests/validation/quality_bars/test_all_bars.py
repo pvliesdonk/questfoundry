@@ -1,7 +1,6 @@
 """Comprehensive tests for all quality bars."""
 
 import pytest
-
 from questfoundry.models.artifact import Artifact
 from questfoundry.validation.quality_bars import (
     DeterminismBar,

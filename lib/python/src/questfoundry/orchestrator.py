@@ -245,14 +245,14 @@ class Orchestrator:
                     )
                     if role_name in self.role_registry._roles:
                         role_class = self.role_registry._roles[role_name]
-                        role_instances[role_name] = (
-                            self.showrunner.initialize_role_with_config(
-                                role_class=role_class,
-                                registry=self.provider_registry,
-                                spec_path=self.spec_path,
-                                human_callback=human_callback,
-                                role_name=role_name,
-                            )
+                        role_instances[
+                            role_name
+                        ] = self.showrunner.initialize_role_with_config(
+                            role_class=role_class,
+                            registry=self.provider_registry,
+                            spec_path=self.spec_path,
+                            human_callback=human_callback,
+                            role_name=role_name,
                         )
                     else:
                         # This path is taken if a loop requires a role that is not

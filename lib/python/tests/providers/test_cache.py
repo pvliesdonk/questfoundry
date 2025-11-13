@@ -5,7 +5,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from questfoundry.providers.cache import CacheConfig, ResponseCache, generate_cache_key
 
 

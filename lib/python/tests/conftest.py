@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from questfoundry.providers.base import TextProvider
 
 

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from conftest import MockTextProvider
-
 from questfoundry.loops.base import LoopContext, StepStatus
 from questfoundry.loops.lore_deepening import LoreDeepeningLoop
 from questfoundry.models.artifact import Artifact

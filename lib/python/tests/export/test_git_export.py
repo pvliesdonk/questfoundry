@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from questfoundry.export import GitExporter
 from questfoundry.models.artifact import Artifact
 from questfoundry.state import ProjectInfo, SQLiteStore

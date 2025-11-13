@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from questfoundry.providers.base import TextProvider
 from questfoundry.roles.base import Role, RoleContext, RoleResult
 from questfoundry.roles.session import RoleSession

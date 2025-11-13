@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from questfoundry.roles.session import RoleSession
 from questfoundry.roles.session_manager import SessionManager
 

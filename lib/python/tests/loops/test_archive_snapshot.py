@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from conftest import MockTextProvider
-
 from questfoundry.loops.archive_snapshot import ArchiveSnapshotLoop
 from questfoundry.loops.base import LoopContext, StepStatus
 from questfoundry.models.artifact import Artifact

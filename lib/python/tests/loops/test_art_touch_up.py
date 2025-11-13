@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from conftest import MockTextProvider
-
 from questfoundry.loops.art_touch_up import ArtTouchUpLoop
 from questfoundry.loops.base import LoopContext, StepStatus
 from questfoundry.models.artifact import Artifact

@@ -104,7 +104,7 @@ class GeminiProvider(TextProvider):
         try:
             response = gen_model.generate_content(
                 prompt,
-                generation_config=generation_config,  # type: ignore[arg-type]
+                generation_config=generation_config,
             )
 
             # Extract text from response
