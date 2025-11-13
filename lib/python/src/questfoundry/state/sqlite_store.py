@@ -659,6 +659,16 @@ class SQLiteStore(StateStore):
         )
         # Note: commit is done by calling function
 
+    def __del__(self) -> None:
+        """Ensure connection is closed when object is garbage collected."""
+        if hasattr(self, "_conn") and self._conn is not None:
+            try:
+                self._conn.close()
+                self._conn = None
+            except Exception:
+                # Suppress errors during cleanup to avoid issues in garbage collection
+                pass
+
     def __enter__(self) -> "SQLiteStore":
         """Context manager entry"""
         return self

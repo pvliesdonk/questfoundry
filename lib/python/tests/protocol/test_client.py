@@ -255,7 +255,7 @@ def test_send_and_wait_with_response(client, temp_workspace):
 
     # Use event to track thread completion and exception handling
     thread_error = []
-    
+
     def send_response():
         """Simulate another client sending a response"""
         try:
@@ -298,7 +298,7 @@ def test_send_and_wait_with_response(client, temp_workspace):
     response = client.send_and_wait(request, timeout=2.0, validate=False)
 
     thread.join()
-    
+
     # Check if thread encountered an error
     if thread_error:
         raise thread_error[0]
