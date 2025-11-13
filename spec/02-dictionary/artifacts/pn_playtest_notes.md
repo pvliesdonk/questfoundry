@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-30)** Inline field
 > constraints and validation rules. All Phase 2+3 corrections applied.
-
+>
 > **Use:** Log **player-facing friction** while reading a bound **View** aloud (no improvisation).
 > Tag issues, cite the smallest fix, and route to the right owner. Keep all examples
 > **player-safe**; never reveal canon or internals.

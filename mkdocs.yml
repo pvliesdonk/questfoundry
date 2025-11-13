@@ -1,0 +1,120 @@
+# docs/mkdocs.yml
+site_name: QuestFoundry
+site_url: https://questfoundry.liesdonk.nl/
+repo_url: https://github.com/pvliesdonk/questfoundry
+repo_name: pvliesdonk/questfoundry
+edit_uri: edit/main/
+
+theme:
+  name: material
+  logo: assets/logo.svg # You'll need to add this file to docs/assets/
+  favicon: assets/logo.svg
+  palette:
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+    - content.tabs.link
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          # Point mkdocstrings to the Python lib source code, relative from this file
+          paths: [../lib/python/src]
+          options:
+            show_root_heading: true
+            show_source: true
+            docstring_style: google
+            merge_init_into_class: true
+            show_if_no_docstring: true
+            heading_level: 3
+
+# Enables admonitions, code highlighting, etc.
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.snippets:
+      base_path:
+        - .
+
+# The navigation structure for the unified site
+nav:
+  - "Home": "index.md"
+  - "Specification (L0-L5)":
+      - "Overview": "../spec/README.md"
+      - "L0: North Star": "../spec/00-north-star/README.md"
+      - "L1: Roles": "../spec/01-roles/README.md"
+      - "L2: Dictionary": "../spec/02-dictionary/README.md"
+      - "L3: Schemas": "../spec/03-schemas/README.md"
+      - "L4: Protocol": "../spec/04-protocol/README.md"
+      - "L5: Prompts": "../spec/05-prompts/README.md"
+  - "Python Library (L6)":
+      - "Overview": "../lib/python/README.md"
+      - "Getting Started":
+          - "Installation": "../lib/python/docs/getting-started/installation.md"
+          - "Quickstart": "../lib/python/docs/getting-started/quickstart.md"
+          - "Bundling": "../lib/python/docs/getting-started/bundling.md"
+      - "Guides":
+          - "Overview": "../lib/python/docs/guide/overview.md"
+      - "API Reference":
+          # This uses mkdocstrings to auto-generate docs from source
+          - "State Management": "api/state.md"
+          - "Providers": "api/providers.md"
+          - "Roles": "api/roles.md"
+          - "Loops": "api/loops.md"
+          - "Validation": "api/validation.md"
+          - "Protocol": "api/protocol.md"
+          - "Export": "api/export.md"
+          - "Models": "api/models.md"
+          - "Utilities": "api/utils.md"
+      - "Development": "../lib/python/docs/development/contributing.md"
+  - "CLI Tools (L7)":
+      - "Overview": "../cli/python/README.md"
+  - "Schema Definitions":
+      - "Artifacts": "schemas/index.md" # This will be a landing page
+
+extra_css:
+  - stylesheets/extra.css # For any custom overrides
+
+# This ensures the CNAME file is included in the site output
+extra:
+  include_assets:
+    - CNAME

@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-from conftest import MockTextProvider
 
+from conftest import MockTextProvider
 from questfoundry.models.artifact import Artifact
 from questfoundry.roles.base import RoleContext
 from questfoundry.roles.gatekeeper import Gatekeeper
@@ -16,15 +16,6 @@ from questfoundry.roles.scene_smith import SceneSmith
 def mock_provider():
     """Fixture providing a mock text provider."""
     return MockTextProvider()
-
-
-@pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    # Find spec relative to test file
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent.parent
-    return repo_root / "spec"
 
 
 @pytest.fixture

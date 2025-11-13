@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-30)** Inline field
 > constraints and validation rules. All Phase 2+3 corrections applied (8 bars).
-
+>
 > **Use:** Propose **line-level** fixes without changing structure or canon. Keep examples
 > **player-safe**; no spoilers, no internals. Owners apply the edits in their lanes.
 

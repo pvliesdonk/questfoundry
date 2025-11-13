@@ -3,7 +3,7 @@
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-29)** This template includes
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied (space-separated deferrals).
-
+>
 > **Use:** Art Director's compact index of **all illustration slots** in a slice. Each row points to
 > a full **Art Plan**. Keep **player surfaces** clean here too (captions/alt are safe); all
 > technique/repro details stay **off-surface** inside the Art Plan or producer logs.

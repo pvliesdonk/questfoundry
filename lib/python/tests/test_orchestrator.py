@@ -1,12 +1,11 @@
 """Tests for orchestrator."""
 
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from conftest import MockTextProvider
 
+from conftest import MockTextProvider
 from questfoundry.loops.base import LoopResult
 from questfoundry.models.artifact import Artifact
 from questfoundry.orchestrator import Orchestrator
@@ -29,14 +28,6 @@ def temp_workspace():
 def mock_provider():
     """Fixture providing a mock text provider."""
     return MockTextProvider()
-
-
-@pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent
-    return repo_root / "spec"
 
 
 @pytest.fixture

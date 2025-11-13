@@ -1,0 +1,98 @@
+name: Release Specification
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version bump type for the ENTIRE spec"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release-spec:
+    name: Bump, Tag, and Release Spec
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # To push commits, tags, and create a release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }} # Use GITHUB_TOKEN for commit push
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Commitizen
+        run: pip install commitizen
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: |
+          # This assumes a .cz.toml config at the root pointing to spec/SPEC_VERSION.txt
+          # or you configure it here.
+          # For this example, I'll assume a file 'spec/SPEC_VERSION.txt' and a .cz.toml
+          #
+          # Create a root .cz.toml if it doesn't exist:
+          # [tool.commitizen]
+          # version_files = ["spec/SPEC_VERSION.txt:version"]
+          # tag_format = "spec-v$version"
+
+          # For this example, let's just configure it in the workflow
+          echo "[tool.commitizen]" > .cz.toml
+          echo "version_files = [\"spec/SPEC_VERSION.txt:version\"]" >> .cz.toml
+          echo "tag_format = \"spec-v\$version\"" >> .cz.toml
+
+          cz bump --increment ${{ inputs.bump_type }} --yes
+          echo "NEW_VERSION=$(cat spec/SPEC_VERSION.txt)" >> $GITHUB_ENV
+
+      - name: Push version bump
+        run: |
+          git push
+          git push --tags
+
+      - name: Create artifact staging directory
+        run: mkdir -p ./spec-artifacts
+
+      - name: Build spec-all.zip
+        run: |
+          cd spec
+          zip -r ../spec-artifacts/spec-all.zip .
+          cd ..
+
+      - name: Build spec-schemas.zip
+        run: |
+          cd spec
+          zip -r ../spec-artifacts/spec-schemas.zip 03-schemas 04-protocol
+          cd ..
+
+      - name: Build spec-prompts.zip
+        run: |
+          cd spec
+          zip -r ../spec-artifacts/spec-prompts.zip 05-prompts
+          cd ..
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: spec-v${{ env.NEW_VERSION }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --repo "${{ github.repository }}" \
+            --title "Specification v${{ env.NEW_VERSION }}" \
+            --notes "Full specification release (Layers 0-5). See commit history for changes." \
+            ./spec-artifacts/spec-all.zip \
+            ./spec-artifacts/spec-schemas.zip \
+            ./spec-artifacts/spec-prompts.zip

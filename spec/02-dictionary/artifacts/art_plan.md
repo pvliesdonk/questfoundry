@@ -3,7 +3,7 @@
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-29)** This template includes
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied (13 hook types, 7 status values, 8 bars, 13 loops, space-separated deferrals).
-
+>
 > **Use:** Specify an illustration slot so an Illustrator can execute without guessing. Keep
 > **player surfaces** clean: captions/alt are **in-world**; all technique/repro stays
 > **off-surface**.

@@ -1,0 +1,77 @@
+name: Deploy Unified Documentation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Grant permissions for deploying to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for mkdocstrings to get version info
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install Python library dependencies
+        run: uv sync --all-extras
+        working-directory: ./lib/python
+
+      - name: Install Docs dependencies
+        # This is the 'uv-centric' flow for the docs
+        run: uv sync
+        working-directory: ./docs
+
+      - name: Bundle Python library resources
+        # This is crucial so mkdocstrings can import the library
+        run: uv run python scripts/bundle_resources.py
+        working-directory: ./lib/python
+
+      - name: Build documentation
+        # Run mkdocs from the root, pointing to the new config file
+        run: uv run mkdocs build -f docs/mkdocs.yml
+
+      - name: Copy Schemas for public hosting
+        run: |
+          # Create the path that will resolve to questfoundry.liesdonk.nl/schemas/
+          mkdir -p site/schemas
+          # Copy all schemas from L3 and L4
+          cp spec/03-schemas/*.json site/schemas/
+          cp spec/04-protocol/*.json site/schemas/
+
+      - name: Copy CNAME
+        # Ensures your CNAME file is deployed to the root of the Pages site
+        # Assumes your CNAME file is at docs/CNAME
+        run: |
+          if [ -f "docs/CNAME" ]; then
+            cp docs/CNAME site/CNAME
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

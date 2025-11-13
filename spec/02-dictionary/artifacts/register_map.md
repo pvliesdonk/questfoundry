@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-30)** Inline field
 > constraints and validation rules. All Phase 2+3 corrections applied.
-
+>
 > **Use:** Translator's one-pager that pins **pronouns, formality, tense/aspect, punctuation,
 > numerals, idioms, PN patterns,** and any typography/directionality notes for a **target locale**.
 > It travels with the slice or book. Keep it **player-safe**.

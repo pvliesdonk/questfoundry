@@ -94,7 +94,7 @@ binder.save_html(html, "./output/chapter1.html")
 
 This library implements **Layer 6** of the QuestFoundry architecture:
 
-```
+```text
 Layer 3: Schemas (JSON Schema validation) ← ../../spec/03-schemas/
     ↓
 Layer 4: Protocol & Envelopes ← ../../spec/04-protocol/
@@ -343,4 +343,4 @@ Built with:
 
 ---
 
-**🎮 Happy Quest Building! ✨**
+🎮 Happy Quest Building! ✨

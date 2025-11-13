@@ -1,12 +1,11 @@
 """Tests for Hook Harvest loop execution."""
 
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from conftest import MockTextProvider
 
+from conftest import MockTextProvider
 from questfoundry.loops.base import LoopContext, StepStatus
 from questfoundry.loops.hook_harvest import HookHarvestLoop
 from questfoundry.models.artifact import Artifact
@@ -35,14 +34,6 @@ def mock_provider():
             "coordinate_step": "Coordination complete",
         }
     )
-
-
-@pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent.parent
-    return repo_root / "spec"
 
 
 @pytest.fixture

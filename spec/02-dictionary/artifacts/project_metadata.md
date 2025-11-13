@@ -1,7 +1,7 @@
 # Project Metadata — Initialization & Configuration (Layer 1, Human-Level)
 
 > **Status:** ✅ **DEFINED (2025-11-04)** Project-wide settings from Showrunner initialization.
-
+>
 > **Use:** Showrunner's project configuration established during initialization and updated
 > throughout project lifecycle. Drives creative decisions across all roles (Plotwright scope, Style
 > Lead tone, Book Binder front matter). Stored in Cold snapshot or project root.

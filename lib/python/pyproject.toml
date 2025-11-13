@@ -20,6 +20,8 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
@@ -70,16 +72,24 @@ Schemas = "https://questfoundry.liesdonk.nl/schemas/"
 [tool.hatch.version]
 source = "versioningit"
 
+[tool.hatch.envs.default.scripts]
+bundle = "python scripts/bundle_resources.py"
+test = "pytest {args:tests}"
+test-cov = "pytest --cov=questfoundry --cov-report=term-missing {args:tests}"
+lint = "ruff check src tests"
+format = "ruff format src tests"
+format-check = "ruff format --check src tests"
+typecheck = "mypy src"
+all-checks = ["format-check", "lint", "typecheck", "test"]
+
 [tool.versioningit]
 default-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/questfoundry"]
-include = [
-    "src/questfoundry/resources/prompts/**/*.md",
-    "src/questfoundry/resources/prompts/**/*.json",
-    "src/questfoundry/resources/schemas/*.json",
-]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/questfoundry/resources" = "questfoundry/resources"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -103,13 +113,18 @@ disallow_untyped_defs = true
 disable_error_code = ["misc", "no-any-return", "attr-defined"]
 
 [[tool.mypy.overrides]]
-module = ["pydantic", "jsonschema.*", "yaml.*", "openai.*", "ollama.*", "httpx.*"]
+module = ["pydantic", "jsonschema.*", "yaml.*", "openai.*", "ollama.*", "httpx.*", "google.*", "vertexai.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["questfoundry.providers.text.gemini", "questfoundry.providers.image.imagen"]
+disable_error_code = ["arg-type"]
 
 [tool.ruff]
 line-length = 88
 target-version = "py311"
 exclude = ["spec"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

@@ -58,6 +58,7 @@ The index provides for each schema:
 
 1. **Locate schema** in `SCHEMA_INDEX.json` using the schema key (e.g., `"hook_card"`)
 2. **Echo back** the schema metadata:
+
    ```json
    {
      "$id": "https://questfoundry.liesdonk.nl/schemas/hook_card.schema.json",
@@ -66,6 +67,7 @@ The index provides for each schema:
      "sha256": "a1b2c3d4e5f6..."
    }
    ```
+
 3. **Show a minimal valid instance** demonstrating you understand the schema
 4. **Show one invalid example** with explanation of why it fails validation
 5. **Only then proceed** with producing the actual artifact
@@ -156,6 +158,7 @@ The index provides for each schema:
 
 1. **Check the SHA-256 hash** of the schema file against `SCHEMA_INDEX.json`
 2. **If hash mismatch:** REFUSE TO PROCEED and report:
+
    ```
    ERROR: Schema integrity check failed for hook_card.schema.json
    Expected SHA-256: a1b2c3d4e5f6...
@@ -173,10 +176,13 @@ The index provides for each schema:
 
 1. **Bundled in upload kit** (if provided) — use this for offline validation
 2. **GitHub Raw URLs** (always available):
+
    ```
    https://raw.githubusercontent.com/pvliesdonk/questfoundry-spec/main/03-schemas/hook_card.schema.json
    ```
+
 3. **Canonical URLs** (when configured):
+
    ```
    https://questfoundry.liesdonk.nl/schemas/hook_card.schema.json
    ```

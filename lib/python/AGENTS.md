@@ -1,0 +1,262 @@
+# Agent Guidelines (Python Library)
+
+> **Parent Guidelines:** See [`../../AGENTS.md`](../../AGENTS.md) for:
+>
+> - Universal assistant rules (clarity, conciseness, expert opinions)
+> - QuestFoundry mono-repo context (layered architecture)
+> - Commit conventions and branch workflow
+> - Separation of concerns (spec vs. lib)
+
+This file extends the parent with **Python-specific guidelines** for the Layer 6 Python library.
+
+---
+
+## Project Context (lib/python)
+
+The `lib/python/` directory contains the Python implementation of the QuestFoundry specification
+(Layer 6). This library provides the runtime for the QuestFoundry studio.
+
+### Directory Structure
+
+```text
+lib/python/
+├── src/
+│   └── questfoundry/     # Main Python package
+│       ├── models/       # Data models
+│       ├── roles/        # Role implementations
+│       ├── loops/        # Loop implementations
+│       ├── protocol/     # Protocol handlers
+│       ├── providers/    # LLM providers
+│       ├── utils/        # Utilities (including resource loading)
+│       ├── validation/   # Validation logic
+│       └── orchestrator.py  # Main orchestrator
+├── tests/                # Pytest test suite
+├── pyproject.toml        # Dependencies and configuration
+├── AGENTS.md             # <-- This file (Python coding standards)
+└── README.md             # Library documentation
+```
+
+### Relationship to Specification
+
+This library **implements** the specification defined in `../../spec/`:
+
+- Bundles schemas from `../../spec/03-schemas/` into the package at build time
+- Bundles prompts from `../../spec/05-prompts/` into the package at build time
+- Implements roles defined in `../../spec/01-roles/`
+- Follows protocols defined in `../../spec/04-protocol/`
+
+**Important**: This library reads from the spec but **never modifies** it. The spec is the single
+source of truth. Always edit files in `spec/` and re-run the bundling script.
+
+---
+
+## Python Coding Guidelines
+
+These rules apply to all Python code (`*.py`) in `lib/python/`.
+
+### Python Version
+
+Write for Python 3.11-3.13. Do NOT write code to support earlier versions. Always use modern Python
+practices, including full type annotations and generics.
+
+### Project Setup and Developer Workflows
+
+- **ALWAYS use uv** for running all code and managing dependencies.
+- Never use direct `pip` or `python` commands.
+- Use modern `uv` commands: `uv sync`, `uv run ...`, `uv add`.
+
+- Use the following commands to ensure quality:
+
+  ```shell
+  # Install/sync all dependencies:
+  uv sync
+
+  # Run linting (ruff) and type checking (mypy):
+  uv run ruff check .
+  uv run mypy
+
+  # Run tests:
+  uv run pytest
+
+  # Auto-format code
+  uv run ruff format .
+  ```
+
+- To see test output for individual tests, run: `uv run pytest -s tests/some/file.py`
+
+- You must verify there are zero linter warnings/errors or test failures before considering any task
+  complete.
+
+### General Development Practices
+
+- All code must be in `src/`.
+- All tests must be in `tests/`.
+- Follow Ruff linting standards.
+- All code must pass `pytest`.
+- Be sure to resolve pyright/mypy linter errors as you develop.
+- If type checker errors are hard to resolve, you may add a comment `# pyright: ignore` to disable
+  warnings or errors _only_ if you know they are not a real problem and are difficult to fix.
+- DO NOT globally disable lint or type checker rules without confirmation.
+- Never change an existing comment, pydoc, or a log statement, unless it is directly related to the
+  fix or the user has asked for a cleanup. Do not drop existing comments when editing code!
+
+### Coding Conventions and Imports
+
+- Always use full, absolute imports: `from toplevel_pkg.module1.module2 import ...`
+- DO NOT use relative imports: `from .module1.module2 import ...`
+- Be sure to import types from `collections.abc` or `typing_extensions` where appropriate. (e.g.,
+  `from collections.abc import Callable, Coroutine`)
+- Use `typing_extensions` for `@override` (to support Python 3.11).
+- Add `from __future__ import annotations` on files with types whenever applicable.
+- Use `pathlib.Path` instead of strings for paths. Use `Path(filename).read_text()` instead of
+  `with open(...)`.
+
+### Use Modern Python Practices
+
+- ALWAYS use `@override` decorators (from `typing_extensions`) when overriding methods.
+
+### Resource Loading
+
+- Resources (schemas and prompts) are **bundled** from the spec into the library package during
+  the build process.
+- The bundling script (`scripts/bundle_resources.py`) copies files from `../../spec/` into
+  `src/questfoundry/resources/`.
+- The library uses `importlib.resources` to load bundled resources at runtime.
+- Always use the resource loading utilities in `src/questfoundry/utils/resources.py` to access
+  schemas and prompts.
+- The spec directory (`../../spec/`) is the single source of truth. Bundled resources are
+  synchronized via the bundling script.
+
+**To bundle resources:**
+
+```shell
+# From lib/python/ directory:
+uv run hatch run bundle
+
+# Or run the script directly:
+python scripts/bundle_resources.py
+```
+
+### Testing
+
+- Place tests in the `tests/` directory.
+- For simple tests, prefer inline functions in the original code file below a `## Tests` comment.
+  Inline tests should NOT import pytest.
+- DO NOT write one-off test code in throwaway files.
+- DO NOT put `if __name__ == "__main__":` for quick testing.
+- Just write `assert x == 5`. Do NOT write `assert x == 5, "x should be 5"`.
+- DO NOT write trivial tests (e.g., asserting a constant's value or simple Pydantic instantiation).
+- NEVER write `assert False`. Use `raise AssertionError("Some explanation")` instead.
+- DO NOT use pytest fixtures (like parameterization) unless absolutely necessary.
+
+### Types and Type Annotations
+
+- Use modern union syntax: `str | None` (NOT `Optional[str]`).
+- Use `dict[str]` (NOT `Dict[str]`), `list[str]` (NOT `List[str]`), etc.
+- Never use/import `Optional` for new code.
+
+### Guidelines for Literal Strings
+
+- For multi-line strings, ALWAYS use `textwrap.dedent` to make them readable. Example:
+
+  ```python
+  from textwrap import dedent
+
+  markdown_content = dedent("""
+      # Title 1
+      Some text.
+      """).strip()
+  ```
+
+### Guidelines for Comments
+
+- Comments should be EXPLANATORY: Explain _WHY_, not _WHAT_.
+- Comments should be CONCISE.
+- DO NOT use comments to state obvious things. (e.g., `if self.failed == 0: # All successful`).
+
+### Guidelines for Docstrings
+
+- Use concise pydoc strings with triple quotes on their own lines.
+- Use `backticks` around variable names and inline code.
+- Docstrings should explain rationale or pitfalls, not obvious details from types/names.
+- Avoid obvious or repetitive docstrings.
+- Do NOT list args and return values if they're obvious from the signature.
+- Public/exported functions/methods SHOULD have concise docstrings.
+- Internal/local functions/methods DO NOT need docstrings unless their purpose is not obvious.
+
+### General Clean Coding Practices
+
+- Avoid writing trivial wrapper or delegation functions.
+- If a function does not use a parameter, use `# pyright: ignore[reportUnusedParameter]` to suppress
+  the linter warning.
+
+### Guidelines for Backward Compatibility
+
+- If a change to an API or library will break backward compatibility, MENTION THIS.
+- DO NOT implement backward-compatibility code unless explicitly confirmed.
+
+---
+
+## Conventional Commit Types for Python Library
+
+When working in the `lib/python/` directory, use **standard conventional commit types** to trigger the `publish-python.yml` workflow:
+
+### Standard Types
+
+- **`feat(lib)`**: New features or capabilities
+  - Example: `feat(lib): add support for Anthropic provider`
+  - Triggers: Minor version bump (0.x.0)
+
+- **`fix(lib)`**: Bug fixes
+  - Example: `fix(lib): resolve resource loading on Windows`
+  - Triggers: Patch version bump (0.0.x)
+
+- **`refactor(lib)`**: Code refactoring without behavior changes
+  - Example: `refactor(lib): simplify validation logic`
+  - Triggers: Patch version bump
+
+- **`test(lib)`**: Adding or updating tests
+  - Example: `test(lib): add tests for prompt loading`
+  - Triggers: No version bump
+
+- **`docs(lib)`**: Documentation changes
+  - Example: `docs(lib): update API documentation`
+  - Triggers: No version bump
+
+- **`chore(lib)`**: Maintenance tasks
+  - Example: `chore(lib): update dependencies`
+  - Triggers: No version bump
+
+- **`ci(lib)`**: CI/CD changes
+  - Example: `ci(lib): update GitHub Actions workflow`
+  - Triggers: No version bump
+
+### Breaking Changes
+
+Use `!` suffix to indicate breaking changes:
+
+- `feat(lib)!: change resource API to use async/await`
+- Triggers: Major version bump (x.0.0)
+
+### Important Notes
+
+- All library code changes must pass linting, type checking, and tests
+- Version bumps are handled automatically by the CI/CD pipeline
+- For spec changes, see `../../spec/AGENTS.md` for custom commit types
+
+---
+
+## Working Directory
+
+Python commands should typically be run from **the library directory** (`lib/python/`) when using
+`uv` or `hatch` commands.
+
+The resource loading utilities in `src/questfoundry/utils/resources.py` use `importlib.resources`
+to load bundled resources from the package at runtime.
+
+**Before running tests or building**, ensure resources are bundled:
+
+```shell
+cd lib/python
+uv run hatch run bundle
+```

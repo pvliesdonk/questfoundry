@@ -1,6 +1,24 @@
 """Shared test fixtures and utilities for QuestFoundry tests."""
 
+from pathlib import Path
+
+import pytest
+
 from questfoundry.providers.base import TextProvider
+
+
+@pytest.fixture
+def spec_path():
+    """
+    Fixture providing path to spec directory.
+
+    This fixture calculates the path to the spec/ directory in the mono-repo root.
+    From tests/, we need to go up to lib/python, then up to the mono-repo root.
+    """
+    test_dir = Path(__file__).parent  # /path/to/questfoundry/lib/python/tests
+    lib_python = test_dir.parent  # /path/to/questfoundry/lib/python
+    repo_root = lib_python.parent.parent  # /path/to/questfoundry
+    return repo_root / "spec"
 
 
 class MockTextProvider(TextProvider):

@@ -3,7 +3,7 @@
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-29)** This template includes
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied (space-separated deferrals).
-
+>
 > **Use:** Audio Director's compact index of **all cues** in a slice. Each row points to a full
 > **Audio Plan**. Keep **player surfaces** clean (captions/text equivalents are safe). All
 > technique/repro lives **off-surface** inside the Audio Plan or producer logs.

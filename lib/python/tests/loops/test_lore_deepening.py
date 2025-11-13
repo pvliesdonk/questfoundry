@@ -1,12 +1,11 @@
 """Tests for Lore Deepening loop execution."""
 
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from conftest import MockTextProvider
 
+from conftest import MockTextProvider
 from questfoundry.loops.base import LoopContext, StepStatus
 from questfoundry.loops.lore_deepening import LoreDeepeningLoop
 from questfoundry.models.artifact import Artifact
@@ -48,14 +47,6 @@ def mock_provider():
             "generate player summary": "Player-safe summary text",
         }
     )
-
-
-@pytest.fixture
-def spec_path():
-    """Fixture providing path to spec directory."""
-    test_dir = Path(__file__).parent
-    repo_root = test_dir.parent.parent
-    return repo_root / "spec"
 
 
 @pytest.fixture

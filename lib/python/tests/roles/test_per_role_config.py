@@ -58,7 +58,8 @@ class TestProviderConfigRoleSupport:
     def test_get_role_config_with_config(self, tmp_path) -> None:
         """get_role_config returns configuration when present."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -73,7 +74,8 @@ roles:
       ttl_seconds: 3600
     rate_limit:
       requests_per_minute: 30
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         role_config = config.get_role_config("plotwright")
@@ -85,14 +87,16 @@ roles:
     def test_get_role_provider_default_fallback(self, tmp_path) -> None:
         """get_role_provider falls back to default if role not configured."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
     openai:
       api_key: test_key
       model: gpt-4o
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = config.get_role_provider("any_role", "text")
@@ -101,7 +105,8 @@ providers:
     def test_get_role_provider_role_specific(self, tmp_path) -> None:
         """get_role_provider returns role-specific provider when configured."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -115,7 +120,8 @@ providers:
 roles:
   plotwright:
     text_provider: ollama
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = config.get_role_provider("plotwright", "text")
@@ -124,7 +130,8 @@ roles:
     def test_get_role_provider_config_basic(self, tmp_path) -> None:
         """get_role_provider_config returns provider config for role."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -138,7 +145,8 @@ providers:
 roles:
   plotwright:
     text_provider: ollama
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider_config = config.get_role_provider_config("plotwright", "text")
@@ -149,7 +157,8 @@ roles:
     def test_get_role_provider_config_with_overrides(self, tmp_path) -> None:
         """get_role_provider_config merges provider config with role overrides."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -165,7 +174,8 @@ roles:
       ttl_seconds: 3600
     rate_limit:
       requests_per_minute: 30
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider_config = config.get_role_provider_config("plotwright", "text")
@@ -181,7 +191,8 @@ roles:
     def test_get_role_provider_config_not_found(self, tmp_path) -> None:
         """get_role_provider_config returns empty dict if provider not found."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -189,7 +200,8 @@ providers:
 roles:
   plotwright:
     text_provider: nonexistent
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider_config = config.get_role_provider_config("plotwright", "text")
@@ -204,7 +216,8 @@ roles:
     def test_list_roles_with_config(self, tmp_path) -> None:
         """list_roles returns configured role names."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -217,7 +230,8 @@ roles:
   lore_weaver:
     cache:
       ttl_seconds: 7200
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         roles = config.list_roles()
@@ -287,14 +301,16 @@ class TestShowrunnerRoleInitialization:
     def test_get_provider_for_role_default(self, tmp_path) -> None:
         """get_provider_for_role uses default when role not configured."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
     openai:
       api_key: test_key
       model: gpt-4o
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -311,7 +327,8 @@ providers:
     def test_get_provider_for_role_role_specific(self, tmp_path) -> None:
         """get_provider_for_role uses role-specific provider when configured."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -325,7 +342,8 @@ providers:
 roles:
   showrunner:
     text_provider: ollama
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -343,14 +361,16 @@ roles:
     def test_initialize_role_with_config_basic(self, tmp_path) -> None:
         """initialize_role_with_config creates role with provider config."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
     openai:
       api_key: test_key
       model: gpt-4o
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -373,7 +393,8 @@ providers:
     def test_initialize_role_with_config_role_specific(self, tmp_path) -> None:
         """initialize_role_with_config uses role-specific configuration."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -391,7 +412,8 @@ roles:
       ttl_seconds: 3600
     rate_limit:
       requests_per_minute: 30
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -411,14 +433,16 @@ roles:
     def test_initialize_role_with_config_session_and_callback(self, tmp_path) -> None:
         """initialize_role_with_config passes session and callback."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
     openai:
       api_key: test_key
       model: gpt-4o
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -444,14 +468,16 @@ providers:
     def test_initialize_role_with_config_spec_path(self, tmp_path) -> None:
         """initialize_role_with_config passes spec_path."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
     openai:
       api_key: test_key
       model: gpt-4o
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -474,10 +500,12 @@ providers:
     def test_initialize_role_with_config_no_default_provider(self, tmp_path) -> None:
         """initialize_role_with_config raises error if no default provider."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text: {}
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider = MockTextProvider({})
@@ -530,7 +558,8 @@ class TestPerRoleConfigIntegration:
     def test_provider_config_multiple_roles_independent(self, tmp_path) -> None:
         """Different roles can have independent configurations."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -550,7 +579,8 @@ roles:
     text_provider: openai
     cache:
       ttl_seconds: 86400
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
 
@@ -565,7 +595,8 @@ roles:
     def test_role_inherits_base_provider_config(self, tmp_path) -> None:
         """Role-specific config can inherit from base provider config."""
         config_file = tmp_path / "config.yml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 providers:
   text:
     default: openai
@@ -579,7 +610,8 @@ roles:
     text_provider: openai
     cache:
       ttl_seconds: 3600
-""")
+"""
+        )
 
         config = ProviderConfig(config_file)
         provider_config = config.get_role_provider_config("plotwright", "text")

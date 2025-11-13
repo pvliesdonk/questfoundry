@@ -1,7 +1,7 @@
 # Style Manifest — Typography & Style Settings (Layer 1, Human-Level)
 
 > **Status:** ✅ **DEFINED (2025-11-04)** Typography specification for export formatting.
-
+>
 > **Use:** Style Lead's typography and style decisions for Book Binder export formatting. Defines
 > font families, sizes, line heights, and other typographic parameters for prose, display, cover,
 > and UI elements. Used by Book Binder during export to EPUB/HTML/PDF.
