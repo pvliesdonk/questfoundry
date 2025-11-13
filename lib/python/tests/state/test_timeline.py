@@ -1,6 +1,7 @@
 """Tests for timeline management (Layer 6/7 canon workflows)"""
 
 import pytest
+
 from questfoundry.state.timeline import TimelineAnchor, TimelineManager
 
 

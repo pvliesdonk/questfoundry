@@ -1,6 +1,7 @@
 """Tests for TU lifecycle"""
 
 import pytest
+
 from questfoundry.lifecycles import StateTransitionError, TULifecycle
 
 

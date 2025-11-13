@@ -3,6 +3,7 @@
 from unittest.mock import Mock
 
 import pytest
+
 from questfoundry.providers.base import TextProvider
 from questfoundry.providers.config import ProviderConfig
 from questfoundry.providers.registry import ProviderRegistry

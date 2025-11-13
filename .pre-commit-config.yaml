@@ -19,29 +19,31 @@ repos:
       - id: check-case-conflict
       - id: mixed-line-ending
 
-  # Python: Ruff (linting and formatting)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.15
+  # Python: Ruff (linting and formatting) - run from lib/python directory
+  - repo: local
     hooks:
-      # Linting
-      - id: ruff
-        args: [--fix]
-        files: ^(lib/python/|cli/python/)
-      # Formatting
-      - id: ruff-format
-        files: ^(lib/python/|cli/python/)
+      - id: ruff-lib-python
+        name: ruff (lib/python)
+        entry: bash -c 'cd lib/python && uv run ruff check --fix src tests'
+        language: system
+        files: ^lib/python/(src|tests)/
+        pass_filenames: false
+      - id: ruff-format-lib-python
+        name: ruff format (lib/python)
+        entry: bash -c 'cd lib/python && uv run ruff format src tests'
+        language: system
+        files: ^lib/python/(src|tests)/
+        pass_filenames: false
 
-  # Python: Type checking with mypy
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+  # Python: Type checking with mypy - run from lib/python directory
+  - repo: local
     hooks:
-      - id: mypy
+      - id: mypy-lib-python
+        name: mypy (lib/python)
+        entry: bash -c 'cd lib/python && uv run mypy src'
+        language: system
         files: ^lib/python/src/
-        args: [--config-file, lib/python/pyproject.toml]
-        additional_dependencies:
-          - pydantic>=2.0
-          - types-jsonschema>=4.0
-          - types-pyyaml>=6.0
+        pass_filenames: false
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli

@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 from questfoundry.export import BookBinder, ViewArtifact
 from questfoundry.models.artifact import Artifact
 

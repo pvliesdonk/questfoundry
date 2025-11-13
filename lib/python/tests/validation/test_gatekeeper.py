@@ -1,6 +1,7 @@
 """Tests for Gatekeeper integration."""
 
 import pytest
+
 from questfoundry.models.artifact import Artifact
 from questfoundry.validation import GatecheckReport, Gatekeeper
 

@@ -1,6 +1,7 @@
 """Tests for Hook lifecycle"""
 
 import pytest
+
 from questfoundry.lifecycles import HookLifecycle, StateTransitionError
 
 

@@ -1,6 +1,7 @@
 """Tests for loop registry."""
 
 import pytest
+
 from questfoundry.loops.registry import LoopMetadata, LoopRegistry
 
 

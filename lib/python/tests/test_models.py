@@ -214,6 +214,6 @@ def test_all_artifact_types_have_correct_type():
 
     for expected_type, artifact_class in artifacts.items():
         instance = artifact_class(data={})
-        assert (
-            instance.type == expected_type
-        ), f"{artifact_class.__name__} has wrong type"
+        assert instance.type == expected_type, (
+            f"{artifact_class.__name__} has wrong type"
+        )

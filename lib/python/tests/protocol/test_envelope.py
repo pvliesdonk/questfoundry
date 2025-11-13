@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+
 from questfoundry.protocol import (
     Context,
     Envelope,

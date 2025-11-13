@@ -5,6 +5,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from questfoundry.providers.text.bedrock import BedrockProvider
 
 

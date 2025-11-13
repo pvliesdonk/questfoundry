@@ -1,6 +1,7 @@
 """Tests for entity registry (Layer 6/7 canon workflows)"""
 
 import pytest
+
 from questfoundry.state.entity_registry import Entity, EntityRegistry, EntityType
 
 

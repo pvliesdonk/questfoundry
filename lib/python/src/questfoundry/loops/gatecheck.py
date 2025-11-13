@@ -337,9 +337,9 @@ class GatecheckLoop(Loop):
             triage_results = []
             for finding in self.findings:
                 triage_result = finding.copy()
-                triage_result[
-                    "smallest_viable_fix"
-                ] = f"Fix {finding['bar']} issue: {finding['evidence']}"
+                triage_result["smallest_viable_fix"] = (
+                    f"Fix {finding['bar']} issue: {finding['evidence']}"
+                )
                 triage_result["owner"] = "owner_role"
                 triage_results.append(triage_result)
 

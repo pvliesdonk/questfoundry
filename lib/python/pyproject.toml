@@ -111,13 +111,18 @@ disallow_untyped_defs = true
 disable_error_code = ["misc", "no-any-return", "attr-defined"]
 
 [[tool.mypy.overrides]]
-module = ["pydantic", "jsonschema.*", "yaml.*", "openai.*", "ollama.*", "httpx.*"]
+module = ["pydantic", "jsonschema.*", "yaml.*", "openai.*", "ollama.*", "httpx.*", "google.*", "vertexai.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["questfoundry.providers.text.gemini", "questfoundry.providers.image.imagen"]
+disable_error_code = ["arg-type"]
 
 [tool.ruff]
 line-length = 88
 target-version = "py311"
 exclude = ["spec"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

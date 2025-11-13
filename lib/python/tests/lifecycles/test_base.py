@@ -1,6 +1,7 @@
 """Tests for base lifecycle"""
 
 import pytest
+
 from questfoundry.lifecycles import Lifecycle, StateTransitionError
 
 
