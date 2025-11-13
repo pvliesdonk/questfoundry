@@ -2,6 +2,14 @@ name: Publish Python Library
 
 on:
   workflow_dispatch:
+    inputs:
+      destination:
+        description: "Publish to PyPi"
+        required: true
+        type: choice
+        options:
+          - pypi
+          - testpypi
 
 jobs:
   bump-and-tag:
