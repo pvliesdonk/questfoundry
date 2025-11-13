@@ -253,36 +253,42 @@ def test_send_and_wait_with_response(client, temp_workspace):
         payload_data={"test": "request"},
     )
 
+    # Use event to track thread completion and exception handling
+    thread_error = []
+    
     def send_response():
         """Simulate another client sending a response"""
-        time.sleep(0.1)  # Small delay
+        try:
+            time.sleep(0.1)  # Small delay
 
-        # Create response client
-        response_client = ProtocolClient.from_workspace(temp_workspace, "GK")
+            # Create response client
+            response_client = ProtocolClient.from_workspace(temp_workspace, "GK")
 
-        # Move request from outbox to inbox so we can read it
-        for outbox_file in response_client.transport.outbox_dir.glob("*.json"):
-            inbox_file = response_client.transport.inbox_dir / outbox_file.name
-            outbox_file.rename(inbox_file)
-
-        # Read the request to get correlation_id
-        requests = list(response_client.receive(validate=False))
-        if requests:
-            req = requests[0]
-            # Send response with same correlation_id
-            response = response_client.create_envelope(
-                receiver="SR",
-                intent="test.response",
-                payload_type="simple",
-                payload_data={"test": "response"},
-                correlation_id=req.correlation_id,
-            )
-            response_client.send(response, validate=False)
-
-            # Move response to inbox
+            # Move request from outbox to inbox so we can read it
             for outbox_file in response_client.transport.outbox_dir.glob("*.json"):
                 inbox_file = response_client.transport.inbox_dir / outbox_file.name
                 outbox_file.rename(inbox_file)
+
+            # Read the request to get correlation_id
+            requests = list(response_client.receive(validate=False))
+            if requests:
+                req = requests[0]
+                # Send response with same correlation_id
+                response = response_client.create_envelope(
+                    receiver="SR",
+                    intent="test.response",
+                    payload_type="simple",
+                    payload_data={"test": "response"},
+                    correlation_id=req.correlation_id,
+                )
+                response_client.send(response, validate=False)
+
+                # Move response to inbox
+                for outbox_file in response_client.transport.outbox_dir.glob("*.json"):
+                    inbox_file = response_client.transport.inbox_dir / outbox_file.name
+                    outbox_file.rename(inbox_file)
+        except Exception as e:
+            thread_error.append(e)
 
     # Start response thread
     thread = threading.Thread(target=send_response)
@@ -292,6 +298,10 @@ def test_send_and_wait_with_response(client, temp_workspace):
     response = client.send_and_wait(request, timeout=2.0, validate=False)
 
     thread.join()
+    
+    # Check if thread encountered an error
+    if thread_error:
+        raise thread_error[0]
 
     assert response is not None
     assert response.intent == "test.response"
