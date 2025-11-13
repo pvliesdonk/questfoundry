@@ -1,5 +1,11 @@
 # .cz.toml
 [tool.commitizen]
+
+[tool.commitizen.workspace]
+# Defines which projects are part of the monorepo
+members = ["lib/python", "spec"]
+
+
 # Config for the Python library
 [tool.commitizen.files."lib/python"]
 version_files = [
