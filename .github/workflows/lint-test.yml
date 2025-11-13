@@ -18,7 +18,7 @@ jobs:
         with:
           files: .
           config_file: .markdownlint.json
-          ignore_files: "lib/python/src/questfoundry/resources/,spec/"
+          ignore_files: "lib/python/src/questfoundry/resources/,lib/python/docs/,spec/"
 
   lint-python:
     name: Lint Python (Ruff)
@@ -114,9 +114,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install dependencies
+        run: cd lib/python && uv sync --all-extras
 
       - uses: pre-commit/action@v3.0.1
