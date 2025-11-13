@@ -33,7 +33,7 @@ def _trace(
 
 
 # Attach trace method to Logger class
-logging.Logger.trace = _trace  # type: ignore
+logging.Logger.trace = _trace
 
 
 class TraceFormatter(logging.Formatter):
