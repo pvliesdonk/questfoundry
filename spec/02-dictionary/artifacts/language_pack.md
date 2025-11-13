@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-30)** Inline field
 > constraints and validation rules. All Phase 2+3 corrections applied (space-separated deferrals).
-
+>
 > **Use:** Translator's deliverable that ships a **portable bundle** for a locale: localized
 > surfaces (manuscript/codex/captions), **Register Map**, **Glossary Slice**, **anchor/label
 > diffs**, and a **Coverage Report**—all **player-safe**. No spoilers, no internals.

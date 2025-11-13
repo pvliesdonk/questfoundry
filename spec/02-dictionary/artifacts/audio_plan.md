@@ -3,7 +3,7 @@
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-29)** This template includes
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied.
-
+>
 > **Use:** Specify a cue so an Audio Producer can realize it **without guessing**. Keep player
 > surfaces clean: captions/text equivalents are **in-world**; all technique/repro stays
 > **off-surface**.

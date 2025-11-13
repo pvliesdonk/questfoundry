@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-30)** Inline field
 > constraints and validation rules. All Phase 2+3 corrections applied (space-separated deferrals).
-
+>
 > **Use:** Book Binder's one-pager for any bound _View_ (export). Declares the **Cold** snapshot,
 > **options/coverage**, anchor health, and any `deferred:*` tracks. No spoilers, no Hot content.
 

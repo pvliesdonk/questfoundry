@@ -1,7 +1,7 @@
 # Art Manifest — Visual Asset Registry (Layer 1, Human-Level)
 
 > **Status:** ✅ **DEFINED (2025-11-04)** Registry of planned and rendered visual assets.
-
+>
 > **Use:** Art Director's inventory of all visual assets (covers, plates, thumbnails, scene art)
 > with filenames, captions, prompts, hashes, and approval status. Enables Book Binder to
 > automatically include images at correct anchors with player-safe captions.

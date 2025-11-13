@@ -4,7 +4,7 @@
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied (13 hook types, 7 status values, 8 bars, 13 loops, space-separated deferrals, full
 > research posture values).
-
+>
 > **Use:** Lore Weaver's bundle that turns **accepted hooks** into coherent **canon** (Hot) and
 > exports **player-safe summaries** (Cold) for neighbors. Keep the split explicit: **Hot may contain
 > spoilers; Cold must not.** This is a _human template_ (no schemas).

@@ -4,7 +4,7 @@
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied (13 hook types, 7 status values, 8 bars, 13 loops, space-separated deferrals, full
 > research posture values).
-
+>
 > **Use:** Answer the **smallest useful question** with a short, sourced summary. Label **posture**,
 > provide **player-safe neutral phrasing**, and name **creative implications**. Hot can hold
 > citations; outward text stays spoiler-free.

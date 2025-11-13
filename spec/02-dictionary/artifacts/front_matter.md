@@ -2,7 +2,7 @@
 
 > **Status:** ✅ **ENRICHED with Layer 2 constraints (Phase 3 — 2025-10-30)** Inline field
 > constraints and validation rules. All Phase 2+3 corrections applied.
-
+>
 > **Use:** Book Binder's player-facing header that tops any bound **View** (PDF/HTML/EPUB/bundle).
 > Declares **what this View is**, **which Cold snapshot it reflects**, and **what options/coverage**
 > are included. No spoilers, no Hot content, no internal technique.

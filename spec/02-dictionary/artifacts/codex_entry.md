@@ -4,7 +4,7 @@
 > inline field constraints, validation rules, and common error prevention. All Phase 2+3 corrections
 > applied (13 hook types, 7 status values, 8 bars, 13 loops, space-separated deferrals, full
 > research posture values).
-
+>
 > **Use:** Write **player-safe** background pieces that clarify terms, places, procedures, or
 > objects without revealing canon or internal mechanics. Keep entries concise, linkable, and
 > portable across locales. This is a **human template**; no schemas here.
