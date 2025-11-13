@@ -26,31 +26,32 @@ jobs:
           fetch-depth: 0 # Required for mkdocstrings to get version info
 
       - name: Set up Python
-        # Use a standard action for setup, enabling cache for 'uv'
+        # Removed 'cache: uv' to resolve setup error.
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "uv"
 
-      - name: Install dependencies via uv
-        # Install mkdocs toolchain and the local library (with all development dependencies)
-        # The Python library must be installed for mkdocstrings to import it.
+      - name: Install dependencies via pip
+        # Installs the MkDocs toolchain, and the local library in editable mode.
         run: |
-          # 1. Install MkDocs toolchain (mkdocs-material, mkdocstrings, etc.)
-          uv pip install mkdocs-material mkdocstrings[python]
+          # 1. Install core MkDocs toolchain
+          python -m pip install --upgrade pip
+          pip install mkdocs-material mkdocstrings[python]
           # 2. Install Python library in editable mode with all extras
-          uv pip install -e ./lib/python[all-extras]
+          # This makes the source code available to mkdocstrings.
+          pip install -e ./lib/python[all-extras]
 
       - name: Bundle Python library resources
-        # This makes resources available via Python's package data (important for the running library)
-        run: uv run python scripts/bundle_resources.py
+        # Executes the resource script directly using python from path.
+        run: python scripts/bundle_resources.py
         working-directory: ./lib/python
 
       - name: Build documentation
-        # Run mkdocs from the root, pointing to the unified config file
-        run: uv run mkdocs build -f docs/mkdocs.yml
+        # Runs mkdocs build using the main unified config, relying on its presence in PATH.
+        run: mkdocs build -f docs/mkdocs.yml
 
       - name: Copy Schemas for public hosting
+        # This step handles item 1e: publishing JSON schemas
         run: |
           # Create the path that will resolve to your_site.com/schemas/
           mkdir -p site/schemas
