@@ -25,35 +25,34 @@ jobs:
         with:
           fetch-depth: 0 # Required for mkdocstrings to get version info
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-
       - name: Set up Python
-        run: uv python install 3.11
+        # Use a standard action for setup, enabling cache for 'uv'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "uv"
 
-      - name: Install Python library dependencies
-        run: uv sync --all-extras
-        working-directory: ./lib/python
-
-      - name: Install Docs dependencies
-        # This is the 'uv-centric' flow for the docs
-        run: uv sync
-        working-directory: ./docs
+      - name: Install dependencies via uv
+        # Install mkdocs toolchain and the local library (with all development dependencies)
+        # The Python library must be installed for mkdocstrings to import it.
+        run: |
+          # 1. Install MkDocs toolchain (mkdocs-material, mkdocstrings, etc.)
+          uv pip install mkdocs-material mkdocstrings[python]
+          # 2. Install Python library in editable mode with all extras
+          uv pip install -e ./lib/python[all-extras]
 
       - name: Bundle Python library resources
-        # This is crucial so mkdocstrings can import the library
+        # This makes resources available via Python's package data (important for the running library)
         run: uv run python scripts/bundle_resources.py
         working-directory: ./lib/python
 
       - name: Build documentation
-        # Run mkdocs from the root, pointing to the new config file
+        # Run mkdocs from the root, pointing to the unified config file
         run: uv run mkdocs build -f docs/mkdocs.yml
 
       - name: Copy Schemas for public hosting
         run: |
-          # Create the path that will resolve to questfoundry.liesdonk.nl/schemas/
+          # Create the path that will resolve to your_site.com/schemas/
           mkdir -p site/schemas
           # Copy all schemas from L3 and L4
           cp spec/03-schemas/*.json site/schemas/
@@ -61,7 +60,6 @@ jobs:
 
       - name: Copy CNAME
         # Ensures your CNAME file is deployed to the root of the Pages site
-        # Assumes your CNAME file is at docs/CNAME
         run: |
           if [ -f "docs/CNAME" ]; then
             cp docs/CNAME site/CNAME
