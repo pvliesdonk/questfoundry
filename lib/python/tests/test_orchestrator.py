@@ -1,7 +1,6 @@
 """Tests for orchestrator."""
 
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
