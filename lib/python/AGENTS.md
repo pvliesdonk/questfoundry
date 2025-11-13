@@ -18,7 +18,7 @@ The `lib/python/` directory contains the Python implementation of the QuestFound
 
 ### Directory Structure
 
-```
+```text
 lib/python/
 ├── src/
 │   └── questfoundry/     # Main Python package

@@ -90,10 +90,3 @@ from questfoundry.utils.resources import list_schemas, list_prompts
 print(f"Schemas: {list_schemas()}")
 print(f"Roles: {list_prompts()}")
 ```
-
-## Next Steps
-
-- [Working with Schemas](schemas.md)
-- [Working with Prompts](prompts.md)
-- [Validation](validation.md)
-- [Providers](providers.md)

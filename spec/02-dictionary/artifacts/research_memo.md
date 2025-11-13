@@ -341,7 +341,7 @@ hook://research/reader-firmware — prevalence of vulnerable models (defer)
 
 **❌ Evidence without relevance summary**
 
-- Wrong: "- https://example.com/whitepaper.pdf"
+- Wrong: "- <https://example.com/whitepaper.pdf>"
 - Right: "- Trade whitepaper on RFID dock passes — common anti-clone features"
 
 ---

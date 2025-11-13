@@ -25,7 +25,6 @@ QuestFoundry is a Python library for collaborative interactive fiction authoring
 - [Installation](getting-started/installation.md) - Get started with QuestFoundry
 - [Quick Start](getting-started/quickstart.md) - Your first QuestFoundry program
 - [API Reference](api/utils.md) - Complete API documentation
-- [Specification](../../spec/README.md) - Full QuestFoundry specification
 
 ## Project Structure
 

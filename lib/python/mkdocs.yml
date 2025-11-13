@@ -81,23 +81,10 @@ nav:
       - Resource Bundling: getting-started/bundling.md
   - User Guide:
       - Overview: guide/overview.md
-      - Working with Schemas: guide/schemas.md
-      - Working with Prompts: guide/prompts.md
-      - Validation: guide/validation.md
-      - Providers: guide/providers.md
   - API Reference:
       - Utils: api/utils.md
-      - Validators: api/validators.md
-      - Providers: api/providers.md
-      - Lifecycles: api/lifecycles.md
   - Development:
       - Contributing: development/contributing.md
-      - Architecture: development/architecture.md
-      - Testing: development/testing.md
-  - Specification:
-      - Overview: ../../spec/README.md
-      - Schemas: ../../spec/03-schemas/README.md
-      - Prompts: ../../spec/05-prompts/README.md
 
 extra:
   social:

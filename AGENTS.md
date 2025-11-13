@@ -34,7 +34,7 @@ mono-repo is organized into three main areas:
 
 ### Mono-Repo Structure
 
-```
+```text
 .
 ├── spec/                 # Layers 0-5 (The Specification)
 │   ├── 00-north-star/    # Layer 0: Foundational principles, loops, quality bars

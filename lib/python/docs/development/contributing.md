@@ -88,6 +88,7 @@ git checkout -b feat/my-feature
 ```
 
 Use conventional commit prefixes:
+
 - `feat/` for new features
 - `fix/` for bug fixes
 - `docs/` for documentation
@@ -96,7 +97,7 @@ Use conventional commit prefixes:
 
 ### 2. Make Your Changes
 
-- Follow the coding guidelines in `lib/python/AGENTS.md`
+- Follow the coding guidelines in the repository
 - Add tests for new functionality
 - Update documentation as needed
 - Bundle resources if you modified schemas or prompts
@@ -131,7 +132,7 @@ Then create a pull request on GitHub.
 
 ## Project Structure
 
-```
+```text
 lib/python/
 ├── src/questfoundry/        # Main package
 │   ├── utils/               # Utilities (resource loading, etc.)
@@ -152,10 +153,8 @@ lib/python/
 - Full type annotations
 - Follow Ruff linting rules
 - Use modern Python idioms
-- See `lib/python/AGENTS.md` for detailed guidelines
 
 ## Questions?
 
 - Open a [Discussion](https://github.com/pvliesdonk/questfoundry/discussions)
 - Create an [Issue](https://github.com/pvliesdonk/questfoundry/issues)
-- Review the [AGENTS.md](../../AGENTS.md) guidelines

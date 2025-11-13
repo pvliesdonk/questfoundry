@@ -45,6 +45,7 @@ For each artifact in the TU:
 2. **Check for `"$schema"` field** in artifact pointing to canonical schema $id
 3. **Locate validation_report.json** (e.g., `/out/hook_card_validation_report.json`)
 4. **Verify validation_report.json structure:**
+
    ```json
    {
      "artifact_path": "out/hook_card.json",
@@ -56,6 +57,7 @@ For each artifact in the TU:
      "validator": "jsonschema-python-4.20"
    }
    ```
+
 5. **If any artifact lacks validation_report.json:** BLOCK merge
 6. **If any validation_report.json shows `"valid": false`:** BLOCK merge
 7. **If any validation_report.json has non-empty `"errors"`:** BLOCK merge
@@ -82,6 +84,7 @@ For each artifact in the TU:
   ```
 
 - ❌ **Missing `"$schema"` field in artifact** → BLOCK with remediation:
+
   ```
   Artifact 'gatecheck_report.json' missing "$schema" field.
   Add: "$schema": "https://questfoundry.liesdonk.nl/schemas/gatecheck_report.schema.json"

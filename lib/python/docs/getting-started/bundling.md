@@ -23,6 +23,7 @@ python scripts/bundle_resources.py
 ```
 
 This copies:
+
 - All `.schema.json` files from `spec/03-schemas/` to `src/questfoundry/resources/schemas/`
 - All role directories from `spec/05-prompts/` to `src/questfoundry/resources/prompts/`
 
@@ -112,4 +113,3 @@ uv run hatch run typecheck
 
 - [User Guide](../guide/overview.md) - Learn how to use the library
 - [Development Guide](../development/contributing.md) - Contribute to QuestFoundry
-- [Architecture](../development/architecture.md) - Understand the design
