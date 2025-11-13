@@ -1,17 +1,10 @@
-name: Release Spec
+name: Release Specification
 
 on:
   workflow_dispatch:
     inputs:
-      spec_type:
-        description: 'Spec type to release'
-        required: true
-        type: choice
-        options:
-          - schemas
-          - prompts
       bump_type:
-        description: 'Version bump type'
+        description: "Version bump type for the ENTIRE spec"
         required: true
         type: choice
         options:
@@ -20,17 +13,18 @@ on:
           - major
 
 jobs:
-  release-schemas:
-    name: Release Schemas
-    if: ${{ inputs.spec_type == 'schemas' }}
+  release-spec:
+    name: Bump, Tag, and Release Spec
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # To push commits, tags, and create a release
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }} # Use GITHUB_TOKEN for commit push
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,79 +37,62 @@ jobs:
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Bump version
-        working-directory: spec/03-schemas
         run: |
-          cz bump --increment ${{ inputs.bump_type }} --yes
-          echo "NEW_VERSION=$(cat SCHEMA_VERSION.txt)" >> $GITHUB_ENV
+          # This assumes a .cz.toml config at the root pointing to spec/SPEC_VERSION.txt
+          # or you configure it here.
+          # For this example, I'll assume a file 'spec/SPEC_VERSION.txt' and a .cz.toml
+          #
+          # Create a root .cz.toml if it doesn't exist:
+          # [tool.commitizen]
+          # version_files = ["spec/SPEC_VERSION.txt:version"]
+          # tag_format = "spec-v$version"
 
-      - name: Push changes
+          # For this example, let's just configure it in the workflow
+          echo "[tool.commitizen]" > .cz.toml
+          echo "version_files = [\"spec/SPEC_VERSION.txt:version\"]" >> .cz.toml
+          echo "tag_format = \"spec-v\$version\"" >> .cz.toml
+
+          cz bump --increment ${{ inputs.bump_type }} --yes
+          echo "NEW_VERSION=$(cat spec/SPEC_VERSION.txt)" >> $GITHUB_ENV
+
+      - name: Push version bump
         run: |
           git push
           git push --tags
 
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: schemas-v${{ env.NEW_VERSION }}
-          release_name: Schemas v${{ env.NEW_VERSION }}
-          body: |
-            ## QuestFoundry Schemas v${{ env.NEW_VERSION }}
+      - name: Create artifact staging directory
+        run: mkdir -p ./spec-artifacts
 
-            Schema specification release. See commit history for changes.
-          draft: false
-          prerelease: false
-
-  release-prompts:
-    name: Release Prompts
-    if: ${{ inputs.spec_type == 'prompts' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Commitizen
-        run: pip install commitizen
-
-      - name: Configure Git
+      - name: Build spec-all.zip
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cd spec
+          zip -r ../spec-artifacts/spec-all.zip .
+          cd ..
 
-      - name: Bump version
-        working-directory: spec/05-prompts
+      - name: Build spec-schemas.zip
         run: |
-          cz bump --increment ${{ inputs.bump_type }} --yes
-          echo "NEW_VERSION=$(cat PROMPTS_VERSION.txt)" >> $GITHUB_ENV
+          cd spec
+          zip -r ../spec-artifacts/spec-schemas.zip 03-schemas 04-protocol
+          cd ..
 
-      - name: Push changes
+      - name: Build spec-prompts.zip
         run: |
-          git push
-          git push --tags
+          cd spec
+          zip -r ../spec-artifacts/spec-prompts.zip 05-prompts
+          cd ..
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: prompts-v${{ env.NEW_VERSION }}
-          release_name: Prompts v${{ env.NEW_VERSION }}
-          body: |
-            ## QuestFoundry Prompts v${{ env.NEW_VERSION }}
-
-            Prompts specification release. See commit history for changes.
-          draft: false
-          prerelease: false
+          TAG_NAME: spec-v${{ env.NEW_VERSION }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --repo "${{ github.repository }}" \
+            --title "Specification v${{ env.NEW_VERSION }}" \
+            --notes "Full specification release (Layers 0-5). See commit history for changes." \
+            ./spec-artifacts/spec-all.zip \
+            ./spec-artifacts/spec-schemas.zip \
+            ./spec-artifacts/spec-prompts.zip

@@ -4,7 +4,7 @@
 repos:
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: ^(spec/|lib/python/src/questfoundry/resources/)
@@ -14,36 +14,38 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ["--maxkb=1000"]
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: mixed-line-ending
 
   # Python: Ruff (linting and formatting) - run from lib/python directory
+  # --no-cache has been disabled due to a locking problem, probably from the check and format hook fighting.
   - repo: local
     hooks:
       - id: ruff-lib-python
         name: ruff (lib/python)
-        entry: bash -c 'cd lib/python && uv run ruff check --fix src tests'
+        entry: uv run --project lib/python ruff check --fix --no-cache
         language: system
-        files: ^lib/python/(src|tests)/
-        pass_filenames: false
+        types_or: [python, pyi]
+        files: ^lib/python/
       - id: ruff-format-lib-python
         name: ruff format (lib/python)
-        entry: bash -c 'cd lib/python && uv run ruff format src tests'
+        entry: uv run --project lib/python ruff format --no-cache
         language: system
-        files: ^lib/python/(src|tests)/
-        pass_filenames: false
+        types_or: [python, pyi]
+        files: ^lib/python/
 
   # Python: Type checking with mypy - run from lib/python directory
   - repo: local
     hooks:
       - id: mypy-lib-python
         name: mypy (lib/python)
-        entry: bash -c 'cd lib/python && uv run mypy src'
+        entry: uv run --project lib/python mypy
         language: system
+        types_or: [python, pyi]
         files: ^lib/python/src/
-        pass_filenames: false
+        args: [--config-file=lib/python/pyproject.toml]
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
@@ -60,18 +62,14 @@ repos:
       - id: commitizen
         stages: [commit-msg]
 
-# Configuration
-default_language_version:
-  python: python3.11
-
 ci:
   autofix_commit_msg: |
     chore: auto-fix pre-commit hooks
 
     [pre-commit.ci] auto fixes from pre-commit.com hooks
   autofix_prs: true
-  autoupdate_branch: ''
-  autoupdate_commit_msg: 'chore: pre-commit autoupdate'
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "chore: pre-commit autoupdate"
   autoupdate_schedule: weekly
   skip: []
   submodules: false
