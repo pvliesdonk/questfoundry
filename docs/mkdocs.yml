@@ -7,8 +7,8 @@ edit_uri: edit/main/
 
 theme:
   name: material
-  logo: assets/logo.svg # You'll need to add this file to docs/assets/
-  favicon: assets/logo.svg
+  #logo: assets/logo.svg # You'll need to add this file to docs/assets/
+  #favicon: assets/logo.svg
   palette:
     # Palette toggle for dark mode
     - media: "(prefers-color-scheme: light)"
@@ -111,8 +111,8 @@ nav:
   - "Schema Definitions":
       - "Artifacts": "schemas/index.md" # This will be a landing page
 
-extra_css:
-  - stylesheets/extra.css # For any custom overrides
+# extra_css:
+#   - stylesheets/extra.css # For any custom overrides
 
 # This ensures the CNAME file is included in the site output
 extra:
