@@ -18,7 +18,7 @@ jobs:
         with:
           files: .
           config_file: .markdownlint.json
-          ignore_files: "lib/python/src/questfoundry/resources/,lib/python/docs/,spec/"
+          ignore_files: "lib/python/src/questfoundry/resources/,lib/python/docs/"
 
   lint-python:
     name: Lint Python (Ruff)
