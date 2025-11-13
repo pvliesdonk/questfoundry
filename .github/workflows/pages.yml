@@ -23,44 +23,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for mkdocstrings to get version info
+          fetch-depth: 0
 
       - name: Set up Python
-        # Removed 'cache: uv' to resolve setup error.
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies via pip
-        # Installs the MkDocs toolchain, and the local library in editable mode.
         run: |
           # 1. Install core MkDocs toolchain
           python -m pip install --upgrade pip
           pip install mkdocs-material mkdocstrings[python]
           # 2. Install Python library in editable mode with all extras
-          # This makes the source code available to mkdocstrings.
           pip install -e ./lib/python[all-extras]
 
       - name: Bundle Python library resources
-        # Executes the resource script directly using python from path.
         run: python scripts/bundle_resources.py
         working-directory: ./lib/python
 
-      - name: Build documentation
-        # Runs mkdocs build using the main unified config, relying on its presence in PATH.
-        run: mkdocs build -f docs/mkdocs.yml
+      - name: Build documentation*
+        run: mkdocs build -f mkdocs.yml
 
       - name: Copy Schemas for public hosting
-        # This step handles item 1e: publishing JSON schemas
         run: |
-          # Create the path that will resolve to your_site.com/schemas/
           mkdir -p site/schemas
-          # Copy all schemas from L3 and L4
           cp spec/03-schemas/*.json site/schemas/
           cp spec/04-protocol/*.json site/schemas/
 
       - name: Copy CNAME
-        # Ensures your CNAME file is deployed to the root of the Pages site
         run: |
           if [ -f "docs/CNAME" ]; then
             cp docs/CNAME site/CNAME
