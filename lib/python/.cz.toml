@@ -1,0 +1,12 @@
+[tool.commitizen]
+# This version is read by 'cz bump' when run in this directory.
+# It should match the version in pyproject.toml
+version = "0.1.0"
+
+# Paths are relative to this .cz.toml file (i.e., inside lib/python/)
+version_files = [
+    "src/questfoundry/version.py:__version__",
+    "pyproject.toml:version"
+]
+tag_format = "lib-py-v$version"
+update_changelog_on_bump = true

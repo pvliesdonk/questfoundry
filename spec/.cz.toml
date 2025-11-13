@@ -1,0 +1,10 @@
+[tool.commitizen]
+# This version is read by 'cz bump' to know what to increment.
+version = "0.0.0"
+
+# Paths are relative to this .cz.toml file (i.e., inside spec/)
+version_files = [
+    "SPEC_VERSION.txt:version"
+]
+tag_format = "spec-v$version"
+update_changelog_on_bump = true

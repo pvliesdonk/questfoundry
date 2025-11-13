@@ -1,11 +1,11 @@
 [build-system]
-requires = ["hatchling", "versioningit"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "questfoundry-py"
 
-dynamic = ["version"]
+version = "0.0.0"
 
 description = "Python library for QuestFoundry protocol and artifact management"
 readme = "README.md"
@@ -69,9 +69,6 @@ Documentation = "https://github.com/pvliesdonk/questfoundry-spec"
 Specification = "https://github.com/pvliesdonk/questfoundry-spec"
 Schemas = "https://questfoundry.liesdonk.nl/schemas/"
 
-[tool.hatch.version]
-source = "versioningit"
-
 [tool.hatch.envs.default.scripts]
 bundle = "python scripts/bundle_resources.py"
 test = "pytest {args:tests}"
@@ -81,9 +78,6 @@ format = "ruff format src tests"
 format-check = "ruff format --check src tests"
 typecheck = "mypy src"
 all-checks = ["format-check", "lint", "typecheck", "test"]
-
-[tool.versioningit]
-default-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/questfoundry"]
@@ -131,7 +125,7 @@ select = ["E", "F", "W", "I"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.5.0"
+version = "0.0.0"
 version_files = [
     "src/questfoundry/version.py:__version__",
     "pyproject.toml:version"
