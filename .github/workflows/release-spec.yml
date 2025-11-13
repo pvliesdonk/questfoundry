@@ -39,24 +39,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Bump version
+      - name: Bump Spec Version
+        # Assuming you've corrected .cz.toml and spec/SPEC_VERSION.txt
+        # as discussed (using 'version = 0.0.0' and ':version' key).
         run: |
-          # This assumes a .cz.toml config at the root pointing to spec/SPEC_VERSION.txt
-          # or you configure it here.
-          # For this example, I'll assume a file 'spec/SPEC_VERSION.txt' and a .cz.toml
-          #
-          # Create a root .cz.toml if it doesn't exist:
-          # [tool.commitizen]
-          # version_files = ["spec/SPEC_VERSION.txt:version"]
-          # tag_format = "spec-v$version"
+          cz bump --project spec --increment ${{ inputs.bump_type }} --yes
 
-          # For this example, let's just configure it in the workflow
-          echo "[tool.commitizen]" > .cz.toml
-          echo "version_files = [\"spec/SPEC_VERSION.txt:version\"]" >> .cz.toml
-          echo "tag_format = \"spec-v\$version\"" >> .cz.toml
-
-          cz bump --increment ${{ inputs.bump_type }} --yes
-          echo "NEW_VERSION=$(cat spec/SPEC_VERSION.txt)" >> $GITHUB_ENV
+          NEW_VERSION=$(grep 'version =' spec/SPEC_VERSION.txt | awk '{print $3}')
+          echo "NEW_VERSION=${NEW_VERSION}" >> $GITHUB_ENV
 
       - name: Push version bump
         run: |
