@@ -1,23 +1,57 @@
 """Manifest loader for compiled playbook manifests."""
 
+from __future__ import annotations
+
 import json
 import logging
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any
 
+ManifestLocation = Path | Traversable
+
 logger = logging.getLogger(__name__)
+
+
+def resolve_manifest_location(
+    manifest_dir: ManifestLocation | None = None,
+) -> ManifestLocation:
+    """
+    Resolve the manifest directory to either a bundled resource or filesystem path.
+
+    Args:
+        manifest_dir: Optional explicit path provided by caller
+
+    Returns:
+        Manifest location that can be traversed for manifest files
+    """
+    if manifest_dir is not None:
+        if isinstance(manifest_dir, Path):
+            return manifest_dir
+        return manifest_dir
+
+    try:
+        manifests_pkg = resources.files("questfoundry.resources").joinpath("manifests")
+        if manifests_pkg.is_dir():
+            return manifests_pkg
+    except (FileNotFoundError, ModuleNotFoundError):
+        logger.debug("Bundled manifest resources not available, falling back to dist/")
+
+    fallback = Path.cwd() / "dist" / "compiled" / "manifests"
+    return fallback
 
 
 class ManifestLoader:
     """Load and validate compiled playbook manifests."""
 
-    def __init__(self, manifest_dir: Path):
+    def __init__(self, manifest_dir: ManifestLocation):
         """Initialize manifest loader.
 
         Args:
             manifest_dir: Directory containing compiled manifest files
         """
-        self.manifest_dir = Path(manifest_dir)
+        self.manifest_dir = manifest_dir
         self._manifests_cache: dict[str, dict[str, Any]] = {}
 
     def load_manifest(self, playbook_id: str) -> dict[str, Any]:
@@ -36,14 +70,16 @@ class ManifestLoader:
         if playbook_id in self._manifests_cache:
             return self._manifests_cache[playbook_id]
 
-        manifest_path = self.manifest_dir / f"{playbook_id}.manifest.json"
-        if not manifest_path.exists():
-            msg = f"Manifest not found: {manifest_path}"
-            raise FileNotFoundError(msg)
+        manifest_path = self.manifest_dir.joinpath(f"{playbook_id}.manifest.json")
 
         try:
-            with open(manifest_path) as f:
-                manifest = json.load(f)
+            manifest_text = manifest_path.read_text(encoding="utf-8")
+        except FileNotFoundError as e:
+            msg = f"Manifest not found: {manifest_path}"
+            raise FileNotFoundError(msg) from e
+
+        try:
+            manifest = json.loads(manifest_text)
 
             # Basic validation
             self._validate_manifest(manifest, playbook_id)
@@ -132,13 +168,16 @@ class ManifestLoader:
         Returns:
             List of playbook IDs
         """
-        if not self.manifest_dir.exists():
+        try:
+            entries = list(self.manifest_dir.iterdir())
+        except FileNotFoundError:
             return []
 
-        manifests = []
-        for manifest_path in self.manifest_dir.glob("*.manifest.json"):
-            # Extract playbook_id from filename
-            playbook_id = manifest_path.stem.replace(".manifest", "")
+        manifests: list[str] = []
+        for manifest_path in entries:
+            if not manifest_path.name.endswith(".manifest.json"):
+                continue
+            playbook_id = manifest_path.name.replace(".manifest.json", "")
             manifests.append(playbook_id)
 
         return sorted(manifests)

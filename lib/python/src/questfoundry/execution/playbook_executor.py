@@ -1,5 +1,8 @@
 """Generic executor for compiled playbook manifests."""
 
+from __future__ import annotations
+
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -7,7 +10,11 @@ from typing import Any
 from ..models.artifact import Artifact
 from ..roles.base import Role, RoleContext, RoleResult
 from ..state.workspace import WorkspaceManager
-from .manifest_loader import ManifestLoader
+from .manifest_loader import (
+    ManifestLoader,
+    ManifestLocation,
+    resolve_manifest_location,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,34 +30,31 @@ class PlaybookExecutor:
         self,
         manifest_path: Path | None = None,
         playbook_id: str | None = None,
-        manifest_dir: Path | None = None,
+        manifest_dir: ManifestLocation | None = None,
     ):
         """Initialize playbook executor.
 
         Args:
             manifest_path: Direct path to manifest file (takes precedence)
             playbook_id: ID of playbook to load from manifest_dir
-            manifest_dir: Directory containing manifests (default: dist/compiled/manifests)
+            manifest_dir: Directory containing manifests. Defaults to the
+                bundled resources when not provided, falling back to
+                dist/compiled/manifests for development builds.
 
         Raises:
             ValueError: If neither manifest_path nor playbook_id provided
         """
         if manifest_path:
-            self.manifest_path = Path(manifest_path)
-            with open(self.manifest_path) as f:
-                import json
-
+            manifest_file = Path(manifest_path)
+            self.manifest_path = str(manifest_file)
+            with open(manifest_file, encoding="utf-8") as f:
                 self.manifest = json.load(f)
-        elif playbook_id and manifest_dir:
-            loader = ManifestLoader(Path(manifest_dir))
-            self.manifest = loader.load_manifest(playbook_id)
-            self.manifest_path = Path(manifest_dir) / f"{playbook_id}.manifest.json"
         elif playbook_id:
-            # Default manifest directory
-            default_dir = Path.cwd() / "dist" / "compiled" / "manifests"
-            loader = ManifestLoader(default_dir)
+            resolved_dir = resolve_manifest_location(manifest_dir)
+            loader = ManifestLoader(resolved_dir)
             self.manifest = loader.load_manifest(playbook_id)
-            self.manifest_path = default_dir / f"{playbook_id}.manifest.json"
+            manifest_resource = resolved_dir.joinpath(f"{playbook_id}.manifest.json")
+            self.manifest_path = str(manifest_resource)
         else:
             msg = "Either manifest_path or playbook_id must be provided"
             raise ValueError(msg)
@@ -61,6 +65,7 @@ class PlaybookExecutor:
         self.current_step_index = 0
         self.context: dict[str, Any] = {}
         self.step_results: dict[str, Any] = {}
+        self.latest_artifacts: list[Artifact] = []
 
     def execute_step(
         self,
@@ -99,7 +104,10 @@ class PlaybookExecutor:
         # Use first assigned role (RACI: Responsible)
         primary_role_name = assigned_role_names[0]
         if primary_role_name not in roles:
-            msg = f"Required role '{primary_role_name}' not available for step '{step_id}'"
+            msg = (
+                f"Required role '{primary_role_name}' not available "
+                f"for step '{step_id}'"
+            )
             raise ValueError(msg)
 
         primary_role = roles[primary_role_name]
@@ -110,7 +118,7 @@ class PlaybookExecutor:
             task=step["description"],
             artifacts=artifacts or [],
             project_metadata=project_metadata or {},
-            workspace_path=workspace.workspace_path if workspace else None,
+            workspace_path=workspace.project_dir if workspace else None,
             additional_context={
                 "step_id": step_id,
                 "procedure": procedure_content,
@@ -130,9 +138,27 @@ class PlaybookExecutor:
         # Execute via role
         result = primary_role.execute(role_context)
 
-        # Store result for subsequent steps only if successful
-        if result.success:
-            self.step_results[step_id] = result
+        # Ensure downstream steps have artifact context even if roles
+        # returned raw text instead of structured artifacts.
+        if not result.artifacts:
+            expected_outputs = step.get("artifacts_output", [])
+            fallback_type = expected_outputs[0] if expected_outputs else "loop_output"
+            fallback_artifact = Artifact(
+                type=fallback_type,
+                data={
+                    "content": result.output,
+                    "procedure": procedure_content,
+                    "step_id": step_id,
+                },
+                metadata={
+                    "id": f"{self.playbook_id}-{step_id}",
+                    "source_role": primary_role_name,
+                },
+            )
+            result.artifacts = [fallback_artifact]
+
+        # Store result for subsequent steps
+        self.step_results[step_id] = result
 
         # Validate output artifacts if required
         if step.get("validation_required", True):
@@ -146,7 +172,7 @@ class PlaybookExecutor:
         artifacts: list[Artifact] | None = None,
         workspace: WorkspaceManager | None = None,
         project_metadata: dict[str, Any] | None = None,
-    ) -> dict[str, RoleResult]:
+    ) -> tuple[dict[str, RoleResult], list[Artifact]]:
         """Execute entire playbook from start to finish.
 
         Args:
@@ -156,9 +182,10 @@ class PlaybookExecutor:
             project_metadata: Project metadata
 
         Returns:
-            Dictionary mapping step IDs to their results
+            Tuple of (step results, aggregated artifacts)
         """
         results: dict[str, RoleResult] = {}
+        aggregated_artifacts = artifacts if artifacts is not None else []
 
         for step in self.steps:
             step_id = step["step_id"]
@@ -175,9 +202,7 @@ class PlaybookExecutor:
 
                 # Update artifacts with outputs from this step only if successful
                 if result.success and result.artifacts:
-                    if artifacts is None:
-                        artifacts = []
-                    artifacts.extend(result.artifacts)
+                    aggregated_artifacts.extend(result.artifacts)
 
             except Exception as e:
                 logger.exception(
@@ -194,7 +219,9 @@ class PlaybookExecutor:
                 # Stop execution on failure
                 break
 
-        return results
+        # Keep snapshot for callers who need to access artifacts later
+        self.latest_artifacts = list(aggregated_artifacts)
+        return results, aggregated_artifacts
 
     def _get_step(self, step_id: str) -> dict[str, Any] | None:
         """Get step by ID.

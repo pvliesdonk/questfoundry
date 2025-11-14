@@ -146,16 +146,36 @@ class TestPlaybookExecutor:
         executor = PlaybookExecutor(manifest_path=manifest_file)
         roles = {"test_role": mock_role, "consultant": Mock(spec=Role)}
 
-        results = executor.execute_full_loop(roles)
+        results, aggregated_artifacts = executor.execute_full_loop(roles)
 
         assert len(results) == 2
         assert "step1" in results
         assert "step2" in results
         assert results["step1"].success
         assert results["step2"].success
+        assert len(aggregated_artifacts) == 2
+        assert executor.latest_artifacts == aggregated_artifacts
 
         # Check that role was called for each step
         assert mock_role.execute.call_count == 2
+
+    def test_execute_full_loop_mutates_passed_artifact_list(
+        self,
+        manifest_file,
+        mock_role,
+    ):
+        """Artifacts list is mutated in place when provided."""
+        executor = PlaybookExecutor(manifest_path=manifest_file)
+        roles = {"test_role": mock_role, "consultant": Mock(spec=Role)}
+        initial_artifacts: list[Artifact] = []
+
+        _, aggregated_artifacts = executor.execute_full_loop(
+            roles,
+            artifacts=initial_artifacts,
+        )
+
+        assert aggregated_artifacts is initial_artifacts
+        assert len(initial_artifacts) == 2
 
     def test_execute_full_loop_stops_on_failure(self, manifest_file, mock_role):
         """Test that execution stops on step failure."""
@@ -165,13 +185,14 @@ class TestPlaybookExecutor:
         executor = PlaybookExecutor(manifest_path=manifest_file)
         roles = {"test_role": mock_role}
 
-        results = executor.execute_full_loop(roles)
+        results, aggregated_artifacts = executor.execute_full_loop(roles)
 
         # Only first step should be attempted
         assert len(results) == 1
         assert "step1" in results
         assert not results["step1"].success
         assert "Step failed" in results["step1"].error
+        assert aggregated_artifacts == []
 
     def test_get_raci(self, manifest_file):
         """Test getting RACI matrix."""
@@ -208,3 +229,36 @@ class TestPlaybookExecutor:
         # Check second call has step results from first
         second_call_args = mock_role.execute.call_args_list[1][0][0]
         assert "step1" in second_call_args.additional_context["step_results"]
+
+    def test_step_results_store_failures(self, manifest_file, mock_role):
+        """Ensure failed role executions are tracked in step_results."""
+        mock_role.execute.return_value = RoleResult(
+            success=False,
+            output="",
+            error="Validation failed",
+            artifacts=[],
+        )
+
+        executor = PlaybookExecutor(manifest_path=manifest_file)
+        roles = {"test_role": mock_role}
+
+        result = executor.execute_step("step1", roles)
+
+        assert not result.success
+        assert executor.step_results["step1"].success is False
+
+    def test_execute_step_creates_fallback_artifact(self, manifest_file, mock_role):
+        """Generate synthetic artifact when role does not supply one."""
+        mock_role.execute.return_value = RoleResult(
+            success=True,
+            output="Generated text",
+            artifacts=[],
+        )
+
+        executor = PlaybookExecutor(manifest_path=manifest_file)
+        roles = {"test_role": mock_role}
+
+        result = executor.execute_step("step1", roles)
+
+        assert result.artifacts
+        assert result.artifacts[0].metadata["source_role"] == "test_role"

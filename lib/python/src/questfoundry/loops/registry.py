@@ -1,9 +1,20 @@
 """Loop registry for QuestFoundry."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from questfoundry.execution.manifest_loader import (
+    ManifestLoader,
+    ManifestLocation,
+    resolve_manifest_location,
+)
+
+if TYPE_CHECKING:
+    from questfoundry.execution.playbook_executor import PlaybookExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +79,7 @@ class LoopRegistry:
     def __init__(
         self,
         spec_path: Path | None = None,
-        manifest_dir: Path | None = None,
+        manifest_dir: ManifestLocation | None = None,
     ):
         """
         Initialize loop registry.
@@ -78,7 +89,8 @@ class LoopRegistry:
             manifest_dir: Path to compiled manifests (default: dist/compiled/manifests)
         """
         self.spec_path = spec_path or Path.cwd() / "spec"
-        self.manifest_dir = manifest_dir or (Path.cwd() / "dist" / "compiled" / "manifests")
+        self.manifest_dir = resolve_manifest_location(manifest_dir)
+        self._manifest_loader = ManifestLoader(self.manifest_dir)
         self._loops: dict[str, LoopMetadata] = {}
 
         # Always use manifest-based discovery in v2
@@ -86,17 +98,8 @@ class LoopRegistry:
 
     def _discover_loops_from_manifests(self) -> None:
         """Discover loops from compiled manifests (v2 architecture)."""
-        import json
-
-        if not self.manifest_dir.exists():
-            logger.warning(
-                "Manifest directory not found: %s. No loops will be available.",
-                self.manifest_dir,
-            )
-            return
-
-        manifest_files = list(self.manifest_dir.glob("*.manifest.json"))
-        if not manifest_files:
+        manifest_ids = self._manifest_loader.list_available_manifests()
+        if not manifest_ids:
             logger.warning(
                 "No manifest files found in: %s. No loops will be available.",
                 self.manifest_dir,
@@ -108,13 +111,11 @@ class LoopRegistry:
             self.manifest_dir,
         )
 
-        for manifest_path in manifest_files:
+        for loop_id in manifest_ids:
             try:
-                with open(manifest_path) as f:
-                    manifest = json.load(f)
+                manifest = self._manifest_loader.load_manifest(loop_id)
 
                 # Extract metadata from manifest
-                loop_id = manifest["playbook_id"]
                 display_name = manifest.get("display_name", loop_id)
                 description = manifest.get("description", "")
 
@@ -155,11 +156,11 @@ class LoopRegistry:
             except Exception as e:
                 logger.exception(
                     "Failed to load manifest %s: %s",
-                    manifest_path,
+                    loop_id,
                     e,
                 )
 
-    def get_executor(self, loop_id: str) -> "PlaybookExecutor":
+    def get_executor(self, loop_id: str) -> PlaybookExecutor:
         """Get executor for a specific loop (v2 architecture).
 
         Args:

@@ -57,6 +57,10 @@ class SpecCompiler:
         self.behavior_dir = self.spec_root / "05-behavior"
         self.primitives: dict[str, BehaviorPrimitive] = {}
         self.reference_pattern = re.compile(r"@(\w+):([a-z_0-9]+)(?:#([a-z_0-9-]+))?")
+        self.frontmatter_pattern = re.compile(
+            r"\A---\s*\n(.*?)\n---\s*\n(.*)",
+            re.DOTALL,
+        )
 
     def load_all_primitives(self) -> None:
         """Load all behavior primitives from disk."""
@@ -105,14 +109,12 @@ class SpecCompiler:
             try:
                 content = md_file.read_text()
 
-                # Split frontmatter and content
-                parts = content.split("---", 2)
-                if len(parts) >= 3:
-                    # Has frontmatter
-                    frontmatter = yaml.safe_load(parts[1])
-                    markdown_content = parts[2].strip()
+                match = self.frontmatter_pattern.match(content)
+                if match:
+                    frontmatter_str, markdown_content = match.groups()
+                    frontmatter = yaml.safe_load(frontmatter_str) or {}
+                    markdown_content = markdown_content.strip()
                 else:
-                    # No frontmatter
                     frontmatter = {}
                     markdown_content = content.strip()
 

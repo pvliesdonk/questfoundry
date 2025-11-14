@@ -59,7 +59,8 @@ def compile_spec(repo_root: Path, output_dir: Path) -> bool:
             if result.stderr:
                 logger.warning(result.stderr)
             logger.warning(
-                "Compilation failed. V1 prompts will still be bundled for compatibility."
+                "Compilation failed. V1 prompts will still be bundled for "
+                "compatibility."
             )
             return False
 

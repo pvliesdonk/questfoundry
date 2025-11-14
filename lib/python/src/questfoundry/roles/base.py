@@ -485,6 +485,9 @@ class Role(ABC):
 
         In v2, procedure prompts are assembled from atomic primitives
         and provided by PlaybookExecutor via context.additional_context['procedure'].
+        This base method does not inject that content automatically—role
+        implementations that need the procedure text must read the field
+        and incorporate it into their prompts.
 
         Args:
             context: Execution context containing task, artifacts, and procedure
@@ -511,6 +514,11 @@ class Role(ABC):
 
         Returns:
             Result of task execution
+
+        Note:
+            Procedure content assembled by the PlaybookExecutor is available via
+            ``context.additional_context['procedure']`` and should be merged into
+            prompts by role implementations as needed.
         """
         pass
 

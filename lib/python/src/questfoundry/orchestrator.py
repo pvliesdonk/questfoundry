@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .logging_config import get_logger
-from .loops.base import Loop, LoopContext, LoopResult
+from .loops.base import LoopContext, LoopResult
 from .loops.registry import LoopRegistry
 from .models.artifact import Artifact
 from .providers.base import TextProvider
@@ -301,22 +301,63 @@ class Orchestrator:
             config=config or {},
         )
 
-        # Get loop class and instantiate
-        logger.trace("Getting loop class for loop '%s'", loop_id)
-        loop_class = self._get_loop_class(loop_id)
-        loop_instance = loop_class(loop_context)
-        logger.debug("Loop instance created, starting execution")
+        logger.trace("Initializing PlaybookExecutor for loop '%s'", loop_id)
+        executor = self.loop_registry.get_executor(loop_id)
 
-        # Execute loop
-        logger.trace("Calling loop_instance.execute()")
-        result = loop_instance.execute()
+        initial_artifact_count = len(loop_context.artifacts)
+        step_results, aggregated_artifacts = executor.execute_full_loop(
+            roles=role_instances,
+            artifacts=loop_context.artifacts,
+            workspace=self.workspace,
+            project_metadata=loop_context.project_metadata,
+        )
 
-        if result.success:
-            logger.info("Loop '%s' executed successfully", loop_id)
+        steps_failed = sum(not result.success for result in step_results.values())
+        steps_completed = len(step_results) - steps_failed
+        success = steps_failed == 0
+
+        error_message = None
+        if not success:
+            for step_id, step_result in step_results.items():
+                if not step_result.success:
+                    error_message = step_result.error or f"Step '{step_id}' failed"
+                    break
+
+        new_artifacts = aggregated_artifacts[initial_artifact_count:]
+        metadata_summary = {
+            step_id: {
+                "success": result.success,
+                "error": result.error,
+                "artifact_types": [artifact.type for artifact in result.artifacts],
+            }
+            for step_id, result in step_results.items()
+        }
+
+        loop_result = LoopResult(
+            success=success,
+            loop_id=loop_id,
+            artifacts_created=new_artifacts,
+            steps_completed=steps_completed,
+            steps_failed=steps_failed,
+            error=error_message,
+            metadata={"step_results": metadata_summary},
+        )
+
+        if loop_result.success:
+            logger.info(
+                "Loop '%s' executed successfully (%d steps)",
+                loop_id,
+                steps_completed,
+            )
         else:
-            logger.warning("Loop '%s' execution failed: %s", loop_id, result.error)
+            logger.warning(
+                "Loop '%s' execution failed after %d steps: %s",
+                loop_id,
+                steps_completed,
+                loop_result.error,
+            )
 
-        return result
+        return loop_result
 
     def execute_goal(
         self,
@@ -431,51 +472,6 @@ class Orchestrator:
         raise RuntimeError(
             f"Could not extract loop ID from showrunner output:\n{output}"
         )
-
-    def _get_loop_class(self, loop_id: str) -> type[Loop]:
-        """
-        Get loop class for the given loop ID.
-
-        Args:
-            loop_id: Loop identifier
-
-        Returns:
-            Loop class
-
-        Raises:
-            KeyError: If loop not implemented
-        """
-        logger.debug("Getting loop class for loop_id='%s'", loop_id)
-
-        # Map loop IDs to loop classes
-        # For now, only story_spark is implemented
-        loop_classes = {
-            "story_spark": self._import_story_spark_loop,
-        }
-
-        if loop_id not in loop_classes:
-            logger.error(
-                "Loop '%s' not yet implemented. Available: %s",
-                loop_id,
-                list(loop_classes.keys()),
-            )
-            raise KeyError(
-                f"Loop '{loop_id}' not yet implemented. "
-                f"Available loops: {list(loop_classes.keys())}"
-            )
-
-        logger.trace("Calling importer for loop '%s'", loop_id)
-        loop_class = loop_classes[loop_id]()
-        logger.debug(
-            "Retrieved loop class %s for loop '%s'", loop_class.__name__, loop_id
-        )
-        return loop_class
-
-    def _import_story_spark_loop(self) -> type[Loop]:
-        """Import and return StorySparkLoop class."""
-        from .loops.story_spark import StorySparkLoop
-
-        return StorySparkLoop
 
     def __repr__(self) -> str:
         """String representation of orchestrator."""
