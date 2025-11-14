@@ -9,9 +9,7 @@ from questfoundry.compiler.spec_compiler import BehaviorPrimitive
 class ReferenceValidator:
     """Validate cross-references between primitives."""
 
-    def __init__(
-        self, primitives: dict[str, BehaviorPrimitive], spec_root: Path
-    ):
+    def __init__(self, primitives: dict[str, BehaviorPrimitive], spec_root: Path):
         """Initialize validator.
 
         Args:
@@ -85,7 +83,8 @@ class ReferenceValidator:
                     schema_path = schema_dir / schema_id
                     if not schema_path.exists():
                         errors.append(
-                            f"{prim_key}: Schema '{schema_id}' not found at {schema_path}"
+                            f"{prim_key}: Schema '{schema_id}' "
+                            f"not found at {schema_path}"
                         )
         return errors
 
@@ -125,7 +124,13 @@ class ReferenceValidator:
             deps = set()
             for ref_type, ref_list in primitive.references.items():
                 # Only check behavior primitive references (not schemas/roles)
-                if ref_type in ["expertise", "procedure", "snippet", "playbook", "adapter"]:
+                if ref_type in [
+                    "expertise",
+                    "procedure",
+                    "snippet",
+                    "playbook",
+                    "adapter",
+                ]:
                     for ref_id in ref_list:
                         dep_key = f"{ref_type}:{ref_id}"
 
@@ -139,7 +144,9 @@ class ReferenceValidator:
             dep_graph[prim_key] = deps
 
         # Detect cycles using DFS
-        def has_cycle(node: str, visited: set[str], rec_stack: set[str], path: list[str]) -> bool:
+        def has_cycle(
+            node: str, visited: set[str], rec_stack: set[str], path: list[str]
+        ) -> bool:
             visited.add(node)
             rec_stack.add(node)
             path.append(node)
@@ -239,9 +246,7 @@ def validate_manifest_structure(manifest: dict[str, Any]) -> list[str]:
     if "manifest_version" in manifest:
         version = manifest["manifest_version"]
         if not version.startswith("2."):
-            errors.append(
-                f"Invalid manifest_version: {version} (expected 2.x.x)"
-            )
+            errors.append(f"Invalid manifest_version: {version} (expected 2.x.x)")
 
     # Steps validation
     if "steps" in manifest:

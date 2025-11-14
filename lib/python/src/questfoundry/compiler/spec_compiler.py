@@ -144,7 +144,9 @@ class SpecCompiler:
                 data = yaml.safe_load(yaml_file.read_text())
 
                 # Extract ID from data or filename
-                prim_id = data.get(f"{prim_type}_id", yaml_file.stem.replace(f".{prim_type}", ""))
+                prim_id = data.get(
+                    f"{prim_type}_id", yaml_file.stem.replace(f".{prim_type}", "")
+                )
 
                 # Extract references
                 references = ref_extractor(data)
@@ -248,7 +250,10 @@ class SpecCompiler:
             refs["schema"] = data["artifacts"]
 
         # Extract snippet references
-        if "validation_requirements" in data and "reference" in data["validation_requirements"]:
+        if (
+            "validation_requirements" in data
+            and "reference" in data["validation_requirements"]
+        ):
             snippet_ref = data["validation_requirements"]["reference"]
             snippet_ids = self._extract_ref_ids([snippet_ref])
             if snippet_ids:
@@ -272,7 +277,9 @@ class SpecCompiler:
             if "primary" in data["procedures"]:
                 procedures.extend(self._extract_ref_ids(data["procedures"]["primary"]))
             if "supporting" in data["procedures"]:
-                procedures.extend(self._extract_ref_ids(data["procedures"]["supporting"]))
+                procedures.extend(
+                    self._extract_ref_ids(data["procedures"]["supporting"])
+                )
             if procedures:
                 refs["procedure"] = procedures
 
@@ -433,7 +440,7 @@ class SpecCompiler:
         )
 
         # Compilation stats
-        stats = {
+        stats: dict[str, Any] = {
             "compiled_at": datetime.now(UTC).isoformat(),
             "primitives_loaded": len(self.primitives),
             "playbook_manifests_generated": 0,
@@ -478,7 +485,8 @@ class SpecCompiler:
                 except Exception as e:
                     # Log warning but don't fail compilation
                     print(
-                        f"Warning: Error assembling standalone prompt for {primitive.id}: {e}"
+                        f"Warning: Error assembling standalone prompt "
+                        f"for {primitive.id}: {e}"
                     )
 
         return stats

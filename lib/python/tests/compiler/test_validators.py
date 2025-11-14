@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from questfoundry.compiler.spec_compiler import BehaviorPrimitive, SpecCompiler
+from questfoundry.compiler.spec_compiler import SpecCompiler
 from questfoundry.compiler.validators import (
     ReferenceValidator,
     validate_manifest_structure,
@@ -14,7 +14,8 @@ from questfoundry.compiler.validators import (
 @pytest.fixture
 def spec_root() -> Path:
     """Get the spec root directory."""
-    return Path(__file__).parents[3] / "spec"
+    # Path: tests/compiler/test_validators.py -> repo_root / spec
+    return Path(__file__).parents[4] / "spec"
 
 
 @pytest.fixture
@@ -31,9 +32,7 @@ def validator(compiler: SpecCompiler, spec_root: Path) -> ReferenceValidator:
     return ReferenceValidator(compiler.primitives, spec_root)
 
 
-def test_validator_initialization(
-    compiler: SpecCompiler, spec_root: Path
-) -> None:
+def test_validator_initialization(compiler: SpecCompiler, spec_root: Path) -> None:
     """Test validator initialization."""
     validator = ReferenceValidator(compiler.primitives, spec_root)
     assert validator.primitives == compiler.primitives

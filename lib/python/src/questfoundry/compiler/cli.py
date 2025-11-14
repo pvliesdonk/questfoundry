@@ -10,7 +10,10 @@ from questfoundry.compiler.spec_compiler import CompilationError, SpecCompiler
 def main() -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="QuestFoundry Spec Compiler - Transform behavior primitives into runtime artifacts",
+        description=(
+            "QuestFoundry Spec Compiler - "
+            "Transform behavior primitives into runtime artifacts"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -174,9 +177,7 @@ Examples:
 
                 # Generate manifest
                 manifest = manifest_builder.build_adapter_manifest(args.adapter)
-                manifest_path = (
-                    manifest_dir / f"{args.adapter}.adapter.manifest.json"
-                )
+                manifest_path = manifest_dir / f"{args.adapter}.adapter.manifest.json"
 
                 import json
 
@@ -198,13 +199,9 @@ Examples:
 
             print("\n📦 Compilation complete!")
             print(f"  Primitives loaded: {stats['primitives_loaded']}")
-            print(
-                f"  Playbook manifests: {stats['playbook_manifests_generated']}"
-            )
+            print(f"  Playbook manifests: {stats['playbook_manifests_generated']}")
             print(f"  Adapter manifests: {stats['adapter_manifests_generated']}")
-            print(
-                f"  Standalone prompts: {stats['standalone_prompts_generated']}"
-            )
+            print(f"  Standalone prompts: {stats['standalone_prompts_generated']}")
             print(f"  Output directory: {args.output}")
 
         return 0

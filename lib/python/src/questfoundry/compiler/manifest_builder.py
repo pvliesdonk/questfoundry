@@ -1,7 +1,6 @@
 """Manifest builder for generating JSON runtime manifests."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from questfoundry.compiler.assemblers import ReferenceResolver

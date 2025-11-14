@@ -16,8 +16,8 @@ from questfoundry.compiler.spec_compiler import (
 @pytest.fixture
 def spec_root() -> Path:
     """Get the spec root directory."""
-    # Assuming tests run from lib/python/
-    return Path(__file__).parents[3] / "spec"
+    # Path: tests/compiler/test_spec_compiler.py -> repo_root / spec
+    return Path(__file__).parents[4] / "spec"
 
 
 @pytest.fixture
@@ -106,7 +106,9 @@ def test_compile_all_creates_outputs(compiler: SpecCompiler, spec_root: Path) ->
 
             # If manifests were generated, check they exist
             if stats["playbook_manifests_generated"] > 0:
-                manifest_files = list((output_dir / "manifests").glob("*.manifest.json"))
+                manifest_files = list(
+                    (output_dir / "manifests").glob("*.manifest.json")
+                )
                 assert len(manifest_files) > 0
 
                 # Validate a manifest is valid JSON
@@ -116,7 +118,9 @@ def test_compile_all_creates_outputs(compiler: SpecCompiler, spec_root: Path) ->
                     assert "playbook_id" in manifest_data
 
             if stats["standalone_prompts_generated"] > 0:
-                prompt_files = list((output_dir / "standalone_prompts").glob("*_full.md"))
+                prompt_files = list(
+                    (output_dir / "standalone_prompts").glob("*_full.md")
+                )
                 assert len(prompt_files) > 0
 
         except CompilationError:

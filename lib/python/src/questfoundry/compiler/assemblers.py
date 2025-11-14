@@ -2,7 +2,6 @@
 
 import re
 from pathlib import Path
-from typing import Any
 
 from questfoundry.compiler.spec_compiler import BehaviorPrimitive, CompilationError
 
@@ -10,9 +9,7 @@ from questfoundry.compiler.spec_compiler import BehaviorPrimitive, CompilationEr
 class ReferenceResolver:
     """Resolve references and assemble content."""
 
-    def __init__(
-        self, primitives: dict[str, BehaviorPrimitive], spec_root: Path
-    ):
+    def __init__(self, primitives: dict[str, BehaviorPrimitive], spec_root: Path):
         """Initialize resolver.
 
         Args:
@@ -21,13 +18,9 @@ class ReferenceResolver:
         """
         self.primitives = primitives
         self.spec_root = Path(spec_root)
-        self.reference_pattern = re.compile(
-            r"@(\w+):([a-z_0-9]+)(?:#([a-z_0-9-]+))?"
-        )
+        self.reference_pattern = re.compile(r"@(\w+):([a-z_0-9]+)(?:#([a-z_0-9-]+))?")
 
-    def resolve_reference(
-        self, ref: str, inline_content: bool = True
-    ) -> str:
+    def resolve_reference(self, ref: str, inline_content: bool = True) -> str:
         """Resolve a single reference.
 
         Args:
@@ -64,13 +57,12 @@ class ReferenceResolver:
         primitive = self.primitives.get(prim_key)
 
         if not primitive:
-            raise CompilationError(
-                f"Primitive not found: {ref_type}:{ref_id}"
-            )
+            raise CompilationError(f"Primitive not found: {ref_type}:{ref_id}")
 
         # For playbook/adapter references, always create links
         if ref_type in ["playbook", "adapter"] or not inline_content:
-            return f"[{ref_id}](../05-behavior/{ref_type}s/{ref_id}.{self._get_extension(ref_type)})"
+            ext = self._get_extension(ref_type)
+            return f"[{ref_id}](../05-behavior/{ref_type}s/{ref_id}.{ext})"
 
         # Inline the content
         content = primitive.content
@@ -106,9 +98,7 @@ class ReferenceResolver:
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
 
         if not match:
-            raise CompilationError(
-                f"Section '{section_id}' not found in content"
-            )
+            raise CompilationError(f"Section '{section_id}' not found in content")
 
         return match.group(1).strip()
 
