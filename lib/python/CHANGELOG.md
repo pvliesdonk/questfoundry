@@ -1,3 +1,9 @@
+## v0.6.0 (2025-11-14)
+
+### Fix
+
+- align release numbering after rollback so the first post-migration package ships as `v0.6.0`
+
 ## v0.1.0 (2025-11-13)
 
 ### Feat
