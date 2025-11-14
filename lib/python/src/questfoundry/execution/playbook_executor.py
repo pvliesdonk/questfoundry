@@ -1,6 +1,7 @@
 """Generic executor for compiled playbook manifests."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,8 @@ class PlaybookExecutor:
         Args:
             manifest_path: Direct path to manifest file (takes precedence)
             playbook_id: ID of playbook to load from manifest_dir
-            manifest_dir: Directory containing manifests (default: dist/compiled/manifests)
+            manifest_dir: Directory containing manifests
+                (default: QF_MANIFEST_DIR env var or dist/compiled/manifests)
 
         Raises:
             ValueError: If neither manifest_path nor playbook_id provided
@@ -46,8 +48,13 @@ class PlaybookExecutor:
             self.manifest = loader.load_manifest(playbook_id)
             self.manifest_path = Path(manifest_dir) / f"{playbook_id}.manifest.json"
         elif playbook_id:
-            # Default manifest directory
-            default_dir = Path.cwd() / "dist" / "compiled" / "manifests"
+            # Default manifest directory from env or fallback
+            default_dir_str = os.environ.get(
+                "QF_MANIFEST_DIR", "dist/compiled/manifests"
+            )
+            default_dir = Path(default_dir_str)
+            if not default_dir.is_absolute():
+                default_dir = Path.cwd() / default_dir
             loader = ManifestLoader(default_dir)
             self.manifest = loader.load_manifest(playbook_id)
             self.manifest_path = default_dir / f"{playbook_id}.manifest.json"
@@ -99,7 +106,10 @@ class PlaybookExecutor:
         # Use first assigned role (RACI: Responsible)
         primary_role_name = assigned_role_names[0]
         if primary_role_name not in roles:
-            msg = f"Required role '{primary_role_name}' not available for step '{step_id}'"
+            msg = (
+                f"Required role '{primary_role_name}' "
+                f"not available for step '{step_id}'"
+            )
             raise ValueError(msg)
 
         primary_role = roles[primary_role_name]
@@ -130,9 +140,8 @@ class PlaybookExecutor:
         # Execute via role
         result = primary_role.execute(role_context)
 
-        # Store result for subsequent steps only if successful
-        if result.success:
-            self.step_results[step_id] = result
+        # Store result for subsequent steps (success or failure)
+        self.step_results[step_id] = result
 
         # Validate output artifacts if required
         if step.get("validation_required", True):
@@ -146,17 +155,21 @@ class PlaybookExecutor:
         artifacts: list[Artifact] | None = None,
         workspace: WorkspaceManager | None = None,
         project_metadata: dict[str, Any] | None = None,
-    ) -> dict[str, RoleResult]:
+    ) -> tuple[dict[str, RoleResult], list[Artifact]]:
         """Execute entire playbook from start to finish.
 
         Args:
             roles: Dictionary of role instances
-            artifacts: Initial artifacts
+            artifacts: Initial artifacts (modified in place and returned)
             workspace: Workspace manager
             project_metadata: Project metadata
 
         Returns:
-            Dictionary mapping step IDs to their results
+            Tuple of (step results dictionary, updated artifacts list)
+
+        Note:
+            The artifacts list is modified in place during execution.
+            The updated list is also returned for convenience.
         """
         results: dict[str, RoleResult] = {}
 
@@ -194,7 +207,11 @@ class PlaybookExecutor:
                 # Stop execution on failure
                 break
 
-        return results
+        # Ensure artifacts list is initialized
+        if artifacts is None:
+            artifacts = []
+
+        return results, artifacts
 
     def _get_step(self, step_id: str) -> dict[str, Any] | None:
         """Get step by ID.

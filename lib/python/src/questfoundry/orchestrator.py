@@ -473,7 +473,7 @@ class Orchestrator:
 
     def _import_story_spark_loop(self) -> type[Loop]:
         """Import and return StorySparkLoop class."""
-        from .loops.story_spark import StorySparkLoop
+        from .loops.story_spark import StorySparkLoop  # type: ignore[import-not-found]
 
         return StorySparkLoop
 

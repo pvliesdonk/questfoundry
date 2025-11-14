@@ -3,7 +3,10 @@
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..execution.playbook_executor import PlaybookExecutor
 
 logger = logging.getLogger(__name__)
 

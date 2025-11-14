@@ -485,6 +485,7 @@ class Role(ABC):
 
         In v2, procedure prompts are assembled from atomic primitives
         and provided by PlaybookExecutor via context.additional_context['procedure'].
+        Implementations should access this field via context if needed.
 
         Args:
             context: Execution context containing task, artifacts, and procedure
