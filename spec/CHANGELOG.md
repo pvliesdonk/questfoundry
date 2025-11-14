@@ -1,3 +1,9 @@
+## spec-v0.6.0 (2025-11-14)
+
+### Fix
+
+- align release numbering after the rollback so future spec tags resume at `spec-v0.6.0`
+
 ## spec-v0.1.0 (2025-11-13)
 
 ### Feat
