@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "title": "Adapter Manifest",
+  "description": "Runtime manifest for compiled role adapters in QuestFoundry v2",
+  "type": "object",
+  "required": ["manifest_version", "adapter_id", "role_name", "compiled_at"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "manifest_version": {
+      "type": "string",
+      "pattern": "^2\\.\\d+\\.\\d+$",
+      "description": "Semantic version of manifest schema"
+    },
+    "adapter_id": {
+      "type": "string",
+      "description": "Unique identifier for this adapter (role)"
+    },
+    "role_name": {
+      "type": "string",
+      "description": "Human-readable role name"
+    },
+    "mission": {
+      "type": "string",
+      "description": "Role mission statement from L1 charter"
+    },
+    "compiled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of compilation"
+    },
+    "source_files": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of source files used in compilation"
+    },
+    "expertise": {
+      "type": "string",
+      "description": "Reference to primary expertise primitive"
+    },
+    "procedures": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Primary procedures this role executes"
+        },
+        "supporting": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Supporting procedures for this role"
+        }
+      }
+    },
+    "protocol_intents": {
+      "type": "object",
+      "properties": {
+        "receives": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Protocol intents this role receives"
+        },
+        "sends": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Protocol intents this role sends"
+        }
+      }
+    },
+    "loops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "playbook": {"type": "string"},
+          "raci": {
+            "type": "string",
+            "enum": ["responsible", "accountable", "consulted", "informed"]
+          },
+          "description": {"type": "string"}
+        }
+      },
+      "description": "Loops (playbooks) this role participates in"
+    },
+    "quality_bars": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "integrity",
+              "reachability",
+              "nonlinearity",
+              "gateways",
+              "style",
+              "determinism",
+              "presentation",
+              "accessibility"
+            ]
+          }
+        },
+        "secondary": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "integrity",
+              "reachability",
+              "nonlinearity",
+              "gateways",
+              "style",
+              "determinism",
+              "presentation",
+              "accessibility"
+            ]
+          }
+        }
+      }
+    },
+    "safety_protocols": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Cross-cutting safety snippets for this role"
+    },
+    "handoffs": {
+      "type": "object",
+      "description": "Handoff protocols to other roles"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Schema names of artifacts this role produces"
+    }
+  }
+}

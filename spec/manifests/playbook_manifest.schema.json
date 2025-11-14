@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "title": "Playbook Manifest",
+  "description": "Runtime manifest for compiled playbooks in QuestFoundry v2",
+  "type": "object",
+  "required": ["manifest_version", "playbook_id", "display_name", "compiled_at"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "manifest_version": {
+      "type": "string",
+      "pattern": "^2\\.\\d+\\.\\d+$",
+      "description": "Semantic version of manifest schema"
+    },
+    "playbook_id": {
+      "type": "string",
+      "description": "Unique identifier for this playbook"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable playbook name"
+    },
+    "category": {
+      "type": "string",
+      "description": "Playbook category (e.g., Discovery, Refinement, Publication)"
+    },
+    "purpose": {
+      "type": "string",
+      "description": "What this playbook accomplishes"
+    },
+    "outcome": {
+      "type": "string",
+      "description": "Expected deliverables from this playbook"
+    },
+    "compiled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of compilation"
+    },
+    "source_files": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "List of source files used in compilation"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_id", "name", "description"],
+        "properties": {
+          "step_id": {"type": "string"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "assigned_roles": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "consulted_roles": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "procedure_content": {
+            "type": "string",
+            "description": "Assembled procedure markdown for this step"
+          },
+          "protocol_intent": {
+            "type": "string",
+            "description": "Protocol intent sent by this step"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Conditional execution criteria"
+          },
+          "example": {
+            "type": "string",
+            "description": "Example output or usage"
+          },
+          "artifacts_input": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "artifacts_output": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "validation_required": {"type": "boolean"}
+        }
+      }
+    },
+    "raci": {
+      "type": "object",
+      "properties": {
+        "responsible": {"type": "array", "items": {"type": "string"}},
+        "accountable": {"type": "array", "items": {"type": "string"}},
+        "consulted": {"type": "array", "items": {"type": "string"}},
+        "informed": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "quality_bars": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "integrity",
+          "reachability",
+          "nonlinearity",
+          "gateways",
+          "style",
+          "determinism",
+          "presentation",
+          "accessibility"
+        ]
+      },
+      "description": "Quality bars emphasized by this playbook"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Schema names of artifacts produced"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Expected inputs to the playbook"
+    },
+    "deliverables": {
+      "type": "object",
+      "description": "Structured deliverables produced by this playbook"
+    }
+  }
+}
