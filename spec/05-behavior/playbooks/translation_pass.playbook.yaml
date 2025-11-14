@@ -1,0 +1,134 @@
+---
+playbook_id: translation_pass
+playbook_name: Translation Pass
+abbreviation: TP
+version: 2.0.0
+category: Asset
+
+# Purpose and outcome
+purpose: "Create or update a player-safe translation of the manuscript/codex surfaces while preserving PN boundaries, style intent, and navigation. This loop supports plan-only merges (glossary/style kit) when the full slice isn't ready."
+
+outcome: "A Language Pack (glossary, style notes, localized surfaces, open issues) ready for Gatekeeper checks and merge to Cold. Exports can include complete or partial translations flagged accordingly."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "New target language requested"
+    - "Significant style/canon changes warrant a translation refresh"
+    - "Accessibility or market goals require multilingual exports"
+  tu_format: "tu-translation-<lang>-<scope>"
+  showrunner_decision: "Confirm Translator activation (others may be dormant)"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:translator"
+      responsibilities: "Produce Language Pack: glossary, style transfer notes, localized surfaces; flag untranslatables and cultural risks"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Scope completeness (chapters only, full book, codex subset) and merge timing"
+  consulted:
+    - role: "@adapter:style_lead"
+      responsibilities: "Approve register mapping (formal/informal 'you'), motif equivalence, idiom strategy"
+    - role: "@adapter:player_narrator"
+      responsibilities: "Validate diegetic gate phrasing patterns in target language; no internals exposed"
+    - role: "@adapter:codex_curator"
+      responsibilities: "Ensure cross-refs and titles localize consistently; avoid spoiler drift"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Check Presentation Safety, Integrity (links resolve), Style adherence"
+  informed:
+    - role: "@adapter:book_binder"
+      responsibilities: "Includes translated slices in exports with coverage flags"
+
+# Inputs
+inputs:
+  - "Cold snapshot (manuscript/codex surfaces), PN Principles, Style guardrails"
+  - "Current glossary/terminology (if any); motif kit"
+  - "Cultural notes from Lore/Style (tone, registers to preserve/avoid)"
+  - "Known untranslatable idioms list (if exists)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:language_pack_production"
+    - "@procedure:register_map_maintenance"
+    - "@procedure:terminology_coordination"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+
+# Language pack components
+language_pack_components:
+  - "Glossary (bilingual, with variants)"
+  - "Style transfer notes (register map, idiom strategy)"
+  - "Localized surfaces (manuscript/codex slices)"
+  - "PN phrasing patterns (target language)"
+  - "Open issues (untranslatables, cultural risks)"
+  - "Coverage report (% complete, gaps documented)"
+
+# Coverage tracking
+coverage_tracking:
+  levels:
+    - complete     # Full coverage
+    - partial      # Flagged gaps with fallback policy
+    - plan-only    # Glossary and style kit only
+  reporting: "Coverage % stated; gaps documented with fallback policy"
+
+# Register mapping
+register_mapping:
+  considerations:
+    - "Formal/informal 'you' (tu/vous, tú/usted)"
+    - "Slang and colloquialisms"
+    - "POV distance"
+    - "Motif equivalence"
+    - "Idiom portability"
+
+# Success criteria
+success_criteria:
+  - "Glossary complete with bilingual terms and variants"
+  - "Style register mapped with exemplars"
+  - "Localized surfaces retain PN boundaries (no spoilers/internals)"
+  - "Diegetic gate phrasing preserved in target language"
+  - "Coverage % stated; gaps flagged with safe fallbacks"
+  - "Cross-refs and navigation resolve correctly"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - presentation   # No internals; retain source spoiler restraint
+    - accessibility  # Descriptive links; readable sentences; adapted punctuation
+    - style          # Register/terminology align with Style/Curator
+  secondary:
+    - integrity      # Anchors resolve after binding; no orphan labels
+    - gateways       # Gates remain diegetic in target language
+
+# Handoffs
+handoffs:
+  from_style_lead:
+    content: "Receive register map and localization cues"
+    artifacts: ["localization.cues"]
+
+  from_codex_curator:
+    content: "Receive glossary and terminology guidance"
+    artifacts: ["glossary.slice"]
+
+  to_binder:
+    content: "Provide localized surfaces with coverage notes"
+    artifacts: ["translation.pack", "coverage.report"]
+
+  to_gatekeeper:
+    content: "Submit for Presentation and Accessibility checks"
+
+# Artifacts produced
+artifacts:
+  - translation_pack.schema.json
+  - coverage_report.schema.json
+  - bilingual_glossary.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - translation_pack.schema.json
+    - coverage_report.schema.json
+    - bilingual_glossary.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

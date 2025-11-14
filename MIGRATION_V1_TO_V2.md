@@ -22,11 +22,13 @@ This document provides complete instructions for an AI agent to migrate QuestFou
 ### Current Architecture (v1)
 
 **7-Layer System:**
+
 - **L0-L4:** Specification layers (North Star, Roles, Dictionary, Schemas, Protocol) - **STABLE, DO NOT MODIFY**
 - **L5 (Prompts):** `spec/05-prompts/` - Pre-assembled prompt templates - **TARGET FOR MIGRATION**
 - **L6 (Python Library):** `lib/python/src/questfoundry/` - Runtime implementation - **REQUIRES REFACTORING**
 
 **Current L5 Structure:**
+
 ```
 spec/05-prompts/
   loops/*.playbook.md          # 13 loop playbooks (e.g., lore_deepening.playbook.md)
@@ -37,6 +39,7 @@ spec/05-prompts/
 ```
 
 **Current L6 Structure:**
+
 ```
 lib/python/src/questfoundry/
   loops/                       # Hardcoded loop classes (e.g., lore_deepening.py)
@@ -49,6 +52,7 @@ lib/python/src/questfoundry/
 ### Target Architecture (v2)
 
 **New L5 Structure (Behavior Primitives):**
+
 ```
 spec/05-behavior/
   README.md                    # Architecture documentation
@@ -84,6 +88,7 @@ spec/05-behavior/
 ```
 
 **New L6 Build (Spec Compiler):**
+
 ```
 lib/python/src/questfoundry/
   compiler/
@@ -95,6 +100,7 @@ lib/python/src/questfoundry/
 ```
 
 **New L6a/L7a Runtime:**
+
 ```
 lib/python/src/questfoundry/
   execution/
@@ -103,6 +109,7 @@ lib/python/src/questfoundry/
 ```
 
 **New L6b/L7b Outputs:**
+
 ```
 dist/compiled/
   manifests/
@@ -125,12 +132,14 @@ dist/compiled/
 **Assigned LLM:** Sonnet 4.5 or GPT-5 (requires nuanced understanding)
 
 **Inputs:**
+
 - All files in `spec/05-prompts/`
 - Layer 1 role charters (`spec/01-roles/`)
 - Layer 3 schemas (`spec/03-schemas/`)
 - Layer 4 protocol (`spec/04-protocol/`)
 
 **Outputs:**
+
 - `spec/05-behavior/` directory structure with atomic files
 - Migration tracking spreadsheet documenting all extractions
 
@@ -143,6 +152,7 @@ mkdir -p spec/05-behavior/{expertises,procedures,snippets,playbooks,adapters}
 ```
 
 Create `spec/05-behavior/README.md` documenting:
+
 - Purpose of atomic primitives
 - YAML frontmatter schema for procedures/playbooks/adapters
 - Cross-reference syntax (e.g., `@expertise:lore_weaver_expertise`, `@procedure:canonization_core`)
@@ -155,10 +165,12 @@ For each of the 15 roles, extract domain expertise into atomic files:
 **Example: `lore_weaver_expertise.md`**
 
 Source locations to extract from:
+
 - `spec/05-prompts/lore_weaver/system_prompt.md` (lines 17-39: "Operating Model" section)
 - `spec/05-prompts/role_adapters/lore_weaver.adapter.md` (lines 10-35: "Core Expertise" section)
 
 Extract common content, creating single source of truth:
+
 ```markdown
 # Lore Weaver Expertise
 
@@ -183,6 +195,7 @@ Identify reusable workflow procedures across playbooks and role prompts:
 **Example: `canonization_core.md`**
 
 Add YAML frontmatter for metadata and cross-references:
+
 ```yaml
 ---
 procedure_id: canonization_core
@@ -204,6 +217,7 @@ references_roles:
 ```
 
 Source locations:
+
 - `spec/05-prompts/lore_weaver/system_prompt.md` (lines 24-38: "Canonization algorithm")
 - `spec/05-prompts/loops/lore_deepening.playbook.md` (steps 2-8)
 
@@ -214,6 +228,7 @@ Source locations:
 Identify small, frequently-reused text blocks:
 
 **Example: `spoiler_hygiene_reminder.md`**
+
 ```markdown
 # Spoiler Hygiene Protocol
 
@@ -221,6 +236,7 @@ Identify small, frequently-reused text blocks:
 ```
 
 Source locations:
+
 - Appears in multiple role prompts and playbooks
 - `spec/05-prompts/_shared/safety_protocol.md`
 
@@ -231,6 +247,7 @@ Source locations:
 Transform each playbook from markdown to YAML with references:
 
 **Example: `lore_deepening.playbook.yaml`**
+
 ```yaml
 ---
 playbook_id: lore_deepening
@@ -305,6 +322,7 @@ quality_bars_pressed:
 Transform role adapters to YAML with references:
 
 **Example: `lore_weaver.adapter.yaml`**
+
 ```yaml
 ---
 adapter_id: lore_weaver
@@ -360,6 +378,7 @@ Create validation scripts:
 **Script: `scripts/validate_behavior_refs.py`**
 
 Checks:
+
 1. All `@expertise:`, `@procedure:`, `@snippet:` references resolve to actual files
 2. All `references_schemas` point to valid L3 schemas
 3. All `references_roles` match L1 role definitions
@@ -373,6 +392,7 @@ Checks:
 **Spreadsheet: `spec/05-behavior/MIGRATION_TRACKING.csv`**
 
 Columns:
+
 - Source File (v1)
 - Content Extracted
 - Target File (v2)
@@ -391,11 +411,13 @@ Track every extraction for human review if needed.
 **Assigned LLM:** Sonnet 4.5 or GPT-5 (complex logic) with Haiku/mini for testing
 
 **Inputs:**
+
 - `spec/05-behavior/` directory structure from Phase 1
 - Layer 3 schemas for validation
 - Layer 1 roles for RACI validation
 
 **Outputs:**
+
 - Working spec compiler in `lib/python/src/questfoundry/compiler/`
 - Compiled manifests in `dist/compiled/manifests/`
 - Standalone prompts in `dist/compiled/standalone_prompts/`
@@ -407,12 +429,14 @@ Track every extraction for human review if needed.
 Create `lib/python/src/questfoundry/compiler/README.md` documenting:
 
 **Compiler Pipeline:**
+
 ```
 [Atomic Sources] → [Validator] → [Assembler] → [Manifest Builder] → [Output Writer]
      (YAML/MD)        (refs)       (compose)       (JSON)           (dist/)
 ```
 
 **Components:**
+
 1. **Loader:** Parse YAML frontmatter and markdown content
 2. **Validator:** Validate cross-references and schema compliance
 3. **Assembler:** Compose prompts by resolving references
@@ -502,6 +526,7 @@ class SpecCompiler:
 **File: `lib/python/src/questfoundry/compiler/assemblers.py`**
 
 Handle reference syntax:
+
 - `@expertise:lore_weaver_expertise` → Inject full expertise content
 - `@procedure:canonization_core` → Inject full procedure
 - `@procedure:canonization_core#step1` → Inject specific section
@@ -549,6 +574,7 @@ class ReferenceValidator:
 Generate JSON manifests for runtime:
 
 **Example output: `dist/compiled/manifests/lore_deepening.manifest.json`**
+
 ```json
 {
   "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
@@ -583,6 +609,7 @@ Generate JSON manifests for runtime:
 **File: `lib/python/src/questfoundry/compiler/assemblers.py`**
 
 Assemble full standalone prompts by composing:
+
 1. Role charter (from adapter)
 2. Referenced expertises (full content)
 3. Protocol intents (from adapter)
@@ -656,6 +683,7 @@ qf-compile --watch
 **File: `lib/python/tests/compiler/test_spec_compiler.py`**
 
 Test cases:
+
 1. Valid compilation of all playbooks
 2. Detection of invalid references
 3. Detection of circular dependencies
@@ -683,10 +711,12 @@ Define JSON schema for compiled playbook manifests (Layer 3 extension).
 **Assigned LLM:** Sonnet 4.5/GPT-5 for executor, Haiku/mini for cleanup tasks
 
 **Inputs:**
+
 - Compiled manifests from Phase 2
 - Existing loop/role implementations in `lib/python/src/questfoundry/`
 
 **Outputs:**
+
 - Generic `PlaybookExecutor` replacing hardcoded loops
 - Updated library using compiled manifests
 - Deleted `spec/05-prompts/` directory
@@ -752,6 +782,7 @@ class PlaybookExecutor:
 ```
 
 **Key Features:**
+
 - Load any playbook manifest
 - Execute steps generically via role interfaces
 - Validate artifacts using existing validators
@@ -832,15 +863,18 @@ def bundle_compiled_resources():
 ##### 3.5 Delete Deprecated Code
 
 **Directories to delete:**
+
 1. `spec/05-prompts/` — Replaced by `spec/05-behavior/`
 2. `lib/python/src/questfoundry/loops/*.py` (except `base.py`, `registry.py`) — Replaced by generic executor
 3. `lib/python/src/questfoundry/resources/prompts/` (old bundled prompts)
 
 **Before deletion:**
+
 - Ensure all tests pass with new executor
 - Archive deleted files to a git tag: `git tag v1-archive`
 
 **Commands:**
+
 ```bash
 # Archive v1
 git tag -a v1-archive -m "Archive v1 architecture before deletion"
@@ -857,6 +891,7 @@ rm -rf lib/python/src/questfoundry/resources/prompts/
 ##### 3.6 Update Tests
 
 **Tasks:**
+
 1. Delete tests for hardcoded loop classes
 2. Create tests for `PlaybookExecutor` with various manifests
 3. Create tests for manifest loading and validation
@@ -867,12 +902,14 @@ rm -rf lib/python/src/questfoundry/resources/prompts/
 ##### 3.7 Update Documentation
 
 **Files to update:**
+
 1. `README.md` — Update architecture description
 2. `spec/README.md` — Update layer descriptions (L5 is now "Behavior")
 3. `lib/python/README.md` — Update library usage
 4. `docs/` — Update MkDocs documentation
 
 **Key changes:**
+
 - Rename "Layer 5: Prompts" to "Layer 5: Behavior"
 - Document atomic primitives architecture
 - Document spec compiler usage
@@ -885,6 +922,7 @@ rm -rf lib/python/src/questfoundry/resources/prompts/
 **File: `.github/workflows/lint-test.yml`**
 
 Add compiler validation:
+
 ```yaml
 - name: Validate spec compilation
   run: |
@@ -904,6 +942,7 @@ Add compiler validation:
 ##### 3.9 Version Bump
 
 Update version to 2.0.0 in:
+
 - `lib/python/pyproject.toml`
 - `spec/05-behavior/VERSION`
 
@@ -911,6 +950,7 @@ Create migration guide:
 **File: `MIGRATION_V1_TO_V2_USER_GUIDE.md`**
 
 For users of the library, explain:
+
 - Breaking changes
 - How to update code using old loop classes
 - How to use new `PlaybookExecutor`
@@ -925,6 +965,7 @@ For users of the library, explain:
 ### Prerequisites
 
 **Environment Setup:**
+
 ```bash
 # Navigate to repository
 cd /home/user/questfoundry
@@ -942,6 +983,7 @@ pytest
 ### Phase Execution Order
 
 **Phase 1: Deconstruction (Sonnet 4.5 / GPT-5)**
+
 ```bash
 # Create tracking document
 touch spec/05-behavior/MIGRATION_TRACKING.csv
@@ -953,6 +995,7 @@ git commit -m "feat(phase1): complete deconstruction of [component]"
 ```
 
 **Phase 2: Compiler (Sonnet 4.5 / GPT-5)**
+
 ```bash
 # Execute tasks 2.1-2.9 sequentially
 # Each major component should be tested and committed
@@ -961,6 +1004,7 @@ git commit -m "feat(phase2): implement spec compiler [component]"
 ```
 
 **Phase 3: Runtime (Sonnet 4.5 for executor, Haiku for cleanup)**
+
 ```bash
 # Execute tasks 3.1-3.9 sequentially
 # Critical: Don't delete old code until new tests pass
@@ -974,6 +1018,7 @@ git commit -m "chore(phase3): delete deprecated v1 code"
 ### Validation Gates
 
 **After Phase 1:**
+
 - [ ] All cross-references resolve
 - [ ] No orphaned files
 - [ ] No circular dependencies
@@ -982,6 +1027,7 @@ git commit -m "chore(phase3): delete deprecated v1 code"
 - [ ] Migration tracking complete
 
 **After Phase 2:**
+
 - [ ] Compiler runs without errors
 - [ ] All manifests validate against schema
 - [ ] All standalone prompts generated
@@ -989,6 +1035,7 @@ git commit -m "chore(phase3): delete deprecated v1 code"
 - [ ] No validation errors
 
 **After Phase 3:**
+
 - [ ] All tests pass with new executor
 - [ ] No hardcoded loop classes remain
 - [ ] Old prompt directory deleted
@@ -999,6 +1046,7 @@ git commit -m "chore(phase3): delete deprecated v1 code"
 ### Commit Strategy
 
 **Commit Message Format:**
+
 ```
 feat(phase[N]): [component] - [brief description]
 
@@ -1009,6 +1057,7 @@ Refs: MIGRATION_V1_TO_V2.md Phase [N] Task [N.N]
 ```
 
 **Branch Strategy:**
+
 ```
 migration/v1-to-v2              # Main migration branch
   ├─ phase1/[task]              # Optional: sub-branches for complex tasks
@@ -1017,24 +1066,28 @@ migration/v1-to-v2              # Main migration branch
 ```
 
 **PR Strategy:**
+
 - Create PRs for each phase against `migration/v1-to-v2`
 - Final PR from `migration/v1-to-v2` to `main` after all validation gates pass
 
 ### Error Recovery
 
 **If Phase 1 fails:**
+
 - Review migration tracking spreadsheet
 - Manually inspect duplicated content
 - Consult L1/L3/L4 specs for canonical definitions
 - Ask human for ambiguous architectural decisions
 
 **If Phase 2 compilation fails:**
+
 - Check reference syntax in YAML files
 - Validate YAML frontmatter structure
 - Ensure all referenced files exist
 - Check for typos in reference IDs
 
 **If Phase 3 tests fail:**
+
 - Compare new executor output with old loop class output
 - Ensure manifests contain all required metadata
 - Check role interface compatibility
@@ -1043,12 +1096,14 @@ migration/v1-to-v2              # Main migration branch
 ### Human Escalation Points
 
 **Automatic escalation required for:**
+
 1. Ambiguous content in prompts (conflicting logic across files)
 2. Architectural decisions not specified in this document
 3. Breaking changes to L0-L4 specs (should not happen)
 4. Test failures that cannot be resolved by examining manifest structure
 
 **Escalation format:**
+
 ```markdown
 ## Escalation: [Brief Issue]
 
@@ -1065,6 +1120,7 @@ migration/v1-to-v2              # Main migration branch
 ## Success Criteria
 
 ### Technical Criteria
+
 - [ ] All behavior primitives extracted and validated
 - [ ] Spec compiler functional and tested
 - [ ] Generic executor replaces all hardcoded loops
@@ -1073,12 +1129,14 @@ migration/v1-to-v2              # Main migration branch
 - [ ] No code duplication in behavior layer
 
 ### Documentation Criteria
+
 - [ ] `spec/05-behavior/README.md` complete
 - [ ] Compiler usage documented
 - [ ] User migration guide complete
 - [ ] All layer documentation updated
 
 ### Maintainability Criteria
+
 - [ ] Single source of truth for all role expertise
 - [ ] No N-way updates required for logic changes
 - [ ] Clear cross-reference graph
@@ -1091,51 +1149,66 @@ migration/v1-to-v2              # Main migration branch
 ### Reference Types
 
 **Expertise Reference:**
+
 ```yaml
 @expertise:lore_weaver_expertise
 ```
+
 Resolves to: `spec/05-behavior/expertises/lore_weaver_expertise.md`
 
 **Procedure Reference:**
+
 ```yaml
 @procedure:canonization_core
 @procedure:canonization_core#step1  # With section anchor
 ```
+
 Resolves to: `spec/05-behavior/procedures/canonization_core.md`
 
 **Snippet Reference:**
+
 ```yaml
 @snippet:spoiler_hygiene_reminder
 ```
+
 Resolves to: `spec/05-behavior/snippets/spoiler_hygiene_reminder.md`
 
 **Playbook Reference:**
+
 ```yaml
 @playbook:lore_deepening
 ```
+
 Resolves to: `spec/05-behavior/playbooks/lore_deepening.playbook.yaml`
 
 **Adapter Reference:**
+
 ```yaml
 @adapter:lore_weaver
 ```
+
 Resolves to: `spec/05-behavior/adapters/lore_weaver.adapter.yaml`
 
 **Schema Reference (L3):**
+
 ```yaml
 @schema:canon_pack.schema.json
 ```
+
 Resolves to: `spec/03-schemas/canon_pack.schema.json`
 
 **Role Reference (L1):**
+
 ```yaml
 @role:lore_weaver
 ```
+
 Resolves to: `spec/01-roles/charters/lore_weaver.md`
 
 ### YAML Frontmatter Schema
 
 **For Procedures:**
+
 ```yaml
 ---
 procedure_id: canonization_core
@@ -1156,6 +1229,7 @@ tags:
 ```
 
 **For Playbooks:**
+
 ```yaml
 ---
 playbook_id: lore_deepening
@@ -1183,6 +1257,7 @@ quality_bars_pressed: [integrity, gateways, presentation]
 ```
 
 **For Adapters:**
+
 ```yaml
 ---
 adapter_id: lore_weaver
@@ -1211,6 +1286,7 @@ handoffs:
 ## Appendix B: File Naming Conventions
 
 ### Expertises
+
 - Pattern: `[role]_[domain].md`
 - Examples:
   - `lore_weaver_expertise.md`
@@ -1219,6 +1295,7 @@ handoffs:
   - `researcher_fact_validation.md`
 
 ### Procedures
+
 - Pattern: `[action]_[object].md` or `[process_name].md`
 - Examples:
   - `canonization_core.md`
@@ -1228,6 +1305,7 @@ handoffs:
   - `topology_impact_analysis.md`
 
 ### Snippets
+
 - Pattern: `[concept]_[type].md`
 - Examples:
   - `spoiler_hygiene_reminder.md`
@@ -1236,6 +1314,7 @@ handoffs:
   - `pn_boundary_enforcement.md`
 
 ### Playbooks
+
 - Pattern: `[loop_name].playbook.yaml`
 - Examples:
   - `lore_deepening.playbook.yaml`
@@ -1243,6 +1322,7 @@ handoffs:
   - `story_spark.playbook.yaml`
 
 ### Adapters
+
 - Pattern: `[role_name].adapter.yaml`
 - Examples:
   - `lore_weaver.adapter.yaml`

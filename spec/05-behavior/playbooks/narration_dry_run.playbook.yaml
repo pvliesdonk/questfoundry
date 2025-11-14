@@ -1,0 +1,118 @@
+---
+playbook_id: narration_dry_run
+playbook_name: Narration Dry-Run
+abbreviation: NDR
+version: 2.0.0
+category: Export
+
+# Purpose and outcome
+purpose: "Have the Player-Narrator (PN) play through the current Cold snapshot exactly as a player would experience it—in-world, spoiler-safe—to surface UX issues in comprehension, choice clarity, pacing, and diegetic gate enforcement."
+
+outcome: "A set of PN playtest notes and handoff tickets (Trace Units or edit notes) that improve player-facing surfaces without rewriting canon or topology during the dry-run itself."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "After a Binding Run exports a view on Cold (chapter/act/book)"
+    - "Before user playtests, recordings, or live demos"
+    - "When PN phrasing patterns or recaps were recently updated"
+  tu_format: "tu-pn-dryrun-<date|milestone>"
+  snapshot_requirement: "Same Cold snapshot used by the Binding Run"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:player_narrator"
+      responsibilities: "Perform the book in-voice; enforce gates diegetically; log UX issues. No creative rewrites during the pass"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Scope routes to test; decide depth (single path vs sample of branches)"
+  consulted:
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Classify issues against Presentation Safety, Integrity, Style bars"
+    - role: "@adapter:style_lead"
+      responsibilities: "Advise on voice/register adjustments; review PN phrasing patterns"
+    - role: "@adapter:book_binder"
+      responsibilities: "Investigate navigation issues (anchors, labels, layout)"
+    - role: "@adapter:codex_curator"
+      responsibilities: "Address codex coverage gaps or cross-ref problems"
+    - role: "@adapter:translator"
+      responsibilities: "If testing a localized slice, flag mistransfers in tone/links"
+
+# Inputs
+inputs:
+  - "Exported bundle from Binding Run (Markdown/HTML/EPUB/PDF)"
+  - "PN Principles (in-world, spoiler-safe, diegetic gates)"
+  - "Style guardrails (voice/register/motifs)"
+  - "Language Pack if testing a non-source language"
+  - "CRITICAL: PN reads Cold only—no Hot drafts, no canon notes"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:in_world_performance"
+    - "@procedure:diegetic_gate_enforcement"
+    - "@procedure:ux_issue_tagging"
+  supporting:
+    - "@procedure:artifact_validation"
+
+# UX issue categories
+ux_issue_tags:
+  - choice_ambiguity    # Choice labels unclear or too similar
+  - gate_friction       # Gate phrasing confusing or meta
+  - nav_bug             # Navigation broken or confusing
+  - tone_wobble         # Register/voice inconsistency
+  - translation_glitch  # Localization issues
+  - accessibility       # Pacing, caption, or contrast issues
+
+# Route planning
+route_plan:
+  representative_paths:
+    - "Hub route (fan-out)"
+    - "Loop return (with difference)"
+    - "Gated branch"
+    - "At least one terminal"
+  edge_cases: "Pick one 'weird' edge case if time-boxed"
+
+# Success criteria
+success_criteria:
+  - "All selected routes played through as player would experience"
+  - "UX issues logged with tags, locations, severity"
+  - "No creative rewrites or canon invented during dry-run"
+  - "Handoff tickets created for owner roles (Scene, Style, Curator, Binder)"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - presentation   # Diegetic gates; no internals leak
+    - accessibility  # Pace, contrast, caption usefulness
+    - gateways       # Gate phrasing enforceable in-world
+  secondary:
+    - style          # Tone wobble detection
+    - nonlinearity   # Choice ambiguity
+    - integrity      # Nav bugs, broken refs
+
+# Handoffs
+handoffs:
+  to_showrunner:
+    content: "Playtest notes with tagged issues and locations"
+    artifacts: ["pn.playtest_notes"]
+
+  to_style_lead:
+    content: "Tone wobble and gate phrasing friction"
+    artifacts: ["pn.friction.report"]
+
+  to_gatekeeper:
+    content: "Presentation issues for validation"
+
+# Artifacts produced
+artifacts:
+  - playtest_notes.schema.json
+  - friction_report.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - playtest_notes.schema.json
+    - friction_report.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"
