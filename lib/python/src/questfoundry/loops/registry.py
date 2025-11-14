@@ -59,18 +59,135 @@ class LoopRegistry:
     Provides lightweight metadata for loop selection without loading
     full implementation details. This enables the Showrunner to make
     strategic decisions with minimal context (~90 lines total).
+
+    In v2, supports both:
+    - Legacy hardcoded loop metadata (backward compatibility)
+    - Manifest-based discovery from compiled manifests
     """
 
-    def __init__(self, spec_path: Path | None = None):
+    def __init__(
+        self,
+        spec_path: Path | None = None,
+        manifest_dir: Path | None = None,
+        use_manifests: bool = True,
+    ):
         """
         Initialize loop registry.
 
         Args:
             spec_path: Path to spec directory (default: ./spec)
+            manifest_dir: Path to compiled manifests (default: dist/compiled/manifests)
+            use_manifests: If True, load from manifests; if False, use legacy registry
         """
         self.spec_path = spec_path or Path.cwd() / "spec"
+        self.manifest_dir = manifest_dir or (Path.cwd() / "dist" / "compiled" / "manifests")
+        self.use_manifests = use_manifests
         self._loops: dict[str, LoopMetadata] = {}
-        self._register_builtin_loops()
+
+        if use_manifests and self.manifest_dir.exists():
+            self._discover_loops_from_manifests()
+        else:
+            self._register_builtin_loops()
+
+    def _discover_loops_from_manifests(self) -> None:
+        """Discover loops from compiled manifests (v2 architecture)."""
+        import json
+
+        if not self.manifest_dir.exists():
+            logger.warning(
+                "Manifest directory not found: %s. Falling back to builtin loops.",
+                self.manifest_dir,
+            )
+            self._register_builtin_loops()
+            return
+
+        manifest_files = list(self.manifest_dir.glob("*.manifest.json"))
+        if not manifest_files:
+            logger.warning(
+                "No manifest files found in: %s. Falling back to builtin loops.",
+                self.manifest_dir,
+            )
+            self._register_builtin_loops()
+            return
+
+        logger.info(
+            "Discovering loops from manifests in %s",
+            self.manifest_dir,
+        )
+
+        for manifest_path in manifest_files:
+            try:
+                with open(manifest_path) as f:
+                    manifest = json.load(f)
+
+                # Extract metadata from manifest
+                loop_id = manifest["playbook_id"]
+                display_name = manifest.get("display_name", loop_id)
+                description = manifest.get("description", "")
+
+                # Extract RACI for roles
+                raci = manifest.get("raci", {})
+                primary_roles = raci.get("responsible", [])
+                consulted_roles = raci.get("consulted", [])
+
+                # Extract other metadata
+                steps = manifest.get("steps", [])
+                output_artifacts = list(
+                    {
+                        artifact
+                        for step in steps
+                        for artifact in step.get("artifacts_output", [])
+                    }
+                )
+
+                # Create LoopMetadata
+                metadata = LoopMetadata(
+                    loop_id=loop_id,
+                    display_name=display_name,
+                    description=description,
+                    typical_duration="Variable",  # Not in manifest
+                    primary_roles=primary_roles,
+                    consulted_roles=consulted_roles,
+                    entry_conditions=[],  # Not in manifest
+                    exit_conditions=[],  # Not in manifest
+                    output_artifacts=output_artifacts,
+                    inputs=[],  # Not in manifest
+                    tags=manifest.get("tags", []),
+                )
+
+                self.register_loop(metadata)
+                logger.debug("Registered loop from manifest: %s", loop_id)
+
+            except Exception as e:
+                logger.exception(
+                    "Failed to load manifest %s: %s",
+                    manifest_path,
+                    e,
+                )
+
+    def get_executor(self, loop_id: str) -> "PlaybookExecutor":
+        """Get executor for a specific loop (v2 architecture).
+
+        Args:
+            loop_id: Loop identifier
+
+        Returns:
+            PlaybookExecutor configured for the loop
+
+        Raises:
+            KeyError: If loop not found
+            ImportError: If PlaybookExecutor not available
+        """
+        from ..execution.playbook_executor import PlaybookExecutor
+
+        if loop_id not in self._loops:
+            msg = f"Loop '{loop_id}' not registered"
+            raise KeyError(msg)
+
+        return PlaybookExecutor(
+            playbook_id=loop_id,
+            manifest_dir=self.manifest_dir,
+        )
 
     def _register_builtin_loops(self) -> None:
         """Register all built-in loop metadata."""
