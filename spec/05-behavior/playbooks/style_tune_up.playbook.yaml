@@ -1,0 +1,126 @@
+---
+playbook_id: style_tune_up
+playbook_name: Style Tune-up
+abbreviation: ST
+version: 2.0.0
+category: Refinement
+
+# Purpose and outcome
+purpose: "Detect and correct style drift across prose, captions, and PN surfaces without re-architecting the story. Tighten voice, register, motifs, and visual guardrails so the book reads like one mind made it."
+
+outcome: "A consolidated style addendum with specific edit notes to owners, plus a green Presentation/Style pre-gate—ready for merge after downstream fixes."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "Readers/PN report tonal wobble or inconsistent diction"
+    - "New chapter/act introduces variant tone needing harmonizing"
+    - "Art/Audio plans landed and nudge aesthetics"
+    - "Localization uncovered phrasing that fights register"
+  tu_format: "tu-style-tune-<scope>"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:style_lead"
+      responsibilities: "Diagnose drift; author style addendum; write targeted edit notes"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Scope pass; sequence fixes"
+  consulted:
+    - role: "@adapter:scene_smith"
+      responsibilities: "Receive edits; propose rewrites that preserve intent"
+    - role: "@adapter:plotwright"
+      responsibilities: "Confirm revisions don't alter topology/gateways"
+    - role: "@adapter:art_director"
+      responsibilities: "If active: align captions/cue language with register"
+    - role: "@adapter:audio_director"
+      responsibilities: "If active: align audio cue descriptions with register"
+    - role: "@adapter:translator"
+      responsibilities: "If active: flag untranslatable idioms; suggest equivalents"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Pre-check Style and Presentation Safety"
+  informed:
+    - role: "@adapter:player_narrator"
+      responsibilities: "Receives updated PN phrasing patterns if relevant"
+
+# Inputs
+inputs:
+  - "Current Cold style guide (plus motifs and exemplars)"
+  - "Recent prose drafts (Hot), captions, PN lines"
+  - "Canon changes that might affect tone (grim vs caper)"
+  - "PN and Binder UX notes; localization notes (if any)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:voice_coherence"
+    - "@procedure:contrastive_choice_polishing"
+    - "@procedure:diegetic_gate_language"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+
+# Drift diagnosis tags
+drift_tags:
+  - voice-shift         # POV or narrative voice changes
+  - register-mismatch   # Formal/informal shifts
+  - motif-missing       # Lost recurring imagery
+  - over-exposition     # Too much explanation
+  - jargon-spike        # Sudden technical language
+
+# Style addendum components
+style_addendum:
+  contents:
+    - "Sentence rhythm under pressure"
+    - "Idiom boundaries"
+    - "POV distance rules"
+    - "Caption tone guidelines"
+    - "Localization notes (avoid puns / provide alternatives)"
+
+# Success criteria
+success_criteria:
+  - "Voice/register drift corrected across all surfaces"
+  - "Motif usage consistent; exemplars updated"
+  - "PN phrasing patterns aligned with register"
+  - "Edit notes actionable and localized (file/section specific)"
+  - "No structural changes forced; only phrasing improvements"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - style          # Voice/register/motif consistency
+    - presentation   # Diegetic gates; accessibility phrasing
+    - accessibility  # Descriptive links; readable sentences
+  secondary:
+    - gateways       # Gate phrasing supports diegetic enforcement
+    - nonlinearity   # Choices meaningfully differentiate
+
+# Handoffs
+handoffs:
+  to_scene_smith:
+    content: "Targeted edit notes (small & surgical)"
+
+  to_player_narrator:
+    content: "Updated phrasing patterns for gates and refusals"
+
+  to_translator:
+    content: "Register map & localization cues"
+
+  to_gatekeeper:
+    content: "After fixes, full Style bar check"
+
+# Artifacts produced
+artifacts:
+  - style_addendum.schema.json
+  - edit_notes.schema.json
+  - phrasing_patterns.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - style_addendum.schema.json
+    - edit_notes.schema.json
+    - phrasing_patterns.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

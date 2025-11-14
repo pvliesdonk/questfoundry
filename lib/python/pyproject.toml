@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "questfoundry-py"
 
-version = "0.1.0"
+version = "2.0.0"
 
 description = "Python library for QuestFoundry protocol and artifact management"
 readme = "README.md"
@@ -68,6 +68,9 @@ Homepage = "https://github.com/pvliesdonk/questfoundry-py"
 Documentation = "https://github.com/pvliesdonk/questfoundry-spec"
 Specification = "https://github.com/pvliesdonk/questfoundry-spec"
 Schemas = "https://questfoundry.liesdonk.nl/schemas/"
+
+[project.scripts]
+qf-compile = "questfoundry.compiler.cli:main"
 
 [tool.hatch.envs.default.scripts]
 bundle = "python scripts/bundle_resources.py"

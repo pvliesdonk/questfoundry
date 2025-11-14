@@ -16,7 +16,7 @@ Located in `spec/` — The canonical definition of QuestFoundry
 - **Layer 2** (`spec/02-dictionary/`) — Common language (artifacts, taxonomies, glossary)
 - **Layer 3** (`spec/03-schemas/`) — JSON schemas (machine validation)
 - **Layer 4** (`spec/04-protocol/`) — Communication protocol (intents, lifecycles, flows)
-- **Layer 5** (`spec/05-prompts/`) — AI agent prompts (loop playbooks, role prompts)
+- **Layer 5** (`spec/05-behavior/`) — Atomic behavior primitives (expertises, procedures, playbooks, adapters)
 
 ### Implementation (Layer 6)
 
@@ -40,7 +40,9 @@ Located in `cli/` — Command-line interface tools
 │   ├── 02-dictionary/
 │   ├── 03-schemas/
 │   ├── 04-protocol/
-│   ├── 05-prompts/
+│   ├── 05-behavior/      # Atomic behavior primitives (v2)
+│   ├── 05-prompts/       # Legacy prompts (deprecated)
+│   ├── manifests/        # Manifest schemas
 │   ├── agents.md
 │   └── README.md
 │
@@ -102,6 +104,30 @@ QuestFoundry operates as a **virtual studio**:
 
 - **Hot** = internal, spoilers allowed, work-in-progress
 - **Cold** = player-facing, no spoilers, validated and canonical
+
+### V2 Architecture (Composable Behavior)
+
+QuestFoundry v2 introduces **atomic, composable behavior primitives** to eliminate duplication:
+
+- **Expertises** (`spec/05-behavior/expertises/`) — Domain-specific knowledge for each role
+- **Procedures** (`spec/05-behavior/procedures/`) — Reusable workflow steps with YAML frontmatter
+- **Snippets** (`spec/05-behavior/snippets/`) — Small reusable text blocks
+- **Playbooks** (`spec/05-behavior/playbooks/`) — Loop definitions referencing procedures
+- **Adapters** (`spec/05-behavior/adapters/`) — Role configurations referencing expertises
+
+The **spec compiler** (`lib/python/src/questfoundry/compiler/`) assembles these primitives into:
+
+- **Manifests** (`dist/compiled/manifests/*.manifest.json`) — Runtime-ready JSON for playbook execution
+- **Standalone prompts** (`dist/compiled/standalone_prompts/*.md`) — Complete role prompts
+
+The **PlaybookExecutor** (`lib/python/src/questfoundry/execution/`) provides generic loop execution from manifests, replacing hardcoded loop classes.
+
+**Benefits:**
+
+- Single source of truth for role expertise and procedures
+- No N-way updates when logic changes
+- Validated cross-references prevent broken dependencies
+- Generic executor reduces maintenance burden
 
 ## Development Guidelines
 

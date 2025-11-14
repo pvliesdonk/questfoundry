@@ -1,0 +1,109 @@
+---
+playbook_id: archive_snapshot
+playbook_name: Archive Snapshot
+abbreviation: AS
+version: 2.0.0
+category: Export
+
+# Purpose and outcome
+purpose: "Create a comprehensive, versioned snapshot of the entire project state (Hot and Cold) at a significant milestone for long-term archival, reproducibility, and provenance."
+
+outcome: "A timestamped archive package with complete project state, manifest, and restoration instructions. Captures all artifacts, TU history, gatecheck reports, schema versions, and metadata to enable future recovery, audit, or analysis."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "Major milestone completion (chapter/act/book release)"
+    - "Before significant refactoring or architectural changes"
+    - "Periodic archival schedule (e.g., monthly, quarterly)"
+    - "Before team transitions or long breaks"
+    - "Legal/compliance requirements for version preservation"
+  tu_format: "tu-archive-snapshot-<milestone>"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:showrunner"
+      responsibilities: "Coordinates snapshot; verifies completeness; archives package"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Accountable for archive integrity and accessibility"
+  consulted:
+    - role: "@adapter:book_binder"
+      responsibilities: "Assists with artifact collection and manifest generation"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Verifies integrity of archived artifacts"
+  informed:
+    - role: "All Roles"
+      responsibilities: "Informed of snapshot creation and archive location"
+
+# Inputs
+inputs:
+  - "Current Cold snapshot with all merged artifacts"
+  - "Current Hot snapshot with work-in-progress"
+  - "All TU records (opened, stabilizing, gatecheck, cold-merged, closed)"
+  - "All Gatecheck Reports"
+  - "All Hook Cards"
+  - "Schema versions and specifications"
+  - "Configuration files and tool versions"
+  - "Post-Mortem Reports (if any)"
+  - "View Logs from Binding Runs"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:snapshot_stamping"
+    - "@procedure:manifest_generation"
+    - "@procedure:artifact_validation"
+
+# Archive package contents
+archive_contents:
+  hot:
+    - "Work-in-progress artifacts"
+    - "Active TUs"
+    - "Draft canon/codex"
+    - "Hook cards (proposed/accepted/deferred)"
+  cold:
+    - "Stable canon"
+    - "Published codex entries"
+    - "Merged topology notes"
+    - "Validated artifacts"
+  metadata:
+    - "TU history log"
+    - "Gatecheck reports"
+    - "Schema versions"
+    - "Tool/configuration versions"
+    - "View logs"
+    - "Post-mortem reports"
+  restoration:
+    - "Restoration instructions"
+    - "Dependency manifest"
+    - "Verification checksums"
+
+# Success criteria
+success_criteria:
+  - "Complete Hot and Cold state captured"
+  - "All artifacts present with validation reports"
+  - "Manifest includes schema versions, tool versions, dependencies"
+  - "Restoration instructions documented"
+  - "Archive timestamped and versioned"
+  - "Verification checksums generated"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - integrity      # Complete artifact set, no broken refs
+    - determinism    # Reproducible from archive
+  secondary:
+    - accessibility  # Clear restoration documentation
+
+# Artifacts produced
+artifacts:
+  - archive_manifest.schema.json
+  - restoration_guide.md
+
+# References
+references:
+  layer_3_schemas:
+    - archive_manifest.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"
