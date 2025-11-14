@@ -476,6 +476,24 @@ class Role(ABC):
 
         return "\n".join(parts)
 
+    def execute(self, context: RoleContext) -> RoleResult:
+        """
+        Execute a task with the given context.
+
+        This is the v2 entry point for manifest-based execution.
+        It delegates to execute_task() for backward compatibility.
+
+        In v2, procedure prompts are assembled from atomic primitives
+        and provided by PlaybookExecutor via context.additional_context['procedure'].
+
+        Args:
+            context: Execution context containing task, artifacts, and procedure
+
+        Returns:
+            Result of task execution
+        """
+        return self.execute_task(context)
+
     @abstractmethod
     def execute_task(self, context: RoleContext) -> RoleResult:
         """

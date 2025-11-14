@@ -57,9 +57,10 @@ The specification is deliberately **layered** for clarity, testability, and trac
 
 ### For AI Agents (Running Roles)
 
-1. **Browse prompts**: [`05-prompts/`](05-prompts/)
-2. **Usage guide**: [`05-prompts/USAGE_GUIDE.md`](05-prompts/USAGE_GUIDE.md)
-3. **Example conversations**: Each role directory contains `/examples/`
+1. **Browse behavior primitives**: [`05-behavior/`](05-behavior/)
+2. **Compile manifests**: Run `qf-compile` to generate runtime artifacts
+3. **Execute with PlaybookExecutor**: Use the generic executor from compiled manifests
+4. **Legacy prompts** (deprecated): [`05-prompts/`](05-prompts/)
 
 ---
 
@@ -74,7 +75,7 @@ QuestFoundry is organized into **7 layers**, each with clear separation of conce
 | **2** | **Common Language** | Data dictionary, artifact templates        | ✅ 100%    | [`02-dictionary/README.md`](02-dictionary/README.md) |
 | **3** | **Schemas**         | JSON Schema specifications (Draft 2020-12) | ✅ 100%    | [`03-schemas/README.md`](03-schemas/README.md)       |
 | **4** | **Protocol**        | Message envelopes, intents, state machines | ✅ 100%    | [`04-protocol/README.md`](04-protocol/README.md)     |
-| **5** | **Prompts**         | AI agent system prompts                    | ✅ 100%    | [`05-prompts/README.md`](05-prompts/README.md)       |
+| **5** | **Behavior**        | Atomic behavior primitives (v2)            | ✅ 100%    | [`05-behavior/README.md`](05-behavior/README.md)     |
 | **6** | **Libraries**       | Python SDK, validators, clients            | 🚧 Active  | `../lib/python/`                                     |
 | **7** | **CLI**             | Command-line interface tools               | 📋 Planned | `../cli/python/`                                     |
 
