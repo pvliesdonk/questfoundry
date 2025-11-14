@@ -12,63 +12,66 @@ on:
           - testpypi
 
 jobs:
-  bump-and-tag:
-    name: Bump Version and Create Tag
+  prepare-release:
+    name: Prepare Release Inputs
     runs-on: ubuntu-latest
-    # Grant permissions to write to contents (push tag/commit)
     permissions:
       contents: write
     outputs:
+      publish_ref: ${{ steps.bump.outputs.publish_ref || steps.test-ref.outputs.publish_ref }}
       new_tag: ${{ steps.bump.outputs.new_tag }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for commitizen to find tags
-          token: ${{ secrets.GITHUB_TOKEN }} # Use GITHUB_TOKEN for push
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
+      - name: Set up Python (release only)
+        if: inputs.destination == 'pypi'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Commitizen
+        if: inputs.destination == 'pypi'
         run: pip install commitizen
 
-      - name: Configure Git User
+      - name: Configure Git user
+        if: inputs.destination == 'pypi'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Bump version, create tag, and push
+      - name: Bump version, tag, and push
+        if: inputs.destination == 'pypi'
         id: bump
-        # Run inside the lib/python directory
         working-directory: lib/python
         run: |
-          # cz bump will read pyproject.toml, update files, and create the tag
           cz bump --yes
-
-          # Push the commit (pyproject.toml change) and the new tag
           git push --follow-tags
-
-          # Get the new tag name and set it as an output
           NEW_TAG=$(git describe --tags --abbrev=0)
           echo "new_tag=${NEW_TAG}" >> $GITHUB_OUTPUT
+          echo "publish_ref=${NEW_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Use current SHA for TestPyPI
+        if: inputs.destination == 'testpypi'
+        id: test-ref
+        run: echo "publish_ref=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
   build:
     name: Build Distribution
-    needs: bump-and-tag
+    needs: prepare-release
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: lib/python
     steps:
-      - name: Checkout repository at new tag
+      - name: Checkout source to publish ref
         uses: actions/checkout@v4
         with:
-          # Check out the exact tag created by the bump job
-          ref: ${{ needs.bump-and-tag.outputs.new_tag }}
+          ref: ${{ needs.prepare-release.outputs.publish_ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -99,7 +102,7 @@ jobs:
     if: inputs.destination == 'pypi'
     needs:
       - build
-      - bump-and-tag
+      - prepare-release
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -122,7 +125,7 @@ jobs:
     if: inputs.destination == 'testpypi'
     needs:
       - build
-      - bump-and-tag
+      - prepare-release
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -147,7 +150,7 @@ jobs:
     if: inputs.destination == 'pypi'
     needs:
       - publish-to-pypi
-      - bump-and-tag
+      - prepare-release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -163,7 +166,7 @@ jobs:
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NEW_TAG: ${{ needs.bump-and-tag.outputs.new_tag }}
+          NEW_TAG: ${{ needs.prepare-release.outputs.new_tag }}
         run: |
           gh release create "$NEW_TAG" \
             --repo '${{ github.repository }}' \
