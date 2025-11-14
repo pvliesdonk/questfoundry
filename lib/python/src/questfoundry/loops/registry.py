@@ -3,7 +3,10 @@
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..execution.playbook_executor import PlaybookExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +81,9 @@ class LoopRegistry:
             manifest_dir: Path to compiled manifests (default: dist/compiled/manifests)
         """
         self.spec_path = spec_path or Path.cwd() / "spec"
-        self.manifest_dir = manifest_dir or (Path.cwd() / "dist" / "compiled" / "manifests")
+        self.manifest_dir = manifest_dir or (
+            Path.cwd() / "dist" / "compiled" / "manifests"
+        )
         self._loops: dict[str, LoopMetadata] = {}
 
         # Always use manifest-based discovery in v2

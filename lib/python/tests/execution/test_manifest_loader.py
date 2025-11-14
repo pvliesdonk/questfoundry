@@ -146,7 +146,9 @@ class TestManifestLoader:
 
         loader = ManifestLoader(tmp_path)
 
-        with pytest.raises(ValueError, match="Missing required field 'step_id' in step 0"):
+        with pytest.raises(
+            ValueError, match="Missing required field 'step_id' in step 0"
+        ):
             loader.load_manifest("test_playbook")
 
     def test_validate_step_invalid_roles(self, tmp_path, valid_manifest):
