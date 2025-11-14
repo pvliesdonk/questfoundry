@@ -16,6 +16,7 @@ QuestFoundry v2 introduces a major architectural change:
 ### 1. Loop Execution
 
 **v1 (Deprecated):**
+
 ```python
 from questfoundry.loops.lore_deepening import LoreDeepeningLoop
 
@@ -24,6 +25,7 @@ result = loop.execute()
 ```
 
 **v2 (New):**
+
 ```python
 from questfoundry.execution import PlaybookExecutor
 
@@ -45,6 +47,7 @@ result = executor.execute_full_loop(roles, artifacts, workspace, project_metadat
 ### 2. Loop Discovery
 
 **v1 (Deprecated):**
+
 ```python
 from questfoundry.loops.registry import LoopRegistry
 
@@ -57,6 +60,7 @@ loop = LoreDeepeningLoop(...)
 ```
 
 **v2 (New):**
+
 ```python
 from questfoundry.loops.registry import LoopRegistry
 
@@ -78,6 +82,7 @@ loops = registry.list_loops()
 Roles now support both v1 and v2 interfaces:
 
 **v1 (Still Supported):**
+
 ```python
 from questfoundry.roles.base import RoleContext
 
@@ -86,6 +91,7 @@ result = role.execute_task(context)
 ```
 
 **v2 (Preferred):**
+
 ```python
 from questfoundry.roles.base import RoleContext
 
@@ -108,10 +114,12 @@ result = role.execute_task(context)  # v1 (internally calls execute)
 ### 4. Resource Bundling
 
 **v1:**
+
 - Prompts bundled from `spec/05-prompts/`
 - No compilation step
 
 **v2:**
+
 - Behavior primitives compiled from `spec/05-behavior/`
 - Manifests generated at build time
 - Run `python scripts/bundle_resources.py` or `hatch run bundle`
@@ -241,6 +249,7 @@ v2 maintains compatibility during transition:
 **Error:** `FileNotFoundError: Manifest not found`
 
 **Solution:** Ensure manifests are compiled:
+
 ```bash
 python -m questfoundry.compiler.cli --spec-dir spec/ --output dist/compiled/
 ```
@@ -250,6 +259,7 @@ python -m questfoundry.compiler.cli --spec-dir spec/ --output dist/compiled/
 **Error:** Missing expertises or procedures
 
 **Solution:** Check that all referenced primitives exist:
+
 ```bash
 python -m questfoundry.compiler.cli --validate-only
 ```
@@ -261,6 +271,7 @@ Review validation output and ensure all `@expertise:`, `@procedure:`, and `@snip
 **Error:** `Manifest directory not found`
 
 **Solution:** Specify manifest directory explicitly:
+
 ```python
 executor = PlaybookExecutor(
     playbook_id="lore_deepening",

@@ -123,6 +123,7 @@ The **spec compiler** (`lib/python/src/questfoundry/compiler/`) assembles these 
 The **PlaybookExecutor** (`lib/python/src/questfoundry/execution/`) provides generic loop execution from manifests, replacing hardcoded loop classes.
 
 **Benefits:**
+
 - Single source of truth for role expertise and procedures
 - No N-way updates when logic changes
 - Validated cross-references prevent broken dependencies

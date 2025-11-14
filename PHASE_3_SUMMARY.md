@@ -13,6 +13,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ### 1. Generic Execution Engine (Task 3.1-3.2)
 
 #### PlaybookExecutor (`lib/python/src/questfoundry/execution/playbook_executor.py`)
+
 - Generic executor that works with any compiled playbook manifest
 - Replaces all hardcoded loop classes (e.g., `LoreDeepeningLoop`)
 - Features:
@@ -23,12 +24,14 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
   - Exposes RACI, quality bars, and source file metadata
 
 #### ManifestLoader (`lib/python/src/questfoundry/execution/manifest_loader.py`)
+
 - Loads and validates compiled manifest files
 - Caches manifests for performance
 - Validates manifest structure and version
 - Lists available playbooks
 
 #### Role Base Class Updates
+
 - Added `execute()` method for v2 compatibility
 - Maintains `execute_task()` for backward compatibility
 - Roles receive procedure content from manifests via context
@@ -36,6 +39,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ### 2. Manifest-Based Loop Registry (Task 3.3)
 
 #### Updated LoopRegistry (`lib/python/src/questfoundry/loops/registry.py`)
+
 - Discovers loops from compiled manifests (v2)
 - Falls back to hardcoded metadata (v1 compatibility)
 - New method: `get_executor(loop_id)` returns PlaybookExecutor
@@ -45,6 +49,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ### 3. Resource Bundling (Task 3.4)
 
 #### Updated Bundle Script (`lib/python/scripts/bundle_resources.py`)
+
 - Compiles behavior primitives using spec compiler
 - Bundles compiled manifests into package
 - Bundles standalone prompts
@@ -54,6 +59,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ### 4. Comprehensive Testing (Task 3.6)
 
 #### Test Coverage
+
 - **25 tests** for execution module
 - Tests for PlaybookExecutor:
   - Initialization with manifest path/ID
@@ -72,6 +78,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ### 5. Documentation Updates (Task 3.7)
 
 #### Updated Documentation
+
 - `README.md`:
   - Layer 5 renamed to "Behavior" (v2)
   - Added V2 Architecture section
@@ -89,6 +96,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ### 6. Version Bump (Task 3.9)
 
 #### Version 2.0.0
+
 - `lib/python/pyproject.toml`: 2.0.0
 - `lib/python/src/questfoundry/version.py`: 2.0.0
 - `spec/SPEC_VERSION.txt`: 2.0.0
@@ -101,12 +109,14 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 **Decision:** Keep v1 code for backward compatibility during transition
 
 **Rationale:**
+
 - Allows gradual migration for existing users
 - Both v1 and v2 can coexist
 - Lower risk of breaking existing deployments
 - Can be removed in future cleanup when v2 is fully validated
 
 **What remains:**
+
 - `spec/05-prompts/` (legacy prompts)
 - Hardcoded loop classes (deprecated but functional)
 - Old tests for hardcoded loops
@@ -116,12 +126,14 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 **Decision:** Not required for core functionality
 
 **Rationale:**
+
 - Compilation validation works via manual testing
 - CI addition can be done in future PR
 - Not blocking for Phase 3 completion
 - Tests validate execution infrastructure adequately
 
 **Recommendation:** Add later if automated validation needed:
+
 ```yaml
 - name: Validate spec compilation
   run: python -m questfoundry.compiler.cli --validate-only
@@ -149,6 +161,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ## Verification
 
 ### Imports Work
+
 ```python
 ✓ PlaybookExecutor imported successfully
 ✓ ManifestLoader imported successfully
@@ -157,11 +170,13 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 ```
 
 ### Tests Pass
+
 ```
 25 passed in 0.08s
 ```
 
 ### Resource Bundling Works
+
 ```
 ✅ Resource bundling completed successfully!
    Schemas: [path]/schemas
@@ -174,6 +189,7 @@ Implement Phase 3 of the v1 → v2 migration: Replace hardcoded loop classes wit
 Users can migrate gradually:
 
 **Option 1: Use v2 immediately**
+
 ```python
 from questfoundry.execution import PlaybookExecutor
 executor = PlaybookExecutor(playbook_id="lore_deepening")
@@ -181,6 +197,7 @@ results = executor.execute_full_loop(roles)
 ```
 
 **Option 2: Continue with v1 (deprecated)**
+
 ```python
 from questfoundry.loops.lore_deepening import LoreDeepeningLoop
 loop = LoreDeepeningLoop(...)
@@ -217,6 +234,7 @@ From MIGRATION_V1_TO_V2.md Phase 3:
 ## Next Steps (Future Work)
 
 Optional cleanup tasks:
+
 1. Add CI/CD compilation validation step
 2. Archive v1 code with git tag
 3. Delete deprecated loop classes
@@ -228,6 +246,7 @@ These are not required for Phase 3 completion but can improve maintainability.
 ## Files Changed
 
 **New Files:**
+
 - `lib/python/src/questfoundry/execution/__init__.py`
 - `lib/python/src/questfoundry/execution/playbook_executor.py`
 - `lib/python/src/questfoundry/execution/manifest_loader.py`
@@ -238,6 +257,7 @@ These are not required for Phase 3 completion but can improve maintainability.
 - `MIGRATION_V1_TO_V2_USER_GUIDE.md`
 
 **Modified Files:**
+
 - `lib/python/src/questfoundry/roles/base.py`
 - `lib/python/src/questfoundry/loops/registry.py`
 - `lib/python/scripts/bundle_resources.py`
