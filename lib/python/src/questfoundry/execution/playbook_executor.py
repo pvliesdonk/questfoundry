@@ -130,8 +130,9 @@ class PlaybookExecutor:
         # Execute via role
         result = primary_role.execute(role_context)
 
-        # Store result for subsequent steps
-        self.step_results[step_id] = result
+        # Store result for subsequent steps only if successful
+        if result.success:
+            self.step_results[step_id] = result
 
         # Validate output artifacts if required
         if step.get("validation_required", True):
@@ -172,8 +173,8 @@ class PlaybookExecutor:
                 )
                 results[step_id] = result
 
-                # Update artifacts with outputs from this step
-                if result.artifacts:
+                # Update artifacts with outputs from this step only if successful
+                if result.success and result.artifacts:
                     if artifacts is None:
                         artifacts = []
                     artifacts.extend(result.artifacts)
@@ -243,7 +244,7 @@ class PlaybookExecutor:
         return self.manifest.get("raci", {})
 
     def get_quality_bars(self) -> list[str]:
-        """Get quality bars pressed by this playbook.
+        """Get quality bars assessed by this playbook.
 
         Returns:
             List of quality bar names

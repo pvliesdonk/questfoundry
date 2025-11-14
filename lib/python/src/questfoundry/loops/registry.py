@@ -132,12 +132,13 @@ class LoopRegistry:
 
                 # Extract other metadata
                 steps = manifest.get("steps", [])
+                # Preserve artifact ordering while removing duplicates
                 output_artifacts = list(
-                    {
+                    dict.fromkeys(
                         artifact
                         for step in steps
                         for artifact in step.get("artifacts_output", [])
-                    }
+                    )
                 )
 
                 # Create LoopMetadata
