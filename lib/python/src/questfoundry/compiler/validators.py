@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from questfoundry.compiler.spec_compiler import BehaviorPrimitive
+from questfoundry.compiler.types import BehaviorPrimitive
 
 
 class ReferenceValidator:
@@ -185,27 +185,17 @@ class ReferenceValidator:
         """
         warnings = []
 
-        # Build set of all referenced primitives
+        # Build set of all primitives referenced by playbooks and adapters
         referenced: set[str] = set()
         for primitive in self.primitives.values():
-            # Only playbooks and adapters are "root" artifacts
-            if primitive.type in ["playbook", "adapter"]:
-                continue
-
-            for ref_type, ref_list in primitive.references.items():
-                if ref_type in ["expertise", "procedure", "snippet"]:
-                    for ref_id in ref_list:
-                        referenced.add(f"{ref_type}:{ref_id}")
-
-        # Also check what playbooks and adapters reference
-        for primitive in self.primitives.values():
+            # Only count references from playbooks and adapters
             if primitive.type in ["playbook", "adapter"]:
                 for ref_type, ref_list in primitive.references.items():
                     if ref_type in ["expertise", "procedure", "snippet"]:
                         for ref_id in ref_list:
                             referenced.add(f"{ref_type}:{ref_id}")
 
-        # Find orphans
+        # Find orphans (non-root primitives not referenced by roots)
         for prim_key, primitive in self.primitives.items():
             # Skip playbooks and adapters (they are roots)
             if primitive.type in ["playbook", "adapter"]:

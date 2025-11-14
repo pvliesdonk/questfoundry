@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from questfoundry.compiler.spec_compiler import BehaviorPrimitive, CompilationError
+from questfoundry.compiler.types import BehaviorPrimitive, CompilationError
 
 
 class ReferenceResolver:
@@ -19,6 +19,10 @@ class ReferenceResolver:
         self.primitives = primitives
         self.spec_root = Path(spec_root)
         self.reference_pattern = re.compile(r"@(\w+):([a-z_0-9]+)(?:#([a-z_0-9-]+))?")
+        # Pre-compile section extraction pattern (## heading only, not deeper levels)
+        self._section_pattern_template = (
+            r"## [^#\n]*{section_id}[^#\n]*\n(.*?)(?=\n## |\Z)"
+        )
 
     def resolve_reference(self, ref: str, inline_content: bool = True) -> str:
         """Resolve a single reference.
@@ -92,9 +96,9 @@ class ReferenceResolver:
         Raises:
             CompilationError: If section not found
         """
-        # Look for heading with matching ID
+        # Look for heading with matching ID (## level only for precision)
         # Support both "## Step 1" and "## step1" formats
-        pattern = rf"##+ [^#\n]*{section_id}[^#\n]*\n(.*?)(?=\n##+ |\Z)"
+        pattern = self._section_pattern_template.format(section_id=section_id)
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
 
         if not match:
@@ -102,18 +106,22 @@ class ReferenceResolver:
 
         return match.group(1).strip()
 
-    def assemble_procedure_content(self, procedure_id: str) -> str:
-        """Assemble complete procedure markdown by resolving references.
+    def assemble_primitive_content(self, prim_type: str, prim_id: str) -> str:
+        """Assemble complete primitive markdown by resolving references.
 
         Args:
-            procedure_id: ID of procedure to assemble
+            prim_type: Type of primitive ('expertise', 'procedure', etc.)
+            prim_id: ID of primitive to assemble
 
         Returns:
             Assembled markdown content
+
+        Raises:
+            CompilationError: If primitive not found
         """
-        primitive = self.primitives.get(f"procedure:{procedure_id}")
+        primitive = self.primitives.get(f"{prim_type}:{prim_id}")
         if not primitive:
-            raise CompilationError(f"Procedure not found: {procedure_id}")
+            raise CompilationError(f"{prim_type.capitalize()} not found: {prim_id}")
 
         content = primitive.content
 
@@ -124,32 +132,6 @@ class ReferenceResolver:
                 return self.resolve_reference(ref, inline_content=True)
             except CompilationError:
                 # If resolution fails, keep the reference as-is
-                return ref
-
-        assembled = self.reference_pattern.sub(replace_ref, content)
-        return assembled
-
-    def assemble_expertise_content(self, expertise_id: str) -> str:
-        """Assemble complete expertise markdown.
-
-        Args:
-            expertise_id: ID of expertise to assemble
-
-        Returns:
-            Assembled markdown content
-        """
-        primitive = self.primitives.get(f"expertise:{expertise_id}")
-        if not primitive:
-            raise CompilationError(f"Expertise not found: {expertise_id}")
-
-        content = primitive.content
-
-        # Resolve all embedded references
-        def replace_ref(match: re.Match[str]) -> str:
-            ref = match.group(0)
-            try:
-                return self.resolve_reference(ref, inline_content=True)
-            except CompilationError:
                 return ref
 
         assembled = self.reference_pattern.sub(replace_ref, content)

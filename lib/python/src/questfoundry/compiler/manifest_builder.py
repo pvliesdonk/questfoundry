@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from questfoundry.compiler.assemblers import ReferenceResolver
-from questfoundry.compiler.spec_compiler import BehaviorPrimitive, CompilationError
+from questfoundry.compiler.types import BehaviorPrimitive, CompilationError
 
 
 class ManifestBuilder:
@@ -24,6 +24,27 @@ class ManifestBuilder:
         self.primitives = primitives
         self.resolver = resolver
 
+    def _collect_source_files(self, primitive: BehaviorPrimitive) -> list[str]:
+        """Collect source files from primitive and its references.
+
+        Args:
+            primitive: Primitive to collect sources from
+
+        Returns:
+            List of source file paths
+        """
+        source_files = [str(primitive.source_path)]
+
+        # Collect source files from referenced primitives
+        for ref_type, ref_list in primitive.references.items():
+            if ref_type in ["expertise", "procedure", "snippet"]:
+                for ref_id in ref_list:
+                    prim = self.primitives.get(f"{ref_type}:{ref_id}")
+                    if prim and prim.source_path:
+                        source_files.append(str(prim.source_path))
+
+        return source_files
+
     def build_playbook_manifest(self, playbook_id: str) -> dict[str, Any]:
         """Build JSON manifest for a playbook.
 
@@ -41,15 +62,7 @@ class ManifestBuilder:
             raise CompilationError(f"Playbook not found: {playbook_id}")
 
         data = playbook.metadata
-        source_files = [str(playbook.source_path)]
-
-        # Collect source files from referenced primitives
-        for ref_type, ref_list in playbook.references.items():
-            if ref_type in ["expertise", "procedure", "snippet"]:
-                for ref_id in ref_list:
-                    prim = self.primitives.get(f"{ref_type}:{ref_id}")
-                    if prim and prim.source_path:
-                        source_files.append(str(prim.source_path))
+        source_files = self._collect_source_files(playbook)
 
         # Build manifest
         manifest: dict[str, Any] = {
@@ -87,10 +100,11 @@ class ManifestBuilder:
 
         # Add quality bars
         if "quality_bars" in data:
-            if "primary" in data["quality_bars"]:
-                manifest["quality_bars"] = data["quality_bars"]["primary"]
+            quality_bars = data["quality_bars"]
+            if isinstance(quality_bars, dict) and "primary" in quality_bars:
+                manifest["quality_bars"] = quality_bars["primary"]
             else:
-                manifest["quality_bars"] = data["quality_bars"]
+                manifest["quality_bars"] = quality_bars
 
         # Add artifacts
         if "artifacts" in data:
@@ -116,8 +130,13 @@ class ManifestBuilder:
         if "name" not in step_data:
             return None
 
+        # Validate step ID exists
+        if "step" not in step_data:
+            step_name = step_data.get("name", "unknown")
+            raise CompilationError(f"Step missing required 'step' field: {step_name}")
+
         step: dict[str, Any] = {
-            "step_id": f"step_{step_data.get('step', 'unknown')}",
+            "step_id": f"step_{step_data['step']}",
             "name": step_data["name"],
             "description": step_data.get("action", step_data["name"]),
         }
@@ -196,15 +215,7 @@ class ManifestBuilder:
             raise CompilationError(f"Adapter not found: {adapter_id}")
 
         data = adapter.metadata
-        source_files = [str(adapter.source_path)]
-
-        # Collect source files from referenced primitives
-        for ref_type, ref_list in adapter.references.items():
-            if ref_type in ["expertise", "procedure", "snippet"]:
-                for ref_id in ref_list:
-                    prim = self.primitives.get(f"{ref_type}:{ref_id}")
-                    if prim and prim.source_path:
-                        source_files.append(str(prim.source_path))
+        source_files = self._collect_source_files(adapter)
 
         # Build manifest
         manifest: dict[str, Any] = {

@@ -3,30 +3,45 @@
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from questfoundry.compiler.types import BehaviorPrimitive, CompilationError
 
-class CompilationError(Exception):
-    """Raised when compilation fails."""
+if TYPE_CHECKING:
+    from questfoundry.compiler.assemblers import (
+        ReferenceResolver,
+        StandalonePromptAssembler,
+    )
+    from questfoundry.compiler.manifest_builder import ManifestBuilder
+    from questfoundry.compiler.validators import ReferenceValidator
 
-    pass
 
+# Import these after types to avoid circular dependency
+# Import at module level for proper PEP 8 compliance
+def _import_helpers() -> tuple[
+    type["ReferenceResolver"],
+    type["StandalonePromptAssembler"],
+    type["ManifestBuilder"],
+    type["ReferenceValidator"],
+]:
+    """Lazy import helpers to break circular dependency."""
+    from questfoundry.compiler.assemblers import (
+        ReferenceResolver,
+        StandalonePromptAssembler,
+    )
+    from questfoundry.compiler.manifest_builder import ManifestBuilder
+    from questfoundry.compiler.validators import ReferenceValidator
 
-@dataclass
-class BehaviorPrimitive:
-    """Base class for atomic behavior components."""
-
-    id: str
-    type: str  # 'expertise', 'procedure', 'snippet', 'playbook', 'adapter'
-    content: str
-    metadata: dict[str, Any]
-    references: dict[str, list[str]] = field(default_factory=dict)
-    source_path: Path | None = None
+    return (
+        ReferenceResolver,
+        StandalonePromptAssembler,
+        ManifestBuilder,
+        ReferenceValidator,
+    )
 
 
 class SpecCompiler:
@@ -145,7 +160,8 @@ class SpecCompiler:
 
                 # Extract ID from data or filename
                 prim_id = data.get(
-                    f"{prim_type}_id", yaml_file.stem.replace(f".{prim_type}", "")
+                    f"{prim_type}_id",
+                    yaml_file.stem.removesuffix(f".{prim_type}"),
                 )
 
                 # Extract references
@@ -313,63 +329,13 @@ class SpecCompiler:
 
     def _extract_ref_ids(self, ref_list: list[str]) -> list[str]:
         """Extract IDs from reference strings like '@type:id'."""
-        ids = []
+        ids = set()
         for ref in ref_list:
             if isinstance(ref, str):
                 match = self.reference_pattern.match(ref)
                 if match:
-                    ids.append(match.group(2))
-        return ids
-
-    def validate_references(self) -> list[str]:
-        """Validate all cross-references resolve correctly.
-
-        Returns:
-            List of validation error messages (empty if all valid)
-        """
-        errors = []
-
-        for prim_key, primitive in self.primitives.items():
-            for ref_type, ref_list in primitive.references.items():
-                for ref_id in ref_list:
-                    # Special handling for schema and role references
-                    if ref_type in ["schema", "role"]:
-                        if not self._validate_layer_reference(ref_type, ref_id):
-                            errors.append(
-                                f"{prim_key}: Invalid {ref_type} reference '{ref_id}'"
-                            )
-                    else:
-                        # Behavior primitive reference
-                        ref_key = f"{ref_type}:{ref_id}"
-                        if ref_key not in self.primitives:
-                            errors.append(
-                                f"{prim_key}: Invalid {ref_type} reference '{ref_id}' "
-                                f"(expected file: {ref_type}s/{ref_id}.md or .yaml)"
-                            )
-
-        return errors
-
-    def _validate_layer_reference(self, ref_type: str, ref_id: str) -> bool:
-        """Validate references to other layers (schemas, roles).
-
-        Args:
-            ref_type: Type of reference ('schema', 'role')
-            ref_id: ID being referenced
-
-        Returns:
-            True if reference is valid, False otherwise
-        """
-        if ref_type == "schema":
-            # Check if schema file exists
-            schema_path = self.spec_root / "03-schemas" / ref_id
-            return schema_path.exists()
-
-        if ref_type == "role":
-            # Check if role charter exists
-            role_path = self.spec_root / "01-roles" / "charters" / f"{ref_id}.md"
-            return role_path.exists()
-
-        return False
+                    ids.add(match.group(2))
+        return list(ids)
 
     def get_primitive(self, ref_type: str, ref_id: str) -> BehaviorPrimitive | None:
         """Get a primitive by type and ID.
@@ -384,6 +350,118 @@ class SpecCompiler:
         key = f"{ref_type}:{ref_id}"
         return self.primitives.get(key)
 
+    def compile_playbook(self, playbook_id: str, output_dir: Path) -> dict[str, Any]:
+        """Compile a specific playbook.
+
+        Args:
+            playbook_id: ID of the playbook to compile
+            output_dir: Directory for compiled output
+
+        Returns:
+            Compilation result with file paths
+
+        Raises:
+            CompilationError: If compilation fails
+        """
+        # Ensure primitives are loaded
+        if not self.primitives:
+            self.load_all_primitives()
+
+        # Import helpers
+        ReferenceResolver, _, ManifestBuilder, ReferenceValidator = _import_helpers()
+
+        # Validate
+        validator = ReferenceValidator(self.primitives, self.spec_root)
+        errors = validator.validate_all()
+        if errors:
+            actual_errors = [e for e in errors if not e.startswith("Warning:")]
+            if actual_errors:
+                error_msg = "\n".join(actual_errors)
+                raise CompilationError(f"Validation failed:\n{error_msg}")
+
+        output_dir = Path(output_dir)
+        manifest_dir = output_dir / "manifests"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize helpers
+        resolver = ReferenceResolver(self.primitives, self.spec_root)
+        manifest_builder = ManifestBuilder(self.primitives, resolver)
+
+        # Build manifest
+        manifest = manifest_builder.build_playbook_manifest(playbook_id)
+        output_path = manifest_dir / f"{playbook_id}.manifest.json"
+        output_path.write_text(json.dumps(manifest, indent=2))
+
+        return {
+            "playbook_id": playbook_id,
+            "manifest_path": str(output_path),
+            "compiled_at": manifest["compiled_at"],
+        }
+
+    def compile_adapter(self, adapter_id: str, output_dir: Path) -> dict[str, Any]:
+        """Compile a specific adapter (role).
+
+        Args:
+            adapter_id: ID of the adapter to compile
+            output_dir: Directory for compiled output
+
+        Returns:
+            Compilation result with file paths
+
+        Raises:
+            CompilationError: If compilation fails
+        """
+        # Ensure primitives are loaded
+        if not self.primitives:
+            self.load_all_primitives()
+
+        # Import helpers
+        (
+            ReferenceResolver,
+            StandalonePromptAssembler,
+            ManifestBuilder,
+            ReferenceValidator,
+        ) = _import_helpers()
+
+        # Validate
+        validator = ReferenceValidator(self.primitives, self.spec_root)
+        errors = validator.validate_all()
+        if errors:
+            actual_errors = [e for e in errors if not e.startswith("Warning:")]
+            if actual_errors:
+                error_msg = "\n".join(actual_errors)
+                raise CompilationError(f"Validation failed:\n{error_msg}")
+
+        output_dir = Path(output_dir)
+        manifest_dir = output_dir / "manifests"
+        prompt_dir = output_dir / "standalone_prompts"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize helpers
+        resolver = ReferenceResolver(self.primitives, self.spec_root)
+        manifest_builder = ManifestBuilder(self.primitives, resolver)
+        prompt_assembler = StandalonePromptAssembler(
+            self.primitives, resolver, self.spec_root
+        )
+
+        # Build manifest
+        manifest = manifest_builder.build_adapter_manifest(adapter_id)
+        manifest_path = manifest_dir / f"{adapter_id}.adapter.manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        # Build standalone prompt
+        prompt = prompt_assembler.assemble_role_prompt(adapter_id)
+        prompt_path = prompt_dir / f"{adapter_id}_full.md"
+        prompt_path.write_text(prompt)
+
+        return {
+            "adapter_id": adapter_id,
+            "manifest_path": str(manifest_path),
+            "prompt_path": str(prompt_path),
+            "compiled_at": manifest["compiled_at"],
+        }
+
     def compile_all(self, output_dir: Path) -> dict[str, Any]:
         """Run full compilation pipeline.
 
@@ -396,17 +474,18 @@ class SpecCompiler:
         Raises:
             CompilationError: If compilation fails
         """
-        from questfoundry.compiler.assemblers import (
-            ReferenceResolver,
-            StandalonePromptAssembler,
-        )
-        from questfoundry.compiler.manifest_builder import ManifestBuilder
-        from questfoundry.compiler.validators import ReferenceValidator
-
         output_dir = Path(output_dir)
 
         # Step 1: Load all primitives
         self.load_all_primitives()
+
+        # Import helpers
+        (
+            ReferenceResolver,
+            StandalonePromptAssembler,
+            ManifestBuilder,
+            ReferenceValidator,
+        ) = _import_helpers()
 
         # Step 2: Validate references
         validator = ReferenceValidator(self.primitives, self.spec_root)

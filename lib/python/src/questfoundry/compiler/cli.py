@@ -142,53 +142,20 @@ Examples:
         # Compile
         if args.playbook or args.adapter:
             # Compile specific artifact
-            from questfoundry.compiler.assemblers import (
-                ReferenceResolver,
-                StandalonePromptAssembler,
-            )
-            from questfoundry.compiler.manifest_builder import ManifestBuilder
-
-            resolver = ReferenceResolver(compiler.primitives, compiler.spec_root)
-            manifest_builder = ManifestBuilder(compiler.primitives, resolver)
-            prompt_assembler = StandalonePromptAssembler(
-                compiler.primitives, resolver, compiler.spec_root
-            )
-
-            # Create output directories
-            manifest_dir = args.output / "manifests"
-            prompt_dir = args.output / "standalone_prompts"
-            manifest_dir.mkdir(parents=True, exist_ok=True)
-            prompt_dir.mkdir(parents=True, exist_ok=True)
-
             if args.playbook:
                 if args.verbose:
                     print(f"Compiling playbook: {args.playbook}")
-                manifest = manifest_builder.build_playbook_manifest(args.playbook)
-                output_path = manifest_dir / f"{args.playbook}.manifest.json"
 
-                import json
-
-                output_path.write_text(json.dumps(manifest, indent=2))
-                print(f"✅ Generated: {output_path}")
+                result = compiler.compile_playbook(args.playbook, args.output)
+                print(f"✅ Generated: {result['manifest_path']}")
 
             if args.adapter:
                 if args.verbose:
                     print(f"Compiling adapter: {args.adapter}")
 
-                # Generate manifest
-                manifest = manifest_builder.build_adapter_manifest(args.adapter)
-                manifest_path = manifest_dir / f"{args.adapter}.adapter.manifest.json"
-
-                import json
-
-                manifest_path.write_text(json.dumps(manifest, indent=2))
-                print(f"✅ Generated: {manifest_path}")
-
-                # Generate standalone prompt
-                prompt = prompt_assembler.assemble_role_prompt(args.adapter)
-                prompt_path = prompt_dir / f"{args.adapter}_full.md"
-                prompt_path.write_text(prompt)
-                print(f"✅ Generated: {prompt_path}")
+                result = compiler.compile_adapter(args.adapter, args.output)
+                print(f"✅ Generated: {result['manifest_path']}")
+                print(f"✅ Generated: {result['prompt_path']}")
 
         else:
             # Compile all
