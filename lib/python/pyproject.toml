@@ -69,6 +69,9 @@ Documentation = "https://github.com/pvliesdonk/questfoundry-spec"
 Specification = "https://github.com/pvliesdonk/questfoundry-spec"
 Schemas = "https://questfoundry.liesdonk.nl/schemas/"
 
+[project.scripts]
+qf-compile = "questfoundry.compiler.cli:main"
+
 [tool.hatch.envs.default.scripts]
 bundle = "python scripts/bundle_resources.py"
 test = "pytest {args:tests}"
