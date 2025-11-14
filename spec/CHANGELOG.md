@@ -1,3 +1,48 @@
+## spec-v0.7.0 (2025-11-14)
+
+### Feat
+
+- **phase3**: version bump to 2.0.0 with migration guide
+- **phase3**: update resource bundling for v2 architecture
+- **phase3**: implement PlaybookExecutor and manifest-based loop registry
+- **phase2**: add manifest JSON schemas
+- **phase2**: add CLI entry point for spec compiler
+- **phase2**: implement spec compiler core
+- **behavior**: add cross-reference validation script
+- **behavior**: complete snippet extraction (29 total)
+- **behavior**: complete procedure extraction (50 total)
+- **behavior**: extract Scene Smith and Plotwright procedures (batch 2)
+- **behavior**: extract art and audio procedures (batch 1)
+- **behavior**: extract art and audio procedures (batch 1)
+- **behavior**: convert final 4 playbooks to YAML
+- **behavior**: convert playbooks 7-9 to YAML
+- **behavior**: convert playbooks 4-6 to YAML
+- **behavior**: convert first 3 playbooks to YAML
+- **behavior**: convert all 15 role adapters to YAML
+- **behavior**: add core reusable snippets
+- **behavior**: add coordination and interaction procedures
+- **behavior**: add quality and canon procedures
+- **behavior**: add core validation and workflow procedures
+- **behavior**: extract asset and support role expertises
+- **behavior**: extract export, verification, performance expertises
+- **behavior**: extract topology, publication, voice expertises
+- **behavior**: extract core role expertises
+- **behavior**: create Layer 5 v2 architecture foundation
+- **migration**: add comprehensive v1 to v2 migration instructions
+
+### Fix
+
+- **lib/python**: bump version to 0.6.0
+- **lib**: set version to 0.2.0 and dedupe resources
+- **lib**: stabilize manifest runtime
+- **phase3**: address code review feedback
+- **phase2**: address linting and test issues
+
+### Refactor
+
+- **phase3**: remove v1 deprecated code (backed up in v1-archive tag)
+- **compiler**: address PR #4 code review comments
+
 ## spec-v0.6.0 (2025-11-14)
 
 ### Fix
