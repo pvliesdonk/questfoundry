@@ -59,6 +59,7 @@ Analyze canon for content that must not reach players.
    - Role assignments
 
 **Actions:**
+
 1. Read canon thoroughly
 2. Highlight spoiler content
 3. Identify player-facing facts (safe to reveal)
@@ -69,6 +70,7 @@ Analyze canon for content that must not reach players.
 > "Kestrel's jaw scar from failed guild assassination attempt. Attack ordered by Guildmaster Thane after Kestrel discovered embezzlement. Executed by her former partner Mira. Kestrel survived but was exiled, leading to current mercenary status. Thane still leads guild, Mira is guild enforcer, both believe Kestrel dead."
 
 **Spoilers identified:**
+
 - Why: embezzlement discovery
 - Who ordered: Guildmaster Thane
 - Who executed: Mira (her partner)
@@ -99,6 +101,7 @@ Identify what players CAN know without spoiling.
    - Codex entries already unlocked
 
 **Actions:**
+
 1. Extract observable facts from canon
 2. Separate earned vs unearned knowledge
 3. Note unlock conditions for staged reveals
@@ -106,11 +109,13 @@ Identify what players CAN know without spoiling.
 **Example from canon above:**
 
 **Player-safe facts:**
+
 - Kestrel has a jaw scar (observable)
 - She is a mercenary (public role)
 - Origin of scar is mysterious/unknown (implied)
 
 **Not player-safe:**
+
 - Guild assassination attempt
 - Embezzlement discovery
 - Thane/Mira's roles
@@ -125,6 +130,7 @@ Transform spoiler content into safe phrasings.
 Replace specific details with general statements.
 
 **Example:**
+
 - Canon: "Scar from assassination attempt by her former partner Mira"
 - Safe: "Scar from a violent encounter in her past"
 
@@ -133,6 +139,7 @@ Replace specific details with general statements.
 Acknowledge unknown without revealing.
 
 **Example:**
+
 - Canon: "Exiled from guild for discovering embezzlement"
 - Safe: "Left her former life under mysterious circumstances"
 
@@ -141,6 +148,7 @@ Acknowledge unknown without revealing.
 Describe what player can see, not causes.
 
 **Example:**
+
 - Canon: "Distrusts guild members due to betrayal"
 - Safe: "Notably wary around mention of guilds"
 
@@ -149,6 +157,7 @@ Describe what player can see, not causes.
 Avoid loaded words that imply hidden information.
 
 **Example:**
+
 - Spoilery: "betrayal", "assassination", "conspiracy"
 - Neutral: "incident", "past", "history"
 
@@ -157,6 +166,7 @@ Avoid loaded words that imply hidden information.
 Compose codex-ready summary using redaction techniques.
 
 **Guidelines:**
+
 - **Brevity:** Concise, 1-3 paragraphs
 - **In-world voice:** Match style guide register
 - **No meta language:** Avoid system terminology
@@ -169,6 +179,7 @@ Compose codex-ready summary using redaction techniques.
 > "Kestrel bears a distinctive scar along her jawline, a mark from events she rarely discusses. Once affiliated with a professional organization in the city, she now works independently as a mercenary for hire. Those who know her note a certain wariness in her demeanor, particularly regarding matters of trust and loyalty."
 
 **Comparison to canon:**
+
 - ✅ Mentions scar (observable)
 - ✅ Hints at past (mysterious)
 - ✅ States mercenary role (public)
@@ -229,21 +240,25 @@ unlock_conditions:
 Create staged disclosure for complex entries.
 
 **Stage 0: Title Only**
+
 - Teaser entry
 - Minimal info
 - Piques curiosity
 
 **Stage 1: Brief Summary**
+
 - Basic facts
 - Observable details
 - No spoilers
 
 **Stage 2: Extended Entry**
+
 - Deeper context
 - Some backstory
 - Still player-safe
 
 **Stage 3+: Full Details**
+
 - After story reveals
 - Canon now safe to show
 - Complete information
@@ -267,6 +282,7 @@ Create staged disclosure for complex entries.
 Double-check summary against spoiler criteria.
 
 **Safety checklist:**
+
 - [ ] No plot twists revealed prematurely
 - [ ] No hidden motivations exposed
 - [ ] No future events spoiled
@@ -297,6 +313,7 @@ Provide summary and unlock specs.
 ```
 
 **Codex Curator responsibilities:**
+
 - Create codex entry from summary
 - Apply unlock conditions
 - Maintain crosslinks
@@ -309,6 +326,7 @@ Provide summary and unlock specs.
 **Mistake:** Including too much detail
 
 **Example:**
+
 - Too revealing: "Kestrel discovered embezzlement and was targeted"
 - Safe: "Kestrel left her previous organization under unclear circumstances"
 
@@ -317,6 +335,7 @@ Provide summary and unlock specs.
 **Mistake:** Using system terminology
 
 **Example:**
+
 - Meta: "Unlocks after player reaches trust threshold"
 - Diegetic: "Known to those who earn her confidence"
 
@@ -325,6 +344,7 @@ Provide summary and unlock specs.
 **Mistake:** Redacting so much nothing remains
 
 **Example:**
+
 - Too vague: "Kestrel exists"
 - Better: "Kestrel is a mercenary with a mysterious past"
 
@@ -335,22 +355,26 @@ Provide summary and unlock specs.
 **Mistake:** Not matching style guide
 
 **Example:**
+
 - Wrong register: "Kestrel is a badass merc with a sick scar"
 - Correct register: "Kestrel is a skilled mercenary bearing a distinctive scar"
 
 ## Escalation
 
 **Ask Human:**
+
 - Borderline spoiler classification
 - Trade-off between clarity and mystery
 - Unlock timing for sensitive info
 
 **Coordinate with Lore Weaver:**
+
 - Canon verification
 - Spoiler boundary clarification
 - Progressive reveal staging
 
 **Coordinate with Style Lead:**
+
 - Register appropriateness
 - Voice consistency
 - Diegetic phrasing

@@ -27,12 +27,14 @@ Maintain strict separation between spoiler-level content (Hot) and player-safe s
 **Rule:** Player Narrator receives ONLY Cold snapshot content.
 
 **Enforcement:**
+
 - If receiver is PN, envelope MUST have:
   - `context.hot_cold = "cold"`
   - `context.snapshot` present
   - `safety.player_safe = true`
 
 **Violation handling:**
+
 - Reject message with `error(business_rule_violation)`
 - Report violation to Showrunner
 - DO NOT deliver content to PN
@@ -40,6 +42,7 @@ Maintain strict separation between spoiler-level content (Hot) and player-safe s
 ### No Internal Logic in Player Text
 
 **Forbidden in player-facing surfaces:**
+
 - State variables (e.g., `flag_kestrel_betrayal`)
 - Gateway logic (e.g., `if state.dock_access == true`)
 - Codewords or meta terminology
@@ -48,6 +51,7 @@ Maintain strict separation between spoiler-level content (Hot) and player-safe s
 - Authoring notes or development context
 
 **Allowed in player surfaces:**
+
 - Diegetic descriptions
 - Character dialogue
 - In-world observations
@@ -59,6 +63,7 @@ Maintain strict separation between spoiler-level content (Hot) and player-safe s
 Classify your content as Hot or Cold.
 
 **Hot (spoiler-level, discovery workspace):**
+
 - Canon Packs with full backstory and twists
 - Internal notes and development context
 - Gateway implementation details
@@ -68,6 +73,7 @@ Classify your content as Hot or Cold.
 - Research memos with evidence
 
 **Cold (player-safe, curated canon):**
+
 - Published codex entries
 - Player-facing prose
 - Choice text
@@ -84,6 +90,7 @@ For each content type, apply appropriate filters.
 **Input:** Canon Pack with spoiler-level details
 
 **Filter:**
+
 1. Extract player-facing facts only
 2. Redact spoilers, twists, secret allegiances
 3. Remove internal mechanics and codewords
@@ -93,6 +100,7 @@ For each content type, apply appropriate filters.
 **Output:** Player-safe codex entry
 
 **Example:**
+
 - **Canon (Hot):** "Kestrel's jaw scar from failed assassination attempt by her own guild"
 - **Codex (Cold):** "Kestrel bears a distinctive jaw scar, origin unknown"
 
@@ -101,6 +109,7 @@ For each content type, apply appropriate filters.
 **Input:** Gateway condition (system level)
 
 **Filter:**
+
 1. Express in world-based terms
 2. Avoid meta language ("if flag", "requires stat")
 3. Make comprehensible through story
@@ -109,6 +118,7 @@ For each content type, apply appropriate filters.
 **Output:** Player-safe gateway text
 
 **Example:**
+
 - **System (Hot):** `if (player.has_item("foreman_seal"))`
 - **Diegetic (Cold):** "The guard eyes your dock pass. With the foreman's stamp, he waves you through."
 
@@ -117,6 +127,7 @@ For each content type, apply appropriate filters.
 **Input:** Choice options with consequences
 
 **Filter:**
+
 1. Use verb-first, action-oriented phrasing
 2. Don't preview outcomes
 3. Avoid meta language ("select", "option", "this will result in")
@@ -125,6 +136,7 @@ For each content type, apply appropriate filters.
 **Output:** Clean choice labels
 
 **Example:**
+
 - **Meta (forbidden):** "Choose option 1 to gain the key (recommended)"
 - **Diegetic (correct):** "Ask the guard about the locked door"
 
@@ -133,6 +145,7 @@ For each content type, apply appropriate filters.
 Before sending to Player Narrator, verify safety.
 
 **Checklist:**
+
 - [ ] Content is from Cold snapshot only
 - [ ] No Hot content referenced or leaked
 - [ ] No state variables visible in text
@@ -153,6 +166,7 @@ Specific checks for Presentation Bar compliance.
 ### Spoiler Leaks
 
 **Check for:**
+
 - Plot twists revealed too early
 - Character secrets exposed
 - Future events spoiled
@@ -164,6 +178,7 @@ Specific checks for Presentation Bar compliance.
 ### Internal Plumbing
 
 **Check for:**
+
 - State variables in narration
 - Gateway logic exposed
 - Determinism parameters visible
@@ -175,6 +190,7 @@ Specific checks for Presentation Bar compliance.
 ### Mechanical Exposure
 
 **Check for:**
+
 - Branching structure visible
 - RNG seeds or generation params
 - Provider model names
@@ -213,18 +229,21 @@ Convert system concepts to in-world language.
 Control when information becomes available.
 
 **Codex unlock conditions:**
+
 - After specific story beats
 - Upon discovering items or locations
 - Through character interactions
 - At major milestones
 
 **Progressive stages:**
+
 - Stage 0: Title only (teaser)
 - Stage 1: Brief summary
 - Stage 2: Extended details
 - Each stage player-safe
 
 **Never reveal:**
+
 - Future plot points
 - Unearned secrets
 - Hidden character motives (until reveal)
@@ -233,16 +252,19 @@ Control when information becomes available.
 ## Escalation
 
 **Report to Gatekeeper:**
+
 - Borderline spoiler classification
 - Unclear safety boundaries
 - Presentation Bar concerns
 
 **Report to Showrunner:**
+
 - Systemic spoiler leaks
 - Hot content in Cold detected
 - PN safety violation
 
 **Ask Human:**
+
 - Trade-offs between clarity and mystery
 - Ambiguous spoiler boundaries
 - Cultural sensitivity in localization

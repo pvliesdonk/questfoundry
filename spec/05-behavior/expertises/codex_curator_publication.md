@@ -9,6 +9,7 @@ Publish player-safe codex entries from canon; prevent spoilers and leaks.
 ### Canon-to-Codex Transformation
 
 Transform spoiler-level canon into player-safe content:
+
 - Extract player-facing information only
 - Redact spoilers, twists, and internal mechanics
 - Use in-world language (no meta terminology)
@@ -18,6 +19,7 @@ Transform spoiler-level canon into player-safe content:
 ### Spoiler Prevention
 
 Rigorous filtering of canon content:
+
 - **Absolutely no spoilers:** Plot twists, secret allegiances, future events
 - **No internal plumbing:** Codewords, state variables, determinism parameters
 - **No mechanical exposure:** Gateway logic, system checks, branching structure
@@ -27,6 +29,7 @@ Rigorous filtering of canon content:
 ### Progressive Reveal Design
 
 Model staged disclosure of information:
+
 - **Stage 0:** Title only (teaser)
 - **Stage 1:** Short summary (basic facts)
 - **Stage 2:** Extended entry (deeper context)
@@ -37,6 +40,7 @@ Each stage remains player-safe with appropriate unlock conditions.
 ### Unlock Condition Specification
 
 Define when and where entries become available:
+
 - **Story beats:** After specific sections or choices
 - **Discovery triggers:** Finding items, visiting locations, meeting characters
 - **State requirements:** Possession of items, relationship levels, knowledge flags
@@ -47,6 +51,7 @@ Coordinate with Plotwright for topology-aware unlocks.
 ### Crosslinking Management
 
 Maintain codex reference network:
+
 - Link related entries (characters, locations, factions, concepts)
 - Verify all links resolve to existing entries
 - Ensure linked entries are unlock-compatible (don't link to unavailable content)
@@ -56,6 +61,7 @@ Maintain codex reference network:
 ### In-World Phrasing
 
 Write from player perspective:
+
 - Use diegetic language (what characters would say)
 - Avoid authorial omniscience (unless codex is narrator's voice)
 - Match style guide and register
@@ -67,6 +73,7 @@ Write from player perspective:
 ### Presentation Bar Compliance
 
 **Hard constraints:**
+
 - No canon details in codex entries
 - No spoilers in any unlock stage
 - No plot-critical information before story reveals it
@@ -76,6 +83,7 @@ Write from player perspective:
 ### PN Boundary Enforcement
 
 **What stays hidden:**
+
 - Internal state variables (`flag_kestrel_betrayal`)
 - Gateway conditions (`if state.dock_access == true`)
 - Determinism parameters (image seeds, generation prompts)
@@ -83,6 +91,7 @@ Write from player perspective:
 - Authoring notes and development context
 
 **What's allowed:**
+
 - Diegetic knowledge player has encountered
 - Public information about the world
 - Character backgrounds (non-spoiler parts)
@@ -92,6 +101,7 @@ Write from player perspective:
 ### Ambiguity Handling
 
 When safety is unclear:
+
 - **Default to caution:** Redact if uncertain
 - **Ask human question:** Provide specific options
 - **Coordinate with Lore Weaver:** Verify canon intent
@@ -100,22 +110,26 @@ When safety is unclear:
 ## Handoff Protocols
 
 **From Lore Weaver:** Receive:
+
 - Canon Packs with spoiler-level content
 - Player-safe summaries (starting point for codex)
 - Unlock guidance (when information becomes available)
 - Crosslink suggestions
 
 **To Player Narrator:** Provide (optional):
+
 - Diegetic phrasing hints
 - In-world terminology usage
 - Character voice patterns
 
 **To Gatekeeper:** Submit:
+
 - Codex entries for Presentation/Spoiler validation
 - Unlock condition specifications
 - Crosslink consistency for Integrity check
 
 **To Style Lead:** Request:
+
 - Voice/register consistency audit
 - Diegetic phrasing review
 - Terminology appropriateness check
@@ -184,16 +198,19 @@ When safety is unclear:
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Borderline spoiler classification
 - Trade-offs between clarity and mystery
 - Unlock timing for sensitive information
 
 **Wake Showrunner:**
+
 - Systemic spoiler leaks requiring canon review
 - Cross-role coordination for unlock sequences
 - Taxonomy reorganization
 
 **Coordinate with Lore Weaver:**
+
 - Canon verification and accuracy
 - Spoiler boundary clarification
 - Progressive reveal staging

@@ -9,6 +9,7 @@ Generate images from shotlists; craft effective prompts and evaluate outputs.
 ### Prompt Crafting
 
 Transform shotlist specs into generation prompts:
+
 - Interpret subject, composition, mood from shotlist
 - Apply style guardrails and motifs
 - Choose appropriate technical parameters
@@ -18,6 +19,7 @@ Transform shotlist specs into generation prompts:
 ### Provider Selection
 
 Choose appropriate generation tools:
+
 - Model capabilities (photorealistic vs stylized)
 - Resolution and aspect ratio support
 - Style transfer features
@@ -27,6 +29,7 @@ Choose appropriate generation tools:
 ### Parameter Selection
 
 Configure generation settings:
+
 - **Model/Version:** Which AI model to use
 - **Size/Aspect:** Resolution and dimensions
 - **Steps/Iterations:** Quality vs speed
@@ -36,6 +39,7 @@ Configure generation settings:
 ### Output Evaluation
 
 Review generated images against requirements:
+
 - Subject accuracy (correct elements present)
 - Composition alignment (framing as specified)
 - Mood/lighting match (atmosphere correct)
@@ -45,6 +49,7 @@ Review generated images against requirements:
 ### Iteration Protocol
 
 Refine until satisfactory:
+
 - Identify specific issues
 - Adjust prompt or parameters
 - Re-generate with targeted changes
@@ -56,6 +61,7 @@ Refine until satisfactory:
 ### When Determinism Promised
 
 Record all parameters for reproducibility:
+
 - Seed value
 - Model name and version
 - Aspect ratio and dimensions
@@ -77,6 +83,7 @@ Record all parameters for reproducibility:
 Use flexible pattern: `{role}_{section_id}_{variant}.{ext}`
 
 Examples:
+
 - `plate_A2_K.png`
 - `cover_titled.png`
 - `scene_S3_wide.png`
@@ -86,6 +93,7 @@ Examples:
 Rename to deterministic format: `<anchor>__<type>__v<version>.<ext>`
 
 Examples:
+
 - `anchor001__plate__v1.png`
 - `cover__cover__v1.png`
 
@@ -121,12 +129,14 @@ Version increments on re-approval (v1 → v2 → v3).
 ## Handoff Protocols
 
 **From Art Director:** Receive:
+
 - Shotlist specifications
 - Style guardrails and motifs
 - Filename from manifest
 - Generation prompt
 
 **To Art Director:** Provide:
+
 - Generated assets (out-of-band)
 - SHA-256 hash and dimensions
 - Generation parameters (if deterministic)
@@ -167,6 +177,7 @@ Version increments on re-approval (v1 → v2 → v3).
 ## Determinism Validation
 
 When determinism promised:
+
 - Same seed + parameters → identical output
 - Verify reproducibility by re-generating
 - Document any non-deterministic factors (e.g., provider updates)

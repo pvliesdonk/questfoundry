@@ -9,6 +9,7 @@ Produce audio from cuelists; generate assets and log parameters.
 ### Cue Interpretation
 
 Transform cuelist specifications into audio:
+
 - **Type:** Music, SFX, voice production
 - **Mood:** Emotional tone and intensity
 - **Instrumentation:** Specific sounds or instruments
@@ -18,6 +19,7 @@ Transform cuelist specifications into audio:
 ### Provider Selection
 
 Choose appropriate audio generation tools:
+
 - **AI Audio:** For music and SFX generation
 - **Voice Synthesis:** For narration or dialogue
 - **DAW/Manual:** For custom composition
@@ -26,6 +28,7 @@ Choose appropriate audio generation tools:
 ### Render Parameters
 
 Configure generation settings:
+
 - **Model/Voice/Version:** Which AI model or voice to use
 - **Tempo:** Speed (BPM for music)
 - **Key:** Musical key signature
@@ -36,6 +39,7 @@ Configure generation settings:
 ### Quality Assessment
 
 Evaluate generated audio against requirements:
+
 - **Mood match:** Does it convey intended emotion?
 - **Clarity:** Clean audio, no artifacts
 - **Balance:** Proper levels and EQ
@@ -45,6 +49,7 @@ Evaluate generated audio against requirements:
 ### Iteration Protocol
 
 Refine until satisfactory:
+
 - Identify specific audio issues
 - Adjust parameters or prompt
 - Re-generate with targeted changes
@@ -56,6 +61,7 @@ Refine until satisfactory:
 ### When Determinism Promised
 
 Record all parameters for reproducibility:
+
 - Seeds or randomization settings
 - Model name and version
 - All generation parameters
@@ -94,18 +100,21 @@ Record all parameters for reproducibility:
 ## Handoff Protocols
 
 **From Audio Director:** Receive:
+
 - Cuelist specifications
 - Audio plan constraints
 - Mood and instrumentation guidance
 - Timing and transition requirements
 
 **To Audio Director:** Provide:
+
 - Generated audio assets (out-of-band)
 - Parameter logs (if deterministic)
 - Quality assessment notes
 - Issue flags (ambiguous cues, constraint conflicts)
 
 **To Book Binder / Player Narrator (via Audio Director):**
+
 - Placement and level guidance
 - Trigger specifications
 - Accessibility notes
@@ -160,6 +169,7 @@ Record all parameters for reproducibility:
 ## Validation
 
 Before handoff:
+
 - Play through entire cue
 - Check levels (not clipping)
 - Verify timing and duration

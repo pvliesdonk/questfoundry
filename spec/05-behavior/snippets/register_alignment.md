@@ -9,6 +9,7 @@ quality_bars: [style, accessibility]
 # Register Alignment
 
 ## Core Principle
+
 All player-facing content (prose, alt text, captions, codex) must maintain consistent register/tone as defined by Style Lead.
 
 ## What is Register?
@@ -16,11 +17,13 @@ All player-facing content (prose, alt text, captions, codex) must maintain consi
 **Register:** Formality level and diction choices
 
 Examples:
+
 - Formal: "Proceed to engineering via maintenance corridor"
 - Neutral: "Head to engineering through maintenance"
 - Informal: "Slip through maintenance, hit engineering"
 
 **For Cold (example: industrial noir):**
+
 - Register: Neutral to informal
 - Tone: Terse, mechanical, shadow-side
 - Rhythm: Short under pressure, longer in reflection
@@ -28,6 +31,7 @@ Examples:
 ## Register in Different Surfaces
 
 ### Manuscript Prose (Scene Smith)
+
 ```
 ✓ "The relay hum thrums through deck plates."
 (Terse, mechanical, fitting register)
@@ -37,6 +41,7 @@ Examples:
 ```
 
 ### Alt Text (Illustrator)
+
 ```
 ✓ "Frost patterns web the airlock glass"
 (Terse, concrete, fitting register)
@@ -46,6 +51,7 @@ Examples:
 ```
 
 ### Audio Captions (Audio Producer)
+
 ```
 ✓ "[Relay hum thrums through bulkheads]"
 (Mechanical, fitting register)
@@ -55,6 +61,7 @@ Examples:
 ```
 
 ### Codex Entries (Codex Curator)
+
 ```
 ✓ "Relay Hum: Constant mechanical sound from station power relays"
 (Neutral, informative, fitting register)
@@ -68,6 +75,7 @@ Examples:
 Use Curator-approved terms across ALL surfaces:
 
 **Approved term:** "union token"
+
 ```
 ✓ Prose: "Your union token gets you past the foreman"
 ✓ Alt text: "A union token lying on the desk"
@@ -76,6 +84,7 @@ Use Curator-approved terms across ALL surfaces:
 ```
 
 **Inconsistent (forbidden):**
+
 ```
 ❌ Prose: "union token"
 ❌ Alt text: "ID badge"
@@ -88,6 +97,7 @@ Each surface uses same approved term.
 ## Style Lead Responsibilities
 
 Define register in Style Addendum:
+
 ```yaml
 voice:
   perspective: "Close 3rd person present"
@@ -112,6 +122,7 @@ Provide to all content creators.
 ## Codex Curator Responsibilities
 
 Maintain terminology glossary:
+
 ```yaml
 term: "hex-key"
 definition: "Standard six-sided maintenance tool"
@@ -124,6 +135,7 @@ Supply to all roles for consistency.
 ## Illustrator Responsibilities
 
 Write alt text matching register:
+
 ```yaml
 style_register: "Neutral to informal, terse, industrial"
 
@@ -139,6 +151,7 @@ Coordinate with Style Lead if uncertain.
 ## Audio Producer Responsibilities
 
 Write captions matching register:
+
 ```yaml
 style_register: "Terse, mechanical, industrial"
 
@@ -154,6 +167,7 @@ Use Style motif kit (e.g., "relay hum", "PA crackle").
 ## Translator Responsibilities
 
 Maintain register in target language:
+
 ```yaml
 source_register: "Neutral to informal"
 target_language: es
@@ -171,18 +185,21 @@ Adapt formality to target language norms while preserving tone.
 Write content that translates cleanly:
 
 ### Good (Portable)
+
 ```
 "The foreman blocks the door"
 → Translates cleanly, register maintainable
 ```
 
 ### Poor (Portability Issues)
+
 ```
 "The foreman's like, blocking the door, y'know?"
 → Slang/colloquialisms hard to translate
 ```
 
 Style Lead notes portable vs. challenging phrases:
+
 ```yaml
 motif: "relay hum"
 portability: high
@@ -196,6 +213,7 @@ guidance: "Noir imagery; adapt to target culture's noir conventions"
 ## Gatekeeper Validation
 
 Pre-gate checks:
+
 - [ ] Register matches Style Addendum
 - [ ] Terminology matches Curator glossary
 - [ ] Tone consistent (not formal then informal)
@@ -203,6 +221,7 @@ Pre-gate checks:
 - [ ] Portable for translation (if localization planned)
 
 **Block if:**
+
 - Register drift (formal where informal expected)
 - Terminology inconsistent (different terms for same concept)
 - Banned phrases present
@@ -211,6 +230,7 @@ Pre-gate checks:
 ## Common Issues
 
 ### Register Drift
+
 ```
 Section starts:
 ✓ "The relay hum thrums. Deck plates vibrate."
@@ -224,6 +244,7 @@ Fix:
 ```
 
 ### Terminology Inconsistency
+
 ```
 ❌ Paragraph 1: "hex-key"
 ❌ Paragraph 2: "allen wrench"
@@ -234,6 +255,7 @@ Fix:
 ```
 
 ### Tone Wobble
+
 ```
 ❌ "The cargo bay's dim and grimy. It's such a lovely space, really quite charming."
 (Starts industrial, becomes flowery)
@@ -244,6 +266,7 @@ Fix:
 ```
 
 ### Portability Issues
+
 ```
 ❌ "The foreman's totally not having it, y'know?"
 (Slang doesn't translate)
@@ -256,21 +279,26 @@ Fix:
 ## Validation Across Surfaces
 
 **Scene Smith prose:**
+
 - Matches Style register? ✓
 
 **Illustrator alt text:**
+
 - Matches Style register? ✓
 - Uses Curator terminology? ✓
 
 **Audio Producer captions:**
+
 - Matches Style register? ✓
 - Uses Style motif kit? ✓
 
 **Codex Curator entries:**
+
 - Matches Style register? ✓
 - Defines Curator terminology? ✓
 
 **Translator localization:**
+
 - Maintains register in target language? ✓
 - Uses approved term translations? ✓
 

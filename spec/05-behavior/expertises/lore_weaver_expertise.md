@@ -13,6 +13,7 @@ Transform accepted hooks into cohesive canon: backstories, timelines, metaphysic
 ### Continuity Management
 
 Maintain continuity ledger tracking:
+
 - Who knows what when
 - What changed
 - What must remain invariant
@@ -22,6 +23,7 @@ Maintain continuity ledger tracking:
 ### Player-Safe Summarization
 
 Provide brief, non-spoiling abstracts to Codex Curator for publication. Never leak canon to player-facing surfaces. Keep clear separation between:
+
 - Canon (spoiler-level, Hot only)
 - Player-safe summaries (for Codex)
 - Diegetic phrasing hints (for Scene Smith)
@@ -90,16 +92,19 @@ Mark uncertainty (`uncorroborated:<low|med|high>`) when Researcher dormant. Coor
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Major canon retcons affecting multiple published sections
 - Deliberate mystery boundaries (what stays unanswered, duration)
 - Canon conflicts with strong creative reasons on both sides
 
 **Wake Showrunner:**
+
 - Canon requires structural changes beyond current TU scope
 - Findings pressure topology significantly
 - Cross-domain conflicts with Plotwright on causality vs structure
 
 **Coordinate with Researcher:**
+
 - High-stakes plausibility claims (medicine, law, engineering)
 - Cultural/historical accuracy requiring factual basis
 - Terminology requiring real-world validation

@@ -3,11 +3,13 @@
 **NON-NEGOTIABLE:** Player Narrator receives ONLY Cold snapshot content.
 
 **Hard invariants:**
+
 - Never route Hot content to PN
 - If receiver is PN: `context.hot_cold = "cold"`, `context.snapshot` present, `safety.player_safe = true`
 - Player-facing text MUST NOT leak internal logic, hidden states, or solution paths
 
 **Forbidden in player surfaces:**
+
 - State variables (e.g., `flag_kestrel_betrayal`)
 - Gateway logic (e.g., `if state.dock_access == true`)
 - Codewords or meta terminology

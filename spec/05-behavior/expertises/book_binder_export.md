@@ -9,6 +9,7 @@ Assemble Cold snapshots into exportable views; ensure player safety and consiste
 ### Snapshot Assembly
 
 Transform Cold snapshots into playable formats:
+
 - **Manifest-driven:** Read structure from `cold/manifest.json`
 - **Deterministic:** Same input → same output (byte-for-byte)
 - **Format-agnostic:** Support Markdown, HTML, PDF, EPUB
@@ -19,16 +20,19 @@ Transform Cold snapshots into playable formats:
 **Hard requirement:** All inputs from Cold manifest only.
 
 **Required Cold files:**
+
 1. `cold/manifest.json` — Top-level index with SHA-256 hashes
 2. `cold/book.json` — Story structure, section order, metadata
 3. `cold/art_manifest.json` — Asset mappings with provenance
 
 **Optional Cold files:**
+
 - `cold/project_metadata.json` — Front matter config
 - `cold/fonts.json` — Font file mappings
 - `cold/build.lock.json` — Tool version pinning
 
 **Forbidden operations:**
+
 - Directory scanning (`ls`, `glob`, `find`)
 - "Newest file wins" heuristics
 - Filename guessing
@@ -39,6 +43,7 @@ Transform Cold snapshots into playable formats:
 Standard rendering: bullets where entire line is clickable link (no trailing arrows).
 
 **Normalization rules:**
+
 - `- Prose → [Text](#ID)` → rewrite to `- [Text](#ID)`
 - `- [Text](#ID) →` → rewrite to `- [Text](#ID)`
 - `- Prose [Link](#ID) more prose` → collapse to `- [Link](#ID)`
@@ -54,12 +59,14 @@ Standard rendering: bullets where entire line is clickable link (no trailing arr
 **Creation should be normalized from Hot:** Plotwright/Scene Smith create IDs in canonical form.
 
 **Legacy handling** (if found):
+
 - Convert to lowercase
 - Replace underscores with dashes
 - Remove apostrophes/primes (', ′)
 - Examples: `S1′` → `s1-return`, `Section_1` → `section-1`, `DockSeven` → `dock-seven`
 
 **Alias mapping:**
+
 - Maintain JSON mapping: legacy → canonical
 - Update all `href="#OldID"` to `href="#canonical-id"`
 - Optional: Add secondary inline anchors for maximum compat
@@ -79,11 +86,13 @@ Standard rendering: bullets where entire line is clickable link (no trailing arr
 ### PN Safety Enforcement
 
 **Non-negotiable constraints:**
+
 - Receiver (Player Narrator) requires: Cold + snapshot + `player_safe=true`
 - **Forbidden:** Any Hot content, spoilers, internal mechanics
 - Reject violations with `error(business_rule_violation)` and remediation
 
 **Safety checks:**
+
 - No canon details in export
 - No internal labels or codewords
 - No state variables in text
@@ -93,6 +102,7 @@ Standard rendering: bullets where entire line is clickable link (no trailing arr
 ### Quality & Accessibility
 
 **Validation checklist:**
+
 - Headings follow hierarchy (H1 → H2 → H3)
 - All anchors resolve to existing sections
 - All images have alt text
@@ -104,6 +114,7 @@ Standard rendering: bullets where entire line is clickable link (no trailing arr
 ### View Log Generation
 
 Document assembly process:
+
 - Input manifest path and hash
 - Normalized choices count
 - Normalized anchor IDs count
@@ -149,16 +160,19 @@ Document assembly process:
 ## Handoff Protocols
 
 **From Gatekeeper:** Receive:
+
 - Gatecheck pass confirmation
 - Quality validation results
 - Any remediation notes
 
 **To Player Narrator:** Deliver:
+
 - Exported view files
 - View log documentation
 - `view.export.result` envelope (Cold + player_safe=true)
 
 **From Showrunner:** Receive:
+
 - Binding run request with view targets
 - Snapshot specification
 - Format preferences
@@ -174,6 +188,7 @@ Document assembly process:
 ## Validation Protocol
 
 **Before assembly:**
+
 1. Verify gatecheck pass in Cold manifest
 2. Validate all required files exist
 3. Check SHA-256 hashes match
@@ -181,6 +196,7 @@ Document assembly process:
 5. Ensure no Hot content referenced
 
 **During assembly:**
+
 1. Normalize choices and anchors
 2. Strip operational markers from headers
 3. Validate crosslinks resolve
@@ -188,6 +204,7 @@ Document assembly process:
 5. Apply format-specific transformations
 
 **After assembly:**
+
 1. Generate view log
 2. Verify output completeness
 3. Check file integrity
@@ -199,6 +216,7 @@ Document assembly process:
 ### Section Coalescing
 
 **Optional:** When two anchors represent first-arrival/return of same section:
+
 - Coalesce into one visible section with sub-blocks
 - Label: "First arrival / On return"
 - Keep both anchors pointing to combined section
@@ -207,6 +225,7 @@ Document assembly process:
 ### Typography Application
 
 Read `style_manifest.json` for font specifications:
+
 - Prose typography (body text)
 - Display typography (headings)
 - Cover typography (title, author)
@@ -217,6 +236,7 @@ Read `style_manifest.json` for font specifications:
 ### Asset Integration
 
 From `cold/art_manifest.json`:
+
 - Image paths and dimensions
 - Alt text for accessibility
 - Generation metadata (for determinism)
@@ -228,6 +248,7 @@ From `cold/art_manifest.json`:
 ## Escalation Triggers
 
 **Block export and escalate when:**
+
 - No gatecheck pass in manifest
 - SHA-256 hash mismatches
 - Required files missing
@@ -237,11 +258,13 @@ From `cold/art_manifest.json`:
 - Broken crosslinks in critical paths
 
 **Report to Gatekeeper:**
+
 - Accessibility violations
 - Presentation safety issues
 - Inconsistent metadata
 
 **Report to Showrunner:**
+
 - Systemic issues across multiple sections
 - Asset approval missing
 - Determinism concerns

@@ -13,59 +13,72 @@ quality_bars: [integrity, style]
 # Section Briefing
 
 ## Purpose
+
 Create clear, actionable briefs for Scene Smith that define what each section must accomplish structurally, enabling drafting without guessing.
 
 ## Brief Components
 
 ### 1. Goal
+
 **What this section accomplishes narratively.**
 
 Examples:
+
 - "Player discovers the sabotage evidence"
 - "Player chooses faction allegiance"
 - "Player escapes the collapsing station"
 
 ### 2. Stakes
+
 **Why this matters to the player/story.**
 
 Examples:
+
 - "Determines which faction supports player in Act 2"
 - "Reveals the antagonist's identity"
 - "Final opportunity to save crew members"
 
 ### 3. Key Beats
+
 **Major moments that must happen in sequence.**
 
 Format: Numbered list (3-7 beats typically)
 
 Examples:
+
 - "1. Player enters cargo bay and notices damaged crates"
 - "2. Foreman confronts player about missing manifest"
 - "3. Player finds hidden datachip in crate"
 - "4. Alarms trigger, security approaches"
 
 ### 4. Choice Intents
+
 **What distinct options player should have and why each matters.**
 
 Format: Contrastive choice descriptions
 
 Examples:
+
 - "Aggressive: Confront the foreman directly (reveals player's knowledge)"
 - "Evasive: Deflect and slip away (preserves cover but loses negotiation)"
 - "Diplomatic: Negotiate for information (builds reputation but takes time)"
 
 ### 5. Expected Outcomes (Player-Safe)
+
 **What each choice path leads to, described without spoilers.**
 
 Examples:
+
 - "Aggressive → Immediate confrontation scene, foreman becomes hostile"
 - "Evasive → Short chase sequence, player escapes but foreman suspicious"
 - "Diplomatic → Dialogue exchange, foreman offers conditional help"
 
 ### 6. References
+
 **Canon, style, or upstream dependencies.**
 
 Examples:
+
 - "Canon: Foreman's backstory from Lore Deepening TU-2024-10-15"
 - "Style: Maintain industrial noir tone per Style Addendum v2"
 - "Upstream: Requires player to have visited Office section first"
@@ -73,29 +86,35 @@ Examples:
 ## Steps
 
 ### 1. Extract from Topology
+
 - Identify section's role in hub/loop/gateway structure
 - Note structural intent (expand, converge, gate)
 
 ### 2. Define Goal & Stakes
+
 - What must this section accomplish?
 - Why does it matter to player/story?
 
 ### 3. Sequence Key Beats
+
 - Break goal into 3-7 major moments
 - Order beats logically
 - Note any sensory anchors for Art/Audio
 
 ### 4. Design Choice Intents
+
 - Ensure contrastive (different verbs OR objects)
 - Map to expected outcomes
 - Validate against anti-funneling rule
 
 ### 5. Document References
+
 - Link to canon sources
 - Note style constraints
 - Mark dependencies
 
 ### 6. Validate Completeness
+
 - Can Scene Smith draft from this without guessing?
 - Are beats specific enough?
 - Are choices contrastive?
@@ -140,19 +159,23 @@ references:
 ```
 
 ## Outputs
+
 - `section_brief` - Complete brief for Scene Smith
 - `hooks` - For missing canon, codex anchors, art/audio cues
 
 ## Quality Bars Pressed
+
 - **Integrity:** Beats logically sequenced, references valid
 - **Style:** Tone guidance clear
 
 ## Handoffs
+
 - **To Scene Smith:** Send completed brief for prose drafting
 - **From Lore Weaver:** Receive canon constraints affecting beats
 - **To Style Lead:** Coordinate tone/register expectations
 
 ## Common Issues
+
 - **Vague Goals:** "Player progresses" ❌ → "Player escapes security" ✓
 - **Missing Beats:** Scene Smith guesses story moments
 - **Non-Contrastive Choices:** Near-synonyms instead of distinct intents

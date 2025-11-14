@@ -1468,6 +1468,7 @@ wheels = [
 
 [[package]]
 name = "questfoundry-py"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -1544,7 +1545,7 @@ requires-dist = [
     { name = "types-jsonschema", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["all-providers", "dev", "docs", "google", "ollama", "openai"]
+provides-extras = ["openai", "ollama", "google", "all-providers", "dev", "docs"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -28,6 +28,7 @@ When `receiver.role = player_narrator`, ALL three conditions MUST be true:
 ## Violation Handling
 
 **Gatekeeper:**
+
 - Block any message to PN violating safety triple
 - Report violation as `business_rule_violation`
 - Rule ID: `PN_SAFETY_INVARIANT`
@@ -35,12 +36,14 @@ When `receiver.role = player_narrator`, ALL three conditions MUST be true:
 - Escalate to Showrunner immediately
 
 **Showrunner:**
+
 - Enforce safety triple when receiver.role = PN
 - Violation is CRITICAL ERROR
 - Do not proceed with workflow until resolved
 - Coordinate with Binder for proper snapshot sourcing
 
 **Book Binder:**
+
 - NEVER export from Hot
 - NEVER mix Hot & Cold sources
 - Single snapshot source for entire view
@@ -49,16 +52,19 @@ When `receiver.role = player_narrator`, ALL three conditions MUST be true:
 ## Why This Matters
 
 **Player Experience:**
+
 - PN performance is player-facing
 - Spoilers in PN output ruin narrative discovery
 - Hot content may contain incomplete/contradictory information
 
 **Production Safety:**
+
 - Hot workspace contains spoilers, internals, technique
 - PN has no context to filter unsafe content
 - Violation breaks immersion irreparably
 
 **Business Risk:**
+
 - Spoiled players cannot "unsee" reveals
 - Lost narrative value cannot be recovered
 - Reputation damage from poor player experience
@@ -66,15 +72,18 @@ When `receiver.role = player_narrator`, ALL three conditions MUST be true:
 ## Validation Points
 
 **Pre-Gate (Gatekeeper):**
+
 - Check all PN inputs for safety triple
 - Block on violation before PN receives content
 
 **View Export (Binder):**
+
 - Verify snapshot source is Cold
 - Validate all included content marked player_safe
 - Ensure no Hot contamination
 
 **TU Orchestration (Showrunner):**
+
 - Enforce safety triple when routing to PN
 - Double-check snapshot ID present
 - Never wake PN for Hot-only content
@@ -82,16 +91,19 @@ When `receiver.role = player_narrator`, ALL three conditions MUST be true:
 ## Common Violations
 
 **Hot Content Leak:**
+
 - Accidental inclusion of Hot files in view
 - Mixed Hot/Cold sources in export
 - Missing snapshot validation
 
 **Spoiler Contamination:**
+
 - Codewords visible in gate text
 - Twist causality in summaries
 - Internal labels in navigation
 
 **Missing Snapshot:**
+
 - PN invoked without snapshot ID
 - Attempting to perform from working draft
 - No stable Cold source identified
@@ -99,6 +111,7 @@ When `receiver.role = player_narrator`, ALL three conditions MUST be true:
 ## Recovery
 
 If violation detected:
+
 1. STOP workflow immediately
 2. Do not deliver to PN
 3. Report to Showrunner with violation details

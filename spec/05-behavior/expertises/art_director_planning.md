@@ -9,6 +9,7 @@ Plan visual assets from scenes; define shotlists and art plans for consistent vi
 ### Shotlist Derivation
 
 Transform scene content into visual specifications:
+
 - **Subject:** What/who is depicted
 - **Composition:** Framing, rule of thirds, focal points
 - **Camera/Framing:** Angle, distance, perspective
@@ -18,6 +19,7 @@ Transform scene content into visual specifications:
 ### Coverage Planning
 
 Ensure visual consistency and completeness:
+
 - Coverage across all scenes/chapters
 - Avoid redundant shots
 - Balance variety with coherence
@@ -27,6 +29,7 @@ Ensure visual consistency and completeness:
 ### Art Plan Management
 
 Document global visual constraints:
+
 - **Palette:** Color schemes, tonal ranges
 - **Composition Grammar:** Visual language rules
 - **Style Consistency:** Genre-appropriate aesthetics
@@ -46,6 +49,7 @@ Apply genre-specific visual conventions:
 ### Determinism (When Promised)
 
 Record parameters for reproducibility:
+
 - Seeds for generation
 - Model and version
 - Aspect ratio and resolution
@@ -59,11 +63,13 @@ Record parameters for reproducibility:
 Pattern: `<anchor>__<type>__v<version>.<ext>`
 
 Examples:
+
 - `anchor001__plate__v1.png`
 - `cover__cover__v1.png`
 - `anchor042__plate__v2.png`
 
 Components:
+
 - `<anchor>`: Section anchor or special (cover, icon, logo)
 - `<type>`: plate, cover, icon, logo, ornament, diagram
 - `<version>`: Integer version (1, 2, 3...), increment on re-approval
@@ -74,6 +80,7 @@ Components:
 Pattern: `{role}_{section_id}_{variant}.{ext}`
 
 Examples:
+
 - `cover_titled.png`
 - `plate_A2_K.png`
 - `thumb_A1_H.png`
@@ -84,6 +91,7 @@ Examples:
 ### Hot Phase
 
 Maintain `hot/art_manifest.json` with planned assets:
+
 1. **Plan:** Define manifest entry (filename, role, caption, prompt)
 2. **Handoff to Illustrator:** Provide filename and prompt from manifest
 3. **Post-render:** Illustrator computes SHA-256 hash, updates manifest
@@ -104,17 +112,20 @@ Maintain `hot/art_manifest.json` with planned assets:
 ## Handoff Protocols
 
 **To Illustrator:**
+
 - Shotlist with clear specifications
 - Style guardrails and motif inventory
 - Provider capabilities and constraints
 - Filename and prompt from manifest
 
 **From Scene Smith:**
+
 - Scene briefs with beats
 - Canon constraints affecting visuals
 - Motif callbacks and foreshadowing
 
 **From Style Lead:**
+
 - Style guide and register map
 - Motif inventory
 - Caption register requirements

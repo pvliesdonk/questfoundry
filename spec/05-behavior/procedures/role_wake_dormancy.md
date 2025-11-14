@@ -34,10 +34,12 @@ Determine if role should be activated.
 **Wake triggers per role:**
 
 ### Always-Active Roles
+
 - **Showrunner:** Never dormant (orchestrator)
 - **Gatekeeper:** Active for all gatechecks
 
 ### Content Roles (Wake on Loop Activation)
+
 - **Lore Weaver:** Wake for Lore Deepening, Hook Harvest (consulted)
 - **Plotwright:** Wake for Story Spark, topology changes
 - **Scene Smith:** Wake for Story Spark, Scene Forge, Style Tune-up
@@ -45,20 +47,24 @@ Determine if role should be activated.
 - **Style Lead:** Wake for Style Tune-up, major register questions
 
 ### Support Roles (Wake on Demand)
+
 - **Researcher:** Wake only for high-stakes fact checking (dormant by default)
 - **Translator:** Wake only for Translation Pass (dormant by default)
 
 ### Asset Roles (Wake for Asset Loops)
+
 - **Art Director:** Wake for Art Touch-up
 - **Illustrator:** Wake when AD provides shotlist
 - **Audio Director:** Wake for Audio Pass
 - **Audio Producer:** Wake when AuD provides cuelist
 
 ### Runtime Roles (Wake for Export/Testing)
+
 - **Book Binder:** Wake for Binding Run, Archive Snapshot
 - **Player Narrator:** Wake for Narration Dry-Run
 
 **Decision:**
+
 - If role's wake criteria met → proceed to Step 2
 - If not needed → keep dormant
 
@@ -67,6 +73,7 @@ Determine if role should be activated.
 Gather information needed by waking role.
 
 **Context to provide:**
+
 - **TU Brief:** What work is happening
 - **Loop name:** Which playbook executing
 - **Deliverables:** What role is responsible for
@@ -75,6 +82,7 @@ Gather information needed by waking role.
 - **Quality bars:** Which bars to focus on
 
 **Example:**
+
 ```yaml
 wake_context:
   tu: "TU-2025-11-06-LW01"
@@ -97,6 +105,7 @@ wake_context:
 Send activation message to role.
 
 **Protocol envelope:**
+
 ```json
 {
   "protocol": "questfoundry/1.0.0",
@@ -123,12 +132,14 @@ Send activation message to role.
 ```
 
 **Required fields:**
+
 - `intent = "role.wake"`
 - `receiver` = role abbreviation to wake
 - `payload.data.reason` - Why waking this role
 - `payload.data.tu_brief` - Work context
 
 **Role response:**
+
 - Acknowledge with `ack` intent
 - Begin work immediately
 - Reference TU in all subsequent messages
@@ -138,17 +149,20 @@ Send activation message to role.
 Track role participation during loop.
 
 **Activity indicators:**
+
 - Emits `tu.checkpoint` regularly
 - Produces artifacts on schedule
 - Responds to coordination requests
 - Escalates blockers promptly
 
 **Inactivity indicators:**
+
 - No checkpoints for extended period
 - Stalled on blocker without escalation
 - Deliverables overdue
 
 **Actions:**
+
 - If active: continue monitoring
 - If inactive: check for blocker, offer help
 - If complete: proceed to dormancy (Step 6)
@@ -160,6 +174,7 @@ Sometimes roles request additional specialist wakes.
 **Trigger:** Role sends `role.wake` request to SR
 
 **Example:**
+
 ```json
 {
   "sender": "LW",
@@ -178,6 +193,7 @@ Sometimes roles request additional specialist wakes.
 ```
 
 **SR actions:**
+
 1. Assess request validity
 2. If approved, wake requested role (Step 3)
 3. Provide context from requesting role
@@ -190,21 +206,25 @@ Determine when to park role.
 **Dormancy triggers:**
 
 ### Work Complete
+
 - All deliverables produced
 - Artifacts validated and handed off
 - No pending coordination
 
 ### Loop Ended
+
 - TU closed
 - No immediate follow-up work
 - Graceful degradation acceptable
 
 ### Resource Optimization
+
 - Context window pressure
 - Role not needed for several loops
 - Can be re-woken when needed
 
 **Do NOT set dormant if:**
+
 - Deliverables incomplete
 - Blocking another role
 - Human question pending answer
@@ -215,12 +235,14 @@ Determine when to park role.
 Capture role contributions before parking.
 
 **Actions:**
+
 1. Request final `tu.checkpoint` from role
 2. Verify all deliverables handed off
 3. Document revisit criteria (when to wake again)
 4. Archive role's session state
 
 **Example checkpoint:**
+
 ```yaml
 final_checkpoint:
   role: "lore_weaver"
@@ -240,6 +262,7 @@ final_checkpoint:
 Send dormancy message to role.
 
 **Protocol envelope:**
+
 ```json
 {
   "protocol": "questfoundry/1.0.0",
@@ -264,6 +287,7 @@ Send dormancy message to role.
 ```
 
 **Role response:**
+
 - Acknowledge with `ack`
 - Stop monitoring for new work
 - Archive session state
@@ -274,16 +298,19 @@ Send dormancy message to role.
 Handle roles while parked.
 
 **Do NOT:**
+
 - Send routine messages to dormant roles
 - Include dormant roles in broadcasts (except critical)
 - Request work from dormant roles
 
 **DO:**
+
 - Monitor for wake criteria
 - Keep dormancy reasons documented
 - Re-wake promptly when needed
 
 **If work arises for dormant role:**
+
 1. Check if work meets wake criteria
 2. If yes, wake role (Step 3)
 3. If no, defer work or assign to active role
@@ -293,17 +320,20 @@ Handle roles while parked.
 Some roles can remain dormant with acceptable impacts.
 
 **Researcher dormant:**
+
 - Mark claims `uncorroborated:<risk>`
 - Use neutral phrasing
 - Note revisit criteria
 - **Impact:** Factual uncertainty documented but non-blocking
 
 **Translator dormant:**
+
 - Default to source language only
 - Note localization deferred
 - **Impact:** Single-language release, translation pass later
 
 **Asset roles dormant:**
+
 - Plan-only asset work
 - Defer rendering to future
 - **Impact:** Story complete, assets added later
@@ -311,6 +341,7 @@ Some roles can remain dormant with acceptable impacts.
 ## Common Patterns
 
 ### Standard Loop Wake
+
 ```
 SR: Opens TU, identifies roles needed
 SR: Wakes LW, SS, PW for Story Spark
@@ -320,6 +351,7 @@ SR: Sets roles dormant after TU close
 ```
 
 ### Mid-Loop Specialist Wake
+
 ```
 LW: Discovers high-stakes medical claim
 LW: Requests Researcher wake
@@ -330,6 +362,7 @@ SR: Sets Researcher dormant after handoff
 ```
 
 ### Context Pressure Dormancy
+
 ```
 SR: Notes context window filling
 SR: Identifies roles with completed work
@@ -350,6 +383,7 @@ Role wake/dormancy aligns with TU lifecycle:
 ## Summary Checklist
 
 **Waking a role:**
+
 - [ ] Wake criteria met
 - [ ] Context prepared (TU brief, deliverables)
 - [ ] `role.wake` intent sent with reason
@@ -357,6 +391,7 @@ Role wake/dormancy aligns with TU lifecycle:
 - [ ] Activity monitored
 
 **Setting dormant:**
+
 - [ ] Work complete or loop ended
 - [ ] Final checkpoint captured
 - [ ] All deliverables handed off

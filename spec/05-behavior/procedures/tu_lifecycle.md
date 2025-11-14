@@ -26,11 +26,13 @@ Trace Units (TUs) are the fundamental units of traceable work in QuestFoundry. T
 **Format:** `TU-YYYY-MM-DD-<ROLE><NN>`
 
 **Components:**
+
 - `YYYY-MM-DD`: Date of TU creation
 - `<ROLE>`: Two-letter abbreviation of responsible role
 - `<NN>`: Sequential number for that role/date
 
 **Examples:**
+
 - `TU-2025-11-06-LW01`: First Lore Weaver TU on Nov 6, 2025
 - `TU-2025-11-06-SS02`: Second Scene Smith TU on Nov 6, 2025
 - `TU-2025-11-07-PW01`: First Plotwright TU on Nov 7, 2025
@@ -40,6 +42,7 @@ Trace Units (TUs) are the fundamental units of traceable work in QuestFoundry. T
 Initiate a new trace unit for upcoming work.
 
 **Trigger:**
+
 - Loop activation (e.g., Lore Deepening starts)
 - Customer directive requiring new work
 - Discovery of work requiring traceability
@@ -51,6 +54,7 @@ Initiate a new trace unit for upcoming work.
 1. **Generate TU ID:** Using naming convention above
 
 2. **Create TU Brief:**
+
    ```yaml
    id: "TU-2025-11-06-LW01"
    loop: "Lore Deepening"
@@ -78,6 +82,7 @@ Initiate a new trace unit for upcoming work.
    ```
 
 3. **Broadcast `tu.open` Intent:**
+
    ```json
    {
      "intent": "tu.open",
@@ -106,6 +111,7 @@ Initiate a new trace unit for upcoming work.
 Maintain visibility into work status during execution.
 
 **Frequency:**
+
 - After completing major sub-steps
 - When blocked or needing coordination
 - At natural workflow transitions
@@ -116,6 +122,7 @@ Maintain visibility into work status during execution.
 **Actions:**
 
 1. **Emit `tu.checkpoint` Intent:**
+
    ```json
    {
      "intent": "tu.checkpoint",
@@ -148,6 +155,7 @@ Maintain visibility into work status during execution.
 Adapt TU as work progresses and discoveries emerge.
 
 **Trigger:**
+
 - Scope expansion discovered
 - New dependencies identified
 - Blockers requiring replanning
@@ -157,6 +165,7 @@ Adapt TU as work progresses and discoveries emerge.
 **Actions:**
 
 1. **Emit `tu.update` Intent:**
+
    ```json
    {
      "intent": "tu.update",
@@ -197,6 +206,7 @@ Verify completeness before closing TU.
 **Responsible:** Showrunner
 
 **Checklist:**
+
 - [ ] All deliverables produced
 - [ ] Artifacts validated (schema + quality)
 - [ ] Gatecheck passed (if applicable)
@@ -205,11 +215,13 @@ Verify completeness before closing TU.
 - [ ] Traceability complete (lineage, sources)
 
 **If incomplete:**
+
 - Identify gaps
 - Emit `tu.update` with remaining work
 - Continue execution
 
 **If complete:**
+
 - Proceed to Step 5
 
 ## Step 5: Close TU
@@ -221,6 +233,7 @@ Formally complete the trace unit and archive results.
 **Actions:**
 
 1. **Emit `tu.close` Intent:**
+
    ```json
    {
      "intent": "tu.close",
@@ -333,11 +346,13 @@ For long-running TUs approaching token limits:
 ## Escalation Triggers
 
 **Wake Showrunner:**
+
 - TU blocked with no clear resolution
 - Scope expansion requires approval
 - Quality issues preventing closure
 
 **Ask Human:**
+
 - Ambiguous deliverable requirements
 - Trade-offs affecting timeline or quality
 - Creative decisions blocking progress

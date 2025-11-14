@@ -43,6 +43,7 @@ Comprehensive validation of artifacts against all 8 quality bars before Hot→Co
 List all artifacts in the TU submission.
 
 **Actions:**
+
 1. Review `gate.submit` payload for artifact list
 2. Verify each artifact file exists
 3. Check each artifact has `"$schema"` field
@@ -51,6 +52,7 @@ List all artifacts in the TU submission.
 **Output:** Complete artifact inventory
 
 **If missing artifacts or validation reports:**
+
 - BLOCK immediately
 - Report missing files to Showrunner
 - Do not proceed with gatecheck
@@ -65,6 +67,7 @@ Verify all artifacts passed schema validation.
    - Example: `hook_card.json` → `hook_card_validation_report.json`
 
 2. **Verify report structure:**
+
    ```json
    {
      "artifact_path": "out/hook_card.json",
@@ -83,9 +86,11 @@ Verify all artifacts passed schema validation.
    - Schema SHA-256 must match SCHEMA_INDEX.json
 
 **If ANY artifact fails schema validation:**
+
 - **BLOCK merge** (hard gate)
 - List ALL artifacts with validation issues
 - Provide remediation for each:
+
   ```
   Artifact 'hook_card.json' failed validation.
   Errors:
@@ -94,6 +99,7 @@ Verify all artifacts passed schema validation.
 
   Producer role must fix and re-validate before resubmission.
   ```
+
 - Escalate to Showrunner with role assignments
 
 **Integration with Determinism Bar:**
@@ -108,6 +114,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Referential integrity and internal consistency
 
 **Checks:**
+
 - All choice `target_id` resolve to existing sections
 - All gateway conditions reference defined state variables
 - All canon references point to existing entries
@@ -117,6 +124,7 @@ Systematically check each of the 8 quality bars.
 - Entity state transitions coherent
 
 **Example violations:**
+
 - Choice points to deleted section
 - Gateway checks undefined variable
 - Scene callbacks non-existent canon
@@ -128,6 +136,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** All critical beats accessible via valid paths
 
 **Checks:**
+
 - Start section reachable
 - All mandatory beats have path from start
 - No impossible gateway combinations blocking critical content
@@ -135,6 +144,7 @@ Systematically check each of the 8 quality bars.
 - Hub diversity supports multiple paths
 
 **Example violations:**
+
 - Keystone beat behind impossible gateways
 - Required content only via single fragile path
 - Dead-end loops with no escape
@@ -146,6 +156,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Meaningful choice consequences
 
 **Checks:**
+
 - Multiple viable paths exist
 - Choices are contrastive (not cosmetic)
 - Loop-with-difference shows state changes
@@ -153,6 +164,7 @@ Systematically check each of the 8 quality bars.
 - Hub returns reflect decisions
 
 **Example violations:**
+
 - All choices converge immediately
 - Loop returns identical regardless of state
 - Choices with no narrative consequence
@@ -164,6 +176,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Clear diegetic choice conditions
 
 **Checks:**
+
 - Gateway reasons are world-based (not meta)
 - Conditions comprehensible through story
 - PN-safe phrasing (no codeword leaks)
@@ -171,6 +184,7 @@ Systematically check each of the 8 quality bars.
 - No player-hostile hidden gates
 
 **Example violations:**
+
 - Meta conditions ("if flag_x == true")
 - Incomprehensible requirements
 - Arbitrary restrictions without story justification
@@ -182,6 +196,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Consistent voice and register
 
 **Checks:**
+
 - Register matches style guide
 - Voice consistent across sections
 - Diction appropriate for setting
@@ -190,6 +205,7 @@ Systematically check each of the 8 quality bars.
 - Paragraph rhythm maintained
 
 **Example violations:**
+
 - Register shifts between sections
 - Inconsistent character voice
 - Modern idioms in historical settings
@@ -201,6 +217,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Reproducible asset generation
 
 **Checks:**
+
 - All images have generation parameters logged
 - All audio has production metadata
 - Asset manifests include checksums
@@ -209,6 +226,7 @@ Systematically check each of the 8 quality bars.
 - Seeds documented for regeneration
 
 **Example violations:**
+
 - Assets without generation parameters
 - Missing checksums
 - Undocumented manual edits
@@ -221,6 +239,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Spoiler hygiene and player safety
 
 **Checks:**
+
 - No spoilers in player surfaces
 - Canon stays Hot only
 - Codex entries player-safe
@@ -229,6 +248,7 @@ Systematically check each of the 8 quality bars.
 - Section titles avoid spoilers
 
 **Example violations:**
+
 - Canon details in codex
 - Choice text reveals consequences
 - Section titles spoil twists
@@ -241,6 +261,7 @@ Systematically check each of the 8 quality bars.
 **Validates:** Navigation and inclusive design
 
 **Checks:**
+
 - All images have alt text
 - Navigation clear and consistent
 - Choice presentation accessible
@@ -249,6 +270,7 @@ Systematically check each of the 8 quality bars.
 - Screen reader compatible
 
 **Example violations:**
+
 - Missing alt text
 - Unclear navigation
 - Color-only indicators
@@ -261,6 +283,7 @@ Systematically check each of the 8 quality bars.
 Aggregate all violations across bars.
 
 **Actions:**
+
 1. Create violation list per bar
 2. Classify severity: Critical vs Minor
 3. Assign remediation responsibility (which role fixes)
@@ -269,6 +292,7 @@ Aggregate all violations across bars.
 **Output:** Structured violation report
 
 **Example:**
+
 ```yaml
 violations:
   bar_1_integrity:
@@ -291,22 +315,26 @@ violations:
 Grade overall submission.
 
 **Critical violations (must fix):**
+
 - Schema validation failures
 - Spoiler leaks in Cold
 - Broken references (Integrity)
 - Unreachable critical beats (Reachability)
 
 **Major violations (should fix):**
+
 - Gateway clarity issues
 - Style inconsistencies
 - Missing determinism params
 - Accessibility gaps
 
 **Minor violations (polish):**
+
 - Style refinements
 - Optional accessibility improvements
 
 **Decision:**
+
 - **PASS:** No critical, few/no major
 - **FAIL:** Any critical OR multiple major
 
@@ -385,6 +413,7 @@ Generate gatecheck report and decision.
 Work with Showrunner to fix issues.
 
 **Actions:**
+
 1. Showrunner assigns fixes to appropriate roles
 2. Roles address violations systematically
 3. Artifacts re-validated (schema + quality)
@@ -395,12 +424,14 @@ Work with Showrunner to fix issues.
 ## Enforcement
 
 **Hard gates (no exceptions):**
+
 - Schema validation failures
 - Spoiler leaks in Cold
 - Broken references
 - Unreachable critical beats
 
 **Escalate to Showrunner when:**
+
 - Remediation requires cross-role coordination
 - Multiple bars fail (systemic issues)
 - Same violations recur

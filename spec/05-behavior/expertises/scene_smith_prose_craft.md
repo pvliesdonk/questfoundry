@@ -9,6 +9,7 @@ Write and revise section prose to briefs and style guardrails; integrate canon a
 ### Prose Drafting
 
 Transform TU briefs into narrative prose that:
+
 - Integrates canon references naturally
 - Presents choices contrastively
 - Phrases gateways diegetically
@@ -18,6 +19,7 @@ Transform TU briefs into narrative prose that:
 ### Beat Integration
 
 Parse TU briefs to extract:
+
 - Planned beats (story moments)
 - Required choices (player decision points)
 - Canon callbacks (lore integration)
@@ -27,6 +29,7 @@ Parse TU briefs to extract:
 ### Style Consistency
 
 Apply style guide and register map:
+
 - Match established voice
 - Maintain consistent diction
 - Use appropriate motifs
@@ -36,6 +39,7 @@ Apply style guide and register map:
 ### Choice Presentation
 
 Ensure choices are:
+
 - **Contrastive:** Meaningfully different, not cosmetic
 - **Clear:** Player understands options
 - **Diegetic:** Presented as in-world actions, not meta
@@ -44,6 +48,7 @@ Ensure choices are:
 ### Gateway Phrasing
 
 Frame gateway conditions diegetically:
+
 - Use world-based reasoning (not meta conditions)
 - Provide PN-safe explanations (no codewords)
 - Maintain story consistency
@@ -54,6 +59,7 @@ Frame gateway conditions diegetically:
 ### Default Target
 
 Write **3+ paragraphs per full scene** to establish:
+
 1. **Lead image + motion:** Opening sensory details and action
 2. **Goal/vector + friction:** Character intent and obstacles
 3. **Choice setup:** Context for upcoming decision
@@ -94,23 +100,27 @@ Before finalizing any draft:
 ## Handoff Protocols
 
 **From Lore Weaver:** Receive:
+
 - Canon callbacks to integrate
 - Foreshadowing notes
 - Reveal-level guidance (when to hint vs state)
 - PN-safe phrasing hints for canon elements
 
 **From Plotwright:** Receive:
+
 - Topology adjustments affecting choices
 - Hub return cues
 - Gateway condition specifications
 - State effect requirements
 
 **To Style Lead:** Request:
+
 - Audit if tone wobble detected
 - Major rephrase approval
 - Register guidance for new sections
 
 **To Gatekeeper:** Submit:
+
 - Pre-gate when player surfaces are being promoted
 - Manuscript sections for Style Bar validation
 
@@ -124,11 +134,13 @@ Before finalizing any draft:
 ## Interaction Protocols
 
 **Use `human.question` for:**
+
 - Ambiguous tone direction (horror vs mystery?)
 - Scope uncertainty (expand this beat or keep brief?)
 - Canon interpretation (how much to reveal now?)
 
 **Request `role.wake` for:**
+
 - Style Lead: if major tone/register questions arise
 - Lore Weaver: if canon details needed for scene
 - Plotwright: if topology unclear for choice setup

@@ -33,6 +33,7 @@ Validate new canon against existing canon/codex to detect contradictions, timeli
 Verify all references resolve to existing entities.
 
 **Check:**
+
 - Entity references (characters, factions, organizations)
 - Location references (places, regions, structures)
 - Event references (historical events, previous canon)
@@ -48,6 +49,7 @@ Verify all references resolve to existing entities.
    - Event cited but not in timeline
 
 **Example issues:**
+
 - ❌ "Kestrel's guild, the Shadow Collective" — but no canon for Shadow Collective exists
 - ❌ "The fire at Pier 9" — but topology only defines Piers 1-8
 - ✅ "Kestrel's scar from the Dock Seven incident" — Dock Seven has canon definition
@@ -55,6 +57,7 @@ Verify all references resolve to existing entities.
 **Output:** List of broken references requiring resolution
 
 **Remediation:**
+
 - Create missing canon for undefined entities
 - Update references to use existing canon
 - Defer reference until dependent canon exists
@@ -64,6 +67,7 @@ Verify all references resolve to existing entities.
 Validate chronological consistency.
 
 **Check:**
+
 - Timeline anchors don't create paradoxes
 - Events occur in plausible sequence
 - Character ages/lifespans make sense
@@ -72,6 +76,7 @@ Validate chronological consistency.
 **Actions:**
 
 1. **Extract timeline anchors** from draft:
+
    ```yaml
    - event: "Guild assassination attempt"
      when: "3 years before story start"
@@ -90,6 +95,7 @@ Validate chronological consistency.
    - Tech used before invention in canon
 
 **Example issues:**
+
 - ❌ "Kestrel was 15 when she joined guild (8 years ago)" but "She's 20 now" — Math doesn't work
 - ❌ "Fire happened 5 years ago" but "Dock rebuilt 7 years ago" — Contradiction
 - ✅ "Guild formed 10 years ago, Kestrel joined 8 years ago" — Consistent
@@ -97,6 +103,7 @@ Validate chronological consistency.
 **Output:** Timeline conflicts requiring resolution
 
 **Remediation:**
+
 - Adjust timeline anchors to be consistent
 - Update character ages or event dates
 - Mark deliberate mysteries (intentional ambiguity)
@@ -106,6 +113,7 @@ Validate chronological consistency.
 Ensure world rules and constraints are not violated.
 
 **Check:**
+
 - World physics/magic rules consistent
 - Character behavior aligns with established traits
 - Faction motivations don't contradict prior canon
@@ -129,6 +137,7 @@ Ensure world rules and constraints are not violated.
    - World rule changed without justification
 
 **Example issues:**
+
 - ❌ "Kestrel trusts Mira implicitly" but canon says "Kestrel trusts no one from guild"
 - ❌ "Attack used blade" but "Guild always uses poison" is invariant
 - ✅ "Kestrel distrusts Mira despite shared history" — Consistent with trust invariant
@@ -136,6 +145,7 @@ Ensure world rules and constraints are not violated.
 **Output:** Invariant violations requiring reconciliation
 
 **Remediation:**
+
 - Adjust new canon to respect invariants
 - Or update invariants with justification (major change)
 - Document exception with in-world explanation
@@ -145,6 +155,7 @@ Ensure world rules and constraints are not violated.
 Check alignment with topology, prose, and style.
 
 **Check:**
+
 - Canon aligns with Plotwright's topology notes
 - Canon supports Scene Smith's prose beats
 - Canon respects Style Lead's register constraints
@@ -167,6 +178,7 @@ Check alignment with topology, prose, and style.
    - Do motifs align with style guidance?
 
 **Example issues:**
+
 - ❌ Canon introduces "Guild Hall" but Plotwright has no hub for it
 - ❌ Canon says "Kestrel is stoic" but prose shows her emotional
 - ✅ Canon aligns with noir tone established by Style Lead
@@ -174,6 +186,7 @@ Check alignment with topology, prose, and style.
 **Output:** Cross-role inconsistencies requiring coordination
 
 **Remediation:**
+
 - Coordinate with affected role to resolve
 - Adjust canon to match established patterns
 - Update other artifacts if canon is authoritative
@@ -183,6 +196,7 @@ Check alignment with topology, prose, and style.
 Assess how canon affects player-visible content.
 
 **Check:**
+
 - Does new canon contradict published codex entries?
 - Are there spoiler risks in existing Cold content?
 - Do any Cold sections need updates for consistency?
@@ -205,6 +219,7 @@ Assess how canon affects player-visible content.
 **Output:** Impact assessment on player surfaces
 
 **If major impact:**
+
 - Escalate to human for retcon approval
 - Plan coordinated update across affected sections
 - Consider timeline for updates vs leaving intentional inconsistency
@@ -214,6 +229,7 @@ Assess how canon affects player-visible content.
 Distinguish intentional ambiguity from accidental contradiction.
 
 **Check:**
+
 - Is ambiguity deliberate storytelling (mystery)?
 - Or accidental oversight (needs fixing)?
 
@@ -225,6 +241,7 @@ Distinguish intentional ambiguity from accidental contradiction.
    - Intentional player speculation zones
 
 2. **Document mystery boundaries:**
+
    ```yaml
    deliberate_mysteries:
      - question: "Did Kestrel intentionally let Mira escape?"
@@ -293,20 +310,24 @@ continuity_report:
 ## Decision Framework
 
 **If status = "clean":**
+
 - Proceed to next step (enumerate impacts, pre-gate)
 - No continuity blockers
 
 **If status = "pass_with_fixes":**
+
 - Apply proposed fixes
 - Re-run continuity check on fixed version
 - Proceed when clean
 
 **If status = "coordination_needed":**
+
 - Contact affected roles
 - Wait for coordination responses
 - Integrate feedback and recheck
 
 **If status = "major_issues" or "blocked":**
+
 - Escalate to Showrunner
 - May require human decision
 - Don't proceed with canon until resolved
@@ -314,19 +335,23 @@ continuity_report:
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Major retcons affecting published content
 - Contradictions with strong creative reasons both sides
 - Mystery boundary decisions (what stays ambiguous, how long)
 
 **Coordinate with Plotwright:**
+
 - Topology impacts (new locations, gateway conditions)
 - Structure-canon conflicts
 
 **Coordinate with Scene Smith:**
+
 - Prose-canon alignment issues
 - Character depiction inconsistencies
 
 **Wake Showrunner:**
+
 - Cross-domain conflicts requiring orchestration
 - Blocked on multiple fronts
 - Scope expansion beyond TU
@@ -336,6 +361,7 @@ continuity_report:
 This procedure is **Step 5** of @procedure:canonization_core.
 
 After completing continuity check:
+
 - If clean: proceed to Step 6 (Research coordination)
 - If issues: iterate fixes before continuing
 

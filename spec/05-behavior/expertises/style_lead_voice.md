@@ -9,6 +9,7 @@ Maintain voice/register/motifs; guide prose and surface phrasing.
 ### Register Management
 
 Define and enforce consistent register:
+
 - **Perspective:** First/second/third person consistency
 - **Tense:** Past/present tense alignment
 - **Mood:** Tone and emotional register
@@ -18,6 +19,7 @@ Define and enforce consistent register:
 ### Voice Consistency
 
 Maintain authorial and character voice:
+
 - **Narrative voice:** Consistent storyteller presence
 - **Character voice:** Distinct dialogue and thought patterns per character
 - **Tone stability:** Emotional register doesn't waver inappropriately
@@ -26,6 +28,7 @@ Maintain authorial and character voice:
 ### Motif Tracking
 
 Identify and guide recurring elements:
+
 - **Image patterns:** Repeated visual motifs
 - **Thematic echoes:** Symbolic resonance
 - **Phrase patterns:** Recurring sentence structures
@@ -34,6 +37,7 @@ Identify and guide recurring elements:
 ### Prose Auditing
 
 Review text for style issues:
+
 - Register drift (perspective, tense, mood shifts)
 - Diction inconsistencies (anachronisms, register breaks)
 - Rhythm problems (sentence length monotony)
@@ -43,6 +47,7 @@ Review text for style issues:
 ### Phrasing Guidance
 
 Provide concrete rewrites:
+
 - Targeted fixes for specific violations
 - Phrasing templates for recurring patterns
 - Alternative wordings preserving intent
@@ -53,6 +58,7 @@ Provide concrete rewrites:
 ### Map Structure
 
 Document register specifications:
+
 - **Perspective:** Which POV(s) used and when
 - **Tense:** Primary tense and exceptions
 - **Voice characteristics:** Key traits of narrative voice
@@ -63,6 +69,7 @@ Document register specifications:
 ### Map Updates
 
 Evolve register guidance:
+
 - Capture patterns from approved prose
 - Document recurring issues and fixes
 - Add new motifs as they emerge
@@ -111,6 +118,7 @@ Evolve register guidance:
 ### Hard Constraint: Readability Over Theme
 
 **Body text and choices MUST use readable fonts:**
+
 - Prioritize legibility over aesthetic
 - Thematic fonts (horror, script, pixel, blackletter) ONLY for titles/headers
 - **NEVER** thematic fonts for body prose or choice text
@@ -126,6 +134,7 @@ Evolve register guidance:
 ### Typography Definition
 
 During style stabilization, specify:
+
 - **Prose typography:** Font family, fallback, size, line height, paragraph spacing
 - **Display typography:** Heading fonts and sizes (H1, H2, H3)
 - **Cover typography:** Title and author fonts for cover art
@@ -134,6 +143,7 @@ During style stabilization, specify:
 ### Genre-Specific Recommendations
 
 Reference `docs/design_guidelines/typography_recommendations.md` for:
+
 - **Detective Noir:** Classic Noir vs Modern Noir pairings
 - **Fantasy/RPG:** Epic, High, or Dark Fantasy fonts
 - **Horror/Thriller:** Gothic, Modern, or Cosmic Horror typography
@@ -145,6 +155,7 @@ Reference `docs/design_guidelines/typography_recommendations.md` for:
 ### Style Manifest Creation
 
 Generate `style_manifest.json`:
+
 - Font families and fallbacks
 - Size, line height, spacing specifications
 - Heading hierarchy
@@ -163,22 +174,26 @@ Book Binder reads manifest during export; missing manifest triggers fallbacks.
 ## Handoff Protocols
 
 **To Scene Smith:**
+
 - Targeted rewrites for register violations
 - Phrasing guidance for recurring patterns
 - Register clarifications for new sections
 - Motif integration suggestions
 
 **To Gatekeeper:**
+
 - Style Bar evidence (quoted violations + fixes)
 - Register consistency documentation
 - Audit findings for quality validation
 
 **To Codex Curator:**
+
 - Surface phrasing patterns for player-safe entries
 - Voice/register guidance for codex text
 - In-world terminology consistency
 
 **From Scene Smith:**
+
 - Draft prose for style audit
 - Questions about register ambiguity
 - Requests for phrasing alternatives
@@ -222,16 +237,19 @@ Book Binder reads manifest during export; missing manifest triggers fallbacks.
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Major register changes affecting established style
 - Trade-offs between clarity and voice
 - Genre convention violations for creative reasons
 
 **Wake Showrunner:**
+
 - Systemic style issues requiring multiple role coordination
 - Style guide overhaul needed
 - Register changes affecting asset generation
 
 **Coordinate with Scene Smith:**
+
 - Targeted rewrites and revisions
 - Register clarification for ambiguous sections
 - Motif integration coordination

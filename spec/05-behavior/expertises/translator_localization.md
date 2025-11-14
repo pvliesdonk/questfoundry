@@ -9,6 +9,7 @@ Localize content while preserving style, register, and motifs.
 ### Cultural Adaptation
 
 Transform content for target locale:
+
 - **Linguistic accuracy:** Proper grammar, syntax, idioms
 - **Cultural appropriateness:** Adapt references and metaphors
 - **Register preservation:** Maintain formality level and tone
@@ -18,6 +19,7 @@ Transform content for target locale:
 ### Terminology Management
 
 Maintain bilingual glossary:
+
 - **Consistent terms:** Same source term → same target term
 - **Usage notes:** Context-specific variations
 - **False friends:** Flag confusable terms
@@ -27,6 +29,7 @@ Maintain bilingual glossary:
 ### Register Parity
 
 Match style across languages:
+
 - **Formal/Informal:** Maintain same formality level
 - **Voice consistency:** Character voice patterns preserved
 - **Tone:** Emotional register matches source
@@ -35,6 +38,7 @@ Match style across languages:
 ### PN Pattern Localization
 
 Adapt player-facing templates:
+
 - **Gateway phrasings:** Diegetic conditions in target language
 - **Choice labels:** Action-oriented, concise
 - **Navigation text:** Clear UI language
@@ -45,6 +49,7 @@ Adapt player-facing templates:
 ### Coverage Metrics
 
 Document translation completeness:
+
 - Percentage of sections translated
 - Which content types covered (prose, choices, codex, UI)
 - Known gaps and deferrals
@@ -52,6 +57,7 @@ Document translation completeness:
 ### PN Patterns
 
 Localized templates for common phrasings:
+
 - Gateway checks
 - Choice presentations
 - State changes
@@ -60,6 +66,7 @@ Localized templates for common phrasings:
 ### Glossary Slice
 
 Bilingual term list:
+
 - Source term → target term(s)
 - Usage notes and context
 - Character names and titles
@@ -69,6 +76,7 @@ Bilingual term list:
 ### Register Map Deltas
 
 Adjustments to style guide for target language:
+
 - Formal/informal shifts
 - Grammatical gender handling
 - Cultural sensitivity notes
@@ -92,26 +100,31 @@ Adjustments to style guide for target language:
 ## Handoff Protocols
 
 **From Book Binder:** Receive:
+
 - Cold snapshot to localize
 - Front matter and UI labels
 - Style guide and register map
 
 **To Book Binder:** Provide:
+
 - Language pack pointer
 - Localized front matter
 - UI label translations
 
 **To Player Narrator:** Provide:
+
 - PN performance patterns for target language
 - Pronunciation guidance (if relevant)
 - Voice consistency notes
 
 **From Style Lead:** Receive:
+
 - Style guide and register requirements
 - Motif descriptions
 - Voice characteristics
 
 **To Gatekeeper:** Submit:
+
 - Language pack for Presentation/Accessibility check
 - Ensure player-safety maintained
 
@@ -126,11 +139,13 @@ Adjustments to style guide for target language:
 ### Dormancy
 
 Wake only when:
+
 - Translation Pass loop active
 - Explicit localization need arises
 - Human requests translation work
 
 Return to dormancy after:
+
 - Language pack delivered
 - Coverage documented
 - No pending translation work
@@ -186,16 +201,19 @@ Return to dormancy after:
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Multiple valid translation choices
 - Cultural sensitivity questions
 - Character name handling unclear
 
 **Coordinate with Style Lead:**
+
 - Register ambiguity in source
 - Voice consistency questions
 - Motif translation approaches
 
 **Wake Showrunner:**
+
 - Scope expansion needed
 - Timeline concerns
 - Cross-role coordination required
@@ -203,6 +221,7 @@ Return to dormancy after:
 ## Quality Validation
 
 Before submitting language pack:
+
 - **Completeness:** All in-scope content translated
 - **Consistency:** Glossary terms used correctly throughout
 - **Register:** Voice and tone match source

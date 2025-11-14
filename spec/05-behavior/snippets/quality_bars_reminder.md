@@ -14,6 +14,7 @@ All Cold merges must pass these 8 criteria:
 **Focus bars for your role:** Check `@expertise:<your_role>_expertise` for primary bars.
 
 **Before requesting gatecheck:**
+
 - Self-validate against relevant bars
 - Fix obvious violations
 - Document edge cases for Gatekeeper

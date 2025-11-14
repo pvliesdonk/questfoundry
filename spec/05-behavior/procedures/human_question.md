@@ -27,6 +27,7 @@ Formal protocol for escalating questions to the human customer when agent needs 
 ## When to Ask Human
 
 **Appropriate triggers:**
+
 - Ambiguity that blocks progress (tone, stakes, constraints unclear)
 - Forking choices that change scope or style
 - Trade-offs requiring creative judgment
@@ -35,6 +36,7 @@ Formal protocol for escalating questions to the human customer when agent needs 
 - Major changes affecting published content
 
 **Do NOT ask for:**
+
 - Routine decisions covered by existing specs
 - Technical implementation details
 - Process questions (consult specs/documentation)
@@ -45,16 +47,19 @@ Formal protocol for escalating questions to the human customer when agent needs 
 Formulate specific, answerable question.
 
 **Good questions:**
+
 - "Should Kestrel's backstory reveal happen in Chapter 2 or defer to Chapter 4?"
 - "Which tone for this scene: horror or mystery?"
 - "Is this spoiler acceptable in codex entry, or too revealing?"
 
 **Poor questions:**
+
 - "What should I do?" (too vague)
 - "Is this good?" (seeking validation, not decision)
 - "How do I implement X?" (technical, not creative)
 
 **Actions:**
+
 1. Identify specific decision point
 2. Frame question clearly
 3. Determine if answerable with options
@@ -64,11 +69,13 @@ Formulate specific, answerable question.
 Provide minimal but sufficient context for human to decide.
 
 **Context structure:**
+
 - **What changed:** Trigger for this question
 - **What's needed:** Specific decision required
 - **Why it matters:** Impact on story/quality/scope
 
 **Example:**
+
 ```
 Context: Kestrel's backstory canon is ready. Decision needed on reveal timing.
 
@@ -85,11 +92,13 @@ Recommendation: Chapter 4 for stronger dramatic timing.
 Offer 2-4 concrete choices when possible.
 
 **Option structure:**
+
 - **Key:** Short identifier (A, B, C or 1, 2, 3)
 - **Label:** Clear, descriptive text
 - **Implication:** Brief consequence note
 
 **Example:**
+
 ```json
 "options": [
   {
@@ -111,10 +120,12 @@ Offer 2-4 concrete choices when possible.
 ```
 
 **Include:**
+
 - Safe default option
 - Free text option if appropriate: `{"key": "other", "label": "Specify custom approach"}`
 
 **For open-ended questions:**
+
 - Provide empty `options: []` array
 - Expect free-text response
 
@@ -123,6 +134,7 @@ Offer 2-4 concrete choices when possible.
 Build valid `human.question` message.
 
 **Envelope structure:**
+
 ```json
 {
   "protocol": "questfoundry/1.0.0",
@@ -152,11 +164,13 @@ Build valid `human.question` message.
 ```
 
 **Required fields:**
+
 - `protocol`, `id`, `time`, `sender`, `receiver`, `intent`
 - `payload.type = "question"`
 - `payload.data.question_text`
 
 **Optional but recommended:**
+
 - `context.tu` - Link to active trace unit
 - `payload.data.context_summary` - Background
 - `payload.data.options` - Suggested answers
@@ -167,12 +181,14 @@ Build valid `human.question` message.
 Stop current work and wait for human response.
 
 **Actions:**
+
 1. Emit `human.question` envelope
 2. Pause task execution
 3. Do NOT proceed with guesses or assumptions
 4. Do NOT emit placeholder acknowledgments
 
 **System behavior:**
+
 - Intercepts JSON envelope
 - Presents question to human
 - Returns `human.response` when answered
@@ -182,6 +198,7 @@ Stop current work and wait for human response.
 Process `human.response` and continue work.
 
 **Response structure:**
+
 ```json
 {
   "intent": "human.response",
@@ -202,11 +219,13 @@ Process `human.response` and continue work.
 ```
 
 **Interpretation priority:**
+
 1. **If `choice` present:** Use selected option
 2. **If `free_text` present:** Interpret custom answer
 3. **If both:** Prefer `choice` unless `choice = "other"` then use `free_text`
 
 **Actions:**
+
 1. Apply answer immediately to current work
 2. If answer changes scope, emit `tu.update`
 3. Continue with updated direction
@@ -217,16 +236,19 @@ Process `human.response` and continue work.
 When multiple questions arise, batch efficiently.
 
 **Batching strategy:**
+
 1. **Independent questions:** Ask separately (parallel is fine)
 2. **Dependent questions:** Ask first, then ask follow-ups based on answer
 3. **Related questions:** Combine into single question with compound options
 
 **Example of combining:**
 Instead of:
+
 - Q1: "Which tone: horror or mystery?"
 - Q2: "Should we reveal backstory early or late?"
 
 Combine:
+
 - Q: "Tone and reveal timing?"
   - A: "Horror tone, early reveal"
   - B: "Horror tone, late reveal"
@@ -240,18 +262,21 @@ Combine:
 Different levels for different severity.
 
 **L1: Clarification (minor)**
+
 - Single question
 - No artifact blockage
 - Prefer `human.question` with options
 - Example: "Which phrasing do you prefer?"
 
 **L2: Artifact Risk (moderate)**
+
 - Quality bar could slip
 - Notify Showrunner
 - May need specialist role wake
 - Example: "Style inconsistency detected, coordinate with Style Lead?"
 
 **L3: Blocker (major)**
+
 - Cannot proceed
 - Request Gatekeeper review
 - Include `tu.checkpoint` summary
@@ -266,12 +291,14 @@ Set reasonable expectations for response time.
 **Slow track (days-weeks):** Major retcons, controversial changes
 
 **If timeout concerns:**
+
 - Note in context: "Time-sensitive: affects current session"
 - Or provide fallback: "Will defer to Chapter 4 if no response by EOD"
 
 ## Common Patterns
 
 ### Tone Ambiguity
+
 ```json
 {
   "question_text": "This scene feels ambiguous. Horror or mystery tone?",
@@ -284,6 +311,7 @@ Set reasonable expectations for response time.
 ```
 
 ### Scope Decision
+
 ```json
 {
   "question_text": "Canonizing this hook revealed it needs new location. Expand scope or defer?",
@@ -298,6 +326,7 @@ Set reasonable expectations for response time.
 ```
 
 ### Trade-Off
+
 ```json
 {
   "question_text": "Quality vs speed trade-off for this loop?",
@@ -314,6 +343,7 @@ Set reasonable expectations for response time.
 If you're not Showrunner, your `human.question` goes to SR first:
 
 **Your envelope:**
+
 ```json
 {
   "sender": "LW",
@@ -324,6 +354,7 @@ If you're not Showrunner, your `human.question` goes to SR first:
 ```
 
 **Showrunner responsibilities:**
+
 - Review question for clarity
 - Add additional context if needed
 - Forward to human with `sender: "SR"`, original question in payload

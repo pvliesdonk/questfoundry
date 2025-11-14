@@ -9,11 +9,13 @@ quality_bars: [determinism]
 # Determinism
 
 ## Core Principle
+
 When reproducibility is promised, capture complete workflow details OFF-SURFACE. Never expose technique on player-facing surfaces.
 
 ## What to Log
 
 ### Generative Images (Illustrator)
+
 - Seeds/prompts
 - Model names and versions
 - Generation parameters (steps, guidance, sampler)
@@ -22,6 +24,7 @@ When reproducibility is promised, capture complete workflow details OFF-SURFACE.
 - Post-processing steps
 
 ### Generative Audio (Audio Producer)
+
 - Seeds (if applicable)
 - Model/synth settings
 - DAW session files
@@ -30,6 +33,7 @@ When reproducibility is promised, capture complete workflow details OFF-SURFACE.
 - Mix levels and automation
 
 ### Manual Workflows
+
 - Software versions
 - Tool settings
 - Reference materials used
@@ -39,12 +43,14 @@ When reproducibility is promised, capture complete workflow details OFF-SURFACE.
 ## Where to Store
 
 ### OFF-SURFACE Locations (Required)
+
 - Hot workspace logs
 - Dedicated determinism log files
 - Version control commits (Hot branch)
 - Project documentation (internal)
 
 ### FORBIDDEN Locations
+
 - Image alt text
 - Image captions
 - Audio text equivalents
@@ -55,6 +61,7 @@ When reproducibility is promised, capture complete workflow details OFF-SURFACE.
 ## Log Format
 
 ### Art Determinism Log
+
 ```yaml
 asset_id: frost_viewport_01
 asset_path: images/frost_viewport.png
@@ -73,6 +80,7 @@ determinism_log:
 ```
 
 ### Audio Determinism Log
+
 ```yaml
 asset_id: alarm_chirp_01
 asset_path: audio/alarm_chirp.wav
@@ -98,23 +106,27 @@ determinism_log:
 ## Validation by Role
 
 **Art Director:**
+
 - State determinism requirements in art plans
 - Specify off-surface logging location
 - Never include technique in captions
 
 **Illustrator:**
+
 - Capture complete workflow
 - Store logs off-surface
 - Keep alt text technique-free
 - Maintain reproducibility logs
 
 **Audio Producer:**
+
 - Capture DAW/VST details
 - Store session files accessible
 - Keep text equivalents technique-free
 - Log complete processing chain
 
 **Gatekeeper:**
+
 - Validate determinism logs present (when promised)
 - Validate logs stored off-surface
 - Block technique leakage to surfaces
@@ -123,16 +135,19 @@ determinism_log:
 ## When Determinism Required
 
 ### Always Required
+
 - Official release assets (for patches/updates)
 - Localized asset variants (maintain consistency)
 - Versioned content (reproducibility critical)
 
 ### Optional
+
 - Prototype/placeholder assets
 - One-off illustrations
 - Background ambience (if not critical)
 
 ### Decision Criteria
+
 - Will this asset need exact reproduction?
 - Will variants be needed (crops, colors)?
 - Is consistency across updates critical?
@@ -141,24 +156,28 @@ determinism_log:
 ## Common Issues
 
 **Technique Leakage:**
+
 - Seeds in image alt text
 - Plugin names in audio captions
 - Model names in codex entries
 - ❌ Fix: Move to off-surface logs
 
 **Incomplete Logs:**
+
 - Missing software versions
 - Undocumented post-processing
 - No source files referenced
 - ❌ Fix: Capture complete workflow
 
 **Lost Logs:**
+
 - Logs not committed to version control
 - No backup of session files
 - Documentation separate from assets
 - ❌ Fix: Coordinate with Binder for archival
 
 **Inaccessible Logs:**
+
 - Proprietary formats without export
 - Local-only files not shared
 - Undocumented file locations
@@ -167,6 +186,7 @@ determinism_log:
 ## Quality Bar Check
 
 Gatekeeper validates Determinism bar by confirming:
+
 - [ ] Determinism promised? (check art/audio plan)
 - [ ] Logs present and complete?
 - [ ] Logs stored off-surface?

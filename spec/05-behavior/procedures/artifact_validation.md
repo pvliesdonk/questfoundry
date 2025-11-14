@@ -33,6 +33,7 @@ Locate the schema in `SCHEMA_INDEX.json` using the artifact type key.
 **Action:** Read `SCHEMA_INDEX.json` and find the entry for your artifact type.
 
 **Output:** Schema metadata containing:
+
 - `$id`: Canonical schema URL
 - `path`: Relative path to schema file
 - `draft`: JSON Schema draft version
@@ -47,6 +48,7 @@ Echo back schema understanding before producing artifact.
 **Action:** Output the following:
 
 1. **Schema metadata:**
+
    ```json
    {
      "$id": "https://questfoundry.liesdonk.nl/schemas/hook_card.schema.json",
@@ -68,6 +70,7 @@ Check that the schema file hasn't been modified.
 **Action:** Compute SHA-256 hash of schema file and compare to index.
 
 **If hash mismatch:**
+
 ```
 ERROR: Schema integrity check failed for hook_card.schema.json
 Expected SHA-256: a1b2c3d4e5f6...
@@ -82,11 +85,13 @@ REFUSING TO USE COMPROMISED SCHEMA.
 Create the artifact with required `$schema` field.
 
 **Action:** Generate artifact JSON with:
+
 - `"$schema"` field at top level pointing to schema's `$id` URL
 - All required fields per schema
 - Proper data types and structure
 
 **Example:**
+
 ```json
 {
   "$schema": "https://questfoundry.liesdonk.nl/schemas/hook_card.schema.json",
@@ -104,11 +109,13 @@ Run JSON Schema validation on the produced artifact.
 **Action:** Use validator to check artifact against schema.
 
 **Validation inputs:**
+
 - Artifact JSON
 - Schema from canonical source
 - JSON Schema draft version from metadata
 
 **Validation outputs:**
+
 - `valid`: boolean (true/false)
 - `errors`: array of validation errors (if any)
 
@@ -131,6 +138,7 @@ Create validation report documenting the results.
 ```
 
 **If validation failed:**
+
 ```json
 {
   "artifact_path": "out/hook_card.json",
@@ -159,24 +167,28 @@ Based on validation result, either emit artifact or stop.
 ### If Validation Passed (`valid: true`)
 
 **Actions:**
+
 1. Emit artifact file (e.g., `out/hook_card.json`)
 2. Emit validation report with `"valid": true`
 3. Proceed to next workflow step
 4. Include validation report in handoff to next role
 
 **Handoff requirements:**
+
 - Both artifact and validation report must be provided
 - Next role should verify validation report before processing
 
 ### If Validation Failed (`valid: false`)
 
 **Actions:**
+
 1. **DO NOT emit artifact** - failed artifacts are never delivered
 2. Emit validation report with `"valid": false` and error details
 3. **STOP workflow immediately** - hard gate, no exceptions
 4. Report to user/Showrunner: "Validation failed. See validation_report.json for errors."
 
 **Do not:**
+
 - Attempt to "fix" the artifact and re-validate without guidance
 - Proceed with downstream work
 - Emit the artifact anyway with a warning
@@ -186,17 +198,20 @@ Based on validation result, either emit artifact or stop.
 In multi-role loops, validation occurs at handoff points.
 
 **Producer role responsibilities:**
+
 1. Validate artifact before handoff
 2. Provide both artifact and validation report
 3. If validation fails, notify Showrunner immediately
 
 **Consumer role responsibilities:**
+
 1. Verify validation report exists
 2. Check `"valid": true` before processing artifact
 3. If no validation report or `"valid": false`, refuse to proceed
 
 **Showrunner verification:**
 Before allowing role-to-role handoff:
+
 - Artifact file exists with `"$schema"` field
 - `validation_report.json` exists
 - Report shows `"valid": true` with empty `"errors": []`
@@ -206,19 +221,23 @@ If any validation fails, STOP loop and escalate to human.
 ## Troubleshooting
 
 **Cannot access schema:**
+
 - STOP and report: "Cannot access schema at [URL]. Validation impossible. REFUSING TO PROCEED."
 - Check network connectivity or bundled schema availability
 
 **Schema ambiguous or multiple versions:**
+
 - Use `$id` URL from `SCHEMA_INDEX.json` as single source of truth
 - Do not use schemas from untrusted sources
 
 **Artifact believed correct but fails validation:**
+
 - Validation failure is authoritative
 - DO NOT emit artifact
 - Report error and ask for guidance on schema interpretation
 
 **Validation is slow/resource-intensive:**
+
 - Validation is mandatory regardless of performance
 - Budget time for validation in workflow planning
 

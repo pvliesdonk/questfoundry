@@ -40,6 +40,7 @@ Use this structure when asking human for decisions:
 ```
 
 **When to use:**
+
 - Ambiguity blocks progress
 - Creative decisions requiring author input
 - Trade-offs needing human judgment

@@ -13,16 +13,19 @@ All messages during active TU should include proper context:
 ```
 
 **Required context fields:**
+
 - `context.hot_cold` - Always present ("hot" or "cold")
 - `context.tu` - TU ID for traceable work (format: TU-YYYY-MM-DD-ROLE-NN)
 - `context.loop` - Active loop name (e.g., "lore_deepening", "story_spark")
 
 **For PN delivery:**
+
 - `context.hot_cold = "cold"` (REQUIRED)
 - `context.snapshot` - Snapshot ID (REQUIRED)
 - `safety.player_safe = true` (REQUIRED)
 
 **For traceability:**
+
 - `correlation_id` - Link response to triggering message
 - `refs` - Array of upstream artifact IDs
 

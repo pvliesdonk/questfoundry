@@ -9,11 +9,13 @@ quality_bars: [presentation, determinism]
 # Technique Off Surfaces
 
 ## Core Principle
+
 All production technique details stay OFF player-facing surfaces. Store in dedicated logs accessible only to production team.
 
 ## What is "Technique"?
 
 ### Audio Production
+
 - DAW names (Logic Pro, Ableton, Pro Tools)
 - Plugin/VST names (Reverb, EQ, Compressor)
 - Session files and settings
@@ -23,6 +25,7 @@ All production technique details stay OFF player-facing surfaces. Store in dedic
 - Sample libraries used
 
 ### Image Production
+
 - Model names (DALL-E, Midjourney, Stable Diffusion)
 - Seeds and parameters
 - Generation settings (steps, guidance, sampler)
@@ -31,6 +34,7 @@ All production technique details stay OFF player-facing surfaces. Store in dedic
 - Post-processing software (Photoshop, GIMP)
 
 ### General Production
+
 - Software versions
 - Tool settings
 - Workflow documentation
@@ -41,6 +45,7 @@ All production technique details stay OFF player-facing surfaces. Store in dedic
 ## Where to Store (OFF-SURFACE)
 
 ### Determinism Logs
+
 ```yaml
 # logs/audio_determinism.yaml (OFF-SURFACE)
 asset_id: alarm_chirp_01
@@ -55,16 +60,19 @@ processing:
 ```
 
 ### Hot Workspace
+
 - Production notes in Hot (work-in-progress)
 - Never merge to Cold if technique-facing
 - Keep in developer/producer-only areas
 
 ### Version Control
+
 - Commit messages with technique details
 - Technical documentation in repo
 - Never in player-facing markdown
 
 ### Project Documentation
+
 - Internal wiki/docs
 - Producer guides
 - Process documentation
@@ -72,6 +80,7 @@ processing:
 ## Where NOT to Store (FORBIDDEN)
 
 ### ❌ Player-Facing Surfaces
+
 - Image alt text
 - Image captions
 - Audio text equivalents
@@ -82,6 +91,7 @@ processing:
 ### Examples of Violations
 
 **Image Alt Text:**
+
 ```
 ❌ "Frost viewport (DALL-E 3, seed 1234567890)"
 ✓ "Frost patterns web the viewport"
@@ -89,6 +99,7 @@ processing:
 ```
 
 **Audio Caption:**
+
 ```
 ❌ "[Alarm created with ES2 synth, reverb applied]"
 ✓ "[A short alarm chirps twice, distant.]"
@@ -96,6 +107,7 @@ processing:
 ```
 
 **Codex Entry:**
+
 ```
 ❌ "Relay Hum: Generated using ambient drone synth with 200Hz fundamental"
 ✓ "Relay Hum: The constant mechanical sound of station power relays"
@@ -103,6 +115,7 @@ processing:
 ```
 
 **Section Prose:**
+
 ```
 ❌ "The image shows (rendered with Midjourney v6)..."
 ✓ "The viewport shows frost patterns webbing the glass..."
@@ -112,12 +125,14 @@ processing:
 ## Role-Specific Responsibilities
 
 ### Audio Producer
+
 - Render audio assets
 - Write player-safe text equivalents (no plugin names)
 - Store ALL technique in off-surface determinism logs
 - Never leak DAW/VST details to captions
 
 Example workflow:
+
 ```yaml
 # Player-facing (caption):
 text_equivalent: "[A short alarm chirps twice, distant.]"
@@ -130,12 +145,14 @@ determinism_log:
 ```
 
 ### Illustrator
+
 - Render images
 - Write player-safe alt text (no model/seed names)
 - Store ALL technique in off-surface determinism logs
 - Never leak generation details to alt text/captions
 
 Example workflow:
+
 ```yaml
 # Player-facing (alt text):
 alt_text: "Frost patterns web the airlock glass"
@@ -148,12 +165,14 @@ determinism_log:
 ```
 
 ### Gatekeeper
+
 - Validate no technique on player surfaces
 - Check alt text, captions, prose for leakage
 - Verify determinism logs exist off-surface (when promised)
 - BLOCK if technique found on surfaces
 
 ### Book Binder
+
 - Strip production metadata during export
 - Ensure only player-safe content in view
 - Validate no internal comments leaked
@@ -162,21 +181,25 @@ determinism_log:
 ## Why Technique Must Stay Off-Surface
 
 ### Player Immersion
+
 - Technique references break fourth wall
 - "Generated with DALL-E" destroys atmospheric immersion
 - Players experience world, not production process
 
 ### Spoiler Risk
+
 - Prompts may contain spoilers ("traitor revealed in reflection")
 - Generation parameters may signal significance
 - Technique details can telegraph narrative intent
 
 ### Professionalism
+
 - Players don't need to know production tools
 - Like film credits: relevant but not during experience
 - Maintains narrative focus
 
 ### Determinism Requirement
+
 - When reproducibility promised, logs MUST exist
 - But logs stay OFF-SURFACE (internal documentation)
 - See @snippet:determinism for full requirements
@@ -184,6 +207,7 @@ determinism_log:
 ## Validation
 
 ### Gatekeeper Pre-Gate Checks
+
 - [ ] All images have technique-free alt text
 - [ ] All audio has technique-free captions
 - [ ] No DAW/plugin names on surfaces
@@ -192,6 +216,7 @@ determinism_log:
 - [ ] Determinism logs exist off-surface (if promised)
 
 ### Common Violations
+
 ```
 ❌ Image metadata: "Created with Photoshop CC 2024"
 ✓ Image metadata: Clean (technique in off-surface log)
@@ -228,11 +253,13 @@ determinism_log:
 ### Image: Frost Viewport
 
 **On-Surface (alt text):**
+
 ```
 "Frost patterns web the airlock glass"
 ```
 
 **Off-Surface (determinism log):**
+
 ```yaml
 asset: frost_viewport_01.png
 model: "DALL-E 3"
@@ -244,11 +271,13 @@ post_processing: ["Crop to 16:9", "Color correction"]
 ### Audio: Alarm Chirp
 
 **On-Surface (caption):**
+
 ```
 [A short alarm chirps twice, distant.]
 ```
 
 **Off-Surface (determinism log):**
+
 ```yaml
 asset: alarm_chirp_01.wav
 daw: "Logic Pro 11.0.1"
@@ -262,6 +291,7 @@ export: "WAV 24bit/96kHz, normalized -3dB"
 ## Integration with Determinism Bar
 
 When Determinism bar active:
+
 - OFF-SURFACE logs REQUIRED
 - Logs must be complete and accessible
 - But NEVER on player-facing surfaces

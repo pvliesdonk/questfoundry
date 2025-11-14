@@ -10,35 +10,44 @@ criticality: CRITICAL
 # Safety-Critical Audio
 
 ## Core Principle (CRITICAL)
+
 Audio must not cause physical discomfort, fatigue, or harm. Mark risks explicitly; avoid extremes.
 
 ## Safety Risks to Avoid
 
 ### Startle Peaks
+
 **Risk:** Sudden loud sounds can startle, especially with headphones
 **Mitigation:**
+
 - Mark startle risk in plan notes
 - Use caption warnings: `[Sudden alarm blares]`
 - Avoid jump-scare stingers without warnings
 - Keep peak levels reasonable
 
 ### Extreme Panning
+
 **Risk:** Hard left-right panning causes fatigue/disorientation
 **Mitigation:**
+
 - Avoid full L-R panning (stay within 50-70% pan)
 - Use center-weighted mixing for important cues
 - Limit rapid panning movements
 
 ### Frequency Fatigue
+
 **Risk:** Sustained extreme frequencies (very high/very low) cause fatigue
 **Mitigation:**
+
 - Avoid sustained piercing frequencies (>10kHz sustained)
 - Avoid sustained infrasonic rumble (<40Hz sustained)
 - Use high/low frequencies sparingly for effect
 
 ### Volume Targets
+
 **Risk:** Overly loud playback causes hearing damage
 **Mitigation:**
+
 - Target -18 LUFS integrated loudness (comfortable listening)
 - Peak limit: -3dBTP (true peak)
 - Avoid excessive dynamic range requiring volume adjustment
@@ -46,7 +55,9 @@ Audio must not cause physical discomfort, fatigue, or harm. Mark risks explicitl
 ## Safety Marking Requirements
 
 ### Audio Director (Plan Notes)
+
 Mark safety considerations in audio plans:
+
 ```yaml
 audio_cue: alarm_sudden_01
 purpose: "Emergency alert"
@@ -60,7 +71,9 @@ safety_notes:
 ```
 
 ### Audio Producer (Caption Warnings)
+
 Include safety cues in text equivalents:
+
 ```
 [Sudden alarm blares]  ← "Sudden" warns of startle
 [Sharp metallic clang] ← "Sharp" indicates intensity
@@ -68,7 +81,9 @@ Include safety cues in text equivalents:
 ```
 
 ### Gatekeeper (Validation)
+
 Check safety requirements:
+
 - [ ] Startle risks marked in plan + caption
 - [ ] Peak levels within safe range (-3dBTP max)
 - [ ] No extreme panning (>80% L-R)
@@ -77,6 +92,7 @@ Check safety requirements:
 - [ ] Comfortable volume targets met
 
 **BLOCK if:**
+
 - Startle risk unmarked
 - Peak levels exceed -3dBTP
 - Extreme panning/frequencies without justification
@@ -85,6 +101,7 @@ Check safety requirements:
 ## Specific Hazards
 
 ### Startle/Jump Scares
+
 ```yaml
 forbidden: "Surprise loud sound with no warning"
 
@@ -95,6 +112,7 @@ required:
 ```
 
 ### Infrasonic Rumble
+
 ```yaml
 risk: "Sustained <40Hz causes physical discomfort"
 
@@ -105,6 +123,7 @@ mitigation:
 ```
 
 ### Piercing Frequencies
+
 ```yaml
 risk: "Sustained >10kHz causes ear fatigue"
 
@@ -115,6 +134,7 @@ mitigation:
 ```
 
 ### Extreme Panning
+
 ```yaml
 risk: "Hard L-R panning causes disorientation"
 
@@ -127,16 +147,19 @@ mitigation:
 ## Volume Targeting
 
 ### Integrated Loudness
+
 - Target: -18 LUFS integrated
 - Range: -20 to -16 LUFS acceptable
 - Use loudness normalization (not peak limiting alone)
 
 ### Peak Levels
+
 - Maximum: -3dBTP (true peak)
 - Typical: -6dBTP for most content
 - Headroom: Prevents clipping, allows comfortable playback
 
 ### Dynamic Range
+
 - Avoid excessive compression (maintain 8-12dB dynamic range)
 - Avoid excessive range requiring volume adjustment
 - Balance clarity with comfort
@@ -144,6 +167,7 @@ mitigation:
 ## Caption Safety Cues
 
 Use descriptive cues to warn players:
+
 ```
 [Sudden alarm blares] ← Startle warning
 [Sharp metallic clang] ← Intensity cue
@@ -152,12 +176,14 @@ Use descriptive cues to warn players:
 ```
 
 These cues serve dual purpose:
+
 1. Accessibility: Describe sound for deaf/hard-of-hearing
 2. Safety: Warn of intense/startling sounds
 
 ## Audio Director Responsibilities
 
 In audio plans, mark:
+
 - Startle risks (sudden, loud, unexpected)
 - Intensity levels (peak targets)
 - Frequency extremes (high/low)
@@ -165,6 +191,7 @@ In audio plans, mark:
 - Any safety considerations
 
 Example:
+
 ```yaml
 audio_cue: emergency_klaxon
 purpose: "Critical emergency alert"
@@ -181,6 +208,7 @@ caption_guidance: "Sudden, loud, piercing alarm; mark all three qualities"
 ## Audio Producer Responsibilities
 
 When rendering:
+
 1. Follow safety guidelines in plan
 2. Measure peak levels (use true peak meter)
 3. Check frequency content (avoid extremes)
@@ -188,6 +216,7 @@ When rendering:
 5. Mark in determinism log (off-surface)
 
 Example determinism log entry:
+
 ```yaml
 asset_id: emergency_klaxon
 safety_validation:
@@ -201,6 +230,7 @@ safety_validation:
 ## Gatekeeper Validation
 
 Pre-gate checks:
+
 1. Review audio plans for safety notes
 2. Validate captions include warnings
 3. Check peak levels if measurements provided
@@ -210,6 +240,7 @@ Pre-gate checks:
 ## Common Violations
 
 ### Unmarked Startle
+
 ```
 ❌ Plan: "Alarm sound"
     Caption: "[Alarm sounds]"
@@ -220,18 +251,21 @@ Pre-gate checks:
 ```
 
 ### Excessive Peak Levels
+
 ```
 ❌ Peak: -1dBTP or higher (painful on headphones)
 ✓ Peak: -6dBTP (urgent but comfortable)
 ```
 
 ### Sustained Extreme Frequencies
+
 ```
 ❌ 15kHz tone for 30 seconds (ear fatigue)
 ✓ 8kHz component for 3 seconds (brief intensity)
 ```
 
 ### No Caption Warning
+
 ```
 ❌ Caption: "[Alarm sounds]" (no intensity cue)
 ✓ Caption: "[Sudden alarm blares]" (warns of startle + intensity)
@@ -242,6 +276,7 @@ Pre-gate checks:
 CRITICAL: Player safety > atmospheric effect
 
 If safety concern arises:
+
 1. Reduce intensity
 2. Add warnings
 3. Shorten duration

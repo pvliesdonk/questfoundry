@@ -22,6 +22,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Referential integrity and internal consistency
 
 **Checks:**
+
 - All choice `target_id` references resolve to existing sections
 - All gateway conditions reference defined state variables
 - All canon references point to existing canon entries
@@ -31,6 +32,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Entity state transitions are coherent
 
 **Common Violations:**
+
 - Deleted sections still referenced in choices
 - Gateway checks variables that don't exist
 - Scene callbacks to non-existent canon
@@ -42,6 +44,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** All critical story beats are accessible through valid player paths
 
 **Checks:**
+
 - Start section reachable from initialization
 - All mandatory beats have at least one path from start
 - No story-critical content behind impossible gateways
@@ -49,6 +52,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Hub diversity supports multiple valid paths
 
 **Common Violations:**
+
 - Unreachable sections due to impossible gateway combinations
 - Required story beats only accessible through single fragile path
 - Dead-end loops with no exit conditions
@@ -60,6 +64,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Player choices have meaningful consequences
 
 **Checks:**
+
 - Multiple viable paths exist through story
 - Choices are contrastive (not cosmetic)
 - Loop-with-difference: repeat visits show meaningful changes
@@ -67,6 +72,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Hub returns reflect prior player decisions
 
 **Common Violations:**
+
 - All choices converge immediately (illusory branching)
 - Loop returns are identical regardless of state
 - Choices with no narrative consequence
@@ -78,6 +84,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Choice availability uses clear diegetic conditions
 
 **Checks:**
+
 - Gateway reasons are world-based, not meta
 - Conditions are comprehensible to players through story
 - PN-safe phrasing (no codewords or state leaks)
@@ -85,6 +92,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - No player-hostile hidden gates
 
 **Common Violations:**
+
 - Meta conditions ("if flag X is set")
 - Incomprehensible requirements
 - Arbitrary restrictions without story justification
@@ -96,6 +104,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Consistent voice, register, and prose quality
 
 **Checks:**
+
 - Register matches style guide
 - Voice consistent across sections
 - Diction appropriate for setting
@@ -104,6 +113,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Paragraph rhythm maintained
 
 **Common Violations:**
+
 - Register shifts between sections
 - Inconsistent character voice
 - Modern idioms in historical settings
@@ -116,6 +126,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Reproducible asset generation
 
 **Checks:**
+
 - All images have generation parameters logged
 - All audio has production metadata
 - Asset manifests include checksums
@@ -124,6 +135,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Seed values documented for regeneration
 
 **Common Violations:**
+
 - Assets without generation parameters
 - Missing checksums or file paths
 - Undocumented manual edits to generated assets
@@ -136,6 +148,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Spoiler hygiene and player safety
 
 **Checks:**
+
 - No spoilers in player-facing surfaces
 - Canon Pack remains in Hot only
 - Codex entries are player-safe
@@ -144,6 +157,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Section titles avoid spoilers
 
 **Common Violations:**
+
 - Canon details in codex entries
 - Choice text that reveals consequences
 - Section titles that spoil twists
@@ -156,6 +170,7 @@ All Cold merges must pass these criteria (from Layer 0):
 **Validates:** Navigation and inclusive design
 
 **Checks:**
+
 - All images have alt text
 - Navigation is clear and consistent
 - Choice presentation is accessible
@@ -164,6 +179,7 @@ All Cold merges must pass these criteria (from Layer 0):
 - Screen reader compatibility
 
 **Common Violations:**
+
 - Missing alt text for images
 - Unclear navigation between sections
 - Color-only state indicators
@@ -185,12 +201,14 @@ For each TU submitted for gatecheck:
 ## Decision Framework
 
 **PASS criteria:**
+
 - All 8 bars pass
 - No critical violations
 - Minor issues documented but non-blocking
 - All artifacts have valid schemas
 
 **FAIL criteria:**
+
 - Any bar has critical violations
 - Schema validation failures
 - Spoiler leaks in player surfaces
@@ -199,6 +217,7 @@ For each TU submitted for gatecheck:
 ## Remediation Guidance
 
 For each violation:
+
 - **Location:** File path, line number, artifact ID
 - **Bar violated:** Which of the 8 bars
 - **Issue:** Specific problem description
@@ -209,12 +228,14 @@ For each violation:
 ## Enforcement
 
 **Hard gates (no exceptions):**
+
 - Schema validation failures
 - Spoiler leaks in Cold
 - Broken references (Integrity Bar)
 - Unreachable critical beats (Reachability Bar)
 
 **Escalate to Showrunner when:**
+
 - Remediation requires cross-role coordination
 - Multiple bars fail indicating systemic issues
 - Same violations recur across TUs

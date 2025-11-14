@@ -28,6 +28,7 @@ Layer 5 in v2 uses **atomic, composable behavior primitives** instead of pre-ass
 **Structure:** Pure Markdown, no frontmatter (referenced by adapters).
 
 **Examples:**
+
 - `lore_weaver_expertise.md` — Canon creation and continuity management
 - `gatekeeper_quality_bars.md` — Quality validation expertise
 - `scene_smith_prose_craft.md` — Prose writing techniques
@@ -41,6 +42,7 @@ Layer 5 in v2 uses **atomic, composable behavior primitives** instead of pre-ass
 **Structure:** YAML frontmatter + Markdown content.
 
 **Frontmatter Schema:**
+
 ```yaml
 ---
 procedure_id: canonization_core
@@ -61,6 +63,7 @@ tags:
 ```
 
 **Examples:**
+
 - `canonization_core.md` — Hook-to-canon transformation
 - `continuity_check.md` — Contradiction detection
 - `player_safe_summarization.md` — Spoiler-free summary generation
@@ -74,6 +77,7 @@ tags:
 **Structure:** Pure Markdown, no frontmatter (referenced by procedures/playbooks).
 
 **Examples:**
+
 - `spoiler_hygiene_reminder.md` — PN boundary enforcement
 - `validation_protocol.md` — Artifact validation rules
 - `human_question_format.md` — How to ask clarifying questions
@@ -87,6 +91,7 @@ tags:
 **Structure:** Pure YAML (references procedures, expertises, snippets).
 
 **Schema:**
+
 ```yaml
 ---
 playbook_id: lore_deepening
@@ -139,6 +144,7 @@ quality_bars_pressed: [integrity, gateways, presentation]
 **Structure:** Pure YAML (references expertises, procedures, snippets).
 
 **Schema:**
+
 ```yaml
 ---
 adapter_id: lore_weaver
@@ -203,22 +209,27 @@ The spec compiler (Layer 6 build) validates and resolves all references:
 ## File Naming Conventions
 
 ### Expertises
+
 - Pattern: `[role]_[domain].md`
 - Examples: `lore_weaver_expertise.md`, `gatekeeper_quality_bars.md`
 
 ### Procedures
+
 - Pattern: `[action]_[object].md` or `[process_name].md`
 - Examples: `canonization_core.md`, `continuity_check.md`
 
 ### Snippets
+
 - Pattern: `[concept]_[type].md`
 - Examples: `spoiler_hygiene_reminder.md`, `validation_protocol.md`
 
 ### Playbooks
+
 - Pattern: `[loop_name].playbook.yaml`
 - Examples: `lore_deepening.playbook.yaml`, `hook_harvest.playbook.yaml`
 
 ### Adapters
+
 - Pattern: `[role_name].adapter.yaml`
 - Examples: `lore_weaver.adapter.yaml`, `gatekeeper.adapter.yaml`
 
@@ -230,6 +241,7 @@ The spec compiler (Layer 6 build) validates and resolves all references:
 ```
 
 **Outputs:**
+
 1. `dist/compiled/manifests/*.manifest.json` — Runtime execution manifests
 2. `dist/compiled/standalone_prompts/*.md` — Assembled full prompts
 
@@ -242,6 +254,7 @@ v1 architecture (`spec/05-prompts/`) used pre-assembled prompts with significant
 ## Validation
 
 All cross-references are validated by the spec compiler:
+
 - References must resolve to existing files
 - Schema references must point to valid L3 schemas
 - Role references must match L1 role definitions

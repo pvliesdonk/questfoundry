@@ -37,6 +37,7 @@ Examine each hook for scope, stakes, and implications.
 **Input:** Accepted hook cards
 
 **Actions:**
+
 1. **Identify scope:** What aspect of world/story does this affect?
 2. **Assess stakes:** How important is this to narrative continuity?
 3. **Map dependencies:** What existing canon does this touch?
@@ -46,6 +47,7 @@ Examine each hook for scope, stakes, and implications.
 **Output:** Structured analysis for each hook
 
 **Example:**
+
 - Hook: "Kestrel's jaw scar from guild betrayal"
 - Scope: Character backstory, faction lore
 - Stakes: High (affects character motivation)
@@ -60,6 +62,7 @@ Create spoiler-level canonical explanations.
 **Input:** Hook analysis from Step 1
 
 **Actions:**
+
 1. **Frame canon question:** "What caused Kestrel's scar and who was involved?"
 2. **Draft `canon_answers_hot`:**
    - Precise, spoiler-level answer
@@ -75,6 +78,7 @@ Create spoiler-level canonical explanations.
 **Output:** Canon Pack with Hot and player-safe versions
 
 **Example:**
+
 - **Canon Answer (Hot):** "Kestrel's scar from failed guild assassination attempt after she discovered corruption in leadership. Attack ordered by Guildmaster Thane, executed by her former partner Mira. Kestrel survived but was exiled, leading to current mercenary status."
 - **Player-Safe (for Codex):** "Kestrel bears a distinctive jaw scar. She rarely speaks of its origin, though some whisper it's connected to her past."
 
@@ -104,6 +108,7 @@ Enrich canon with timeline, invariants, and knowledge tracking.
 **Output:** Structured Canon Pack with all metadata
 
 **Example:**
+
 ```yaml
 timeline_anchors_hot:
   - event: "Guild assassination attempt"
@@ -183,6 +188,7 @@ Validate against existing canon and detect contradictions.
 **Output:** List of detected conflicts or clean validation
 
 **If conflicts found:**
+
 - Document specific contradictions
 - Propose reconciliations
 - Mark deliberate mysteries with bounds
@@ -210,6 +216,7 @@ Verify factual claims if Researcher is awake.
 **Output:** Canon Pack with research posture annotations
 
 **Example:**
+
 ```yaml
 factual_claims:
   - claim: "Medieval guilds had strict apprenticeship hierarchies"
@@ -251,6 +258,7 @@ Document traceability and snapshot implications.
 Before submitting to Gatekeeper, self-check quality.
 
 **Checklist:**
+
 - [ ] All continuity checks passed or conflicts resolved
 - [ ] Player-safe summary is truly spoiler-free
 - [ ] Downstream effects clearly enumerated
@@ -267,39 +275,46 @@ Before submitting to Gatekeeper, self-check quality.
 When issues arise, refine systematically.
 
 **If continuity conflicts:**
+
 - Identify specific contradiction
 - Explore reconciliation options
 - Consider mystery boundaries (what stays unanswered)
 - Escalate to human if creative trade-offs needed
 
 **If downstream impacts unclear:**
+
 - Coordinate with affected role directly
 - Request specific guidance on how to frame handoff
 - Document assumptions for future reference
 
 **If factual uncertainty high:**
+
 - Request Researcher wake via Showrunner
 - Or mark as uncorroborated and use neutral phrasing
 
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Major canon retcons affecting published sections
 - Deliberate mystery boundaries (what, when, how long)
 - Conflicts with strong creative reasons on both sides
 
 **Wake Showrunner:**
+
 - Canon requires structural changes beyond TU scope
 - Cross-domain conflicts with Plotwright
 - Findings pressure topology significantly
 
 **Coordinate with Researcher:**
+
 - High-stakes plausibility (medicine, law, engineering)
 - Cultural/historical accuracy when factual basis needed
 
 ## Completion Criteria
 
 Canon Pack is ready for gatecheck when:
+
 - All 7 steps completed
 - Continuity checks passed
 - Downstream impacts documented

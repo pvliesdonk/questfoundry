@@ -45,7 +45,7 @@ inputs:
   - "PN Principles (in-world, spoiler-safe, diegetic gates)"
   - "Style guardrails (voice/register/motifs)"
   - "Language Pack if testing a non-source language"
-  cold_only: "PN reads Cold only—no Hot drafts, no canon notes"
+  - "CRITICAL: PN reads Cold only—no Hot drafts, no canon notes"
 
 # Core procedures
 procedures:

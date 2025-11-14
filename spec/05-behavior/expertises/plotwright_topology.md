@@ -9,6 +9,7 @@ Design hubs/loops/gateways; maintain intended topology and player routes.
 ### Topology Architecture
 
 Design and maintain narrative structure:
+
 - **Hubs:** Junction points where multiple paths converge
 - **Loops:** Paths that return to previous locations with state-aware differences
 - **Gateways:** Conditional choice availability based on world state
@@ -18,6 +19,7 @@ Design and maintain narrative structure:
 ### Path Planning
 
 Ensure viable player routes:
+
 - Prove reachability to all keystone beats
 - Provide concrete path examples for critical sequences
 - Balance linearity with meaningful choice
@@ -27,6 +29,7 @@ Ensure viable player routes:
 ### Loop Design (Return-with-Difference)
 
 Create meaningful repeat visits:
+
 - State changes must affect choices or narration
 - Perceivable differences on return (not just flag checks)
 - Progressive reveal or escalation on subsequent visits
@@ -36,6 +39,7 @@ Create meaningful repeat visits:
 ### Gateway Definition
 
 Specify choice availability conditions:
+
 - **Diegetic:** Conditions phrased in-world, not meta
 - **Clear:** Player can understand requirements through story
 - **Obtainable:** At least one clear route to satisfy condition
@@ -47,6 +51,7 @@ Specify choice availability conditions:
 ### First-Choice Integrity
 
 Avoid early funnels where sibling choices are functionally equivalent:
+
 - If convergence necessary, insert micro-beat between scenes
 - Micro-beat sets visible state flag (e.g., stamped vs cadence-only)
 - Establish small risk/reward delta
@@ -55,6 +60,7 @@ Avoid early funnels where sibling choices are functionally equivalent:
 ### Contrastive Choices
 
 Make options read differently and imply different consequences:
+
 - Distinct framing (not cosmetic wording)
 - Different friction or stakes
 - Varied tone or approach
@@ -63,6 +69,7 @@ Make options read differently and imply different consequences:
 ### Return-with-Difference
 
 When paths reconverge, ensure perceivable differences:
+
 - State-aware affordances (new choices based on history)
 - Tone shifts reflecting prior decisions
 - NPC reactions to player state
@@ -88,12 +95,14 @@ Book Binder validates and strips these during export.
 **Standard Format:** `lowercase-dash-separated` (ASCII-safe, Kobo-compatible)
 
 **Creation Rules:**
+
 - Lowercase letters only
 - Separate words with dashes (not underscores)
 - No apostrophes, primes, or special characters (except dash)
 - Examples: `dock-seven`, `pier-6`, `s1-return`, `a2-k`
 
 **Naming Conventions:**
+
 - Section IDs: descriptive kebab-case (`office-midnight`, `alley-encounter`)
 - Hub IDs: prefix with `hub-` (`hub-dock-seven`)
 - Loop return IDs: suffix with `-return` (`s1-return`, `office-return`)
@@ -122,16 +131,19 @@ Book Binder validates and strips these during export.
 ## Handoff Protocols
 
 **To Scene Smith:**
+
 - Update choices and gateway phrasing in prose
 - Provide state-aware prose guidance for hub returns
 - Specify micro-beat requirements between convergent choices
 
 **To Lore Weaver:**
+
 - Validate topology consequences against canon
 - Check invariants aren't violated by structural changes
 - Confirm gateway conditions align with world rules
 
 **To Gatekeeper:**
+
 - Provide Nonlinearity/Reachability/Gateways bar proofs
 - Document path examples for validation
 - Supply topology notes for quality audit
@@ -148,6 +160,7 @@ Book Binder validates and strips these during export.
 ### Hub-and-Spoke
 
 Central location with multiple radiating paths:
+
 - Hub serves as navigation anchor
 - Spokes offer distinct experiences
 - Return to hub shows state changes
@@ -156,6 +169,7 @@ Central location with multiple radiating paths:
 ### Linear with Branches
 
 Main path with occasional meaningful divergences:
+
 - Critical path always accessible
 - Branches offer flavor and depth
 - Reconvergence shows state awareness
@@ -164,6 +178,7 @@ Main path with occasional meaningful divergences:
 ### Looping Structure
 
 Repeated visits to same locations:
+
 - Each visit reveals more or changes state
 - Progressive escalation or deterioration
 - Clear exit conditions from loop
@@ -172,6 +187,7 @@ Repeated visits to same locations:
 ### Multi-Path Convergence
 
 Multiple routes to same destination:
+
 - Path choice affects arrival state
 - Destination prose reflects route taken
 - Subsequent choices aware of path history
@@ -180,16 +196,19 @@ Multiple routes to same destination:
 ## Escalation Triggers
 
 **Ask Human:**
+
 - Trade-offs between accessibility and depth
 - Structural complexity vs player comprehension
 - Removal of established paths or hubs
 
 **Wake Showrunner:**
+
 - Topology changes require cross-role coordination
 - Scope expansion beyond current TU
 - Resource constraints (too many paths to author)
 
 **Coordinate with Lore Weaver:**
+
 - Canon implications of topology decisions
 - Gateway conditions based on world rules
 - Invariants that constrain structure
