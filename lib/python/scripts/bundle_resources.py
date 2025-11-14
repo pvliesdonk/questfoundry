@@ -80,7 +80,6 @@ def main() -> None:
     repo_root = lib_root.parent.parent  # Up from lib/python/scripts
 
     spec_schemas = repo_root / "spec" / "03-schemas"
-    spec_prompts = repo_root / "spec" / "05-prompts"
     spec_behavior = repo_root / "spec" / "05-behavior"
 
     target_schemas = lib_root / "src" / "questfoundry" / "resources" / "schemas"
@@ -90,6 +89,8 @@ def main() -> None:
     # Validate source directories exist
     if not spec_schemas.exists():
         raise FileNotFoundError(f"Schemas directory not found: {spec_schemas}")
+    if not spec_behavior.exists():
+        raise FileNotFoundError(f"Behavior directory not found: {spec_behavior}")
 
     # Ensure target directories exist
     target_schemas.mkdir(parents=True, exist_ok=True)
@@ -116,60 +117,35 @@ def main() -> None:
     logger.info(f"  ✓ Bundled {schema_count} schemas")
 
     # V2 Architecture: Compile and bundle manifests
-    if spec_behavior.exists():
-        logger.info(f"\n🔨 V2 Architecture detected: {spec_behavior}")
-        compiled_dir = repo_root / "dist" / "compiled"
+    logger.info(f"\n🔨 V2 Architecture: Compiling from {spec_behavior}")
+    compiled_dir = repo_root / "dist" / "compiled"
 
-        # Compile behavior primitives
-        compilation_ok = compile_spec(repo_root, compiled_dir)
+    # Compile behavior primitives
+    compilation_ok = compile_spec(repo_root, compiled_dir)
 
-        # Bundle compiled artifacts if they exist (even if compilation had warnings)
-        manifest_src = compiled_dir / "manifests"
-        standalone_src = compiled_dir / "standalone_prompts"
+    # Bundle compiled artifacts if they exist (even if compilation had warnings)
+    manifest_src = compiled_dir / "manifests"
+    standalone_src = compiled_dir / "standalone_prompts"
 
-        if manifest_src.exists():
-            logger.info(f"Bundling compiled manifests from {manifest_src}...")
-            manifest_count = 0
-            for manifest_file in manifest_src.glob("*.manifest.json"):
-                target_file = target_manifests / manifest_file.name
-                shutil.copy2(manifest_file, target_file)
-                manifest_count += 1
-            logger.info(f"  ✓ Bundled {manifest_count} playbook manifests")
-        elif compilation_ok:
-            logger.warning("No manifests found despite successful compilation")
+    if manifest_src.exists():
+        logger.info(f"Bundling compiled manifests from {manifest_src}...")
+        manifest_count = 0
+        for manifest_file in manifest_src.glob("*.manifest.json"):
+            target_file = target_manifests / manifest_file.name
+            shutil.copy2(manifest_file, target_file)
+            manifest_count += 1
+        logger.info(f"  ✓ Bundled {manifest_count} playbook manifests")
+    elif compilation_ok:
+        logger.warning("No manifests found despite successful compilation")
 
-        if standalone_src.exists():
-            logger.info(f"Bundling standalone prompts from {standalone_src}...")
-            standalone_count = 0
-            for prompt_file in standalone_src.glob("*.md"):
-                target_file = target_prompts / prompt_file.name
-                shutil.copy2(prompt_file, target_file)
-                standalone_count += 1
-            logger.info(f"  ✓ Bundled {standalone_count} standalone prompts")
-
-    # V1 Architecture: Bundle legacy prompts (backward compatibility)
-    if spec_prompts.exists():
-        logger.info(f"\nBundling legacy prompts from {spec_prompts}...")
-        prompt_count = 0
-        for role_dir in spec_prompts.iterdir():
-            if role_dir.is_dir() and not role_dir.name.startswith("_"):
-                target_role_dir = target_prompts / role_dir.name
-
-                # Copy the entire role directory structure
-                if target_role_dir.exists():
-                    shutil.rmtree(target_role_dir)
-                shutil.copytree(role_dir, target_role_dir)
-                prompt_count += 1
-        logger.info(f"  ✓ Bundled {prompt_count} legacy role prompts")
-
-        # Copy shared prompt resources if they exist
-        shared_dir = spec_prompts / "_shared"
-        if shared_dir.exists():
-            target_shared = target_prompts / "_shared"
-            if target_shared.exists():
-                shutil.rmtree(target_shared)
-            shutil.copytree(shared_dir, target_shared)
-            logger.info("  ✓ Bundled shared prompt resources")
+    if standalone_src.exists():
+        logger.info(f"Bundling standalone prompts from {standalone_src}...")
+        standalone_count = 0
+        for prompt_file in standalone_src.glob("*.md"):
+            target_file = target_prompts / prompt_file.name
+            shutil.copy2(prompt_file, target_file)
+            standalone_count += 1
+        logger.info(f"  ✓ Bundled {standalone_count} standalone prompts")
 
     logger.info("\n✅ Resource bundling completed successfully!")
     logger.info(f"   Schemas: {target_schemas}")

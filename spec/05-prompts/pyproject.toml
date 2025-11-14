@@ -1,8 +1,0 @@
-[tool.commitizen]
-name = "cz_conventional_commits"
-version_files = ["PROMPTS_VERSION.txt"]
-tag_format = "prompts-v$version"
-bump_message = "bump(prompts): version $current_version → $new_version"
-update_changelog_on_bump = true
-changelog_file = "CHANGELOG.md"
-annotated_tag = true
