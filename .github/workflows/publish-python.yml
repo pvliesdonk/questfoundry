@@ -10,6 +10,11 @@ on:
         options:
           - pypi
           - testpypi
+      bump_version:
+        description: "Automatically bump version and create a release tag"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   prepare-release:
@@ -18,7 +23,7 @@ jobs:
     permissions:
       contents: write
     outputs:
-      publish_ref: ${{ steps.bump.outputs.publish_ref || steps.test-ref.outputs.publish_ref }}
+      publish_ref: ${{ steps.bump.outputs.publish_ref || steps.manual-ref.outputs.publish_ref }}
       new_tag: ${{ steps.bump.outputs.new_tag }}
 
     steps:
@@ -29,23 +34,23 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python (release only)
-        if: inputs.destination == 'pypi'
+        if: inputs.destination == 'pypi' && inputs.bump_version == true
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Commitizen
-        if: inputs.destination == 'pypi'
+        if: inputs.destination == 'pypi' && inputs.bump_version == true
         run: pip install commitizen
 
       - name: Configure Git user
-        if: inputs.destination == 'pypi'
+        if: inputs.destination == 'pypi' && inputs.bump_version == true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Bump version, tag, and push
-        if: inputs.destination == 'pypi'
+        if: inputs.destination == 'pypi' && inputs.bump_version == true
         id: bump
         working-directory: lib/python
         run: |
@@ -55,9 +60,9 @@ jobs:
           echo "new_tag=${NEW_TAG}" >> $GITHUB_OUTPUT
           echo "publish_ref=${NEW_TAG}" >> $GITHUB_OUTPUT
 
-      - name: Use current SHA for TestPyPI
-        if: inputs.destination == 'testpypi'
-        id: test-ref
+      - name: Use current SHA without bump
+        if: inputs.destination == 'testpypi' || (inputs.destination == 'pypi' && inputs.bump_version == false)
+        id: manual-ref
         run: echo "publish_ref=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
   build:
@@ -147,7 +152,7 @@ jobs:
 
   github-release:
     name: Create GitHub Release
-    if: inputs.destination == 'pypi'
+    if: inputs.destination == 'pypi' && inputs.bump_version == true
     needs:
       - publish-to-pypi
       - prepare-release
