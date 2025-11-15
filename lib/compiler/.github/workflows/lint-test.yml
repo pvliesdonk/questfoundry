@@ -1,0 +1,95 @@
+name: Lint & Test Compiler
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'lib/compiler/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'lib/compiler/**'
+
+jobs:
+  lint-python:
+    name: Lint Python (Ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lib/compiler
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff check
+        run: uv run ruff check src tests
+
+      - name: Run ruff format check
+        run: uv run ruff format --check src tests
+
+  typecheck-python:
+    name: Type Check Python (mypy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lib/compiler
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run mypy
+        run: uv run mypy src
+
+  test-python:
+    name: Test Compiler
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: lib/compiler
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run pytest
+        run: uv run pytest --cov=questfoundry_compiler --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./lib/compiler/coverage.xml
+          flags: compiler-${{ matrix.python-version }}
+          fail_ci_if_error: false

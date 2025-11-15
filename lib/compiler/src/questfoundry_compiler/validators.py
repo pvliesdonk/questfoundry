@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from questfoundry.compiler.types import BehaviorPrimitive
+from questfoundry_compiler.types import BehaviorPrimitive
 
 
 class ReferenceValidator:

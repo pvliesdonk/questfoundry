@@ -9,15 +9,15 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from questfoundry.compiler.types import BehaviorPrimitive, CompilationError
+from questfoundry_compiler.types import BehaviorPrimitive, CompilationError
 
 if TYPE_CHECKING:
-    from questfoundry.compiler.assemblers import (
+    from questfoundry_compiler.assemblers import (
         ReferenceResolver,
         StandalonePromptAssembler,
     )
-    from questfoundry.compiler.manifest_builder import ManifestBuilder
-    from questfoundry.compiler.validators import ReferenceValidator
+    from questfoundry_compiler.manifest_builder import ManifestBuilder
+    from questfoundry_compiler.validators import ReferenceValidator
 
 
 # Import these after types to avoid circular dependency
@@ -29,12 +29,12 @@ def _import_helpers() -> tuple[
     type["ReferenceValidator"],
 ]:
     """Lazy import helpers to break circular dependency."""
-    from questfoundry.compiler.assemblers import (
+    from questfoundry_compiler.assemblers import (
         ReferenceResolver,
         StandalonePromptAssembler,
     )
-    from questfoundry.compiler.manifest_builder import ManifestBuilder
-    from questfoundry.compiler.validators import ReferenceValidator
+    from questfoundry_compiler.manifest_builder import ManifestBuilder
+    from questfoundry_compiler.validators import ReferenceValidator
 
     return (
         ReferenceResolver,

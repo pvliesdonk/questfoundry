@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from questfoundry.compiler.spec_compiler import CompilationError, SpecCompiler
+from questfoundry_compiler.spec_compiler import CompilationError, SpecCompiler
 
 
 def main() -> int:
@@ -107,7 +107,7 @@ Examples:
         if args.verbose:
             print("Validating references...")
 
-        from questfoundry.compiler.validators import ReferenceValidator
+        from questfoundry_compiler.validators import ReferenceValidator
 
         validator = ReferenceValidator(compiler.primitives, compiler.spec_root)
         errors = validator.validate_all()

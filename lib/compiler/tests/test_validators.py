@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from questfoundry.compiler.spec_compiler import SpecCompiler
-from questfoundry.compiler.validators import (
+from questfoundry_compiler.spec_compiler import SpecCompiler
+from questfoundry_compiler.validators import (
     ReferenceValidator,
     validate_manifest_structure,
 )
@@ -14,8 +14,8 @@ from questfoundry.compiler.validators import (
 @pytest.fixture
 def spec_root() -> Path:
     """Get the spec root directory."""
-    # Path: tests/compiler/test_validators.py -> repo_root / spec
-    return Path(__file__).parents[4] / "spec"
+    # Path: lib/compiler/tests/test_validators.py -> repo_root / spec
+    return Path(__file__).parents[3] / "spec"
 
 
 @pytest.fixture
