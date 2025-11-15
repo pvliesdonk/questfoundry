@@ -63,9 +63,9 @@ def test_pn_safety_invariant_cold_valid():
     result = validate_envelope_conformance(envelope)
 
     # Should have no PN safety violations (may have payload schema errors)
-    assert not any(
-        v.rule == "PN_SAFETY_INVARIANT" for v in result.violations
-    ), "Should not have PN safety violations"
+    assert not any(v.rule == "PN_SAFETY_INVARIANT" for v in result.violations), (
+        "Should not have PN safety violations"
+    )
 
 
 def test_pn_safety_invariant_hot_invalid():

@@ -118,7 +118,10 @@ def test_compile_all_creates_outputs(compiler: SpecCompiler, spec_root: Path) ->
                 if manifest_files:
                     manifest_data = json.loads(manifest_files[0].read_text())
                     assert "manifest_version" in manifest_data
-                    assert "playbook_id" in manifest_data
+                    # Manifests can be either playbook or adapter manifests
+                    assert (
+                        "playbook_id" in manifest_data or "adapter_id" in manifest_data
+                    )
 
             if stats["standalone_prompts_generated"] > 0:
                 prompt_files = list(
