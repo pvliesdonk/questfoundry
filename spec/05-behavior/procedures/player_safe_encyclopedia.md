@@ -6,7 +6,7 @@ roles: [codex_curator]
 references_schemas:
   - codex_entry.schema.json
 references_expertises:
-  - codex_curator_publishing
+  - codex_curator_publication
 quality_bars: [presentation, integrity, accessibility]
 ---
 

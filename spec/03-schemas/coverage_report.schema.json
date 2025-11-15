@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/coverage_report.schema.json",
+  "title": "coverage report",
+  "description": "Schema for coverage report (stub - to be fully defined)",
+  "type": "object",
+  "properties": {},
+  "required": []
+}

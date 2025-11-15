@@ -7,7 +7,7 @@ references_schemas:
   - determinism_log.schema.json
   - audio_plan.schema.json
 references_expertises:
-  - audio_producer_rendering
+  - audio_producer_generation
 quality_bars: [determinism, presentation]
 ---
 

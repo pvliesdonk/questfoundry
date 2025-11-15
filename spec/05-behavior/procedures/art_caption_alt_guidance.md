@@ -6,7 +6,7 @@ roles: [art_director]
 references_schemas:
   - art_plan.schema.json
 references_expertises:
-  - art_director_accessibility
+  - art_director_planning
   - codex_curator_terminology
 quality_bars: [presentation, accessibility]
 ---

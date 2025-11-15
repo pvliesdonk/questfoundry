@@ -7,7 +7,7 @@ references_schemas:
   - audio_plan.schema.json
   - audio_render.schema.json
 references_expertises:
-  - audio_producer_rendering
+  - audio_producer_generation
 quality_bars: [integrity, presentation, accessibility]
 ---
 

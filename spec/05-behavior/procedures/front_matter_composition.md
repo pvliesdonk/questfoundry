@@ -7,7 +7,7 @@ references_schemas:
   - view_export.schema.json
   - snapshot.schema.json
 references_expertises:
-  - book_binder_assembly
+  - book_binder_export
   - style_lead_voice
 quality_bars: [presentation, accessibility]
 ---
