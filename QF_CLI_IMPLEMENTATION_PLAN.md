@@ -9,18 +9,20 @@
 
 ## Executive Summary
 
-This plan describes the implementation of the **QF CLI** - a unified command-line interface for QuestFoundry. The implementation involves **three distinct components**:
+This plan describes the implementation of **three separate components** for the QuestFoundry ecosystem:
 
 1. **`lib/spec_compiler/`** - Standalone spec compiler library (extracted from lib/python)
-2. **Prompt Generator** - Tool to generate standalone prompts for LLM consumption
-3. **`qf` CLI** - Unified command-line interface orchestrating all QuestFoundry operations
+2. **`tools/prompt_generator/`** - Standalone prompt generation tool (depends on spec_compiler only)
+3. **`cli/python/`** - Unified qf CLI (depends on both spec_compiler and questfoundry-py)
 
 ### Critical Understanding
 
-These are **NOT the same program**. They are:
-- **lib/spec_compiler/** - A reusable library with no CLI
-- **Prompt Generator** - A feature within the qf CLI
-- **qf CLI** - The user-facing command-line tool
+These are **THREE SEPARATE PROGRAMS/REPOS**:
+- **lib/spec_compiler/** - A reusable library with no CLI dependencies
+- **tools/prompt_generator/** - A standalone tool that uses spec_compiler (NOT part of qf CLI)
+- **cli/python/ (qf CLI)** - The unified command-line interface for QuestFoundry runtime
+
+The prompt generator is **independent** from the qf CLI. Any similarity in command names is coincidental.
 
 ---
 
@@ -88,6 +90,18 @@ questfoundry/
 │       │   └── ...                 # Rest of questfoundry library
 │       └── pyproject.toml          # Add dependency: spec_compiler
 │
+├── tools/
+│   └── prompt_generator/           # NEW: Standalone prompt generator
+│       ├── src/
+│       │   └── qf_prompt_gen/
+│       │       ├── __init__.py
+│       │       ├── cli.py          # CLI entry point
+│       │       ├── generator.py    # Prompt generation logic
+│       │       └── formatters.py   # Output formatting
+│       ├── tests/
+│       ├── pyproject.toml          # Depends ONLY on spec_compiler
+│       └── README.md
+│
 └── cli/
     └── python/                     # NEW: Unified qf CLI
         ├── src/
@@ -98,14 +112,13 @@ questfoundry/
         │       │   ├── __init__.py
         │       │   ├── spec.py     # qf spec subcommands
         │       │   ├── run.py      # qf run subcommands
-        │       │   ├── generate.py # qf generate subcommands
         │       │   └── config.py   # qf config subcommands
         │       └── utils/
         │           ├── __init__.py
         │           ├── output.py   # Rich output formatting
         │           └── config.py   # Configuration management
         ├── tests/
-        ├── pyproject.toml
+        ├── pyproject.toml          # Depends on spec_compiler + questfoundry-py
         └── README.md
 ```
 
@@ -256,7 +269,30 @@ uv run pytest
 
 ---
 
-## Phase 2: Create Unified qf CLI
+## Phase 2: Create Standalone Prompt Generator
+
+### Objective
+
+Build a **standalone prompt generation tool** that depends ONLY on `lib/spec_compiler/` (not on questfoundry-py).
+
+### Purpose
+
+Generate standalone, self-contained prompts for LLM consumption by:
+1. Loading adapter configurations
+2. Resolving all @references (expertises, procedures, snippets)
+3. Inlining referenced content into a single markdown file
+4. Formatting for LLM consumption (GPT-4, Claude Sonnet 4.5+)
+
+### Command Structure
+
+```
+qf-prompt-gen
+├── generate              # Generate prompt for a role
+├── list                  # List available roles
+└── validate              # Validate adapter references
+```
+
+## Phase 3: Create Unified qf CLI
 
 ### Objective
 
@@ -284,9 +320,6 @@ qf
 │   ├── chat                 # Interactive chat mode
 │   └── playbook             # Execute playbook
 │
-├── generate
-│   └── prompt               # Generate standalone prompts
-│
 └── config
     ├── doctor               # Diagnose configuration
     ├── list-playbooks       # List available playbooks
@@ -294,9 +327,311 @@ qf
     └── set-default          # Set default configuration
 ```
 
+**Note:** The qf CLI does NOT include prompt generation - that's handled by the separate `qf-prompt-gen` tool.
+
 ### Tasks
 
-#### 2.1 Create CLI Project Structure
+#### 2.1 Create Prompt Generator Project Structure
+
+**Location:** `tools/prompt_generator/`
+
+**Initialize project:**
+```bash
+mkdir -p tools/prompt_generator/src/qf_prompt_gen
+mkdir -p tools/prompt_generator/tests
+cd tools/prompt_generator
+```
+
+#### 2.2 Create tools/prompt_generator/pyproject.toml
+
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "questfoundry-prompt-generator"
+version = "0.1.0"
+description = "Standalone prompt generator for QuestFoundry role adapters"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [{name = "Peter Liesdonk", email = "peter@liesdonk.nl"}]
+
+dependencies = [
+    "questfoundry-spec-compiler",    # ONLY dependency
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "click>=8.0.0",
+]
+
+[project.scripts]
+qf-prompt-gen = "qf_prompt_gen.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qf_prompt_gen"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+```
+
+#### 2.3 Implement Prompt Generator CLI
+
+**File:** `tools/prompt_generator/src/qf_prompt_gen/cli.py`
+
+```python
+"""QuestFoundry Prompt Generator CLI."""
+
+from pathlib import Path
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.syntax import Syntax
+from rich.table import Table
+from spec_compiler import SpecCompiler, CompilationError
+from spec_compiler.assemblers import ReferenceResolver, StandalonePromptAssembler
+
+app = typer.Typer(
+    name="qf-prompt-gen",
+    help="Generate standalone prompts for QuestFoundry role adapters",
+    add_completion=True,
+)
+
+console = Console()
+
+
+@app.command()
+def generate(
+    adapter: str = typer.Argument(
+        ...,
+        help="Adapter ID (role name) to generate prompt for",
+    ),
+    spec_dir: Path = typer.Option(
+        Path("spec"),
+        "--spec-dir",
+        help="Root directory of spec/",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Output file (default: stdout)",
+    ),
+    format: str = typer.Option(
+        "markdown",
+        "--format", "-f",
+        help="Output format: markdown",
+    ),
+):
+    """Generate standalone prompt for a role adapter.
+
+    This assembles a complete, self-contained prompt by:
+    1. Loading the adapter configuration
+    2. Resolving all @references (expertises, procedures, snippets)
+    3. Inlining referenced content into a single markdown file
+    4. Formatting for LLM consumption (GPT-4, Claude Sonnet 4.5+)
+
+    Example:
+        qf-prompt-gen generate lore_weaver
+        qf-prompt-gen generate scene_smith --output prompts/scene_smith.md
+    """
+
+    try:
+        # Load compiler
+        compiler = SpecCompiler(spec_dir)
+        compiler.load_all_primitives()
+
+        # Check adapter exists
+        adapter_key = f"adapter:{adapter}"
+        if adapter_key not in compiler.primitives:
+            console.print(f"[red]Error:[/red] Adapter not found: {adapter}")
+            console.print("\n[yellow]Available adapters:[/yellow]")
+            for key in sorted(compiler.primitives.keys()):
+                if key.startswith("adapter:"):
+                    console.print(f"  - {key.split(':')[1]}")
+            raise typer.Exit(1)
+
+        # Generate prompt
+        resolver = ReferenceResolver(compiler.primitives, compiler.spec_root)
+        assembler = StandalonePromptAssembler(
+            compiler.primitives, resolver, compiler.spec_root
+        )
+
+        prompt_text = assembler.assemble_role_prompt(adapter)
+
+        # Output
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(prompt_text)
+            console.print(f"✅ [green]Generated prompt:[/green] {output}")
+            console.print(f"   Characters: {len(prompt_text):,}")
+            console.print(f"   Lines: {len(prompt_text.splitlines()):,}")
+        else:
+            # Print to stdout with syntax highlighting
+            syntax = Syntax(prompt_text, "markdown", theme="monokai", line_numbers=False)
+            console.print(syntax)
+
+    except CompilationError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def list(
+    spec_dir: Path = typer.Option(
+        Path("spec"),
+        "--spec-dir",
+        help="Root directory of spec/",
+    ),
+):
+    """List available role adapters."""
+
+    try:
+        compiler = SpecCompiler(spec_dir)
+        compiler.load_all_primitives()
+
+        adapters = [
+            key.split(':')[1]
+            for key in sorted(compiler.primitives.keys())
+            if key.startswith("adapter:")
+        ]
+
+        if adapters:
+            table = Table(title="Available Role Adapters")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Abbreviation", style="yellow")
+
+            for adapter_id in adapters:
+                prim = compiler.primitives[f"adapter:{adapter_id}"]
+                name = prim.metadata.get('role_name', adapter_id)
+                abbr = prim.metadata.get('abbreviation', '—')
+                table.add_row(adapter_id, name, abbr)
+
+            console.print(table)
+        else:
+            console.print("[yellow]No adapters found[/yellow]")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def validate(
+    spec_dir: Path = typer.Option(
+        Path("spec"),
+        "--spec-dir",
+        help="Root directory of spec/",
+    ),
+    adapter: Optional[str] = typer.Option(
+        None,
+        "--adapter",
+        help="Validate specific adapter only",
+    ),
+):
+    """Validate adapter references."""
+
+    try:
+        compiler = SpecCompiler(spec_dir)
+        compiler.load_all_primitives()
+
+        from spec_compiler.validators import ReferenceValidator
+
+        validator = ReferenceValidator(compiler.primitives, compiler.spec_root)
+        errors = validator.validate_all()
+
+        if errors:
+            actual_errors = [e for e in errors if not e.startswith("Warning:")]
+            warnings = [e for e in errors if e.startswith("Warning:")]
+
+            if actual_errors:
+                console.print("[red]Validation errors:[/red]")
+                for error in actual_errors:
+                    console.print(f"  ❌ {error}")
+                raise typer.Exit(1)
+
+            if warnings:
+                console.print("[yellow]Validation warnings:[/yellow]")
+                for warning in warnings:
+                    console.print(f"  ⚠️  {warning}")
+
+        console.print("✅ [green]Validation passed[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()
+```
+
+#### 2.4 Create README
+
+**File:** `tools/prompt_generator/README.md`
+
+```markdown
+# QuestFoundry Prompt Generator
+
+Standalone tool to generate self-contained LLM prompts from QuestFoundry role adapters.
+
+## Installation
+
+```bash
+cd tools/prompt_generator
+uv sync
+```
+
+## Usage
+
+### Generate a prompt
+
+```bash
+# Output to stdout
+qf-prompt-gen generate lore_weaver
+
+# Save to file
+qf-prompt-gen generate scene_smith --output prompts/scene_smith.md
+```
+
+### List available roles
+
+```bash
+qf-prompt-gen list
+```
+
+### Validate adapter references
+
+```bash
+qf-prompt-gen validate
+```
+
+## Dependencies
+
+- `questfoundry-spec-compiler` - Spec compiler library (ONLY dependency)
+- `typer` - CLI framework
+- `rich` - Terminal formatting
+
+**Note:** This tool does NOT depend on `questfoundry-py`. It only uses the spec compiler.
+```
+
+---
+
+## Phase 3 Tasks (Unified qf CLI)
+
+### Tasks
+
+#### 3.1 Create CLI Project Structure
 
 **Location:** `cli/python/`
 
@@ -306,7 +641,7 @@ cd cli/python
 # Create pyproject.toml with dependencies
 ```
 
-#### 2.2 Create cli/python/pyproject.toml
+#### 3.2 Create cli/python/pyproject.toml
 
 ```toml
 [build-system]
@@ -350,7 +685,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 ```
 
-#### 2.3 Implement CLI Entry Point
+#### 3.3 Implement CLI Entry Point
 
 **File:** `cli/python/src/qf_cli/main.py`
 
@@ -387,7 +722,7 @@ if __name__ == "__main__":
     app()
 ```
 
-#### 2.4 Implement `qf spec` Commands
+#### 3.4 Implement `qf spec` Commands
 
 **File:** `cli/python/src/qf_cli/commands/spec.py`
 
@@ -560,94 +895,7 @@ def watch(
     raise typer.Exit(1)
 ```
 
-#### 2.5 Implement `qf generate` Commands
-
-**File:** `cli/python/src/qf_cli/commands/generate.py`
-
-```python
-"""Prompt generation commands."""
-
-from pathlib import Path
-from typing import Optional
-
-import typer
-from rich.console import Console
-from rich.syntax import Syntax
-from spec_compiler import SpecCompiler
-
-app = typer.Typer()
-console = Console()
-
-
-@app.command()
-def prompt(
-    adapter: str = typer.Argument(
-        ...,
-        help="Adapter ID (role name) to generate prompt for",
-    ),
-    spec_dir: Path = typer.Option(
-        Path("spec"),
-        "--spec-dir",
-        help="Root directory of spec/",
-    ),
-    output: Optional[Path] = typer.Option(
-        None,
-        "--output", "-o",
-        help="Output file (default: stdout)",
-    ),
-    format: str = typer.Option(
-        "markdown",
-        "--format", "-f",
-        help="Output format: markdown, json",
-    ),
-):
-    """Generate standalone prompt for a role adapter.
-
-    This assembles a complete, self-contained prompt by:
-    1. Loading the adapter configuration
-    2. Resolving all @references (expertises, procedures, snippets)
-    3. Inlining referenced content into a single markdown file
-    4. Formatting for LLM consumption (GPT-4, Claude Sonnet 4.5+)
-
-    Example:
-        qf generate prompt lore_weaver
-        qf generate prompt scene_smith --output prompts/scene_smith.md
-    """
-
-    # Load compiler
-    compiler = SpecCompiler(spec_dir)
-    compiler.load_all_primitives()
-
-    # Check adapter exists
-    adapter_key = f"adapter:{adapter}"
-    if adapter_key not in compiler.primitives:
-        console.print(f"[red]Error:[/red] Adapter not found: {adapter}")
-        console.print("\n[yellow]Available adapters:[/yellow]")
-        for key in sorted(compiler.primitives.keys()):
-            if key.startswith("adapter:"):
-                console.print(f"  - {key.split(':')[1]}")
-        raise typer.Exit(1)
-
-    # Generate prompt
-    from spec_compiler.assemblers import ReferenceResolver, StandalonePromptAssembler
-
-    resolver = ReferenceResolver(compiler.primitives, compiler.spec_root)
-    assembler = StandalonePromptAssembler(compiler.primitives, resolver, compiler.spec_root)
-
-    prompt_text = assembler.assemble_role_prompt(adapter)
-
-    # Output
-    if output:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(prompt_text)
-        console.print(f"✅ [green]Generated prompt:[/green] {output}")
-    else:
-        # Print to stdout with syntax highlighting
-        syntax = Syntax(prompt_text, "markdown", theme="monokai", line_numbers=False)
-        console.print(syntax)
-```
-
-#### 2.6 Implement `qf run` Commands (Stub)
+#### 3.5 Implement `qf run` Commands (Stub)
 
 **File:** `cli/python/src/qf_cli/commands/run.py`
 
@@ -685,7 +933,7 @@ def playbook():
     console.print("[yellow]qf run playbook: Not yet implemented[/yellow]")
 ```
 
-#### 2.7 Implement `qf config` Commands
+#### 3.6 Implement `qf config` Commands
 
 **File:** `cli/python/src/qf_cli/commands/config.py`
 
@@ -827,12 +1075,14 @@ def set_default():
 1. **Phase 1.1-1.3** - Extract spec_compiler library structure
 2. **Phase 1.4** - Update lib/python dependencies
 3. **Phase 1.5** - Port and run tests
-4. **Phase 2.1-2.2** - Create CLI project structure
-5. **Phase 2.3** - Implement CLI entry point
-6. **Phase 2.4** - Implement `qf spec` commands
-7. **Phase 2.5** - Implement `qf generate` commands
-8. **Phase 2.7** - Implement `qf config` commands
-9. **Phase 2.6** - Stub `qf run` commands (future work)
+4. **Phase 2.1-2.2** - Create prompt generator project structure
+5. **Phase 2.3** - Implement prompt generator CLI
+6. **Phase 2.4** - Create prompt generator README
+7. **Phase 3.1-3.2** - Create qf CLI project structure
+8. **Phase 3.3** - Implement qf CLI entry point
+9. **Phase 3.4** - Implement `qf spec` commands
+10. **Phase 3.6** - Implement `qf config` commands
+11. **Phase 3.5** - Stub `qf run` commands (future work)
 
 ---
 
@@ -895,11 +1145,14 @@ qf config list-roles
 
 **Migration guide for users:**
 ```bash
-# OLD
+# OLD: Compilation
 qf-compile --spec-dir spec/ --output dist/compiled/
 
-# NEW
+# NEW: Compilation
 qf spec compile --spec-dir spec/ --output dist/compiled/
+
+# NEW: Prompt generation (separate tool)
+qf-prompt-gen generate lore_weaver --output prompts/lore_weaver.md
 ```
 
 ---
@@ -913,6 +1166,17 @@ dependencies = [
     "pydantic>=2.0",
     "jsonschema>=4.0",
     "pyyaml>=6.0",
+]
+```
+
+### tools/prompt_generator/
+
+```toml
+dependencies = [
+    "questfoundry-spec-compiler",    # Phase 1 output (ONLY dependency)
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "click>=8.0.0",
 ]
 ```
 
@@ -940,9 +1204,17 @@ dependencies = [
 - ✅ All existing functionality works without regression
 
 ### Phase 2 Complete When:
+- ✅ `qf-prompt-gen` command is installed and discoverable
+- ✅ `qf-prompt-gen generate` produces valid standalone prompts
+- ✅ `qf-prompt-gen list` shows all available adapters
+- ✅ `qf-prompt-gen validate` checks adapter references
+- ✅ Tool depends ONLY on spec_compiler (not questfoundry-py)
+- ✅ All commands have `--help` documentation
+- ✅ Rich output formatting works correctly
+
+### Phase 3 Complete When:
 - ✅ `qf` command is installed and discoverable
 - ✅ `qf spec compile` produces identical output to old `qf-compile`
-- ✅ `qf generate prompt` generates valid standalone prompts
 - ✅ `qf config` commands provide useful diagnostics
 - ✅ All commands have `--help` documentation
 - ✅ Rich output formatting works correctly
