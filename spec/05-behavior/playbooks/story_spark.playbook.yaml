@@ -63,6 +63,8 @@ procedures:
   supporting:
     - "@procedure:spoiler_hygiene"
     - "@procedure:tu_lifecycle"
+    - "@procedure:prose_drafting"
+    - "@procedure:sensory_anchoring"
 
 # Validation requirements
 validation_requirements:

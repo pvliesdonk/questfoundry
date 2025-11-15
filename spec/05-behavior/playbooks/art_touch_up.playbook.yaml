@@ -58,6 +58,9 @@ procedures:
   supporting:
     - "@procedure:artifact_validation"
     - "@procedure:spoiler_hygiene"
+    - "@procedure:art_determinism_planning"
+    - "@procedure:alt_text_creation"
+    - "@procedure:determinism_logging"
 
 # Merge options
 merge_options:

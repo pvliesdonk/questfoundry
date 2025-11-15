@@ -60,6 +60,8 @@ procedures:
   supporting:
     - "@procedure:spoiler_hygiene"
     - "@procedure:tu_lifecycle"
+    - "@procedure:player_safe_encyclopedia"
+    - "@procedure:curator_gap_identification"
 
 # Entry anatomy
 entry_anatomy:
