@@ -314,3 +314,564 @@ class StandalonePromptAssembler:
             sections.append("")
 
         return "\n".join(sections)
+
+
+class PromptAssembler:
+    """Assemble monolithic web prompts for loops or roles."""
+
+    def __init__(
+        self,
+        primitives: dict[str, BehaviorPrimitive],
+        resolver: ReferenceResolver,
+        spec_root: Path,
+    ):
+        """Initialize assembler.
+
+        Args:
+            primitives: Dictionary of loaded primitives
+            resolver: Reference resolver
+            spec_root: Root directory of spec/
+        """
+        self.primitives = primitives
+        self.resolver = resolver
+        self.spec_root = Path(spec_root)
+
+    def _parse_raci_from_markdown(self, loop_name: str) -> dict[str, list[str]]:
+        """Parse RACI assignments from spec/01-roles/raci/by_loop.md.
+
+        Args:
+            loop_name: Name of the loop (e.g., "Lore Deepening", "Story Spark")
+
+        Returns:
+            Dict with keys 'R', 'A', 'C', 'I' containing role abbreviations
+
+        Raises:
+            CompilationError: If RACI file not found or loop not found
+        """
+        raci_file = self.spec_root / "01-roles" / "raci" / "by_loop.md"
+        if not raci_file.exists():
+            raise CompilationError(f"RACI file not found: {raci_file}")
+
+        # Read and parse the markdown
+        content = raci_file.read_text()
+
+        # Map of role abbreviations to adapter IDs
+        role_map = {
+            "SR": "showrunner",
+            "GK": "gatekeeper",
+            "PW": "plotwright",
+            "SS": "scene_smith",
+            "ST": "style_lead",
+            "LW": "lore_weaver",
+            "CC": "codex_curator",
+            "RS": "researcher",
+            "AD": "art_director",
+            "IL": "illustrator",
+            "AuD": "audio_director",
+            "AuP": "audio_producer",
+            "TR": "translator",
+            "BB": "book_binder",
+            "PN": "player_narrator",
+        }
+
+        # Find the section for this loop
+        # Pattern: ## N) Loop Name
+        loop_pattern = rf"## \d+\)\s+{re.escape(loop_name)}\s*(?:\(.*?\))?\s*\n"
+        match = re.search(loop_pattern, content, re.IGNORECASE)
+        if not match:
+            raise CompilationError(f"Loop '{loop_name}' not found in RACI by_loop.md")
+
+        # Extract section until next heading
+        start_pos = match.end()
+        next_section = re.search(r"\n##\s", content[start_pos:])
+        if next_section:
+            section = content[start_pos : start_pos + next_section.start()]
+        else:
+            section = content[start_pos:]
+
+        # Parse RACI lines
+        raci: dict[str, list[str]] = {"R": [], "A": [], "C": [], "I": []}
+
+        # Look for lines like: - **R:** PW
+        # or: - **R (plan):** AD
+        for line in section.split("\n"):
+            for key in ["R", "A", "C", "I"]:
+                pattern = rf"-\s+\*\*{key}(?:\s*\([^)]+\))?\s*:\*\*\s+(.+)"
+                match = re.search(pattern, line)
+                if match:
+                    roles_str = match.group(1)
+                    # Handle "All creation roles (...)" specially
+                    if "All creation roles" in roles_str:
+                        # Extract roles from parentheses
+                        paren_match = re.search(r"\(([^)]+)\)", roles_str)
+                        if paren_match:
+                            roles_str = paren_match.group(1)
+
+                    # Split on comma and resolve abbreviations
+                    for abbrev in re.findall(r"\b[A-Z][A-Za-z]*\b", roles_str):
+                        if abbrev in role_map:
+                            adapter_id = role_map[abbrev]
+                            if adapter_id not in raci[key]:
+                                raci[key].append(adapter_id)
+
+        return raci
+
+    def _get_adapter_id_from_ref(self, ref: str) -> str | None:
+        """Extract adapter ID from a reference string.
+
+        Args:
+            ref: Reference like '@adapter:lore_weaver'
+
+        Returns:
+            Adapter ID or None if not a valid adapter reference
+        """
+        match = self.resolver.reference_pattern.match(ref)
+        if match and match.group(1) == "adapter":
+            return match.group(2)
+        return None
+
+    def assemble_web_prompt_for_loop(self, playbook_id: str) -> str:
+        """Assemble complete web prompt for a specific loop.
+
+        This creates a monolithic prompt suitable for web agent simulation,
+        including the Showrunner expertise, playbook procedures, and all
+        participating role expertises.
+
+        Args:
+            playbook_id: ID of the playbook (e.g., 'lore_deepening')
+
+        Returns:
+            Complete assembled markdown prompt
+
+        Raises:
+            CompilationError: If assembly fails
+        """
+        playbook = self.primitives.get(f"playbook:{playbook_id}")
+        if not playbook:
+            raise CompilationError(f"Playbook not found: {playbook_id}")
+
+        data = playbook.metadata
+        playbook_name = data.get("playbook_name", playbook_id)
+
+        sections = []
+
+        # Header
+        sections.append(f"# QuestFoundry Web Agent Prompt: {playbook_name}")
+        sections.append("")
+        sections.append(
+            "**Purpose:** This prompt enables a web agent (LLM) to simulate "
+            "the entire QuestFoundry studio executing the "
+            f"{playbook_name} loop."
+        )
+        sections.append("")
+        sections.append("**Target:** GPT-4+, Claude Sonnet 3.5+, Gemini 1.5 Pro+")
+        sections.append("")
+        sections.append("---")
+        sections.append("")
+
+        # Overview
+        sections.append("## Loop Overview")
+        sections.append("")
+        sections.append(f"**Loop:** {playbook_name}")
+        if "category" in data:
+            sections.append(f"**Category:** {data['category']}")
+        if "purpose" in data:
+            sections.append(f"**Purpose:** {data['purpose']}")
+        if "outcome" in data:
+            sections.append(f"**Expected Outcome:** {data['outcome']}")
+        sections.append("")
+        sections.append("---")
+        sections.append("")
+
+        # Get RACI from by_loop.md
+        try:
+            raci_roles = self._parse_raci_from_markdown(playbook_name)
+        except CompilationError:
+            # Fall back to RACI from playbook YAML
+            raci_roles = {"R": [], "A": [], "C": [], "I": []}
+            if "raci" in data:
+                for role_type_key, role_type_val in [
+                    ("responsible", "R"),
+                    ("accountable", "A"),
+                    ("consulted", "C"),
+                    ("informed", "I"),
+                ]:
+                    if role_type_key in data["raci"]:
+                        for item in data["raci"][role_type_key]:
+                            if isinstance(item, dict) and "role" in item:
+                                adapter_id = self._get_adapter_id_from_ref(item["role"])
+                                if adapter_id:
+                                    raci_roles[role_type_val].append(adapter_id)
+
+        # Collect all unique roles
+        all_roles = set()
+        for role_list in raci_roles.values():
+            all_roles.update(role_list)
+
+        # RACI Matrix
+        sections.append("## RACI Matrix")
+        sections.append("")
+        if raci_roles["R"]:
+            sections.append(f"**Responsible:** {', '.join(raci_roles['R'])}")
+        if raci_roles["A"]:
+            sections.append(f"**Accountable:** {', '.join(raci_roles['A'])}")
+        if raci_roles["C"]:
+            sections.append(f"**Consulted:** {', '.join(raci_roles['C'])}")
+        if raci_roles["I"]:
+            sections.append(f"**Informed:** {', '.join(raci_roles['I'])}")
+        sections.append("")
+        sections.append("---")
+        sections.append("")
+
+        # Always include Showrunner expertise first
+        sections.append("## Showrunner Expertise")
+        sections.append("")
+        sections.append(
+            "*The Showrunner orchestrates the loop and coordinates all roles.*"
+        )
+        sections.append("")
+        try:
+            showrunner_expertise = self.resolver.resolve_reference(
+                "@expertise:showrunner_expertise", inline_content=True
+            )
+            sections.append(showrunner_expertise)
+        except CompilationError:
+            sections.append("<!-- Showrunner expertise not found -->")
+        sections.append("")
+        sections.append("---")
+        sections.append("")
+
+        # Role Expertises
+        sections.append("## Role Expertises")
+        sections.append("")
+        for role_id in sorted(all_roles):
+            if role_id == "showrunner":
+                continue  # Already included above
+
+            adapter = self.primitives.get(f"adapter:{role_id}")
+            if not adapter:
+                continue
+
+            adapter_data = adapter.metadata
+            role_name = adapter_data.get("role_name", role_id)
+
+            sections.append(f"### {role_name}")
+            sections.append("")
+
+            if "mission" in adapter_data:
+                sections.append(f"**Mission:** {adapter_data['mission']}")
+                sections.append("")
+
+            # Include expertise
+            if "expertise" in adapter_data:
+                try:
+                    expertise_content = self.resolver.resolve_reference(
+                        adapter_data["expertise"], inline_content=True
+                    )
+                    sections.append(expertise_content)
+                    sections.append("")
+                except CompilationError:
+                    sections.append("<!-- Expertise not found -->")
+                    sections.append("")
+
+        sections.append("---")
+        sections.append("")
+
+        # Primary Procedures
+        sections.append("## Primary Procedures")
+        sections.append("")
+        sections.append(
+            f"*These are the core procedures for the {playbook_name} loop.*"
+        )
+        sections.append("")
+
+        if "procedures" in data and "primary" in data["procedures"]:
+            for proc_ref in data["procedures"]["primary"]:
+                try:
+                    proc_content = self.resolver.resolve_reference(
+                        proc_ref, inline_content=True
+                    )
+                    sections.append(proc_content)
+                    sections.append("")
+                except CompilationError:
+                    sections.append(f"<!-- Error loading procedure {proc_ref} -->")
+                    sections.append("")
+
+        sections.append("---")
+        sections.append("")
+
+        # Supporting Procedures
+        if "procedures" in data and "supporting" in data["procedures"]:
+            sections.append("## Supporting Procedures")
+            sections.append("")
+            for proc_ref in data["procedures"]["supporting"]:
+                try:
+                    proc_content = self.resolver.resolve_reference(
+                        proc_ref, inline_content=True
+                    )
+                    sections.append(proc_content)
+                    sections.append("")
+                except CompilationError:
+                    sections.append(f"<!-- Error loading procedure {proc_ref} -->")
+                    sections.append("")
+
+            sections.append("---")
+            sections.append("")
+
+        # Safety Protocols
+        sections.append("## Safety & Validation Protocols")
+        sections.append("")
+
+        # Add validation reminder from playbook
+        if (
+            "validation_requirements" in data
+            and "reference" in data["validation_requirements"]
+        ):
+            try:
+                validation_ref = data["validation_requirements"]["reference"]
+                validation_content = self.resolver.resolve_reference(
+                    validation_ref, inline_content=True
+                )
+                sections.append(validation_content)
+                sections.append("")
+            except CompilationError:
+                pass
+
+        # Add common safety snippets
+        common_snippets = [
+            "@snippet:spoiler_hygiene_check",
+            "@snippet:pn_safety_warning",
+        ]
+        for snippet_ref in common_snippets:
+            try:
+                snippet_content = self.resolver.resolve_reference(
+                    snippet_ref, inline_content=True
+                )
+                sections.append(snippet_content)
+                sections.append("")
+            except CompilationError:
+                pass  # Snippet may not exist
+
+        sections.append("---")
+        sections.append("")
+
+        # Procedure Steps
+        if "procedure_steps" in data:
+            sections.append("## Execution Steps")
+            sections.append("")
+            for step_data in data["procedure_steps"]:
+                step_num = step_data.get("step", "?")
+                step_name = step_data.get("name", "Unnamed Step")
+                owner = step_data.get("owner", "?")
+                action = step_data.get("action", "")
+
+                sections.append(f"### Step {step_num}: {step_name}")
+                sections.append("")
+                sections.append(f"**Owner:** {owner}")
+                if action:
+                    sections.append(f"**Action:** {action}")
+                sections.append("")
+
+            sections.append("---")
+            sections.append("")
+
+        # Artifacts
+        if "artifacts" in data:
+            sections.append("## Artifacts")
+            sections.append("")
+            sections.append("*Schemas referenced by this loop:*")
+            sections.append("")
+            for artifact in data["artifacts"]:
+                sections.append(f"- `{artifact}`")
+            sections.append("")
+            sections.append("---")
+            sections.append("")
+
+        # Footer
+        sections.append("## Usage Instructions")
+        sections.append("")
+        sections.append(
+            "1. You are simulating the entire QuestFoundry studio in this chat."
+        )
+        sections.append(
+            f"2. The Customer will provide inputs to start the {playbook_name} loop."
+        )
+        sections.append(
+            "3. Act as the Showrunner to coordinate all roles (LW, SR, etc.)."
+        )
+        sections.append(
+            "4. Follow the procedures and steps outlined above in sequence."
+        )
+        sections.append(
+            "5. Produce artifacts matching the referenced schemas where applicable."
+        )
+        sections.append("6. Respect all safety protocols and quality bars.")
+        sections.append("")
+
+        return "\n".join(sections)
+
+    def assemble_web_prompt_for_roles(
+        self, role_ids: list[str], standalone: bool = False
+    ) -> str:
+        """Assemble complete web prompt for specific roles.
+
+        Args:
+            role_ids: List of adapter IDs (e.g., ['lore_weaver', 'plotwright'])
+            standalone: If True, include all procedures from loops these roles
+                       participate in
+
+        Returns:
+            Complete assembled markdown prompt
+
+        Raises:
+            CompilationError: If assembly fails
+        """
+        sections = []
+
+        # Header
+        role_names = []
+        for role_id in role_ids:
+            adapter = self.primitives.get(f"adapter:{role_id}")
+            if adapter:
+                role_names.append(adapter.metadata.get("role_name", role_id))
+            else:
+                role_names.append(role_id)
+
+        sections.append(f"# QuestFoundry Web Agent Prompt: {', '.join(role_names)}")
+        sections.append("")
+        sections.append(
+            "**Purpose:** This prompt enables a web agent (LLM) to act as "
+            f"the following QuestFoundry roles: {', '.join(role_names)}."
+        )
+        sections.append("")
+        sections.append("**Target:** GPT-4+, Claude Sonnet 3.5+, Gemini 1.5 Pro+")
+        sections.append("")
+        sections.append("---")
+        sections.append("")
+
+        # For each role
+        for role_id in role_ids:
+            adapter = self.primitives.get(f"adapter:{role_id}")
+            if not adapter:
+                sections.append(f"<!-- Adapter not found: {role_id} -->")
+                sections.append("")
+                continue
+
+            adapter_data = adapter.metadata
+            role_name = adapter_data.get("role_name", role_id)
+
+            sections.append(f"## {role_name}")
+            sections.append("")
+
+            # Mission
+            if "mission" in adapter_data:
+                sections.append(f"**Mission:** {adapter_data['mission']}")
+                sections.append("")
+
+            # Expertise
+            if "expertise" in adapter_data:
+                sections.append("### Expertise")
+                sections.append("")
+                try:
+                    expertise_content = self.resolver.resolve_reference(
+                        adapter_data["expertise"], inline_content=True
+                    )
+                    sections.append(expertise_content)
+                    sections.append("")
+                except CompilationError:
+                    sections.append("<!-- Expertise not found -->")
+                    sections.append("")
+
+            # Primary Procedures
+            if "procedures" in adapter_data and "primary" in adapter_data["procedures"]:
+                sections.append("### Primary Procedures")
+                sections.append("")
+                for proc_ref in adapter_data["procedures"]["primary"]:
+                    try:
+                        proc_content = self.resolver.resolve_reference(
+                            proc_ref, inline_content=True
+                        )
+                        sections.append(proc_content)
+                        sections.append("")
+                    except CompilationError:
+                        sections.append(f"<!-- Error loading procedure {proc_ref} -->")
+                        sections.append("")
+
+            # Loop Participation
+            if "loops" in adapter_data:
+                sections.append("### Loop Participation")
+                sections.append("")
+                for loop in adapter_data["loops"]:
+                    playbook_ref = loop.get("playbook", "")
+                    raci = loop.get("raci", "")
+                    desc = loop.get("description", "")
+
+                    # Extract playbook ID
+                    playbook_id = self._get_adapter_id_from_ref(playbook_ref)
+                    if not playbook_id:
+                        # Try direct extraction
+                        match = self.resolver.reference_pattern.match(playbook_ref)
+                        if match:
+                            playbook_id = match.group(2)
+
+                    sections.append(f"**{playbook_id}** ({raci})")
+                    if desc:
+                        sections.append(f": {desc}")
+                    sections.append("")
+
+                    # If standalone mode, include procedures from this loop
+                    if standalone and playbook_id:
+                        playbook = self.primitives.get(f"playbook:{playbook_id}")
+                        if playbook:
+                            playbook_data = playbook.metadata
+                            if "procedures" in playbook_data:
+                                if "primary" in playbook_data["procedures"]:
+                                    sections.append(f"*Procedures from {playbook_id}:*")
+                                    sections.append("")
+                                    for proc_ref in playbook_data["procedures"][
+                                        "primary"
+                                    ]:
+                                        try:
+                                            proc_content = (
+                                                self.resolver.resolve_reference(
+                                                    proc_ref, inline_content=True
+                                                )
+                                            )
+                                            sections.append(proc_content)
+                                            sections.append("")
+                                        except CompilationError:
+                                            pass
+
+            # Safety Protocols
+            if "safety_protocols" in adapter_data:
+                sections.append("### Safety Protocols")
+                sections.append("")
+                for snippet_ref in adapter_data["safety_protocols"]:
+                    try:
+                        snippet_content = self.resolver.resolve_reference(
+                            snippet_ref, inline_content=True
+                        )
+                        sections.append(snippet_content)
+                        sections.append("")
+                    except CompilationError:
+                        pass
+
+            sections.append("---")
+            sections.append("")
+
+        # Footer
+        sections.append("## Usage Instructions")
+        sections.append("")
+        sections.append(
+            "1. You are acting as the specified QuestFoundry role(s) in this chat."
+        )
+        sections.append(
+            "2. Follow the procedures and expertise guidelines outlined above."
+        )
+        sections.append("3. Respect all safety protocols and quality bars.")
+        sections.append(
+            "4. Coordinate with other roles as indicated in loop participation."
+        )
+        sections.append("")
+
+        return "\n".join(sections)
