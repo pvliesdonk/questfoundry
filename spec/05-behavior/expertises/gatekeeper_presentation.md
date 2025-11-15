@@ -11,6 +11,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 **Validates:** All player-visible text is spoiler-free and diegetic
 
 **Scope:**
+
 - Section prose
 - Choice text
 - Codex entries (player stages only)
@@ -23,12 +24,14 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 ### 1. Spoilers
 
 **Direct Reveals:**
+
 - Future plot points visible too early
 - Character allegiances revealed prematurely
 - Outcomes telegraphed before choices
 - Twists exposed in descriptive text
 
 **Indirect Leaks:**
+
 - Foreshadowing that's too obvious
 - Choice text that implies outcomes
 - Codex entries that reveal future content
@@ -37,6 +40,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 ### 2. Internal Plumbing
 
 **Forbidden Content:**
+
 - State variable names or codewords
 - Gateway conditions or logic
 - Branching structure references
@@ -45,6 +49,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 - Artifact IDs or internal labels
 
 **Examples:**
+
 - ❌ "If loyalty_count > 3, this path unlocks"
 - ❌ "This is section_brief_47"
 - ❌ "Gateway: has_sword && trust_level_2"
@@ -53,6 +58,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 ### 3. Meta Terminology
 
 **Out-of-Game Language:**
+
 - Role names (Showrunner, Lore Weaver, etc.)
 - System terminology (canon, trace unit, hook)
 - Authoring notes or production comments
@@ -60,6 +66,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 - File paths or technical references
 
 **Examples:**
+
 - ❌ "TODO: Add lore here"
 - ❌ "See canon_pack_17 for background"
 - ❌ "Gatekeeper note: Check continuity"
@@ -68,6 +75,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 ### 4. Accessibility Violations
 
 **Alt Text Issues:**
+
 - Technical descriptions instead of sensory
 - Spoilers in image alt text
 - Missing or placeholder descriptions
@@ -78,6 +86,7 @@ Enforce the Presentation Quality Bar (#7) to ensure player-facing surfaces conta
 ### Step 1: Identify Violations
 
 Scan all player-facing text for:
+
 - Search for internal terminology patterns
 - Flag forward references to unrevealed content
 - Detect meta language and authoring artifacts
@@ -93,6 +102,7 @@ Scan all player-facing text for:
 ### Step 3: Provide Fixes
 
 For each violation:
+
 1. **Quote exact text** with file and line number
 2. **Explain violation** (which bar, why it fails)
 3. **Suggest rewrite** using diegetic alternatives
@@ -101,24 +111,29 @@ For each violation:
 ## Collaboration Points
 
 **With Lore Weaver:**
+
 - Validate canon summaries for leaks
 - Ensure diegetic consistency
 
 **With Codex Curator:**
+
 - Review unlock logic for spoiler prevention
 - Verify progressive reveal staging
 
 **With Scene Smith:**
+
 - Check prose for forward references
 - Validate choice text framing
 
 **With Book Binder:**
+
 - Ensure export views maintain spoiler hygiene
 - Verify player surfaces remain sealed
 
 ## Quick Reference
 
 **Always Forbidden:**
+
 - Variable names in player text
 - "If X then Y" gateway logic
 - Role or system terminology
@@ -126,6 +141,7 @@ For each violation:
 - Debug/TODO markers
 
 **Always Required:**
+
 - Diegetic framing
 - In-world language
 - Player-appropriate knowledge

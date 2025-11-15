@@ -291,7 +291,9 @@ class SpecCompiler:
 
         # Extract additional expertises
         if "references_expertises" in data:
-            additional_expertise_ids = self._extract_ref_ids(data["references_expertises"])
+            additional_expertise_ids = self._extract_ref_ids(
+                data["references_expertises"]
+            )
             if additional_expertise_ids:
                 if "expertise" in refs:
                     refs["expertise"].extend(additional_expertise_ids)

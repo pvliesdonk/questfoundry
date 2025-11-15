@@ -26,36 +26,42 @@ This document tracks behavior primitives (expertises, procedures, snippets) that
 These domain expertise definitions are not currently referenced by any playbook or adapter:
 
 ### 1. `translator_terminology`
+
 **File:** `spec/05-behavior/expertises/translator_terminology.md`
 **Purpose:** Bilingual glossary management, translation term consistency
 **Why Orphaned:** Created during spec validation fix; needs integration into translation_pass playbook
 **Recommendation:** Reference from `translator.adapter.yaml`
 
 ### 2. `gatekeeper_presentation`
+
 **File:** `spec/05-behavior/expertises/gatekeeper_presentation.md`
 **Purpose:** Enforce Presentation Quality Bar (#7) - spoiler safety, player-facing polish
 **Why Orphaned:** Created during spec validation fix; Gatekeeper may use generic quality bar expertise
 **Recommendation:** Reference from `gatekeeper.adapter.yaml` or merge into existing gatekeeper expertise
 
 ### 3. `codex_curator_terminology`
+
 **File:** `spec/05-behavior/expertises/codex_curator_terminology.md`
 **Purpose:** Glossary governance, cross-entry consistency, spoiler prevention
 **Why Orphaned:** Created during spec validation fix; needs integration into codex_expansion playbook
 **Recommendation:** Reference from `codex_curator.adapter.yaml`
 
 ### 4. `audio_producer_safety`
+
 **File:** `spec/05-behavior/expertises/audio_producer_safety.md`
 **Purpose:** Audio safety standards (volume, frequency, accessibility)
 **Why Orphaned:** Created during spec validation fix; needs integration into audio_pass playbook
 **Recommendation:** Reference from `audio_producer.adapter.yaml`
 
 ### 5. `lore_weaver_summarization`
+
 **File:** `spec/05-behavior/expertises/lore_weaver_summarization.md`
 **Purpose:** Canon compression, player-safe summarization for codex
 **Why Orphaned:** Created during spec validation fix; may be covered by main lore_weaver_expertise
 **Recommendation:** Reference from `lore_weaver.adapter.yaml` or merge into `lore_weaver_expertise`
 
 ### 6. `researcher_fact_checking`
+
 **File:** `spec/05-behavior/expertises/researcher_fact_checking.md`
 **Purpose:** Fact verification, uncertainty assessment, research memo production
 **Why Orphaned:** Created during spec validation fix; Researcher role may be dormant in current workflows

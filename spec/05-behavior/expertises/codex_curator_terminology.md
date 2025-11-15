@@ -31,12 +31,14 @@ Ensure uniform terminology across codex:
 All codex terms must be in-world:
 
 **Acceptable:**
+
 - "The Council of Seven"
 - "Moonstone amulet"
 - "The First Concordat"
 - "Eastern trade routes"
 
 **Forbidden:**
+
 - "Player inventory item #7"
 - "NPC faction leader"
 - "Quest trigger location"
@@ -47,11 +49,13 @@ All codex terms must be in-world:
 Term selection must avoid reveals:
 
 **Safe Terms:**
+
 - "The Advisor" (before twist reveal)
 - "Ancient ruins" (before discovery)
 - "The Stranger" (before identity known)
 
 **Spoiler Terms:**
+
 - "The Traitor" (reveals future)
 - "Secret laboratory" (premature knowledge)
 - "Your father" (spoils relationship)
@@ -72,19 +76,23 @@ Terminology clarity:
 Standard format for each term:
 
 **Primary Name:**
+
 - Official canonical designation
 - Most common usage
 
 **Alternatives:**
+
 - Regional variations
 - Historical names
 - Cultural equivalents
 
 **Definition:**
+
 - Concise, player-safe explanation
 - No spoilers or forward references
 
 **Usage Notes:**
+
 - Contextual guidance
 - Tone and register
 - Unlock requirements
@@ -109,6 +117,7 @@ Provide translation guidance:
 - **Glossary Alignment:** Synchronized terminology databases
 
 **Terminology Coordination:**
+
 - Share canonical term lists
 - Align on formal/informal variants
 - Document cultural equivalents
@@ -145,36 +154,43 @@ Ensure presentation standards:
 ### Consistency
 
 **Intra-Entry:**
+
 - Term used uniformly within single entry
 - No contradictory definitions
 
 **Inter-Entry:**
+
 - Cross-references use identical terms
 - Relationships clearly defined
 
 **Global:**
+
 - All codex entries follow same conventions
 - Glossary is single source of truth
 
 ### Clarity
 
 **Definitions:**
+
 - Unambiguous and precise
 - Sufficient context provided
 - Examples where helpful
 
 **Distinctions:**
+
 - Related terms clearly differentiated
 - Disambiguation explicit
 
 ### Safety
 
 **Spoiler-Free:**
+
 - No forward references
 - Progressive reveal supported
 - Knowledge boundaries respected
 
 **Player-Appropriate:**
+
 - Age-suitable language
 - Culturally sensitive
 - Accessibility-conscious
@@ -184,6 +200,7 @@ Ensure presentation standards:
 ### Creation
 
 New terms enter glossary when:
+
 - Canon establishes new concept
 - Story progression reveals information
 - Unlock conditions met
@@ -191,6 +208,7 @@ New terms enter glossary when:
 ### Update
 
 Terms evolve when:
+
 - Player knowledge expands
 - Canon clarifies or revises
 - Story context changes
@@ -198,6 +216,7 @@ Terms evolve when:
 ### Deprecation
 
 Terms retire when:
+
 - Superseded by better terminology
 - Revealed as misnomer in-story
 - No longer relevant
@@ -205,6 +224,7 @@ Terms retire when:
 ## Quick Reference
 
 **Terminology Checklist:**
+
 - [ ] In-world / diegetic
 - [ ] Spoiler-free
 - [ ] Consistent with existing terms

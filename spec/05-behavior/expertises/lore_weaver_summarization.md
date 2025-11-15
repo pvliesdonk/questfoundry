@@ -20,21 +20,25 @@ Transform detailed canon into essential summaries:
 Create summaries at multiple levels:
 
 **Ultra-Brief (1-2 sentences):**
+
 - For quick reference by other roles
 - High-level concept or status
 - No spoilers, pure essence
 
 **Short Summary (1 paragraph):**
+
 - For Codex Curator translation
 - Player-safe overview
 - Context without reveals
 
 **Extended Summary (2-3 paragraphs):**
+
 - For Scene Smith / Plotwright coordination
 - Includes spoiler-level details (marked)
 - Full context for authoring decisions
 
 **Complete Canon (full detail):**
+
 - Canonical source of truth (Hot workspace)
 - All details, alternatives, and nuances
 - Internal use only
@@ -66,12 +70,14 @@ Identify and isolate core facts:
 Separate public from hidden information:
 
 **Player-Safe:**
+
 - Observable facts
 - Commonly known information
 - Surface appearances
 - Published histories
 
 **Spoiler-Level:**
+
 - Hidden motives
 - Secret allegiances
 - Future consequences
@@ -127,21 +133,25 @@ Provide localization context:
 ## Quality Standards
 
 **Accuracy:**
+
 - No fabrication or speculation
 - Direct canon citation
 - Verifiable facts only
 
 **Concision:**
+
 - Minimum viable detail
 - No redundancy
 - Clear hierarchy of importance
 
 **Clarity:**
+
 - Self-contained summaries
 - No assumed knowledge
 - Explicit connections
 
 **Safety:**
+
 - Spoiler boundaries respected
 - Player surfaces sealed
 - Internal terminology avoided
@@ -149,24 +159,29 @@ Provide localization context:
 ## Collaboration Points
 
 **With Codex Curator:**
+
 - Transform summaries into codex entries
 - Define progressive reveal stages
 
 **With Scene Smith:**
+
 - Provide canonical context for prose
 - Ensure continuity adherence
 
 **With Plotwright:**
+
 - Clarify lore constraints on topology
 - Validate gateway logic against canon
 
 **With Gatekeeper:**
+
 - Review summaries for presentation violations
 - Ensure spoiler hygiene
 
 ## Quick Reference
 
 **Summary Checklist:**
+
 - [ ] Accurate to source canon
 - [ ] Concise and focused
 - [ ] Spoiler boundary marked

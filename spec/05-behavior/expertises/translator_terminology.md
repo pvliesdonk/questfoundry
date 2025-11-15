@@ -18,18 +18,21 @@ Build and govern language-pair glossaries:
 ### Terminology Categories
 
 **Proper Nouns:**
+
 - **Characters:** Transliterate vs. translate (e.g., "The Wanderer")
 - **Places:** Official names vs. descriptive translations
 - **Organizations:** Preserve mystique vs. clarity
 - **Items:** Cultural equivalence vs. literal meaning
 
 **Concepts:**
+
 - **Magic Systems:** Consistency across supernatural terminology
 - **Social Structures:** Cultural mapping (e.g., "guild" equivalents)
 - **Technology:** Anachronism-aware choices
 - **Abstract Ideas:** Philosophical concept alignment
 
 **Gameplay Terms:**
+
 - **UI Elements:** Standardized across localized interfaces
 - **Actions:** Verb consistency ("examine" vs. "inspect")
 - **Status Effects:** Medical/emotional term alignment
@@ -39,11 +42,13 @@ Build and govern language-pair glossaries:
 ### Consistency Requirements
 
 **Global Consistency:**
+
 - Same source term → same target term throughout
 - Documented exceptions with rationale
 - Version-controlled glossary updates
 
 **Contextual Variation:**
+
 - Register shifts (formal/informal)
 - Character voice (nobility vs. peasant)
 - Temporal context (archaic vs. modern)
@@ -53,16 +58,19 @@ Build and govern language-pair glossaries:
 **Localization Strategies:**
 
 **Transliterate:**
+
 - Unique proper nouns (e.g., "Aria", "Theron")
 - Invented terminology without Earth equivalents
 - Names with phonetic significance
 
 **Translate:**
+
 - Descriptive titles (e.g., "The Scarlet Hand" → "La Mano Escarlata")
 - Common objects with clear equivalents
 - Universal concepts
 
 **Adapt:**
+
 - Idioms and metaphors
 - Cultural references
 - Measurement units
@@ -71,12 +79,14 @@ Build and govern language-pair glossaries:
 ### Forbidden Practices
 
 **Never:**
+
 - Introduce spoilers via translation choices
 - Break diegesis with meta language
 - Contradict source canon through terminology
 - Ignore gender, number, or cultural agreements
 
 **Avoid:**
+
 - Machine translation without review
 - Inconsistent term usage
 - Culturally insensitive choices
@@ -89,18 +99,21 @@ Build and govern language-pair glossaries:
 Synchronize terminology databases:
 
 **Codex Curator Provides:**
+
 - Source glossary (canonical English)
 - Term definitions and context
 - Usage guidelines and constraints
 - Spoiler boundaries and unlock stages
 
 **Translator Provides:**
+
 - Target language glossaries
 - Cultural adaptation notes
 - Ambiguity flags
 - Localization constraints
 
 **Coordination Tasks:**
+
 - Quarterly glossary alignment
 - New term introduction process
 - Deprecated term retirement
@@ -111,6 +124,7 @@ Synchronize terminology databases:
 Align register and voice:
 
 **Register Mapping:**
+
 - Formal speech → formal target equivalents
 - Colloquial dialogue → informal variants
 - Regional dialects → target regional flavors
@@ -121,6 +135,7 @@ Align register and voice:
 Validate cultural context:
 
 **Canon Consultation:**
+
 - In-world cultural significance of terms
 - Historical evolution of terminology
 - Character-specific language patterns
@@ -131,6 +146,7 @@ Validate cultural context:
 Guide prose terminology:
 
 **Translation Guidance:**
+
 - Preferred term variants per context
 - Character voice preservation
 - Emotional tone alignment
@@ -141,12 +157,14 @@ Guide prose terminology:
 ### Bilingual Entry Format
 
 **Source (English):**
+
 - **Term:** "Sanctuary"
 - **Definition:** "Sacred refuge protected by ancient law"
 - **Context:** Used in formal/religious contexts
 - **Register:** Elevated
 
 **Target (Example: Spanish):**
+
 - **Primary:** "Santuario"
 - **Formal:** "Refugio Sagrado"
 - **Informal:** "El Refugio"
@@ -154,6 +172,7 @@ Guide prose terminology:
 - **Conjugation:** masculine, singular
 
 **Variants:**
+
 - **Regional:** Latin America vs. Spain
 - **Temporal:** Modern vs. archaic
 - **Register:** Formal vs. colloquial
@@ -172,6 +191,7 @@ Track terminology across all target languages:
 ### Term Introduction
 
 New source terms require:
+
 1. Codex Curator canonical definition
 2. Cultural context analysis
 3. Target equivalents researched
@@ -182,6 +202,7 @@ New source terms require:
 ### Term Evolution
 
 Update existing terms when:
+
 - Source term meaning expands
 - Story progression reveals new context
 - Cultural sensitivity concerns arise
@@ -190,6 +211,7 @@ Update existing terms when:
 ### Term Deprecation
 
 Retire terms when:
+
 - Source term superseded
 - Canon changes invalidate usage
 - Cultural inappropriateness discovered
@@ -199,11 +221,13 @@ Retire terms when:
 ### Accuracy
 
 **Semantic Fidelity:**
+
 - Preserves source meaning
 - Respects cultural context
 - Maintains emotional tone
 
 **Cultural Appropriateness:**
+
 - Sensitive to target culture
 - Avoids offensive associations
 - Respects linguistic norms
@@ -211,11 +235,13 @@ Retire terms when:
 ### Consistency
 
 **Database Integrity:**
+
 - All instances use approved terms
 - Exceptions documented
 - Cross-references validated
 
 **Version Control:**
+
 - Glossary changes tracked
 - Historical versions preserved
 - Rollback capability
@@ -223,11 +249,13 @@ Retire terms when:
 ### Accessibility
 
 **Comprehension:**
+
 - Age-appropriate vocabulary
 - Clear definitions
 - Examples provided
 
 **Inclusivity:**
+
 - Gender-neutral options where appropriate
 - Disability-aware language
 - Culturally inclusive choices
@@ -235,6 +263,7 @@ Retire terms when:
 ## Quick Reference
 
 **Terminology Checklist:**
+
 - [ ] Source term in Codex Curator glossary
 - [ ] Cultural context researched
 - [ ] Target equivalents identified
