@@ -81,6 +81,9 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:terminology"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
 
 # Codex entry structure
 entry_structure:

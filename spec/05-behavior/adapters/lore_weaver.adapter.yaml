@@ -72,6 +72,8 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:continuity_check_quick"
+  - "@snippet:spoiler_hygiene"
 
 # Handoff protocols (references other roles and procedures)
 handoffs:

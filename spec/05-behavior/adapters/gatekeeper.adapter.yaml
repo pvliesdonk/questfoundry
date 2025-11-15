@@ -65,6 +65,9 @@ safety_protocols:
   - "@snippet:validation_reminder"
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:quality_bars_reminder"
+  - "@snippet:presentation_normalization"
+  - "@snippet:continuity_check_quick"
+  - "@snippet:accessibility"
 
 # Handoff protocols
 handoffs:

@@ -119,6 +119,10 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:validation_reminder"
   - "@snippet:tu_context_template"
+  - "@snippet:dormancy_policy"
+  - "@snippet:human_question_template"
+  - "@snippet:handoff_checklist"
+  - "@snippet:pn_safety_invariant"
 
 # PN safety invariant (CRITICAL)
 pn_safety_invariant:

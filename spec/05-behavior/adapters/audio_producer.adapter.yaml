@@ -59,6 +59,12 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:determinism"
+  - "@snippet:technique_off_surfaces"
+  - "@snippet:safety_critical_audio"
+  - "@snippet:text_equivalents_captions"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
 
 # Audio rendering
 audio_rendering:

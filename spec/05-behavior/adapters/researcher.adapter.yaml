@@ -69,6 +69,7 @@ quality_bars:
 safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:validation_reminder"
+  - "@snippet:research_posture"
 
 # Role dormancy (optional role)
 dormancy:

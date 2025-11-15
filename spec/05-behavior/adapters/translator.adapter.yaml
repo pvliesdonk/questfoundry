@@ -72,6 +72,12 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:terminology"
+  - "@snippet:register_alignment"
+  - "@snippet:localization_support"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
+  - "@snippet:pn_boundaries"
 
 # Language pack production
 language_pack_production:
