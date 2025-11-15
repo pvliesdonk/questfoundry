@@ -5,7 +5,7 @@ from typing import Annotated
 
 import questionary
 import typer
-from questfoundry_compiler import (
+from questfoundry_compiler import (  # type: ignore[import-untyped]
     CompilationError,
     PromptAssembler,
     ReferenceResolver,
@@ -207,10 +207,12 @@ def generate(
                 role = selected_roles
 
                 # Ask about standalone mode
-                standalone = questionary.confirm(
+                standalone_choice = questionary.confirm(
                     "Include all procedures from loops? (standalone mode)",
                     default=False,
                 ).ask()
+                if standalone_choice is not None:
+                    standalone = standalone_choice
 
         # Initialize assembler
         resolver = ReferenceResolver(compiler.primitives, spec_dir)
@@ -245,7 +247,7 @@ def generate(
         # Output
         if output:
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(prompt)
+            output.write_text(prompt, encoding="utf-8")
             console.print(f"[green]✓[/green] Generated: {output}")
 
             # Show preview if verbose

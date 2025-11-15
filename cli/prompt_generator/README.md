@@ -139,7 +139,7 @@ Main command to generate prompts.
 - `--role, -r <id>` - Role/adapter ID (can be repeated)
 - `--standalone, -s` - Include all loop procedures for roles
 - `--output, -o <path>` - Output file (default: stdout)
-- `--spec-dir <path>` - Spec root directory (default: `../../spec`)
+- `--spec-dir <path>` - Spec root directory (default: `spec/`)
 - `--verbose, -v` - Show detailed progress
 
 **Examples:**

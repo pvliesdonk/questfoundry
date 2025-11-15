@@ -353,7 +353,7 @@ class PromptAssembler:
             raise CompilationError(f"RACI file not found: {raci_file}")
 
         # Read and parse the markdown
-        content = raci_file.read_text()
+        content = raci_file.read_text(encoding="utf-8")
 
         # Map of role abbreviations to adapter IDs
         role_map = {
@@ -408,7 +408,7 @@ class PromptAssembler:
                             roles_str = paren_match.group(1)
 
                     # Split on comma and resolve abbreviations
-                    for abbrev in re.findall(r"\b[A-Z][A-Za-z]*\b", roles_str):
+                    for abbrev in re.findall(r"\b[A-Z]{2,3}\b", roles_str):
                         if abbrev in role_map:
                             adapter_id = role_map[abbrev]
                             if adapter_id not in raci[key]:
@@ -448,7 +448,7 @@ class PromptAssembler:
         """
         playbook = self.primitives.get(f"playbook:{playbook_id}")
         if not playbook:
-            raise CompilationError(f"Playbook not found: {playbook_id}")
+            raise CompilationError(f"Playbook not found: id='{playbook_id}'")
 
         data = playbook.metadata
         playbook_name = data.get("playbook_name", playbook_id)
@@ -634,8 +634,9 @@ class PromptAssembler:
                 )
                 sections.append(validation_content)
                 sections.append("")
-            except CompilationError:
-                pass
+            except CompilationError as e:
+                sections.append(f"<!-- Error loading validation requirements: {e} -->")
+                sections.append("")
 
         # Add common safety snippets
         common_snippets = [
@@ -840,6 +841,7 @@ class PromptAssembler:
                                             sections.append(proc_content)
                                             sections.append("")
                                         except CompilationError:
+                                            # Procedure not found or failed to resolve
                                             pass
 
             # Safety Protocols
@@ -854,6 +856,7 @@ class PromptAssembler:
                         sections.append(snippet_content)
                         sections.append("")
                     except CompilationError:
+                        # Safety protocol snippet not found
                         pass
 
             sections.append("---")
