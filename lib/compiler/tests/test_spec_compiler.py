@@ -16,8 +16,8 @@ from questfoundry_compiler.spec_compiler import (
 @pytest.fixture
 def spec_root() -> Path:
     """Get the spec root directory."""
-    # Path: tests/compiler/test_spec_compiler.py -> repo_root / spec
-    return Path(__file__).parents[4] / "spec"
+    # Path: lib/compiler/tests/test_spec_compiler.py -> repo_root / spec
+    return Path(__file__).parents[3] / "spec"
 
 
 @pytest.fixture
