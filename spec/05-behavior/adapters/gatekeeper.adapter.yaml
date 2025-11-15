@@ -19,9 +19,11 @@ procedures:
   primary:
     - "@procedure:gatecheck_validation"
     - "@procedure:artifact_validation"
+    - "@procedure:quality_bar_enforcement"
   supporting:
     - "@procedure:continuity_check"
     - "@procedure:spoiler_hygiene"
+    - "@procedure:smallest_viable_fixes"
 
 # Protocol intents from L4
 protocol_intents:

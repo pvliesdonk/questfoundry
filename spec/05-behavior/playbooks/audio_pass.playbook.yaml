@@ -63,6 +63,7 @@ procedures:
     - "@procedure:audio_mix_ready_delivery"
     - "@procedure:determinism_logging"
     - "@procedure:dynamic_range_safety"
+    - "@procedure:audio_reproducibility_planning"
 
 # Merge options
 merge_options:

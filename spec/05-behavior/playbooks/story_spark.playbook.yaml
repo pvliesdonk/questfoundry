@@ -65,6 +65,8 @@ procedures:
     - "@procedure:tu_lifecycle"
     - "@procedure:prose_drafting"
     - "@procedure:sensory_anchoring"
+    - "@procedure:contrastive_choice_design"
+    - "@procedure:micro_context_management"
 
 # Validation requirements
 validation_requirements:

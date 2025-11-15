@@ -16,6 +16,7 @@ procedures:
     - "@procedure:tu_lifecycle"
     - "@procedure:role_wake_dormancy"
     - "@procedure:human_question"
+    - "@procedure:loop_orchestration"
   supporting:
     - "@procedure:artifact_validation"
     - "@procedure:spoiler_hygiene"
