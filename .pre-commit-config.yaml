@@ -24,16 +24,20 @@ repos:
     hooks:
       - id: ruff-lib-compiler
         name: ruff (lib/compiler)
-        entry: uv run --project lib/compiler ruff check --fix --no-cache
-        language: system
+        entry: ruff check --fix --no-cache
+        language: python
         types_or: [python, pyi]
         files: ^lib/compiler/
+        additional_dependencies:
+          - ruff==0.6.9
       - id: ruff-format-lib-compiler
         name: ruff format (lib/compiler)
-        entry: uv run --project lib/compiler ruff format --no-cache
-        language: system
+        entry: ruff format --no-cache
+        language: python
         types_or: [python, pyi]
         files: ^lib/compiler/
+        additional_dependencies:
+          - ruff==0.6.9
 
   # Python: Ruff (linting and formatting) - lib/python
   # --no-cache has been disabled due to a locking problem, probably from the check and format hook fighting.
@@ -41,38 +45,46 @@ repos:
     hooks:
       - id: ruff-lib-python
         name: ruff (lib/python)
-        entry: uv run --project lib/python ruff check --fix --no-cache
-        language: system
+        entry: ruff check --fix --no-cache
+        language: python
         types_or: [python, pyi]
         files: ^lib/python/
+        additional_dependencies:
+          - ruff==0.6.9
       - id: ruff-format-lib-python
         name: ruff format (lib/python)
-        entry: uv run --project lib/python ruff format --no-cache
-        language: system
+        entry: ruff format --no-cache
+        language: python
         types_or: [python, pyi]
         files: ^lib/python/
+        additional_dependencies:
+          - ruff==0.6.9
 
   # Python: Type checking with mypy - lib/compiler
   - repo: local
     hooks:
       - id: mypy-lib-compiler
         name: mypy (lib/compiler)
-        entry: uv run --project lib/compiler mypy
-        language: system
+        entry: mypy
+        language: python
         types_or: [python, pyi]
         files: ^lib/compiler/src/
         args: [--config-file=lib/compiler/pyproject.toml]
+        additional_dependencies:
+          - mypy==1.11.2
 
   # Python: Type checking with mypy - lib/python
   - repo: local
     hooks:
       - id: mypy-lib-python
         name: mypy (lib/python)
-        entry: uv run --project lib/python mypy
-        language: system
+        entry: mypy
+        language: python
         types_or: [python, pyi]
         files: ^lib/python/src/
         args: [--config-file=lib/python/pyproject.toml]
+        additional_dependencies:
+          - mypy==1.11.2
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli

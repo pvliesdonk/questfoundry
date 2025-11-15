@@ -22,12 +22,14 @@ if TYPE_CHECKING:
 
 # Import these after types to avoid circular dependency
 # Import at module level for proper PEP 8 compliance
-def _import_helpers() -> tuple[
-    type["ReferenceResolver"],
-    type["StandalonePromptAssembler"],
-    type["ManifestBuilder"],
-    type["ReferenceValidator"],
-]:
+def _import_helpers() -> (
+    tuple[
+        type["ReferenceResolver"],
+        type["StandalonePromptAssembler"],
+        type["ManifestBuilder"],
+        type["ReferenceValidator"],
+    ]
+):
     """Lazy import helpers to break circular dependency."""
     from questfoundry_compiler.assemblers import (
         ReferenceResolver,
