@@ -3,8 +3,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from questfoundry.compiler.assemblers import ReferenceResolver
-from questfoundry.compiler.types import BehaviorPrimitive, CompilationError
+from questfoundry_compiler.assemblers import ReferenceResolver
+from questfoundry_compiler.types import BehaviorPrimitive, CompilationError
 
 
 class ManifestBuilder:

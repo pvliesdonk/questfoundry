@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from questfoundry.compiler.spec_compiler import SpecCompiler
-from questfoundry.compiler.validators import (
+from questfoundry_compiler.spec_compiler import SpecCompiler
+from questfoundry_compiler.validators import (
     ReferenceValidator,
     validate_manifest_structure,
 )

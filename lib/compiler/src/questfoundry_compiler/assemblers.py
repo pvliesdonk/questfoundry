@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from questfoundry.compiler.types import BehaviorPrimitive, CompilationError
+from questfoundry_compiler.types import BehaviorPrimitive, CompilationError
 
 
 class ReferenceResolver:

@@ -38,7 +38,7 @@ def compile_spec(repo_root: Path, output_dir: Path) -> bool:
             [
                 sys.executable,
                 "-m",
-                "questfoundry.compiler.cli",
+                "questfoundry_compiler.cli",
                 "--spec-dir",
                 str(repo_root / "spec"),
                 "--output",

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from questfoundry.compiler.spec_compiler import (
+from questfoundry_compiler.spec_compiler import (
     BehaviorPrimitive,
     CompilationError,
     SpecCompiler,
@@ -62,7 +62,7 @@ def test_get_primitive(compiler: SpecCompiler) -> None:
 
 def test_validate_references(compiler: SpecCompiler) -> None:
     """Test reference validation using ReferenceValidator."""
-    from questfoundry.compiler.validators import ReferenceValidator
+    from questfoundry_compiler.validators import ReferenceValidator
 
     compiler.load_all_primitives()
 
