@@ -37,6 +37,7 @@ qf-generate --loop lore_deepening --output sim_prompt.md
 ```
 
 This creates a monolithic prompt containing:
+
 - Showrunner expertise
 - All participating role expertises (Lore Weaver, Researcher, etc.)
 - All procedures for the loop
@@ -67,6 +68,7 @@ qf-generate
 ```
 
 This will prompt you to:
+
 1. Choose between loop or role prompt
 2. Select the specific loop or roles
 3. Configure options (e.g., standalone mode)
@@ -90,6 +92,7 @@ qf-generate list-roles
 ### Web Agent Simulation
 
 1. Generate a loop prompt:
+
    ```bash
    qf-generate --loop lore_deepening --output lore_deepening_sim.md
    ```
@@ -97,10 +100,11 @@ qf-generate list-roles
 2. Upload `lore_deepening_sim.md` to your web agent (ChatGPT, Claude, etc.)
 
 3. Start the simulation:
+
    ```
-   You: "I have three accepted hooks about time magic: [hook descriptions]. 
+   You: "I have three accepted hooks about time magic: [hook descriptions].
         Please run the Lore Deepening loop."
-   
+
    Agent: [Acts as Showrunner, coordinates Lore Weaver, Researcher, etc.]
    ```
 
@@ -130,6 +134,7 @@ qf-generate --role plotwright --role scene_smith --role style_lead \
 Main command to generate prompts.
 
 **Options:**
+
 - `--loop, -l <id>` - Loop/playbook ID (e.g., `lore_deepening`)
 - `--role, -r <id>` - Role/adapter ID (can be repeated)
 - `--standalone, -s` - Include all loop procedures for roles
@@ -138,6 +143,7 @@ Main command to generate prompts.
 - `--verbose, -v` - Show detailed progress
 
 **Examples:**
+
 ```bash
 # Single loop
 qf-generate --loop lore_deepening -o prompt.md
@@ -160,9 +166,11 @@ qf-generate --loop hook_harvest --verbose -o prompt.md
 List all available loops/playbooks.
 
 **Options:**
+
 - `--spec-dir <path>` - Spec root directory
 
 **Example:**
+
 ```bash
 qf-generate list-loops
 ```
@@ -172,9 +180,11 @@ qf-generate list-loops
 List all available roles/adapters.
 
 **Options:**
+
 - `--spec-dir <path>` - Spec root directory
 
 **Example:**
+
 ```bash
 qf-generate list-roles
 ```
@@ -190,6 +200,7 @@ The tool uses the `questfoundry-compiler` library's `PromptAssembler` to:
 5. Include safety protocols and validation requirements
 
 The generated prompts are optimized for:
+
 - **Token efficiency** - Only includes relevant content
 - **Context preservation** - Clear structure with sections
 - **Self-contained** - No external file dependencies
