@@ -6,7 +6,7 @@ roles: [book_binder]
 references_schemas:
   - view_log.schema.json
 references_expertises:
-  - book_binder_assembly
+  - book_binder_export
 quality_bars: [integrity, presentation]
 ---
 

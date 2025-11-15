@@ -7,7 +7,7 @@ references_schemas:
   - codex_entry.schema.json
   - crosslink_map.schema.json
 references_expertises:
-  - codex_curator_publishing
+  - codex_curator_publication
 quality_bars: [integrity, accessibility]
 ---
 

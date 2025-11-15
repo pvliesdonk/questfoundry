@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:audio_producer_generation"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:audio_producer_safety"
+
 # Mission from L1 charter
 mission: "Produce clean, reproducible audio cues from Audio Plans, with text equivalents and safety notes honored—and keep the noise behind the curtain."
 
@@ -55,6 +59,12 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:determinism"
+  - "@snippet:technique_off_surfaces"
+  - "@snippet:safety_critical_audio"
+  - "@snippet:text_equivalents_captions"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
 
 # Audio rendering
 audio_rendering:

@@ -59,6 +59,10 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:cold_only_rule"
+  - "@snippet:cold_manifest_validation"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
 
 # Cold-only rule (CRITICAL)
 cold_only_rule:

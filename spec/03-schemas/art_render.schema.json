@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/art_render.schema.json",
+  "title": "art render",
+  "description": "Schema for art render (stub - to be fully defined)",
+  "type": "object",
+  "properties": {},
+  "required": []
+}

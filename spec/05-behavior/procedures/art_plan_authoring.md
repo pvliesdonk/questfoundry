@@ -7,7 +7,7 @@ references_schemas:
   - art_plan.schema.json
 references_expertises:
   - art_director_planning
-  - art_director_accessibility
+  - art_director_planning
 quality_bars: [presentation, accessibility, style]
 ---
 

@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/view_bundle.schema.json",
+  "title": "view bundle",
+  "description": "Schema for view bundle (stub - to be fully defined)",
+  "type": "object",
+  "properties": {},
+  "required": []
+}

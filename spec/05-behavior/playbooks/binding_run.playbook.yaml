@@ -52,6 +52,8 @@ procedures:
   supporting:
     - "@procedure:artifact_validation"
     - "@procedure:spoiler_hygiene"
+    - "@procedure:binder_presentation_enforcement"
+    - "@procedure:view_log_maintenance"
 
 # Export options
 export_options:

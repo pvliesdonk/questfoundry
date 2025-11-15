@@ -53,6 +53,11 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:determinism"
+  - "@snippet:technique_off_surfaces"
+  - "@snippet:alt_text_quality"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
 
 # Image rendering
 image_rendering:

@@ -59,6 +59,7 @@ procedures:
   supporting:
     - "@procedure:spoiler_hygiene"
     - "@procedure:tu_lifecycle"
+    - "@procedure:lore_translation"
 
 # Validation requirements
 validation_requirements:

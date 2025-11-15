@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:translator_localization"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:translator_terminology"
+
 # Mission from L1 charter
 mission: "Carry intent—tone, stakes, and affordances—into the target language while keeping player surfaces clean, diegetic, and accessible."
 
@@ -68,6 +72,12 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:pn_safety_warning"
   - "@snippet:validation_reminder"
+  - "@snippet:terminology"
+  - "@snippet:register_alignment"
+  - "@snippet:localization_support"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
+  - "@snippet:pn_boundaries"
 
 # Language pack production
 language_pack_production:

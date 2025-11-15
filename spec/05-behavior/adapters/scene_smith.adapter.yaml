@@ -59,6 +59,9 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:diegetic_phrasing_guide"
   - "@snippet:pn_safety_warning"
+  - "@snippet:contrastive_choices"
+  - "@snippet:pn_boundaries"
+  - "@snippet:no_internals"
   - "@snippet:validation_reminder"
 
 # Handoff protocols

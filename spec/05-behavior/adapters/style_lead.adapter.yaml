@@ -76,6 +76,8 @@ safety_protocols:
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:diegetic_phrasing_guide"
   - "@snippet:validation_reminder"
+  - "@snippet:register_alignment"
+  - "@snippet:accessibility"
 
 # Voice & register coherence
 voice_coherence:

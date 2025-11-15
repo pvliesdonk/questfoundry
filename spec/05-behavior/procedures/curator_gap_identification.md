@@ -7,7 +7,7 @@ references_schemas:
   - codex_entry.schema.json
   - hook.schema.json
 references_expertises:
-  - codex_curator_publishing
+  - codex_curator_publication
 quality_bars: [integrity, accessibility]
 ---
 

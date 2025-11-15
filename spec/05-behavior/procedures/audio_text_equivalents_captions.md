@@ -6,7 +6,7 @@ roles: [audio_director]
 references_schemas:
   - audio_plan.schema.json
 references_expertises:
-  - audio_director_accessibility
+  - audio_director_planning
 quality_bars: [presentation, accessibility]
 ---
 

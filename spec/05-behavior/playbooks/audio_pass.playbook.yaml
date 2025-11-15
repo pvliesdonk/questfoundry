@@ -57,6 +57,13 @@ procedures:
   supporting:
     - "@procedure:artifact_validation"
     - "@procedure:spoiler_hygiene"
+    - "@procedure:audio_text_equivalents_captions"
+    - "@procedure:audio_caption_text_alignment"
+    - "@procedure:audio_dynamic_range_safety"
+    - "@procedure:audio_mix_ready_delivery"
+    - "@procedure:determinism_logging"
+    - "@procedure:dynamic_range_safety"
+    - "@procedure:audio_reproducibility_planning"
 
 # Merge options
 merge_options:

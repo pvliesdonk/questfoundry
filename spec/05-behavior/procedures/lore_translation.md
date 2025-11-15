@@ -7,7 +7,7 @@ references_schemas:
   - codex_entry.schema.json
   - canon_summary.schema.json
 references_expertises:
-  - codex_curator_publishing
+  - codex_curator_publication
   - lore_weaver_summarization
 quality_bars: [presentation, integrity]
 ---

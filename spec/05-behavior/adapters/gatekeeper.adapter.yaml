@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:gatekeeper_quality_bars"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:gatekeeper_presentation"
+
 # Mission from L1 charter
 mission: "Enforce Quality Bars before Hot→Cold merges; provide actionable remediation."
 
@@ -15,9 +19,11 @@ procedures:
   primary:
     - "@procedure:gatecheck_validation"
     - "@procedure:artifact_validation"
+    - "@procedure:quality_bar_enforcement"
   supporting:
     - "@procedure:continuity_check"
     - "@procedure:spoiler_hygiene"
+    - "@procedure:smallest_viable_fixes"
 
 # Protocol intents from L4
 protocol_intents:
@@ -59,6 +65,9 @@ safety_protocols:
   - "@snippet:validation_reminder"
   - "@snippet:spoiler_hygiene_check"
   - "@snippet:quality_bars_reminder"
+  - "@snippet:presentation_normalization"
+  - "@snippet:continuity_check_quick"
+  - "@snippet:accessibility"
 
 # Handoff protocols
 handoffs:
