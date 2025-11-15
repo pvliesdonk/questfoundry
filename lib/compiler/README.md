@@ -40,26 +40,24 @@ qf-compile --spec-dir /path/to/spec --playbook lore_deepening --output dist/comp
 ### Programmatic Usage
 
 ```python
-from questfoundry_compiler import SpecCompiler
+from pathlib import Path
+from questfoundry_compiler import SpecCompiler, CompilationError
 
 # Initialize compiler
-compiler = SpecCompiler(spec_root="/path/to/spec")
+compiler = SpecCompiler(spec_root=Path("/path/to/spec"))
 
-# Load all primitives
-compiler.load_all_primitives()
+# Compile all primitives (includes validation)
+try:
+    output_dir = Path("dist/compiled")
+    stats = compiler.compile_all(output_dir)
 
-# Validate cross-references
-errors = compiler.validate_all()
-if errors:
-    for error in errors:
-        print(f"Error: {error}")
+    print(f"✓ Compiled {stats['primitives_loaded']} primitives")
+    print(f"  - Playbook manifests: {stats['playbook_manifests_generated']}")
+    print(f"  - Adapter manifests: {stats['adapter_manifests_generated']}")
+    print(f"  - Standalone prompts: {stats['standalone_prompts_generated']}")
+except CompilationError as e:
+    print(f"Compilation failed: {e}")
     exit(1)
-
-# Compile to manifests
-output_dir = Path("dist/compiled")
-compiler.compile_all(output_dir)
-
-print(f"✓ Compiled {len(compiler.primitives)} primitives")
 ```
 
 ## What It Compiles
@@ -167,11 +165,15 @@ Options:
 
 ```python
 # In build hook or bundle script
-from questfoundry_compiler import SpecCompiler
+from pathlib import Path
+from questfoundry_compiler import SpecCompiler, CompilationError
 
-compiler = SpecCompiler(spec_root="../../spec")
-compiler.load_all_primitives()
-compiler.compile_all(output_dir="src/questfoundry/resources/manifests")
+try:
+    compiler = SpecCompiler(spec_root=Path("../../spec"))
+    stats = compiler.compile_all(output_dir=Path("src/questfoundry/resources/manifests"))
+    print(f"✓ Bundled {stats['playbook_manifests_generated']} manifests")
+except CompilationError as e:
+    print(f"Warning: Compilation failed, using v1 prompts for compatibility")
 ```
 
 Published package contains pre-compiled manifests, **not** the compiler itself.
@@ -179,15 +181,23 @@ Published package contains pre-compiled manifests, **not** the compiler itself.
 ### 2. Runtime Dynamic Compilation (Web Agents)
 
 ```python
-# In web service
-from questfoundry_compiler import SpecCompiler
+from pathlib import Path
+from flask import Flask, jsonify
+from questfoundry_compiler import SpecCompiler, CompilationError
+
+app = Flask(__name__)
+
+# Initialize compiler once at startup
+compiler = SpecCompiler(spec_root=Path("/spec"))
+compiler.load_all_primitives()
 
 @app.route("/compile/<playbook_id>")
 def compile_playbook(playbook_id):
-    compiler = SpecCompiler(spec_root="/spec")
-    compiler.load_all_primitives()
-    manifest = compiler.compile_playbook(playbook_id)
-    return jsonify(manifest)
+    try:
+        result = compiler.compile_playbook(playbook_id, output_dir=Path("/tmp/compiled"))
+        return jsonify(result)
+    except CompilationError as e:
+        return jsonify({"error": str(e)}), 400
 ```
 
 Service dynamically compiles prompts on demand.
