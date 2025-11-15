@@ -178,7 +178,32 @@ lib/spec_compiler/
 - ✅ `validators.py` → Copy as-is
 - ❌ `cli.py` → Do NOT copy (move logic to qf CLI in Phase 2)
 
-#### 1.3 Create lib/spec_compiler/pyproject.toml
+#### 1.3 Study Spec Layers for Documentation
+
+**CRITICAL**: Before writing any READMEs or documentation, the implementing LLM MUST:
+
+1. **Read and understand spec layers:**
+   - `spec/00-north-star/` - Vision, principles, quality bars
+   - `spec/01-roles/` - Role definitions and charters
+   - `spec/02-dictionary/` - Artifact templates and terminology
+   - `spec/03-schemas/` - JSON schema definitions
+   - `spec/04-protocol/` - Communication protocols
+   - `spec/05-behavior/` - Behavioral primitives (the source material)
+
+2. **Understand the compilation pipeline:**
+   - How Layer 5 primitives are loaded
+   - How @references are resolved
+   - How manifests are generated
+   - How standalone prompts are assembled
+
+3. **Document with context:**
+   - READMEs should explain HOW the component fits into the QuestFoundry architecture
+   - READMEs should reference the appropriate spec layers
+   - READMEs should include concrete examples from actual spec files
+
+**Time Investment**: Spend 10-15 minutes reading spec files before writing documentation.
+
+#### 1.4 Create lib/spec_compiler/pyproject.toml
 
 ```toml
 [build-system]
@@ -224,7 +249,37 @@ line-length = 88
 target-version = "py311"
 ```
 
-#### 1.4 Update lib/python to Use New Library
+#### 1.5 Create Comprehensive README for lib/spec_compiler/
+
+**File:** `lib/spec_compiler/README.md`
+
+**Requirements:**
+- Explain what the spec compiler does and WHY it exists
+- Describe the Layer 5 behavioral primitive architecture
+- Show the compilation pipeline with diagrams
+- Include real examples from spec/05-behavior/
+- Document all @reference types and resolution rules
+- Provide usage examples for both manifest and prompt generation
+- Link to relevant spec layers (0-4) for context
+- Include API documentation for SpecCompiler, ReferenceResolver, etc.
+
+**Minimum sections:**
+1. Overview - What is this and why does it exist?
+2. Architecture - How does it fit into QuestFoundry?
+3. Behavioral Primitives - What are they? (with examples)
+4. Compilation Pipeline - Step-by-step process
+5. API Reference - Classes and methods
+6. Usage Examples - Common workflows
+7. Testing - How to run tests
+8. References - Links to spec layers
+
+**Example content to include:**
+- Show an actual adapter.yaml from spec/05-behavior/adapters/
+- Show how @procedure:canonization_core resolves
+- Show a compiled manifest output
+- Show a generated standalone prompt
+
+#### 1.6 Update lib/python to Use New Library
 
 **File:** `lib/python/pyproject.toml`
 
@@ -253,7 +308,18 @@ from questfoundry.compiler import SpecCompiler
 from spec_compiler import SpecCompiler
 ```
 
-#### 1.5 Testing Strategy
+#### 1.7 Update lib/python README
+
+**File:** `lib/python/README.md`
+
+**Updates Required:**
+- Add section on spec_compiler dependency
+- Update installation instructions
+- Document the change from embedded compiler to external library
+- Add migration guide for existing code using questfoundry.compiler
+- Update architecture diagram to show spec_compiler as external dependency
+
+#### 1.8 Testing Strategy
 
 **Port existing tests:**
 - Copy tests from `lib/python/tests/compiler/` → `lib/spec_compiler/tests/`
@@ -576,14 +642,77 @@ if __name__ == "__main__":
     app()
 ```
 
-#### 2.4 Create README
+#### 2.4 Create Comprehensive README
 
 **File:** `tools/prompt_generator/README.md`
+
+**Requirements:**
+- Explain the TWO consumption models for Layer 5 primitives:
+  1. Automated multi-agent (lib/python) - Agentic orchestration
+  2. Manual human+AI chat (prompt_generator) - Single AI workflows
+- Show WHY someone would use this instead of the agentic runtime
+- Provide concrete use cases and examples
+- Include a complete example showing input (adapter) → output (prompt)
+- Explain how @references are resolved and inlined
+- Document the relationship to spec layers 0-5
+
+**Minimum sections:**
+1. **Overview** - What is this and when to use it?
+2. **Architecture** - Two paths for consuming Layer 5
+3. **Use Cases** - When to use prompt generator vs agentic runtime
+4. **Installation** - Setup instructions
+5. **Usage** - All commands with examples
+6. **Output Format** - What the generated prompts look like
+7. **Examples** - Complete end-to-end example
+8. **Dependencies** - Why ONLY spec_compiler (not questfoundry-py)
+9. **References** - Links to spec layers
+
+**Example content:**
 
 ```markdown
 # QuestFoundry Prompt Generator
 
 Standalone tool to generate self-contained LLM prompts from QuestFoundry role adapters.
+
+## Overview
+
+QuestFoundry's Layer 5 behavioral primitives can be consumed in two ways:
+
+1. **Automated Multi-Agent Orchestration** (`lib/python`) - The Showrunner coordinates multiple AI roles working together autonomously
+2. **Manual Human+AI Chat** (`prompt_generator`) - Generate standalone prompts for direct human-in-the-loop workflows with a single AI
+
+This tool implements the second approach.
+
+### When to Use This Tool
+
+Use the prompt generator when:
+- You want direct control over AI interactions (not autonomous)
+- You're working with a single role in a chat interface
+- You need a portable, self-contained prompt for Claude/GPT
+- You're prototyping or exploring role behaviors
+- You don't need multi-agent orchestration
+
+Use `lib/python` (agentic runtime) when:
+- You want autonomous multi-agent collaboration
+- You need the Showrunner to coordinate work
+- You're executing complete playbooks
+- You need state management and Hot/Cold storage
+
+## Architecture
+
+```
+spec/05-behavior/          # Layer 5: Behavioral primitives (source)
+│
+├──> spec_compiler         # Compilation engine
+│    ├──> Manifests       # → lib/python (agentic runtime)
+│    └──> Prompts         # → prompt_generator (manual chat)
+│
+├──> lib/python            # Automated multi-agent orchestration
+│                          # Uses manifests, includes workspace, roles, etc.
+│
+└──> prompt_generator      # Manual human+AI chat
+                           # Uses prompts, NO runtime dependencies
+```
 
 ## Installation
 
@@ -594,14 +723,17 @@ uv sync
 
 ## Usage
 
-### Generate a prompt
+### Generate a prompt for a role
 
 ```bash
-# Output to stdout
+# Output to stdout (with syntax highlighting)
 qf-prompt-gen generate lore_weaver
 
 # Save to file
 qf-prompt-gen generate scene_smith --output prompts/scene_smith.md
+
+# Specify spec directory
+qf-prompt-gen generate gatekeeper --spec-dir /path/to/spec
 ```
 
 ### List available roles
@@ -610,20 +742,148 @@ qf-prompt-gen generate scene_smith --output prompts/scene_smith.md
 qf-prompt-gen list
 ```
 
+Output:
+```
+Available Role Adapters
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ ID               ┃ Name           ┃ Abbreviation ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ lore_weaver      │ Lore Weaver    │ LW           │
+│ scene_smith      │ Scene Smith    │ SS           │
+│ gatekeeper       │ Gatekeeper     │ GK           │
+└──────────────────┴────────────────┴──────────────┘
+```
+
 ### Validate adapter references
 
 ```bash
 qf-prompt-gen validate
 ```
 
+## Output Format
+
+Generated prompts are comprehensive, self-contained markdown files that include:
+
+1. **Mission** - Role's core purpose from Layer 1 charter
+2. **Core Expertise** - Domain knowledge (inlined from @expertise references)
+3. **Primary Procedures** - Workflow algorithms (inlined from @procedure references)
+4. **Safety & Validation** - Critical reminders (inlined from @snippet references)
+5. **Protocol Intents** - What messages the role sends/receives
+6. **Loop Participation** - Which playbooks the role participates in
+7. **Escalation Rules** - When to ask humans or wake Showrunner
+
+All @references are resolved and inlined, creating a single file ready for LLM consumption.
+
+## Example: Generating a Lore Weaver Prompt
+
+### Input Adapter
+
+`spec/05-behavior/adapters/lore_weaver.adapter.yaml`:
+```yaml
+adapter_id: lore_weaver
+role_name: Lore Weaver
+expertise: "@expertise:lore_weaver_expertise"
+procedures:
+  primary:
+    - "@procedure:canonization_core"
+    - "@procedure:continuity_check"
+safety_protocols:
+  - "@snippet:spoiler_hygiene_check"
+```
+
+### Command
+
+```bash
+qf-prompt-gen generate lore_weaver --output lore_weaver_prompt.md
+```
+
+### Output
+
+`lore_weaver_prompt.md` (simplified excerpt):
+```markdown
+# Lore Weaver — System Prompt
+
+Target: GPT-5, Claude Sonnet 4.5+
+
+## Mission
+
+Resolve the world's deep truth—quietly—then hand clear, spoiler-safe
+summaries to neighbors who face the player.
+
+## Core Expertise
+
+[Full content of spec/05-behavior/expertises/lore_weaver_expertise.md
+inlined here - 500+ lines covering canon creation, continuity management,
+mystery handling, etc.]
+
+## Primary Procedures
+
+### Canonization Core
+
+[Full content of spec/05-behavior/procedures/canonization_core.md
+inlined here - algorithm for transforming hooks into canon]
+
+### Continuity Check
+
+[Full content of spec/05-behavior/procedures/continuity_check.md
+inlined here - contradiction detection process]
+
+## Safety & Validation
+
+[Full content of spec/05-behavior/snippets/spoiler_hygiene_check.md
+inlined here - PN boundary enforcement]
+...
+```
+
+Result: A ~2000-line standalone prompt ready to paste into Claude/GPT.
+
 ## Dependencies
 
-- `questfoundry-spec-compiler` - Spec compiler library (ONLY dependency)
+This tool depends ONLY on:
+- `questfoundry-spec-compiler` - Compiles Layer 5 primitives
 - `typer` - CLI framework
 - `rich` - Terminal formatting
 
-**Note:** This tool does NOT depend on `questfoundry-py`. It only uses the spec compiler.
+**Important:** This tool does NOT depend on `questfoundry-py` because it doesn't
+need the agentic runtime, workspace management, or role orchestration. It only
+needs to compile and assemble Layer 5 primitives into standalone prompts.
+
+## How It Works
+
+1. **Load primitives** - Reads all files from `spec/05-behavior/`
+2. **Find adapter** - Locates the requested role adapter (e.g., `lore_weaver.adapter.yaml`)
+3. **Resolve references** - Follows all @expertise, @procedure, @snippet references
+4. **Inline content** - Replaces references with actual file contents
+5. **Assemble prompt** - Combines everything into a structured markdown file
+6. **Format for LLM** - Adds headers, sections, and metadata
+
+## References
+
+- **Spec Overview**: `spec/README.md`
+- **Layer 5 Behavioral Primitives**: `spec/05-behavior/README.md`
+- **Role Charters** (Layer 1): `spec/01-roles/`
+- **Artifact Templates** (Layer 2): `spec/02-dictionary/`
+- **JSON Schemas** (Layer 3): `spec/03-schemas/`
+- **Spec Compiler Library**: `lib/spec_compiler/README.md`
+- **Agentic Runtime** (alternate approach): `lib/python/README.md`
+
+## Contributing
+
+See main repository `CONTRIBUTING.md` for guidelines.
+
+## License
+
+MIT License - See `LICENSE` file in repository root.
 ```
+
+#### 2.5 Create Examples Directory
+
+**Location:** `tools/prompt_generator/examples/`
+
+Create example outputs:
+- `examples/lore_weaver_prompt.md` - Full generated prompt for Lore Weaver
+- `examples/gatekeeper_prompt.md` - Full generated prompt for Gatekeeper
+- `examples/README.md` - Explains the examples and how to regenerate them
 
 ---
 
@@ -1066,23 +1326,65 @@ def set_default():
     console.print("[yellow]qf config set-default: Not yet implemented[/yellow]")
 ```
 
+#### 3.7 Create Comprehensive README for qf CLI
+
+**File:** `cli/python/README.md`
+
+**Requirements:**
+- Explain that this wraps the agentic runtime (lib/python)
+- Distinguish from prompt_generator clearly
+- Document all command groups (spec, run, config)
+- Provide examples for each command
+- Explain relationship to Layer 5 and spec_compiler
+- Include architecture diagram showing CLI → lib/python → spec_compiler → spec/
+
+**Minimum sections:**
+1. **Overview** - What is the qf CLI?
+2. **Architecture** - How it fits into QuestFoundry
+3. **Installation** - Setup instructions
+4. **Commands** - Complete command reference
+   - `qf spec` - Compilation commands
+   - `qf run` - Runtime commands (when implemented)
+   - `qf config` - Configuration utilities
+5. **Examples** - Common workflows
+6. **Comparison** - When to use qf CLI vs prompt_generator vs direct library use
+7. **References** - Links to lib/python, spec_compiler, spec layers
+
 ---
 
 ## Implementation Sequence
 
 ### Recommended Order for LLM Implementation
 
-1. **Phase 1.1-1.3** - Extract spec_compiler library structure
-2. **Phase 1.4** - Update lib/python dependencies
-3. **Phase 1.5** - Port and run tests
-4. **Phase 2.1-2.2** - Create prompt generator project structure
-5. **Phase 2.3** - Implement prompt generator CLI
-6. **Phase 2.4** - Create prompt generator README
-7. **Phase 3.1-3.2** - Create qf CLI project structure
-8. **Phase 3.3** - Implement qf CLI entry point
-9. **Phase 3.4** - Implement `qf spec` commands
-10. **Phase 3.6** - Implement `qf config` commands
-11. **Phase 3.5** - Stub `qf run` commands (future work)
+**Phase 1: Spec Compiler Extraction**
+1. **Phase 1.1-1.2** - Create spec_compiler library structure
+2. **Phase 1.3** - **CRITICAL: Study spec layers 0-5** (15 minutes minimum)
+3. **Phase 1.4** - Create pyproject.toml
+4. **Phase 1.5** - **Write comprehensive README** (using spec layer knowledge)
+5. **Phase 1.6** - Update lib/python to use new library
+6. **Phase 1.7** - Update lib/python README
+7. **Phase 1.8** - Port and run tests
+
+**Phase 2: Prompt Generator**
+8. **Phase 2.1** - Create prompt generator project structure
+9. **Phase 2.2** - Create pyproject.toml
+10. **Phase 2.3** - Implement prompt generator CLI
+11. **Phase 2.4** - **Write comprehensive README** (explain two consumption models)
+12. **Phase 2.5** - Create example outputs
+
+**Phase 3: QF CLI**
+13. **Phase 3.1-3.2** - Create qf CLI project structure
+14. **Phase 3.3** - Implement CLI entry point
+15. **Phase 3.4** - Implement `qf spec` commands
+16. **Phase 3.6** - Implement `qf config` commands
+17. **Phase 3.7** - **Write comprehensive README**
+18. **Phase 3.5** - Stub `qf run` commands (future work)
+
+**Documentation Quality Gates:**
+- Each README must be reviewed against spec layers for accuracy
+- Each README must include concrete examples from actual spec files
+- Each README must explain architectural context (not just usage)
+- Each README must be minimum 200 lines (excluding code examples)
 
 ---
 
@@ -1202,6 +1504,9 @@ dependencies = [
 - ✅ All tests pass in lib/spec_compiler/
 - ✅ lib/python successfully uses the new library
 - ✅ All existing functionality works without regression
+- ✅ **README.md is comprehensive** (minimum 200 lines, references spec layers)
+- ✅ **README includes real examples** from spec/05-behavior/
+- ✅ **lib/python README updated** to document spec_compiler dependency
 
 ### Phase 2 Complete When:
 - ✅ `qf-prompt-gen` command is installed and discoverable
@@ -1211,6 +1516,10 @@ dependencies = [
 - ✅ Tool depends ONLY on spec_compiler (not questfoundry-py)
 - ✅ All commands have `--help` documentation
 - ✅ Rich output formatting works correctly
+- ✅ **README.md is comprehensive** (minimum 300 lines)
+- ✅ **README explains two consumption models** (agentic vs manual)
+- ✅ **README includes complete end-to-end example** (input adapter → output prompt)
+- ✅ **examples/ directory contains generated prompts** (lore_weaver, gatekeeper)
 
 ### Phase 3 Complete When:
 - ✅ `qf` command is installed and discoverable
@@ -1218,6 +1527,9 @@ dependencies = [
 - ✅ `qf config` commands provide useful diagnostics
 - ✅ All commands have `--help` documentation
 - ✅ Rich output formatting works correctly
+- ✅ **README.md is comprehensive** (minimum 250 lines)
+- ✅ **README clearly distinguishes** from prompt_generator
+- ✅ **README includes architecture diagram** (CLI → lib → compiler → spec)
 
 ---
 
@@ -1251,11 +1563,15 @@ dependencies = [
 
 **Implementation Tips:**
 
+- **CRITICAL**: Study spec layers 0-5 BEFORE writing documentation (15+ minutes)
 - Start with Phase 1 (extraction) before Phase 2 (CLI)
 - Run tests frequently to catch regressions early
 - Use rich for all user-facing output (consistent UX)
 - Follow existing code style (ruff, mypy strict)
 - Keep CLI commands thin - delegate to libraries
+- **Documentation quality > speed** - take time to write comprehensive READMEs
+- Include real examples from actual spec files in documentation
+- Explain WHY and HOW, not just WHAT
 
 **Potential Pitfalls:**
 
