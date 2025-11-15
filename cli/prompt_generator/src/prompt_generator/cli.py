@@ -99,9 +99,9 @@ def generate(
         Path,
         typer.Option(
             "--spec-dir",
-            help="Root directory of spec/ (default: ../../spec relative to CLI)",
+            help="Root directory of spec/ (default: spec/)",
         ),
-    ] = Path("../../spec"),
+    ] = Path("spec"),
     verbose: Annotated[
         bool,
         typer.Option(
@@ -135,9 +135,8 @@ def generate(
     """
     # Resolve spec directory
     if not spec_dir.is_absolute():
-        # Make it relative to the CLI directory
-        cli_dir = Path(__file__).parent.parent.parent
-        spec_dir = (cli_dir / spec_dir).resolve()
+        # Make it relative to current working directory
+        spec_dir = spec_dir.resolve()
 
     # Validate spec directory exists
     if not spec_dir.exists():
@@ -276,15 +275,14 @@ def list_loops(
         Path,
         typer.Option(
             "--spec-dir",
-            help="Root directory of spec/ (default: ../../spec relative to CLI)",
+            help="Root directory of spec/ (default: spec/)",
         ),
-    ] = Path("../../spec"),
+    ] = Path("spec"),
 ) -> None:
     """List all available loops/playbooks."""
     # Resolve spec directory
     if not spec_dir.is_absolute():
-        cli_dir = Path(__file__).parent.parent.parent
-        spec_dir = (cli_dir / spec_dir).resolve()
+        spec_dir = spec_dir.resolve()
 
     if not spec_dir.exists():
         console.print(f"[red]Error: Spec directory not found: {spec_dir}[/red]")
@@ -316,15 +314,14 @@ def list_roles(
         Path,
         typer.Option(
             "--spec-dir",
-            help="Root directory of spec/ (default: ../../spec relative to CLI)",
+            help="Root directory of spec/ (default: spec/)",
         ),
-    ] = Path("../../spec"),
+    ] = Path("spec"),
 ) -> None:
     """List all available roles/adapters."""
     # Resolve spec directory
     if not spec_dir.is_absolute():
-        cli_dir = Path(__file__).parent.parent.parent
-        spec_dir = (cli_dir / spec_dir).resolve()
+        spec_dir = spec_dir.resolve()
 
     if not spec_dir.exists():
         console.print(f"[red]Error: Spec directory not found: {spec_dir}[/red]")
