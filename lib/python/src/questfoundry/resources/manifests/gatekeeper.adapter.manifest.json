@@ -1,0 +1,104 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "gatekeeper",
+  "role_name": "Gatekeeper",
+  "compiled_at": "2025-11-15T20:00:12.811194+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/gatekeeper.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/gatekeeper_quality_bars.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/gatekeeper_presentation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/quality_bar_enforcement.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/gatecheck_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/smallest_viable_fixes.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/continuity_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/continuity_check_quick.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/quality_bars_reminder.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/presentation_normalization.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/accessibility.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Enforce Quality Bars before Hot\u2192Cold merges; provide actionable remediation.",
+  "expertise": "@expertise:gatekeeper_quality_bars",
+  "procedures": {
+    "primary": [
+      "@procedure:gatecheck_validation",
+      "@procedure:artifact_validation",
+      "@procedure:quality_bar_enforcement"
+    ],
+    "supporting": [
+      "@procedure:continuity_check",
+      "@procedure:spoiler_hygiene",
+      "@procedure:smallest_viable_fixes"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "gate.submit"
+    ],
+    "sends": [
+      "gate.decision",
+      "ack",
+      "error"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:gatecheck",
+      "raci": "responsible",
+      "description": "Validate all artifacts against 8 quality bars before Cold merge"
+    },
+    {
+      "playbook": "@playbook:lore_deepening",
+      "raci": "consulted",
+      "description": "Pre-reads for likely Integrity/Reachability/Gateway risks"
+    },
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "consulted",
+      "description": "Review topology and prose for quality risks"
+    }
+  ],
+  "quality_bars": {
+    "all": [
+      "integrity",
+      "reachability",
+      "nonlinearity",
+      "gateways",
+      "style",
+      "determinism",
+      "presentation",
+      "accessibility"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:validation_reminder",
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:quality_bars_reminder",
+    "@snippet:presentation_normalization",
+    "@snippet:continuity_check_quick",
+    "@snippet:accessibility"
+  ],
+  "handoffs": {
+    "to_showrunner": {
+      "content": "Gate decision with pass/fail and remediation guidance",
+      "artifacts": [
+        "gatecheck_report"
+      ]
+    },
+    "from_all_roles": {
+      "content": "TU artifacts submitted for gatecheck",
+      "requirements": [
+        "All artifacts schema-validated",
+        "validation_report.json present for each artifact",
+        "TU brief with deliverables list"
+      ]
+    }
+  },
+  "artifacts": [
+    "gatecheck_report.schema.json"
+  ]
+}

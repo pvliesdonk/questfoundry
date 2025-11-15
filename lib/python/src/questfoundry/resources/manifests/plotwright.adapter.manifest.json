@@ -1,0 +1,141 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "plotwright",
+  "role_name": "Plotwright",
+  "compiled_at": "2025-11-15T20:00:12.810655+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/plotwright.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/plotwright_topology.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/topology_design.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/gateway_mapping.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/section_briefing.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/diegetic_phrasing_guide.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_boundaries.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/diegetic_gates.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/contrastive_choices.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Design nonlinear structure that invites choice and rewards return, then hand clear briefs to prose and canon neighbors.",
+  "expertise": "@expertise:plotwright_topology",
+  "procedures": {
+    "primary": [
+      "@procedure:topology_design",
+      "@procedure:section_briefing",
+      "@procedure:gateway_mapping"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "tu.open",
+      "hook.accept",
+      "canon.impact"
+    ],
+    "sends": [
+      "section.brief",
+      "topology.notes",
+      "gateway.map",
+      "hook.create",
+      "merge.request",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "responsible",
+      "description": "Sketch/adjust topology; mark gateway conditions; generate narrative hooks"
+    },
+    {
+      "playbook": "@playbook:hook_harvest",
+      "raci": "consulted",
+      "description": "Triage & clustering; judge structural impact"
+    },
+    {
+      "playbook": "@playbook:lore_deepening",
+      "raci": "consulted",
+      "description": "Sanity-check topology implications; request/accept constraints"
+    },
+    {
+      "playbook": "@playbook:style_tune_up",
+      "raci": "consulted",
+      "description": "Ensure choice contrast aligns with cadence"
+    },
+    {
+      "playbook": "@playbook:codex_expansion",
+      "raci": "consulted",
+      "description": "Identify taxonomy/clarity gaps created by new structure"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "reachability",
+      "nonlinearity",
+      "gateways",
+      "presentation"
+    ],
+    "secondary": [
+      "integrity",
+      "style"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:diegetic_phrasing_guide",
+    "@snippet:validation_reminder",
+    "@snippet:diegetic_gates",
+    "@snippet:contrastive_choices",
+    "@snippet:pn_boundaries"
+  ],
+  "handoffs": {
+    "to_scene_smith": {
+      "content": "Section briefs enabling drafting without guessing",
+      "artifacts": [
+        "section.brief"
+      ]
+    },
+    "to_lore_weaver": {
+      "content": "Request canon timing & structural fit when topology needs world rules",
+      "trigger": "Topology requires diegetic justification"
+    },
+    "to_codex_curator": {
+      "content": "Flag taxonomy/clarity needs when structure introduces new concepts",
+      "artifacts": [
+        "topology.notes"
+      ]
+    },
+    "to_gatekeeper": {
+      "content": "Submit topology for pre-gate on Reachability/Nonlinearity/Gateways",
+      "artifacts": [
+        "topology.notes",
+        "gateway.map"
+      ]
+    },
+    "from_lore_weaver": {
+      "content": "Receive canon constraints affecting gateway design or loop justification",
+      "artifacts": [
+        "canon_constraints"
+      ]
+    },
+    "from_hook_harvest": {
+      "content": "Receive accepted hooks requiring hub/loop/gateway changes",
+      "artifacts": [
+        "accepted_hooks"
+      ]
+    }
+  },
+  "artifacts": [
+    "section_brief.schema.json",
+    "topology_notes.schema.json",
+    "gateway_map.schema.json"
+  ]
+}

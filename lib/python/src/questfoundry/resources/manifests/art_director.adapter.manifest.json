@@ -1,0 +1,127 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "art_director",
+  "role_name": "Art Director",
+  "compiled_at": "2025-11-15T20:00:12.810061+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/art_director.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/art_director_planning.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/art_plan_authoring.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/illustration_slot_selection.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/visual_language_maintenance.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/no_internals.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/accessibility.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/technique_off_surfaces.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/determinism.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/alt_text_quality.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_safety_warning.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Choose image moments that clarify, recall, signal, or enrich mood\u2014and specify them in player-safe plans that respect style and accessibility.",
+  "expertise": "@expertise:art_director_planning",
+  "procedures": {
+    "primary": [
+      "@procedure:illustration_slot_selection",
+      "@procedure:art_plan_authoring",
+      "@procedure:visual_language_maintenance"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "tu.open",
+      "art.slot.request",
+      "feasibility.report"
+    ],
+    "sends": [
+      "art.plan",
+      "art.shotlist",
+      "hook.create",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:art_touch_up",
+      "raci": "responsible",
+      "description": "Select slots; author plans; coordinate with Style/Gatekeeper"
+    },
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "consulted",
+      "description": "When imagery clarifies affordances or terms"
+    },
+    {
+      "playbook": "@playbook:codex_expansion",
+      "raci": "consulted",
+      "description": "Visual anchors for terms"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "presentation",
+      "accessibility"
+    ],
+    "secondary": [
+      "style",
+      "gateways"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:pn_safety_warning",
+    "@snippet:validation_reminder",
+    "@snippet:determinism",
+    "@snippet:technique_off_surfaces",
+    "@snippet:alt_text_quality",
+    "@snippet:accessibility",
+    "@snippet:no_internals"
+  ],
+  "handoffs": {
+    "to_illustrator": {
+      "content": "Send art plans for rendering; coordinate feasibility",
+      "artifacts": [
+        "art.plan"
+      ]
+    },
+    "to_style_lead": {
+      "content": "Coordinate register and motif alignment",
+      "trigger": "Visual language decisions needed"
+    },
+    "to_codex_curator": {
+      "content": "Coordinate terminology for captions and alt text",
+      "trigger": "Terms need alignment"
+    },
+    "to_translator": {
+      "content": "Coordinate caption portability across languages",
+      "artifacts": [
+        "caption_notes"
+      ]
+    },
+    "from_any_role": {
+      "content": "Receive requests for visual clarification or signposting",
+      "artifacts": [
+        "art.slot.request"
+      ]
+    },
+    "from_illustrator": {
+      "content": "Receive feasibility reports; adjust plans as needed",
+      "artifacts": [
+        "feasibility.report"
+      ]
+    }
+  },
+  "artifacts": [
+    "art_plan.schema.json",
+    "shotlist.schema.json"
+  ]
+}

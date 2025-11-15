@@ -411,6 +411,68 @@ class Orchestrator:
 
         return result
 
+    def run_playbook(
+        self, playbook_id: str, inputs: dict[str, Any] | None = None
+    ) -> LoopResult:
+        """
+        Run a specific playbook by its ID, bypassing customer intent dispatch.
+
+        This is useful for CLI commands that want to execute a known playbook
+        directly without going through the showrunner's loop selection logic.
+
+        Args:
+            playbook_id: The ID of the playbook to run
+            inputs: Optional inputs to pass to the playbook
+
+        Returns:
+            LoopResult from executing the playbook
+
+        Raises:
+            KeyError: If playbook not found in registry
+            RuntimeError: If orchestrator not initialized
+        """
+        logger.info("Running playbook '%s' directly", playbook_id)
+
+        if self.showrunner is None:
+            logger.error("Orchestrator not initialized - showrunner is None")
+            raise RuntimeError("Orchestrator not initialized. Call initialize() first.")
+
+        # Verify the playbook exists
+        try:
+            metadata = self.loop_registry.get_loop_metadata(playbook_id)
+            logger.debug(
+                "Found playbook '%s' (%s) in registry", playbook_id, metadata.display_name
+            )
+        except KeyError:
+            logger.error("Playbook '%s' not found in registry", playbook_id)
+            raise
+
+        # Get project info for context
+        project_info = self.workspace.get_project_info()
+        project_id = project_info.name
+
+        logger.debug(
+            "Executing playbook '%s' for project '%s' with inputs: %s",
+            playbook_id,
+            project_id,
+            inputs,
+        )
+
+        # Execute the playbook directly (without loop selection)
+        result = self.execute_loop(
+            loop_id=playbook_id,
+            project_id=project_id,
+            artifacts=[],
+            config=inputs or {},
+        )
+
+        if result.success:
+            logger.info("Playbook '%s' executed successfully", playbook_id)
+        else:
+            logger.error("Playbook '%s' execution failed: %s", playbook_id, result.error)
+
+        return result
+
     def _extract_loop_id(self, output: str) -> str:
         """
         Extract loop ID from showrunner output.

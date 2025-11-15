@@ -1,0 +1,130 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "book_binder",
+  "role_name": "Book Binder",
+  "compiled_at": "2025-11-15T20:00:12.809712+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/book_binder.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/book_binder_export.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/front_matter_composition.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/integrity_enforcement.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/export_view_assembly.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/cold_manifest_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/no_internals.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/accessibility.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/cold_only_rule.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_safety_warning.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Assemble reproducible, accessible bundles from Cold, stamp snapshot & options, and keep navigation rock-solid.",
+  "expertise": "@expertise:book_binder_export",
+  "procedures": {
+    "primary": [
+      "@procedure:export_view_assembly",
+      "@procedure:front_matter_composition",
+      "@procedure:integrity_enforcement"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "view.export.request",
+      "tu.open"
+    ],
+    "sends": [
+      "view.export.result",
+      "view.log",
+      "view.anchor_map",
+      "view.assembly_notes",
+      "hook.create",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:binding_run",
+      "raci": "responsible",
+      "description": "Assemble view; compose front matter; run link/anchor pass"
+    },
+    {
+      "playbook": "@playbook:narration_dry_run",
+      "raci": "informed",
+      "description": "Informed of view for PN testing"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "integrity",
+      "presentation",
+      "accessibility"
+    ],
+    "secondary": [
+      "style",
+      "reachability"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:pn_safety_warning",
+    "@snippet:validation_reminder",
+    "@snippet:cold_only_rule",
+    "@snippet:cold_manifest_validation",
+    "@snippet:accessibility",
+    "@snippet:no_internals"
+  ],
+  "handoffs": {
+    "from_showrunner": {
+      "content": "Receive snapshot ID and export options",
+      "artifacts": [
+        "view.export.request"
+      ]
+    },
+    "to_gatekeeper": {
+      "content": "Request export spot-check before view ships",
+      "trigger": "View assembly complete"
+    },
+    "to_player_narrator": {
+      "content": "Deliver view bundle for dry-run testing",
+      "artifacts": [
+        "view.export.result"
+      ]
+    },
+    "from_gatekeeper": {
+      "content": "Receive export spot-check approval",
+      "artifacts": [
+        "gatecheck_report"
+      ]
+    },
+    "from_translator": {
+      "content": "Receive localized slices with coverage notes",
+      "artifacts": [
+        "translation_slices"
+      ]
+    },
+    "from_style_lead": {
+      "content": "Receive front-matter phrasing guidance",
+      "artifacts": [
+        "style_notes"
+      ]
+    },
+    "to_owners": {
+      "content": "Open TU and ping owner role when content issues found",
+      "trigger": "Broken links, ambiguous headings, nav friction",
+      "note": "Request upstream edits instead of 'fixing' in binder step"
+    }
+  },
+  "artifacts": [
+    "view_bundle.schema.json",
+    "view_log.schema.json",
+    "anchor_map.schema.json"
+  ]
+}

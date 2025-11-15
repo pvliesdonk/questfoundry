@@ -1,0 +1,189 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "showrunner",
+  "role_name": "Showrunner",
+  "compiled_at": "2025-11-15T20:00:12.810256+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/showrunner.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/showrunner_orchestration.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/role_wake_dormancy.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/loop_orchestration.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/human_question.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_safety_invariant.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/handoff_checklist.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/human_question_template.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/tu_context_template.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/dormancy_policy.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_safety_warning.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Keep the studio moving in small, high-signal loops; merge only what's safe and useful; make the next step obvious.",
+  "expertise": "@expertise:showrunner_orchestration",
+  "procedures": {
+    "primary": [
+      "@procedure:tu_lifecycle",
+      "@procedure:role_wake_dormancy",
+      "@procedure:human_question",
+      "@procedure:loop_orchestration"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "hook.accept",
+      "hook.defer",
+      "hook.reject",
+      "gate.decision",
+      "view.export.result",
+      "human.question",
+      "tu.checkpoint",
+      "error"
+    ],
+    "sends": [
+      "tu.open",
+      "tu.update",
+      "tu.checkpoint",
+      "tu.close",
+      "role.wake",
+      "role.dormant",
+      "gate.submit",
+      "view.export.request",
+      "human.response",
+      "merge.approve",
+      "ack",
+      "error"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:hook_harvest",
+      "raci": "responsible",
+      "description": "Runs triage session; decides role activation; makes final triage calls"
+    },
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "accountable",
+      "description": "Coordinates scope and timing; merge decisions"
+    },
+    {
+      "playbook": "@playbook:lore_deepening",
+      "raci": "accountable",
+      "description": "Scopes deepening pass; resolves cross-domain contention"
+    },
+    {
+      "playbook": "@playbook:codex_expansion",
+      "raci": "accountable",
+      "description": "Frames coverage scope; approves merge"
+    },
+    {
+      "playbook": "@playbook:style_tune_up",
+      "raci": "accountable",
+      "description": "Sequences style work; coordinates handoffs"
+    },
+    {
+      "playbook": "@playbook:gatecheck",
+      "raci": "accountable",
+      "description": "Receives decision; coordinates next steps (merge or remediation)"
+    },
+    {
+      "playbook": "@playbook:narration_dry_run",
+      "raci": "accountable",
+      "description": "Scopes test; routes PN feedback"
+    },
+    {
+      "playbook": "@playbook:binding_run",
+      "raci": "accountable",
+      "description": "Selects snapshot; sets view options; approves export"
+    },
+    {
+      "playbook": "@playbook:translation_pass",
+      "raci": "accountable",
+      "description": "Sets coverage target; approves merge"
+    },
+    {
+      "playbook": "@playbook:art_touch_up",
+      "raci": "accountable",
+      "description": "Coordinates art planning; approves plan-only or asset merges"
+    },
+    {
+      "playbook": "@playbook:audio_pass",
+      "raci": "accountable",
+      "description": "Coordinates audio planning; approves plan-only or asset merges"
+    },
+    {
+      "playbook": "@playbook:archive_snapshot",
+      "raci": "accountable",
+      "description": "Triggers snapshot stamping"
+    },
+    {
+      "playbook": "@playbook:post_mortem",
+      "raci": "accountable",
+      "description": "Facilitates retrospective; captures lessons"
+    }
+  ],
+  "quality_bars": {
+    "all": [
+      "integrity",
+      "reachability",
+      "nonlinearity",
+      "gateways",
+      "style",
+      "determinism",
+      "presentation",
+      "accessibility"
+    ],
+    "delegation": "Delegates detailed bar-by-bar evaluation to Gatekeeper"
+  },
+  "safety_protocols": [
+    "@snippet:pn_safety_warning",
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:validation_reminder",
+    "@snippet:tu_context_template",
+    "@snippet:dormancy_policy",
+    "@snippet:human_question_template",
+    "@snippet:handoff_checklist",
+    "@snippet:pn_safety_invariant"
+  ],
+  "handoffs": {
+    "to_gatekeeper": {
+      "content": "Submit work for pre-gate or gatecheck when stabilizing or merging to Cold",
+      "trigger": "TU work stabilized and ready for quality validation"
+    },
+    "to_binder": {
+      "content": "Request view export with snapshot ID and options",
+      "artifacts": [
+        "snapshot_id",
+        "view_options"
+      ]
+    },
+    "to_all_roles": {
+      "content": "Broadcast TU open/update/close; maintain correlation_id for workflow tracking",
+      "protocol": "Use @snippet:tu_context_template for all TU messages"
+    },
+    "from_gatekeeper": {
+      "content": "Receive gate decision; route remediations to owners; approve merge on pass",
+      "artifacts": [
+        "gatecheck_report"
+      ]
+    },
+    "from_owners": {
+      "content": "Receive checkpoint updates; adjust scope or sequence as needed",
+      "artifacts": [
+        "tu.checkpoint"
+      ]
+    }
+  },
+  "artifacts": [
+    "tu_brief.schema.json",
+    "tu_checkpoint.schema.json",
+    "merge_approval.schema.json"
+  ]
+}

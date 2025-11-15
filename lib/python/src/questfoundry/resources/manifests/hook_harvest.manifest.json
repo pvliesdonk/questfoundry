@@ -1,0 +1,113 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "hook_harvest",
+  "display_name": "Hook Harvest",
+  "compiled_at": "2025-11-15T20:00:12.807869+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/hook_harvest.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/hook_triaging.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/clustering.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "category": "Discovery",
+  "purpose": "Sweep up newly proposed hooks (narrative, scene, factual, taxonomy), remove duplicates, cluster related ideas, and triage what should advance now, later, or never.",
+  "outcome": "A prioritized, tagged hook set ready for Lore Deepening (canonization) and follow-on loops, with risks and dependencies made explicit.",
+  "steps": [
+    {
+      "step_id": "step_1",
+      "name": "Open Hook Harvest TU",
+      "description": "Open TU and broadcast to consulted roles",
+      "assigned_roles": [
+        "showrunner"
+      ],
+      "protocol_intent": "tu.open"
+    },
+    {
+      "step_id": "step_2",
+      "name": "Collect",
+      "description": "Sweep all new 'proposed' hooks; reject obvious dupes; link provenance",
+      "assigned_roles": []
+    },
+    {
+      "step_id": "step_3",
+      "name": "Cluster",
+      "description": "Group by theme (e.g., 'Wormhole economy', 'Kestrel arc'), then by type (narrative|scene|factual|taxonomy)",
+      "assigned_roles": []
+    },
+    {
+      "step_id": "step_4",
+      "name": "Annotate",
+      "description": "Add or confirm triage tags, uncertainty levels, dependencies for each hook",
+      "assigned_roles": []
+    },
+    {
+      "step_id": "step_5",
+      "name": "Decide",
+      "description": "Mark each as accepted, deferred, or rejected (with 1-line reason)",
+      "assigned_roles": [
+        "showrunner"
+      ]
+    },
+    {
+      "step_id": "step_6",
+      "name": "Package",
+      "description": "Produce Harvest Sheet summarizing decisions for hand-off",
+      "assigned_roles": []
+    }
+  ],
+  "raci": {
+    "responsible": [
+      "showrunner"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "lore_weaver",
+      "plotwright",
+      "scene_smith",
+      "codex_curator",
+      "researcher",
+      "style_lead",
+      "gatekeeper"
+    ],
+    "informed": [
+      "player_narrator"
+    ]
+  },
+  "quality_bars": [
+    "integrity"
+  ],
+  "artifacts": [
+    "hook_card.schema.json",
+    "harvest_sheet.schema.json"
+  ],
+  "inputs": [
+    "Hook cards in Hot SoT with status 'proposed'",
+    "Recent topology notes, section drafts, style addenda",
+    "Open QA notes from Gatekeeper (integrity/reachability/nonlinearity risks)",
+    "Prior harvest decisions (for consistency)"
+  ],
+  "deliverables": {
+    "harvest_sheet": {
+      "format": "Human text; attach to TU",
+      "contents": [
+        "Date and TU-ID",
+        "Cluster headings with lists of hooks (accepted/deferred/rejected)",
+        "Risk notes (dormant Researcher? style pressure? topology churn?)",
+        "Activation requests (roles Showrunner should wake for next loops)"
+      ]
+    },
+    "updated_hooks": {
+      "contents": [
+        "Status set (accepted/deferred/rejected)",
+        "Triage tags",
+        "Uncertainty level",
+        "Dependencies"
+      ]
+    }
+  }
+}

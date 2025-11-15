@@ -1,0 +1,51 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "archive_snapshot",
+  "display_name": "Archive Snapshot",
+  "compiled_at": "2025-11-15T20:00:12.808061+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/archive_snapshot.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/manifest_generation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/snapshot_stamping.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md"
+  ],
+  "category": "Export",
+  "purpose": "Create a comprehensive, versioned snapshot of the entire project state (Hot and Cold) at a significant milestone for long-term archival, reproducibility, and provenance.",
+  "outcome": "A timestamped archive package with complete project state, manifest, and restoration instructions. Captures all artifacts, TU history, gatecheck reports, schema versions, and metadata to enable future recovery, audit, or analysis.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "showrunner"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "book_binder",
+      "gatekeeper"
+    ],
+    "informed": [
+      "All Roles"
+    ]
+  },
+  "quality_bars": [
+    "integrity",
+    "determinism"
+  ],
+  "artifacts": [
+    "archive_manifest.schema.json",
+    "restoration_guide.md"
+  ],
+  "inputs": [
+    "Current Cold snapshot with all merged artifacts",
+    "Current Hot snapshot with work-in-progress",
+    "All TU records (opened, stabilizing, gatecheck, cold-merged, closed)",
+    "All Gatecheck Reports",
+    "All Hook Cards",
+    "Schema versions and specifications",
+    "Configuration files and tool versions",
+    "Post-Mortem Reports (if any)",
+    "View Logs from Binding Runs"
+  ]
+}

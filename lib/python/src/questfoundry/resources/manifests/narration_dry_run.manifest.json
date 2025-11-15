@@ -1,0 +1,49 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "narration_dry_run",
+  "display_name": "Narration Dry-Run",
+  "compiled_at": "2025-11-15T20:00:12.808856+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/narration_dry_run.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/in_world_performance.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/diegetic_gate_enforcement.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/ux_issue_tagging.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md"
+  ],
+  "category": "Export",
+  "purpose": "Have the Player-Narrator (PN) play through the current Cold snapshot exactly as a player would experience it\u2014in-world, spoiler-safe\u2014to surface UX issues in comprehension, choice clarity, pacing, and diegetic gate enforcement.",
+  "outcome": "A set of PN playtest notes and handoff tickets (Trace Units or edit notes) that improve player-facing surfaces without rewriting canon or topology during the dry-run itself.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "player_narrator"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "gatekeeper",
+      "style_lead",
+      "book_binder",
+      "codex_curator",
+      "translator"
+    ]
+  },
+  "quality_bars": [
+    "presentation",
+    "accessibility",
+    "gateways"
+  ],
+  "artifacts": [
+    "playtest_notes.schema.json",
+    "friction_report.schema.json"
+  ],
+  "inputs": [
+    "Exported bundle from Binding Run (Markdown/HTML/EPUB/PDF)",
+    "PN Principles (in-world, spoiler-safe, diegetic gates)",
+    "Style guardrails (voice/register/motifs)",
+    "Language Pack if testing a non-source language",
+    "CRITICAL: PN reads Cold only\u2014no Hot drafts, no canon notes"
+  ]
+}

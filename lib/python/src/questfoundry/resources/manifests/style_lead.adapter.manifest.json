@@ -1,0 +1,149 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "style_lead",
+  "role_name": "Style Lead",
+  "compiled_at": "2025-11-15T20:00:12.812052+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/style_lead.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/style_lead_voice.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/diegetic_gate_language.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/voice_coherence.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/contrastive_choice_polishing.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/diegetic_phrasing_guide.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/register_alignment.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/accessibility.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Maintain a consistent voice and readable cadence, shaping phrasing so choices are contrastive, gates are diegetic, and player surfaces are clean and accessible.",
+  "expertise": "@expertise:style_lead_voice",
+  "procedures": {
+    "primary": [
+      "@procedure:voice_coherence",
+      "@procedure:contrastive_choice_polishing",
+      "@procedure:diegetic_gate_language"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "tu.open",
+      "style.review.request",
+      "pn.friction.report"
+    ],
+    "sends": [
+      "style.addendum",
+      "style.edit_notes",
+      "pn.phrasing.patterns",
+      "localization.cues",
+      "hook.create",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:style_tune_up",
+      "raci": "responsible",
+      "description": "Author addenda; provide edit notes; create PN phrasing patterns"
+    },
+    {
+      "playbook": "@playbook:narration_dry_run",
+      "raci": "consulted",
+      "description": "Capture PN friction \u2192 phrasing fixes"
+    },
+    {
+      "playbook": "@playbook:binding_run",
+      "raci": "consulted",
+      "description": "Front-matter phrasing, labels"
+    },
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "consulted",
+      "description": "Guard tone/voice; flag drift; suggest motif threading"
+    },
+    {
+      "playbook": "@playbook:hook_harvest",
+      "raci": "consulted",
+      "description": "Note tone/voice/aesthetic implications"
+    },
+    {
+      "playbook": "@playbook:translation_pass",
+      "raci": "consulted",
+      "description": "Register constraints; idiom fit"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "style",
+      "presentation",
+      "accessibility"
+    ],
+    "secondary": [
+      "gateways",
+      "nonlinearity"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:diegetic_phrasing_guide",
+    "@snippet:validation_reminder",
+    "@snippet:register_alignment",
+    "@snippet:accessibility"
+  ],
+  "handoffs": {
+    "from_player_narrator": {
+      "content": "Receive friction reports on tone wobble, gate phrasing issues, cadence problems",
+      "artifacts": [
+        "pn_friction_report"
+      ]
+    },
+    "from_scene_smith_plotwright": {
+      "content": "Receive drafts for style review",
+      "artifacts": [
+        "draft_scenes",
+        "section_briefs"
+      ]
+    },
+    "from_translator": {
+      "content": "Coordinate register decisions and idiom patterns",
+      "artifacts": [
+        "translation_notes"
+      ]
+    },
+    "to_scene_smith": {
+      "content": "Send targeted edit notes (small & surgical)",
+      "artifacts": [
+        "style.edit_notes"
+      ]
+    },
+    "to_player_narrator": {
+      "content": "Send phrasing patterns for common gates and refusals",
+      "artifacts": [
+        "pn.phrasing.patterns"
+      ]
+    },
+    "to_translator": {
+      "content": "Send register map & localization cues",
+      "artifacts": [
+        "localization.cues"
+      ]
+    },
+    "to_codex_curator": {
+      "content": "Coordinate terminology phrasing",
+      "trigger": "Terminology alignment needed"
+    }
+  },
+  "artifacts": [
+    "style_addendum.schema.json",
+    "edit_notes.schema.json",
+    "phrasing_patterns.schema.json"
+  ]
+}

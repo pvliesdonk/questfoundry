@@ -1,0 +1,55 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "style_tune_up",
+  "display_name": "Style Tune-up",
+  "compiled_at": "2025-11-15T20:00:12.808326+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/style_tune_up.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/diegetic_gate_language.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/voice_coherence.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/contrastive_choice_polishing.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md"
+  ],
+  "category": "Refinement",
+  "purpose": "Detect and correct style drift across prose, captions, and PN surfaces without re-architecting the story. Tighten voice, register, motifs, and visual guardrails so the book reads like one mind made it.",
+  "outcome": "A consolidated style addendum with specific edit notes to owners, plus a green Presentation/Style pre-gate\u2014ready for merge after downstream fixes.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "style_lead"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "scene_smith",
+      "plotwright",
+      "art_director",
+      "audio_director",
+      "translator",
+      "gatekeeper"
+    ],
+    "informed": [
+      "player_narrator"
+    ]
+  },
+  "quality_bars": [
+    "style",
+    "presentation",
+    "accessibility"
+  ],
+  "artifacts": [
+    "style_addendum.schema.json",
+    "edit_notes.schema.json",
+    "phrasing_patterns.schema.json"
+  ],
+  "inputs": [
+    "Current Cold style guide (plus motifs and exemplars)",
+    "Recent prose drafts (Hot), captions, PN lines",
+    "Canon changes that might affect tone (grim vs caper)",
+    "PN and Binder UX notes; localization notes (if any)"
+  ]
+}
