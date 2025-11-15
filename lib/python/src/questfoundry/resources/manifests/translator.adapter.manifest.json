@@ -1,0 +1,148 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "translator",
+  "role_name": "Translator",
+  "compiled_at": "2025-11-15T20:00:12.810465+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/translator.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/translator_localization.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/translator_terminology.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/terminology_coordination.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/language_pack_production.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/register_map_maintenance.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/localization_support.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/terminology.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/no_internals.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/register_alignment.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/accessibility.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_boundaries.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_safety_warning.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Carry intent\u2014tone, stakes, and affordances\u2014into the target language while keeping player surfaces clean, diegetic, and accessible.",
+  "expertise": "@expertise:translator_localization",
+  "procedures": {
+    "primary": [
+      "@procedure:language_pack_production",
+      "@procedure:register_map_maintenance",
+      "@procedure:terminology_coordination"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "tu.open",
+      "translation.request",
+      "glossary.update"
+    ],
+    "sends": [
+      "translation.pack",
+      "pn.phrasing.patterns",
+      "caption.localization",
+      "coverage.report",
+      "hook.create",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:translation_pass",
+      "raci": "responsible",
+      "description": "Localize surfaces; maintain register map; coordinate terminology"
+    },
+    {
+      "playbook": "@playbook:style_tune_up",
+      "raci": "consulted",
+      "description": "Register constraints; idiom fit"
+    },
+    {
+      "playbook": "@playbook:binding_run",
+      "raci": "consulted",
+      "description": "Labels, link text, directionality/typography checks"
+    },
+    {
+      "playbook": "@playbook:codex_expansion",
+      "raci": "consulted",
+      "description": "Terminology alignment"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "presentation",
+      "accessibility",
+      "style"
+    ],
+    "secondary": [
+      "integrity",
+      "gateways"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:pn_safety_warning",
+    "@snippet:validation_reminder",
+    "@snippet:terminology",
+    "@snippet:register_alignment",
+    "@snippet:localization_support",
+    "@snippet:accessibility",
+    "@snippet:no_internals",
+    "@snippet:pn_boundaries"
+  ],
+  "handoffs": {
+    "from_style_lead": {
+      "content": "Receive register map and localization cues",
+      "artifacts": [
+        "localization.cues"
+      ]
+    },
+    "from_codex_curator": {
+      "content": "Receive glossary and terminology guidance",
+      "artifacts": [
+        "glossary.slice"
+      ]
+    },
+    "from_player_narrator": {
+      "content": "Coordinate performance cadence in target language",
+      "trigger": "PN performance coordination needed"
+    },
+    "to_binder": {
+      "content": "Provide localized surfaces with coverage notes",
+      "artifacts": [
+        "translation.pack",
+        "coverage.report"
+      ]
+    },
+    "to_gatekeeper": {
+      "content": "Submit for Presentation and Accessibility checks",
+      "artifacts": [
+        "translation.pack"
+      ]
+    },
+    "coordinate_with_curator": {
+      "content": "Terminology stabilization; glossary slice",
+      "trigger": "Term conflicts or missing entries"
+    },
+    "coordinate_with_style": {
+      "content": "Register/voice agreement; exemplars",
+      "trigger": "Register or idiom decisions needed"
+    },
+    "coordinate_with_player_narrator": {
+      "content": "Adjust patterns, not meaning; cadence fit",
+      "trigger": "Performance cadence issues"
+    }
+  },
+  "artifacts": [
+    "translation_pack.schema.json",
+    "coverage_report.schema.json",
+    "bilingual_glossary.schema.json"
+  ]
+}

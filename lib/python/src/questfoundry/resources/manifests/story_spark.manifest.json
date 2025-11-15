@@ -1,0 +1,151 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "story_spark",
+  "display_name": "Story Spark",
+  "compiled_at": "2025-11-15T20:00:12.807388+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/story_spark.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/topology_design.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/gateway_mapping.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/section_briefing.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/prose_drafting.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/sensory_anchoring.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/contrastive_choice_design.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/micro_context_management.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "category": "Discovery",
+  "purpose": "Introduce or reshape narrative structure\u2014parts/chapters, hubs, loops, gateways, and codeword economy\u2014then ripple changes through prose, hooks, and QA without leaking spoilers to player surfaces.",
+  "outcome": "A stabilized topology update (in Hot) with section briefs and scene drafts, harvested hooks, and a Gatekeeper preview\u2014ready to feed Lore Deepening and Codex Expansion, then merge to Cold after gatecheck.",
+  "steps": [
+    {
+      "step_id": "step_1",
+      "name": "Topology Draft",
+      "description": "Map parts/chapters and designate hubs (fan-out), loops (return-with-difference), and gateways (state-gated)",
+      "assigned_roles": [
+        "plotwright"
+      ]
+    },
+    {
+      "step_id": "step_2",
+      "name": "Section Briefs",
+      "description": "For each affected/new section: intent, stakes, choices, expected state effect, references",
+      "assigned_roles": [
+        "plotwright"
+      ]
+    },
+    {
+      "step_id": "step_3",
+      "name": "Prose Pass",
+      "description": "Draft/adjust section text in style; make choices clear and distinct",
+      "assigned_roles": [
+        "scene_smith"
+      ]
+    },
+    {
+      "step_id": "step_4",
+      "name": "Hook Generation",
+      "description": "Create narrative/scene/factual hook cards with rationales and uncertainty levels",
+      "assigned_roles": [],
+      "protocol_intent": "hook.create"
+    },
+    {
+      "step_id": "step_5",
+      "name": "Style Check",
+      "description": "Sample sections; flag tone drift; propose motif anchors; suggest PN-surface phrasing patterns",
+      "assigned_roles": [
+        "style_lead"
+      ]
+    },
+    {
+      "step_id": "step_6",
+      "name": "Feasibility Check",
+      "description": "Flag canon collisions; suggest where Lore Deepening is needed",
+      "assigned_roles": [
+        "lore_weaver"
+      ]
+    },
+    {
+      "step_id": "step_7",
+      "name": "Preview Gate",
+      "description": "Run quick pre-gate: Integrity, Reachability, Nonlinearity",
+      "assigned_roles": [
+        "gatekeeper"
+      ]
+    },
+    {
+      "step_id": "step_8",
+      "name": "Triage Hand-off",
+      "description": "Pass hook set to Hook Harvest loop; schedule Lore Deepening follow-up",
+      "assigned_roles": [
+        "showrunner"
+      ]
+    }
+  ],
+  "raci": {
+    "responsible": [
+      "plotwright",
+      "scene_smith"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "style_lead",
+      "lore_weaver",
+      "codex_curator",
+      "researcher",
+      "gatekeeper"
+    ],
+    "informed": [
+      "player_narrator",
+      "book_binder"
+    ]
+  },
+  "quality_bars": [
+    "reachability",
+    "nonlinearity",
+    "gateways",
+    "presentation"
+  ],
+  "artifacts": [
+    "tu_brief.schema.json",
+    "topology_notes.schema.json",
+    "section_brief.schema.json",
+    "scene.schema.json",
+    "hook_card.schema.json"
+  ],
+  "inputs": [
+    "Current Cold snapshot (canon, codex, style guardrails)",
+    "Prior topology notes (Hot/Cold)",
+    "Open hooks (if any) relevant to structure",
+    "Known QA findings (Integrity/Reachability/Nonlinearity)"
+  ],
+  "deliverables": {
+    "topology_notes": {
+      "format": "Human prose",
+      "contents": "Hubs/loops/gateways overview with rationale"
+    },
+    "section_briefs_and_drafts": {
+      "contents": "Section briefs and draft prose for changed/new sections"
+    },
+    "hook_list": {
+      "contents": "Narrative/scene/factual hooks with triage tags candidate"
+    },
+    "style_addendum": {
+      "contents": "Style addendum (if any) and motif notes",
+      "condition": "If style changes needed"
+    },
+    "pre_gate_note": {
+      "owner": "@adapter:gatekeeper",
+      "contents": "Early findings and risks"
+    },
+    "tu_update": {
+      "contents": "All upstream refs and predicted downstream impacts"
+    }
+  }
+}

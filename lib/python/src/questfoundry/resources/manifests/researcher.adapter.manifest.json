@@ -1,0 +1,126 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "researcher",
+  "role_name": "Researcher",
+  "compiled_at": "2025-11-15T20:00:12.811360+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/researcher.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/researcher_verification.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/researcher_fact_checking.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/research_memo_creation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/uncertainty_posture_assessment.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/fact_corroboration.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/research_posture.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Corroborate claims and constraints, record uncertainty plainly, and hand neighbors just enough truth to work safely.",
+  "expertise": "@expertise:researcher_verification",
+  "procedures": {
+    "primary": [
+      "@procedure:fact_corroboration",
+      "@procedure:research_memo_creation",
+      "@procedure:uncertainty_posture_assessment"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "research.request",
+      "tu.open",
+      "hook.accept"
+    ],
+    "sends": [
+      "research.memo",
+      "research.posture",
+      "research.phrasing",
+      "hook.create",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:hook_harvest",
+      "raci": "consulted",
+      "description": "Triage: which hooks need verification vs canon vs style"
+    },
+    {
+      "playbook": "@playbook:lore_deepening",
+      "raci": "consulted",
+      "description": "Evidence & constraints; corroborate factual claims"
+    },
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "consulted",
+      "description": "Feasibility notes on gateways/affordances"
+    },
+    {
+      "playbook": "@playbook:style_tune_up",
+      "raci": "consulted",
+      "description": "Terminology accuracy; sensitive language flags"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "integrity",
+      "presentation"
+    ],
+    "secondary": [
+      "accessibility",
+      "gateways"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:validation_reminder",
+    "@snippet:research_posture"
+  ],
+  "handoffs": {
+    "from_any_role": {
+      "content": "Receive research requests for fact validation",
+      "artifacts": [
+        "research.request"
+      ]
+    },
+    "to_lore_weaver": {
+      "content": "Provide evidence grading and constraints (not outcomes)",
+      "artifacts": [
+        "research.memo",
+        "research.posture"
+      ],
+      "note": "Constraints only; never dictate canon outcomes"
+    },
+    "to_plotwright": {
+      "content": "Suggest plausible mechanisms for gates via hooks",
+      "artifacts": [
+        "hook_card"
+      ]
+    },
+    "to_style_lead": {
+      "content": "Flag sensitive language and terminology accuracy issues",
+      "artifacts": [
+        "content_risk_flags"
+      ]
+    },
+    "to_codex_curator": {
+      "content": "Coordinate terminology requiring codex entry",
+      "trigger": "Terms need player-facing definition"
+    },
+    "to_translator": {
+      "content": "Coordinate culture/idiom concerns",
+      "trigger": "Cross-cultural validation needed"
+    }
+  },
+  "artifacts": [
+    "research_memo.schema.json",
+    "uncertainty_assessment.schema.json"
+  ]
+}

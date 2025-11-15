@@ -1,0 +1,73 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "gatecheck",
+  "display_name": "Gatecheck",
+  "compiled_at": "2025-11-15T20:00:12.808996+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/gatecheck.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/gatecheck_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/continuity_check.md"
+  ],
+  "category": "Export",
+  "purpose": "Validate quality bars and deliver decisions to coordinate merge approvals with snapshot stamping per TRACEABILITY. Enable Gatekeeper to evaluate all 8 quality bars and deliver pass/conditional pass/block decisions.",
+  "outcome": "A gatecheck report with bar statuses (green/yellow/red), decision (pass/conditional pass/block), smallest viable fixes for yellow/red bars, and owner assignments\u2014ready for merge approval or remediation.",
+  "steps": [
+    {
+      "step_id": "step_1",
+      "name": "Gate Report Submission",
+      "description": "Owner signals work ready for gatecheck",
+      "assigned_roles": [
+        "Owner"
+      ],
+      "protocol_intent": "tu.submit_gate"
+    },
+    {
+      "step_id": "step_2",
+      "name": "Evaluate All 8 Quality Bars",
+      "description": "Review against all bars; assign green/yellow/red status to each",
+      "assigned_roles": [
+        "gatekeeper"
+      ]
+    },
+    {
+      "step_id": "step_3",
+      "name": "Decision & Smallest Viable Fixes",
+      "description": "Deliver pass/conditional pass/block decision with actionable remediation notes",
+      "assigned_roles": [
+        "gatekeeper"
+      ],
+      "protocol_intent": "gate.decision"
+    },
+    {
+      "step_id": "step_4",
+      "name": "Remediation or Merge Approval",
+      "description": "If pass: approve merge. If conditional: route fixes to owner. If block: escalate.",
+      "assigned_roles": [
+        "showrunner"
+      ]
+    }
+  ],
+  "raci": {
+    "responsible": [
+      "gatekeeper"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "Owner (varies by loop)"
+    ]
+  },
+  "artifacts": [
+    "gatecheck_report.schema.json"
+  ],
+  "inputs": [
+    "TU Brief from owner (status: stabilizing \u2192 gatecheck)",
+    "Artifacts to review (Canon Pack, Codex entries, Topology notes, Art/Audio plans, etc.)",
+    "Current Cold snapshot for reference",
+    "Prior pre-gate notes (if any)"
+  ]
+}

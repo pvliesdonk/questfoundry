@@ -1,0 +1,57 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "codex_expansion",
+  "display_name": "Codex Expansion",
+  "compiled_at": "2025-11-15T20:00:12.808191+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/codex_expansion.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/crosslink_management.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/terminology_alignment.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/player_safe_summarization.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/curator_gap_identification.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/player_safe_encyclopedia.md"
+  ],
+  "category": "Refinement",
+  "purpose": "Turn canon (often spoiler-heavy) into player-safe codex pages with clear cross-references. Improve comprehension without leaking twists or internal plumbing.",
+  "outcome": "Codex entries and crosslink maps (in Hot) derived from canon and ready to merge to Cold after gatecheck. Taxonomy/clarity hooks may also be addressed here.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "codex_curator"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "lore_weaver",
+      "style_lead",
+      "gatekeeper",
+      "translator"
+    ],
+    "informed": [
+      "player_narrator",
+      "book_binder"
+    ]
+  },
+  "quality_bars": [
+    "integrity",
+    "presentation",
+    "accessibility"
+  ],
+  "artifacts": [
+    "codex_entry.schema.json",
+    "glossary.schema.json",
+    "crosslink_map.schema.json"
+  ],
+  "inputs": [
+    "Canon entries from Lore Deepening (spoiler-level answers)",
+    "Style guardrails (tone, register, motif vocabulary)",
+    "Existing codex pages (Cold) for alignment",
+    "Accepted taxonomy/clarity hooks (from Hook Harvest)",
+    "PN feedback and Binder UX notes"
+  ]
+}

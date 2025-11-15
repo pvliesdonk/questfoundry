@@ -1,0 +1,50 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "post_mortem",
+  "display_name": "Post-Mortem",
+  "compiled_at": "2025-11-15T20:00:12.809142+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/post_mortem.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/retrospective_facilitation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/lessons_extraction.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/action_item_creation.md"
+  ],
+  "category": "Export",
+  "purpose": "Conduct a structured retrospective after completing a major milestone, release, or significant TU cluster. Extract actionable lessons, identify process improvements, track quality bar trends, and update best practices to reduce recurring issues and strengthen the workflow.",
+  "outcome": "A post-mortem report documenting successes, failures, surprising discoveries, and concrete action items with owners and deadlines.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "showrunner"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "All Roles",
+      "gatekeeper",
+      "book_binder",
+      "player_narrator"
+    ]
+  },
+  "artifacts": [
+    "post_mortem_report.schema.json",
+    "action_items.schema.json"
+  ],
+  "inputs": {
+    "tu_records": "Completed TUs from the milestone/period under review",
+    "gatecheck_reports": "Bar status trends, recurring failures, pass/block rates",
+    "pn_playtest_notes": "From Narration Dry-Run sessions",
+    "hook_harvest_sheets": "Triage patterns, acceptance/deferral/rejection rates",
+    "binding_run_logs": "Export issues, determinism failures, format problems",
+    "timeline_metrics": [
+      "Cycle time (TU open \u2192 merge)",
+      "Gate pass rates per loop",
+      "Rework cycles per artifact type",
+      "Dormant role activation frequency"
+    ],
+    "team_observations": "Anecdotes, pain points, discoveries",
+    "incident_reports": "If post-mortem follows protocol violation"
+  }
+}

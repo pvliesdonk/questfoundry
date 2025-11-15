@@ -1,0 +1,50 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "binding_run",
+  "display_name": "Binding Run",
+  "compiled_at": "2025-11-15T20:00:12.808456+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/binding_run.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/front_matter_composition.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/integrity_enforcement.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/export_view_assembly.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/binder_presentation_enforcement.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/view_log_maintenance.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md"
+  ],
+  "category": "Export",
+  "purpose": "Assemble a player-safe export view of the book from a specific Cold snapshot. Package manuscript, codex, and checklists\u2014optionally including art/audio plans or assets and translation slices\u2014without leaking spoilers or internal plumbing.",
+  "outcome": "A stamped export bundle (Markdown/HTML/EPUB/PDF) with front-matter metadata (snapshot ID, options used) and a View Log. No new canon is created; this loop does not write to Cold.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "book_binder"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "gatekeeper",
+      "player_narrator",
+      "style_lead",
+      "translator"
+    ]
+  },
+  "quality_bars": [
+    "integrity",
+    "presentation",
+    "accessibility"
+  ],
+  "artifacts": [
+    "view_bundle.schema.json",
+    "view_log.schema.json",
+    "anchor_map.schema.json"
+  ],
+  "inputs": [
+    "Cold snapshot (manuscript, codex, style addenda, optional plans/assets, translations)",
+    "Gatekeeper's latest pass notes (for presentation safety)",
+    "Inclusion options from Showrunner"
+  ]
+}

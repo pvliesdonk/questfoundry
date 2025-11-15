@@ -1,0 +1,151 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/adapter_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "adapter_id": "codex_curator",
+  "role_name": "Codex Curator",
+  "compiled_at": "2025-11-15T20:00:12.811681+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/adapters/codex_curator.adapter.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/codex_curator_publication.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/expertises/codex_curator_terminology.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/crosslink_management.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/terminology_alignment.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/player_safe_summarization.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/tu_lifecycle.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/spoiler_hygiene_check.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/terminology.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/no_internals.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/accessibility.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/pn_safety_warning.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/snippets/validation_reminder.md"
+  ],
+  "mission": "Explain just enough of the world for players to act with confidence\u2014clearly, concisely, and without spoilers.",
+  "expertise": "@expertise:codex_curator_publication",
+  "procedures": {
+    "primary": [
+      "@procedure:player_safe_summarization",
+      "@procedure:crosslink_management",
+      "@procedure:terminology_alignment"
+    ],
+    "supporting": [
+      "@procedure:artifact_validation",
+      "@procedure:spoiler_hygiene",
+      "@procedure:tu_lifecycle"
+    ]
+  },
+  "protocol_intents": {
+    "receives": [
+      "tu.open",
+      "canon.summary",
+      "hook.accept",
+      "terminology.request"
+    ],
+    "sends": [
+      "codex.create",
+      "codex.update",
+      "glossary.slice",
+      "hook.create",
+      "merge.request",
+      "ack"
+    ]
+  },
+  "loops": [
+    {
+      "playbook": "@playbook:codex_expansion",
+      "raci": "responsible",
+      "description": "Author entries; maintain crosslinks; update glossary"
+    },
+    {
+      "playbook": "@playbook:hook_harvest",
+      "raci": "consulted",
+      "description": "Taxonomy & gap triage"
+    },
+    {
+      "playbook": "@playbook:translation_pass",
+      "raci": "consulted",
+      "description": "Terminology & register map coordination"
+    },
+    {
+      "playbook": "@playbook:binding_run",
+      "raci": "consulted",
+      "description": "Link integrity & front-matter notes"
+    },
+    {
+      "playbook": "@playbook:story_spark",
+      "raci": "consulted",
+      "description": "Identify taxonomy/clarity gaps created by new structure"
+    },
+    {
+      "playbook": "@playbook:lore_deepening",
+      "raci": "informed",
+      "description": "Receive player-safe summaries for publication"
+    }
+  ],
+  "quality_bars": {
+    "primary": [
+      "integrity",
+      "presentation",
+      "accessibility"
+    ],
+    "secondary": [
+      "style",
+      "gateways"
+    ]
+  },
+  "safety_protocols": [
+    "@snippet:spoiler_hygiene_check",
+    "@snippet:pn_safety_warning",
+    "@snippet:validation_reminder",
+    "@snippet:terminology",
+    "@snippet:accessibility",
+    "@snippet:no_internals"
+  ],
+  "handoffs": {
+    "from_lore_weaver": {
+      "content": "Receive player-safe summaries for entry content",
+      "artifacts": [
+        "player_safe_summaries"
+      ],
+      "rule": "NEVER invent canon or add hidden causality"
+    },
+    "from_style_lead": {
+      "content": "Receive register guidance and phrasing patterns",
+      "artifacts": [
+        "style_notes"
+      ]
+    },
+    "from_translator": {
+      "content": "Coordinate terminology and bilingual glossary",
+      "artifacts": [
+        "translation_notes",
+        "bilingual_glossary"
+      ]
+    },
+    "to_gatekeeper": {
+      "content": "Submit entries for Integrity and Presentation checks",
+      "artifacts": [
+        "codex_entries"
+      ]
+    },
+    "to_binder": {
+      "content": "Provide updated crosslink map and coverage notes",
+      "artifacts": [
+        "crosslink_map",
+        "coverage_notes"
+      ]
+    },
+    "to_player_narrator": {
+      "content": "Supply terminology clarifications for in-world phrasing",
+      "artifacts": [
+        "terminology_guide"
+      ]
+    }
+  },
+  "artifacts": [
+    "codex_entry.schema.json",
+    "glossary.schema.json",
+    "crosslink_map.schema.json"
+  ]
+}

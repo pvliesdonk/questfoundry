@@ -1,0 +1,52 @@
+{
+  "$schema": "https://questfoundry.liesdonk.nl/manifests/playbook_manifest.schema.json",
+  "manifest_version": "2.0.0",
+  "playbook_id": "translation_pass",
+  "display_name": "Translation Pass",
+  "compiled_at": "2025-11-15T20:00:12.809394+00:00",
+  "source_files": [
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/playbooks/translation_pass.playbook.yaml",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/terminology_coordination.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/language_pack_production.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/register_map_maintenance.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/spoiler_hygiene.md",
+    "/home/runner/work/questfoundry/questfoundry/spec/05-behavior/procedures/artifact_validation.md"
+  ],
+  "category": "Asset",
+  "purpose": "Create or update a player-safe translation of the manuscript/codex surfaces while preserving PN boundaries, style intent, and navigation. This loop supports plan-only merges (glossary/style kit) when the full slice isn't ready.",
+  "outcome": "A Language Pack (glossary, style notes, localized surfaces, open issues) ready for Gatekeeper checks and merge to Cold. Exports can include complete or partial translations flagged accordingly.",
+  "steps": [],
+  "raci": {
+    "responsible": [
+      "translator"
+    ],
+    "accountable": [
+      "showrunner"
+    ],
+    "consulted": [
+      "style_lead",
+      "player_narrator",
+      "codex_curator",
+      "gatekeeper"
+    ],
+    "informed": [
+      "book_binder"
+    ]
+  },
+  "quality_bars": [
+    "presentation",
+    "accessibility",
+    "style"
+  ],
+  "artifacts": [
+    "translation_pack.schema.json",
+    "coverage_report.schema.json",
+    "bilingual_glossary.schema.json"
+  ],
+  "inputs": [
+    "Cold snapshot (manuscript/codex surfaces), PN Principles, Style guardrails",
+    "Current glossary/terminology (if any); motif kit",
+    "Cultural notes from Lore/Style (tone, registers to preserve/avoid)",
+    "Known untranslatable idioms list (if exists)"
+  ]
+}
