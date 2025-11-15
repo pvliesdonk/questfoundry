@@ -289,6 +289,15 @@ class SpecCompiler:
             if expertise_ids:
                 refs["expertise"] = expertise_ids
 
+        # Extract additional expertises
+        if "references_expertises" in data:
+            additional_expertise_ids = self._extract_ref_ids(data["references_expertises"])
+            if additional_expertise_ids:
+                if "expertise" in refs:
+                    refs["expertise"].extend(additional_expertise_ids)
+                else:
+                    refs["expertise"] = additional_expertise_ids
+
         # Extract procedure references
         if "procedures" in data:
             procedures = []

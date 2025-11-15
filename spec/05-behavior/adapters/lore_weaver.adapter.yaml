@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:lore_weaver_expertise"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:lore_weaver_summarization"
+
 # Mission from L1 charter
 mission: "Resolve the world's deep truth—quietly—then hand clear, spoiler-safe summaries to neighbors who face the player."
 

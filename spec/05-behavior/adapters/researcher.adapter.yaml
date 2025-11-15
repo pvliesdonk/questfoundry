@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:researcher_verification"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:researcher_fact_checking"
+
 # Mission from L1 charter
 mission: "Corroborate claims and constraints, record uncertainty plainly, and hand neighbors just enough truth to work safely."
 

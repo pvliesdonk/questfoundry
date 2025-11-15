@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:gatekeeper_quality_bars"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:gatekeeper_presentation"
+
 # Mission from L1 charter
 mission: "Enforce Quality Bars before Hot→Cold merges; provide actionable remediation."
 

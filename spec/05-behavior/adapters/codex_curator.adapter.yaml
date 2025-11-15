@@ -7,6 +7,10 @@ version: 2.0.0
 # Primary expertise reference
 expertise: "@expertise:codex_curator_publication"
 
+# Additional expertises
+references_expertises:
+  - "@expertise:codex_curator_terminology"
+
 # Mission from L1 charter
 mission: "Explain just enough of the world for players to act with confidence—clearly, concisely, and without spoilers."
 
