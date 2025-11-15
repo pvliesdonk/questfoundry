@@ -77,6 +77,7 @@ raise CompilationError(
 ```
 
 Include:
+
 - What went wrong
 - Where (file, line, reference)
 - Why (file not found, circular dependency, etc.)
@@ -183,6 +184,7 @@ cz bump
 ## Release Process
 
 1. Ensure all tests pass:
+
    ```bash
    uv run pytest
    uv run mypy src
@@ -190,16 +192,19 @@ cz bump
    ```
 
 2. Update CHANGELOG:
+
    ```bash
    cz changelog
    ```
 
 3. Bump version:
+
    ```bash
    cz bump
    ```
 
 4. Push to GitHub (triggers publish workflow):
+
    ```bash
    git push --follow-tags
    ```

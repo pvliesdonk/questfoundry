@@ -19,7 +19,23 @@ repos:
       - id: check-case-conflict
       - id: mixed-line-ending
 
-  # Python: Ruff (linting and formatting) - run from lib/python directory
+  # Python: Ruff (linting and formatting) - lib/compiler
+  - repo: local
+    hooks:
+      - id: ruff-lib-compiler
+        name: ruff (lib/compiler)
+        entry: uv run --project lib/compiler ruff check --fix --no-cache
+        language: system
+        types_or: [python, pyi]
+        files: ^lib/compiler/
+      - id: ruff-format-lib-compiler
+        name: ruff format (lib/compiler)
+        entry: uv run --project lib/compiler ruff format --no-cache
+        language: system
+        types_or: [python, pyi]
+        files: ^lib/compiler/
+
+  # Python: Ruff (linting and formatting) - lib/python
   # --no-cache has been disabled due to a locking problem, probably from the check and format hook fighting.
   - repo: local
     hooks:
@@ -36,7 +52,18 @@ repos:
         types_or: [python, pyi]
         files: ^lib/python/
 
-  # Python: Type checking with mypy - run from lib/python directory
+  # Python: Type checking with mypy - lib/compiler
+  - repo: local
+    hooks:
+      - id: mypy-lib-compiler
+        name: mypy (lib/compiler)
+        entry: uv run --project lib/compiler mypy
+        language: system
+        types_or: [python, pyi]
+        files: ^lib/compiler/src/
+        args: [--config-file=lib/compiler/pyproject.toml]
+
+  # Python: Type checking with mypy - lib/python
   - repo: local
     hooks:
       - id: mypy-lib-python
