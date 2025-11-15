@@ -63,11 +63,8 @@ jobs:
       - name: Set up Python
         run: uv python install 3.11
 
-      - name: Install compiler dependency
-        run: uv pip install -e ../../lib/compiler
-
       - name: Install dependencies
-        run: uv pip install -e .[dev]
+        run: uv sync --all-extras
 
       - name: Run ruff check
         run: uv run ruff check src tests
@@ -118,11 +115,8 @@ jobs:
       - name: Set up Python
         run: uv python install 3.11
 
-      - name: Install compiler dependency
-        run: uv pip install -e ../../lib/compiler
-
       - name: Install dependencies
-        run: uv pip install -e .[dev]
+        run: uv sync --all-extras
 
       - name: Run mypy
         run: uv run mypy src
@@ -186,7 +180,7 @@ jobs:
         run: |
           (cd lib/compiler && uv sync --all-extras)
           (cd lib/python && uv sync --all-extras)
-          (cd cli/prompt_generator && uv pip install -e ../../lib/compiler && uv pip install -e .[dev])
+          (cd cli/prompt_generator && uv sync --all-extras)
 
       - uses: pre-commit/action@v3.0.1
 
