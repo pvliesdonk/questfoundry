@@ -5,7 +5,7 @@ from typing import Annotated
 
 import questionary
 import typer
-from questfoundry_compiler import (  # type: ignore[import-not-found]
+from questfoundry_compiler import (  # type: ignore[import-untyped]
     CompilationError,
     PromptAssembler,
     ReferenceResolver,
