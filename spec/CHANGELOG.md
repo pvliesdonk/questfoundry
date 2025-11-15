@@ -1,3 +1,34 @@
+## spec-v0.8.0 (2025-11-15)
+
+### Feat
+
+- **cli**: add prompt generator CLI tool (qf-generate)
+- **compiler**: add PromptAssembler for web agent prompt generation
+- **spec**: batch-reference all 23 orphaned snippets in adapters
+- **spec**: reference 6 specialized procedures in adapters/playbooks
+- **spec**: reference 16 high-value procedures in playbooks
+- **orphans**: Priority 2 complete - merged/deleted 7 duplicate procedures
+- **orphans**: delete 4 duplicate procedures (merges 3-6)
+- **orphans**: delete binder_integrity_enforcement (duplicate of integrity_enforcement)
+- **orphans**: merge leitmotif_use_policy → leitmotif_management
+- **orphans**: Priority 1 complete - reference 6 new expertises in adapters
+
+### Fix
+
+- **pre-commit**: sync ruff versions with CI and skip cli mypy
+- correct formatting and mypy issues
+- **ci**: resolve CI failures from merge
+- address code review feedback
+- **cli**: improve spec directory path resolution
+- **spec**: correct binder_integrity_enforcement expertise reference
+- **spec**: complete spec validation fixes - all 157 errors resolved
+- **compiler**: address PR review comments
+- **compiler**: correct test fixture paths after package extraction
+
+### Refactor
+
+- **compiler**: extract spec compiler into standalone package
+
 ## spec-v0.7.0 (2025-11-14)
 
 ### Feat
