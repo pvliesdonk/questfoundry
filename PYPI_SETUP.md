@@ -30,7 +30,7 @@ Before you can publish, you need to register the package names:
    # For compiler
    cd lib/compiler
    uv build
-   
+
    # For python library
    cd lib/python
    uv build
@@ -41,10 +41,10 @@ Before you can publish, you need to register the package names:
    ```bash
    # Install twine
    pip install twine
-   
+
    # Upload to TestPyPI first (recommended for testing)
    twine upload --repository testpypi dist/*
-   
+
    # Then upload to PyPI (production)
    twine upload dist/*
    ```
