@@ -39,6 +39,26 @@ repos:
         additional_dependencies:
           - ruff==0.6.9
 
+  # Python: Ruff (linting and formatting) - cli/prompt_generator
+  - repo: local
+    hooks:
+      - id: ruff-cli-prompt-generator
+        name: ruff (cli/prompt_generator)
+        entry: ruff check --fix --no-cache
+        language: python
+        types_or: [python, pyi]
+        files: ^cli/prompt_generator/
+        additional_dependencies:
+          - ruff==0.6.9
+      - id: ruff-format-cli-prompt-generator
+        name: ruff format (cli/prompt_generator)
+        entry: ruff format --no-cache
+        language: python
+        types_or: [python, pyi]
+        files: ^cli/prompt_generator/
+        additional_dependencies:
+          - ruff==0.6.9
+
   # Python: Ruff (linting and formatting) - lib/python
   # --no-cache has been disabled due to a locking problem, probably from the check and format hook fighting.
   - repo: local
@@ -72,6 +92,23 @@ repos:
         args: [--config-file=lib/compiler/pyproject.toml]
         additional_dependencies:
           - mypy==1.11.2
+
+  # Python: Type checking with mypy - cli/prompt_generator
+  - repo: local
+    hooks:
+      - id: mypy-cli-prompt-generator
+        name: mypy (cli/prompt_generator)
+        entry: mypy
+        language: python
+        types_or: [python, pyi]
+        files: ^cli/prompt_generator/src/
+        args: [--config-file=cli/prompt_generator/pyproject.toml]
+        additional_dependencies:
+          - mypy==1.11.2
+          - typer>=0.9.0
+          - rich>=13.0.0
+          - questionary>=2.0.0
+          - pyyaml>=6.0
 
   # Python: Type checking with mypy - lib/python
   - repo: local
