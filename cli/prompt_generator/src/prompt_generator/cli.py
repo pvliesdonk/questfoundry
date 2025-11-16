@@ -86,6 +86,7 @@ class LoopCatalog:
     id_index: dict[str, str]
     abbreviation_index: dict[str, str]
     categories: dict[str, CategoryGroup]
+    duplicate_abbreviations: dict[str, set[str]]
 
 
 @dataclass
@@ -94,6 +95,7 @@ class RoleCatalog:
     id_index: dict[str, str]
     abbreviation_index: dict[str, str]
     categories: dict[str, CategoryGroup]
+    duplicate_abbreviations: dict[str, set[str]]
 
 
 def _is_valid_spec_root(path: Path) -> bool:
@@ -197,6 +199,7 @@ def _build_loop_catalog(compiler: SpecCompiler) -> LoopCatalog:
     id_index: dict[str, str] = {}
     abbreviation_index: dict[str, str] = {}
     categories: dict[str, CategoryGroup] = {}
+    duplicate_abbreviations: dict[str, set[str]] = {}
 
     for key, primitive in compiler.primitives.items():
         if not key.startswith("playbook:"):
@@ -213,9 +216,14 @@ def _build_loop_catalog(compiler: SpecCompiler) -> LoopCatalog:
         items[loop_id] = descriptor
         id_index[_normalize_identifier_token(loop_id)] = loop_id
         if descriptor.abbreviation:
-            abbreviation_index[_normalize_abbreviation(descriptor.abbreviation)] = (
-                loop_id
-            )
+            normalized_abbrev = _normalize_abbreviation(descriptor.abbreviation)
+            existing = abbreviation_index.get(normalized_abbrev)
+            if existing and existing != loop_id:
+                duplicate_abbreviations.setdefault(normalized_abbrev, set()).update(
+                    {existing, loop_id}
+                )
+            else:
+                abbreviation_index.setdefault(normalized_abbrev, loop_id)
 
         slug = _slugify_label(descriptor.category)
         normalized_label = _normalize_category_token(descriptor.category)
@@ -231,7 +239,13 @@ def _build_loop_catalog(compiler: SpecCompiler) -> LoopCatalog:
     for group in categories.values():
         group.ids.sort(key=lambda loop_id: items[loop_id].name)
 
-    return LoopCatalog(items, id_index, abbreviation_index, categories)
+    return LoopCatalog(
+        items,
+        id_index,
+        abbreviation_index,
+        categories,
+        duplicate_abbreviations,
+    )
 
 
 def _build_role_catalog(compiler: SpecCompiler, spec_dir: Path) -> RoleCatalog:
@@ -240,6 +254,7 @@ def _build_role_catalog(compiler: SpecCompiler, spec_dir: Path) -> RoleCatalog:
     id_index: dict[str, str] = {}
     abbreviation_index: dict[str, str] = {}
     categories: dict[str, CategoryGroup] = {}
+    duplicate_abbreviations: dict[str, set[str]] = {}
 
     for key, primitive in compiler.primitives.items():
         if not key.startswith("adapter:"):
@@ -258,9 +273,14 @@ def _build_role_catalog(compiler: SpecCompiler, spec_dir: Path) -> RoleCatalog:
         items[role_id] = descriptor
         id_index[_normalize_identifier_token(role_id)] = role_id
         if descriptor.abbreviation:
-            abbreviation_index[_normalize_abbreviation(descriptor.abbreviation)] = (
-                role_id
-            )
+            normalized_abbrev = _normalize_abbreviation(descriptor.abbreviation)
+            existing = abbreviation_index.get(normalized_abbrev)
+            if existing and existing != role_id:
+                duplicate_abbreviations.setdefault(normalized_abbrev, set()).update(
+                    {existing, role_id}
+                )
+            else:
+                abbreviation_index.setdefault(normalized_abbrev, role_id)
 
         slug = _slugify_label(descriptor.category)
         normalized_label = _normalize_category_token(descriptor.category)
@@ -276,7 +296,13 @@ def _build_role_catalog(compiler: SpecCompiler, spec_dir: Path) -> RoleCatalog:
     for group in categories.values():
         group.ids.sort(key=lambda role_id: items[role_id].name)
 
-    return RoleCatalog(items, id_index, abbreviation_index, categories)
+    return RoleCatalog(
+        items,
+        id_index,
+        abbreviation_index,
+        categories,
+        duplicate_abbreviations,
+    )
 
 
 def _match_category_token(
@@ -287,63 +313,43 @@ def _match_category_token(
         return categories[slug_candidate]
 
     normalized = _normalize_category_token(token)
-    matches = [
+    prefix_matches = [
         group
         for group in categories.values()
         if group.normalized_label.startswith(normalized)
     ]
-    if len(matches) == 1:
-        return matches[0]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
 
-    matches = [
+    superstring_matches = [
         group
         for group in categories.values()
         if normalized.startswith(group.normalized_label)
     ]
-    if len(matches) == 1:
-        return matches[0]
+    if len(superstring_matches) == 1:
+        return superstring_matches[0]
     return None
 
 
-def _resolve_loop_ids(requested: list[str], catalog: LoopCatalog) -> list[str]:
-    resolved: list[str] = []
-    seen: set[str] = set()
-
-    for raw in requested:
-        token, forced_category = _strip_category_prefix(raw.strip())
-        normalized_id = _normalize_identifier_token(token)
-        if not forced_category and normalized_id in catalog.id_index:
-            loop_id = catalog.id_index[normalized_id]
-            if loop_id not in seen:
-                seen.add(loop_id)
-                resolved.append(loop_id)
-            continue
-
-        normalized_abbrev = _normalize_abbreviation(token)
-        if not forced_category and normalized_abbrev in catalog.abbreviation_index:
-            loop_id = catalog.abbreviation_index[normalized_abbrev]
-            if loop_id not in seen:
-                seen.add(loop_id)
-                resolved.append(loop_id)
-            continue
-
-        category_group = _match_category_token(token, catalog.categories)
-        if category_group:
-            for loop_id in category_group.ids:
-                if loop_id not in seen:
-                    seen.add(loop_id)
-                    resolved.append(loop_id)
-            continue
-
+def _warn_duplicate_abbreviations(
+    entity_label: str, duplicates: dict[str, set[str]]
+) -> None:
+    if not duplicates:
+        return
+    for token in sorted(duplicates.keys()):
+        identifiers = ", ".join(sorted(duplicates[token]))
         console.print(
-            f"[red]Unknown loop, abbreviation, or category token: '{raw}'[/red]"
+            "[yellow]Warning: duplicate "
+            f"{entity_label} abbreviation '{token}' shared by: {identifiers}. "
+            "Use full IDs or category tokens instead.[/yellow]"
         )
-        raise typer.Exit(1)
-
-    return resolved
 
 
-def _resolve_role_ids(requested: list[str], catalog: RoleCatalog) -> list[str]:
+def _resolve_ids(
+    requested: list[str],
+    catalog: LoopCatalog | RoleCatalog,
+    entity_label: str,
+) -> list[str]:
     resolved: list[str] = []
     seen: set[str] = set()
 
@@ -359,22 +365,23 @@ def _resolve_role_ids(requested: list[str], catalog: RoleCatalog) -> list[str]:
 
         normalized_abbrev = _normalize_abbreviation(token)
         if not forced_category and normalized_abbrev in catalog.abbreviation_index:
-            role_id = catalog.abbreviation_index[normalized_abbrev]
-            if role_id not in seen:
-                seen.add(role_id)
-                resolved.append(role_id)
+            identifier = catalog.abbreviation_index[normalized_abbrev]
+            if identifier not in seen:
+                seen.add(identifier)
+                resolved.append(identifier)
             continue
 
         category_group = _match_category_token(token, catalog.categories)
         if category_group:
-            for role_id in category_group.ids:
-                if role_id not in seen:
-                    seen.add(role_id)
-                    resolved.append(role_id)
+            for identifier in category_group.ids:
+                if identifier not in seen:
+                    seen.add(identifier)
+                    resolved.append(identifier)
             continue
 
         console.print(
-            f"[red]Unknown role, abbreviation, or category token: '{raw}'[/red]"
+            f"[red]Unknown {entity_label}, abbreviation, or category token: "
+            f"'{raw}'[/red]"
         )
         raise typer.Exit(1)
 
@@ -411,13 +418,8 @@ def _bundle_loop_prompts(
     sections.append("---")
     sections.append("")
 
-    for idx, (_loop_id, prompt) in enumerate(prompts, start=1):
-        if idx > 1:
-            sections.append("")
-            sections.append("---")
-            sections.append("")
-        sections.append(prompt)
-
+    body = "\n\n---\n\n".join(prompt for _loop_id, prompt in prompts)
+    sections.extend(["", "---", "", body])
     return "\n".join(sections)
 
 
@@ -530,6 +532,8 @@ def generate(
 
         loop_catalog = _build_loop_catalog(compiler)
         role_catalog = _build_role_catalog(compiler, spec_dir)
+        _warn_duplicate_abbreviations("loop", loop_catalog.duplicate_abbreviations)
+        _warn_duplicate_abbreviations("role", role_catalog.duplicate_abbreviations)
 
         # Interactive mode if no loops or roles specified
         if not loop and not role:
@@ -608,8 +612,8 @@ def generate(
                     standalone = standalone_choice
 
         # Resolve requested IDs (abbreviations/categories supported)
-        loop_ids = _resolve_loop_ids(loop or [], loop_catalog)
-        role_ids = _resolve_role_ids(role or [], role_catalog)
+        loop_ids = _resolve_ids(loop or [], loop_catalog, "loop")
+        role_ids = _resolve_ids(role or [], role_catalog, "role")
 
         # Initialize assembler
         resolver = ReferenceResolver(compiler.primitives, spec_dir)
@@ -687,6 +691,7 @@ def list_loops(
         compiler.load_all_primitives()
 
         catalog = _build_loop_catalog(compiler)
+        _warn_duplicate_abbreviations("loop", catalog.duplicate_abbreviations)
 
         if not catalog.items:
             console.print("[yellow]No loops found[/yellow]")
@@ -735,6 +740,7 @@ def list_roles(
         compiler.load_all_primitives()
 
         catalog = _build_role_catalog(compiler, spec_dir)
+        _warn_duplicate_abbreviations("role", catalog.duplicate_abbreviations)
 
         if not catalog.items:
             console.print("[yellow]No roles found[/yellow]")

@@ -12,9 +12,9 @@ runner = CliRunner()
 
 def _prepare_spec_dir(tmp_path: Path) -> Path:
     spec_root = tmp_path / "spec"
-    (spec_root / "05-behavior").mkdir(parents=True)
+    (spec_root / "05-behavior").mkdir(parents=True, exist_ok=True)
     role_index_dir = spec_root / "00-north-star"
-    role_index_dir.mkdir(parents=True)
+    role_index_dir.mkdir(parents=True, exist_ok=True)
     (role_index_dir / "ROLE_INDEX.md").write_text(
         """## Always On
 
@@ -36,6 +36,9 @@ def _prepare_spec_dir(tmp_path: Path) -> Path:
 
 def _stub_compiler_stack(monkeypatch):
     class StubCompiler:
+        duplicate_loop_abbreviations = False
+        duplicate_role_abbreviations = False
+
         def __init__(self, spec_dir: Path):
             self.spec_dir = spec_dir
             self.primitives: dict[str, object] = {}
@@ -46,7 +49,7 @@ def _stub_compiler_stack(monkeypatch):
             ) -> SimpleNamespace:
                 return SimpleNamespace(id=prim_id, metadata=metadata)
 
-            self.primitives = {
+            primitives: dict[str, object] = {
                 "playbook:lore_deepening": _primitive(
                     "lore_deepening",
                     {
@@ -83,6 +86,29 @@ def _stub_compiler_stack(monkeypatch):
                 ),
             }
 
+            if type(self).duplicate_loop_abbreviations:
+                primitives["playbook:lore_dynamo"] = _primitive(
+                    "lore_dynamo",
+                    {
+                        "playbook_name": "Lore Dynamo",
+                        "abbreviation": "L-D",
+                        "category": "Discovery",
+                        "purpose": "Variant lore loop",
+                    },
+                )
+
+            if type(self).duplicate_role_abbreviations:
+                primitives["adapter:lore_delegate"] = _primitive(
+                    "lore_delegate",
+                    {
+                        "role_name": "Lore Delegate",
+                        "abbreviation": "LW",
+                        "mission": "Assist canon work",
+                    },
+                )
+
+            self.primitives = primitives
+
     class StubResolver:
         def __init__(self, primitives: dict[str, object], spec_dir: Path):
             self.primitives = primitives
@@ -116,11 +142,11 @@ def _stub_compiler_stack(monkeypatch):
     StubPromptAssembler.calls = []
     StubPromptAssembler.last_call = None
 
-    return StubPromptAssembler
+    return StubPromptAssembler, StubCompiler
 
 
 def test_generate_loop_uses_prompt_assembler(monkeypatch, tmp_path):
-    stub_assembler = _stub_compiler_stack(monkeypatch)
+    stub_assembler, _ = _stub_compiler_stack(monkeypatch)
     spec_root = _prepare_spec_dir(tmp_path)
     output_path = tmp_path / "loop.md"
 
@@ -143,7 +169,7 @@ def test_generate_loop_uses_prompt_assembler(monkeypatch, tmp_path):
 
 
 def test_generate_roles_honors_standalone(monkeypatch, tmp_path):
-    stub_assembler = _stub_compiler_stack(monkeypatch)
+    stub_assembler, _ = _stub_compiler_stack(monkeypatch)
     spec_root = _prepare_spec_dir(tmp_path)
     output_path = tmp_path / "roles.md"
 
@@ -181,7 +207,7 @@ def test_generate_roles_honors_standalone(monkeypatch, tmp_path):
 
 
 def test_generate_loop_bundle_supports_multiple_loops(monkeypatch, tmp_path):
-    stub_assembler = _stub_compiler_stack(monkeypatch)
+    stub_assembler, _ = _stub_compiler_stack(monkeypatch)
     spec_root = _prepare_spec_dir(tmp_path)
     output_path = tmp_path / "bundle.md"
 
@@ -212,7 +238,7 @@ def test_generate_loop_bundle_supports_multiple_loops(monkeypatch, tmp_path):
 
 
 def test_generate_loop_accepts_abbreviation_and_category(monkeypatch, tmp_path):
-    stub_assembler = _stub_compiler_stack(monkeypatch)
+    stub_assembler, _ = _stub_compiler_stack(monkeypatch)
     spec_root = _prepare_spec_dir(tmp_path)
     output_path = tmp_path / "abbr.md"
 
@@ -337,6 +363,40 @@ def test_list_loops_shows_categories(monkeypatch, tmp_path):
 
 def test_list_roles_shows_categories(monkeypatch, tmp_path):
     _stub_compiler_stack(monkeypatch)
+
+
+def test_duplicate_loop_abbreviation_warns(monkeypatch, tmp_path):
+    _, StubCompiler = _stub_compiler_stack(monkeypatch)
+    StubCompiler.duplicate_loop_abbreviations = True
+    spec_root = _prepare_spec_dir(tmp_path)
+
+    try:
+        result = runner.invoke(
+            cli.app,
+            ["list-loops", "--spec-dir", str(spec_root)],
+        )
+    finally:
+        StubCompiler.duplicate_loop_abbreviations = False
+
+    assert result.exit_code == 0, result.output
+    assert "duplicate loop abbreviation" in result.output.lower()
+
+
+def test_duplicate_role_abbreviation_warns(monkeypatch, tmp_path):
+    _, StubCompiler = _stub_compiler_stack(monkeypatch)
+    StubCompiler.duplicate_role_abbreviations = True
+    spec_root = _prepare_spec_dir(tmp_path)
+
+    try:
+        result = runner.invoke(
+            cli.app,
+            ["list-roles", "--spec-dir", str(spec_root)],
+        )
+    finally:
+        StubCompiler.duplicate_role_abbreviations = False
+
+    assert result.exit_code == 0, result.output
+    assert "duplicate role abbreviation" in result.output.lower()
     spec_root = _prepare_spec_dir(tmp_path)
 
     result = runner.invoke(
