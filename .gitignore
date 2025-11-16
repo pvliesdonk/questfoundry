@@ -30,3 +30,4 @@ py-repo/
 
 # build artifacts for compiler package
 lib/compiler/.spec_cache/
+lib/compiler/src/questfoundry_compiler/_bundled_spec/
