@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -10,7 +11,8 @@ import SettingsPage from './pages/SettingsPage';
 
 const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
@@ -23,6 +25,7 @@ const App: React.FC = () => {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 

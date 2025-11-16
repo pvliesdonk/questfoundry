@@ -1,16 +1,17 @@
 // API Types matching the backend models
 
-export interface Project {
+export interface ProjectInfo {
   name: string;
   description?: string;
-  version: string;
-  created_at?: string;
-  updated_at?: string;
+  version?: string;
+  author?: string;
+  metadata?: Record<string, any>;
 }
 
-export interface ProjectResponse extends Project {
-  id: string;
-  owner: string;
+export interface Project extends ProjectInfo {
+  project_id: string;
+  owner_id: string;
+  created_at?: string;
 }
 
 export interface Artifact {
@@ -25,18 +26,18 @@ export interface ArtifactResponse extends Artifact {
   updated_at: string;
 }
 
-export interface GoalExecutionRequest {
+export interface ExecutionRequest {
   goal: string;
 }
 
-export interface GoalExecutionResponse {
+export interface ExecutionResult {
   status: string;
-  result: any;
+  result?: any;
   error?: string;
 }
 
-export interface GatecheckResponse {
-  status: string;
+export interface GatecheckResult {
+  passed: boolean;
   issues: Array<{
     severity: string;
     message: string;
@@ -45,9 +46,7 @@ export interface GatecheckResponse {
 }
 
 export interface UserSettings {
-  user_id: string;
-  has_openai_key: boolean;
-  has_anthropic_key: boolean;
+  provider_keys?: Record<string, string>;
 }
 
 export interface ProviderKeys {
