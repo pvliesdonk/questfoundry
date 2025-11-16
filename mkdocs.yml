@@ -85,13 +85,12 @@ nav:
       - "L2: Dictionary": "../spec/02-dictionary/README.md"
       - "L3: Schemas": "../spec/03-schemas/README.md"
       - "L4: Protocol": "../spec/04-protocol/README.md"
-      - "L5: Prompts": "../spec/05-prompts/README.md"
+      - "L5: Behavior": "../spec/05-behavior/README.md"
   - "Python Library (L6)":
       - "Overview": "../lib/python/README.md"
       - "Getting Started":
           - "Installation": "../lib/python/docs/getting-started/installation.md"
           - "Quickstart": "../lib/python/docs/getting-started/quickstart.md"
-          - "Bundling": "../lib/python/docs/getting-started/bundling.md"
       - "Guides":
           - "Overview": "../lib/python/docs/guide/overview.md"
       - "API Reference":
@@ -106,8 +105,10 @@ nav:
           - "Models": "api/models.md"
           - "Utilities": "api/utils.md"
       - "Development": "../lib/python/docs/development/contributing.md"
+  - "Spec Compiler (L6)":
+      - "Overview": "../lib/compiler/README.md"
   - "CLI Tools (L7)":
-      - "Overview": "../cli/python/README.md"
+      - "Prompt Generator": "../cli/prompt_generator/README.md"
   - "Schema Definitions":
       - "Artifacts": "schemas/index.md" # This will be a landing page
 
