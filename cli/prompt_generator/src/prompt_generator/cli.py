@@ -1,11 +1,12 @@
 """Command-line interface for QuestFoundry prompt generator."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
+import questfoundry_compiler
 import questionary
 import typer
-from questfoundry_compiler import (  # type: ignore[import-untyped]
+from questfoundry_compiler import (
     CompilationError,
     PromptAssembler,
     ReferenceResolver,
@@ -13,12 +14,91 @@ from questfoundry_compiler import (  # type: ignore[import-untyped]
 )
 from rich.console import Console
 
+from prompt_generator import spec_fetcher
+
 app = typer.Typer(
     name="qf-generate",
     help="Generate monolithic web agent prompts from QuestFoundry behavior primitives",
     add_completion=False,
 )
 console = Console()
+
+SpecSource = Literal["auto", "bundled", "release"]
+
+
+def _is_valid_spec_root(path: Path) -> bool:
+    return path.is_dir() and (path / "05-behavior").is_dir()
+
+
+def _find_repo_spec(start_dirs: list[Path]) -> Path | None:
+    seen: set[Path] = set()
+    for start in start_dirs:
+        current = start.resolve()
+        for candidate in (current, *current.parents):
+            spec_candidate = (candidate / "spec").resolve()
+            if spec_candidate in seen:
+                continue
+            seen.add(spec_candidate)
+            if _is_valid_spec_root(spec_candidate):
+                return spec_candidate
+    return None
+
+
+def _bundled_spec_dir() -> Path | None:
+    package_root = Path(questfoundry_compiler.__file__).resolve().parent
+    bundled = package_root / "_bundled_spec"
+    if _is_valid_spec_root(bundled):
+        return bundled
+    return None
+
+
+def _resolve_spec_dir(spec_dir: Path | None, spec_source: SpecSource) -> Path:
+    if spec_dir is not None:
+        resolved = spec_dir
+        if not spec_dir.is_absolute():
+            resolved = (Path.cwd() / spec_dir).resolve()
+        if not _is_valid_spec_root(resolved):
+            console.print(f"[red]Error: Spec directory not found: {resolved}[/red]")
+            raise typer.Exit(1)
+        return resolved
+
+    def download_release_spec() -> Path:
+        try:
+            release_dir = spec_fetcher.download_latest_release_spec()
+        except spec_fetcher.SpecFetchError as exc:
+            console.print(f"[red]Failed to download released spec: {exc}[/red]")
+            raise typer.Exit(1)
+        console.print(
+            f"[green]Using released QuestFoundry spec from {release_dir}[/green]"
+        )
+        return release_dir
+
+    if spec_source == "bundled":
+        bundled = _bundled_spec_dir()
+        if bundled:
+            return bundled
+        console.print(
+            "[red]Bundled spec directory missing. Provide --spec-dir or use "
+            "--spec-source release.[/red]"
+        )
+        raise typer.Exit(1)
+
+    if spec_source == "release":
+        return download_release_spec()
+
+    repo_spec = _find_repo_spec([Path.cwd()])
+    if repo_spec:
+        return repo_spec
+
+    bundled = _bundled_spec_dir()
+    if bundled:
+        return bundled
+
+    console.print(
+        "[red]Error: Spec directory not found. Provide --spec-dir or use "
+        "--spec-source release to download the latest published spec.[/red]"
+    )
+    raise typer.Exit(1)
 
 
 def get_available_loops(compiler: SpecCompiler) -> list[str]:
@@ -96,12 +176,23 @@ def generate(
         ),
     ] = None,
     spec_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--spec-dir",
-            help="Root directory of spec/ (default: spec/)",
+            help="Root directory of spec/ (auto-detected or bundled if omitted)",
         ),
-    ] = Path("spec"),
+    ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help=(
+                "Where to load QuestFoundry spec data from. Options: auto, "
+                "bundled, release."
+            ),
+        ),
+    ] = "auto",
     verbose: Annotated[
         bool,
         typer.Option(
@@ -133,15 +224,7 @@ def generate(
         # Interactive mode
         qf-generate
     """
-    # Resolve spec directory
-    if not spec_dir.is_absolute():
-        # Make it relative to current working directory
-        spec_dir = spec_dir.resolve()
-
-    # Validate spec directory exists
-    if not spec_dir.exists():
-        console.print(f"[red]Error: Spec directory not found: {spec_dir}[/red]")
-        raise typer.Exit(1)
+    spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     behavior_dir = spec_dir / "05-behavior"
     if not behavior_dir.exists():
@@ -274,21 +357,23 @@ def generate(
 @app.command()
 def list_loops(
     spec_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--spec-dir",
-            help="Root directory of spec/ (default: spec/)",
+            help="Root directory of spec/ (auto-detected or bundled if omitted)",
         ),
-    ] = Path("spec"),
+    ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
+        ),
+    ] = "auto",
 ) -> None:
     """List all available loops/playbooks."""
-    # Resolve spec directory
-    if not spec_dir.is_absolute():
-        spec_dir = spec_dir.resolve()
-
-    if not spec_dir.exists():
-        console.print(f"[red]Error: Spec directory not found: {spec_dir}[/red]")
-        raise typer.Exit(1)
+    spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
         compiler = SpecCompiler(spec_dir)
@@ -313,21 +398,23 @@ def list_loops(
 @app.command()
 def list_roles(
     spec_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--spec-dir",
-            help="Root directory of spec/ (default: spec/)",
+            help="Root directory of spec/ (auto-detected or bundled if omitted)",
         ),
-    ] = Path("spec"),
+    ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
+        ),
+    ] = "auto",
 ) -> None:
     """List all available roles/adapters."""
-    # Resolve spec directory
-    if not spec_dir.is_absolute():
-        spec_dir = spec_dir.resolve()
-
-    if not spec_dir.exists():
-        console.print(f"[red]Error: Spec directory not found: {spec_dir}[/red]")
-        raise typer.Exit(1)
+    spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
         compiler = SpecCompiler(spec_dir)

@@ -63,6 +63,11 @@ all-checks = ["format-check", "lint", "typecheck", "test"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/questfoundry_compiler"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"../../spec/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
+"../../spec/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
+"../../spec/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
@@ -70,6 +75,11 @@ include = [
     "/README.md",
     "/LICENSE",
 ]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../../spec/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
+"../../spec/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
+"../../spec/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
 
 [tool.pytest.ini_options]
 minversion = "7.0"

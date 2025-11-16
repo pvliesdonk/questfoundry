@@ -140,6 +140,10 @@ Main command to generate prompts.
 - `--standalone, -s` - Include all loop procedures for roles
 - `--output, -o <path>` - Output file (default: stdout)
 - `--spec-dir <path>` - Spec root directory (default: `spec/`)
+- `--spec-source <auto|bundled|release>` - Choose how the spec is resolved. `auto`
+  searches the repo tree then falls back to the bundled minimal spec, `bundled`
+  forces the bundled copy, and `release` downloads the latest GitHub release
+  into `~/.cache/questfoundry/spec/`.
 - `--verbose, -v` - Show detailed progress
 
 **Examples:**
@@ -168,6 +172,7 @@ List all available loops/playbooks.
 **Options:**
 
 - `--spec-dir <path>` - Spec root directory
+- `--spec-source <auto|bundled|release>` - Same semantics as the main command.
 
 **Example:**
 
@@ -182,6 +187,7 @@ List all available roles/adapters.
 **Options:**
 
 - `--spec-dir <path>` - Spec root directory
+- `--spec-source <auto|bundled|release>` - Same semantics as the main command.
 
 **Example:**
 
@@ -205,6 +211,19 @@ The generated prompts are optimized for:
 - **Context preservation** - Clear structure with sections
 - **Self-contained** - No external file dependencies
 - **LLM-friendly** - Formatted for optimal LLM comprehension
+
+## Spec Sources & Releases
+
+`qf-generate` bundles a minimal snapshot of the spec for offline use. With
+`--spec-source auto` (the default) the CLI searches for a local `spec/`
+directory by walking up from the current working directory and falls back to
+the bundled snapshot when nothing is found.
+
+Use `--spec-source release` to download the latest published spec release from
+GitHub (trusted per QuestFoundry policy). Releases are cached under
+`~/.cache/questfoundry/spec/<tag>` so subsequent invocations reuse them without a
+network call. You can also force the bundled snapshot via `--spec-source
+bundled` when you explicitly want the paired minimal spec.
 
 ## Development
 
