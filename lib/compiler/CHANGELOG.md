@@ -1,26 +1,3 @@
-## compiler-v0.4.0 (2025-11-16)
-
-### Feat
-
-- **compiler**: prep 0.5.0 release
-- **cli,compiler**: add prompt profiles and controllers
-- **cli**: support multi-loop bundles
-- **prompt-generator**: add spec release fetcher
-
-### Fix
-
-- **compiler**: add hatch spec copy hook
-- address review feedback
-- **cli**: handle duplicate abbreviations
-- **prompt-generator**: satisfy mypy checks
-- **prompt-generator**: fallback to bundled spec
-
-## compiler-v0.3.1 (2025-11-16)
-
-### Fix
-
-- **compiler**: not exportong some needed classes
-
 ## compiler-v0.6.0 (2025-11-16)
 
 ### Feat
