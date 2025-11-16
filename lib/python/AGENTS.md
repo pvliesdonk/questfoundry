@@ -41,7 +41,9 @@ lib/python/
 This library **implements** the specification defined in `../../spec/`:
 
 - Bundles schemas from `../../spec/03-schemas/` into the package at build time
-- Bundles prompts from `../../spec/05-prompts/` into the package at build time
+- Uses the `questfoundry-compiler` package at build time to compile behavior primitives
+- Compiled manifests from `../../spec/05-behavior/` are bundled into the package at build time
+- Schemas from `../../spec/03-schemas/` are loaded at runtime
 - Implements roles defined in `../../spec/01-roles/`
 - Follows protocols defined in `../../spec/04-protocol/`
 
