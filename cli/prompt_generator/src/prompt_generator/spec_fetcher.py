@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 DEFAULT_CACHE_DIR: Final = Path.home() / ".cache" / "questfoundry" / "spec"
 GITHUB_REPO: Final = "pvliesdonk/questfoundry-spec"
@@ -21,7 +21,7 @@ class SpecFetchError(RuntimeError):
     """Raised when fetching a released spec fails."""
 
 
-def _request_json(url: str) -> dict:
+def _request_json(url: str) -> dict[str, Any]:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -65,7 +65,7 @@ def _is_valid_spec_root(spec_root: Path) -> bool:
     return (spec_root / "05-behavior").is_dir()
 
 
-def _fetch_release_info(tag: str | None = None) -> dict:
+def _fetch_release_info(tag: str | None = None) -> dict[str, Any]:
     if tag:
         url = f"{API_BASE}/releases/tags/{tag}"
     else:

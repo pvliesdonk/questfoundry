@@ -3,10 +3,10 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-import questfoundry_compiler  # type: ignore[import-untyped]
+import questfoundry_compiler
 import questionary
 import typer
-from questfoundry_compiler import (  # type: ignore[import-untyped]
+from questfoundry_compiler import (
     CompilationError,
     PromptAssembler,
     ReferenceResolver,
