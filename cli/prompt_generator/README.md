@@ -135,8 +135,12 @@ Main command to generate prompts.
 
 **Options:**
 
-- `--loop, -l <id>` - Loop/playbook ID (e.g., `lore_deepening`)
-- `--role, -r <id>` - Role/adapter ID (can be repeated)
+- `--loop, -l <token>` - Loop/playbook identifier. Accepts IDs like
+  `lore_deepening`, abbreviations like `LD`, or category tokens such as
+  `discovery`. Repeat the option to bundle multiple loops into one prompt.
+- `--role, -r <token>` - Role/adapter identifier. Accepts IDs like
+  `lore_weaver`, abbreviations like `LW`, or Role Index categories such as
+  `default` or `always`. Repeatable.
 - `--standalone, -s` - Include all loop procedures for roles
 - `--output, -o <path>` - Output file (default: stdout)
 - `--spec-dir <path>` - Spec root directory (default: `spec/`)
@@ -152,8 +156,14 @@ Main command to generate prompts.
 # Single loop
 qf-generate --loop lore_deepening -o prompt.md
 
+# Bundle Discovery loops (ID + category token)
+qf-generate --loop lore_deepening --loop discovery -o prompt.md
+
 # Multiple roles
 qf-generate -r lore_weaver -r researcher -o prompt.md
+
+# Role category shortcut (Default On)
+qf-generate -r default -o prompt.md
 
 # Standalone role prompt
 qf-generate -r lore_weaver --standalone -o prompt.md
@@ -167,7 +177,8 @@ qf-generate --loop hook_harvest --verbose -o prompt.md
 
 ### `qf-generate list-loops`
 
-List all available loops/playbooks.
+List all available loops/playbooks grouped by category, showing abbreviations,
+category tokens, and each loop's purpose.
 
 **Options:**
 
@@ -182,7 +193,8 @@ qf-generate list-loops
 
 ### `qf-generate list-roles`
 
-List all available roles/adapters.
+List all available roles/adapters grouped by Role Index category, with
+abbreviations, missions, and the category tokens you can use in the CLI.
 
 **Options:**
 
