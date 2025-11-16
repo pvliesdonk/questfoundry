@@ -6,7 +6,7 @@ Keys are encrypted using Fernet symmetric encryption and stored in PostgreSQL.
 
 from __future__ import annotations
 
-import psycopg
+from psycopg_pool import ConnectionPool
 from cryptography.fernet import Fernet
 from questfoundry.providers.config import ProviderConfig
 
@@ -59,20 +59,21 @@ def decrypt_keys(encrypted: bytes) -> ProviderConfig:
     return ProviderConfig.model_validate_json(data)
 
 
-async def get_user_provider_config(user_id: str) -> ProviderConfig:
+async def get_user_provider_config(user_id: str, postgres_pool: ConnectionPool) -> ProviderConfig:
     """
-    Get user's decrypted provider configuration.
+    Get user's decrypted provider configuration using shared connection pool.
 
     Retrieves and decrypts the user's BYOK provider keys from the database.
     If the user has no saved configuration, returns a default empty config.
 
     Args:
         user_id: User identifier
+        postgres_pool: Shared PostgreSQL connection pool
 
     Returns:
         Provider configuration (decrypted or default)
     """
-    with psycopg.connect(settings.postgres_url) as conn:
+    with postgres_pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT encrypted_keys FROM user_settings WHERE user_id = %s",
@@ -87,10 +88,10 @@ async def get_user_provider_config(user_id: str) -> ProviderConfig:
 
 
 async def save_user_provider_config(
-    user_id: str, config: ProviderConfig
+    user_id: str, config: ProviderConfig, postgres_pool: ConnectionPool
 ) -> None:
     """
-    Save user's encrypted provider configuration.
+    Save user's encrypted provider configuration using shared connection pool.
 
     Encrypts and stores the user's BYOK provider keys in the database.
     Uses UPSERT to handle both initial save and updates.
@@ -98,10 +99,11 @@ async def save_user_provider_config(
     Args:
         user_id: User identifier
         config: Provider configuration to save
+        postgres_pool: Shared PostgreSQL connection pool
     """
     encrypted = encrypt_keys(config)
 
-    with psycopg.connect(settings.postgres_url) as conn:
+    with postgres_pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """

@@ -126,6 +126,7 @@ class TestAPIContainer:
         )
         
         # Start new container
+        # Note: Fernet key must be 44 characters (32 bytes base64-encoded)
         subprocess.run(
             [
                 "docker", "run", "-d",
@@ -133,7 +134,7 @@ class TestAPIContainer:
                 "-p", "18000:8000",
                 "-e", "WEBUI_POSTGRES_HOST=postgres",
                 "-e", "WEBUI_REDIS_HOST=redis",
-                "-e", "WEBUI_ENCRYPTION_KEY=test_key_for_testing_only_32chars",
+                "-e", "WEBUI_ENCRYPTION_KEY=dGVzdC1rZXktZm9yLXRlc3Rpbmctb25seS0wMDAwMDA=",
                 "qf-api-test"
             ],
             check=True,

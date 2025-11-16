@@ -1,8 +1,12 @@
 """QuestFoundry WebUI API - Main FastAPI application"""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .config import get_settings
+from .dependencies import close_pools, init_pools
 from .middleware import AuthMiddleware
 from .routers import (
     artifacts_router,
@@ -11,10 +15,23 @@ from .routers import (
     user_settings_router,
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup/shutdown events"""
+    # Startup: Initialize connection pools
+    settings = get_settings()
+    init_pools(settings)
+    yield
+    # Shutdown: Close connection pools
+    close_pools()
+
+
 app = FastAPI(
     title="QuestFoundry WebUI API",
     description="Multi-tenant REST API for QuestFoundry",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS for PWA

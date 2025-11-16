@@ -72,7 +72,7 @@ async def create_project(
                 # Generate project ID (simple UUID-based)
                 cur.execute(
                     """
-                    INSERT INTO project_ownership (project_id, owner_id)
+                    INSERT INTO project_ownership (project_id, owner_user_id)
                     VALUES (gen_random_uuid()::text, %s)
                     RETURNING project_id, created_at
                     """,
@@ -149,7 +149,7 @@ async def list_projects(
                     """
                     SELECT project_id, created_at
                     FROM project_ownership
-                    WHERE owner_id = %s
+                    WHERE owner_user_id = %s
                     ORDER BY created_at DESC
                     """,
                     (user_id,),
@@ -222,7 +222,7 @@ async def get_project(
                 # Check ownership
                 cur.execute(
                     """
-                    SELECT owner_id, created_at
+                    SELECT owner_user_id, created_at
                     FROM project_ownership
                     WHERE project_id = %s
                     """,
@@ -296,7 +296,7 @@ async def delete_project(
                 # Check ownership
                 cur.execute(
                     """
-                    SELECT owner_id
+                    SELECT owner_user_id
                     FROM project_ownership
                     WHERE project_id = %s
                     """,

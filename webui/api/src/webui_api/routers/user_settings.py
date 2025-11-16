@@ -5,10 +5,12 @@ This router provides endpoints for users to manage their provider API keys.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, Field
 from questfoundry.providers.config import ProviderConfig
 
+from ..dependencies import get_postgres_pool
 from ..user_settings import get_user_provider_config, save_user_provider_config
 
 router = APIRouter(prefix="/user", tags=["user_settings"])
@@ -43,6 +45,7 @@ class ProviderKeysResponse(BaseModel):
 @router.get("/settings", response_model=UserSettingsResponse)
 async def get_user_settings(
     request: Request,
+    postgres_pool: ConnectionPool = Depends(get_postgres_pool),
 ) -> UserSettingsResponse:
     """
     Get user settings.
@@ -62,8 +65,8 @@ async def get_user_settings(
     user_id = request.state.user_id
 
     try:
-        # Get user's provider config
-        config = await get_user_provider_config(user_id)
+        # Get user's provider config using shared pool
+        config = await get_user_provider_config(user_id, postgres_pool)
 
         return UserSettingsResponse(
             user_id=user_id,
@@ -83,6 +86,7 @@ async def get_user_settings(
 async def update_provider_keys(
     request: Request,
     keys_request: ProviderKeysRequest,
+    postgres_pool: ConnectionPool = Depends(get_postgres_pool),
 ) -> ProviderKeysResponse:
     """
     Update provider API keys (BYOK).
@@ -103,8 +107,8 @@ async def update_provider_keys(
     user_id = request.state.user_id
 
     try:
-        # Get existing config
-        config = await get_user_provider_config(user_id)
+        # Get existing config using shared pool
+        config = await get_user_provider_config(user_id, postgres_pool)
 
         # Update only provided keys
         if keys_request.openai_api_key is not None:
@@ -116,8 +120,8 @@ async def update_provider_keys(
         if keys_request.google_api_key is not None:
             config.google_api_key = keys_request.google_api_key
 
-        # Save encrypted config
-        await save_user_provider_config(user_id, config)
+        # Save encrypted config using shared pool
+        await save_user_provider_config(user_id, config, postgres_pool)
 
         return ProviderKeysResponse(
             status="success",
@@ -134,6 +138,7 @@ async def update_provider_keys(
 @router.delete("/settings/keys", response_model=ProviderKeysResponse)
 async def delete_provider_keys(
     request: Request,
+    postgres_pool: ConnectionPool = Depends(get_postgres_pool),
 ) -> ProviderKeysResponse:
     """
     Delete all provider API keys.
@@ -152,9 +157,9 @@ async def delete_provider_keys(
     user_id = request.state.user_id
 
     try:
-        # Save empty config
+        # Save empty config using shared pool
         empty_config = ProviderConfig()
-        await save_user_provider_config(user_id, empty_config)
+        await save_user_provider_config(user_id, empty_config, postgres_pool)
 
         return ProviderKeysResponse(
             status="success",

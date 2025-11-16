@@ -103,9 +103,13 @@ File: `webui/api/src/webui_api/storage/postgres_store.py`
            params.append(artifact_type)
        
        # Add JSONB filters
+       # Note: JSONB keys should be validated/whitelisted before use
+       # to prevent SQL injection. Only accept known safe keys.
        if filters:
            for key, value in filters.items():
-               query += f" AND data->>'{key}' = %s"
+               # Use parameterized query for both key and value
+               query += " AND data->>%s = %s"
+               params.append(key)
                params.append(str(value))
        
        query += " ORDER BY modified DESC"
