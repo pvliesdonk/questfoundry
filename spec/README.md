@@ -58,9 +58,9 @@ The specification is deliberately **layered** for clarity, testability, and trac
 ### For AI Agents (Running Roles)
 
 1. **Browse behavior primitives**: [`05-behavior/`](05-behavior/)
-2. **Compile manifests**: Run `qf-compile` to generate runtime artifacts
-3. **Execute with PlaybookExecutor**: Use the generic executor from compiled manifests
-4. **Legacy prompts** (deprecated): [`05-prompts/`](05-prompts/)
+2. **Compile manifests**: Run `qf-compile` (from `questfoundry-compiler` package) to generate runtime artifacts
+3. **Execute with PlaybookExecutor**: Use the generic executor from compiled manifests (in `questfoundry-py`)
+4. **Or generate web agent prompts**: Use `qf-generate` (from `cli/prompt_generator/`) for third-party chat UIs
 
 ---
 
@@ -76,8 +76,8 @@ QuestFoundry is organized into **7 layers**, each with clear separation of conce
 | **3** | **Schemas**         | JSON Schema specifications (Draft 2020-12) | ✅ 100%    | [`03-schemas/README.md`](03-schemas/README.md)       |
 | **4** | **Protocol**        | Message envelopes, intents, state machines | ✅ 100%    | [`04-protocol/README.md`](04-protocol/README.md)     |
 | **5** | **Behavior**        | Atomic behavior primitives (v2)            | ✅ 100%    | [`05-behavior/README.md`](05-behavior/README.md)     |
-| **6** | **Libraries**       | Python SDK, validators, clients            | 🚧 Active  | `../lib/python/`                                     |
-| **7** | **CLI**             | Command-line interface tools               | 📋 Planned | `../cli/python/`                                     |
+| **6** | **Libraries**       | Python SDK, validators, clients            | 🚧 Active  | `../lib/python/` and `../lib/compiler/`      |
+| **7** | **CLI**             | Command-line interface tools               | 🚧 Active  | `../cli/prompt_generator/`                   |
 
 **Legend:** ✅ Complete | 🚧 In Progress | 📋 Planned
 
@@ -280,20 +280,22 @@ spec/
 │   ├── LIFECYCLES/         # State machines (hooks, TUs)
 │   ├── FLOWS/              # Message sequence diagrams
 │   └── EXAMPLES/           # 20+ example messages
-├── 05-prompts/             # Layer 5: AI agent prompts
-│   ├── {role_name}/        # Per-role system prompts
-│   │   ├── system_prompt.md
-│   │   ├── intent_handlers/
-│   │   └── examples/
-│   └── _shared/            # Shared patterns (context, safety, escalation)
+├── 05-behavior/            # Layer 5: Atomic behavior primitives
+│   ├── expertises/         # Domain expertise per role
+│   ├── procedures/         # Reusable workflow steps with YAML frontmatter
+│   ├── snippets/           # Small reusable text blocks
+│   ├── playbooks/          # Loop definitions (YAML with references)
+│   ├── adapters/           # Role configurations (YAML with references)
+│   └── README.md           # v2 architecture documentation
 ├── agents.md               # Specification editing guidelines
 └── README.md               # This file
 ```
 
 **Implementation** (Layers 6-7) is located in the parent mono-repo:
 
-- **Layer 6**: `../lib/python/` — Python library implementation
-- **Layer 7**: `../cli/python/` — CLI tools (planned)
+- **Layer 6 Compiler**: `../lib/compiler/` — Spec compiler (`questfoundry-compiler` package)
+- **Layer 6 Runtime**: `../lib/python/` — Python library (`questfoundry-py` package)
+- **Layer 7**: `../cli/prompt_generator/` — CLI tools (`qf-compile`, `qf-generate`)
 
 ---
 
@@ -317,11 +319,13 @@ spec/
 - [`04-protocol/INTENTS.md`](04-protocol/INTENTS.md) — Complete intent catalog
 - [`04-protocol/LIFECYCLES/`](04-protocol/LIFECYCLES/) — State machines for hooks & TUs
 - [`03-schemas/README.md`](03-schemas/README.md) — Schema generation methodology
+- [`05-behavior/README.md`](05-behavior/README.md) — Behavior primitives architecture
 
 **Implementation:**
 
-- [`05-prompts/USAGE_GUIDE.md`](05-prompts/USAGE_GUIDE.md) — AI agent prompt usage
+- `../lib/compiler/README.md` — Spec compiler documentation
 - `../lib/python/README.md` — Python library documentation
+- `../cli/prompt_generator/README.md` — Prompt generator CLI tool
 
 ---
 
@@ -340,9 +344,9 @@ This project is licensed under the **MIT License**. See [`../LICENSE`](../LICENS
 | Layer 2 (Dictionary) | ✅ 100% complete | All 22 artifacts enriched, glossary, taxonomies, cross-refs complete   |
 | Layer 3 (Schemas)    | ✅ 100% complete | 28 schemas (22 artifacts + 6 system schemas) validated                 |
 | Layer 4 (Protocol)   | ✅ 100% complete | protocol-v1.0.0: 4 lifecycles, 6 flows, intents, conformance, examples |
-| Layer 5 (Prompts)    | ✅ 100% complete | Loop-focused architecture: 13 playbooks, 15 adapters, 15 full prompts  |
-| Layer 6 (Libraries)  | 🚧 In Progress   | Python library at `../lib/python/`                                     |
-| Layer 7 (CLI)        | 📋 Planned       | CLI tools at `../cli/python/`                                          |
+| Layer 5 (Prompts)    | ✅ 100% complete | v2 architecture: 100+ primitives (expertises, procedures, snippets, playbooks, adapters) |
+| Layer 6 (Libraries)  | 🚧 In Progress   | `questfoundry-compiler` and `questfoundry-py` packages |
+| Layer 7 (CLI)        | 🚧 In Progress   | `qf-compile` and `qf-generate` CLI tools available    |
 
 ---
 
