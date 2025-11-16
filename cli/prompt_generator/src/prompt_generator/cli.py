@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import questfoundry_compiler
 import questionary
@@ -26,6 +26,7 @@ app = typer.Typer(
 console = Console()
 
 SpecSource = Literal["auto", "bundled", "release"]
+ProfileMode = Literal["walkthrough", "reference", "brief"]
 
 
 def _normalize_identifier_token(value: str) -> str:
@@ -390,12 +391,13 @@ def _resolve_ids(
 
 def _bundle_loop_prompts(
     loop_ids: list[str],
-    assembler: PromptAssembler,
+    assembler: Any,
     catalog: LoopCatalog,
+    profile: ProfileMode,
 ) -> str:
     prompts: list[tuple[str, str]] = []
     for loop_id in loop_ids:
-        prompt = assembler.assemble_web_prompt_for_loop(loop_id)
+        prompt = assembler.assemble_web_prompt_for_loop(loop_id, profile)
         prompts.append((loop_id, prompt.strip()))
 
     if len(prompts) == 1:
@@ -481,6 +483,17 @@ def generate(
             ),
         ),
     ] = "auto",
+    profile: Annotated[
+        ProfileMode,
+        typer.Option(
+            "--profile",
+            case_sensitive=False,
+            help=(
+                "Output style. walkthrough = controller-focused, reference = "
+                "full prompt (default), brief = condensed highlights."
+            ),
+        ),
+    ] = "reference",
     verbose: Annotated[
         bool,
         typer.Option(
@@ -617,14 +630,14 @@ def generate(
 
         # Initialize assembler
         resolver = ReferenceResolver(compiler.primitives, spec_dir)
-        assembler = PromptAssembler(compiler.primitives, resolver, spec_dir)
+        assembler: Any = PromptAssembler(compiler.primitives, resolver, spec_dir)
 
         # Generate prompt
         if loop_ids:
             if verbose:
                 console.print("Generating prompt for loops: " + ", ".join(loop_ids))
 
-            prompt = _bundle_loop_prompts(loop_ids, assembler, loop_catalog)
+            prompt = _bundle_loop_prompts(loop_ids, assembler, loop_catalog, profile)
 
         elif role_ids:
             if verbose:
@@ -632,7 +645,9 @@ def generate(
                 if standalone:
                     console.print("(standalone mode: including loop procedures)")
 
-            prompt = assembler.assemble_web_prompt_for_roles(role_ids, standalone)
+            prompt = assembler.assemble_web_prompt_for_roles(
+                role_ids, standalone, profile
+            )
 
         else:
             console.print("[red]Error: No loop or role specified[/red]")

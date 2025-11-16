@@ -141,6 +141,9 @@ Main command to generate prompts.
 - `--role, -r <token>` - Role/adapter identifier. Accepts IDs like
   `lore_weaver`, abbreviations like `LW`, or Role Index categories such as
   `default` or `always`. Repeatable.
+- `--profile <walkthrough|reference|brief>` - Choose the output style. Use
+  `walkthrough` for a controller-centric, step-by-step prompt, `reference`
+  (default) for the full prompt, or `brief` for a condensed summary.
 - `--standalone, -s` - Include all loop procedures for roles
 - `--output, -o <path>` - Output file (default: stdout)
 - `--spec-dir <path>` - Spec root directory (default: `spec/`)
@@ -164,6 +167,9 @@ qf-generate -r lore_weaver -r researcher -o prompt.md
 
 # Role category shortcut (Default On)
 qf-generate -r default -o prompt.md
+
+# Walkthrough controller view
+qf-generate --loop hook_harvest --profile walkthrough -o guided.md
 
 # Standalone role prompt
 qf-generate -r lore_weaver --standalone -o prompt.md
@@ -215,7 +221,23 @@ The tool uses the `questfoundry-compiler` library to:
 2. Parse RACI assignments from `../../spec/01-roles/raci/by_loop.md`
 3. Resolve all `@type:id` references
 4. Assemble content into a single monolithic markdown file
-5. Include safety protocols and validation requirements
+5. Include safety protocols and validation requirements with adaptive snippets
+
+### Interaction Profiles & Controller Blocks
+
+Every generated prompt now includes a controller section tuned to the selected
+`--profile`:
+
+- **walkthrough** — Adds a controller checklist, `➡️` inline callouts that tell
+  the chat agent when to pause for user input, and detailed execution notes.
+- **reference** — Maintains the original full prompt with condensed controller
+  guidance.
+- **brief** — Produces a slim prompt with key roles, procedures, deliverables,
+  and safety highlights for constrained contexts.
+
+Controller blocks summarize activation triggers, required inputs, decision
+gates, and deliverables so the chat agent always knows when to ask the user for
+more data.
 
 The generated prompts are optimized for:
 
