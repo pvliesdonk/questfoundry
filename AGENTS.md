@@ -42,7 +42,7 @@ mono-repo is organized into three main areas:
 │   ├── 02-dictionary/    # Layer 2: Common language (artifacts, taxonomies, glossary)
 │   ├── 03-schemas/       # Layer 3: JSON schemas (validation)
 │   ├── 04-protocol/      # Layer 4: Communication protocol (intents, lifecycles, flows)
-│   ├── 05-prompts/       # Layer 5: AI agent prompts (loop playbooks, role prompts)
+│   ├── 05-behavior/      # Atomic behavior primitives (expertises, procedures, playbooks, adapters)
 │   ├── AGENTS.md         # <-- Specification editing rules
 │   └── README.md         # Specification overview
 │
@@ -78,8 +78,8 @@ mono-repo is organized into three main areas:
 - `spec/02-dictionary/README.md` — Common language layer (artifact structures)
 - `spec/03-schemas/README.md` — JSON schemas layer (machine validation)
 - `spec/04-protocol/README.md` — Protocol layer (message envelopes, intents, lifecycles)
-- `spec/05-prompts/README.md` — AI agent prompts layer (loop-focused architecture)
-- `spec/05-prompts/USAGE_GUIDE.md` — How to use the AI agents (Customer → AI Showrunner)
+- `spec/05-behavior/README.md` — AI agent behavior primitives layer (v2 architecture)
+- `lib/compiler/README.md` — Spec compiler documentation
 
 **Implementation (Layer 6):**
 

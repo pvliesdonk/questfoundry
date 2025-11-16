@@ -2,7 +2,9 @@
 
 ## Overview
 
-The QuestFoundry Spec Compiler is responsible for transforming atomic behavior primitives from `spec/05-behavior/` into runtime-ready artifacts. It validates cross-references, assembles prompts, and generates JSON manifests for execution.
+The QuestFoundry Spec Compiler is responsible for transforming atomic behavior primitives from `../../../../spec/05-behavior/` into runtime-ready artifacts. It validates cross-references, assembles prompts, and generates JSON manifests for execution.
+
+This is the internal implementation of the `questfoundry-compiler` package, located at `lib/compiler/src/questfoundry_compiler/` in the QuestFoundry mono-repo.
 
 ## Compiler Pipeline
 
@@ -89,7 +91,7 @@ qf-compile --watch
 
 ## Cross-Reference Syntax
 
-See [spec/05-behavior/README.md](../../../../spec/05-behavior/README.md) for complete reference syntax specification.
+See [../../../../spec/05-behavior/README.md](../../../../spec/05-behavior/README.md) for complete reference syntax specification.
 
 ## Output Artifacts
 
@@ -136,8 +138,10 @@ The compiler provides detailed error messages for:
 
 ### Running Tests
 
+From the `lib/compiler/` directory:
+
 ```bash
-pytest tests/compiler/
+pytest tests/
 ```
 
 ### Adding New Primitive Types

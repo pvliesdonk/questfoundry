@@ -9,7 +9,7 @@
 
 The QuestFoundry Prompt Generator (`qf-generate`) is a CLI tool that assembles monolithic, context-optimized prompts for "web agent" simulations. These prompts enable you to simulate the entire QuestFoundry studio (or specific roles) in third-party chat UIs like ChatGPT, Claude, or Gemini.
 
-This solves the v1 limitation where manual file uploads were impractical due to file count limits and context saturation.
+This tool is part of the QuestFoundry mono-repo at `cli/prompt_generator/` and solves a key usability problem: enabling web-based AI assistants to understand and execute QuestFoundry workflows without requiring direct file access to the specification.
 
 ## Installation
 
@@ -191,10 +191,10 @@ qf-generate list-roles
 
 ## Architecture
 
-The tool uses the `questfoundry-compiler` library's `PromptAssembler` to:
+The tool uses the `questfoundry-compiler` library to:
 
-1. Load all behavior primitives from `spec/05-behavior/`
-2. Parse RACI assignments from `spec/01-roles/raci/by_loop.md`
+1. Load all behavior primitives from `../../spec/05-behavior/`
+2. Parse RACI assignments from `../../spec/01-roles/raci/by_loop.md`
 3. Resolve all `@type:id` references
 4. Assemble content into a single monolithic markdown file
 5. Include safety protocols and validation requirements
@@ -230,10 +230,16 @@ uv run hatch run all-checks
 
 ## Dependencies
 
-- `questfoundry-compiler` - Core spec compilation library
-- `typer` - CLI framework
-- `rich` - Terminal formatting
-- `questionary` - Interactive prompts
+- **questfoundry-compiler** - Core spec compilation library (from `../../lib/compiler/`)
+- **typer** - CLI framework
+- **rich** - Terminal formatting
+- **questionary** - Interactive prompts
+
+## Related Tools
+
+- **[questfoundry-compiler](../../lib/compiler/)** - Spec compilation engine
+- **[questfoundry-py](../../lib/python/)** - Python runtime library
+- **[QuestFoundry Spec](../../spec/)** - Complete specification (Layers 0-5)
 
 ## License
 

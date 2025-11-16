@@ -8,13 +8,13 @@
 
 ## Overview
 
-The QuestFoundry Spec Compiler is a standalone tool that compiles atomic behavior primitives from `spec/05-behavior/` into runtime-ready artifacts. It validates cross-references, assembles prompts, and generates JSON manifests for execution.
+The QuestFoundry Spec Compiler (`questfoundry-compiler`) is a standalone tool that compiles atomic behavior primitives from `../../spec/05-behavior/` into runtime-ready artifacts. It validates cross-references, assembles prompts, and generates JSON manifests for execution.
 
-This package is part of the [QuestFoundry](https://github.com/pvliesdonk/questfoundry) mono-repo and can be used:
+This package is located at `lib/compiler/` in the [QuestFoundry](https://github.com/pvliesdonk/questfoundry) mono-repo and can be used:
 
-- **As a build-time dependency** for `questfoundry-py` (static compilation)
-- **As a runtime dependency** for web-based prompt generators (dynamic compilation)
-- **As a standalone CLI tool** for spec validation and compilation
+- **As a build-time dependency** for `questfoundry-py` (static compilation at package build time)
+- **As a runtime dependency** for `qf-generate` CLI tool (dynamic compilation for web agents)
+- **As a standalone CLI tool** (`qf-compile`) for spec validation and compilation
 
 ## Installation
 
@@ -27,14 +27,18 @@ pip install questfoundry-compiler
 ### Compile Behavior Primitives
 
 ```bash
-# Compile all primitives
+# From anywhere (if installed from PyPI)
 qf-compile --spec-dir /path/to/spec --output dist/compiled/
 
+# From mono-repo (using local installation)
+cd lib/compiler
+qf-compile --spec-dir ../../spec --output ../../dist/compiled/
+
 # Validate only (no output)
-qf-compile --spec-dir /path/to/spec --validate-only
+qf-compile --spec-dir ../../spec --validate-only
 
 # Compile specific playbook
-qf-compile --spec-dir /path/to/spec --playbook lore_deepening --output dist/compiled/
+qf-compile --spec-dir ../../spec --playbook lore_deepening --output ../../dist/compiled/
 ```
 
 ### Programmatic Usage
@@ -65,6 +69,8 @@ except CompilationError as e:
 The compiler transforms atomic behavior primitives into runtime artifacts:
 
 ### Input: Atomic Primitives
+
+Located in `../../spec/05-behavior/`:
 
 ```
 spec/05-behavior/
@@ -152,16 +158,20 @@ Options:
 
 ### Components
 
+Located in `lib/compiler/src/questfoundry_compiler/`:
+
 - **spec_compiler.py** - Main orchestrator, loads primitives
 - **validators.py** - Cross-reference validation, dependency analysis
 - **assemblers.py** - Content composition, reference resolution
 - **manifest_builder.py** - JSON manifest generation
 - **types.py** - Type definitions (`BehaviorPrimitive`, `CompilationError`)
-- **cli.py** - Command-line interface
+- **cli.py** - Command-line interface (`qf-compile`)
 
 ## Use Cases
 
 ### 1. Build-Time Static Compilation (questfoundry-py)
+
+The `questfoundry-py` package uses this compiler at build time:
 
 ```python
 # In build hook or bundle script
@@ -173,34 +183,34 @@ try:
     stats = compiler.compile_all(output_dir=Path("src/questfoundry/resources/manifests"))
     print(f"✓ Bundled {stats['playbook_manifests_generated']} manifests")
 except CompilationError as e:
-    print(f"Warning: Compilation failed, using v1 prompts for compatibility")
+    print(f"Error: Compilation failed - {e}")
+    exit(1)
 ```
 
 Published package contains pre-compiled manifests, **not** the compiler itself.
 
-### 2. Runtime Dynamic Compilation (Web Agents)
+### 2. Runtime Dynamic Compilation (qf-generate CLI)
+
+The `qf-generate` tool uses this compiler to dynamically generate prompts:
 
 ```python
 from pathlib import Path
-from flask import Flask, jsonify
 from questfoundry_compiler import SpecCompiler, CompilationError
 
-app = Flask(__name__)
-
 # Initialize compiler once at startup
-compiler = SpecCompiler(spec_root=Path("/spec"))
+compiler = SpecCompiler(spec_root=Path("../../spec"))
 compiler.load_all_primitives()
 
-@app.route("/compile/<playbook_id>")
-def compile_playbook(playbook_id):
-    try:
-        result = compiler.compile_playbook(playbook_id, output_dir=Path("/tmp/compiled"))
-        return jsonify(result)
-    except CompilationError as e:
-        return jsonify({"error": str(e)}), 400
+# Compile specific playbook on demand
+try:
+    result = compiler.compile_playbook("lore_deepening", output_dir=Path("/tmp/compiled"))
+    print(f"✓ Compiled playbook to {result['manifest_path']}")
+except CompilationError as e:
+    print(f"Error: {e}")
+    exit(1)
 ```
 
-Service dynamically compiles prompts on demand.
+The CLI tool dynamically compiles prompts for web agent simulation.
 
 ### 3. Standalone Validation Tool
 
@@ -213,9 +223,16 @@ qf-compile --spec-dir spec/ --validate-only
 
 ### Setup
 
+Install from PyPI:
+
 ```bash
-git clone https://github.com/pvliesdonk/questfoundry.git
-cd questfoundry/lib/compiler
+pip install questfoundry-compiler
+```
+
+Or develop locally:
+
+```bash
+cd lib/compiler
 uv sync --all-extras
 ```
 
@@ -251,8 +268,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Related Projects
 
 - **[questfoundry-py](https://pypi.org/project/questfoundry-py/)** - Python runtime library (uses this compiler at build time)
-- **[QuestFoundry Spec](https://github.com/pvliesdonk/questfoundry)** - Complete specification mono-repo
+- **[QuestFoundry Spec](../../spec/)** - Complete specification (Layers 0-5)
+- **[qf-generate CLI](../../cli/prompt_generator/)** - Prompt generator tool (uses this compiler at runtime)
 
 ## Contributing
 
-See the main [QuestFoundry repository](https://github.com/pvliesdonk/questfoundry) for contribution guidelines.
+See the main [QuestFoundry repository](../../) for contribution guidelines.

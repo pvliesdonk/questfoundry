@@ -123,7 +123,7 @@
 - **spec**: update version format in SPEC_VERSION.txt for consistency
 - **ci**: resolve setup errors by removing 'uv' cache and updating dependency installation steps
 - **ci**: streamline Python setup and remove obsolete mkdocs configuration
-- **state**: add __del__ to SQLiteStore for proper resource cleanup
+- **state**: add **del** to SQLiteStore for proper resource cleanup
 - **test**: improve error handling in threaded test
 - **ci**: remove Python 3.14 from test matrix
 - **lint**: resolve markdownlint errors in spec documentation

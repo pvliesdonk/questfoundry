@@ -19,7 +19,7 @@ The specification is organized into layers:
 - **Layer 2** (`02-dictionary/`) — Common language (artifacts, taxonomies, glossary)
 - **Layer 3** (`03-schemas/`) — JSON schemas (validation)
 - **Layer 4** (`04-protocol/`) — Communication protocol (intents, lifecycles, flows)
-- **Layer 5** (`05-prompts/`) — AI agent prompts (loop playbooks, role prompts)
+- **Layer 5** (`05-behavior/`) — Atomic behavior primitives (expertises, procedures, playbooks, adapters)
 
 ## Editing Rules
 
@@ -62,7 +62,7 @@ When changing a concept, update all layers that reference it:
 
 ### 6. Prompt Engineering
 
-When editing prompts in `05-prompts/`:
+When editing behavior primitives in `05-behavior/`:
 
 - Follow the loop-focused architecture
 - Ensure prompts reference the correct schemas from `03-schemas/`
@@ -97,8 +97,9 @@ When working in the `spec/` directory, use these **custom conventional commit ty
 
 - **Use for**: Any changes to AI prompts (Layer 5)
 - **Examples**:
-  - Updating role prompts in `05-prompts/*/system_prompt.md`
-  - Modifying intent handlers in `05-prompts/*/intent_handlers/`
+  - Creating new behavior primitives in `05-behavior/expertises/`, `procedures/`, or `snippets/`
+  - Updating playbooks in `05-behavior/playbooks/`
+  - Modifying role adapters in `05-behavior/adapters/`
   - Changing loop playbooks
 - **Version impact**: Triggers a spec version bump
 - **Workflow**: Triggers `release-spec.yml` workflow
@@ -141,7 +142,8 @@ All specification files must:
 The Python library in `lib/python/` bundles resources from this spec directory at build time:
 
 - Schemas from `03-schemas/` are bundled into the library package
-- Prompts from `05-prompts/` are bundled into the library package
+- The spec compiler (`../../lib/compiler/`) transforms behavior primitives into runtime manifests
+- Compiled manifests are bundled into packages at build time
 - The bundling script `lib/python/scripts/bundle_resources.py` copies files from spec/
 
 **The spec is the single source of truth**. Never manually edit files in `lib/python/src/questfoundry/resources/` - always edit files in `spec/` and re-run the bundling script.
