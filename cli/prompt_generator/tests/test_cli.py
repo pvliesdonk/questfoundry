@@ -123,16 +123,16 @@ def _stub_compiler_stack(monkeypatch):
             self.resolver = resolver
             self.spec_dir = spec_dir
 
-        def assemble_web_prompt_for_loop(self, loop_id: str) -> str:
-            type(self).last_call = ("loop", loop_id, None)
-            type(self).calls.append(("loop", loop_id, None))
+        def assemble_web_prompt_for_loop(self, loop_id: str, profile: str) -> str:
+            type(self).last_call = ("loop", loop_id, profile)
+            type(self).calls.append(("loop", loop_id, profile))
             return f"PROMPT:{loop_id}"
 
         def assemble_web_prompt_for_roles(
-            self, role_ids: list[str], standalone: bool
+            self, role_ids: list[str], standalone: bool, profile: str
         ) -> str:
-            type(self).last_call = ("roles", tuple(role_ids), standalone)
-            type(self).calls.append(("roles", tuple(role_ids), standalone))
+            type(self).last_call = ("roles", tuple(role_ids), standalone, profile)
+            type(self).calls.append(("roles", tuple(role_ids), standalone, profile))
             joined = ",".join(role_ids)
             return f"PROMPT:roles:{joined}:{int(standalone)}"
 
@@ -165,7 +165,28 @@ def test_generate_loop_uses_prompt_assembler(monkeypatch, tmp_path):
 
     assert result.exit_code == 0, result.output
     assert output_path.read_text(encoding="utf-8") == "PROMPT:lore_deepening"
-    assert stub_assembler.calls == [("loop", "lore_deepening", None)]
+    assert stub_assembler.calls == [("loop", "lore_deepening", "reference")]
+
+
+def test_generate_loop_honors_profile(monkeypatch, tmp_path):
+    stub_assembler, _ = _stub_compiler_stack(monkeypatch)
+    spec_root = _prepare_spec_dir(tmp_path)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "generate",
+            "--loop",
+            "lore_deepening",
+            "--profile",
+            "walkthrough",
+            "--spec-dir",
+            str(spec_root),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert stub_assembler.calls == [("loop", "lore_deepening", "walkthrough")]
 
 
 def test_generate_roles_honors_standalone(monkeypatch, tmp_path):
@@ -194,16 +215,9 @@ def test_generate_roles_honors_standalone(monkeypatch, tmp_path):
         output_path.read_text(encoding="utf-8")
         == "PROMPT:roles:lore_weaver,plotwright:1"
     )
-    assert stub_assembler.last_call == (
-        "roles",
-        ("lore_weaver", "plotwright"),
-        True,
-    )
-    assert stub_assembler.calls[-1] == (
-        "roles",
-        ("lore_weaver", "plotwright"),
-        True,
-    )
+    expected_call = ("roles", ("lore_weaver", "plotwright"), True, "reference")
+    assert stub_assembler.last_call == expected_call
+    assert stub_assembler.calls[-1] == expected_call
 
 
 def test_generate_loop_bundle_supports_multiple_loops(monkeypatch, tmp_path):
@@ -232,8 +246,8 @@ def test_generate_loop_bundle_supports_multiple_loops(monkeypatch, tmp_path):
     assert contents.count("PROMPT:lore_deepening") == 1
     assert contents.count("PROMPT:hook_harvest") == 1
     assert stub_assembler.calls == [
-        ("loop", "lore_deepening", None),
-        ("loop", "hook_harvest", None),
+        ("loop", "lore_deepening", "reference"),
+        ("loop", "hook_harvest", "reference"),
     ]
 
 
@@ -259,8 +273,8 @@ def test_generate_loop_accepts_abbreviation_and_category(monkeypatch, tmp_path):
 
     assert result.exit_code == 0, result.output
     assert stub_assembler.calls == [
-        ("loop", "lore_deepening", None),
-        ("loop", "hook_harvest", None),
+        ("loop", "lore_deepening", "reference"),
+        ("loop", "hook_harvest", "reference"),
     ]
 
 
