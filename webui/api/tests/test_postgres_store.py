@@ -18,8 +18,7 @@ from webui_api.storage.postgres_store import PostgresStore
 pytestmark = pytest.mark.skipif(
     not os.getenv("TEST_POSTGRES_URL"),
     reason=(
-        "PostgreSQL database not available. "
-        "Set TEST_POSTGRES_URL to run these tests."
+        "PostgreSQL database not available. Set TEST_POSTGRES_URL to run these tests."
     ),
 )
 

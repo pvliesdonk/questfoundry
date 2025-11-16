@@ -65,7 +65,7 @@ async def create_artifact(
     ),
     postgres_pool: ConnectionPool = Depends(get_postgres_pool),
     redis_client: redis.Redis = Depends(get_redis_client),
-):
+) -> ArtifactModel:
     """Create a new artifact in the specified storage backend.
 
     Args:
@@ -113,7 +113,7 @@ async def list_artifacts(
     artifact_type: str | None = Query(None, description="Filter by artifact type"),
     postgres_pool: ConnectionPool = Depends(get_postgres_pool),
     redis_client: redis.Redis = Depends(get_redis_client),
-):
+) -> list[ArtifactModel]:
     """List artifacts in the specified storage backend.
 
     Args:
@@ -154,7 +154,7 @@ async def get_artifact(
     storage: Literal["hot", "cold"] = Query("cold", description="Storage backend"),
     postgres_pool: ConnectionPool = Depends(get_postgres_pool),
     redis_client: redis.Redis = Depends(get_redis_client),
-):
+) -> ArtifactModel:
     """Get a specific artifact by ID.
 
     Args:
@@ -193,7 +193,7 @@ async def update_artifact(
     storage: Literal["hot", "cold"] = Query("cold", description="Storage backend"),
     postgres_pool: ConnectionPool = Depends(get_postgres_pool),
     redis_client: redis.Redis = Depends(get_redis_client),
-):
+) -> ArtifactModel:
     """Update an existing artifact.
 
     Args:
@@ -245,7 +245,7 @@ async def delete_artifact(
     storage: Literal["hot", "cold"] = Query("cold", description="Storage backend"),
     postgres_pool: ConnectionPool = Depends(get_postgres_pool),
     redis_client: redis.Redis = Depends(get_redis_client),
-):
+) -> None:
     """Delete an artifact.
 
     Args:

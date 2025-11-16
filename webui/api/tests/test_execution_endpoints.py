@@ -1,11 +1,12 @@
 """Unit tests for execution endpoints"""
 
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from webui_api.dependencies import get_postgres_pool, get_redis_client
 from webui_api.middleware import AuthMiddleware
 from webui_api.routers import execution_router
 
@@ -16,6 +17,8 @@ def app():
     app = FastAPI()
     app.add_middleware(AuthMiddleware)
     app.include_router(execution_router)
+    app.dependency_overrides[get_postgres_pool] = lambda: Mock()
+    app.dependency_overrides[get_redis_client] = lambda: Mock()
     return app
 
 
@@ -55,10 +58,11 @@ class TestExecutionEndpoints:
         assert data["result"] == {"result": "test result"}
 
         # Verify mocks called correctly
-        mock_get_config.assert_called_once_with("test-user")
+        mock_get_config.assert_called_once_with("test-user", ANY)
         mock_orchestrator.execute_goal.assert_called_once_with(
             goal="Create a new hook",
-            context={},
+            project_id="test-project",
+            project_state=None,
         )
 
     @patch("webui_api.routers.execution.get_user_provider_config")
@@ -85,7 +89,8 @@ class TestExecutionEndpoints:
         assert response.status_code == 200
         mock_orchestrator.execute_goal.assert_called_once_with(
             goal="Update hook",
-            context={"hook_id": "HOOK-001"},
+            project_id="test-project",
+            project_state={"hook_id": "HOOK-001"},
         )
 
     def test_execute_goal_no_auth(self, client):

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, Field
 
+from ..dependencies import get_postgres_pool
 from ..lifecycle import orchestrator_context
 from ..user_settings import get_user_provider_config
 
@@ -55,6 +57,7 @@ async def execute_goal(
     project_id: str,
     request: Request,
     goal_request: GoalRequest,
+    postgres_pool: ConnectionPool = Depends(get_postgres_pool),
 ) -> GoalResponse:
     """
     Execute a goal using the orchestrator.
@@ -83,17 +86,16 @@ async def execute_goal(
     user_id = request.state.user_id
 
     # Get user's provider config (decrypted BYOK keys)
-    provider_config = await get_user_provider_config(user_id)
+    provider_config = await get_user_provider_config(user_id, postgres_pool)
 
     try:
         # Use orchestrator context (handles locking, storage, lifecycle)
-        with orchestrator_context(
-            project_id, user_id, provider_config
-        ) as orchestrator:
+        with orchestrator_context(project_id, user_id, provider_config) as orchestrator:
             # Execute goal
             result = orchestrator.execute_goal(
                 goal=goal_request.goal,
-                context=goal_request.context or {},
+                project_id=project_id,
+                project_state=goal_request.context,
             )
 
             return GoalResponse(
@@ -113,6 +115,7 @@ async def run_gatecheck(
     project_id: str,
     request: Request,
     gatecheck_request: GatecheckRequest,
+    postgres_pool: ConnectionPool = Depends(get_postgres_pool),
 ) -> GatecheckResponse:
     """
     Run gatecheck validation on artifacts.
@@ -135,12 +138,10 @@ async def run_gatecheck(
     user_id = request.state.user_id
 
     # Get user's provider config
-    provider_config = await get_user_provider_config(user_id)
+    provider_config = await get_user_provider_config(user_id, postgres_pool)
 
     try:
-        with orchestrator_context(
-            project_id, user_id, provider_config
-        ) as _orchestrator:
+        with orchestrator_context(project_id, user_id, provider_config):
             # Run gatecheck
             # Note: Actual implementation depends on orchestrator.run_gatecheck method
             # For now, returning placeholder

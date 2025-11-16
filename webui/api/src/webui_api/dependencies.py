@@ -6,7 +6,7 @@ that are initialized once at application startup and reused across requests.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 import redis
 from psycopg.rows import dict_row
@@ -39,7 +39,10 @@ def init_pools(settings: Settings) -> None:
     )
 
     # Initialize Redis client (thread-safe, can be shared)
-    _redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+    _redis_client = cast(
+        redis.Redis,
+        redis.from_url(settings.redis_url, decode_responses=True),  # type: ignore[no-untyped-call]
+    )
 
 
 def close_pools() -> None:
@@ -121,17 +124,14 @@ def create_storage_backend(
         )
     """
     if storage == "cold":
-        # Create PostgresStore with shared pool (bypass __init__)
-        store = PostgresStore.__new__(PostgresStore)
-        store.project_id = project_id
-        store.pool = postgres_pool
-        return store
-    elif storage == "hot":
-        # Create ValkeyStore with shared client (bypass __init__)
-        store = ValkeyStore.__new__(ValkeyStore)
-        store.project_id = project_id
-        store.client = redis_client
-        store.ttl_seconds = 86400  # 24 hours
-        return store
-    else:
-        raise ValueError(f"Unknown storage type: {storage}")
+        cold_store = PostgresStore.__new__(PostgresStore)
+        cold_store.project_id = project_id
+        cold_store.pool = postgres_pool
+        return cold_store
+    if storage == "hot":
+        hot_store = ValkeyStore.__new__(ValkeyStore)
+        hot_store.project_id = project_id
+        hot_store.client = redis_client
+        hot_store.ttl_seconds = 86400  # 24 hours
+        return hot_store
+    raise ValueError(f"Unknown storage type: {storage}")

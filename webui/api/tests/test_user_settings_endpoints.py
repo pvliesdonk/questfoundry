@@ -1,12 +1,13 @@
 """Unit tests for user settings endpoints"""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from questfoundry.providers.config import ProviderConfig
 
+from webui_api.dependencies import get_postgres_pool, get_redis_client
 from webui_api.middleware import AuthMiddleware
 from webui_api.routers import user_settings_router
 
@@ -17,6 +18,8 @@ def app():
     app = FastAPI()
     app.add_middleware(AuthMiddleware)
     app.include_router(user_settings_router)
+    app.dependency_overrides[get_postgres_pool] = lambda: Mock()
+    app.dependency_overrides[get_redis_client] = lambda: Mock()
     return app
 
 

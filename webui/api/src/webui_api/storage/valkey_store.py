@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import redis
 from questfoundry.models.artifact import Artifact
@@ -52,7 +52,25 @@ class ValkeyStore(StateStore):
         """
         self.project_id = project_id
         self.ttl_seconds = ttl_seconds
-        self.client = redis.from_url(connection_string, decode_responses=True)
+        self.client = cast(
+            redis.Redis,
+            redis.from_url(  # type: ignore[no-untyped-call]
+                connection_string,
+                decode_responses=True,
+            ),
+        )
+
+    @staticmethod
+    def _ensure_str(value: Any) -> str | None:
+        """Ensure Redis responses are strings for JSON decoding."""
+
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (bytes, bytearray)):
+            return value.decode("utf-8")
+        return cast(str, value)
 
     def _key(self, *parts: str) -> str:
         """Generate namespaced key"""
@@ -65,7 +83,7 @@ class ValkeyStore(StateStore):
     def get_project_info(self) -> ProjectInfo:
         """Get project metadata from hot storage"""
         key = self._key("project_info")
-        data_str = self.client.get(key)
+        data_str = self._ensure_str(self.client.get(key))
         if not data_str:
             raise FileNotFoundError(f"Project {self.project_id} not found")
 
@@ -126,7 +144,10 @@ class ValkeyStore(StateStore):
         pattern = self._key("artifacts", "*", artifact_id)
 
         for key in self.client.scan_iter(match=pattern, count=100):
-            data_str = self.client.get(key)
+            key_str = self._ensure_str(key)
+            if not key_str:
+                continue
+            data_str = self._ensure_str(self.client.get(key_str))
             if data_str:
                 data = json.loads(data_str)
                 return Artifact(
@@ -145,7 +166,10 @@ class ValkeyStore(StateStore):
         artifacts = []
 
         for key in self.client.scan_iter(match=pattern, count=100):
-            data_str = self.client.get(key)
+            key_str = self._ensure_str(key)
+            if not key_str:
+                continue
+            data_str = self._ensure_str(self.client.get(key_str))
             if data_str:
                 data = json.loads(data_str)
 
@@ -175,7 +199,10 @@ class ValkeyStore(StateStore):
 
         deleted = False
         for key in self.client.scan_iter(match=pattern, count=100):
-            self.client.delete(key)
+            key_str = self._ensure_str(key)
+            if not key_str:
+                continue
+            self.client.delete(key_str)
             deleted = True
 
         return deleted
@@ -200,7 +227,7 @@ class ValkeyStore(StateStore):
     def get_tu(self, tu_id: str) -> TUState | None:
         """Get TU by ID within current project namespace"""
         key = self._key("tus", tu_id)
-        data_str = self.client.get(key)
+        data_str = self._ensure_str(self.client.get(key))
 
         if not data_str:
             return None
@@ -222,7 +249,10 @@ class ValkeyStore(StateStore):
         tus = []
 
         for key in self.client.scan_iter(match=pattern, count=100):
-            data_str = self.client.get(key)
+            key_str = self._ensure_str(key)
+            if not key_str:
+                continue
+            data_str = self._ensure_str(self.client.get(key_str))
             if data_str:
                 data = json.loads(data_str)
 
@@ -278,7 +308,7 @@ class ValkeyStore(StateStore):
     def get_snapshot(self, snapshot_id: str) -> SnapshotInfo | None:
         """Get snapshot by ID within current project namespace"""
         key = self._key("snapshots", snapshot_id)
-        data_str = self.client.get(key)
+        data_str = self._ensure_str(self.client.get(key))
 
         if not data_str:
             return None
@@ -300,7 +330,10 @@ class ValkeyStore(StateStore):
         snapshots = []
 
         for key in self.client.scan_iter(match=pattern, count=100):
-            data_str = self.client.get(key)
+            key_str = self._ensure_str(key)
+            if not key_str:
+                continue
+            data_str = self._ensure_str(self.client.get(key_str))
             if data_str:
                 data = json.loads(data_str)
 

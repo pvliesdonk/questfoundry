@@ -65,6 +65,10 @@ disable_error_code = ["misc", "no-any-return"]
 module = ["psycopg.*", "redis.*", "cryptography.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["questfoundry.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -72,3 +76,6 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+
+[tool.uv.sources]
+questfoundry-py = { path = "../../lib/python" }

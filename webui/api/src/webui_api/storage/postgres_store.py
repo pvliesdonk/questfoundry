@@ -65,7 +65,7 @@ class PostgresStore(StateStore):
     def get_project_info(self) -> ProjectInfo:
         """Get project metadata scoped to current project_id"""
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     SELECT
@@ -83,14 +83,15 @@ class PostgresStore(StateStore):
                 row = cur.fetchone()
                 if not row:
                     raise FileNotFoundError(f"Project {self.project_id} not found")
+                row_dict = dict(row)
                 return ProjectInfo(
-                    name=row["name"],
-                    description=row["description"],
-                    version=row["version"],
-                    author=row["author"],
-                    created=row["created"],
-                    modified=row["modified"],
-                    metadata=row["metadata"],
+                    name=row_dict["name"],
+                    description=row_dict["description"],
+                    version=row_dict["version"],
+                    author=row_dict["author"],
+                    created=row_dict["created"],
+                    modified=row_dict["modified"],
+                    metadata=row_dict["metadata"],
                 )
 
     def save_project_info(self, info: ProjectInfo) -> None:
@@ -98,7 +99,7 @@ class PostgresStore(StateStore):
         info.modified = datetime.now()
 
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     INSERT INTO project_info
@@ -142,7 +143,7 @@ class PostgresStore(StateStore):
             raise ValueError("Artifact must have 'id' in metadata")
 
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     INSERT INTO artifacts
@@ -168,7 +169,7 @@ class PostgresStore(StateStore):
     def get_artifact(self, artifact_id: str) -> Artifact | None:
         """Get artifact by ID within current project_id scope"""
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     SELECT artifact_type, data, metadata
@@ -211,21 +212,25 @@ class PostgresStore(StateStore):
         query += " ORDER BY modified DESC"
 
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, params)
-                return [
-                    Artifact(
-                        type=row["artifact_type"],
-                        data=row["data"],
-                        metadata=row["metadata"],
+                rows = cur.fetchall()
+                artifacts = []
+                for row in rows:
+                    row_dict = dict(row)
+                    artifacts.append(
+                        Artifact(
+                            type=row_dict["artifact_type"],
+                            data=row_dict["data"],
+                            metadata=row_dict["metadata"],
+                        )
                     )
-                    for row in cur.fetchall()
-                ]
+                return artifacts
 
     def delete_artifact(self, artifact_id: str) -> bool:
         """Delete artifact within current project_id scope"""
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     DELETE FROM artifacts
@@ -241,7 +246,7 @@ class PostgresStore(StateStore):
         tu.modified = datetime.now()
 
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     INSERT INTO tus
@@ -280,7 +285,7 @@ class PostgresStore(StateStore):
     def get_tu(self, tu_id: str) -> TUState | None:
         """Get TU by ID within current project_id scope"""
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     SELECT tu_id, status, snapshot_id, created, modified, data, metadata
@@ -320,7 +325,7 @@ class PostgresStore(StateStore):
         query += " ORDER BY modified DESC"
 
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, params)
                 return [
                     TUState(
@@ -338,7 +343,7 @@ class PostgresStore(StateStore):
     def save_snapshot(self, snapshot: SnapshotInfo) -> None:
         """Save snapshot with project_id scoping"""
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 # Check if snapshot already exists (immutability)
                 cur.execute(
                     """
@@ -373,7 +378,7 @@ class PostgresStore(StateStore):
     def get_snapshot(self, snapshot_id: str) -> SnapshotInfo | None:
         """Get snapshot by ID within current project_id scope"""
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     SELECT snapshot_id, tu_id, created, description, metadata
@@ -411,7 +416,7 @@ class PostgresStore(StateStore):
         query += " ORDER BY created DESC"
 
         with self.pool.connection() as conn:
-            with conn.cursor() as cur:
+            with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, params)
                 return [
                     SnapshotInfo(

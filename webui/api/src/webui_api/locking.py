@@ -7,7 +7,7 @@ concurrent writes to the same project from different users or requests.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import redis
 from fastapi import HTTPException
@@ -81,7 +81,7 @@ class ProjectLock:
 
         if not acquired:
             # Lock exists, check who owns it
-            owner = self.client.get(lock_key)
+            owner = cast(bytes | None, self.client.get(lock_key))
             if owner and owner.decode("utf-8") == user_id:
                 # Same user already has lock, allow re-entry
                 pass
@@ -95,6 +95,6 @@ class ProjectLock:
             yield
         finally:
             # Release lock only if we still own it
-            current_owner = self.client.get(lock_key)
+            current_owner = cast(bytes | None, self.client.get(lock_key))
             if current_owner and current_owner.decode("utf-8") == user_id:
                 self.client.delete(lock_key)

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import redis
 from questfoundry.orchestrator import Orchestrator
@@ -70,7 +70,13 @@ def orchestrator_context(
         ...     result = orch.execute_goal("Create a new hook")
     """
     # Create Redis client for locking
-    redis_client = redis.from_url(settings.redis_url, decode_responses=False)
+    redis_client = cast(
+        redis.Redis,
+        redis.from_url(  # type: ignore[no-untyped-call]
+            settings.redis_url,
+            decode_responses=False,
+        ),
+    )
 
     try:
         # Create lock manager
@@ -86,15 +92,15 @@ def orchestrator_context(
                 provider_reg = ProviderRegistry(config=user_provider_config)
 
                 # Determine spec path
-                if settings.spec_path:
-                    spec_path = Path(settings.spec_path)
-                else:
-                    # Use bundled spec from questfoundry-py
-                    # The library will handle this automatically
-                    spec_path = None  # type: ignore
+                spec_path: Path | None = (
+                    Path(settings.spec_path) if settings.spec_path else None
+                )
 
                 role_reg = RoleRegistry(provider_reg, spec_path=spec_path)
-                workspace = WorkspaceManager(cold=cold_store, hot=hot_store)
+                workspace_dir = Path("/tmp/questfoundry-webui") / project_id
+                workspace = WorkspaceManager(workspace_dir)
+                cast(Any, workspace).cold_store = cold_store
+                cast(Any, workspace).hot_store = hot_store
 
                 # Create orchestrator
                 orchestrator = Orchestrator(

@@ -7,9 +7,9 @@ The API server does NOT implement authentication itself - it trusts
 the header set by the reverse proxy.
 """
 
-from fastapi import HTTPException, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import JSONResponse, Response
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -25,7 +25,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         HTTPException: 401 if X-Forwarded-User header is missing
     """
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """Process request and extract user ID"""
         # Skip auth for health check and docs
         if request.url.path in ["/health", "/", "/docs", "/openapi.json"]:
@@ -35,11 +37,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_id = request.headers.get("X-Forwarded-User")
 
         if not user_id:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=401,
-                detail=(
-                    "Missing X-Forwarded-User header. API must run behind OIDC proxy."
-                ),
+                content={
+                    "detail": "Missing X-Forwarded-User header. "
+                    "API must run behind OIDC proxy."
+                },
             )
 
         # Store user_id in request state for use by handlers
