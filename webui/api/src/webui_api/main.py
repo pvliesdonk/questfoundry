@@ -3,6 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .middleware import AuthMiddleware
+
 app = FastAPI(
     title="QuestFoundry WebUI API",
     description="Multi-tenant REST API for QuestFoundry",
@@ -17,6 +19,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add authentication middleware
+app.add_middleware(AuthMiddleware)
 
 
 @app.get("/health")
