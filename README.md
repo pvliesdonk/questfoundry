@@ -22,13 +22,14 @@ Located in `spec/` — The canonical definition of QuestFoundry
 
 Located in `lib/` — Runtime implementations of the specification
 
-- **Layer 6** (`lib/python/`) — Python library implementation
+- **Layer 6** (`lib/python/`) — Python library implementation (`questfoundry-py`)
+- **Layer 6** (`lib/compiler/`) — Spec compiler (`questfoundry-compiler`)
 
 ### CLI Tools (Layer 7)
 
 Located in `cli/` — Command-line interface tools
 
-- **Layer 7** (`cli/python/`) — Python CLI (future)
+- **Layer 7** (`cli/prompt_generator/`) — Prompt generator (`qf-generate`)
 
 ## Repository Structure
 
@@ -41,20 +42,23 @@ Located in `cli/` — Command-line interface tools
 │   ├── 03-schemas/
 │   ├── 04-protocol/
 │   ├── 05-behavior/      # Atomic behavior primitives (v2)
-│   ├── 05-prompts/       # Legacy prompts (deprecated)
 │   ├── manifests/        # Manifest schemas
-│   ├── agents.md
+│   ├── AGENTS.md
 │   └── README.md
 │
 ├── lib/                  # Layer 6 (Implementation)
-│   └── python/
+│   ├── python/           # questfoundry-py package
+│   │   ├── src/
+│   │   ├── tests/
+│   │   ├── AGENTS.md
+│   │   └── README.md
+│   └── compiler/         # questfoundry-compiler package
 │       ├── src/
 │       ├── tests/
-│       ├── agents.md
 │       └── README.md
 │
 ├── cli/                  # Layer 7 (CLI Tools)
-│   └── python/
+│   └── prompt_generator/ # qf-generate CLI tool
 │
 ├── agents.md             # Global agent guidelines
 ├── README.md             # This file
@@ -71,16 +75,18 @@ Located in `cli/` — Command-line interface tools
 
 ### Using the Python Library
 
-1. **Install dependencies**: Navigate to `lib/python/` and run `uv sync`
-2. **Read the library docs**: See [`lib/python/README.md`](lib/python/README.md)
-3. **Run tests**: From the repo root, run `cd lib/python && uv run pytest`
+1. **Install the package**: `pip install questfoundry-py`
+2. **Or develop locally**: Navigate to `lib/python/` and run `uv sync`
+3. **Read the library docs**: See [`lib/python/README.md`](lib/python/README.md)
+4. **Run tests**: From `lib/python/`, run `uv run pytest`
 
 ## Key Concepts
 
 ### Single Source of Truth
 
-- The `spec/` directory is the **canonical source** for all schemas and prompts
-- Implementation libraries in `lib/` read from `spec/` at runtime
+- The `spec/` directory is the **canonical source** for all schemas and behavior primitives
+- The **spec compiler** (`lib/compiler/`) transforms primitives into runtime artifacts
+- Implementation libraries use compiled manifests, not source specs directly
 - **No duplication** of resources across layers
 
 ### Layered Architecture
@@ -115,12 +121,18 @@ QuestFoundry v2 introduces **atomic, composable behavior primitives** to elimina
 - **Playbooks** (`spec/05-behavior/playbooks/`) — Loop definitions referencing procedures
 - **Adapters** (`spec/05-behavior/adapters/`) — Role configurations referencing expertises
 
-The **spec compiler** (`lib/python/src/questfoundry/compiler/`) assembles these primitives into:
+The **spec compiler** (`lib/compiler/`) assembles these primitives into:
 
 - **Manifests** (`dist/compiled/manifests/*.manifest.json`) — Runtime-ready JSON for playbook execution
 - **Standalone prompts** (`dist/compiled/standalone_prompts/*.md`) — Complete role prompts
 
-The **PlaybookExecutor** (`lib/python/src/questfoundry/execution/`) provides generic loop execution from manifests, replacing hardcoded loop classes.
+The compiler is available as:
+
+- **Build-time tool**: `questfoundry-compiler` package (used by `questfoundry-py`)
+- **CLI tool**: `qf-compile` for manual compilation
+- **Web service**: Dynamic compilation for prompt generation
+
+The **PlaybookExecutor** (in `questfoundry-py`) provides generic loop execution from compiled manifests.
 
 **Benefits:**
 
@@ -133,19 +145,21 @@ The **PlaybookExecutor** (`lib/python/src/questfoundry/execution/`) provides gen
 
 For development rules and conventions, see:
 
-- **Global guidelines**: [`agents.md`](agents.md)
-- **Specification work**: [`spec/agents.md`](spec/agents.md)
-- **Python library**: [`lib/python/agents.md`](lib/python/agents.md)
+- **Global guidelines**: [`AGENTS.md`](AGENTS.md)
+- **Specification work**: [`spec/AGENTS.md`](spec/AGENTS.md)
+- **Python library**: [`lib/python/AGENTS.md`](lib/python/AGENTS.md)
 
 ## Contributing
 
 This is a mono-repo with clear separation between specification and implementation:
 
-1. **Spec changes** go in `spec/`
-2. **Library changes** go in `lib/python/`
-3. **Never duplicate** resources between layers
+1. **Spec changes** go in `spec/` (behavior primitives, schemas, documentation)
+2. **Compiler changes** go in `lib/compiler/` (cross-reference validation, assembly logic)
+3. **Library changes** go in `lib/python/` (runtime implementation, execution engine)
+4. **CLI changes** go in `cli/` (command-line tools)
+5. **Never duplicate** resources between layers
 
-Follow the guidelines in [`agents.md`](agents.md) for commit conventions and workflow.
+Follow the guidelines in [`AGENTS.md`](AGENTS.md) for commit conventions and workflow.
 
 ## License
 
