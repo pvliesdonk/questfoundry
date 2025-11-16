@@ -4,7 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .middleware import AuthMiddleware
-from .routers import execution_router, projects_router, user_settings_router
+from .routers import (
+    artifacts_router,
+    execution_router,
+    projects_router,
+    user_settings_router,
+)
 
 app = FastAPI(
     title="QuestFoundry WebUI API",
@@ -28,6 +33,7 @@ app.add_middleware(AuthMiddleware)
 app.include_router(projects_router)
 app.include_router(execution_router)
 app.include_router(user_settings_router)
+app.include_router(artifacts_router)
 
 
 @app.get("/health")
