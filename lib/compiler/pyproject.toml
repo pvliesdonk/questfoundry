@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "questfoundry-compiler"
 
-version = "0.4.0"
+version = "0.5.0"
 
 description = "Spec compiler for QuestFoundry - transforms atomic behavior primitives into runtime artifacts"
 readme = "README.md"
@@ -109,7 +109,7 @@ select = ["E", "F", "W", "I"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.4.0"
+version = "0.5.0"
 version_files = [
     "pyproject.toml:version"
 ]
