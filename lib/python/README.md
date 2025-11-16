@@ -1,9 +1,10 @@
 # QuestFoundry Python Library
 
-**Layer 6 Python implementation of the QuestFoundry specification.**
+**Layer 6 Python runtime implementation of the QuestFoundry specification.**
 
-This is the Layer 6 Python implementation of the QuestFoundry specification, which is defined in
-the `../../spec/` directory.
+This package (`questfoundry-py`) provides the runtime execution engine for QuestFoundry. It depends on the `questfoundry-compiler` package at build time to compile behavior primitives from `../../spec/05-behavior/` into runtime-ready manifests.
+
+The specification itself is defined in the `../../spec/` directory.
 
 [![Tests](https://img.shields.io/badge/tests-819%20passed-success)](https://github.com/pvliesdonk/questfoundry)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
@@ -99,31 +100,34 @@ Layer 3: Schemas (JSON Schema validation) ← ../../spec/03-schemas/
     ↓
 Layer 4: Protocol & Envelopes ← ../../spec/04-protocol/
     ↓
-Layer 5: Prompts ← ../../spec/05-prompts/
+Layer 5: Behavior Primitives ← ../../spec/05-behavior/
     ↓
-Layer 6: Python Library (this directory) ← You are here
+Layer 6 Compiler: questfoundry-compiler ← ../../lib/compiler/
+    (transforms primitives → manifests at build time)
+    ↓
+Layer 6 Runtime: questfoundry-py ← You are here
     ├── State Management (Hot/Cold SoT)
     ├── Protocol Client (Envelope communication)
     ├── Providers (LLM/Image/Audio)
     ├── Roles (14+ specialized agents)
-    ├── Loops (Multi-step workflows)
+    ├── PlaybookExecutor (Generic loop execution from manifests)
     ├── Validation (8 quality bars)
     └── Export (Views, Git, Book binding)
     ↓
-Layer 7: CLI & UI ← ../../cli/python/ (planned)
+Layer 7: CLI Tools ← ../../cli/
 ```
 
 ## Core Concepts
 
 ### Resource Loading
 
-This library loads schemas and prompts from the specification at `../../spec/`:
+This library uses compiled manifests and schemas from the specification:
 
-- **Schemas**: Loaded from `../../spec/03-schemas/`
-- **Prompts**: Loaded from `../../spec/05-prompts/`
+- **Schemas**: Loaded from `../../spec/03-schemas/` at runtime
+- **Manifests**: Compiled at build time using `questfoundry-compiler` from `../../spec/05-behavior/`
+- **Bundled at build**: The package includes pre-compiled manifests in its distribution
 
-The spec directory is the **single source of truth** for all schemas and prompts. This library
-never duplicates these resources.
+The spec directory is the **single source of truth** for schemas and behavior primitives. The compiler transforms atomic primitives into runtime-ready manifests during the build process.
 
 ### Hot/Cold Source of Truth
 
@@ -172,23 +176,26 @@ providers:
 
 ### Setup
 
-From the mono-repo root:
+Install the published package:
+
+```bash
+pip install questfoundry-py
+```
+
+Or develop locally from the mono-repo root:
 
 ```bash
 cd lib/python
 uv sync
 ```
 
-**Important**: All commands assume you are running from the **mono-repo root** because the library
-loads resources from `../../spec/`. If you need to run commands from this directory, make sure the
-working directory is set to the mono-repo root.
+**Important**: When developing locally, commands should be run from `lib/python/` directory. The library loads schemas from `../../spec/` at runtime and uses pre-compiled manifests bundled during the build.
 
 ### Run Tests
 
-From the mono-repo root:
+From the `lib/python/` directory:
 
 ```bash
-cd lib/python
 uv run pytest tests/
 ```
 
@@ -322,7 +329,8 @@ image_data = image_provider.generate_image(
 ## Related Directories
 
 - **Specification** (`../../spec/`) - QuestFoundry specification (Layers 0-5)
-- **CLI Tools** (`../../cli/python/`) - Command-line interface (Layer 7, planned)
+- **Compiler** (`../../lib/compiler/`) - Spec compiler (Layer 6, build-time)
+- **CLI Tools** (`../../cli/prompt_generator/`) - Command-line tools (Layer 7)
 
 ## Development Guidelines
 
