@@ -74,9 +74,7 @@ class TestUserSettingsEndpoints:
 
     @patch("webui_api.routers.user_settings.get_user_provider_config")
     @patch("webui_api.routers.user_settings.save_user_provider_config")
-    def test_update_provider_keys(
-        self, mock_save_config, mock_get_config, client
-    ):
+    def test_update_provider_keys(self, mock_save_config, mock_get_config, client):
         """Test updating provider keys"""
         # Mock existing config
         mock_get_config.return_value = ProviderConfig()
@@ -107,9 +105,7 @@ class TestUserSettingsEndpoints:
     ):
         """Test updating only some provider keys"""
         # Mock existing config with OpenAI key
-        mock_get_config.return_value = ProviderConfig(
-            openai_api_key="sk-existing"
-        )
+        mock_get_config.return_value = ProviderConfig(openai_api_key="sk-existing")
 
         response = client.put(
             "/user/settings/keys",

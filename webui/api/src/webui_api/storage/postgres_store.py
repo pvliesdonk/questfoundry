@@ -7,11 +7,9 @@ project_id to enable multiple projects in a shared database.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any
 
-import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
@@ -70,7 +68,14 @@ class PostgresStore(StateStore):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT name, description, version, author, created, modified, metadata
+                    SELECT
+                        name,
+                        description,
+                        version,
+                        author,
+                        created,
+                        modified,
+                        metadata
                     FROM project_info WHERE project_id = %s
                     """,
                     (self.project_id,),
@@ -96,8 +101,17 @@ class PostgresStore(StateStore):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO project_info 
-                        (project_id, name, description, version, author, created, modified, metadata)
+                    INSERT INTO project_info
+                        (
+                            project_id,
+                            name,
+                            description,
+                            version,
+                            author,
+                            created,
+                            modified,
+                            metadata
+                        )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (project_id)
                     DO UPDATE SET
@@ -190,7 +204,7 @@ class PostgresStore(StateStore):
         # Add JSONB filters
         if filters:
             for key, value in filters.items():
-                query += f" AND data->>%s = %s"
+                query += " AND data->>%s = %s"
                 params.append(key)
                 params.append(str(value))
 
@@ -231,7 +245,16 @@ class PostgresStore(StateStore):
                 cur.execute(
                     """
                     INSERT INTO tus
-                        (project_id, tu_id, status, snapshot_id, created, modified, data, metadata)
+                        (
+                            project_id,
+                            tu_id,
+                            status,
+                            snapshot_id,
+                            created,
+                            modified,
+                            data,
+                            metadata
+                        )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (project_id, tu_id)
                     DO UPDATE SET

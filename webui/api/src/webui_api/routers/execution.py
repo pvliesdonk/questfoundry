@@ -140,7 +140,7 @@ async def run_gatecheck(
     try:
         with orchestrator_context(
             project_id, user_id, provider_config
-        ) as orchestrator:
+        ) as _orchestrator:
             # Run gatecheck
             # Note: Actual implementation depends on orchestrator.run_gatecheck method
             # For now, returning placeholder

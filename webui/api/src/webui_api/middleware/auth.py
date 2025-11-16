@@ -37,7 +37,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not user_id:
             raise HTTPException(
                 status_code=401,
-                detail="Missing X-Forwarded-User header. API must run behind OIDC proxy.",
+                detail=(
+                    "Missing X-Forwarded-User header. API must run behind OIDC proxy."
+                ),
             )
 
         # Store user_id in request state for use by handlers

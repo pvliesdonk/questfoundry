@@ -79,9 +79,7 @@ def orchestrator_context(
         with lock.acquire(project_id, user_id):
             # Instantiate storage backends (project-scoped)
             cold_store = PostgresStore(settings.postgres_url, project_id)
-            hot_store = ValkeyStore(
-                settings.redis_url, project_id, ttl_seconds=86400
-            )
+            hot_store = ValkeyStore(settings.redis_url, project_id, ttl_seconds=86400)
 
             try:
                 # Instantiate library components

@@ -7,7 +7,6 @@ They use pytest fixtures to manage database connections and test data.
 from __future__ import annotations
 
 import os
-from datetime import datetime
 
 import pytest
 from questfoundry.models.artifact import Artifact
@@ -18,7 +17,10 @@ from webui_api.storage.postgres_store import PostgresStore
 # Skip all tests if PostgreSQL is not available
 pytestmark = pytest.mark.skipif(
     not os.getenv("TEST_POSTGRES_URL"),
-    reason="PostgreSQL database not available. Set TEST_POSTGRES_URL to run these tests.",
+    reason=(
+        "PostgreSQL database not available. "
+        "Set TEST_POSTGRES_URL to run these tests."
+    ),
 )
 
 
@@ -128,7 +130,10 @@ class TestArtifacts:
     """Test artifact operations"""
 
     def test_save_and_get_artifact(
-        self, store: PostgresStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: PostgresStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test saving and retrieving artifact"""
         # Need project info first
@@ -143,7 +148,10 @@ class TestArtifacts:
         assert retrieved.metadata["id"] == "HOOK-001"
 
     def test_update_artifact(
-        self, store: PostgresStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: PostgresStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test updating existing artifact"""
         store.save_project_info(sample_project_info)
@@ -202,7 +210,10 @@ class TestArtifacts:
         assert hooks[0].type == "hook_card"
 
     def test_delete_artifact(
-        self, store: PostgresStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: PostgresStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test deleting artifact"""
         store.save_project_info(sample_project_info)

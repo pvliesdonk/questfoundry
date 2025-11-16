@@ -87,8 +87,8 @@ async def create_project(
                 project_id, created_at = row
 
                 # Create project info in PostgresStore
-                # Note: This would normally use PostgresStore, but we're doing it directly
-                # to avoid circular dependencies and keep it simple
+                # Note: Normally we'd use PostgresStore, but we do it directly here
+                # to avoid circular dependencies and keep it simple.
                 from ..storage import PostgresStore
 
                 store = PostgresStore(settings.postgres_url, project_id)

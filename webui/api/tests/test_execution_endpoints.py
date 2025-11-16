@@ -1,9 +1,10 @@
 """Unit tests for execution endpoints"""
 
+from unittest.mock import Mock, patch
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch
 
 from webui_api.middleware import AuthMiddleware
 from webui_api.routers import execution_router
@@ -29,9 +30,7 @@ class TestExecutionEndpoints:
 
     @patch("webui_api.routers.execution.get_user_provider_config")
     @patch("webui_api.routers.execution.orchestrator_context")
-    def test_execute_goal_success(
-        self, mock_context, mock_get_config, client
-    ):
+    def test_execute_goal_success(self, mock_context, mock_get_config, client):
         """Test successful goal execution"""
         # Mock provider config
         from questfoundry.providers.config import ProviderConfig
@@ -64,9 +63,7 @@ class TestExecutionEndpoints:
 
     @patch("webui_api.routers.execution.get_user_provider_config")
     @patch("webui_api.routers.execution.orchestrator_context")
-    def test_execute_goal_with_context(
-        self, mock_context, mock_get_config, client
-    ):
+    def test_execute_goal_with_context(self, mock_context, mock_get_config, client):
         """Test goal execution with context"""
         from questfoundry.providers.config import ProviderConfig
 
@@ -125,9 +122,7 @@ class TestExecutionEndpoints:
 
     @patch("webui_api.routers.execution.get_user_provider_config")
     @patch("webui_api.routers.execution.orchestrator_context")
-    def test_run_gatecheck_success(
-        self, mock_context, mock_get_config, client
-    ):
+    def test_run_gatecheck_success(self, mock_context, mock_get_config, client):
         """Test successful gatecheck"""
         from questfoundry.providers.config import ProviderConfig
 
@@ -150,9 +145,7 @@ class TestExecutionEndpoints:
 
     @patch("webui_api.routers.execution.get_user_provider_config")
     @patch("webui_api.routers.execution.orchestrator_context")
-    def test_run_gatecheck_with_artifacts(
-        self, mock_context, mock_get_config, client
-    ):
+    def test_run_gatecheck_with_artifacts(self, mock_context, mock_get_config, client):
         """Test gatecheck with specific artifacts"""
         from questfoundry.providers.config import ProviderConfig
 

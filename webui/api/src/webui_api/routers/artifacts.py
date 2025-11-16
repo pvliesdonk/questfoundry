@@ -11,8 +11,6 @@ from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
 from ..dependencies import create_storage_backend, get_postgres_pool, get_redis_client
-from ..storage.postgres_store import PostgresStore
-from ..storage.valkey_store import ValkeyStore
 
 router = APIRouter(prefix="/projects/{project_id}/artifacts", tags=["artifacts"])
 
@@ -43,11 +41,17 @@ def check_project_ownership(
     with postgres_pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM project_ownership WHERE project_id = %s AND owner_user_id = %s",
-                (project_id, user_id)
+                (
+                    "SELECT 1 FROM project_ownership WHERE project_id = %s "
+                    "AND owner_user_id = %s"
+                ),
+                (project_id, user_id),
             )
             if not cur.fetchone():
-                raise HTTPException(status_code=403, detail="Not authorized to access this project")
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to access this project",
+                )
 
 
 @router.post("", response_model=ArtifactModel, status_code=201)
@@ -55,7 +59,10 @@ async def create_artifact(
     project_id: str,
     artifact: ArtifactModel,
     request: Request,
-    storage: Literal["hot", "cold"] = Query("cold", description="Storage backend (hot=ephemeral, cold=persistent)"),
+    storage: Literal["hot", "cold"] = Query(
+        "cold",
+        description="Storage backend (hot=ephemeral, cold=persistent)",
+    ),
     postgres_pool: ConnectionPool = Depends(get_postgres_pool),
     redis_client: redis.Redis = Depends(get_redis_client),
 ):
@@ -78,15 +85,15 @@ async def create_artifact(
 
     # Validate artifact has ID
     if "id" not in artifact.metadata:
-        raise HTTPException(status_code=400, detail="Artifact must have 'id' in metadata")
+        raise HTTPException(
+            status_code=400, detail="Artifact must have 'id' in metadata"
+        )
 
     # Create Artifact object (from questfoundry library)
     from questfoundry.data_models import Artifact as QFArtifact
 
     qf_artifact = QFArtifact(
-        type=artifact.type,
-        data=artifact.data,
-        metadata=artifact.metadata
+        type=artifact.type, data=artifact.data, metadata=artifact.metadata
     )
 
     # Get storage backend with shared pools
@@ -131,17 +138,11 @@ async def list_artifacts(
 
     # List artifacts (no need to close - shared pools)
     artifacts = backend.list_artifacts(
-        artifact_type=artifact_type,
-        filters=filters if filters else None
+        artifact_type=artifact_type, filters=filters if filters else None
     )
 
     return [
-        ArtifactModel(
-            type=a.type,
-            data=a.data,
-            metadata=a.metadata
-        )
-        for a in artifacts
+        ArtifactModel(type=a.type, data=a.data, metadata=a.metadata) for a in artifacts
     ]
 
 
@@ -179,9 +180,7 @@ async def get_artifact(
         raise HTTPException(status_code=404, detail=f"Artifact {artifact_id} not found")
 
     return ArtifactModel(
-        type=artifact.type,
-        data=artifact.data,
-        metadata=artifact.metadata
+        type=artifact.type, data=artifact.data, metadata=artifact.metadata
     )
 
 
@@ -216,7 +215,7 @@ async def update_artifact(
     if "id" in artifact.metadata and artifact.metadata["id"] != artifact_id:
         raise HTTPException(
             status_code=400,
-            detail=f"Artifact ID mismatch: {artifact.metadata['id']} != {artifact_id}"
+            detail=f"Artifact ID mismatch: {artifact.metadata['id']} != {artifact_id}",
         )
 
     # Ensure ID is set
@@ -226,9 +225,7 @@ async def update_artifact(
     from questfoundry.data_models import Artifact as QFArtifact
 
     qf_artifact = QFArtifact(
-        type=artifact.type,
-        data=artifact.data,
-        metadata=artifact.metadata
+        type=artifact.type, data=artifact.data, metadata=artifact.metadata
     )
 
     # Get storage backend with shared pools

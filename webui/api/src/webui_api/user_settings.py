@@ -6,8 +6,8 @@ Keys are encrypted using Fernet symmetric encryption and stored in PostgreSQL.
 
 from __future__ import annotations
 
-from psycopg_pool import ConnectionPool
 from cryptography.fernet import Fernet
+from psycopg_pool import ConnectionPool
 from questfoundry.providers.config import ProviderConfig
 
 from .config import settings
@@ -28,8 +28,9 @@ def encrypt_keys(provider_config: ProviderConfig) -> bytes:
     """
     if not settings.encryption_key:
         raise ValueError(
-            "WEBUI_ENCRYPTION_KEY must be set. "
-            "Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+            "WEBUI_ENCRYPTION_KEY must be set. Generate with: "
+            "python -c 'from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())'"
         )
 
     f = Fernet(settings.encryption_key.encode())
@@ -59,7 +60,9 @@ def decrypt_keys(encrypted: bytes) -> ProviderConfig:
     return ProviderConfig.model_validate_json(data)
 
 
-async def get_user_provider_config(user_id: str, postgres_pool: ConnectionPool) -> ProviderConfig:
+async def get_user_provider_config(
+    user_id: str, postgres_pool: ConnectionPool
+) -> ProviderConfig:
     """
     Get user's decrypted provider configuration using shared connection pool.
 

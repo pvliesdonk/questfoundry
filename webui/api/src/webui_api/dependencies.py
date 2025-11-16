@@ -9,13 +9,11 @@ from __future__ import annotations
 from typing import Literal
 
 import redis
-from fastapi import Depends
-from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
-from .config import Settings, get_settings
+from .config import Settings
 from .storage import PostgresStore, ValkeyStore
-
 
 # Global pool instances (initialized at startup)
 _postgres_pool: ConnectionPool | None = None
@@ -118,7 +116,9 @@ def create_storage_backend(
     Example:
         postgres_pool = Depends(get_postgres_pool)
         redis_client = Depends(get_redis_client)
-        backend = create_storage_backend(project_id, "cold", postgres_pool, redis_client)
+        backend = create_storage_backend(
+            project_id, "cold", postgres_pool, redis_client
+        )
     """
     if storage == "cold":
         # Create PostgresStore with shared pool (bypass __init__)

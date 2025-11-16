@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime
 
 import pytest
 from questfoundry.models.artifact import Artifact
@@ -42,18 +41,18 @@ def project_id() -> str:
 def store(redis_url: str, project_id: str) -> ValkeyStore:
     """Create ValkeyStore instance for testing"""
     store = ValkeyStore(redis_url, project_id, ttl_seconds=3600)  # 1 hour for tests
-    
+
     # Clean up any existing test data
     pattern = f"hot:{project_id}:*"
     for key in store.client.scan_iter(match=pattern, count=100):
         store.client.delete(key)
-    
+
     yield store
-    
+
     # Cleanup after test
     for key in store.client.scan_iter(match=pattern, count=100):
         store.client.delete(key)
-    
+
     store.close()
 
 
@@ -140,10 +139,10 @@ class TestProjectInfo:
     ):
         """Test that project info has TTL set"""
         store.save_project_info(sample_project_info)
-        
+
         key = f"hot:{store.project_id}:project_info"
         ttl = store.client.ttl(key)
-        
+
         # TTL should be positive and close to configured value
         assert ttl > 0
         assert ttl <= store.ttl_seconds
@@ -153,7 +152,10 @@ class TestArtifacts:
     """Test artifact operations"""
 
     def test_save_and_get_artifact(
-        self, store: ValkeyStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: ValkeyStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test saving and retrieving artifact"""
         # Need project info first
@@ -168,7 +170,10 @@ class TestArtifacts:
         assert retrieved.metadata["id"] == "HOOK-001"
 
     def test_update_artifact(
-        self, store: ValkeyStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: ValkeyStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test updating existing artifact"""
         store.save_project_info(sample_project_info)
@@ -190,9 +195,7 @@ class TestArtifacts:
         retrieved = store.get_artifact("NONEXISTENT")
         assert retrieved is None
 
-    def test_list_artifacts(
-        self, store: ValkeyStore, sample_project_info: ProjectInfo
-    ):
+    def test_list_artifacts(self, store: ValkeyStore, sample_project_info: ProjectInfo):
         """Test listing artifacts"""
         store.save_project_info(sample_project_info)
 
@@ -235,16 +238,14 @@ class TestArtifacts:
         # Create artifacts with different data
         store.save_artifact(
             Artifact(
-                type="hook_card",
-                data={"status": "draft"},
-                metadata={"id": "HOOK-001"}
+                type="hook_card", data={"status": "draft"}, metadata={"id": "HOOK-001"}
             )
         )
         store.save_artifact(
             Artifact(
                 type="hook_card",
                 data={"status": "published"},
-                metadata={"id": "HOOK-002"}
+                metadata={"id": "HOOK-002"},
             )
         )
 
@@ -253,7 +254,10 @@ class TestArtifacts:
         assert drafts[0].metadata["id"] == "HOOK-001"
 
     def test_delete_artifact(
-        self, store: ValkeyStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: ValkeyStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test deleting artifact"""
         store.save_project_info(sample_project_info)
@@ -284,15 +288,18 @@ class TestArtifacts:
             store.save_artifact(artifact)
 
     def test_artifact_has_ttl(
-        self, store: ValkeyStore, sample_project_info: ProjectInfo, sample_artifact: Artifact
+        self,
+        store: ValkeyStore,
+        sample_project_info: ProjectInfo,
+        sample_artifact: Artifact,
     ):
         """Test that artifacts have TTL set"""
         store.save_project_info(sample_project_info)
         store.save_artifact(sample_artifact)
-        
+
         key = f"hot:{store.project_id}:artifacts:{sample_artifact.type}:HOOK-001"
         ttl = store.client.ttl(key)
-        
+
         # TTL should be positive
         assert ttl > 0
         assert ttl <= store.ttl_seconds
@@ -365,10 +372,10 @@ class TestTUs:
         """Test that TUs have TTL set"""
         store.save_project_info(sample_project_info)
         store.save_tu(sample_tu)
-        
+
         key = f"hot:{store.project_id}:tus:{sample_tu.tu_id}"
         ttl = store.client.ttl(key)
-        
+
         assert ttl > 0
         assert ttl <= store.ttl_seconds
 
@@ -406,9 +413,7 @@ class TestSnapshots:
         with pytest.raises(ValueError, match="already exists"):
             store.save_snapshot(sample_snapshot)
 
-    def test_list_snapshots(
-        self, store: ValkeyStore, sample_project_info: ProjectInfo
-    ):
+    def test_list_snapshots(self, store: ValkeyStore, sample_project_info: ProjectInfo):
         """Test listing snapshots"""
         store.save_project_info(sample_project_info)
 
@@ -461,10 +466,10 @@ class TestSnapshots:
         """Test that snapshots have TTL set"""
         store.save_project_info(sample_project_info)
         store.save_snapshot(sample_snapshot)
-        
+
         key = f"hot:{store.project_id}:snapshots:{sample_snapshot.snapshot_id}"
         ttl = store.client.ttl(key)
-        
+
         assert ttl > 0
         assert ttl <= store.ttl_seconds
 
@@ -506,7 +511,7 @@ class TestProjectIsolation:
                 store1.client.delete(key)
             for key in store2.client.scan_iter(match="hot:project-2:*", count=100):
                 store2.client.delete(key)
-            
+
             store1.close()
             store2.close()
 
@@ -520,30 +525,32 @@ class TestTTLBehavior:
         """Test that artifacts expire after TTL (requires fast TTL)"""
         # Use very short TTL for this test
         store = ValkeyStore(redis_url, "test-ttl-project", ttl_seconds=2)
-        
+
         try:
             store.save_project_info(sample_project_info)
-            
+
             artifact = Artifact(
                 type="hook_card",
                 data={"name": "Expiring Hook"},
                 metadata={"id": "HOOK-EXPIRE"},
             )
             store.save_artifact(artifact)
-            
+
             # Should exist immediately
             retrieved = store.get_artifact("HOOK-EXPIRE")
             assert retrieved is not None
-            
+
             # Wait for expiration
             time.sleep(3)
-            
+
             # Should be expired
             retrieved = store.get_artifact("HOOK-EXPIRE")
             assert retrieved is None
-            
+
         finally:
             # Cleanup
-            for key in store.client.scan_iter(match="hot:test-ttl-project:*", count=100):
+            for key in store.client.scan_iter(
+                match="hot:test-ttl-project:*", count=100
+            ):
                 store.client.delete(key)
             store.close()

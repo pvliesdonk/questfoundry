@@ -7,6 +7,7 @@ Session 6 completes Phase 4 (Database & Deployment) with comprehensive validatio
 ## Completed Tasks
 
 ### Database Validation ✅
+
 - [x] Created comprehensive schema tests (`test_database_schema.py`)
 - [x] Test all tables are created correctly
 - [x] Test all indexes are created correctly
@@ -17,6 +18,7 @@ Session 6 completes Phase 4 (Database & Deployment) with comprehensive validatio
 - [x] 25 test cases covering schema validation
 
 ### Docker Validation ✅
+
 - [x] Created Docker build tests (`test_docker_builds.py`)
 - [x] Test API Dockerfile builds successfully
 - [x] Test multi-stage build pattern is used
@@ -30,6 +32,7 @@ Session 6 completes Phase 4 (Database & Deployment) with comprehensive validatio
 - [x] 15 test cases covering Docker validation
 
 ### Deployment Validation ✅
+
 - [x] Created deployment validation script (`validate_deployment.sh`)
 - [x] Automated full stack testing
 - [x] Service startup validation
@@ -42,11 +45,13 @@ Session 6 completes Phase 4 (Database & Deployment) with comprehensive validatio
 ## Implementation Statistics
 
 **Session 6:**
+
 - Files Created: 3 (2 test files + 1 script)
 - Test Cases: 40 (25 database + 15 Docker)
 - Lines of Code: ~500 (tests + script)
 
 **Total Progress (Sessions 1-6):**
+
 - Sessions Complete: 6
 - Phases Complete: 4 of 7 (57%)
 - Code Lines: 3,756+
@@ -82,6 +87,7 @@ docker rm postgres-test
 ```
 
 **Test Coverage:**
+
 - ✅ Table creation (6 tests)
 - ✅ Index creation (5 tests)
 - ✅ Trigger functionality (2 tests)
@@ -99,6 +105,7 @@ pytest tests/test_docker_builds.py -v
 ```
 
 **Test Coverage:**
+
 - ✅ Dockerfile builds successfully
 - ✅ Multi-stage build verification
 - ✅ Health check configuration
@@ -120,6 +127,7 @@ cd webui/api
 ```
 
 **What It Tests:**
+
 1. ✅ docker-compose.yml validity
 2. ✅ Docker image builds (API + PWA)
 3. ✅ Service startup (PostgreSQL, Valkey, API, PWA)
@@ -131,6 +139,7 @@ cd webui/api
 9. ✅ Automatic cleanup
 
 **Output Example:**
+
 ```
 ======================================================================
 QuestFoundry WebUI - Deployment Validation
@@ -160,18 +169,22 @@ All validation checks passed!
 ## Files Changed (Session 6)
 
 **New Test Files:**
+
 - `webui/api/tests/test_database_schema.py` - Database schema validation (25 tests)
 - `webui/api/tests/test_docker_builds.py` - Docker build and runtime tests (15 tests)
 
 **New Scripts:**
+
 - `webui/api/validate_deployment.sh` - Automated deployment validation script
 
 **New Documentation:**
+
 - `webui/SESSION_6_SUMMARY.md` - This file
 
 ## Database Schema Validation Details
 
 ### Tables Tested
+
 1. `user_settings` - User BYOK storage
 2. `project_ownership` - Project ownership and metadata
 3. `project_info` - Per-project configuration
@@ -180,6 +193,7 @@ All validation checks passed!
 6. `snapshots` - Immutable checkpoints
 
 ### Indexes Tested
+
 - `idx_user_settings_updated` - User settings update timestamp
 - `idx_project_ownership_owner` - Owner lookup
 - `idx_project_ownership_updated` - Ownership update timestamp
@@ -192,6 +206,7 @@ All validation checks passed!
 - `idx_snapshots_created` - Snapshot creation time
 
 ### Triggers Tested
+
 - `update_user_settings_timestamp` - Auto-update `updated_at`
 - `update_project_ownership_timestamp` - Auto-update `updated_at`
 - `update_project_info_modified` - Auto-update `modified`
@@ -199,6 +214,7 @@ All validation checks passed!
 - `update_tus_modified` - Auto-update `modified`
 
 ### Constraints Tested
+
 - Foreign key cascade deletes (project → artifacts)
 - Check constraint on `project_id` format
 - Primary key constraints
@@ -207,6 +223,7 @@ All validation checks passed!
 ## Docker Build Validation Details
 
 ### Dockerfile Validation
+
 - ✅ Multi-stage build (builder + final)
 - ✅ Uses Python 3.11 slim
 - ✅ Installs uv for dependency management
@@ -217,6 +234,7 @@ All validation checks passed!
 - ✅ Installs runtime dependencies (libpq5)
 
 ### Container Runtime Validation
+
 - ✅ Container starts successfully
 - ✅ Health endpoint responds
 - ✅ Root endpoint responds
@@ -225,6 +243,7 @@ All validation checks passed!
 - ✅ Uvicorn starts correctly
 
 ### docker-compose.yml Validation
+
 - ✅ Valid YAML syntax
 - ✅ All required services defined (postgres, valkey, api, pwa)
 - ✅ Health checks configured for all services
@@ -241,6 +260,7 @@ All validation checks passed!
 **Before Production Deployment:**
 
 1. **Change All Passwords**
+
    ```yaml
    # In docker-compose.yml, change:
    POSTGRES_PASSWORD: <strong-random-password>
@@ -249,9 +269,11 @@ All validation checks passed!
    ```
 
 2. **Generate Encryption Key**
+
    ```bash
    python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
    ```
+
    Set as `WEBUI_ENCRYPTION_KEY` in docker-compose.yml
 
 3. **Configure TLS/SSL**
@@ -304,10 +326,11 @@ All validation checks passed!
 ### Backup Strategy
 
 1. **PostgreSQL Backups**
+
    ```bash
    # Automated backup
    docker compose exec postgres pg_dump -U questfoundry questfoundry > backup.sql
-   
+
    # Restore
    docker compose exec -T postgres psql -U questfoundry questfoundry < backup.sql
    ```
@@ -325,6 +348,7 @@ All validation checks passed!
 ## Next Steps
 
 **Phase 5: PWA Implementation**
+
 - [ ] Initialize React project with Vite
 - [ ] Create API client
 - [ ] Build core components
@@ -337,6 +361,7 @@ All validation checks passed!
 - [ ] PWA capabilities
 
 **Phase 6: CI/CD**
+
 - [ ] GitHub Actions workflow for CI
 - [ ] GitHub Actions workflow for CD
 - [ ] Container image publishing to GHCR

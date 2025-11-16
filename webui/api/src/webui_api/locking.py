@@ -47,9 +47,7 @@ class ProjectLock:
         self.timeout = timeout
 
     @contextmanager
-    def acquire(
-        self, project_id: str, user_id: str
-    ) -> Generator[None, None, None]:
+    def acquire(self, project_id: str, user_id: str) -> Generator[None, None, None]:
         """
         Acquire lock for project.
 

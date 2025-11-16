@@ -83,9 +83,7 @@ class TestProjectEndpoints:
 
     @patch("webui_api.routers.projects.psycopg.connect")
     @patch("webui_api.routers.projects.PostgresStore")
-    def test_list_projects_empty(
-        self, mock_store_class, mock_connect, client
-    ):
+    def test_list_projects_empty(self, mock_store_class, mock_connect, client):
         """Test listing projects when user has none"""
         mock_conn = Mock()
         mock_cur = Mock()
@@ -107,9 +105,7 @@ class TestProjectEndpoints:
 
     @patch("webui_api.routers.projects.psycopg.connect")
     @patch("webui_api.routers.projects.PostgresStore")
-    def test_get_project_success(
-        self, mock_store_class, mock_connect, client
-    ):
+    def test_get_project_success(self, mock_store_class, mock_connect, client):
         """Test getting project details"""
         from questfoundry.state.types import ProjectInfo
 

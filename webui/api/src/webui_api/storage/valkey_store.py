@@ -104,7 +104,7 @@ class ValkeyStore(StateStore):
             raise ValueError("Artifact must have 'id' in metadata")
 
         key = self._key("artifacts", artifact.type, artifact_id)
-        
+
         # Add timestamps if not present
         now = datetime.now().isoformat()
         if "created" not in artifact.metadata:
@@ -124,7 +124,7 @@ class ValkeyStore(StateStore):
         # Try to find artifact across all types
         # Use SCAN to find the key since we don't know the type
         pattern = self._key("artifacts", "*", artifact_id)
-        
+
         for key in self.client.scan_iter(match=pattern, count=100):
             data_str = self.client.get(key)
             if data_str:
@@ -134,7 +134,7 @@ class ValkeyStore(StateStore):
                     data=data["data"],
                     metadata=data["metadata"],
                 )
-        
+
         return None
 
     def list_artifacts(
@@ -148,12 +148,10 @@ class ValkeyStore(StateStore):
             data_str = self.client.get(key)
             if data_str:
                 data = json.loads(data_str)
-                
+
                 # Apply filters
                 if filters:
-                    match = all(
-                        data["data"].get(k) == v for k, v in filters.items()
-                    )
+                    match = all(data["data"].get(k) == v for k, v in filters.items())
                     if not match:
                         continue
 
@@ -166,9 +164,7 @@ class ValkeyStore(StateStore):
                 )
 
         # Sort by modified time (newest first)
-        artifacts.sort(
-            key=lambda a: a.metadata.get("modified", ""), reverse=True
-        )
+        artifacts.sort(key=lambda a: a.metadata.get("modified", ""), reverse=True)
 
         return artifacts
 
@@ -176,12 +172,12 @@ class ValkeyStore(StateStore):
         """Delete artifact within current project namespace"""
         # Find and delete the artifact
         pattern = self._key("artifacts", "*", artifact_id)
-        
+
         deleted = False
         for key in self.client.scan_iter(match=pattern, count=100):
             self.client.delete(key)
             deleted = True
-        
+
         return deleted
 
     def save_tu(self, tu: TUState) -> None:
@@ -205,7 +201,7 @@ class ValkeyStore(StateStore):
         """Get TU by ID within current project namespace"""
         key = self._key("tus", tu_id)
         data_str = self.client.get(key)
-        
+
         if not data_str:
             return None
 
@@ -229,7 +225,7 @@ class ValkeyStore(StateStore):
             data_str = self.client.get(key)
             if data_str:
                 data = json.loads(data_str)
-                
+
                 # Apply filters
                 if filters:
                     match = True
@@ -261,7 +257,7 @@ class ValkeyStore(StateStore):
     def save_snapshot(self, snapshot: SnapshotInfo) -> None:
         """Save snapshot with project namespacing and TTL"""
         key = self._key("snapshots", snapshot.snapshot_id)
-        
+
         # Check if snapshot already exists (immutability)
         if self.client.exists(key):
             raise ValueError(
@@ -283,7 +279,7 @@ class ValkeyStore(StateStore):
         """Get snapshot by ID within current project namespace"""
         key = self._key("snapshots", snapshot_id)
         data_str = self.client.get(key)
-        
+
         if not data_str:
             return None
 
@@ -307,7 +303,7 @@ class ValkeyStore(StateStore):
             data_str = self.client.get(key)
             if data_str:
                 data = json.loads(data_str)
-                
+
                 # Apply filters
                 if filters and "tu_id" in filters:
                     if data.get("tu_id") != filters["tu_id"]:
