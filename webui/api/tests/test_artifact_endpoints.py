@@ -1,11 +1,12 @@
 """Tests for artifact operations endpoints."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from questfoundry.data_models import Artifact
+from questfoundry.models.artifact import Artifact
 
+from webui_api.dependencies import get_postgres_pool, get_redis_client
 from webui_api.main import app
 
 
@@ -25,6 +26,16 @@ def mock_storage():
     storage.delete_artifact = Mock()
     storage.close = Mock()
     return storage
+
+
+@pytest.fixture(autouse=True)
+def override_dependencies():
+    """Override DB/cache dependencies with mocks."""
+    app.dependency_overrides[get_postgres_pool] = lambda: Mock()
+    app.dependency_overrides[get_redis_client] = lambda: Mock()
+    yield
+    app.dependency_overrides.pop(get_postgres_pool, None)
+    app.dependency_overrides.pop(get_redis_client, None)
 
 
 @pytest.fixture
@@ -52,7 +63,8 @@ class TestCreateArtifact:
     ):
         """Test creating artifact in cold storage."""
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.post(
                 "/projects/test-project/artifacts?storage=cold",
@@ -66,7 +78,7 @@ class TestCreateArtifact:
         assert data["metadata"]["id"] == "HOOK-001"
 
         # Verify ownership checked
-        mock_ownership_check.assert_called_once_with("test-project", "alice")
+        mock_ownership_check.assert_called_once_with("test-project", "alice", ANY)
 
         # Verify artifact saved
         mock_storage.save_artifact.assert_called_once()
@@ -79,7 +91,8 @@ class TestCreateArtifact:
     ):
         """Test creating artifact in hot storage."""
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.post(
                 "/projects/test-project/artifacts?storage=hot",
@@ -101,7 +114,8 @@ class TestCreateArtifact:
         }
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.post(
                 "/projects/test-project/artifacts",
@@ -125,7 +139,7 @@ class TestCreateArtifact:
             "webui_api.routers.artifacts.check_project_ownership", side_effect=raise_403
         ):
             with patch(
-                "webui_api.routers.artifacts.get_storage_backend",
+                "webui_api.routers.artifacts.create_storage_backend",
                 return_value=mock_storage,
             ):
                 response = client.post(
@@ -145,7 +159,8 @@ class TestListArtifacts:
         mock_storage.list_artifacts.return_value = []
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.get(
                 "/projects/test-project/artifacts",
@@ -168,7 +183,8 @@ class TestListArtifacts:
         mock_storage.list_artifacts.return_value = [artifact]
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.get(
                 "/projects/test-project/artifacts?artifact_type=hook_card",
@@ -189,7 +205,8 @@ class TestListArtifacts:
     ):
         """Test listing artifacts with metadata filters."""
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.get(
                 "/projects/test-project/artifacts?status=draft&version=1",
@@ -217,7 +234,8 @@ class TestGetArtifact:
         mock_storage.get_artifact.return_value = artifact
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.get(
                 "/projects/test-project/artifacts/HOOK-001",
@@ -233,10 +251,11 @@ class TestGetArtifact:
 
     def test_get_artifact_not_found(self, client, mock_storage, mock_ownership_check):
         """Test getting non-existent artifact returns 404."""
-        mock_storage.get_artifact.side_effect = FileNotFoundError()
+        mock_storage.get_artifact.return_value = None
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.get(
                 "/projects/test-project/artifacts/NONEXISTENT",
@@ -255,7 +274,8 @@ class TestUpdateArtifact:
     ):
         """Test updating artifact."""
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.put(
                 "/projects/test-project/artifacts/HOOK-001",
@@ -281,7 +301,8 @@ class TestUpdateArtifact:
         }
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.put(
                 "/projects/test-project/artifacts/HOOK-001",
@@ -303,7 +324,8 @@ class TestUpdateArtifact:
         }
 
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.put(
                 "/projects/test-project/artifacts/HOOK-001",
@@ -322,7 +344,8 @@ class TestDeleteArtifact:
     def test_delete_artifact_success(self, client, mock_storage, mock_ownership_check):
         """Test deleting artifact."""
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.delete(
                 "/projects/test-project/artifacts/HOOK-001",
@@ -337,7 +360,8 @@ class TestDeleteArtifact:
     ):
         """Test deleting artifact from hot storage."""
         with patch(
-            "webui_api.routers.artifacts.get_storage_backend", return_value=mock_storage
+            "webui_api.routers.artifacts.create_storage_backend",
+            return_value=mock_storage,
         ):
             response = client.delete(
                 "/projects/test-project/artifacts/HOOK-001?storage=hot",
@@ -353,7 +377,7 @@ class TestStorageBackendSelection:
 
     def test_invalid_storage_backend(self, client, mock_ownership_check):
         """Test invalid storage backend returns 400."""
-        with patch("webui_api.routers.artifacts.get_storage_backend") as mock_get:
+        with patch("webui_api.routers.artifacts.create_storage_backend") as mock_get:
             from fastapi import HTTPException
 
             mock_get.side_effect = HTTPException(

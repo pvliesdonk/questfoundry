@@ -90,7 +90,7 @@ async def create_artifact(
         )
 
     # Create Artifact object (from questfoundry library)
-    from questfoundry.data_models import Artifact as QFArtifact
+    from questfoundry.models.artifact import Artifact as QFArtifact
 
     qf_artifact = QFArtifact(
         type=artifact.type, data=artifact.data, metadata=artifact.metadata
@@ -222,7 +222,7 @@ async def update_artifact(
     artifact.metadata["id"] = artifact_id
 
     # Create Artifact object
-    from questfoundry.data_models import Artifact as QFArtifact
+    from questfoundry.models.artifact import Artifact as QFArtifact
 
     qf_artifact = QFArtifact(
         type=artifact.type, data=artifact.data, metadata=artifact.metadata
