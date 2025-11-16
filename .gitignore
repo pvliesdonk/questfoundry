@@ -27,3 +27,6 @@ lib/python/site/
 # Temporary clone directories (used during mono-repo setup)
 spec-repo/
 py-repo/
+
+# build artifacts for compiler package
+lib/compiler/.spec_cache/

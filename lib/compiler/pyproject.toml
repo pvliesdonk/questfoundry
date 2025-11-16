@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "questfoundry-compiler"
 
-version = "0.6.0"
+version = "0.3.1"
 
 description = "Spec compiler for QuestFoundry - transforms atomic behavior primitives into runtime artifacts"
 readme = "README.md"
@@ -64,9 +64,9 @@ all-checks = ["format-check", "lint", "typecheck", "test"]
 packages = ["src/questfoundry_compiler"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"../../spec/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
-"../../spec/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
-"../../spec/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
+".spec_cache/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
+".spec_cache/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
+".spec_cache/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -77,10 +77,12 @@ include = [
 ]
 
 [tool.hatch.build.targets.sdist.force-include]
-"../../spec/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
-"../../spec/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
-"../../spec/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
-"../../spec" = "spec"
+".spec_cache/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
+".spec_cache/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
+".spec_cache/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
+
+[tool.hatch.build.hooks.custom]
+path = "src/questfoundry_compiler/build_hooks.py"
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -99,6 +101,10 @@ disable_error_code = ["misc", "no-any-return", "attr-defined"]
 module = ["yaml.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["hatchling.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -109,7 +115,7 @@ select = ["E", "F", "W", "I"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.6.0"
+version = "0.3.1"
 version_files = [
     "pyproject.toml:version"
 ]
