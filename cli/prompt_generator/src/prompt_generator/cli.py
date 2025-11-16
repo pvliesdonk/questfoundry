@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import questfoundry_compiler
 import questionary
@@ -391,7 +391,7 @@ def _resolve_ids(
 
 def _bundle_loop_prompts(
     loop_ids: list[str],
-    assembler: PromptAssembler,
+    assembler: Any,
     catalog: LoopCatalog,
     profile: ProfileMode,
 ) -> str:
@@ -630,7 +630,7 @@ def generate(
 
         # Initialize assembler
         resolver = ReferenceResolver(compiler.primitives, spec_dir)
-        assembler = PromptAssembler(compiler.primitives, resolver, spec_dir)
+        assembler: Any = PromptAssembler(compiler.primitives, resolver, spec_dir)
 
         # Generate prompt
         if loop_ids:

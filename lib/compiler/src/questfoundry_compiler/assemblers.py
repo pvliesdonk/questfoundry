@@ -160,7 +160,6 @@ class StandalonePromptAssembler:
         self.primitives = primitives
         self.resolver = resolver
         self.spec_root = Path(spec_root)
-        self._role_category_cache: dict[str, str] | None = None
 
     def assemble_role_prompt(self, adapter_id: str) -> str:
         """Assemble complete standalone prompt for a role.
@@ -882,12 +881,7 @@ class PromptAssembler:
         ]
         snippet_refs.extend(self._collect_role_safety_snippets(all_roles))
 
-        deduped: list[str] = []
-        seen_snippets: set[str] = set()
-        for ref in snippet_refs:
-            if ref and ref not in seen_snippets:
-                seen_snippets.add(ref)
-                deduped.append(ref)
+        deduped = list(dict.fromkeys(ref for ref in snippet_refs if ref))
 
         for snippet_ref in deduped:
             if profile == "brief":
@@ -996,7 +990,19 @@ class PromptAssembler:
         standalone: bool = False,
         profile: ProfileType = "reference",
     ) -> str:
-        """Assemble complete web prompt for specific roles."""
+        """Assemble complete web prompt for specific roles.
+
+        Args:
+            role_ids: Adapter IDs (e.g., `['lore_weaver', 'plotwright']`).
+            standalone: Include playbook procedures referenced by the roles.
+            profile: Interaction profile to shape the controller output.
+
+        Returns:
+            Markdown prompt ready for delivery to a chat agent.
+
+        Raises:
+            CompilationError: If any required primitive cannot be resolved.
+        """
 
         profile = self._normalize_profile(profile)
         sections: list[str] = []
