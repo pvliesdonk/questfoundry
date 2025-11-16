@@ -1,3 +1,9 @@
+## compiler-v0.6.0 (2025-11-16)
+
+### Feat
+
+- **compiler**: prep 0.5.0 release
+
 ## compiler-v0.4.0 (2025-11-16)
 
 ### Feat
