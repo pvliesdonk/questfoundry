@@ -334,7 +334,7 @@ image_data = image_provider.generate_image(
 
 ## Development Guidelines
 
-For Python development rules and conventions, see [`agents.md`](agents.md).
+For Python development rules and conventions, see [`AGENTS.md`](AGENTS.md).
 
 ## License
 
