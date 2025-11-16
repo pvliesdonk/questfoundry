@@ -80,6 +80,7 @@ include = [
 "../../spec/05-behavior" = "questfoundry_compiler/_bundled_spec/05-behavior"
 "../../spec/03-schemas" = "questfoundry_compiler/_bundled_spec/03-schemas"
 "../../spec/01-roles/charters" = "questfoundry_compiler/_bundled_spec/01-roles/charters"
+"../../spec" = "spec"
 
 [tool.pytest.ini_options]
 minversion = "7.0"
