@@ -1,3 +1,9 @@
+## compiler-v0.3.1 (2025-11-16)
+
+### Fix
+
+- **compiler**: not exportong some needed classes
+
 ## compiler-v0.3.0 (2025-11-15)
 
 ### Feat
