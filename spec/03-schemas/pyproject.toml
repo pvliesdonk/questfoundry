@@ -1,8 +1,0 @@
-[tool.commitizen]
-name = "cz_conventional_commits"
-version_files = ["SCHEMA_VERSION.txt"]
-tag_format = "schemas-v$version"
-bump_message = "bump(schemas): version $current_version → $new_version"
-update_changelog_on_bump = true
-changelog_file = "CHANGELOG.md"
-annotated_tag = true

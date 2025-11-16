@@ -132,8 +132,8 @@ version_files = [
 ]
 update_changelog_on_bump = true
 changelog_file = "CHANGELOG.md"
-tag_format = "v$version"
-bump_message = "bump: version $current_version → $new_version"
+tag_format = "lib-py-v$version"
+bump_message = "bump(lib/python): version $current_version → $new_version"
 annotated_tag = true
 
 [dependency-groups]
