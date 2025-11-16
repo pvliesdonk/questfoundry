@@ -609,14 +609,14 @@ wheels = [
 
 [[package]]
 name = "questfoundry-compiler"
-version = "0.2.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9c/68/c0813516431358bb8a0142d10b7e68f1f2e7d6a0c0919f1ff4d39f665a13/questfoundry_compiler-0.2.0.tar.gz", hash = "sha256:f3f881946153f6adabdb070e5eb0afdd616b9e8d4d4eadde1b045693b1b59ca9", size = 19631, upload-time = "2025-11-15T15:15:28.39Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/4b/9d8faebe24433834876deb4bf32eb8ca5faa695f94af6376ff56c562a71b/questfoundry_compiler-0.3.1.tar.gz", hash = "sha256:ee1e6707468d1f7d0db28674d0fcf8830f04c81ebfff2c1ced46770e1a8837e5", size = 23964, upload-time = "2025-11-16T11:53:23.058Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/43/8a5e1e3ee3d0d59718af0c5db536a3eee56d5e69470d7b1ae76a59936959/questfoundry_compiler-0.2.0-py3-none-any.whl", hash = "sha256:412e5d852bf8dd99400b34d6b77b3ff621f20d0f85fd9b5abfeb0c5f2227f33c", size = 21389, upload-time = "2025-11-15T15:15:26.975Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/88/0145b7661c704bcdb076b6a40eb75ae12f5602b62d65d18223adb421f6c0/questfoundry_compiler-0.3.1-py3-none-any.whl", hash = "sha256:badd9174ad518548a6c50df4feef0b7d9c3161650aff6fce24ad2927c434d276", size = 25586, upload-time = "2025-11-16T11:53:21.285Z" },
 ]
 
 [[package]]
@@ -624,7 +624,7 @@ name = "questfoundry-prompt-generator"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "questfoundry-compiler" },
+    { name = "questfoundry-compiler", specifier = ">=0.3.1" },
     { name = "questionary" },
     { name = "rich" },
     { name = "typer" },
@@ -647,7 +647,7 @@ requires-dist = [
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
-    { name = "questfoundry-compiler" },
+    { name = "questfoundry-compiler", specifier = ">=0.3.1" },
     { name = "questionary", specifier = ">=2.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
