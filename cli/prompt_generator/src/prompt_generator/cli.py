@@ -1,7 +1,7 @@
 """Command-line interface for QuestFoundry prompt generator."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import questfoundry_compiler  # type: ignore[import-untyped]
 import questionary
@@ -14,12 +14,16 @@ from questfoundry_compiler import (  # type: ignore[import-untyped]
 )
 from rich.console import Console
 
+from prompt_generator import spec_fetcher
+
 app = typer.Typer(
     name="qf-generate",
     help="Generate monolithic web agent prompts from QuestFoundry behavior primitives",
     add_completion=False,
 )
 console = Console()
+
+SpecSource = Literal["auto", "bundled", "release"]
 
 
 def _is_valid_spec_root(path: Path) -> bool:
@@ -48,7 +52,7 @@ def _bundled_spec_dir() -> Path | None:
     return None
 
 
-def _resolve_spec_dir(spec_dir: Path | None) -> Path:
+def _resolve_spec_dir(spec_dir: Path | None, spec_source: SpecSource) -> Path:
     if spec_dir is not None:
         resolved = spec_dir
         if not spec_dir.is_absolute():
@@ -58,19 +62,42 @@ def _resolve_spec_dir(spec_dir: Path | None) -> Path:
             raise typer.Exit(1)
         return resolved
 
+    def download_release_spec() -> Path:
+        try:
+            release_dir = spec_fetcher.download_latest_release_spec()
+        except spec_fetcher.SpecFetchError as exc:
+            console.print(f"[red]Failed to download released spec: {exc}[/red]")
+            raise typer.Exit(1)
+        console.print(
+            f"[green]Using released QuestFoundry spec from {release_dir}[/green]"
+        )
+        return release_dir
+
+    if spec_source == "bundled":
+        bundled = _bundled_spec_dir()
+        if bundled:
+            return bundled
+        console.print(
+            "[red]Bundled spec directory missing. Provide --spec-dir or use "
+            "--spec-source release.[/red]"
+        )
+        raise typer.Exit(1)
+
+    if spec_source == "release":
+        return download_release_spec()
+
     repo_spec = _find_repo_spec([Path.cwd()])
     if repo_spec:
         return repo_spec
 
     bundled = _bundled_spec_dir()
     if bundled:
-        console.print(
-            "[yellow]Spec directory not found locally; "
-            "using bundled copy from questfoundry-compiler[/yellow]"
-        )
         return bundled
 
-    console.print("[red]Error: Spec directory not found. Provide --spec-dir.[/red]")
+    console.print(
+        "[red]Error: Spec directory not found. Provide --spec-dir or use "
+        "--spec-source release to download the latest published spec.[/red]"
+    )
     raise typer.Exit(1)
 
 
@@ -155,6 +182,17 @@ def generate(
             help="Root directory of spec/ (auto-detected or bundled if omitted)",
         ),
     ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help=(
+                "Where to load QuestFoundry spec data from. Options: auto, "
+                "bundled, release."
+            ),
+        ),
+    ] = "auto",
     verbose: Annotated[
         bool,
         typer.Option(
@@ -186,7 +224,7 @@ def generate(
         # Interactive mode
         qf-generate
     """
-    spec_dir = _resolve_spec_dir(spec_dir)
+    spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     behavior_dir = spec_dir / "05-behavior"
     if not behavior_dir.exists():
@@ -325,9 +363,17 @@ def list_loops(
             help="Root directory of spec/ (auto-detected or bundled if omitted)",
         ),
     ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
+        ),
+    ] = "auto",
 ) -> None:
     """List all available loops/playbooks."""
-    spec_dir = _resolve_spec_dir(spec_dir)
+    spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
         compiler = SpecCompiler(spec_dir)
@@ -358,9 +404,17 @@ def list_roles(
             help="Root directory of spec/ (auto-detected or bundled if omitted)",
         ),
     ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
+        ),
+    ] = "auto",
 ) -> None:
     """List all available roles/adapters."""
-    spec_dir = _resolve_spec_dir(spec_dir)
+    spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
         compiler = SpecCompiler(spec_dir)
