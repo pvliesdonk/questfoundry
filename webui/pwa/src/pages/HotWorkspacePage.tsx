@@ -1,61 +1,55 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { listArtifacts } from '../api/artifacts';
-import { ArtifactResponse } from '../types/api';
+import { Artifact } from '../types/api';
+import ArtifactList from '../components/artifacts/ArtifactList';
 
-const HotWorkspacePage: React.FC = () => {
+export default function HotWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const [artifacts, setArtifacts] = useState<ArtifactResponse[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadArtifacts();
+    if (projectId) {
+      loadArtifacts();
+    }
   }, [projectId]);
 
-  const loadArtifacts = async () => {
+  async function loadArtifacts() {
     if (!projectId) return;
-    
+
     try {
       setLoading(true);
       setError(null);
       const data = await listArtifacts(projectId, 'hot');
       setArtifacts(data);
     } catch (err: any) {
-      setError(err.detail || 'Failed to load artifacts');
+      setError(err.detail || 'Failed to load hot artifacts');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Group artifacts by type
-  const groupedArtifacts = artifacts.reduce((acc, artifact) => {
-    if (!acc[artifact.type]) {
-      acc[artifact.type] = [];
-    }
-    acc[artifact.type].push(artifact);
-    return acc;
-  }, {} as Record<string, ArtifactResponse[]>);
+  }
 
   if (loading) {
     return (
       <div className="text-center py-12">
-        <div className="text-xl text-gray-600 dark:text-gray-400">Loading hot workspace...</div>
+        <div className="text-xl text-gray-600">Loading hot workspace...</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div>
       <div className="mb-8">
         <Link to="/projects" className="text-blue-600 hover:underline mb-2 inline-block">
           ← Back to Projects
         </Link>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Hot Workspace
+        <h1 className="text-3xl font-bold mb-2">
+          Hot Workspace 🔥
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Draft artifacts (TTL: 24 hours)
+        <p className="text-gray-600">
+          Working drafts and in-progress artifacts (24h TTL)
         </p>
       </div>
 
@@ -66,56 +60,25 @@ const HotWorkspacePage: React.FC = () => {
       )}
 
       {artifacts.length === 0 ? (
-        <div className="text-center py-12 card">
-          <p className="text-xl text-gray-600 dark:text-gray-400 mb-4">
+        <div className="text-center py-12 bg-white rounded-lg shadow p-6">
+          <p className="text-xl text-gray-600 mb-4">
             No drafts in hot workspace
           </p>
           <Link
             to={`/projects/${projectId}/execute`}
-            className="btn btn-primary"
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
           >
             Execute Goals to Create Drafts
           </Link>
         </div>
       ) : (
-        <div className="space-y-8">
-          {Object.entries(groupedArtifacts).map(([type, items]) => (
-            <div key={type}>
-              <h2 className="text-2xl font-semibold mb-4 capitalize">
-                {type.replace(/_/g, ' ')}
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  ({items.length})
-                </span>
-              </h2>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {items.map((artifact) => (
-                  <div key={artifact.id} className="card">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold">{artifact.metadata.id || artifact.id}</h3>
-                      <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                        HOT
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                      {artifact.metadata.title || artifact.data.title || 'No title'}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      Updated: {new Date(artifact.updated_at).toLocaleDateString()}
-                    </div>
-                    <div className="mt-4">
-                      <pre className="text-xs bg-gray-100 dark:bg-gray-700 p-2 rounded overflow-x-auto">
-                        {JSON.stringify(artifact.data, null, 2).slice(0, 200)}...
-                      </pre>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ArtifactList
+          artifacts={artifacts}
+          storage="hot"
+          projectId={projectId!}
+          onRefresh={loadArtifacts}
+        />
       )}
     </div>
   );
-};
-
-export default HotWorkspacePage;
+}

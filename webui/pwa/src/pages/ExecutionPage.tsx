@@ -1,17 +1,16 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { executeGoal, runGatecheck } from '../api/execution';
+import { executeGoal } from '../api/execution';
+import GatecheckForm from '../components/execution/GatecheckForm';
 
-const ExecutionPage: React.FC = () => {
+export default function ExecutionPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [goal, setGoal] = useState('');
   const [executing, setExecuting] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [gatecheckResult, setGatecheckResult] = useState<any>(null);
-  const [runningGatecheck, setRunningGatecheck] = useState(false);
 
-  const handleExecute = async (e: React.FormEvent) => {
+  async function handleExecute(e: React.FormEvent) {
     e.preventDefault();
     if (!projectId || !goal.trim()) return;
 
@@ -21,43 +20,31 @@ const ExecutionPage: React.FC = () => {
       setResult(null);
       const response = await executeGoal(projectId, goal);
       setResult(response);
+      setGoal(''); // Clear goal after successful execution
     } catch (err: any) {
-      setError(err.detail || 'Execution failed');
+      setError(err.detail || err.message || 'Execution failed');
     } finally {
       setExecuting(false);
     }
-  };
-
-  const handleGatecheck = async () => {
-    if (!projectId) return;
-
-    try {
-      setRunningGatecheck(true);
-      setGatecheckResult(null);
-      const response = await runGatecheck(projectId);
-      setGatecheckResult(response);
-    } catch (err: any) {
-      alert(err.detail || 'Gatecheck failed');
-    } finally {
-      setRunningGatecheck(false);
-    }
-  };
+  }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div className="mb-8">
         <Link to="/projects" className="text-blue-600 hover:underline mb-2 inline-block">
           ← Back to Projects
         </Link>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Goal Execution
+        <h1 className="text-3xl font-bold mb-2">
+          Goal Execution 🎯
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
+        <p className="text-gray-600">
           Use natural language to create story elements
         </p>
       </div>
 
-      <div className="card mb-6">
+      {/* Goal Execution Form */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-4">Create Story Elements</h2>
         <form onSubmit={handleExecute}>
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">
@@ -67,119 +54,66 @@ const ExecutionPage: React.FC = () => {
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               rows={4}
-              className="input"
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary"
               placeholder="Example: Create a hook card called 'The Mysterious Letter' that introduces the main mystery of the story"
               disabled={executing}
             />
           </div>
-          <div className="flex space-x-3">
-            <button
-              type="submit"
-              disabled={executing || !goal.trim()}
-              className="btn btn-primary"
-            >
-              {executing ? 'Executing...' : 'Execute Goal'}
-            </button>
-            <button
-              type="button"
-              onClick={handleGatecheck}
-              disabled={runningGatecheck}
-              className="btn btn-secondary"
-            >
-              {runningGatecheck ? 'Running...' : 'Run Gatecheck'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={executing || !goal.trim()}
+            className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 font-medium"
+          >
+            {executing ? 'Executing...' : 'Execute Goal'}
+          </button>
         </form>
-      </div>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {result && (
-        <div className="card mb-6">
-          <h2 className="text-xl font-semibold mb-4">Execution Result</h2>
-          <div className="mb-2">
-            <span
-              className={`text-sm px-2 py-1 rounded ${
-                result.status === 'success'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
-              }`}
-            >
-              {result.status}
-            </span>
+        {error && (
+          <div className="mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            <strong>Error:</strong> {error}
           </div>
-          <pre className="bg-gray-100 dark:bg-gray-700 p-4 rounded overflow-x-auto text-sm">
-            {JSON.stringify(result.result || result, null, 2)}
-          </pre>
-          {result.status === 'success' && (
-            <div className="mt-4">
+        )}
+
+        {result && (
+          <div className="mt-6 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+            <h3 className="font-semibold text-lg mb-2">✅ Success!</h3>
+            <p className="text-sm text-gray-700 mb-4">
+              Your goal has been executed. New artifacts have been created in the hot workspace.
+            </p>
+            <div className="flex space-x-3">
               <Link
                 to={`/projects/${projectId}/hot`}
-                className="text-blue-600 hover:underline"
+                className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
               >
                 View in Hot Workspace →
               </Link>
             </div>
-          )}
-        </div>
-      )}
-
-      {gatecheckResult && (
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4">Gatecheck Results</h2>
-          <div className="mb-4">
-            <span
-              className={`text-sm px-2 py-1 rounded ${
-                gatecheckResult.status === 'success'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}
-            >
-              {gatecheckResult.status}
-            </span>
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
+                View raw result
+              </summary>
+              <pre className="mt-2 bg-gray-100 p-4 rounded overflow-x-auto text-xs">
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </details>
           </div>
-          {gatecheckResult.issues && gatecheckResult.issues.length > 0 ? (
-            <div className="space-y-2">
-              {gatecheckResult.issues.map((issue: any, idx: number) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded border ${
-                    issue.severity === 'error'
-                      ? 'bg-red-50 border-red-200'
-                      : 'bg-yellow-50 border-yellow-200'
-                  }`}
-                >
-                  <div className="font-semibold text-sm capitalize">{issue.severity}</div>
-                  <div className="text-sm">{issue.message}</div>
-                  {issue.artifact_id && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Artifact: {issue.artifact_id}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-green-600">✓ All quality checks passed!</div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="card mt-6 bg-blue-50 dark:bg-blue-900">
-        <h3 className="font-semibold mb-2">Tips:</h3>
-        <ul className="text-sm space-y-1 text-gray-700 dark:text-gray-300">
-          <li>• Be specific about what you want to create</li>
-          <li>• Include details like names, descriptions, and relationships</li>
-          <li>• Run gatecheck to validate drafts before promoting to cold storage</li>
-          <li>• Check Hot Workspace to see created drafts</li>
+      {/* Gatecheck Form */}
+      {projectId && <GatecheckForm projectId={projectId} />}
+
+      {/* Tips */}
+      <div className="bg-blue-50 rounded-lg shadow p-6">
+        <h3 className="font-semibold mb-3">💡 Tips for Goal Execution</h3>
+        <ul className="text-sm space-y-2 text-gray-700">
+          <li>• <strong>Be specific:</strong> Include names, descriptions, and relationships</li>
+          <li>• <strong>One goal at a time:</strong> Break complex tasks into smaller goals</li>
+          <li>• <strong>Check drafts:</strong> View created artifacts in Hot Workspace</li>
+          <li>• <strong>Validate:</strong> Run gatecheck before promoting to cold storage</li>
+          <li>• <strong>Iterate:</strong> Refine drafts by executing refinement goals</li>
         </ul>
       </div>
     </div>
   );
-};
-
-export default ExecutionPage;
+}
