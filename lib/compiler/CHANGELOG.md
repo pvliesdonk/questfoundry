@@ -1,3 +1,13 @@
+## compiler-v0.6.0 (2025-11-17)
+
+### Feat
+
+- Add spec_fetcher module for downloading QuestFoundry specs from GitHub
+
+### Fix
+
+- Ensure UTF-8 encoding when writing prompt files
+
 ## compiler-v0.5.0 (2025-11-17)
 
 ### Feat
