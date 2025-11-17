@@ -33,7 +33,7 @@ ProfileMode = Literal["walkthrough", "reference", "brief"]
 
 def _configure_logging(verbosity: int) -> None:
     """Configure logging based on verbosity level.
-    
+
     Args:
         verbosity: 0 = WARNING, 1 = INFO, 2+ = DEBUG
     """
@@ -43,20 +43,22 @@ def _configure_logging(verbosity: int) -> None:
         level = logging.INFO
     else:
         level = logging.DEBUG
-    
+
     # Configure root logger with rich handler
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)]
+        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)],
     )
-    
+
     # Set level for questfoundry_compiler loggers
-    for name in ["questfoundry_compiler.spec_compiler", 
-                 "questfoundry_compiler.validators",
-                 "questfoundry_compiler.assemblers",
-                 "questfoundry_compiler.manifest_builder"]:
+    for name in [
+        "questfoundry_compiler.spec_compiler",
+        "questfoundry_compiler.validators",
+        "questfoundry_compiler.assemblers",
+        "questfoundry_compiler.manifest_builder",
+    ]:
         logging.getLogger(name).setLevel(level)
 
 
@@ -531,7 +533,7 @@ def generate(
             "--verbose",
             "-v",
             count=True,
-            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",
+            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",  # noqa: E501
         ),
     ] = 0,
 ) -> None:
@@ -559,7 +561,7 @@ def generate(
     """
     # Configure logging based on verbosity
     _configure_logging(verbose)
-    
+
     spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     behavior_dir = spec_dir / "05-behavior"
@@ -721,14 +723,14 @@ def list_loops(
             "--verbose",
             "-v",
             count=True,
-            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",
+            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",  # noqa: E501
         ),
     ] = 0,
 ) -> None:
     """List all available loops/playbooks."""
     # Configure logging based on verbosity
     _configure_logging(verbose)
-    
+
     spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
@@ -782,14 +784,14 @@ def list_roles(
             "--verbose",
             "-v",
             count=True,
-            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",
+            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",  # noqa: E501
         ),
     ] = 0,
 ) -> None:
     """List all available roles/adapters."""
     # Configure logging based on verbosity
     _configure_logging(verbose)
-    
+
     spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
