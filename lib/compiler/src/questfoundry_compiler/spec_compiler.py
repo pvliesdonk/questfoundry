@@ -124,7 +124,7 @@ class SpecCompiler:
         for md_file in directory.glob("*.md"):
             try:
                 logger.debug(f"Loading {prim_type} from {md_file.name}")
-                content = md_file.read_text()
+                content = md_file.read_text(encoding="utf8")
 
                 match = self.frontmatter_pattern.match(content)
                 if match:
