@@ -1,6 +1,6 @@
 [tool.commitizen]
 # This version is read by 'cz bump' to know what to increment.
-version = "0.8.0"
+version = "0.9.0"
 
 # Paths are relative to this .cz.toml file (i.e., inside spec/)
 version_files = [
