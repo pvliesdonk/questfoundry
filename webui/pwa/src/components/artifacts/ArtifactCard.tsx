@@ -8,10 +8,20 @@ interface Props {
   onRefresh: () => void;
 }
 
+const asString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
 export default function ArtifactCard({ artifact, storage }: Props) {
-  const id = artifact.metadata?.id || 'unknown';
-  const title = artifact.data?.title || artifact.data?.name || id;
-  const description = artifact.data?.description || artifact.data?.summary || '';
+  const rawId = asString(artifact.metadata?.id);
+  const id = rawId ?? 'unknown';
+  const title =
+    asString(artifact.data?.title) ??
+    asString(artifact.data?.name) ??
+    id;
+  const description =
+    asString(artifact.data?.description) ??
+    asString(artifact.data?.summary) ??
+    '';
 
   return (
     <div className={`bg-white rounded-lg shadow hover:shadow-lg transition p-4 border-l-4 ${

@@ -14,6 +14,8 @@ export interface Project extends ProjectInfo {
   created_at?: string;
 }
 
+export interface ProjectResponse extends Project {}
+
 export interface Artifact {
   type: string;
   data: Record<string, unknown>;

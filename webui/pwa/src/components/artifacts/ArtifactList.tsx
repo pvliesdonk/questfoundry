@@ -9,6 +9,9 @@ interface Props {
   onRefresh: () => void;
 }
 
+const asString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
 export default function ArtifactList({ artifacts, storage, projectId, onRefresh }: Props) {
   if (artifacts.length === 0) {
     return (
@@ -19,32 +22,37 @@ export default function ArtifactList({ artifacts, storage, projectId, onRefresh 
   }
 
   // Group artifacts by type
-  const grouped = artifacts.reduce((acc, artifact) => {
+  const grouped = artifacts.reduce<Record<string, Artifact[]>>((acc, artifact) => {
     const type = artifact.type;
     if (!acc[type]) {
       acc[type] = [];
     }
     acc[type].push(artifact);
     return acc;
-  }, {} as Record<string, Artifact[]>);
+  }, {});
+  const groupedEntries = Object.entries(grouped) as Array<[string, Artifact[]]>;
 
   return (
     <div className="space-y-8">
-      {Object.entries(grouped).map(([type, items]) => (
+      {groupedEntries.map(([type, items]) => (
         <div key={type}>
           <h2 className="text-xl font-semibold mb-4 capitalize">
             {type.replace(/_/g, ' ')}s ({items.length})
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map((artifact, idx) => (
-              <ArtifactCard
-                key={artifact.metadata?.id || `${type}-${idx}`}
-                artifact={artifact}
-                storage={storage}
-                projectId={projectId}
-                onRefresh={onRefresh}
-              />
-            ))}
+            {items.map((artifact, idx) => {
+              const metadataId = asString(artifact.metadata?.id);
+              const cardKey = metadataId ?? `${type}-${idx}`;
+              return (
+                <ArtifactCard
+                  key={cardKey}
+                  artifact={artifact}
+                  storage={storage}
+                  projectId={projectId}
+                  onRefresh={onRefresh}
+                />
+              );
+            })}
           </div>
         </div>
       ))}

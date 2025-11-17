@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { listProjects, createProject } from '../api/projects';
 import type { Project, ProjectInfo } from '../types/api';
-import ProjectCard from '../components/projects/ProjectCard';
 import CreateProjectModal from '../components/projects/CreateProjectModal';
 import { getErrorMessage } from '../utils/errorMessage';
 
