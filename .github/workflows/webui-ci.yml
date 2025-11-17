@@ -88,7 +88,7 @@ jobs:
         env:
           TEST_POSTGRES_URL: "postgresql://postgres:testpass@localhost:5432/testdb"
           TEST_REDIS_URL: "redis://localhost:6379/0"
-          WEBUI_ENCRYPTION_KEY: "test-key-for-ci-only-do-not-use-in-production="
+          WEBUI_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXRlc3Rpbmctb25seS0wMDAwMDA="
         run: uv run pytest -v --cov=src --cov-report=term-missing
 
       - name: Upload coverage

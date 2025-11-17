@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 from psycopg_pool import ConnectionPool
 from questfoundry.providers.config import ProviderConfig
 
-from .config import settings
+from . import config
 
 
 def encrypt_keys(provider_config: ProviderConfig) -> bytes:
@@ -26,14 +26,14 @@ def encrypt_keys(provider_config: ProviderConfig) -> bytes:
     Raises:
         ValueError: If encryption_key is not configured
     """
-    if not settings.encryption_key:
+    if not config.settings.encryption_key:
         raise ValueError(
             "WEBUI_ENCRYPTION_KEY must be set. Generate with: "
             "python -c 'from cryptography.fernet import Fernet; "
             "print(Fernet.generate_key().decode())'"
         )
 
-    f = Fernet(settings.encryption_key.encode())
+    f = Fernet(config.settings.encryption_key.encode())
     data = provider_config.model_dump_json()
     return f.encrypt(data.encode())
 
@@ -52,10 +52,10 @@ def decrypt_keys(encrypted: bytes) -> ProviderConfig:
         ValueError: If encryption_key is not configured
         cryptography.fernet.InvalidToken: If decryption fails
     """
-    if not settings.encryption_key:
+    if not config.settings.encryption_key:
         raise ValueError("WEBUI_ENCRYPTION_KEY not configured")
 
-    f = Fernet(settings.encryption_key.encode())
+    f = Fernet(config.settings.encryption_key.encode())
     data = f.decrypt(encrypted).decode()
     return ProviderConfig.model_validate_json(data)
 
