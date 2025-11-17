@@ -7,18 +7,24 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(spec/|lib/python/src/questfoundry/resources/)
+        exclude: ^(spec/|lib/python/src/questfoundry/resources/|webui/pwa/node_modules/)
       - id: end-of-file-fixer
-        exclude: ^(spec/|lib/python/src/questfoundry/resources/)
+        exclude: ^(spec/|lib/python/src/questfoundry/resources/|webui/pwa/node_modules/)
       - id: check-yaml
+        exclude: &node_modules_exclude ^(.*/)?node_modules/
       - id: check-json
-        exclude: ^(.*/)?node_modules/
+        exclude: *node_modules_exclude
       - id: check-toml
+        exclude: *node_modules_exclude
       - id: check-added-large-files
         args: ["--maxkb=1000"]
+        exclude: *node_modules_exclude
       - id: check-merge-conflict
+        exclude: *node_modules_exclude
       - id: check-case-conflict
+        exclude: *node_modules_exclude
       - id: mixed-line-ending
+        exclude: *node_modules_exclude
 
   # Python: Ruff (linting and formatting) - lib/compiler
   - repo: local
