@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Final
 
 DEFAULT_CACHE_DIR: Final = Path.home() / ".cache" / "questfoundry" / "spec"
-GITHUB_REPO: Final = "pvliesdonk/questfoundry-spec"
+GITHUB_REPO: Final = "pvliesdonk/questfoundry"
 API_BASE: Final = f"https://api.github.com/repos/{GITHUB_REPO}"
 USER_AGENT: Final = "questfoundry-prompt-generator"
 
@@ -50,13 +50,24 @@ def _extract_zip(archive_path: Path, target_dir: Path) -> None:
         extract_root = Path(tempfile.mkdtemp(prefix="qf-spec-extract-"))
         try:
             archive.extractall(extract_root)
-            try:
-                unpacked_root = next(extract_root.iterdir())
-            except StopIteration as exc:  # pragma: no cover
-                raise SpecFetchError("Downloaded archive was empty") from exc
+
+            # Prefer copying the directory that directly contains 05-behavior.
+            # Some release zips contain a top-level 'spec' directory (spec-all.zip),
+            # while GitHub repo zipballs contain the repo root with a nested 'spec/'.
+            candidate_root: Path | None = None
+            if (extract_root / "05-behavior").is_dir():
+                candidate_root = extract_root
+            elif (extract_root / "spec" / "05-behavior").is_dir():
+                candidate_root = extract_root / "spec"
+
+            if candidate_root is None:
+                raise SpecFetchError(
+                    "Downloaded archive is missing a spec/05-behavior/ directory"
+                )
+
             if target_dir.exists():
                 shutil.rmtree(target_dir)
-            shutil.copytree(unpacked_root, target_dir)
+            shutil.copytree(candidate_root, target_dir)
         finally:
             shutil.rmtree(extract_root, ignore_errors=True)
 
@@ -68,9 +79,18 @@ def _is_valid_spec_root(spec_root: Path) -> bool:
 def _fetch_release_info(tag: str | None = None) -> dict[str, Any]:
     if tag:
         url = f"{API_BASE}/releases/tags/{tag}"
-    else:
-        url = f"{API_BASE}/releases/latest"
-    return _request_json(url)
+        return _request_json(url)
+
+    # No explicit tag: prefer a release whose tag_name starts with 'spec-v'
+    releases = _request_json(f"{API_BASE}/releases")
+    if isinstance(releases, list):
+        for rel in releases:
+            tag_name = rel.get("tag_name") if isinstance(rel, dict) else None
+            if isinstance(tag_name, str) and tag_name.startswith("spec-v"):
+                return rel
+
+    # Fallback to the GitHub 'latest' release if no spec-tagged release found
+    return _request_json(f"{API_BASE}/releases/latest")
 
 
 def download_latest_release_spec(
@@ -87,7 +107,20 @@ def download_latest_release_spec(
     if _is_valid_spec_root(spec_dir):
         return spec_dir
 
-    archive_url = release_info.get("zipball_url")
+    # Prefer an attached asset named 'spec-all.zip' (browser_download_url)
+    archive_url = None
+    assets = release_info.get("assets") or []
+    if isinstance(assets, list):
+        for asset in assets:
+            name = asset.get("name") if isinstance(asset, dict) else None
+            if isinstance(name, str) and name.lower() == "spec-all.zip":
+                archive_url = asset.get("browser_download_url")
+                break
+
+    # Fallback to the release zipball if no spec-all asset found
+    if not archive_url:
+        archive_url = release_info.get("zipball_url")
+
     if not archive_url:
         raise SpecFetchError("Release response missing archive URL")
 

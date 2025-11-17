@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import click
 import questfoundry_compiler
 import questionary
 import typer
@@ -29,6 +30,46 @@ console = Console()
 
 SpecSource = Literal["auto", "bundled", "release"]
 ProfileMode = Literal["walkthrough", "reference", "brief"]
+
+
+# Global CLI callback to expose shared flags once for the whole app
+@app.callback(invoke_without_command=True)
+def main(
+    spec_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--spec-dir",
+            help="Root directory of spec/ (auto-detected or bundled if omitted)",
+        ),
+    ] = None,
+    spec_source: Annotated[
+        SpecSource,
+        typer.Option(
+            "--spec-source",
+            case_sensitive=False,
+            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
+        ),
+    ] = "auto",
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity (-v for INFO, -vv for DEBUG)",
+        ),
+    ] = 0,
+) -> None:
+    """Global options for spec location and verbosity.
+
+    These flags are available for all subcommands.
+    """
+    # Configure logging early based on global verbose flag
+    _configure_logging(verbose)
+
+    # Store values on the Typer context for subcommands to use
+    ctx = click.get_current_context()
+    ctx.obj = {"spec_dir": spec_dir, "spec_source": spec_source, "verbose": verbose}
 
 
 def _configure_logging(verbosity: int) -> None:
@@ -498,24 +539,6 @@ def generate(
             help="Output file path (defaults to stdout)",
         ),
     ] = None,
-    spec_dir: Annotated[
-        Path | None,
-        typer.Option(
-            "--spec-dir",
-            help="Root directory of spec/ (auto-detected or bundled if omitted)",
-        ),
-    ] = None,
-    spec_source: Annotated[
-        SpecSource,
-        typer.Option(
-            "--spec-source",
-            case_sensitive=False,
-            help=(
-                "Where to load QuestFoundry spec data from. Options: auto, "
-                "bundled, release."
-            ),
-        ),
-    ] = "auto",
     profile: Annotated[
         ProfileMode,
         typer.Option(
@@ -527,15 +550,6 @@ def generate(
             ),
         ),
     ] = "reference",
-    verbose: Annotated[
-        int,
-        typer.Option(
-            "--verbose",
-            "-v",
-            count=True,
-            help="Increase verbosity (-v for INFO, -vv for DEBUG)",
-        ),
-    ] = 0,
 ) -> None:
     """Generate monolithic web agent prompts.
 
@@ -559,6 +573,13 @@ def generate(
         # Interactive mode
         qf-generate
     """
+    # Read global flags from Typer context
+    ctx = click.get_current_context()
+    cfg = ctx.obj or {}
+    spec_dir = cfg.get("spec_dir")
+    spec_source = cfg.get("spec_source", "auto")
+    verbose = cfg.get("verbose", 0)
+
     # Configure logging based on verbosity
     _configure_logging(verbose)
 
@@ -701,33 +722,15 @@ def generate(
 
 
 @app.command()
-def list_loops(
-    spec_dir: Annotated[
-        Path | None,
-        typer.Option(
-            "--spec-dir",
-            help="Root directory of spec/ (auto-detected or bundled if omitted)",
-        ),
-    ] = None,
-    spec_source: Annotated[
-        SpecSource,
-        typer.Option(
-            "--spec-source",
-            case_sensitive=False,
-            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
-        ),
-    ] = "auto",
-    verbose: Annotated[
-        int,
-        typer.Option(
-            "--verbose",
-            "-v",
-            count=True,
-            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",  # noqa: E501
-        ),
-    ] = 0,
-) -> None:
+def list_loops() -> None:
     """List all available loops/playbooks."""
+    # Read global flags from Typer context
+    ctx = click.get_current_context()
+    cfg = ctx.obj or {}
+    spec_dir = cfg.get("spec_dir")
+    spec_source = cfg.get("spec_source", "auto")
+    verbose = cfg.get("verbose", 0)
+
     # Configure logging based on verbosity
     _configure_logging(verbose)
 
@@ -762,33 +765,15 @@ def list_loops(
 
 
 @app.command()
-def list_roles(
-    spec_dir: Annotated[
-        Path | None,
-        typer.Option(
-            "--spec-dir",
-            help="Root directory of spec/ (auto-detected or bundled if omitted)",
-        ),
-    ] = None,
-    spec_source: Annotated[
-        SpecSource,
-        typer.Option(
-            "--spec-source",
-            case_sensitive=False,
-            help="Where to load QuestFoundry spec data from (auto/bundled/release)",
-        ),
-    ] = "auto",
-    verbose: Annotated[
-        int,
-        typer.Option(
-            "--verbose",
-            "-v",
-            count=True,
-            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",  # noqa: E501
-        ),
-    ] = 0,
-) -> None:
+def list_roles() -> None:
     """List all available roles/adapters."""
+    # Read global flags from Typer context
+    ctx = click.get_current_context()
+    cfg = ctx.obj or {}
+    spec_dir = cfg.get("spec_dir")
+    spec_source = cfg.get("spec_source", "auto")
+    verbose = cfg.get("verbose", 0)
+
     # Configure logging based on verbosity
     _configure_logging(verbose)
 
