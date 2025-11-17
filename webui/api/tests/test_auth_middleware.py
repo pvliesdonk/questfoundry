@@ -1,7 +1,7 @@
 """Unit tests for authentication middleware"""
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from webui_api.middleware import AuthMiddleware
@@ -14,7 +14,7 @@ def app():
     app.add_middleware(AuthMiddleware)
 
     @app.get("/test")
-    async def test_endpoint(request):
+    async def test_endpoint(request: Request):
         return {"user_id": request.state.user_id}
 
     @app.get("/health")
@@ -41,9 +41,9 @@ class TestAuthMiddleware:
 
     def test_docs_endpoint_no_auth(self, client):
         """Docs endpoints should not require authentication"""
-        # Note: These will 404 but shouldn't get 401
+        # Docs should be accessible without auth
         response = client.get("/docs")
-        assert response.status_code == 404  # Not found, but not unauthorized
+        assert response.status_code != 401
 
     def test_missing_header_returns_401(self, client):
         """Request without X-Forwarded-User should return 401"""

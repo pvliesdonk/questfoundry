@@ -63,6 +63,7 @@ async def health_check() -> dict[str, str]:
 async def root() -> dict[str, str]:
     """Root endpoint"""
     return {
+        "service": "questfoundry-webui-api",
         "message": "QuestFoundry WebUI API",
         "version": "0.1.0",
         "docs": "/docs",

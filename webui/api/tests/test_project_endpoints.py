@@ -1,7 +1,8 @@
 """Unit tests for project management endpoints"""
 
 import os
-from unittest.mock import Mock, patch
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -40,8 +41,8 @@ class TestProjectEndpoints:
     def test_create_project(self, mock_store_class, mock_connect, client):
         """Test project creation"""
         # Mock database connection
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
@@ -49,11 +50,11 @@ class TestProjectEndpoints:
         # Mock project creation
         mock_cur.fetchone.return_value = (
             "test-project-id",
-            "2024-01-01T00:00:00",
+            datetime(2024, 1, 1),
         )
 
         # Mock store
-        mock_store = Mock()
+        mock_store = MagicMock()
         mock_store_class.return_value = mock_store
 
         # Make request
@@ -85,8 +86,8 @@ class TestProjectEndpoints:
     @patch("webui_api.routers.projects.PostgresStore")
     def test_list_projects_empty(self, mock_store_class, mock_connect, client):
         """Test listing projects when user has none"""
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
@@ -109,17 +110,17 @@ class TestProjectEndpoints:
         """Test getting project details"""
         from questfoundry.state.types import ProjectInfo
 
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
 
         # Mock ownership check
-        mock_cur.fetchone.return_value = ("test-user", "2024-01-01T00:00:00")
+        mock_cur.fetchone.return_value = ("test-user", datetime(2024, 1, 1))
 
         # Mock store
-        mock_store = Mock()
+        mock_store = MagicMock()
         mock_store.get_project_info.return_value = ProjectInfo(
             name="Test Project",
             description="Test",
@@ -142,8 +143,8 @@ class TestProjectEndpoints:
     @patch("webui_api.routers.projects.psycopg.connect")
     def test_get_project_not_found(self, mock_connect, client):
         """Test getting non-existent project"""
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
@@ -161,14 +162,14 @@ class TestProjectEndpoints:
     @patch("webui_api.routers.projects.psycopg.connect")
     def test_get_project_forbidden(self, mock_connect, client):
         """Test getting project owned by different user"""
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
 
         # Project owned by other-user
-        mock_cur.fetchone.return_value = ("other-user", "2024-01-01T00:00:00")
+        mock_cur.fetchone.return_value = ("other-user", datetime(2024, 1, 1))
 
         response = client.get(
             "/projects/test-project-id",
@@ -180,8 +181,8 @@ class TestProjectEndpoints:
     @patch("webui_api.routers.projects.psycopg.connect")
     def test_delete_project_success(self, mock_connect, client):
         """Test deleting project"""
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
@@ -205,8 +206,8 @@ class TestProjectEndpoints:
     @patch("webui_api.routers.projects.psycopg.connect")
     def test_delete_project_forbidden(self, mock_connect, client):
         """Test deleting project owned by different user"""
-        mock_conn = Mock()
-        mock_cur = Mock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
         mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value.__enter__.return_value = mock_cur
         mock_connect.return_value = mock_conn
