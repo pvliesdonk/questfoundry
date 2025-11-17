@@ -533,7 +533,7 @@ def generate(
             "--verbose",
             "-v",
             count=True,
-            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",  # noqa: E501
+            help="Increase verbosity (-v for INFO, -vv for DEBUG)",
         ),
     ] = 0,
 ) -> None:

@@ -762,8 +762,7 @@ class PromptAssembler:
                 )
                 sections.append(showrunner_orchestration)
             except CompilationError as e:
-                logger.error(f"Compilation Error: {e}")
-                logger.exception(e, stack_info=True)
+                logger.exception(f"Compilation Error: {e}", stack_info=True)
                 sections.append("<!-- Showrunner expertise not found -->")
             sections.append("")
             sections.append("---")
