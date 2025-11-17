@@ -1091,8 +1091,8 @@ export default function ArtifactCard({ artifact, storage }: Props) {
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold">{title}</h3>
         <span className={`text-xs px-2 py-1 rounded ${
-          storage === 'hot' 
-            ? 'bg-red-100 text-red-700' 
+          storage === 'hot'
+            ? 'bg-red-100 text-red-700'
             : 'bg-blue-100 text-blue-700'
         }`}>
           {storage}
@@ -1188,8 +1188,8 @@ export default function ExecutionPage() {
 
       {result && (
         <div className={`p-6 rounded-lg border ${
-          result.status === 'success' 
-            ? 'bg-green-50 border-green-200' 
+          result.status === 'success'
+            ? 'bg-green-50 border-green-200'
             : 'bg-yellow-50 border-yellow-200'
         }`}>
           <h2 className="text-xl font-semibold mb-4">Result</h2>
@@ -1272,8 +1272,8 @@ export default function GatecheckForm({ projectId }: Props) {
       {result && (
         <div className="mt-6">
           <div className={`p-4 rounded-lg ${
-            result.passed 
-              ? 'bg-green-50 border-2 border-green-300' 
+            result.passed
+              ? 'bg-green-50 border-2 border-green-300'
               : 'bg-red-50 border-2 border-red-300'
           }`}>
             <h3 className="text-lg font-semibold mb-2">
@@ -1285,7 +1285,7 @@ export default function GatecheckForm({ projectId }: Props) {
                   <div key={idx} className="p-3 bg-white rounded border">
                     <div className="flex items-start justify-between">
                       <span className={`text-xs font-medium px-2 py-1 rounded ${
-                        issue.severity === 'error' 
+                        issue.severity === 'error'
                           ? 'bg-red-100 text-red-700'
                           : 'bg-yellow-100 text-yellow-700'
                       }`}>
@@ -1564,7 +1564,7 @@ describe('ProjectCard', () => {
         <ProjectCard project={mockProject} onDelete={() => {}} />
       </BrowserRouter>
     );
-    
+
     expect(screen.getByText('Test Project')).toBeInTheDocument();
   });
 });
@@ -1588,7 +1588,7 @@ test('create project workflow', async ({ page }) => {
   await page.click('text=New Project');
   await page.fill('input[placeholder*="name"]', 'My Quest');
   await page.click('button:has-text("Create")');
-  
+
   await expect(page.locator('text=My Quest')).toBeVisible();
 });
 ```

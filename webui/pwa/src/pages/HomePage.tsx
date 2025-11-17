@@ -11,7 +11,7 @@ const HomePage: React.FC = () => {
         <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
           AI-Powered Interactive Fiction Authoring Studio
         </p>
-        
+
         <div className="grid md:grid-cols-2 gap-6 mt-12">
           <Link
             to="/projects"

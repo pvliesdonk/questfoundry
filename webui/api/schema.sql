@@ -1,5 +1,5 @@
 -- QuestFoundry WebUI Database Schema
--- 
+--
 -- This schema defines:
 -- 1. Tenancy tables (user_settings, project_ownership)
 -- 2. QuestFoundry cold storage tables (artifacts, tus, snapshots, etc.)

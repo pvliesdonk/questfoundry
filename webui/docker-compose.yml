@@ -73,15 +73,15 @@ services:
       WEBUI_POSTGRES_DB: questfoundry
       WEBUI_POSTGRES_USER: questfoundry
       WEBUI_POSTGRES_PASSWORD: changeme_postgres_password
-      
+
       # Redis/Valkey configuration
       WEBUI_REDIS_HOST: valkey
       WEBUI_REDIS_PORT: 6379
       WEBUI_REDIS_PASSWORD: changeme_valkey_password
-      
+
       # Security configuration
       WEBUI_ENCRYPTION_KEY: changeme_fernet_key_32_chars_base64_encoded
-      
+
       # Lock configuration
       WEBUI_LOCK_TIMEOUT: 300  # 5 minutes
     depends_on:

@@ -80,7 +80,7 @@ wait_for_healthy() {
     local service=$1
     local max_wait=60
     local waited=0
-    
+
     while [ $waited -lt $max_wait ]; do
         if docker compose ps "$service" | grep -q "healthy"; then
             return 0
