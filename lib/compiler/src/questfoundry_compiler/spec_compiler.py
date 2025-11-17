@@ -683,7 +683,7 @@ class SpecCompiler:
                     logger.debug(f"Assembling prompt for adapter: {primitive.id}")
                     prompt = prompt_assembler.assemble_role_prompt(primitive.id)
                     output_path = prompt_dir / f"{primitive.id}_full.md"
-                    output_path.write_text(prompt)
+                    output_path.write_text(prompt, encoding="utf-8")
                     stats["standalone_prompts_generated"] += 1
                     logger.debug(f"  Generated: {output_path}")
                 except Exception as e:
