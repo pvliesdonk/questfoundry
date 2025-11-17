@@ -1,10 +1,35 @@
 """Command-line interface for the QuestFoundry spec compiler."""
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 from questfoundry_compiler.spec_compiler import CompilationError, SpecCompiler
+
+
+def _configure_logging(verbose: bool) -> None:
+    """Configure logging based on verbosity.
+
+    Args:
+        verbose: If True, set to INFO level, otherwise WARNING
+    """
+    level = logging.INFO if verbose else logging.WARNING
+
+    # Configure root logger
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)-8s %(message)s",
+    )
+
+    # Set level for questfoundry_compiler loggers
+    for name in [
+        "questfoundry_compiler.spec_compiler",
+        "questfoundry_compiler.validators",
+        "questfoundry_compiler.assemblers",
+        "questfoundry_compiler.manifest_builder",
+    ]:
+        logging.getLogger(name).setLevel(level)
 
 
 def main() -> int:
@@ -78,6 +103,9 @@ Examples:
 
     args = parser.parse_args()
 
+    # Configure logging based on verbosity
+    _configure_logging(args.verbose)
+
     # Validate spec directory exists
     if not args.spec_dir.exists():
         print(f"Error: Spec directory not found: {args.spec_dir}", file=sys.stderr)
@@ -96,17 +124,9 @@ Examples:
 
     try:
         # Load all primitives
-        if args.verbose:
-            print(f"Loading primitives from {behavior_dir}...")
         compiler.load_all_primitives()
 
-        if args.verbose:
-            print(f"Loaded {len(compiler.primitives)} primitives")
-
         # Validate
-        if args.verbose:
-            print("Validating references...")
-
         from questfoundry_compiler.validators import ReferenceValidator
 
         validator = ReferenceValidator(compiler.primitives, compiler.spec_root)
@@ -143,25 +163,16 @@ Examples:
         if args.playbook or args.adapter:
             # Compile specific artifact
             if args.playbook:
-                if args.verbose:
-                    print(f"Compiling playbook: {args.playbook}")
-
                 result = compiler.compile_playbook(args.playbook, args.output)
                 print(f"✅ Generated: {result['manifest_path']}")
 
             if args.adapter:
-                if args.verbose:
-                    print(f"Compiling adapter: {args.adapter}")
-
                 result = compiler.compile_adapter(args.adapter, args.output)
                 print(f"✅ Generated: {result['manifest_path']}")
                 print(f"✅ Generated: {result['prompt_path']}")
 
         else:
             # Compile all
-            if args.verbose:
-                print(f"Compiling all to {args.output}...")
-
             stats = compiler.compile_all(args.output)
 
             print("\n📦 Compilation complete!")

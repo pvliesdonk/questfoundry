@@ -1,9 +1,12 @@
 """Validators for cross-references and integrity checks."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from questfoundry_compiler.types import BehaviorPrimitive
+
+logger = logging.getLogger(__name__)
 
 
 class ReferenceValidator:
@@ -18,6 +21,9 @@ class ReferenceValidator:
         """
         self.primitives = primitives
         self.spec_root = Path(spec_root)
+        logger.debug(
+            f"Initialized ReferenceValidator with {len(primitives)} primitives"
+        )
 
     def validate_all(self) -> list[str]:
         """Run all validation checks.
@@ -25,13 +31,32 @@ class ReferenceValidator:
         Returns:
             List of error messages (empty if all valid)
         """
+        logger.info("Running all validation checks...")
         errors = []
+
+        logger.debug("Validating expertise references...")
         errors.extend(self.validate_expertise_refs())
+
+        logger.debug("Validating procedure references...")
         errors.extend(self.validate_procedure_refs())
+
+        logger.debug("Validating schema references...")
         errors.extend(self.validate_schema_refs())
+
+        logger.debug("Validating role references...")
         errors.extend(self.validate_role_refs())
+
+        logger.debug("Detecting circular dependencies...")
         errors.extend(self.detect_circular_deps())
+
+        logger.debug("Checking for orphans...")
         errors.extend(self.check_orphans())
+
+        if errors:
+            logger.warning(f"Validation completed with {len(errors)} issues")
+        else:
+            logger.info("All validation checks passed")
+
         return errors
 
     def validate_expertise_refs(self) -> list[str]:
@@ -41,14 +66,20 @@ class ReferenceValidator:
             List of error messages
         """
         errors = []
+        checked_count = 0
         for prim_key, primitive in self.primitives.items():
             if "expertise" in primitive.references:
                 for expertise_id in primitive.references["expertise"]:
+                    checked_count += 1
                     ref_key = f"expertise:{expertise_id}"
                     if ref_key not in self.primitives:
-                        errors.append(
-                            f"{prim_key}: Expertise '{expertise_id}' not found"
-                        )
+                        error_msg = f"{prim_key}: Expertise '{expertise_id}' not found"
+                        errors.append(error_msg)
+                        logger.debug(f"  ✗ {error_msg}")
+
+        logger.debug(
+            f"Checked {checked_count} expertise references, found {len(errors)} errors"
+        )
         return errors
 
     def validate_procedure_refs(self) -> list[str]:
@@ -58,14 +89,20 @@ class ReferenceValidator:
             List of error messages
         """
         errors = []
+        checked_count = 0
         for prim_key, primitive in self.primitives.items():
             if "procedure" in primitive.references:
                 for procedure_id in primitive.references["procedure"]:
+                    checked_count += 1
                     ref_key = f"procedure:{procedure_id}"
                     if ref_key not in self.primitives:
-                        errors.append(
-                            f"{prim_key}: Procedure '{procedure_id}' not found"
-                        )
+                        error_msg = f"{prim_key}: Procedure '{procedure_id}' not found"
+                        errors.append(error_msg)
+                        logger.debug(f"  ✗ {error_msg}")
+
+        logger.debug(
+            f"Checked {checked_count} procedure references, found {len(errors)} errors"
+        )
         return errors
 
     def validate_schema_refs(self) -> list[str]:
@@ -76,16 +113,24 @@ class ReferenceValidator:
         """
         errors = []
         schema_dir = self.spec_root / "03-schemas"
+        checked_count = 0
 
         for prim_key, primitive in self.primitives.items():
             if "schema" in primitive.references:
                 for schema_id in primitive.references["schema"]:
+                    checked_count += 1
                     schema_path = schema_dir / schema_id
                     if not schema_path.exists():
-                        errors.append(
+                        error_msg = (
                             f"{prim_key}: Schema '{schema_id}' "
                             f"not found at {schema_path}"
                         )
+                        errors.append(error_msg)
+                        logger.debug(f"  ✗ {error_msg}")
+
+        logger.debug(
+            f"Checked {checked_count} schema references, found {len(errors)} errors"
+        )
         return errors
 
     def validate_role_refs(self) -> list[str]:
