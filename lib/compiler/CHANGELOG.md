@@ -1,3 +1,48 @@
+## compiler-v0.5.0 (2025-11-17)
+
+### Feat
+
+- **compiler-cli**: integrate logging with compiler CLI
+- **compiler**: add comprehensive logging at multiple levels
+- **webui**: complete final 5% - polish, utilities, and offline support
+- **webui**: wire up pages with component library and add mobile nav
+- **webui**: complete PWA component library and production setup
+- **webui**: implement Phase 6 CI/CD workflows
+- **webui**: implement Phase 5.1-5.2 PWA foundation (setup + API client + core pages)
+- **webui**: complete Phase 4 database and deployment validation
+- **webui**: implement Phase 3.2 artifact operations endpoints
+- **webui**: implement Phase 3 API endpoints
+- **webui**: implement Phase 2 API server core components
+- **webui**: implement ValkeyStore with full StateStore protocol support
+- **webui**: implement PostgresStore with full StateStore protocol support
+- **webui**: add scaffolding for multi-tenant web API and PWA
+
+### Fix
+
+- enhance CLI options for spec directory and verbosity, and improve spec fetching logic
+- improve error logging for CompilationError and standardize UTF-8 encoding
+- update questfoundry-compiler version to 0.4.0
+- update reference resolution for showrunner expertise and specify UTF-8 encoding for YAML file reading
+- enhance error logging for CompilationError in assemblers
+- specify UTF-8 encoding when reading markdown files
+- **pwa**: satisfy Biome type import rules
+- **pwa**: convert React/typed imports to import type
+- **pwa**: resolve biome lint failures
+- **webui**: align valkey error message
+- **webui**: stabilize auth/project tests
+- **webui**: expose PostgresStore for project tests
+- **webui**: use valid encryption key in CI
+- **webui**: satisfy ruff line length
+- **ci**: ignore node modules during linting
+- **ci**: skip node_modules json checks
+- **ci**: limit markdownlint scope
+- **webui**: unblock docker build and postgres tests
+- **webui**: align artifact deps with local questfoundry lib
+- **webui**: align mypy and tests with local library
+- **webui**: address lint regressions
+- address PR review comments - security, performance, and deprecation fixes
+- **ci**: install dev dependencies in webui-ci workflow
+
 ## compiler-v0.4.0 (2025-11-16)
 
 ### Feat
