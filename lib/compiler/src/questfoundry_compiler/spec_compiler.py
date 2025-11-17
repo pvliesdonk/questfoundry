@@ -187,7 +187,7 @@ class SpecCompiler:
         for yaml_file in directory.glob("*.yaml"):
             try:
                 logger.debug(f"Loading {prim_type} from {yaml_file.name}")
-                data = yaml.safe_load(yaml_file.read_text())
+                data = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
 
                 # Extract ID from data or filename
                 prim_id = data.get(

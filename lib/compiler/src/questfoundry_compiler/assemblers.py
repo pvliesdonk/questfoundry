@@ -757,10 +757,10 @@ class PromptAssembler:
             )
             sections.append("")
             try:
-                showrunner_expertise = self.resolver.resolve_reference(
-                    "@expertise:showrunner_expertise", inline_content=True
+                showrunner_orchestration = self.resolver.resolve_reference(
+                    "@expertise:showrunner_orchestration", inline_content=True
                 )
-                sections.append(showrunner_expertise)
+                sections.append(showrunner_orchestration)
             except CompilationError as e:
                 logger.error(f"Compilation Error: {e}")
                 logger.exception(e, stack_info=True)
