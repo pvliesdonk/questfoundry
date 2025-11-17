@@ -12,6 +12,7 @@ repos:
         exclude: ^(spec/|lib/python/src/questfoundry/resources/)
       - id: check-yaml
       - id: check-json
+        exclude: ^(.*/)?node_modules/
       - id: check-toml
       - id: check-added-large-files
         args: ["--maxkb=1000"]
