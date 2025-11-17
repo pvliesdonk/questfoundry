@@ -1,10 +1,13 @@
 """Assemblers for composing prompts and resolving references."""
 
+import logging
 import re
 from pathlib import Path
 from typing import Any, Literal, cast
 
 from questfoundry_compiler.types import BehaviorPrimitive, CompilationError
+
+logger = logging.getLogger(__name__)
 
 ProfileType = Literal["walkthrough", "reference", "brief"]
 
@@ -26,6 +29,7 @@ class ReferenceResolver:
         self._section_pattern_template = (
             r"## [^#\n]*{section_id}[^#\n]*\n(.*?)(?=\n## |\Z)"
         )
+        logger.debug(f"Initialized ReferenceResolver with {len(primitives)} primitives")
 
     def resolve_reference(self, ref: str, inline_content: bool = True) -> str:
         """Resolve a single reference.
@@ -40,8 +44,10 @@ class ReferenceResolver:
         Raises:
             CompilationError: If reference cannot be resolved
         """
+        logger.debug(f"Resolving reference: {ref} (inline={inline_content})")
         match = self.reference_pattern.match(ref)
         if not match:
+            logger.error(f"Invalid reference format: {ref}")
             raise CompilationError(f"Invalid reference format: {ref}")
 
         ref_type, ref_id, section = match.groups()

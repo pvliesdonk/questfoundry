@@ -1,5 +1,6 @@
 """Command-line interface for QuestFoundry prompt generator."""
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from questfoundry_compiler import (
     SpecCompiler,
 )
 from rich.console import Console
+from rich.logging import RichHandler
 
 from prompt_generator import spec_fetcher
 
@@ -27,6 +29,35 @@ console = Console()
 
 SpecSource = Literal["auto", "bundled", "release"]
 ProfileMode = Literal["walkthrough", "reference", "brief"]
+
+
+def _configure_logging(verbosity: int) -> None:
+    """Configure logging based on verbosity level.
+    
+    Args:
+        verbosity: 0 = WARNING, 1 = INFO, 2+ = DEBUG
+    """
+    if verbosity == 0:
+        level = logging.WARNING
+    elif verbosity == 1:
+        level = logging.INFO
+    else:
+        level = logging.DEBUG
+    
+    # Configure root logger with rich handler
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)]
+    )
+    
+    # Set level for questfoundry_compiler loggers
+    for name in ["questfoundry_compiler.spec_compiler", 
+                 "questfoundry_compiler.validators",
+                 "questfoundry_compiler.assemblers",
+                 "questfoundry_compiler.manifest_builder"]:
+        logging.getLogger(name).setLevel(level)
 
 
 def _normalize_identifier_token(value: str) -> str:
@@ -495,13 +526,14 @@ def generate(
         ),
     ] = "reference",
     verbose: Annotated[
-        bool,
+        int,
         typer.Option(
             "--verbose",
             "-v",
-            help="Show detailed progress",
+            count=True,
+            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",
         ),
-    ] = False,
+    ] = 0,
 ) -> None:
     """Generate monolithic web agent prompts.
 
@@ -525,6 +557,9 @@ def generate(
         # Interactive mode
         qf-generate
     """
+    # Configure logging based on verbosity
+    _configure_logging(verbose)
+    
     spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     behavior_dir = spec_dir / "05-behavior"
@@ -534,14 +569,8 @@ def generate(
 
     try:
         # Initialize compiler
-        if verbose:
-            console.print(f"Loading primitives from {behavior_dir}...")
-
         compiler = SpecCompiler(spec_dir)
         compiler.load_all_primitives()
-
-        if verbose:
-            console.print(f"Loaded {len(compiler.primitives)} primitives")
 
         loop_catalog = _build_loop_catalog(compiler)
         role_catalog = _build_role_catalog(compiler, spec_dir)
@@ -550,9 +579,6 @@ def generate(
 
         # Interactive mode if no loops or roles specified
         if not loop and not role:
-            if verbose:
-                console.print("Entering interactive mode...")
-
             # Ask what to generate
             mode = questionary.select(
                 "What would you like to generate?",
@@ -634,17 +660,9 @@ def generate(
 
         # Generate prompt
         if loop_ids:
-            if verbose:
-                console.print("Generating prompt for loops: " + ", ".join(loop_ids))
-
             prompt = _bundle_loop_prompts(loop_ids, assembler, loop_catalog, profile)
 
         elif role_ids:
-            if verbose:
-                console.print(f"Generating prompt for roles: {', '.join(role_ids)}")
-                if standalone:
-                    console.print("(standalone mode: including loop procedures)")
-
             prompt = assembler.assemble_web_prompt_for_roles(
                 role_ids, standalone, profile
             )
@@ -660,7 +678,7 @@ def generate(
             console.print(f"[green]✓[/green] Generated: {output}")
 
             # Show preview if verbose
-            if verbose:
+            if verbose >= 1:
                 console.print("\n[bold]Preview (first 500 characters):[/bold]")
                 console.print(prompt[:500] + "...")
 
@@ -673,7 +691,7 @@ def generate(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Unexpected error: {e}[/red]")
-        if verbose:
+        if verbose >= 1:
             import traceback
 
             traceback.print_exc()
@@ -697,8 +715,20 @@ def list_loops(
             help="Where to load QuestFoundry spec data from (auto/bundled/release)",
         ),
     ] = "auto",
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",
+        ),
+    ] = 0,
 ) -> None:
     """List all available loops/playbooks."""
+    # Configure logging based on verbosity
+    _configure_logging(verbose)
+    
     spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:
@@ -746,8 +776,20 @@ def list_roles(
             help="Where to load QuestFoundry spec data from (auto/bundled/release)",
         ),
     ] = "auto",
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity (can be used multiple times: -v for INFO, -vv for DEBUG)",
+        ),
+    ] = 0,
 ) -> None:
     """List all available roles/adapters."""
+    # Configure logging based on verbosity
+    _configure_logging(verbose)
+    
     spec_dir = _resolve_spec_dir(spec_dir, spec_source)
 
     try:

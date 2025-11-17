@@ -1,10 +1,13 @@
 """Manifest builder for generating JSON runtime manifests."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
 from questfoundry_compiler.assemblers import ReferenceResolver
 from questfoundry_compiler.types import BehaviorPrimitive, CompilationError
+
+logger = logging.getLogger(__name__)
 
 
 class ManifestBuilder:
@@ -23,6 +26,7 @@ class ManifestBuilder:
         """
         self.primitives = primitives
         self.resolver = resolver
+        logger.debug(f"Initialized ManifestBuilder with {len(primitives)} primitives")
 
     def _collect_source_files(self, primitive: BehaviorPrimitive) -> list[str]:
         """Collect source files from primitive and its references.
@@ -33,6 +37,7 @@ class ManifestBuilder:
         Returns:
             List of source file paths
         """
+        logger.debug(f"Collecting source files for {primitive.type}:{primitive.id}")
         source_files = [str(primitive.source_path)]
 
         # Collect source files from referenced primitives
@@ -43,6 +48,7 @@ class ManifestBuilder:
                     if prim and prim.source_path:
                         source_files.append(str(prim.source_path))
 
+        logger.debug(f"  Collected {len(source_files)} source files")
         return source_files
 
     def build_playbook_manifest(self, playbook_id: str) -> dict[str, Any]:
@@ -57,8 +63,10 @@ class ManifestBuilder:
         Raises:
             CompilationError: If manifest cannot be built
         """
+        logger.debug(f"Building playbook manifest for: {playbook_id}")
         playbook = self.primitives.get(f"playbook:{playbook_id}")
         if not playbook:
+            logger.error(f"Playbook not found: {playbook_id}")
             raise CompilationError(f"Playbook not found: {playbook_id}")
 
         data = playbook.metadata
