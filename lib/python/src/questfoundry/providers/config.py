@@ -1,5 +1,8 @@
 """Configuration management for QuestFoundry providers"""
 
+from __future__ import annotations
+
+import json
 import logging
 import os
 import re
@@ -31,8 +34,15 @@ class ProviderConfig:
     """
 
     ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
+    SECRET_FIELDS = ("openai_api_key", "anthropic_api_key", "google_api_key")
 
-    def __init__(self, config_path: Path | str | None = None):
+    def __init__(
+        self,
+        config_path: Path | str | None = None,
+        *,
+        secrets: dict[str, str | None] | None = None,
+        **provider_keys: str | None,
+    ):
         """
         Initialize configuration.
 
@@ -49,6 +59,17 @@ class ProviderConfig:
         logger.debug("Initializing ProviderConfig from path: %s", config_path)
         self.config_path = config_path
         self._config: dict[str, Any] = {}
+        self._secrets: dict[str, str | None] = {
+            field: None for field in self.SECRET_FIELDS
+        }
+        if secrets:
+            for field, value in secrets.items():
+                if field in self._secrets:
+                    self._secrets[field] = value
+        if provider_keys:
+            for field, value in provider_keys.items():
+                if field in self._secrets:
+                    self._secrets[field] = value
 
         if config_path.exists():
             logger.trace("Config file exists, loading configuration")
@@ -60,6 +81,77 @@ class ProviderConfig:
             )
             self._config = self._get_default_config()
             logger.trace("Default configuration initialized")
+
+    # ------------------------------------------------------------------
+    # BYOK secret helpers
+    # ------------------------------------------------------------------
+
+    def _get_secret(self, key: str) -> str | None:
+        return self._secrets.get(key)
+
+    def _set_secret(self, key: str, value: str | None) -> None:
+        self._secrets[key] = value
+
+    @property
+    def openai_api_key(self) -> str | None:
+        """OpenAI API key (BYOK)."""
+
+        return self._get_secret("openai_api_key")
+
+    @openai_api_key.setter
+    def openai_api_key(self, value: str | None) -> None:
+        self._set_secret("openai_api_key", value)
+
+    @property
+    def anthropic_api_key(self) -> str | None:
+        """Anthropic API key (BYOK)."""
+
+        return self._get_secret("anthropic_api_key")
+
+    @anthropic_api_key.setter
+    def anthropic_api_key(self, value: str | None) -> None:
+        self._set_secret("anthropic_api_key", value)
+
+    @property
+    def google_api_key(self) -> str | None:
+        """Google API key (BYOK)."""
+
+        return self._get_secret("google_api_key")
+
+    @google_api_key.setter
+    def google_api_key(self, value: str | None) -> None:
+        self._set_secret("google_api_key", value)
+
+    def model_dump(self) -> dict[str, str | None]:
+        """Return BYOK secrets as a dict (Pydantic-compatible helper)."""
+
+        return dict(self._secrets)
+
+    def model_dump_json(self) -> str:
+        """Return BYOK secrets as JSON string (Pydantic-compatible helper)."""
+
+        return json.dumps(self.model_dump(), separators=(",", ":"))
+
+    @classmethod
+    def model_validate_json(cls, data: str) -> "ProviderConfig":
+        """Create ProviderConfig from a JSON string of BYOK secrets."""
+
+        try:
+            payload = json.loads(data) if data else {}
+        except json.JSONDecodeError as exc:
+            raise ValueError("Invalid provider config payload") from exc
+
+        if not isinstance(payload, dict):
+            raise ValueError("Provider config payload must be a JSON object")
+
+        secrets: dict[str, str | None] = {}
+        for field in cls.SECRET_FIELDS:
+            value = payload.get(field)
+            secrets[field] = value if isinstance(value, str) or value is None else None
+
+        return cls(secrets=secrets)
+
+    # ------------------------------------------------------------------
 
     def load(self) -> None:
         """

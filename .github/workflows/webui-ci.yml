@@ -1,0 +1,138 @@
+name: WebUI CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'webui/**'
+      - '.github/workflows/webui-ci.yml'
+  pull_request:
+    paths:
+      - 'webui/**'
+      - '.github/workflows/webui-ci.yml'
+
+jobs:
+  api-backend:
+    name: API Backend (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ matrix.python-version }}-${{ hashFiles('webui/api/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-${{ matrix.python-version }}-
+
+      - name: Install dependencies
+        working-directory: webui/api
+        run: uv sync --all-extras
+
+      - name: Apply database schema
+        working-directory: webui/api
+        env:
+          TEST_POSTGRES_URL: "postgresql://postgres:testpass@localhost:5432/testdb"
+        run: |
+          PGPASSWORD=testpass psql -h localhost -U postgres -d testdb -f schema.sql
+
+      - name: Lint with ruff
+        working-directory: webui/api
+        run: uv run ruff check src tests
+
+      - name: Type check with mypy
+        working-directory: webui/api
+        run: uv run mypy src
+
+      - name: Run tests
+        working-directory: webui/api
+        env:
+          TEST_POSTGRES_URL: "postgresql://postgres:testpass@localhost:5432/testdb"
+          TEST_REDIS_URL: "redis://localhost:6379/0"
+          WEBUI_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXRlc3Rpbmctb25seS0wMDAwMDA="
+        run: uv run pytest -v --cov=src --cov-report=term-missing
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          files: ./webui/api/coverage.xml
+          flags: api
+          name: api-coverage
+
+  pwa-frontend:
+    name: PWA Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: webui/pwa/package-lock.json
+
+      - name: Install dependencies
+        working-directory: webui/pwa
+        run: npm ci
+
+      - name: Lint
+        working-directory: webui/pwa
+        run: npm run lint
+
+      - name: Type check
+        working-directory: webui/pwa
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: webui/pwa
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-dist
+          path: webui/pwa/dist
+          retention-days: 7

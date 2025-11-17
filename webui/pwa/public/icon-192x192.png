@@ -1,0 +1,2 @@
+This is a placeholder file. Generate actual PNG icons using: npm run generate-icons
+For now, the browser will fallback to icon.svg for PWA installation.
