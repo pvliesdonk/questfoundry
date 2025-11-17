@@ -96,7 +96,10 @@ def _upsert_project(
 
 def _delete_project(conn: psycopg.Connection, project_id: str) -> None:
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM project_ownership WHERE project_id = %s", (project_id,))
+        cur.execute(
+            "DELETE FROM project_ownership WHERE project_id = %s",
+            (project_id,),
+        )
 
 
 def _delete_user(conn: psycopg.Connection, user_id: str) -> None:
