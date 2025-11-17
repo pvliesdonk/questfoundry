@@ -25,9 +25,10 @@ File: `webui/api/src/webui_api/storage/postgres_store.py`
 **Implementation Steps**:
 
 1. **Connection Pooling**: Replace single connection with psycopg_pool
+
    ```python
    from psycopg_pool import ConnectionPool
-   
+
    self.pool = ConnectionPool(
        connection_string,
        min_size=2,
@@ -36,6 +37,7 @@ File: `webui/api/src/webui_api/storage/postgres_store.py`
    ```
 
 2. **Implement get_project_info()**:
+
    ```python
    def get_project_info(self) -> ProjectInfo:
        with self.pool.connection() as conn:
@@ -60,33 +62,35 @@ File: `webui/api/src/webui_api/storage/postgres_store.py`
    ```
 
 3. **Implement save_artifact()**: Use UPSERT with JSONB
+
    ```python
    def save_artifact(self, artifact: Artifact) -> None:
        artifact_id = artifact.metadata.get("id")
        if not artifact_id:
            raise ValueError("Artifact must have 'id' in metadata")
-       
+
        with self.pool.connection() as conn:
            with conn.cursor() as cur:
                cur.execute(
                    """
-                   INSERT INTO artifacts 
+                   INSERT INTO artifacts
                        (project_id, artifact_id, artifact_type, data, metadata)
                    VALUES (%s, %s, %s, %s, %s)
-                   ON CONFLICT (project_id, artifact_id) 
-                   DO UPDATE SET 
+                   ON CONFLICT (project_id, artifact_id)
+                   DO UPDATE SET
                        artifact_type = EXCLUDED.artifact_type,
                        data = EXCLUDED.data,
                        metadata = EXCLUDED.metadata,
                        modified = NOW()
                    """,
-                   (self.project_id, artifact_id, artifact.type, 
+                   (self.project_id, artifact_id, artifact.type,
                     Json(artifact.data), Json(artifact.metadata))
                )
                conn.commit()
    ```
 
 4. **Implement list_artifacts()**: Use JSONB querying
+
    ```python
    def list_artifacts(
        self, artifact_type: str | None = None, filters: dict[str, Any] | None = None
@@ -97,11 +101,11 @@ File: `webui/api/src/webui_api/storage/postgres_store.py`
            WHERE project_id = %s
        """
        params: list[Any] = [self.project_id]
-       
+
        if artifact_type:
            query += " AND artifact_type = %s"
            params.append(artifact_type)
-       
+
        # Add JSONB filters
        # Note: JSONB keys should be validated/whitelisted before use
        # to prevent SQL injection. Only accept known safe keys.
@@ -111,9 +115,9 @@ File: `webui/api/src/webui_api/storage/postgres_store.py`
                query += " AND data->>%s = %s"
                params.append(key)
                params.append(str(value))
-       
+
        query += " ORDER BY modified DESC"
-       
+
        with self.pool.connection() as conn:
            with conn.cursor() as cur:
                cur.execute(query, params)
@@ -140,6 +144,7 @@ File: `webui/api/src/webui_api/storage/valkey_store.py`
 **Implementation Steps**:
 
 1. **Key Design**: Use hierarchical namespacing
+
    ```python
    def _key(self, *parts: str) -> str:
        """Generate namespaced key: hot:{project_id}:type:id"""
@@ -147,19 +152,20 @@ File: `webui/api/src/webui_api/storage/valkey_store.py`
    ```
 
 2. **Implement save_artifact()**:
+
    ```python
    def save_artifact(self, artifact: Artifact) -> None:
        artifact_id = artifact.metadata.get("id")
        if not artifact_id:
            raise ValueError("Artifact must have 'id' in metadata")
-       
+
        key = self._key("artifacts", artifact.type, artifact_id)
        data = {
            "type": artifact.type,
            "data": artifact.data,
            "metadata": artifact.metadata
        }
-       
+
        # Store as JSON with TTL
        self.client.setex(
            key,
@@ -169,13 +175,14 @@ File: `webui/api/src/webui_api/storage/valkey_store.py`
    ```
 
 3. **Implement list_artifacts()**: Use SCAN pattern
+
    ```python
    def list_artifacts(
        self, artifact_type: str | None = None, filters: dict[str, Any] | None = None
    ) -> list[Artifact]:
        pattern = self._key("artifacts", artifact_type or "*", "*")
        artifacts = []
-       
+
        for key in self.client.scan_iter(match=pattern):
            data_str = self.client.get(key)
            if data_str:
@@ -183,18 +190,18 @@ File: `webui/api/src/webui_api/storage/valkey_store.py`
                # Apply filters
                if filters:
                    match = all(
-                       data["data"].get(k) == v 
+                       data["data"].get(k) == v
                        for k, v in filters.items()
                    )
                    if not match:
                        continue
-               
+
                artifacts.append(Artifact(
                    type=data["type"],
                    data=data["data"],
                    metadata=data["metadata"]
                ))
-       
+
        return artifacts
    ```
 
@@ -214,16 +221,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Extract user from X-Forwarded-User header
         user_id = request.headers.get("X-Forwarded-User")
-        
+
         if not user_id:
             raise HTTPException(
                 status_code=401,
                 detail="Missing X-Forwarded-User header. Must run behind OIDC proxy."
             )
-        
+
         # Store user_id in request state
         request.state.user_id = user_id
-        
+
         response = await call_next(request)
         return response
 ```
@@ -241,12 +248,12 @@ class ProjectLock:
     def __init__(self, redis_client: redis.Redis, timeout: int = 300):
         self.client = redis_client
         self.timeout = timeout
-    
+
     @contextmanager
     def acquire(self, project_id: str, user_id: str):
         """Acquire lock for project"""
         lock_key = f"lock:project:{project_id}"
-        
+
         # Try to acquire lock
         acquired = self.client.set(
             lock_key,
@@ -254,7 +261,7 @@ class ProjectLock:
             nx=True,  # Only set if not exists
             ex=self.timeout  # Expire after timeout
         )
-        
+
         if not acquired:
             # Check who owns the lock
             owner = self.client.get(lock_key)
@@ -266,7 +273,7 @@ class ProjectLock:
                     status_code=423,
                     detail=f"Project {project_id} is locked by another user"
                 )
-        
+
         try:
             yield
         finally:
@@ -298,7 +305,7 @@ from .config import settings
 def orchestrator_context(project_id: str, user_id: str, user_provider_config: ProviderConfig):
     """
     Context manager for orchestrator lifecycle.
-    
+
     Implements the mandated request lifecycle:
     1. Acquire lock
     2. Instantiate storage backends
@@ -307,18 +314,18 @@ def orchestrator_context(project_id: str, user_id: str, user_provider_config: Pr
     5. Release lock (automatic via context manager)
     """
     lock = ProjectLock(redis_client, settings.lock_timeout)
-    
+
     with lock.acquire(project_id, user_id):
         # Instantiate storage backends
         cold_store = PostgresStore(settings.postgres_url, project_id)
         hot_store = ValkeyStore(settings.redis_url, project_id)
-        
+
         try:
             # Instantiate library components
             provider_reg = ProviderRegistry(config=user_provider_config)
             role_reg = RoleRegistry(provider_reg, spec_path=Path(settings.spec_path))
             workspace = WorkspaceManager(cold=cold_store, hot=hot_store)
-            
+
             # Create orchestrator
             orchestrator = Orchestrator(
                 workspace=workspace,
@@ -326,9 +333,9 @@ def orchestrator_context(project_id: str, user_id: str, user_provider_config: Pr
                 role_registry=role_reg,
                 spec_path=Path(settings.spec_path)
             )
-            
+
             yield orchestrator
-            
+
         finally:
             # Cleanup connections
             cold_store.close()
@@ -360,14 +367,14 @@ async def execute_goal(
 ):
     """
     Execute a goal using the orchestrator.
-    
+
     This is the main entry point for QuestFoundry operations.
     """
     user_id = request.state.user_id
-    
+
     # Get user's provider config (decrypted BYOK keys)
     provider_config = await get_user_provider_config(user_id)
-    
+
     # Use orchestrator context (handles locking, storage, lifecycle)
     with orchestrator_context(project_id, user_id, provider_config) as orchestrator:
         # Execute goal
@@ -375,7 +382,7 @@ async def execute_goal(
             goal=goal_request.goal,
             context=goal_request.context or {}
         )
-        
+
         return {
             "status": "success",
             "result": result
@@ -419,13 +426,13 @@ async def get_user_provider_config(user_id: str) -> ProviderConfig:
             if not row:
                 # Return default config (no BYOK)
                 return ProviderConfig()
-            
+
             return decrypt_keys(row[0])
 
 async def save_user_provider_config(user_id: str, config: ProviderConfig) -> None:
     """Save user's encrypted provider configuration"""
     encrypted = encrypt_keys(config)
-    
+
     with psycopg.connect(settings.postgres_url) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -433,7 +440,7 @@ async def save_user_provider_config(user_id: str, config: ProviderConfig) -> Non
                 INSERT INTO user_settings (user_id, encrypted_keys)
                 VALUES (%s, %s)
                 ON CONFLICT (user_id)
-                DO UPDATE SET 
+                DO UPDATE SET
                     encrypted_keys = EXCLUDED.encrypted_keys,
                     updated_at = NOW()
                 """,
@@ -465,26 +472,26 @@ jobs:
     defaults:
       run:
         working-directory: webui/api
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v1
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: uv sync
-      
+
       - name: Lint
         run: |
           uv run ruff check src tests
           uv run mypy src
-      
+
       - name: Test
         run: uv run pytest
 
@@ -493,23 +500,23 @@ jobs:
     defaults:
       run:
         working-directory: webui/pwa
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: webui/pwa/package-lock.json
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Lint
         run: npm run lint
-      
+
       - name: Build
         run: npm run build
 ```
@@ -536,23 +543,23 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/webui-api
-      
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -566,23 +573,23 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/webui-pwa
-      
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -629,6 +636,7 @@ The PWA implementation is beyond the scope of this initial scaffolding. Key file
 ## Deployment
 
 1. Generate Fernet key:
+
    ```bash
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
    ```
@@ -636,12 +644,14 @@ The PWA implementation is beyond the scope of this initial scaffolding. Key file
 2. Update docker-compose.yml with real passwords and keys
 
 3. Deploy:
+
    ```bash
    cd webui
    docker-compose up -d
    ```
 
 4. Initialize database:
+
    ```bash
    docker-compose exec postgres psql -U questfoundry -d questfoundry -f /docker-entrypoint-initdb.d/01-schema.sql
    ```

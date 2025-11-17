@@ -5,6 +5,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 1: Storage Backends (Critical Path)
 
 ### PostgresStore Implementation
+
 - [ ] Set up connection pooling (psycopg_pool)
 - [ ] Implement `get_project_info()`
 - [ ] Implement `save_project_info()`
@@ -22,6 +23,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test with real PostgreSQL database
 
 ### ValkeyStore Implementation
+
 - [ ] Implement key namespacing helper
 - [ ] Implement `get_project_info()`
 - [ ] Implement `save_project_info()` with TTL
@@ -41,6 +43,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 2: API Server Core
 
 ### Authentication
+
 - [ ] Create `middleware/auth.py`
 - [ ] Implement `AuthMiddleware` class
 - [ ] Extract `X-Forwarded-User` header
@@ -50,6 +53,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test authentication flow
 
 ### Locking
+
 - [ ] Create `locking.py`
 - [ ] Implement `ProjectLock` class
 - [ ] Implement `acquire()` context manager
@@ -61,6 +65,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test lock timeout
 
 ### Request Lifecycle
+
 - [ ] Create `lifecycle.py`
 - [ ] Implement `orchestrator_context()` context manager
 - [ ] Integrate lock acquisition
@@ -73,6 +78,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test full lifecycle
 
 ### User Settings (BYOK)
+
 - [ ] Create `user_settings.py`
 - [ ] Implement `encrypt_keys()` function
 - [ ] Implement `decrypt_keys()` function
@@ -85,6 +91,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 3: API Endpoints
 
 ### Project Management
+
 - [ ] Create `routers/projects.py`
 - [ ] Implement `POST /projects` (create)
 - [ ] Implement `GET /projects` (list)
@@ -95,6 +102,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Document endpoints
 
 ### Artifact Operations
+
 - [ ] Create `routers/artifacts.py`
 - [ ] Implement `POST /projects/{id}/artifacts` (create)
 - [ ] Implement `GET /projects/{id}/artifacts` (list)
@@ -106,6 +114,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Document endpoints
 
 ### Execution
+
 - [ ] Create `routers/execution.py`
 - [ ] Implement `POST /projects/{id}/execute` (goal execution)
 - [ ] Implement `POST /projects/{id}/gatecheck` (validation)
@@ -116,6 +125,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Document endpoints
 
 ### User Settings
+
 - [ ] Create `routers/user_settings.py`
 - [ ] Implement `GET /user/settings` (get)
 - [ ] Implement `PUT /user/settings/keys` (update BYOK)
@@ -124,6 +134,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Document endpoints
 
 ### Integration
+
 - [ ] Include all routers in main.py
 - [ ] Configure CORS appropriately
 - [ ] Add error handlers
@@ -133,6 +144,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 4: Database & Deployment
 
 ### Database
+
 - [ ] Test schema.sql creates all tables
 - [ ] Verify indexes are created
 - [ ] Verify triggers work
@@ -140,6 +152,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test with docker-compose
 
 ### Docker
+
 - [ ] Test API Dockerfile builds
 - [ ] Test PWA Dockerfile builds
 - [ ] Test docker-compose stack
@@ -150,6 +163,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 5: PWA Implementation
 
 ### Project Setup
+
 - [ ] Initialize React project with Vite
 - [ ] Configure TypeScript
 - [ ] Set up routing
@@ -158,6 +172,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test dev server
 
 ### API Client
+
 - [ ] Create `src/api/client.ts`
 - [ ] Implement fetch wrapper
 - [ ] Handle authentication
@@ -166,6 +181,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test API client
 
 ### Core Components
+
 - [ ] Create `App.tsx`
 - [ ] Create `Layout.tsx`
 - [ ] Create `Navigation.tsx`
@@ -173,6 +189,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test routing
 
 ### Project Management UI
+
 - [ ] Create `ProjectList.tsx`
 - [ ] Create `ProjectCard.tsx`
 - [ ] Create `ProjectCreate.tsx`
@@ -180,6 +197,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test project workflows
 
 ### Hot/Cold SoT UI
+
 - [ ] Create `HotWorkspace.tsx`
 - [ ] Create `ColdStorage.tsx`
 - [ ] Create `ArtifactList.tsx`
@@ -188,24 +206,28 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test artifact viewing
 
 ### Goal Execution UI
+
 - [ ] Create `GoalInput.tsx`
 - [ ] Create `ExecutionProgress.tsx`
 - [ ] Create `ExecutionResult.tsx`
 - [ ] Test goal execution flow
 
 ### Gatecheck UI
+
 - [ ] Create `GatecheckForm.tsx`
 - [ ] Create `GatecheckResults.tsx`
 - [ ] Create `QualityBar.tsx`
 - [ ] Test gatecheck flow
 
 ### Settings UI
+
 - [ ] Create `Settings.tsx`
 - [ ] Create `ProviderKeyForm.tsx`
 - [ ] Handle key encryption
 - [ ] Test BYOK configuration
 
 ### Mobile Optimization
+
 - [ ] Test on mobile devices
 - [ ] Optimize touch targets
 - [ ] Test offline capability
@@ -215,6 +237,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 6: CI/CD
 
 ### CI Workflow
+
 - [ ] Create `.github/workflows/webui-ci.yml`
 - [ ] Configure API linting job
 - [ ] Configure API testing job
@@ -224,6 +247,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Test workflow on PR
 
 ### CD Workflow
+
 - [ ] Create `.github/workflows/publish-webui.yml`
 - [ ] Configure API image build
 - [ ] Configure API image push to GHCR
@@ -235,6 +259,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Phase 7: Testing & Documentation
 
 ### Testing
+
 - [ ] Unit tests: Storage backends (100% coverage)
 - [ ] Unit tests: API endpoints
 - [ ] Unit tests: Authentication
@@ -246,6 +271,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Security testing: BYOK encryption
 
 ### Documentation
+
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Database schema documentation
 - [ ] Deployment guide
@@ -258,6 +284,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 ## Verification
 
 ### Smoke Tests
+
 - [ ] API health check responds
 - [ ] API docs accessible
 - [ ] PWA loads in browser
@@ -268,12 +295,14 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 - [ ] Locking prevents conflicts
 
 ### Integration Tests
+
 - [ ] Full workflow: Create project → Add artifacts → Execute goal → Gatecheck
 - [ ] Multi-user: Two users can't write to same project simultaneously
 - [ ] BYOK: User keys are isolated and encrypted
 - [ ] Hot/Cold: Artifacts move between hot and cold correctly
 
 ### Production Readiness
+
 - [ ] All tests pass
 - [ ] No security vulnerabilities
 - [ ] Performance acceptable
@@ -287,7 +316,7 @@ Use this checklist to track progress on the WebUI implementation. Each checkbox 
 
 ## Progress Tracking
 
-**Current Phase**: Phase 1 - Storage Backends  
-**Next Milestone**: PostgresStore fully implemented and tested  
-**Blockers**: None  
+**Current Phase**: Phase 1 - Storage Backends
+**Next Milestone**: PostgresStore fully implemented and tested
+**Blockers**: None
 **Notes**: Scaffolding complete, ready for implementation

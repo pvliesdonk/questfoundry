@@ -13,10 +13,12 @@ Session 4 successfully implemented Phase 3 (API Endpoints), completing all core 
 Provides core QuestFoundry functionality endpoints.
 
 **Endpoints:**
+
 - `POST /projects/{project_id}/execute` - Execute goals
 - `POST /projects/{project_id}/gatecheck` - Run quality validation
 
 **Key Features:**
+
 - Uses orchestrator_context for complete lifecycle
 - Acquires distributed lock automatically
 - Gets user's provider config (BYOK)
@@ -24,12 +26,13 @@ Provides core QuestFoundry functionality endpoints.
 - Error handling with proper HTTP status codes
 
 **Implementation:**
+
 ```python
 @router.post("/execute", response_model=GoalResponse)
 async def execute_goal(project_id, request, goal_request):
     user_id = request.state.user_id
     provider_config = await get_user_provider_config(user_id)
-    
+
     with orchestrator_context(project_id, user_id, provider_config) as orch:
         result = orch.execute_goal(
             goal=goal_request.goal,
@@ -45,12 +48,14 @@ async def execute_goal(project_id, request, goal_request):
 Provides project management with ownership enforcement.
 
 **Endpoints:**
+
 - `POST /projects` - Create new project
 - `GET /projects` - List user's projects
 - `GET /projects/{project_id}` - Get project details
 - `DELETE /projects/{project_id}` - Delete project
 
 **Key Features:**
+
 - Ownership enforcement (only owner can access)
 - UUID-based project IDs
 - Integration with project_ownership table
@@ -59,6 +64,7 @@ Provides project management with ownership enforcement.
 - Returns 404 for non-existent projects
 
 **Authorization:**
+
 ```python
 # Check ownership
 cur.execute(
@@ -78,11 +84,13 @@ if owner_id != user_id:
 Provides BYOK (Bring Your Own Key) management.
 
 **Endpoints:**
+
 - `GET /user/settings` - Get user settings (shows which keys configured)
 - `PUT /user/settings/keys` - Update provider keys
 - `DELETE /user/settings/keys` - Delete all keys
 
 **Key Features:**
+
 - Partial updates (only update provided keys)
 - Never exposes actual keys (only flags)
 - Uses Fernet encryption
@@ -90,6 +98,7 @@ Provides BYOK (Bring Your Own Key) management.
 - Safe key deletion
 
 **Example Response:**
+
 ```json
 {
   "user_id": "alice",
@@ -106,6 +115,7 @@ Provides BYOK (Bring Your Own Key) management.
 Integrated all routers into the FastAPI application.
 
 **Changes:**
+
 - Imported all routers
 - Called app.include_router() for each
 - Removed TODO comments
@@ -170,6 +180,7 @@ FastAPI automatically generates interactive API documentation:
 **OpenAPI JSON:** `http://localhost:8000/openapi.json`
 
 All endpoints include:
+
 - Request/response schemas
 - Example payloads
 - Error responses
@@ -180,17 +191,20 @@ All endpoints include:
 All endpoints use Pydantic models for validation:
 
 **Execution:**
+
 - GoalRequest
 - GoalResponse
 - GatecheckRequest
 - GatecheckResponse
 
 **Projects:**
+
 - ProjectCreateRequest
 - ProjectResponse
 - ProjectListResponse
 
 **User Settings:**
+
 - UserSettingsResponse
 - ProviderKeysRequest
 - ProviderKeysResponse
@@ -222,6 +236,7 @@ uv run pytest tests/test_user_settings_endpoints.py -v
 ### Manual API Testing
 
 Start the server:
+
 ```bash
 cd webui/api
 export WEBUI_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
@@ -231,6 +246,7 @@ uv run uvicorn webui_api.main:app --reload
 ```
 
 Test endpoints:
+
 ```bash
 # Health check (no auth required)
 curl http://localhost:8000/health
@@ -313,17 +329,20 @@ curl -X PUT http://localhost:8000/user/settings/keys \
 ### Authorization & Isolation
 
 **Project Ownership:**
+
 - Projects have one owner (creator)
 - Ownership stored in `project_ownership` table
 - All project operations check ownership
 - Returns 403 if not owner
 
 **User Isolation:**
+
 - Provider keys scoped by user_id
 - Projects scoped by project_id
 - No cross-user or cross-project access
 
 **Storage Isolation:**
+
 - PostgresStore: WHERE project_id = ?
 - ValkeyStore: hot:{project_id}:*
 - Complete data isolation
@@ -333,6 +352,7 @@ curl -X PUT http://localhost:8000/user/settings/keys \
 ### 1. Ownership Model
 
 Projects have a single owner (the creator). This is simple and clear:
+
 - Easy to implement
 - Easy to reason about
 - Matches solo authoring use case
@@ -341,6 +361,7 @@ Projects have a single owner (the creator). This is simple and clear:
 ### 2. Direct Database Access
 
 Project management endpoints use psycopg directly rather than always going through storage backends:
+
 - Simpler for metadata operations
 - Avoids circular dependencies
 - Storage backends focused on QuestFoundry data
@@ -348,6 +369,7 @@ Project management endpoints use psycopg directly rather than always going throu
 ### 3. Partial Key Updates
 
 User settings allows partial updates:
+
 ```python
 if keys_request.openai_api_key is not None:
     config.openai_api_key = keys_request.openai_api_key
@@ -358,6 +380,7 @@ This allows users to update one key without resending all keys.
 ### 4. Never Expose Keys
 
 GET /user/settings returns flags, not keys:
+
 ```json
 {
   "has_openai_key": true,
@@ -370,6 +393,7 @@ Actual keys are never returned via API.
 ### 5. Mock-Based Testing
 
 Endpoint tests use mocks rather than real databases:
+
 - Faster test execution
 - No database setup required
 - Test edge cases easily
@@ -377,33 +401,37 @@ Endpoint tests use mocks rather than real databases:
 
 ## Validation
 
-✅ All Python files compile without errors  
-✅ All routers imported correctly  
-✅ Main app includes all routers  
-✅ Request/response models validated  
-✅ Error handling implemented  
-✅ Authorization checks in place  
-✅ Tests comprehensive  
-✅ Documentation complete  
+✅ All Python files compile without errors
+✅ All routers imported correctly
+✅ Main app includes all routers
+✅ Request/response models validated
+✅ Error handling implemented
+✅ Authorization checks in place
+✅ Tests comprehensive
+✅ Documentation complete
 
 ## Phases 1-3 Complete ✅
 
 **Phase 1: Storage Backends** (Sessions 1-2)
+
 - ✅ PostgresStore (18 tests)
 - ✅ ValkeyStore (21 tests)
 
 **Phase 2: API Server Core** (Session 3)
+
 - ✅ Authentication Middleware (5 tests)
 - ✅ Distributed Locking (8 tests)
 - ✅ BYOK Encryption (10 tests)
 - ✅ Request Lifecycle
 
 **Phase 3: API Endpoints** (Session 4)
+
 - ✅ Execution Router (6 tests)
 - ✅ Projects Router (9 tests)
 - ✅ User Settings Router (8 tests)
 
 **Total Progress:**
+
 - Sessions: 4
 - Phases Complete: 3 of 7
 - Code Lines: 2,936+
@@ -415,6 +443,7 @@ Endpoint tests use mocks rather than real databases:
 ### Phase 4: Additional Endpoints (Optional)
 
 Could add artifact-specific endpoints:
+
 - POST /projects/{id}/artifacts
 - GET /projects/{id}/artifacts
 - GET /projects/{id}/artifacts/{artifact_id}
@@ -422,6 +451,7 @@ Could add artifact-specific endpoints:
 - DELETE /projects/{id}/artifacts/{artifact_id}
 
 However, these might be redundant since:
+
 - Orchestrator handles artifact operations
 - Execute endpoint provides full functionality
 - Direct artifact manipulation bypasses business logic
@@ -429,6 +459,7 @@ However, these might be redundant since:
 ### Phase 5: PWA Implementation
 
 Next major phase is the frontend:
+
 - React/Svelte PWA
 - Mobile-first design
 - Project management UI
@@ -439,12 +470,14 @@ Next major phase is the frontend:
 ### Phase 6: CI/CD
 
 Automated workflows:
+
 - webui-ci.yml - Linting, tests, type checking
 - publish-webui.yml - Docker image publishing to GHCR
 
 ### Integration Testing
 
 Before PWA, could do end-to-end testing:
+
 - Start full stack (PostgreSQL + Redis + API)
 - Test complete request flows
 - Validate all endpoints work together
@@ -469,20 +502,20 @@ webui/api/
 
 ## Success Criteria Met
 
-✅ Execution endpoints implemented and tested  
-✅ Project management endpoints implemented and tested  
-✅ User settings endpoints implemented and tested  
-✅ All routers integrated into main app  
-✅ Request/response models validated  
-✅ Error handling implemented  
-✅ Authorization checks in place  
-✅ Code compiles without errors  
-✅ Comprehensive test coverage  
-✅ API documentation auto-generated  
-✅ Follows implementation guide patterns  
+✅ Execution endpoints implemented and tested
+✅ Project management endpoints implemented and tested
+✅ User settings endpoints implemented and tested
+✅ All routers integrated into main app
+✅ Request/response models validated
+✅ Error handling implemented
+✅ Authorization checks in place
+✅ Code compiles without errors
+✅ Comprehensive test coverage
+✅ API documentation auto-generated
+✅ Follows implementation guide patterns
 
 ---
 
-**Session 4 Status**: ✅ **COMPLETE**  
-**Phase 3 Status**: ✅ **100% COMPLETE**  
+**Session 4 Status**: ✅ **COMPLETE**
+**Phase 3 Status**: ✅ **100% COMPLETE**
 **Next Session**: Phase 5 (PWA) or Phase 4 (Artifact endpoints)

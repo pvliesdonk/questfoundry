@@ -80,7 +80,7 @@ Every API request that interacts with QuestFoundry follows this lifecycle:
 2. **Acquire Lock**: Atomically acquire Redis lock for project (`lock:project:{id}`)
 3. **Fetch Config**: Get user's decrypted provider keys from PostgreSQL
 4. **Build Config**: Create in-memory `ProviderConfig` with user's keys
-5. **Instantiate Storage**: 
+5. **Instantiate Storage**:
    - `PostgresStore(project_id="...")` for cold storage
    - `ValkeyStore(project_id="...")` for hot storage
 6. **Instantiate Library**:
@@ -93,6 +93,7 @@ Every API request that interacts with QuestFoundry follows this lifecycle:
 10. **Discard**: All library objects go out of scope (no persistence)
 
 This ensures:
+
 - Complete isolation between users
 - No shared state between requests
 - User-specific provider keys per request
@@ -158,6 +159,7 @@ See `docker-compose.yml` for a complete example stack:
 ### Quick Start
 
 1. Generate encryption key:
+
    ```bash
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
    ```
@@ -165,15 +167,16 @@ See `docker-compose.yml` for a complete example stack:
 2. Update `docker-compose.yml` with real passwords and keys
 
 3. Deploy:
+
    ```bash
    cd webui
    docker-compose up -d
    ```
 
 4. Access:
-   - PWA: http://localhost:3000
-   - API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+   - PWA: <http://localhost:3000>
+   - API: <http://localhost:8000>
+   - API Docs: <http://localhost:8000/docs>
 
 ## Development
 
@@ -198,11 +201,13 @@ npm run dev
 This is scaffolding for the full implementation. See `IMPLEMENTATION_GUIDE.md` for detailed step-by-step instructions.
 
 **Phase 1: Storage Backends**
+
 - [ ] PostgresStore implementation
 - [ ] ValkeyStore implementation
 - [ ] Storage backend tests
 
 **Phase 2: API Server**
+
 - [ ] Authentication middleware
 - [ ] Locking mechanism
 - [ ] Core request lifecycle
@@ -212,16 +217,19 @@ This is scaffolding for the full implementation. See `IMPLEMENTATION_GUIDE.md` f
 - [ ] User settings endpoints
 
 **Phase 3: Tenancy**
+
 - [ ] Database schema and migrations
 - [ ] BYOK encryption/decryption
 - [ ] User settings management
 
 **Phase 4: CI/CD**
+
 - [ ] webui-ci.yml workflow
 - [ ] publish-webui.yml workflow
 - [ ] GHCR image publishing
 
 **Phase 5: PWA**
+
 - [ ] React scaffolding
 - [ ] Project management UI
 - [ ] Hot/Cold SoT visualization
@@ -231,7 +239,7 @@ This is scaffolding for the full implementation. See `IMPLEMENTATION_GUIDE.md` f
 
 ## References
 
-- **Specification Gist**: https://gist.github.com/pvliesdonk/785372a19d3bee0fdcb6aceb4998e7ad
+- **Specification Gist**: <https://gist.github.com/pvliesdonk/785372a19d3bee0fdcb6aceb4998e7ad>
 - **questfoundry-py**: The core Python library (../lib/python)
 - **Implementation Guide**: ./IMPLEMENTATION_GUIDE.md
 - **API README**: ./api/README.md

@@ -15,13 +15,16 @@ node scripts/generate-icons.js
 ## Icon Requirements
 
 ### PWA Manifest Icons
+
 - **192x192px**: Minimum required size for PWA
 - **512x512px**: Recommended for splash screens
 
 ### Apple Touch Icons
+
 - **180x180px**: For iOS home screen
 
 ### Favicons
+
 - **32x32px**: Standard favicon
 - **16x16px**: Small favicon
 - **favicon.ico**: Multi-size ICO file
@@ -29,6 +32,7 @@ node scripts/generate-icons.js
 ## Current Status
 
 The repository includes:
+
 - ✅ `icon.svg` - Source SVG icon (QF branding)
 - ⚠️ PNG placeholders - Need to be generated
 
@@ -37,12 +41,14 @@ The repository includes:
 If you can't use the script, generate icons manually:
 
 ### Option 1: Online Tools
-1. Visit https://realfavicongenerator.net/
+
+1. Visit <https://realfavicongenerator.net/>
 2. Upload `/public/icon.svg`
 3. Download generated package
 4. Replace files in `/public/`
 
 ### Option 2: ImageMagick
+
 ```bash
 # Install ImageMagick
 sudo apt-get install imagemagick
@@ -56,6 +62,7 @@ convert public/icon.svg -resize 16x16 public/favicon-16x16.png
 ```
 
 ### Option 3: Inkscape
+
 ```bash
 # Install Inkscape
 sudo apt-get install inkscape
@@ -107,16 +114,19 @@ After generating icons:
 ## Troubleshooting
 
 **Icons not updating?**
+
 - Clear browser cache (Ctrl+Shift+R)
 - Clear service worker cache
 - Check browser console for errors
 
 **Icons look blurry?**
+
 - Ensure PNG is high resolution
 - SVG should be vector (not rasterized)
 - Check PNG export settings (no compression artifacts)
 
 **PWA not installable?**
+
 - Check manifest.json has icons array
 - Verify icons are accessible (not 404)
 - Ensure HTTPS (required for PWA)

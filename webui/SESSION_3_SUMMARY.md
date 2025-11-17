@@ -13,24 +13,26 @@ Session 3 successfully implemented Phase 2 (API Server Core), completing all the
 Extracts user ID from X-Forwarded-User header set by OIDC proxy.
 
 **Key Features:**
+
 - Trusts X-Forwarded-User header (set by Traefik + Authelia)
 - Skips authentication for health check, root, and docs endpoints
 - Returns 401 Unauthorized if header missing
 - Stores user_id in request.state for handlers
 
 **Implementation:**
+
 ```python
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip auth for public endpoints
         if request.url.path in ["/health", "/", "/docs", "/openapi.json"]:
             return await call_next(request)
-        
+
         # Extract user ID
         user_id = request.headers.get("X-Forwarded-User")
         if not user_id:
             raise HTTPException(status_code=401, ...)
-        
+
         # Store for handlers
         request.state.user_id = user_id
         return await call_next(request)
@@ -43,6 +45,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 Redis-based distributed locking to prevent concurrent writes to same project.
 
 **Key Features:**
+
 - Atomic lock acquisition using Redis SET NX EX
 - Lock timeout: 5 minutes (configurable)
 - Same user can re-acquire their own lock
@@ -50,20 +53,21 @@ Redis-based distributed locking to prevent concurrent writes to same project.
 - Returns 423 (Locked) if project already locked by another user
 
 **Implementation:**
+
 ```python
 class ProjectLock:
     @contextmanager
     def acquire(self, project_id: str, user_id: str):
         lock_key = f"lock:project:{project_id}"
-        
+
         # Atomic acquire
         acquired = self.client.set(lock_key, user_id, nx=True, ex=timeout)
-        
+
         if not acquired:
             owner = self.client.get(lock_key)
             if owner.decode() != user_id:
                 raise HTTPException(status_code=423, ...)
-        
+
         try:
             yield
         finally:
@@ -79,12 +83,14 @@ class ProjectLock:
 Fernet symmetric encryption for user provider keys.
 
 **Key Features:**
+
 - Encrypts provider API keys at rest in PostgreSQL
 - Decrypts per request
 - Uses Fernet from cryptography library
 - Secure key generation helper in error messages
 
 **Implementation:**
+
 ```python
 def encrypt_keys(provider_config: ProviderConfig) -> bytes:
     f = Fernet(settings.encryption_key.encode())
@@ -108,6 +114,7 @@ async def get_user_provider_config(user_id: str) -> ProviderConfig:
 Context manager implementing the complete request lifecycle pattern.
 
 **Key Features:**
+
 - Acquires distributed lock
 - Instantiates project-scoped storage backends
 - Creates user-scoped library components
@@ -115,6 +122,7 @@ Context manager implementing the complete request lifecycle pattern.
 - Automatic cleanup and lock release
 
 **Implementation:**
+
 ```python
 @contextmanager
 def orchestrator_context(project_id, user_id, provider_config):
@@ -125,20 +133,20 @@ def orchestrator_context(project_id, user_id, provider_config):
             # Storage backends (project-scoped)
             cold_store = PostgresStore(settings.postgres_url, project_id)
             hot_store = ValkeyStore(settings.redis_url, project_id)
-            
+
             try:
                 # Library components (user-scoped)
                 provider_reg = ProviderRegistry(config=provider_config)
                 role_reg = RoleRegistry(provider_reg)
                 workspace = WorkspaceManager(cold=cold_store, hot=hot_store)
-                
+
                 # Orchestrator
                 orchestrator = Orchestrator(
                     workspace=workspace,
                     provider_registry=provider_reg,
                     role_registry=role_reg
                 )
-                
+
                 yield orchestrator
             finally:
                 cold_store.close()
@@ -242,21 +250,25 @@ Comprehensive test suite with 23 test cases across 3 test files:
 ### Isolation Guarantees
 
 **User Isolation:**
+
 - Each user has encrypted provider keys (BYOK)
 - Keys decrypted only for that user's requests
 - No key sharing between users
 
 **Project Isolation:**
+
 - Storage backends scoped by project_id
 - All queries include WHERE project_id = ?
 - Keys namespaced: hot:{project_id}:...
 
 **Request Isolation:**
+
 - Fresh library objects per request
 - No shared state between requests
 - All objects discarded after response
 
 **Concurrency Protection:**
+
 - Distributed locks prevent concurrent writes
 - Lock held for entire request duration
 - Timeout prevents deadlocks (5 minutes)
@@ -307,6 +319,7 @@ AuthMiddleware is added last, so it runs first in the middleware stack. This ens
 ### 2. Lock Scope
 
 Locks are project-level, not endpoint-level. This is appropriate because:
+
 - Projects are the unit of work in QuestFoundry
 - All operations on a project should be serialized
 - Finer-grained locking would be complex with minimal benefit
@@ -314,6 +327,7 @@ Locks are project-level, not endpoint-level. This is appropriate because:
 ### 3. Lock Timeout
 
 Default 5 minutes is conservative:
+
 - Long enough for typical operations
 - Short enough to prevent long deadlocks
 - Can be tuned via WEBUI_LOCK_TIMEOUT
@@ -321,6 +335,7 @@ Default 5 minutes is conservative:
 ### 4. BYOK Storage
 
 Provider keys stored in PostgreSQL (not Redis) because:
+
 - Persistence required (can't expire)
 - Small data size (no performance concern)
 - ACID guarantees for updates
@@ -329,6 +344,7 @@ Provider keys stored in PostgreSQL (not Redis) because:
 ### 5. Request Lifecycle Pattern
 
 Context manager ensures:
+
 - No leaked connections
 - No forgotten locks
 - Consistent cleanup
@@ -336,27 +352,30 @@ Context manager ensures:
 
 ## Validation
 
-✅ All Python files compile without errors  
-✅ Imports are correctly structured  
-✅ Middleware integrates with FastAPI  
-✅ Lock mechanism is thread-safe  
-✅ Encryption is secure (Fernet)  
-✅ Tests are comprehensive  
-✅ Documentation is complete  
+✅ All Python files compile without errors
+✅ Imports are correctly structured
+✅ Middleware integrates with FastAPI
+✅ Lock mechanism is thread-safe
+✅ Encryption is secure (Fernet)
+✅ Tests are comprehensive
+✅ Documentation is complete
 
 ## Phase 1-2 Complete ✅
 
 **Phase 1: Storage Backends** (Sessions 1-2)
+
 - ✅ PostgresStore (18 tests)
 - ✅ ValkeyStore (21 tests)
 
 **Phase 2: API Server Core** (Session 3)
+
 - ✅ Authentication Middleware (5 tests)
 - ✅ Distributed Locking (8 tests)
 - ✅ BYOK Encryption (10 tests)
 - ✅ Request Lifecycle
 
 **Total Progress:**
+
 - Sessions: 3
 - Phases Complete: 2 of 7
 - Code Lines: 2,086+
@@ -370,6 +389,7 @@ Context manager ensures:
 With the core infrastructure complete, we can now build actual API endpoints:
 
 **Priority:**
+
 1. **Basic execution endpoint** (proof of concept)
    - POST /projects/{id}/execute
    - Uses orchestrator_context
@@ -420,18 +440,18 @@ webui/api/
 
 ## Success Criteria Met
 
-✅ Authentication middleware implemented and tested  
-✅ Distributed locking implemented and tested  
-✅ BYOK encryption implemented and tested  
-✅ Request lifecycle implemented  
-✅ Main app updated with middleware  
-✅ Code compiles without errors  
-✅ Comprehensive test coverage  
-✅ Documentation updated  
-✅ Follows implementation guide patterns  
+✅ Authentication middleware implemented and tested
+✅ Distributed locking implemented and tested
+✅ BYOK encryption implemented and tested
+✅ Request lifecycle implemented
+✅ Main app updated with middleware
+✅ Code compiles without errors
+✅ Comprehensive test coverage
+✅ Documentation updated
+✅ Follows implementation guide patterns
 
 ---
 
-**Session 3 Status**: ✅ **COMPLETE**  
-**Phase 2 Status**: ✅ **100% COMPLETE**  
+**Session 3 Status**: ✅ **COMPLETE**
+**Phase 2 Status**: ✅ **100% COMPLETE**
 **Next Session**: Phase 3 (API Endpoints)

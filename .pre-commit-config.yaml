@@ -131,7 +131,7 @@ repos:
     hooks:
       - id: markdownlint
         args: [--fix]
-        exclude: ^(lib/python/src/questfoundry/resources/|lib/python/docs/)
+        exclude: ^(lib/python/src/questfoundry/resources/|lib/python/docs/|(.*/)?node_modules/)
 
   # Commitizen for commit message format
   - repo: https://github.com/commitizen-tools/commitizen
