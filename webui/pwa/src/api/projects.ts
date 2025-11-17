@@ -1,7 +1,7 @@
 // Project API calls
 
 import { apiFetch } from './client';
-import { Project, ProjectResponse } from '../types/api';
+import type { Project, ProjectResponse } from '../types/api';
 
 export async function listProjects(): Promise<ProjectResponse[]> {
   return apiFetch<ProjectResponse[]>('/projects');

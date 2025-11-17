@@ -1,7 +1,7 @@
 // Artifact API calls
 
 import { apiFetch } from './client';
-import { Artifact, ArtifactResponse } from '../types/api';
+import type { Artifact, ArtifactResponse } from '../types/api';
 
 export type StorageBackend = 'hot' | 'cold';
 

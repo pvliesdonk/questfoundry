@@ -1,7 +1,7 @@
 // Execution API calls
 
 import { apiFetch } from './client';
-import { GoalExecutionRequest, GoalExecutionResponse, GatecheckResponse } from '../types/api';
+import type { GoalExecutionRequest, GoalExecutionResponse, GatecheckResponse } from '../types/api';
 
 export async function executeGoal(
   projectId: string,

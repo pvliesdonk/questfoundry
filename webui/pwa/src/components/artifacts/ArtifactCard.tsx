@@ -1,5 +1,5 @@
-import { Artifact } from '../../types/api';
-import { StorageBackend } from '../../api/artifacts';
+import type { Artifact } from '../../types/api';
+import type { StorageBackend } from '../../api/artifacts';
 
 interface Props {
   artifact: Artifact;

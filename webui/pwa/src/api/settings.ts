@@ -1,7 +1,7 @@
 // Settings API calls
 
 import { apiFetch } from './client';
-import { UserSettings, ProviderKeys } from '../types/api';
+import type { UserSettings, ProviderKeys } from '../types/api';
 
 export async function getUserSettings(): Promise<UserSettings> {
   return apiFetch<UserSettings>('/user/settings');
