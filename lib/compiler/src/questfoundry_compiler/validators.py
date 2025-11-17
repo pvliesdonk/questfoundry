@@ -21,7 +21,9 @@ class ReferenceValidator:
         """
         self.primitives = primitives
         self.spec_root = Path(spec_root)
-        logger.debug(f"Initialized ReferenceValidator with {len(primitives)} primitives")
+        logger.debug(
+            f"Initialized ReferenceValidator with {len(primitives)} primitives"
+        )
 
     def validate_all(self) -> list[str]:
         """Run all validation checks.
@@ -31,30 +33,30 @@ class ReferenceValidator:
         """
         logger.info("Running all validation checks...")
         errors = []
-        
+
         logger.debug("Validating expertise references...")
         errors.extend(self.validate_expertise_refs())
-        
+
         logger.debug("Validating procedure references...")
         errors.extend(self.validate_procedure_refs())
-        
+
         logger.debug("Validating schema references...")
         errors.extend(self.validate_schema_refs())
-        
+
         logger.debug("Validating role references...")
         errors.extend(self.validate_role_refs())
-        
+
         logger.debug("Detecting circular dependencies...")
         errors.extend(self.detect_circular_deps())
-        
+
         logger.debug("Checking for orphans...")
         errors.extend(self.check_orphans())
-        
+
         if errors:
             logger.warning(f"Validation completed with {len(errors)} issues")
         else:
             logger.info("All validation checks passed")
-        
+
         return errors
 
     def validate_expertise_refs(self) -> list[str]:
@@ -74,8 +76,10 @@ class ReferenceValidator:
                         error_msg = f"{prim_key}: Expertise '{expertise_id}' not found"
                         errors.append(error_msg)
                         logger.debug(f"  ✗ {error_msg}")
-        
-        logger.debug(f"Checked {checked_count} expertise references, found {len(errors)} errors")
+
+        logger.debug(
+            f"Checked {checked_count} expertise references, found {len(errors)} errors"
+        )
         return errors
 
     def validate_procedure_refs(self) -> list[str]:
@@ -95,8 +99,10 @@ class ReferenceValidator:
                         error_msg = f"{prim_key}: Procedure '{procedure_id}' not found"
                         errors.append(error_msg)
                         logger.debug(f"  ✗ {error_msg}")
-        
-        logger.debug(f"Checked {checked_count} procedure references, found {len(errors)} errors")
+
+        logger.debug(
+            f"Checked {checked_count} procedure references, found {len(errors)} errors"
+        )
         return errors
 
     def validate_schema_refs(self) -> list[str]:
@@ -121,8 +127,10 @@ class ReferenceValidator:
                         )
                         errors.append(error_msg)
                         logger.debug(f"  ✗ {error_msg}")
-        
-        logger.debug(f"Checked {checked_count} schema references, found {len(errors)} errors")
+
+        logger.debug(
+            f"Checked {checked_count} schema references, found {len(errors)} errors"
+        )
         return errors
 
     def validate_role_refs(self) -> list[str]:

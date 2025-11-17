@@ -70,7 +70,7 @@ class SpecCompiler:
     def load_all_primitives(self) -> None:
         """Load all behavior primitives from disk."""
         logger.info("Loading all behavior primitives")
-        
+
         # Load expertises
         logger.debug("Loading expertises...")
         self._load_markdown_primitives(
@@ -100,7 +100,7 @@ class SpecCompiler:
         self._load_yaml_primitives(
             self.behavior_dir / "adapters", "adapter", self._extract_adapter_refs
         )
-        
+
         logger.info(f"Loaded {len(self.primitives)} total primitives")
 
     def _load_markdown_primitives(
@@ -163,7 +163,7 @@ class SpecCompiler:
                 raise CompilationError(
                     f"Error loading {prim_type} from {md_file}: {e}"
                 ) from e
-        
+
         logger.info(f"Loaded {file_count} {prim_type}(s) from {directory}")
 
     def _load_yaml_primitives(
@@ -218,7 +218,7 @@ class SpecCompiler:
                 raise CompilationError(
                     f"Error loading {prim_type} from {yaml_file}: {e}"
                 ) from e
-        
+
         logger.info(f"Loaded {file_count} {prim_type}(s) from {directory}")
 
     def _extract_expertise_refs(
@@ -413,7 +413,7 @@ class SpecCompiler:
             CompilationError: If compilation fails
         """
         logger.info(f"Compiling playbook: {playbook_id}")
-        
+
         # Ensure primitives are loaded
         if not self.primitives:
             logger.debug("Primitives not loaded, loading now...")
@@ -429,16 +429,16 @@ class SpecCompiler:
         if errors:
             actual_errors = [e for e in errors if not e.startswith("Warning:")]
             warnings = [e for e in errors if e.startswith("Warning:")]
-            
+
             if warnings:
                 for warning in warnings:
                     logger.warning(warning)
-            
+
             if actual_errors:
                 error_msg = "\n".join(actual_errors)
                 logger.error(f"Validation failed with {len(actual_errors)} errors")
                 raise CompilationError(f"Validation failed:\n{error_msg}")
-        
+
         logger.info("Validation passed")
 
         output_dir = Path(output_dir)
@@ -478,7 +478,7 @@ class SpecCompiler:
             CompilationError: If compilation fails
         """
         logger.info(f"Compiling adapter: {adapter_id}")
-        
+
         # Ensure primitives are loaded
         if not self.primitives:
             logger.debug("Primitives not loaded, loading now...")
@@ -499,16 +499,16 @@ class SpecCompiler:
         if errors:
             actual_errors = [e for e in errors if not e.startswith("Warning:")]
             warnings = [e for e in errors if e.startswith("Warning:")]
-            
+
             if warnings:
                 for warning in warnings:
                     logger.warning(warning)
-            
+
             if actual_errors:
                 error_msg = "\n".join(actual_errors)
                 logger.error(f"Validation failed with {len(actual_errors)} errors")
                 raise CompilationError(f"Validation failed:\n{error_msg}")
-        
+
         logger.info("Validation passed")
 
         output_dir = Path(output_dir)
@@ -594,7 +594,7 @@ class SpecCompiler:
                 logger.warning(f"Found {len(warnings)} validation warnings:")
                 for warning in warnings:
                     logger.warning(f"  {warning}")
-        
+
         logger.info("Validation passed")
 
         # Create output directories
@@ -623,9 +623,11 @@ class SpecCompiler:
 
         # Step 3: Build playbook manifests
         logger.info("Step 3: Building playbook manifests...")
-        playbook_count = sum(1 for p in self.primitives.values() if p.type == "playbook")
+        playbook_count = sum(
+            1 for p in self.primitives.values() if p.type == "playbook"
+        )
         logger.debug(f"Found {playbook_count} playbooks to compile")
-        
+
         for prim_key, primitive in self.primitives.items():
             if primitive.type == "playbook":
                 try:
@@ -636,18 +638,22 @@ class SpecCompiler:
                     stats["playbook_manifests_generated"] += 1
                     logger.debug(f"  Generated: {output_path}")
                 except Exception as e:
-                    logger.error(f"Error building playbook manifest for {primitive.id}: {e}")
+                    logger.error(
+                        f"Error building playbook manifest for {primitive.id}: {e}"
+                    )
                     raise CompilationError(
                         f"Error building playbook manifest for {primitive.id}: {e}"
                     ) from e
-        
-        logger.info(f"Generated {stats['playbook_manifests_generated']} playbook manifests")
+
+        logger.info(
+            f"Generated {stats['playbook_manifests_generated']} playbook manifests"
+        )
 
         # Step 4: Build adapter manifests
         logger.info("Step 4: Building adapter manifests...")
         adapter_count = sum(1 for p in self.primitives.values() if p.type == "adapter")
         logger.debug(f"Found {adapter_count} adapters to compile")
-        
+
         for prim_key, primitive in self.primitives.items():
             if primitive.type == "adapter":
                 try:
@@ -658,12 +664,16 @@ class SpecCompiler:
                     stats["adapter_manifests_generated"] += 1
                     logger.debug(f"  Generated: {output_path}")
                 except Exception as e:
-                    logger.error(f"Error building adapter manifest for {primitive.id}: {e}")
+                    logger.error(
+                        f"Error building adapter manifest for {primitive.id}: {e}"
+                    )
                     raise CompilationError(
                         f"Error building adapter manifest for {primitive.id}: {e}"
                     ) from e
-        
-        logger.info(f"Generated {stats['adapter_manifests_generated']} adapter manifests")
+
+        logger.info(
+            f"Generated {stats['adapter_manifests_generated']} adapter manifests"
+        )
 
         # Step 5: Assemble standalone prompts
         logger.info("Step 5: Assembling standalone prompts...")
@@ -679,11 +689,12 @@ class SpecCompiler:
                 except Exception as e:
                     # Log warning but don't fail compilation
                     logger.warning(
-                        f"Error assembling standalone prompt "
-                        f"for {primitive.id}: {e}"
+                        f"Error assembling standalone prompt for {primitive.id}: {e}"
                     )
 
-        logger.info(f"Generated {stats['standalone_prompts_generated']} standalone prompts")
+        logger.info(
+            f"Generated {stats['standalone_prompts_generated']} standalone prompts"
+        )
         logger.info("Compilation pipeline complete!")
 
         return stats

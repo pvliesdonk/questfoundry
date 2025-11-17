@@ -10,23 +10,25 @@ from questfoundry_compiler.spec_compiler import CompilationError, SpecCompiler
 
 def _configure_logging(verbose: bool) -> None:
     """Configure logging based on verbosity.
-    
+
     Args:
         verbose: If True, set to INFO level, otherwise WARNING
     """
     level = logging.INFO if verbose else logging.WARNING
-    
+
     # Configure root logger
     logging.basicConfig(
         level=level,
         format="%(levelname)-8s %(message)s",
     )
-    
+
     # Set level for questfoundry_compiler loggers
-    for name in ["questfoundry_compiler.spec_compiler", 
-                 "questfoundry_compiler.validators",
-                 "questfoundry_compiler.assemblers",
-                 "questfoundry_compiler.manifest_builder"]:
+    for name in [
+        "questfoundry_compiler.spec_compiler",
+        "questfoundry_compiler.validators",
+        "questfoundry_compiler.assemblers",
+        "questfoundry_compiler.manifest_builder",
+    ]:
         logging.getLogger(name).setLevel(level)
 
 
@@ -100,7 +102,7 @@ Examples:
     )
 
     args = parser.parse_args()
-    
+
     # Configure logging based on verbosity
     _configure_logging(args.verbose)
 
