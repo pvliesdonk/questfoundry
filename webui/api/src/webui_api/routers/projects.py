@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from questfoundry.state.types import ProjectInfo
 
 from ..config import settings
+from ..storage.postgres_store import PostgresStore
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -89,8 +90,6 @@ async def create_project(
                 # Create project info in PostgresStore
                 # Note: Normally we'd use PostgresStore, but we do it directly here
                 # to avoid circular dependencies and keep it simple.
-                from ..storage import PostgresStore
-
                 store = PostgresStore(settings.postgres_url, project_id)
                 try:
                     project_info = ProjectInfo(
@@ -158,9 +157,6 @@ async def list_projects(
 
                 projects = []
                 for project_id, created_at in rows:
-                    # Get project info from PostgresStore
-                    from ..storage import PostgresStore
-
                     store = PostgresStore(settings.postgres_url, project_id)
                     try:
                         project_info = store.get_project_info()
@@ -241,8 +237,6 @@ async def get_project(
                     )
 
                 # Get project info
-                from ..storage import PostgresStore
-
                 store = PostgresStore(settings.postgres_url, project_id)
                 try:
                     project_info = store.get_project_info()
