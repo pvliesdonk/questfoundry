@@ -1,3 +1,0 @@
-# For local development, use:
-# uv pip install -e ../../lib/compiler
-# uv pip install -e .

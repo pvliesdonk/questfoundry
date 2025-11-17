@@ -14,7 +14,7 @@ from typing import Any, Final
 DEFAULT_CACHE_DIR: Final = Path.home() / ".cache" / "questfoundry" / "spec"
 GITHUB_REPO: Final = "pvliesdonk/questfoundry"
 API_BASE: Final = f"https://api.github.com/repos/{GITHUB_REPO}"
-USER_AGENT: Final = "questfoundry-prompt-generator"
+USER_AGENT: Final = "questfoundry-compiler"
 
 
 class SpecFetchError(RuntimeError):
@@ -46,19 +46,27 @@ def _download_file(url: str, destination: Path) -> None:
 
 
 def _extract_zip(archive_path: Path, target_dir: Path) -> None:
+    """Extract a zip archive and locate the spec root directory."""
     with zipfile.ZipFile(archive_path) as archive:
         extract_root = Path(tempfile.mkdtemp(prefix="qf-spec-extract-"))
         try:
             archive.extractall(extract_root)
 
-            # Prefer copying the directory that directly contains 05-behavior.
+            # Locate the directory that contains 05-behavior
             # Some release zips contain a top-level 'spec' directory (spec-all.zip),
             # while GitHub repo zipballs contain the repo root with a nested 'spec/'.
             candidate_root: Path | None = None
+
+            # Check if 05-behavior is directly in extract root
             if (extract_root / "05-behavior").is_dir():
                 candidate_root = extract_root
-            elif (extract_root / "spec" / "05-behavior").is_dir():
-                candidate_root = extract_root / "spec"
+            else:
+                # Search for 05-behavior in subdirectories
+                for subdir in extract_root.rglob("05-behavior"):
+                    if subdir.is_dir():
+                        # Found 05-behavior, its parent is the spec root
+                        candidate_root = subdir.parent
+                        break
 
             if candidate_root is None:
                 raise SpecFetchError(
@@ -85,7 +93,9 @@ def _fetch_release_info(tag: str | None = None) -> dict[str, Any]:
     releases = _request_json(f"{API_BASE}/releases")
     if isinstance(releases, list):
         for rel in releases:
-            tag_name = rel.get("tag_name") if isinstance(rel, dict) else None
+            if not isinstance(rel, dict):
+                continue
+            tag_name = rel.get("tag_name")
             if isinstance(tag_name, str) and tag_name.startswith("spec-v"):
                 return rel
 
