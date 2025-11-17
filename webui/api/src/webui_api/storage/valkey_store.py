@@ -119,7 +119,7 @@ class ValkeyStore(StateStore):
         """Save artifact with project namespacing and TTL"""
         artifact_id = artifact.metadata.get("id")
         if not artifact_id:
-            raise ValueError("Artifact must have 'id' in metadata")
+            raise ValueError("Artifact must have an 'id' in metadata")
 
         key = self._key("artifacts", artifact.type, artifact_id)
 
