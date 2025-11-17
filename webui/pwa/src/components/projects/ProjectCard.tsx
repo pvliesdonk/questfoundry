@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { deleteProject } from '../../api/projects';
-import { Project } from '../../types/api';
+import type { Project } from '../../types/api';
 
 interface Props {
   project: Project;
@@ -35,6 +35,7 @@ export default function ProjectCard({ project, onDelete }: Props) {
       <div className="flex items-center justify-between text-sm text-gray-500">
         <span>v{project.version || '1.0.0'}</span>
         <button
+          type="button"
           onClick={handleDelete}
           className="text-red-600 hover:text-red-800"
         >

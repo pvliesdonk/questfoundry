@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -35,6 +35,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               {this.state.error?.message || 'An unexpected error occurred'}
             </p>
             <button
+              type="button"
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
             >

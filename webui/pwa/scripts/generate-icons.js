@@ -8,8 +8,8 @@
  * Usage: node scripts/generate-icons.js
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // Check if sharp is installed
 let sharp;
@@ -74,7 +74,9 @@ async function generateIcons() {
 
   console.log('\n✨ Icon generation complete!\n');
   console.log('Generated icons:');
-  sizes.forEach(({ name }) => console.log(`  - ${name}`));
+  for (const { name } of sizes) {
+    console.log(`  - ${name}`);
+  }
   console.log('\nNext steps:');
   console.log('  1. Review generated icons in /public/');
   console.log('  2. Run: npm run build');

@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -57,6 +57,7 @@ export default function Button({
           fill="none"
           viewBox="0 0 24 24"
         >
+          <title>Loading</title>
           <circle
             className="opacity-25"
             cx="12"

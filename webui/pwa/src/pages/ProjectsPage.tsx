@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { listProjects, createProject } from '../api/projects';
-import { Project, ProjectInfo } from '../types/api';
+import type { Project, ProjectInfo } from '../types/api';
 import ProjectCard from '../components/projects/ProjectCard';
 import CreateProjectModal from '../components/projects/CreateProjectModal';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -22,8 +23,8 @@ export default function ProjectsPage() {
       setError(null);
       const data = await listProjects();
       setProjects(data);
-    } catch (err: any) {
-      setError(err.detail || 'Failed to load projects');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load projects'));
     } finally {
       setLoading(false);
     }
@@ -63,6 +64,7 @@ export default function ProjectsPage() {
           <p className="text-gray-600 mt-1">{projects.length} total projects</p>
         </div>
         <button
+          type="button"
           onClick={() => setShowCreate(true)}
           className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
         >
@@ -86,7 +88,9 @@ export default function ProjectsPage() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
+              <title>Search projects</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -96,6 +100,7 @@ export default function ProjectsPage() {
             </svg>
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
@@ -123,6 +128,7 @@ export default function ProjectsPage() {
             No projects yet
           </p>
           <button
+            type="button"
             onClick={() => setShowCreate(true)}
             className="text-primary hover:underline"
           >
@@ -135,6 +141,7 @@ export default function ProjectsPage() {
             No projects match "{searchQuery}"
           </p>
           <button
+            type="button"
             onClick={() => setSearchQuery('')}
             className="text-primary hover:underline"
           >

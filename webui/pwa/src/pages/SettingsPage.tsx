@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { getUserSettings, updateProviderKeys } from '../api/settings';
-import { UserSettings, ProviderKeys } from '../types/api';
+import type { UserSettings, ProviderKeys } from '../types/api';
 import { LoadingPage } from '../components/common/LoadingSpinner';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -14,6 +15,8 @@ export default function SettingsPage() {
   const [anthropicKey, setAnthropicKey] = useState('');
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
+  const openaiInputId = useId();
+  const anthropicInputId = useId();
 
   useEffect(() => {
     loadSettings();
@@ -25,8 +28,8 @@ export default function SettingsPage() {
       setError(null);
       const data = await getUserSettings();
       setSettings(data);
-    } catch (err: any) {
-      setError(err.detail || 'Failed to load settings');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load settings'));
     } finally {
       setLoading(false);
     }
@@ -55,8 +58,8 @@ export default function SettingsPage() {
       await loadSettings();
 
       setTimeout(() => setSuccess(false), 5000);
-    } catch (err: any) {
-      setError(err.detail || 'Failed to save keys');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to save keys'));
     } finally {
       setSaving(false);
     }
@@ -113,11 +116,12 @@ export default function SettingsPage() {
 
         <form onSubmit={handleSave}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2" htmlFor={openaiInputId}>
               OpenAI API Key
             </label>
             <div className="relative">
               <input
+                id={openaiInputId}
                 type={showOpenaiKey ? 'text' : 'password'}
                 value={openaiKey}
                 onChange={(e) => setOpenaiKey(e.target.value)}
@@ -146,11 +150,12 @@ export default function SettingsPage() {
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2" htmlFor={anthropicInputId}>
               Anthropic API Key
             </label>
             <div className="relative">
               <input
+                id={anthropicInputId}
                 type={showAnthropicKey ? 'text' : 'password'}
                 value={anthropicKey}
                 onChange={(e) => setAnthropicKey(e.target.value)}

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { listArtifacts } from '../api/artifacts';
-import { Artifact } from '../types/api';
+import type { Artifact } from '../types/api';
 import ArtifactList from '../components/artifacts/ArtifactList';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function HotWorkspacePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -24,11 +25,19 @@ export default function HotWorkspacePage() {
       setError(null);
       const data = await listArtifacts(projectId, 'hot');
       setArtifacts(data);
-    } catch (err: any) {
-      setError(err.detail || 'Failed to load hot artifacts');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load hot artifacts'));
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!projectId) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-xl text-gray-600">Project not found.</div>
+      </div>
+    );
   }
 
   if (loading) {
@@ -75,7 +84,7 @@ export default function HotWorkspacePage() {
         <ArtifactList
           artifacts={artifacts}
           storage="hot"
-          projectId={projectId!}
+          projectId={projectId}
           onRefresh={loadArtifacts}
         />
       )}

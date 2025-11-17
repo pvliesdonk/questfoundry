@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { listArtifacts } from '../api/artifacts';
-import { Artifact } from '../types/api';
+import type { Artifact } from '../types/api';
 import ArtifactList from '../components/artifacts/ArtifactList';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function ColdStoragePage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -24,11 +25,19 @@ export default function ColdStoragePage() {
       setError(null);
       const data = await listArtifacts(projectId, 'cold');
       setArtifacts(data);
-    } catch (err: any) {
-      setError(err.detail || 'Failed to load cold artifacts');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load cold artifacts'));
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!projectId) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-xl text-gray-600">Project not found.</div>
+      </div>
+    );
   }
 
   if (loading) {
@@ -72,7 +81,7 @@ export default function ColdStoragePage() {
         <ArtifactList
           artifacts={artifacts}
           storage="cold"
-          projectId={projectId!}
+          projectId={projectId}
           onRefresh={loadArtifacts}
         />
       )}

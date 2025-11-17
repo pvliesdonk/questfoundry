@@ -1,5 +1,6 @@
-import { useState, FormEvent } from 'react';
-import { ProjectInfo } from '../../types/api';
+import { useState, useId, type FormEvent } from 'react';
+import type { ProjectInfo } from '../../types/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 interface Props {
   onClose: () => void;
@@ -7,6 +8,9 @@ interface Props {
 }
 
 export default function CreateProjectModal({ onClose, onCreate }: Props) {
+  const componentId = useId();
+  const nameInputId = `${componentId}-name`;
+  const descriptionInputId = `${componentId}-description`;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,8 +27,8 @@ export default function CreateProjectModal({ onClose, onCreate }: Props) {
         description,
         version: '1.0.0',
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to create project'));
     } finally {
       setLoading(false);
     }
@@ -36,10 +40,11 @@ export default function CreateProjectModal({ onClose, onCreate }: Props) {
         <h2 className="text-2xl font-bold mb-4">Create New Project</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2" htmlFor={nameInputId}>
               Project Name *
             </label>
             <input
+              id={nameInputId}
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
@@ -48,10 +53,11 @@ export default function CreateProjectModal({ onClose, onCreate }: Props) {
             />
           </div>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2" htmlFor={descriptionInputId}>
               Description
             </label>
             <textarea
+              id={descriptionInputId}
               value={description}
               onChange={e => setDescription(e.target.value)}
               className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary"

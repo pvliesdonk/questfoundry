@@ -5,7 +5,7 @@ export interface ProjectInfo {
   description?: string;
   version?: string;
   author?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Project extends ProjectInfo {
@@ -16,8 +16,8 @@ export interface Project extends ProjectInfo {
 
 export interface Artifact {
   type: string;
-  data: Record<string, any>;
-  metadata: Record<string, any>;
+  data: Record<string, unknown>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ArtifactResponse extends Artifact {
@@ -26,24 +26,33 @@ export interface ArtifactResponse extends Artifact {
   updated_at: string;
 }
 
-export interface ExecutionRequest {
+export interface GoalExecutionRequest {
   goal: string;
+  context?: Record<string, unknown>;
 }
 
-export interface ExecutionResult {
+export interface GoalExecutionResponse {
   status: string;
-  result?: any;
+  result?: unknown;
   error?: string;
 }
 
-export interface GatecheckResult {
-  passed: boolean;
-  issues: Array<{
-    severity: string;
-    message: string;
-    artifact_id?: string;
-  }>;
+export type ExecutionRequest = GoalExecutionRequest;
+export type ExecutionResult = GoalExecutionResponse;
+
+export interface GatecheckIssue {
+  severity: string;
+  message: string;
+  artifact_id?: string;
 }
+
+export interface GatecheckResult {
+  status: string;
+  passed: boolean;
+  issues: GatecheckIssue[];
+}
+
+export type GatecheckResponse = GatecheckResult;
 
 export interface UserSettings {
   provider_keys?: Record<string, string>;

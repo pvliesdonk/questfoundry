@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { executeGoal } from '../api/execution';
 import GatecheckForm from '../components/execution/GatecheckForm';
+import type { GoalExecutionResponse } from '../types/api';
+import { getErrorMessage } from '../utils/errorMessage';
 
 export default function ExecutionPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const goalFieldId = useId();
   const [goal, setGoal] = useState('');
   const [executing, setExecuting] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<GoalExecutionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleExecute(e: React.FormEvent) {
@@ -21,11 +24,19 @@ export default function ExecutionPage() {
       const response = await executeGoal(projectId, goal);
       setResult(response);
       setGoal(''); // Clear goal after successful execution
-    } catch (err: any) {
-      setError(err.detail || err.message || 'Execution failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Execution failed'));
     } finally {
       setExecuting(false);
     }
+  }
+
+  if (!projectId) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-xl text-gray-600">Project not found.</div>
+      </div>
+    );
   }
 
   return (
@@ -47,10 +58,11 @@ export default function ExecutionPage() {
         <h2 className="text-2xl font-bold mb-4">Create Story Elements</h2>
         <form onSubmit={handleExecute}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2" htmlFor={goalFieldId}>
               What would you like to create?
             </label>
             <textarea
+              id={goalFieldId}
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               rows={4}
@@ -81,13 +93,13 @@ export default function ExecutionPage() {
               Your goal has been executed. New artifacts have been created in the hot workspace.
             </p>
             <div className="flex space-x-3">
-              <Link
-                to={`/projects/${projectId}/hot`}
-                className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
-              >
-                View in Hot Workspace →
-              </Link>
-            </div>
+                <Link
+                  to={`/projects/${projectId}/hot`}
+                  className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
+                >
+                  View in Hot Workspace →
+                </Link>
+              </div>
             <details className="mt-4">
               <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
                 View raw result

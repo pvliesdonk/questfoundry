@@ -1,6 +1,20 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
+
+const TOAST_STYLES: Record<ToastType, string> = {
+  success: 'bg-green-500 text-white',
+  error: 'bg-red-500 text-white',
+  warning: 'bg-yellow-500 text-white',
+  info: 'bg-blue-500 text-white',
+};
+
+const TOAST_ICONS: Record<ToastType, string> = {
+  success: '✓',
+  error: '✗',
+  warning: '⚠',
+  info: 'ℹ',
+};
 
 interface Toast {
   id: number;
@@ -50,33 +64,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = { showToast, success, error, info, warning };
 
-  const getToastStyles = (type: ToastType) => {
-    switch (type) {
-      case 'success':
-        return 'bg-green-500 text-white';
-      case 'error':
-        return 'bg-red-500 text-white';
-      case 'warning':
-        return 'bg-yellow-500 text-white';
-      case 'info':
-      default:
-        return 'bg-blue-500 text-white';
-    }
-  };
+  const getToastStyles = (type: ToastType) =>
+    TOAST_STYLES[type] ?? TOAST_STYLES.info;
 
-  const getIcon = (type: ToastType) => {
-    switch (type) {
-      case 'success':
-        return '✓';
-      case 'error':
-        return '✗';
-      case 'warning':
-        return '⚠';
-      case 'info':
-      default:
-        return 'ℹ';
-    }
-  };
+  const getIcon = (type: ToastType) => TOAST_ICONS[type] ?? TOAST_ICONS.info;
 
   return (
     <ToastContext.Provider value={value}>
@@ -90,6 +81,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <span className="text-xl">{getIcon(toast.type)}</span>
             <span className="flex-1">{toast.message}</span>
             <button
+              type="button"
               onClick={() => removeToast(toast.id)}
               className="ml-2 hover:opacity-75"
               aria-label="Dismiss"

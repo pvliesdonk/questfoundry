@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { runGatecheck } from '../../api/execution';
-import { GatecheckResult } from '../../types/api';
+import type { GatecheckResult } from '../../types/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 interface Props {
   projectId: string;
@@ -19,8 +20,8 @@ export default function GatecheckForm({ projectId }: Props) {
     try {
       const data = await runGatecheck(projectId);
       setResult(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to run gatecheck'));
     } finally {
       setLoading(false);
     }
@@ -34,6 +35,7 @@ export default function GatecheckForm({ projectId }: Props) {
       </p>
 
       <button
+        type="button"
         onClick={handleRun}
         className="px-6 py-3 bg-secondary text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
         disabled={loading}
@@ -59,8 +61,11 @@ export default function GatecheckForm({ projectId }: Props) {
             </h3>
             {result.issues.length > 0 && (
               <div className="mt-4 space-y-2">
-                {result.issues.map((issue, idx) => (
-                  <div key={idx} className="p-3 bg-white rounded border">
+                {result.issues.map((issue) => (
+                  <div
+                    key={`${issue.artifact_id ?? issue.message}-${issue.severity}`}
+                    className="p-3 bg-white rounded border"
+                  >
                     <div className="flex items-start justify-between">
                       <span className={`text-xs font-medium px-2 py-1 rounded ${
                         issue.severity === 'error'
