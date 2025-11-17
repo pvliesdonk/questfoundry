@@ -139,7 +139,8 @@ class ReferenceResolver:
             ref = match.group(0)
             try:
                 return self.resolve_reference(ref, inline_content=True)
-            except CompilationError:
+            except CompilationError as e:
+                logger.error(f"Compilation Error: {e}")
                 # If resolution fails, keep the reference as-is
                 return ref
 
@@ -232,6 +233,7 @@ class StandalonePromptAssembler:
                 sections.append("---")
                 sections.append("")
             except CompilationError as e:
+                logger.error(f"Compilation Error: {e}")
                 sections.append(f"<!-- Error loading expertise: {e} -->")
                 sections.append("")
 
@@ -247,6 +249,7 @@ class StandalonePromptAssembler:
                     sections.append(proc_content)
                     sections.append("")
                 except CompilationError as e:
+                    logger.error(f"Compilation Error: {e}")
                     sections.append(f"<!-- Error loading procedure {proc_ref}: {e} -->")
                     sections.append("")
             sections.append("---")
@@ -264,6 +267,7 @@ class StandalonePromptAssembler:
                     sections.append(snippet_content)
                     sections.append("")
                 except CompilationError as e:
+                    logger.error(f"Compilation Error: {e}")
                     sections.append(
                         f"<!-- Error loading snippet {snippet_ref}: {e} -->"
                     )
@@ -671,7 +675,8 @@ class PromptAssembler:
         # Get RACI from by_loop.md
         try:
             raci_roles = self._parse_raci_from_markdown(playbook_name)
-        except CompilationError:
+        except CompilationError as e:
+            logger.error(f"Compilation Error: {e}")
             raci_roles = {"R": [], "A": [], "C": [], "I": []}
             if "raci" in data:
                 for role_type_key, role_type_val in [
@@ -756,7 +761,9 @@ class PromptAssembler:
                     "@expertise:showrunner_expertise", inline_content=True
                 )
                 sections.append(showrunner_expertise)
-            except CompilationError:
+            except CompilationError as e:
+                logger.error(f"Compilation Error: {e}")
+                logger.exception(e, stack_info=True)
                 sections.append("<!-- Showrunner expertise not found -->")
             sections.append("")
             sections.append("---")
@@ -789,7 +796,8 @@ class PromptAssembler:
                         )
                         sections.append(expertise_content)
                         sections.append("")
-                    except CompilationError:
+                    except CompilationError as e:
+                        logger.error(f"Compilation Error: {e}")
                         sections.append("<!-- Expertise not found -->")
                         sections.append("")
 
@@ -829,7 +837,8 @@ class PromptAssembler:
                         )
                         sections.append(proc_content)
                         sections.append("")
-                    except CompilationError:
+                    except CompilationError as e:
+                        logger.error(f"Compilation Error: {e}")
                         sections.append(f"<!-- Error loading procedure {proc_ref} -->")
                         sections.append("")
 
@@ -852,7 +861,8 @@ class PromptAssembler:
                         )
                         sections.append(proc_content)
                         sections.append("")
-                    except CompilationError:
+                    except CompilationError as e:
+                        logger.error(f"Compilation Error: {e}")
                         sections.append(f"<!-- Error loading procedure {proc_ref} -->")
                         sections.append("")
 
@@ -878,6 +888,7 @@ class PromptAssembler:
                 sections.append(validation_content)
                 sections.append("")
             except CompilationError as e:
+                logger.error(f"Compilation Error: {e}")
                 sections.append(f"<!-- Error loading validation requirements: {e} -->")
                 sections.append("")
 
@@ -899,7 +910,8 @@ class PromptAssembler:
                     )
                     sections.append(snippet_content)
                     sections.append("")
-                except CompilationError:
+                except CompilationError as e:
+                    logger.error(f"Compilation Error: {e}")
                     pass
 
         if profile == "brief" and deduped:
@@ -1093,7 +1105,8 @@ class PromptAssembler:
                         )
                         sections.append(expertise_content)
                         sections.append("")
-                    except CompilationError:
+                    except CompilationError as e:
+                        logger.error(f"Compilation Error: {e}")
                         sections.append("<!-- Expertise not found -->")
                         sections.append("")
 
@@ -1108,7 +1121,8 @@ class PromptAssembler:
                                 )
                                 sections.append(proc_content)
                                 sections.append("")
-                            except CompilationError:
+                            except CompilationError as e:
+                                logger.error(f"Compilation Error: {e}")
                                 sections.append(
                                     f"<!-- Error loading procedure {proc_ref} -->"
                                 )
@@ -1123,7 +1137,8 @@ class PromptAssembler:
                                 )
                                 sections.append(proc_content)
                                 sections.append("")
-                            except CompilationError:
+                            except CompilationError as e:
+                                logger.error(f"Compilation Error: {e}")
                                 sections.append(
                                     f"<!-- Error loading procedure {proc_ref} -->"
                                 )
@@ -1179,7 +1194,8 @@ class PromptAssembler:
                                             )
                                             sections.append(proc_content)
                                             sections.append("")
-                                        except CompilationError:
+                                        except CompilationError as e:
+                                            logger.error(f"Compilation Error: {e}")
                                             pass
 
                 if "safety_protocols" in adapter_data:
@@ -1195,7 +1211,8 @@ class PromptAssembler:
                             )
                             sections.append(snippet_content)
                             sections.append("")
-                        except CompilationError:
+                        except CompilationError as e:
+                            logger.error(f"Compilation Error: {e}")
                             pass
 
                 sections.append("---")
