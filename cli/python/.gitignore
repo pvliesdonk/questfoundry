@@ -1,9 +1,0 @@
-# Python build artifacts
-dist/
-build/
-*.egg-info/
-
-# Test artifacts
-.pytest_cache/
-htmlcov/
-.coverage
