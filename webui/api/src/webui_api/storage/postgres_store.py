@@ -140,7 +140,7 @@ class PostgresStore(StateStore):
         """Save artifact with project_id scoping"""
         artifact_id = artifact.metadata.get("id")
         if not artifact_id:
-            raise ValueError("Artifact must have 'id' in metadata")
+            raise ValueError("Artifact must have an 'id' in metadata")
 
         with self.pool.connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:

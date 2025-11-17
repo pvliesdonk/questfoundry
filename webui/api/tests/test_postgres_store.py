@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 
+import psycopg
 import pytest
 from questfoundry.models.artifact import Artifact
 from questfoundry.state.types import ProjectInfo, SnapshotInfo, TUState
@@ -36,6 +37,136 @@ def postgres_url() -> str:
 def project_id() -> str:
     """Test project ID"""
     return "test-project-123"
+
+
+@pytest.fixture
+def owner_user_id() -> str:
+    """Test owner user ID"""
+    return "test-user-123"
+
+
+def _cleanup_project_data(conn: psycopg.Connection, project_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM snapshots WHERE project_id = %s", (project_id,))
+        cur.execute("DELETE FROM tus WHERE project_id = %s", (project_id,))
+        cur.execute("DELETE FROM artifacts WHERE project_id = %s", (project_id,))
+        cur.execute("DELETE FROM project_info WHERE project_id = %s", (project_id,))
+
+
+def _upsert_user(conn: psycopg.Connection, user_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO user_settings (user_id, encrypted_keys)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id)
+            DO UPDATE SET encrypted_keys = EXCLUDED.encrypted_keys
+            """,
+            (user_id, b"test-key-material"),
+        )
+
+
+def _upsert_project(
+    conn: psycopg.Connection,
+    project_id: str,
+    owner_user_id: str,
+    *,
+    name: str,
+    description: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO project_ownership (
+                project_id,
+                owner_user_id,
+                project_name,
+                project_description
+            )
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (project_id)
+            DO UPDATE SET
+                owner_user_id = EXCLUDED.owner_user_id,
+                project_name = EXCLUDED.project_name,
+                project_description = EXCLUDED.project_description
+            """,
+            (project_id, owner_user_id, name, description),
+        )
+
+
+def _delete_project(conn: psycopg.Connection, project_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM project_ownership WHERE project_id = %s", (project_id,))
+
+
+def _delete_user(conn: psycopg.Connection, user_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM user_settings WHERE user_id = %s", (user_id,))
+
+
+@pytest.fixture(autouse=True)
+def ensure_project_ownership(
+    postgres_url: str, project_id: str, owner_user_id: str
+) -> None:
+    """Ensure user and project ownership records exist for FK constraints."""
+
+    with psycopg.connect(postgres_url) as conn:
+        _cleanup_project_data(conn, project_id)
+        _upsert_user(conn, owner_user_id)
+        _upsert_project(
+            conn,
+            project_id,
+            owner_user_id,
+            name="Test Project",
+            description="PostgresStore test project",
+        )
+        conn.commit()
+
+    yield
+
+    with psycopg.connect(postgres_url) as conn:
+        _cleanup_project_data(conn, project_id)
+        _delete_project(conn, project_id)
+        _delete_user(conn, owner_user_id)
+        conn.commit()
+
+
+@pytest.fixture
+def project_owner_factory(postgres_url: str, owner_user_id: str):
+    """Factory fixture to upsert additional project ownership records."""
+
+    created: list[tuple[str, str]] = []
+
+    def _create(
+        project_id: str,
+        *,
+        owner_id: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        assigned_owner = owner_id or owner_user_id
+        with psycopg.connect(postgres_url) as conn:
+            _cleanup_project_data(conn, project_id)
+            _upsert_user(conn, assigned_owner)
+            _upsert_project(
+                conn,
+                project_id,
+                assigned_owner,
+                name=name or f"Test Project {project_id}",
+                description=description or "Additional PostgresStore test project",
+            )
+            conn.commit()
+        created.append((project_id, assigned_owner))
+
+    yield _create
+
+    with psycopg.connect(postgres_url) as conn:
+        for project_id, owner in created:
+            _cleanup_project_data(conn, project_id)
+            _delete_project(conn, project_id)
+            if owner != owner_user_id:
+                _delete_user(conn, owner)
+        conn.commit()
 
 
 @pytest.fixture
@@ -389,9 +520,14 @@ class TestProjectIsolation:
     """Test that project_id properly isolates data between projects"""
 
     def test_artifacts_isolated_by_project(
-        self, postgres_url: str, sample_project_info: ProjectInfo
+        self,
+        postgres_url: str,
+        sample_project_info: ProjectInfo,
+        project_owner_factory,
     ):
         """Test that artifacts are isolated by project_id"""
+        project_owner_factory("project-1")
+        project_owner_factory("project-2")
         store1 = PostgresStore(postgres_url, "project-1")
         store2 = PostgresStore(postgres_url, "project-2")
 

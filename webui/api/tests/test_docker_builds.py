@@ -8,12 +8,17 @@ This module validates that:
 4. Environment variables are properly configured
 """
 
-import os
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 import requests
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+API_DIR = REPO_ROOT / "webui" / "api"
+DOCKERFILE_PATH = API_DIR / "Dockerfile"
+COMPOSE_PATH = REPO_ROOT / "webui" / "docker-compose.yml"
 
 # These tests require Docker to be available
 pytestmark = pytest.mark.skipif(
@@ -27,11 +32,17 @@ class TestAPIDockerBuild:
 
     def test_dockerfile_builds(self):
         """Test that the API Dockerfile builds successfully."""
-        api_dir = os.path.join(os.path.dirname(__file__), "..")
-
         result = subprocess.run(
-            ["docker", "build", "-t", "qf-api-test", "-f", "Dockerfile", "."],
-            cwd=api_dir,
+            [
+                "docker",
+                "build",
+                "-t",
+                "qf-api-test",
+                "-f",
+                str(DOCKERFILE_PATH),
+                ".",
+            ],
+            cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout for build
@@ -49,9 +60,7 @@ class TestAPIDockerBuild:
 
     def test_dockerfile_multi_stage(self):
         """Verify that Dockerfile uses multi-stage build pattern."""
-        dockerfile_path = os.path.join(os.path.dirname(__file__), "..", "Dockerfile")
-
-        with open(dockerfile_path) as f:
+        with open(DOCKERFILE_PATH) as f:
             content = f.read()
 
         # Check for builder stage
@@ -65,9 +74,7 @@ class TestAPIDockerBuild:
 
     def test_dockerfile_healthcheck(self):
         """Verify that Dockerfile includes health check."""
-        dockerfile_path = os.path.join(os.path.dirname(__file__), "..", "Dockerfile")
-
-        with open(dockerfile_path) as f:
+        with open(DOCKERFILE_PATH) as f:
             content = f.read()
 
         assert "HEALTHCHECK" in content
@@ -75,9 +82,7 @@ class TestAPIDockerBuild:
 
     def test_dockerfile_security_best_practices(self):
         """Verify Dockerfile follows security best practices."""
-        dockerfile_path = os.path.join(os.path.dirname(__file__), "..", "Dockerfile")
-
-        with open(dockerfile_path) as f:
+        with open(DOCKERFILE_PATH) as f:
             content = f.read()
 
         # Should create non-root user
@@ -97,10 +102,17 @@ class TestAPIContainer:
     def api_container(self):
         """Start API container for testing."""
         # Build image first
-        api_dir = os.path.join(os.path.dirname(__file__), "..")
         subprocess.run(
-            ["docker", "build", "-t", "qf-api-test", "-f", "Dockerfile", "."],
-            cwd=api_dir,
+            [
+                "docker",
+                "build",
+                "-t",
+                "qf-api-test",
+                "-f",
+                str(DOCKERFILE_PATH),
+                ".",
+            ],
+            cwd=str(REPO_ROOT),
             check=True,
             capture_output=True,
         )
@@ -236,12 +248,8 @@ class TestDockerCompose:
 
     def test_docker_compose_valid(self):
         """Test that docker-compose.yml is valid."""
-        compose_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "docker-compose.yml"
-        )
-
         result = subprocess.run(
-            ["docker", "compose", "-f", compose_path, "config"],
+            ["docker", "compose", "-f", str(COMPOSE_PATH), "config"],
             capture_output=True,
             text=True,
         )
@@ -252,11 +260,7 @@ class TestDockerCompose:
 
     def test_docker_compose_includes_required_services(self):
         """Test that docker-compose.yml includes all required services."""
-        compose_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "docker-compose.yml"
-        )
-
-        with open(compose_path) as f:
+        with open(COMPOSE_PATH) as f:
             content = f.read()
 
         # Required services
@@ -267,11 +271,7 @@ class TestDockerCompose:
 
     def test_docker_compose_health_checks(self):
         """Test that services have health checks configured."""
-        compose_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "docker-compose.yml"
-        )
-
-        with open(compose_path) as f:
+        with open(COMPOSE_PATH) as f:
             content = f.read()
 
         # Health checks should be defined
@@ -280,11 +280,7 @@ class TestDockerCompose:
 
     def test_docker_compose_volumes_defined(self):
         """Test that persistent volumes are defined."""
-        compose_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "docker-compose.yml"
-        )
-
-        with open(compose_path) as f:
+        with open(COMPOSE_PATH) as f:
             content = f.read()
 
         # Should have volume definitions
@@ -294,11 +290,7 @@ class TestDockerCompose:
 
     def test_docker_compose_schema_mounted(self):
         """Test that schema.sql is mounted in postgres container."""
-        compose_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "docker-compose.yml"
-        )
-
-        with open(compose_path) as f:
+        with open(COMPOSE_PATH) as f:
             content = f.read()
 
         # Schema should be mounted for init

@@ -5,13 +5,13 @@ FROM python:3.11-slim AS builder
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Set working directory
+# Copy API and shared library sources into the builder image
 WORKDIR /app
+COPY webui/api /app/webui/api
+COPY lib/python /app/lib/python
 
-# Copy dependency files
-COPY pyproject.toml ./
-
-# Install dependencies
+# Install dependencies from the API project
+WORKDIR /app/webui/api
 RUN uv pip install --system --no-cache -e .
 
 # Final stage
@@ -26,15 +26,15 @@ RUN apt-get update && \
 # Create app user
 RUN useradd -m -u 1000 app
 
-# Set working directory
-WORKDIR /app
+# Set working directory to API project
+WORKDIR /app/webui/api
 
 # Copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
-COPY src ./src
+# Copy application source (entire API directory for runtime assets)
+COPY --from=builder /app/webui/api /app/webui/api
 
 # Switch to app user
 USER app
