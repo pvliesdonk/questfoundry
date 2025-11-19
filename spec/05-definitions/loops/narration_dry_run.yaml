@@ -1,0 +1,458 @@
+# QuestFoundry Loop Pattern: Narration Dry-Run
+# Layer 5 Definition — validates against spec/03-schemas/definitions/loop_pattern.schema.json
+
+metadata:
+  version: "0.1.0"
+  schema_ref: "../../03-schemas/definitions/loop_pattern.schema.json"
+  name: "narration_dry_run"
+  description: "PN playtest of Cold view to surface UX issues in comprehension, choice clarity, pacing, diegetic gates"
+  layer0_guide_ref: "../../00-north-star/LOOPS/narration_dry_run.md"
+  created: "2025-11-19"
+  updated: "2025-11-19"
+
+identity:
+  canonical_name: "Narration Dry-Run"
+  aliases:
+    - "PN Playtest"
+    - "UX Dry-Run"
+  purpose: >
+    Have the Player-Narrator play through the current Cold snapshot exactly as a player would
+    experience it—in-world, spoiler-safe—to surface UX issues in comprehension, choice clarity,
+    pacing, and diegetic gate enforcement.
+  outcome: >
+    A set of PN playtest notes and handoff tickets (TUs or edit notes) that improve player-facing
+    surfaces without rewriting canon or topology during the dry-run itself.
+
+topology:
+  nodes:
+    - id: "showrunner_select_view"
+      role: "Showrunner"
+      intent: "view.select"
+      description: "Select same Cold snapshot used by Binding Run; open PN dry-run TU"
+
+    - id: "showrunner_plan_routes"
+      role: "Showrunner"
+      intent: "route.plan"
+      description: "Decide routes to test: high-traffic, hub route, gated branch, edge case, terminal"
+
+    - id: "pn_perform_dry_run"
+      role: "Player-Narrator"
+      intent: "pn.perform"
+      description: "Perform view in-voice section by section; enforce gates diegetically; log UX issues"
+
+    - id: "pn_log_issues"
+      role: "Player-Narrator"
+      intent: "pn.log_issue"
+      description: "Record each UX issue with tag, location, description, suggested remedy, severity"
+
+    - id: "pn_generate_summary"
+      role: "Player-Narrator"
+      intent: "pn.summary"
+      description: "Create summary sheet: issue counts by type/severity, recommended loops, overall assessment"
+
+    - id: "gatekeeper_classify"
+      role: "Gatekeeper"
+      intent: "gate.classify_issues"
+      description: "Classify PN issues against Presentation, Integrity, Style bars; assign severity"
+
+    - id: "binder_investigate_nav"
+      role: "Book Binder"
+      intent: "view.investigate_nav"
+      description: "Investigate navigation issues (anchors, labels, layout) flagged by PN"
+      optional: true
+
+    - id: "curator_check_coverage"
+      role: "Codex Curator"
+      intent: "codex.check_coverage"
+      description: "Address codex coverage gaps or cross-ref problems flagged by PN"
+      optional: true
+
+    - id: "style_review_phrasing"
+      role: "Style Lead"
+      intent: "style.review_phrasing"
+      description: "Review PN phrasing patterns; propose voice/register adjustments"
+      optional: true
+
+    - id: "translator_check_glitches"
+      role: "Translator"
+      intent: "translation.check_glitches"
+      description: "Flag mistransfers in tone/links if testing localized slice"
+      optional: true
+
+    - id: "showrunner_package_handoffs"
+      role: "Showrunner"
+      intent: "tu.package_handoffs"
+      description: "Convert PN notes into TUs or edit tasks routed to appropriate loops"
+
+  edges:
+    - from: "showrunner_select_view"
+      to: "showrunner_plan_routes"
+      condition: null
+
+    - from: "showrunner_plan_routes"
+      to: "pn_perform_dry_run"
+      condition: null
+
+    - from: "pn_perform_dry_run"
+      to: "pn_log_issues"
+      condition: "UX issues encountered during performance"
+
+    - from: "pn_perform_dry_run"
+      to: "pn_generate_summary"
+      condition: "Performance complete with no issues (rare but possible)"
+
+    - from: "pn_log_issues"
+      to: "pn_generate_summary"
+      condition: "All issues logged"
+
+    - from: "pn_generate_summary"
+      to: "gatekeeper_classify"
+      condition: null
+
+    - from: "gatekeeper_classify"
+      to: "binder_investigate_nav"
+      condition: "nav-bug issues flagged"
+
+    - from: "gatekeeper_classify"
+      to: "curator_check_coverage"
+      condition: "codex-invite or codex coverage issues flagged"
+
+    - from: "gatekeeper_classify"
+      to: "style_review_phrasing"
+      condition: "tone-wobble or gate-friction issues flagged"
+
+    - from: "gatekeeper_classify"
+      to: "translator_check_glitches"
+      condition: "translation-glitch issues flagged (localized slice tested)"
+
+    - from: "gatekeeper_classify"
+      to: "showrunner_package_handoffs"
+      condition: "No optional role consultation OR optional consultations complete"
+
+    - from: "binder_investigate_nav"
+      to: "showrunner_package_handoffs"
+      condition: null
+
+    - from: "curator_check_coverage"
+      to: "showrunner_package_handoffs"
+      condition: null
+
+    - from: "style_review_phrasing"
+      to: "showrunner_package_handoffs"
+      condition: null
+
+    - from: "translator_check_glitches"
+      to: "showrunner_package_handoffs"
+      condition: null
+
+  exit_conditions:
+    - condition: "Showrunner packages handoffs and routes follow-up TUs"
+      next_state: "completed"
+      triggers:
+        - "tu.close"
+
+    - condition: "Critical blocking issues found (rare); immediate iteration needed"
+      next_state: "blocked"
+      triggers:
+        - "tu.blocked"
+
+protocol_flow:
+  message_sequences:
+    - sequence_id: "select_and_plan"
+      description: "Showrunner selects view and plans routes to test"
+      steps:
+        - from: "Showrunner"
+          to: "Player-Narrator"
+          intent: "view.select"
+          payload:
+            - "view_snapshot_id (same as Binding Run)"
+            - "tu_id"
+            - "purpose (playtest before user demo / milestone check / localization test)"
+
+        - from: "Showrunner"
+          to: "Player-Narrator"
+          intent: "route.plan"
+          payload:
+            - "routes (high-traffic, hub route, gated branch, edge case, terminal)"
+            - "focus_areas (specific concerns: gate phrasing, choice clarity, pacing)"
+            - "timebox (if limited time, prioritize areas)"
+
+    - sequence_id: "perform_and_log"
+      description: "PN performs dry-run and logs UX issues"
+      steps:
+        - from: "Player-Narrator"
+          to: "State"
+          intent: "pn.perform"
+          payload:
+            - "sections_performed (list of section IDs)"
+            - "routes_tested (route names)"
+            - "performance_notes (high-level observations)"
+
+        - from: "Player-Narrator"
+          to: "State"
+          intent: "pn.log_issue"
+          payload:
+            - "issue_type (choice-ambiguity, gate-friction, recap-needed, etc.)"
+            - "location (section ID or anchor)"
+            - "description"
+            - "found_phrasing"
+            - "suggested_remedy"
+            - "severity (minor, moderate, severe)"
+            - "path_context"
+
+        - from: "Player-Narrator"
+          to: "State"
+          intent: "pn.summary"
+          payload:
+            - "total_issues"
+            - "by_type (counts)"
+            - "by_severity (counts)"
+            - "recommended_loops (Style Tune-up, Codex Expansion, etc.)"
+            - "languages_tested"
+            - "overall_assessment"
+
+    - sequence_id: "classify_and_consult"
+      description: "Gatekeeper classifies issues, optional roles consult"
+      steps:
+        - from: "Gatekeeper"
+          to: "State"
+          intent: "gate.classify_issues"
+          payload:
+            - "issue_id"
+            - "bar_mapping (Presentation, Integrity, Style, Accessibility)"
+            - "severity_confirmed (minor, moderate, severe)"
+            - "blocking (boolean, rare)"
+
+        - from: "Book Binder"
+          to: "State"
+          intent: "view.investigate_nav"
+          payload:
+            - "nav_issues_investigated (list)"
+            - "anchor_fixes_needed (list)"
+            - "re_export_required (boolean)"
+          condition: "nav-bug issues flagged"
+
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.check_coverage"
+          payload:
+            - "coverage_gaps_identified (list)"
+            - "crossref_problems (list)"
+            - "new_entries_needed (list)"
+          condition: "codex-invite issues flagged"
+
+        - from: "Style Lead"
+          to: "State"
+          intent: "style.review_phrasing"
+          payload:
+            - "phrasing_patterns_proposed (list)"
+            - "voice_register_adjustments (list)"
+            - "motif_nudges (list)"
+          condition: "tone-wobble or gate-friction issues flagged"
+
+        - from: "Translator"
+          to: "State"
+          intent: "translation.check_glitches"
+          payload:
+            - "mistransfers_identified (list)"
+            - "tone_link_issues (list)"
+            - "fixes_proposed (list)"
+          condition: "translation-glitch issues flagged"
+
+    - sequence_id: "package_handoffs"
+      description: "Showrunner packages PN notes into follow-up TUs"
+      steps:
+        - from: "Showrunner"
+          to: "State"
+          intent: "tu.package_handoffs"
+          payload:
+            - "handoff_tus (list of TU IDs created)"
+            - "loop_routing (which loops receive which issues)"
+            - "priorities (which TUs are critical vs nice-to-have)"
+            - "summary_for_stakeholders"
+
+gates:
+  pre_gates: []
+
+  merge_gates: []
+
+traceability:
+  tu_lifecycle:
+    creates_tus: true
+    updates_tu_status: true
+    transitions:
+      - from: "proposed"
+        to: "in_progress"
+        trigger: "Showrunner opens dry-run TU"
+      - from: "in_progress"
+        to: "completed"
+        trigger: "Showrunner packages handoffs and routes follow-up TUs"
+      - from: "in_progress"
+        to: "blocked"
+        trigger: "Critical blocking issues found (rare)"
+
+  produces_hot:
+    - "pn_playtest_notes"
+    - "pn_summary_sheet"
+    - "session_recaps (proposed)"
+    - "hooks (pn-phrasing, recap needs, codex-anchor, gate-diegesis)"
+    - "handoff_tus (for follow-up loops)"
+
+  produces_cold: []
+
+  snapshot_dependencies:
+    reads_from_cold:
+      - "snapshots[view_id].export_view (full bundle)"
+      - "snapshots[view_id].codex_entries"
+      - "snapshots[view_id].style_addenda (PN patterns)"
+      - "snapshots[view_id].translations (if testing localized slice)"
+    writes_to_cold: []
+
+roles:
+  primary:
+    - role: "Player-Narrator"
+      raci: "responsible"
+      required: true
+
+  supporting:
+    - role: "Showrunner"
+      raci: "accountable"
+      required: true
+
+    - role: "Gatekeeper"
+      raci: "consulted"
+      required: true
+
+    - role: "Book Binder"
+      raci: "consulted"
+      required: false
+      wake_condition: "nav-bug issues flagged"
+
+    - role: "Codex Curator"
+      raci: "consulted"
+      required: false
+      wake_condition: "codex-invite or coverage issues flagged"
+
+    - role: "Style Lead"
+      raci: "consulted"
+      required: false
+      wake_condition: "tone-wobble or gate-friction issues flagged"
+
+    - role: "Translator"
+      raci: "consulted"
+      required: false
+      wake_condition: "translation-glitch issues flagged (localized slice)"
+
+context:
+  required_state:
+    - "artifacts.export_views[view_id] (from Binding Run)"
+
+  optional_state:
+    - "cold_sot.snapshots[view_id].codex_entries"
+    - "cold_sot.snapshots[view_id].style_addenda (PN patterns)"
+    - "cold_sot.snapshots[view_id].translations"
+
+  quality_bar_focus:
+    - bar_name: "Presentation"
+      pressure: "high"
+      rationale: "PN surfaces issues where internals leak or spoilers brush through; diegetic gates critical"
+
+    - bar_name: "Accessibility"
+      pressure: "high"
+      rationale: "PN flags missing alt text, risky audio cues, low contrast, pacing issues"
+
+    - bar_name: "Style"
+      pressure: "medium"
+      rationale: "PN surfaces tone wobble, register slips, motif gaps"
+
+    - bar_name: "Integrity"
+      pressure: "medium"
+      rationale: "PN flags navigation bugs, broken links, breadcrumb confusion"
+
+success_criteria:
+  required:
+    - "Gates enforced diegetically without confusion or leaks"
+    - "Choices read as distinct and fair; recaps land where helpful"
+    - "Codex invites clarify without spoiling"
+    - "Navigation smooth across all export formats"
+    - "Small, prioritized list of actionable follow-ups exists"
+    - "PN notes are player-safe (no spoilers or internals in descriptions)"
+    - "Summary sheet complete with issue counts, severity, recommended loops"
+
+  optional:
+    - "Session recaps proposed for high-value junction points"
+    - "PN phrasing patterns updated based on friction"
+    - "Localized slice tested and glitches flagged"
+
+  definition_of_done:
+    - "PN playtest notes packaged and routed to appropriate loops"
+    - "Gatekeeper classification complete (bar mapping, severity)"
+    - "Showrunner handoffs created for follow-up work"
+    - "No blocking issues OR blocking issues escalated immediately"
+
+failure_modes:
+  - mode: "PN improvises fixes live during performance"
+    remedy: "Stop; remind PN to log issues only, not rewrite. Route to Style Tune-up or Binder for upstream fixes."
+
+  - mode: "Recurring choice ambiguity across multiple sections"
+    remedy: "Add micro-context in surface text; run focused Style Tune-up on affected sections"
+
+  - mode: "Gate phrasing leaks plumbing (internals exposed)"
+    remedy: "Replace with diegetic token/reputation/knowledge checks; route to Style Lead for pattern library update"
+
+  - mode: "Codex rabbit-holing (too many forced invites)"
+    remedy: "Cap invites; keep main path legible; curator should triage which terms truly need codex grounding"
+
+  - mode: "Format-specific nav bugs (EPUB links broken, PDF anchors fail)"
+    remedy: "Binder repairs anchors and re-exports all formats; re-test after binding fix"
+
+  - mode: "Critical blocking issue (spoiler leak, gate completely broken)"
+    remedy: "Block and escalate to Showrunner; immediate upstream fix required before distribution"
+
+handoffs:
+  from_loops:
+    - loop: "Binding Run"
+      artifact: "export_view (bundle for PN to perform)"
+      trigger: "After Binding Run completes; same Cold snapshot"
+
+    - loop: "Style Tune-up"
+      artifact: "style_addenda (PN phrasing patterns)"
+      trigger: "Updated PN patterns available for performance"
+
+  to_loops:
+    - loop: "Style Tune-up"
+      artifact: "pn_notes (tone-wobble, gate-friction, choice-ambiguity)"
+      condition: "Style/phrasing issues found"
+
+    - loop: "Codex Expansion"
+      artifact: "pn_notes (codex-invite, coverage gaps)"
+      condition: "Codex coverage or crossref issues found"
+
+    - loop: "Binding Run"
+      artifact: "pn_notes (nav-bug, anchor issues)"
+      condition: "Navigation issues require re-export"
+
+    - loop: "Story Spark"
+      artifact: "pn_notes (structural issues, rare)"
+      condition: "Issue reveals actual topology flaw (very rare)"
+
+    - loop: "Translation Pass"
+      artifact: "pn_notes (translation-glitch)"
+      condition: "Localized slice tested and mistransfers found"
+
+execution:
+  max_iterations: 1
+  timebox_minutes: 60
+  timeout_behavior: "complete_with_partial_coverage"
+  error_handling:
+    - error: "PN unavailable or cannot perform"
+      response: "Defer dry-run; cannot proceed without PN performance"
+
+    - error: "View not found (binding failed)"
+      response: "Block; route back to Binding Run to generate export view first"
+
+    - error: "Critical blocking issue discovered (spoiler leak, completely broken gate)"
+      response: "Escalate to Showrunner immediately; mark TU blocked; require upstream fix before distribution"
+
+    - error: "Too many issues to process in timebox"
+      response: "Complete with partial coverage; prioritize high-traffic routes and severe issues; defer edge cases"
