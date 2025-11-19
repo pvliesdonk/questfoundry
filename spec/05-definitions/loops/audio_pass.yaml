@@ -1,0 +1,414 @@
+# QuestFoundry Loop Pattern: Audio Pass
+# Layer 5 Definition — validates against spec/03-schemas/definitions/loop_pattern.schema.json
+
+metadata:
+  version: "0.1.0"
+  schema_ref: "../../03-schemas/definitions/loop_pattern.schema.json"
+  name: "audio_pass"
+  description: "Plan and optionally produce audio cues with spoiler-safe text equivalents and safety notes; supports plan-only merges"
+  layer0_guide_ref: "../../00-north-star/LOOPS/audio_pass.md"
+  created: "2025-11-19"
+  updated: "2025-11-19"
+
+identity:
+  canonical_name: "Audio Pass"
+  aliases:
+    - "Audio Planning"
+    - "Sound Design Pass"
+  purpose: >
+    Decide what the audience should hear and why—ambience, foley, stingers, or voice—then
+    (optionally) produce audio that fits style and narrative intent without leaking spoilers.
+    This loop supports plan-only merges when the Audio Producer is dormant.
+  outcome: >
+    An Audio Plan (cues, purpose, timing/placement, captions/text-equivalents, safety notes)
+    and, if active, audio assets with reproducibility notes. Ready for Gatekeeper checks and
+    merge to Cold (plans may merge as deferred; assets merge only on full pass).
+
+topology:
+  nodes:
+    - id: "showrunner_scope_slice"
+      role: "Showrunner"
+      intent: "tu.scope"
+      description: "Set scope: one chapter or hub path (5-10 cue slots); decide plan-only vs asset production"
+
+    - id: "audio_director_select_justify"
+      role: "Audio Director"
+      intent: "audio.select_cues"
+      description: "Choose cue targets and why (clarity, mood, signposting); assess spoiler risk"
+
+    - id: "audio_director_write_plans"
+      role: "Audio Director"
+      intent: "audio.write_plan"
+      description: "Write Audio Plans: cue description, placement, intensity/duration, text equivalents/captions, safety notes"
+
+    - id: "style_alignment"
+      role: "Style Lead"
+      intent: "style.align_audio"
+      description: "Ensure audio language aligns with register/motifs; veto drift"
+
+    - id: "audio_producer_produce"
+      role: "Audio Producer"
+      intent: "audio.produce"
+      description: "Create/arrange/mix assets; export masters; log reproducibility notes (DAW/session, plugins, versions)"
+      optional: true
+
+    - id: "gatekeeper_pre_gate"
+      role: "Gatekeeper"
+      intent: "gate.pre_gate"
+      description: "Check Presentation Safety (no spoilers; safe levels), Style, and Reproducibility (when promised)"
+
+    - id: "showrunner_package_handoff"
+      role: "Showrunner"
+      intent: "tu.package"
+      description: "Attach Audio Plans and (if produced) assets + logs to TU; notify Binder about inclusion options"
+
+  edges:
+    - from: "showrunner_scope_slice"
+      to: "audio_director_select_justify"
+      condition: null
+
+    - from: "audio_director_select_justify"
+      to: "audio_director_write_plans"
+      condition: null
+
+    - from: "audio_director_write_plans"
+      to: "style_alignment"
+      condition: null
+
+    - from: "style_alignment"
+      to: "audio_producer_produce"
+      condition: "Audio Producer active AND assets requested (not plan-only)"
+
+    - from: "style_alignment"
+      to: "gatekeeper_pre_gate"
+      condition: "Plan-only mode (Audio Producer dormant OR deferred assets)"
+
+    - from: "audio_producer_produce"
+      to: "gatekeeper_pre_gate"
+      condition: "Assets complete"
+
+    - from: "gatekeeper_pre_gate"
+      to: "audio_director_write_plans"
+      condition: "Gatekeeper flags Style/Presentation issues requiring plan revision"
+
+    - from: "gatekeeper_pre_gate"
+      to: "audio_producer_produce"
+      condition: "Gatekeeper flags issues requiring re-production (and Audio Producer active)"
+
+    - from: "gatekeeper_pre_gate"
+      to: "showrunner_package_handoff"
+      condition: "All checks pass (green on Style, Presentation, Reproducibility if applicable)"
+
+  exit_conditions:
+    - condition: "Audio Plans packaged and ready for merge (plan-only or with assets)"
+      next_state: "completed"
+      triggers:
+        - "tu.close"
+
+    - condition: "Gatekeeper blocks on Presentation Safety (spoiler leaks or safety issues)"
+      next_state: "blocked"
+      triggers:
+        - "gate.blocked"
+
+protocol_flow:
+  message_sequences:
+    - sequence_id: "scope_and_select"
+      description: "Showrunner scopes slice; Audio Director selects cues"
+      steps:
+        - from: "Showrunner"
+          to: "Audio Director"
+          intent: "tu.scope"
+          payload:
+            - "scope (chapter or hub path)"
+            - "target_sections (5-10 cue slots)"
+            - "mode (plan-only vs asset production)"
+            - "bar_pressure (Presentation, Accessibility, Style)"
+
+        - from: "Audio Director"
+          to: "State"
+          intent: "audio.select_cues"
+          payload:
+            - "cue_id"
+            - "section_anchor"
+            - "purpose (clarify, recall, mood, signpost, pace)"
+            - "cue_type (ambience, foley, stinger, vo, music)"
+            - "spoiler_risk (low, medium, high)"
+
+    - sequence_id: "write_plans"
+      description: "Audio Director writes complete Audio Plans with text equivalents and safety notes"
+      steps:
+        - from: "Audio Director"
+          to: "State"
+          intent: "audio.write_plan"
+          payload:
+            - "cue_id"
+            - "cue_description (player-safe)"
+            - "placement (entry/exit, loop, timing)"
+            - "intensity_duration"
+            - "text_equivalent (accessibility caption)"
+            - "safety_notes (startle, loudness, harsh sounds)"
+            - "motif_ties"
+            - "inclusion_criteria"
+            - "localization_notes (if VO)"
+            - "reproducibility_requirement (off-surface)"
+
+    - sequence_id: "style_alignment"
+      description: "Style Lead reviews leitmotifs and register consistency"
+      steps:
+        - from: "Style Lead"
+          to: "State"
+          intent: "style.align_audio"
+          payload:
+            - "cue_id"
+            - "motif_alignment (approved or adjustments needed)"
+            - "text_equivalent_register (approved or rephrasing suggested)"
+            - "audio_language_consistency (green or drift flagged)"
+
+    - sequence_id: "produce_optional"
+      description: "Audio Producer creates assets with reproducibility logs (if active)"
+      steps:
+        - from: "Audio Producer"
+          to: "State"
+          intent: "audio.produce"
+          payload:
+            - "cue_id"
+            - "asset_files (audio masters)"
+            - "reproducibility_log (DAW, plugins, settings)"
+            - "stems (if applicable)"
+          condition: "Audio Producer active AND assets requested"
+
+    - sequence_id: "pre_gate"
+      description: "Gatekeeper checks Style, Presentation Safety, Reproducibility"
+      steps:
+        - from: "Gatekeeper"
+          to: "State"
+          intent: "gate.pre_gate"
+          payload:
+            - "cue_id"
+            - "style_check (pass or adjustments needed)"
+            - "presentation_safety (green or spoiler/safety issues flagged)"
+            - "reproducibility_check (pass or logs incomplete)"
+            - "accessibility_check (text equivalents present and clear)"
+            - "overall_status (green, needs_revision, blocked)"
+
+    - sequence_id: "package_handoff"
+      description: "Showrunner packages Audio Plans and assets for merge"
+      steps:
+        - from: "Showrunner"
+          to: "State"
+          intent: "tu.package"
+          payload:
+            - "audio_plans (list of completed plans)"
+            - "assets (list of audio files, if produced)"
+            - "reproducibility_logs (if assets included)"
+            - "merge_status (plan-only deferred OR full with assets)"
+            - "binder_notified (boolean)"
+
+gates:
+  pre_gates:
+    - name: "style_alignment_required"
+      condition: "Style Lead must approve leitmotif policy and register before production"
+      enforced_by: "Showrunner"
+
+  merge_gates:
+    - name: "presentation_safety"
+      condition: "Text equivalents and cue descriptions must be spoiler-safe; no leitmotif spoilers; safe loudness levels"
+      enforced_by: "Gatekeeper"
+
+    - name: "style_consistency"
+      condition: "Leitmotifs and intensity aligned with Style Lead guardrails"
+      enforced_by: "Gatekeeper"
+
+    - name: "reproducibility_when_promised"
+      condition: "If project promises reproducibility, DAW/session logs must be complete"
+      enforced_by: "Gatekeeper"
+
+    - name: "accessibility_complete"
+      condition: "Text equivalents present for all cues; captions convey function/mood without requiring hearing"
+      enforced_by: "Gatekeeper"
+
+traceability:
+  tu_lifecycle:
+    creates_tus: true
+    updates_tu_status: true
+    transitions:
+      - from: "proposed"
+        to: "in_progress"
+        trigger: "Showrunner opens Audio Pass TU"
+      - from: "in_progress"
+        to: "completed"
+        trigger: "Audio Plans packaged and Gatekeeper approves"
+      - from: "in_progress"
+        to: "blocked"
+        trigger: "Gatekeeper blocks on Presentation Safety (spoiler/safety issues)"
+
+  produces_hot:
+    - "audio_plans (per cue slot)"
+    - "cue_list (status tracking)"
+    - "hooks (pn-phrasing, safety, signpost, codex-anchor)"
+    - "reproducibility_logs (if assets produced)"
+
+  produces_cold:
+    - "audio_plans (may merge as deferred:audio without assets)"
+    - "audio_assets (with text equivalents, only if full pass)"
+
+  snapshot_dependencies:
+    reads_from_cold:
+      - "snapshots[view_id].sections (for context and pacing)"
+      - "snapshots[view_id].style_addenda (leitmotif policy, register)"
+    writes_to_cold:
+      - "snapshots[view_id].audio_plans (plan-only merges)"
+      - "snapshots[view_id].audio_assets (full pass with files)"
+
+roles:
+  primary:
+    - role: "Audio Director"
+      raci: "responsible"
+      required: true
+
+  supporting:
+    - role: "Showrunner"
+      raci: "accountable"
+      required: true
+
+    - role: "Style Lead"
+      raci: "consulted"
+      required: true
+
+    - role: "Gatekeeper"
+      raci: "consulted"
+      required: true
+
+    - role: "Audio Producer"
+      raci: "responsible"
+      required: false
+      wake_condition: "Assets requested (not plan-only mode)"
+
+    - role: "Player-Narrator"
+      raci: "consulted"
+      required: false
+      wake_condition: "Cadence or in-world delivery concerns"
+
+    - role: "Translator"
+      raci: "consulted"
+      required: false
+      wake_condition: "VO content or localization needs"
+
+    - role: "Book Binder"
+      raci: "informed"
+      required: false
+      wake_condition: "Notified about inclusion options for export"
+
+context:
+  required_state:
+    - "hot.section_drafts (for planning context)"
+    - "cold_sot.snapshots[view_id].sections (for pacing)"
+
+  optional_state:
+    - "cold_sot.snapshots[view_id].style_addenda (leitmotif policy)"
+    - "hot.pn_friction_tags (cadence issues)"
+    - "hot.researcher_safety_notes (intensity risks)"
+
+  quality_bar_focus:
+    - bar_name: "Presentation"
+      pressure: "high"
+      rationale: "Text equivalents and cue descriptions must be spoiler-safe; no leitmotif spoilers; no technique leakage"
+
+    - bar_name: "Accessibility"
+      pressure: "high"
+      rationale: "Text equivalents required for all cues; captions convey function/mood without requiring hearing; avoid ambiguous placeholders"
+
+    - bar_name: "Style"
+      pressure: "high"
+      rationale: "Leitmotifs and intensity aligned with Style Lead; register consistent in text equivalents"
+
+    - bar_name: "Determinism"
+      pressure: "medium"
+      rationale: "When promised, reproducibility logs must be complete; otherwise mark non-deterministic explicitly"
+
+success_criteria:
+  required:
+    - "Each cue has clear narrative purpose (clarify, recall, mood, signpost, or pace)"
+    - "Text equivalents and captions are spoiler-safe and consistent with Style Lead"
+    - "Safety notes present for all cues (intensity, startle risk, harsh sounds)"
+    - "Leitmotif policy consistent and non-spoiling"
+    - "Gatekeeper reports green on Style/Presentation/Accessibility"
+    - "If assets included, reproducibility notes sufficient (when promised)"
+
+  optional:
+    - "PN cadence coordination complete"
+    - "Localization hooks filed for VO content"
+    - "Plan-only merges allowed (deferred:audio) when Audio Producer dormant"
+
+  definition_of_done:
+    - "Audio Plans complete with text equivalents + safety notes"
+    - "Style Lead approves leitmotif policy and register"
+    - "Gatekeeper pre-gate green (or issues resolved)"
+    - "Showrunner packages handoffs and notifies Binder"
+    - "TU closed or follow-ups split; deferred:audio marked where applicable"
+
+failure_modes:
+  - mode: "Cue telegraphs a twist via leitmotif"
+    remedy: "Move detail to canon notes; use neutral motif; coordinate with Lore for spoiler-safe associations"
+
+  - mode: "Technique on surface (DAW/plugin names in text equivalents)"
+    remedy: "Remove all technique details; keep text equivalents atmospheric; log technique off-surface"
+
+  - mode: "Loudness shocks or startle risk"
+    remedy: "Tame transients; add fade/ramp; include explicit safety note; adjust to safe range (60-85 dB SPL)"
+
+  - mode: "Missing reproducibility notes (promised but incomplete)"
+    remedy: "Re-produce with proper logging OR declare non-deterministic and adjust project promises"
+
+  - mode: "Untranslatable VO idioms"
+    remedy: "Coordinate with Translator; adjust script; provide alternate phrasing for localization"
+
+  - mode: "Sound wallpaper (constant bed muddies prose)"
+    remedy: "Reduce duration; add strategic silence; coordinate with Scene/Style for pacing; respect prose rhythm"
+
+handoffs:
+  from_loops:
+    - loop: "Story Spark"
+      artifact: "section_briefs (pacing needs identified)"
+      trigger: "New chapter/scene needs mood scaffolding or clarifying cues"
+
+    - loop: "Style Tune-up"
+      artifact: "style_addenda (leitmotif policy, register)"
+      trigger: "Style Lead requests motif reinforcement"
+
+    - loop: "Binding Run"
+      artifact: "current Cold snapshot (for pacing context)"
+      trigger: "Audio Director needs pacing context"
+
+  to_loops:
+    - loop: "Binding Run"
+      artifact: "audio_plans and assets (for inclusion in export views)"
+      condition: "Audio Pass complete; ready for export"
+
+    - loop: "Style Tune-up"
+      artifact: "hooks (leitmotif refinements)"
+      condition: "Motif patterns need expansion or consistency work"
+
+    - loop: "Narration Dry-Run"
+      artifact: "hooks (cadence adjustments)"
+      condition: "PN identifies audio-pacing conflicts"
+
+execution:
+  max_iterations: 3
+  timebox_minutes: 90
+  timeout_behavior: "complete_with_deferred"
+  error_handling:
+    - error: "Audio Producer unavailable or dormant"
+      response: "Complete with plan-only merge (deferred:audio); assets can be added later"
+
+    - error: "Gatekeeper blocks on spoiler leaks or safety issues"
+      response: "Audio Director revises cue descriptions/text equivalents; coordinate with Lore/Style for spoiler-safe alternatives; re-submit for gate"
+
+    - error: "Style drift flagged (leitmotif inconsistency)"
+      response: "Style Lead adjusts plan; re-produce if already created; update motif policy if needed"
+
+    - error: "Reproducibility logs incomplete (when promised)"
+      response: "Audio Producer re-exports with proper logging OR declare non-deterministic and adjust project promises"
+
+    - error: "Cue would force canon changes (leitmotif implies unrevealed allegiance)"
+      response: "Escalate to Showrunner; request Lore approval before associating motif; may need to replace with neutral cue"
