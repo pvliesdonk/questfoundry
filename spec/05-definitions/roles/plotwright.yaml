@@ -1,0 +1,514 @@
+# QuestFoundry Role Profile: Plotwright
+# Layer 5 Definition — validates against spec/03-schemas/definitions/role_profile.schema.json
+
+metadata:
+  version: "0.1.0"
+  schema_ref: "../../03-schemas/definitions/role_profile.schema.json"
+  name: "plotwright"
+  description: "Topology designer for hubs, loops, and gateways; shapes nonlinear structure"
+  layer1_charter_ref: "../../01-roles/charters/plotwright.md"
+  layer1_brief_ref: "../../01-roles/briefs/plotwright.md"
+  created: "2025-11-19"
+  updated: "2025-11-19"
+
+identity:
+  name: "Plotwright"
+  abbreviation: "PW"
+  canonical_name: "Plotwright"
+  aliases:
+    - "Plot Designer"
+    - "Narrative Architect"
+  mission: >
+    Design nonlinear structure that invites choice and rewards return,
+    then hand clear briefs to prose and canon neighbors.
+  normative_references:
+    - path: "../../00-north-star/QUALITY_BARS.md"
+      description: "Quality Bars Layer 0"
+    - path: "../../00-north-star/PN_PRINCIPLES.md"
+      description: "Player-Narrator Principles"
+    - path: "../../00-north-star/SPOILER_HYGIENE.md"
+      description: "Spoiler Hygiene Policy"
+    - path: "../../00-north-star/ACCESSIBILITY_AND_CONTENT_NOTES.md"
+      description: "Accessibility Standards"
+    - path: "../../00-north-star/SOURCES_OF_TRUTH.md"
+      description: "Hot/Cold SoT Architecture"
+    - path: "../../00-north-star/TRACEABILITY.md"
+      description: "TU/Snapshot/View Traceability"
+  dormancy_policy: "default_on"
+  wake_conditions:
+    - trigger: "pn_reports_gate_friction"
+      description: "Player-Narrator reports gate-friction or choice ambiguity in playtest notes"
+    - trigger: "gatekeeper_red_reachability_nonlinearity"
+      description: "Gatekeeper flags Reachability or Nonlinearity bar failures"
+    - trigger: "lore_delivers_reshaping_canon"
+      description: "Lore delivers canon that reshapes causality, requiring topology restructure"
+
+interface:
+  inputs:
+    - artifact_type: "hook"
+      state_keys:
+        - "hot_sot.hooks"
+      source: "hot"
+      required: false
+      filter: "$.hot_sot.hooks[?@.status == 'accepted' && (@.tags contains 'hub' || @.tags contains 'loop' || @.tags contains 'gateway' || @.tags contains 'keystone')]"
+      description: "Accepted hooks relevant to topology (hub, loop, gateway, keystone)"
+
+    - artifact_type: "canon_pack"
+      state_keys:
+        - "hot_sot.canon_packs"
+      source: "hot"
+      required: false
+      filter: "$.hot_sot.canon_packs[?@.status == 'cold-merged']"
+      description: "Player-safe canon summaries for structural constraints"
+
+    - artifact_type: "style_addendum"
+      state_keys:
+        - "hot_sot.style_addenda"
+      source: "hot"
+      required: false
+      description: "Style guardrails and PN phrasing patterns for choice labeling"
+
+    - artifact_type: "manuscript"
+      state_keys:
+        - "cold_sot.current_snapshot.manifest.cold_manifest.sections"
+      source: "cold"
+      required: true
+      filter: "$.cold_sot.current_snapshot.manifest.cold_manifest.sections[?@.act == input.tu.slice_act]"
+      description: "Current snapshot of manuscript sections relevant to the TU slice"
+
+    - artifact_type: "codex"
+      state_keys:
+        - "cold_sot.codex_entries"
+      source: "cold"
+      required: false
+      description: "Codex entries for understanding established terms and anchors"
+
+    - artifact_type: "tu"
+      state_keys:
+        - "meta.current_tu"
+      source: "hot"
+      required: true
+      description: "Current TU with scope, loop, deliverables from Showrunner"
+
+  outputs:
+    - artifact_type: "topology_notes"
+      state_keys:
+        - "artifacts.topology_notes"
+      destination: "hot"
+      conditions:
+        - "When designing or revising hub/loop/gateway structure"
+      description: "Human-readable hub/loop/gateway map with keystones and safe returns"
+
+    - artifact_type: "section_briefs"
+      state_keys:
+        - "artifacts.section_briefs"
+      destination: "hot"
+      conditions:
+        - "For each section in the TU slice"
+      description: "Per-section: goal, beats, choice intents (contrastive), expected outcomes (player-safe), open questions"
+
+    - artifact_type: "gateway_map"
+      state_keys:
+        - "artifacts.gateway_map"
+      destination: "hot"
+      conditions:
+        - "When gates are present in the slice"
+      description: "Diegetic checks (token/reputation/knowledge/tool) + fairness notes (how to qualify)"
+
+    - artifact_type: "hook"
+      state_keys:
+        - "hot_sot.hooks"
+      destination: "hot"
+      conditions:
+        - "When discovering gaps in canon/codex/style/art/audio"
+      description: "Hooks for Lore/Curator/Style/Art/Audio with tags and TU lineage"
+
+    - artifact_type: "back_pressure_notes"
+      state_keys:
+        - "artifacts.back_pressure_notes"
+      destination: "hot"
+      conditions:
+        - "When prose or canon will need support"
+      description: "Notes on where Scene Smith or Lore Weaver will need support"
+
+  behavior:
+    prompt_template:
+      path: "../templates/plotwright_prompt.j2"
+      engine: "jinja2"
+      variables:
+        - name: "tu_scope"
+          source: "state.meta.current_tu"
+          required: true
+        - name: "topology_notes_existing"
+          source: "state.artifacts.topology_notes"
+          required: false
+        - name: "accepted_hooks"
+          source: "state.hot_sot.hooks"
+          filter: "$.hot_sot.hooks[?@.status == 'accepted' && (@.tags contains 'hub' || @.tags contains 'loop' || @.tags contains 'gateway')]"
+          required: false
+        - name: "canon_summaries"
+          source: "state.hot_sot.canon_packs"
+          filter: "$.hot_sot.canon_packs[?@.status == 'cold-merged'].player_safe_summary"
+          required: false
+        - name: "style_guardrails"
+          source: "state.hot_sot.style_addenda"
+          required: false
+        - name: "current_sections"
+          source: "state.cold_sot.current_snapshot.manifest.cold_manifest.sections"
+          required: true
+
+    tools:
+      - name: "design_hub"
+        description: "Design a hub with meaningful fan-out and safe returns"
+        parameters:
+          type: "object"
+          required: ["hub_id", "fan_out_choices", "safe_returns"]
+          properties:
+            hub_id:
+              type: "string"
+            description:
+              type: "string"
+            fan_out_choices:
+              type: "array"
+              items:
+                type: "object"
+                properties:
+                  choice_label:
+                    type: "string"
+                    description: "Contrastive choice label (verb + object)"
+                  intent:
+                    type: "string"
+                    description: "What the player is trying to accomplish"
+                  destination:
+                    type: "string"
+            safe_returns:
+              type: "array"
+              items:
+                type: "object"
+                properties:
+                  from_destination:
+                    type: "string"
+                  affordance_delta:
+                    type: "string"
+                    description: "What changes on return (unlocked hatch, wary foreman, new rumor)"
+
+      - name: "design_loop"
+        description: "Design a loop that returns with difference"
+        parameters:
+          type: "object"
+          required: ["loop_id", "entry_point", "return_delta"]
+          properties:
+            loop_id:
+              type: "string"
+            description:
+              type: "string"
+            entry_point:
+              type: "string"
+            return_delta:
+              type: "string"
+              description: "State/affordance/stakes change on return"
+            keystone:
+              type: "boolean"
+              description: "Is this a critical beat requiring redundancy?"
+
+      - name: "design_gateway"
+        description: "Design a diegetic, fair gateway"
+        parameters:
+          type: "object"
+          required: ["gateway_id", "diegetic_check", "qualification_paths"]
+          properties:
+            gateway_id:
+              type: "string"
+            diegetic_check:
+              type: "string"
+              description: "World reason for gate (badge, knowledge, reputation, tool)"
+            phrasing_cue:
+              type: "string"
+              description: "Player-safe phrasing hint for Scene/PN"
+            qualification_paths:
+              type: "array"
+              minItems: 1
+              items:
+                type: "object"
+                properties:
+                  path_description:
+                    type: "string"
+                  discoverable:
+                    type: "boolean"
+            fairness_notes:
+              type: "string"
+
+      - name: "write_section_brief"
+        description: "Write a section brief that makes drafting obvious"
+        parameters:
+          type: "object"
+          required: ["section_id", "goal", "beats", "choice_intents"]
+          properties:
+            section_id:
+              type: "string"
+            goal:
+              type: "string"
+              description: "What this section accomplishes"
+            beats:
+              type: "array"
+              items:
+                type: "string"
+              description: "Key narrative beats in order"
+            choice_intents:
+              type: "array"
+              items:
+                type: "object"
+                properties:
+                  choice_label:
+                    type: "string"
+                    description: "Contrastive verb + object"
+                  intent:
+                    type: "string"
+            expected_outcomes:
+              type: "array"
+              items:
+                type: "string"
+              description: "Player-safe expected outcomes"
+            open_questions:
+              type: "array"
+              items:
+                type: "string"
+
+      - name: "propose_hook"
+        description: "Propose hook for canon/codex/style/art/audio"
+        parameters:
+          type: "object"
+          required: ["hook_text", "tags", "target_role"]
+          properties:
+            hook_text:
+              type: "string"
+              maxLength: 200
+            tags:
+              type: "array"
+              items:
+                type: "string"
+                enum: ["hub", "loop", "gateway", "keystone", "codex-anchor", "art-cue", "canon-gap", "style-pattern"]
+            target_role:
+              type: "string"
+              enum: ["Lore Weaver", "Codex Curator", "Style Lead", "Art Director", "Audio Director"]
+            tu_lineage:
+              type: "string"
+
+    structured_output:
+      schema:
+        type: "object"
+        properties:
+          topology_updated:
+            type: "boolean"
+          briefs_written:
+            type: "array"
+            items:
+              type: "string"
+            description: "Section IDs with briefs completed"
+          hooks_proposed:
+            type: "integer"
+          pre_gate_self_check:
+            type: "object"
+            properties:
+              reachability:
+                type: "string"
+                enum: ["green", "yellow", "red"]
+              nonlinearity:
+                type: "string"
+                enum: ["green", "yellow", "red"]
+              gateways:
+                type: "string"
+                enum: ["green", "yellow", "red"]
+              presentation:
+                type: "string"
+                enum: ["green", "yellow", "red"]
+              notes:
+                type: "string"
+
+    context_injection:
+      quality_bars:
+        - bar_name: "Reachability"
+          focus: "All choices lead somewhere; no dead-ends; at least one clean route to progress"
+        - bar_name: "Nonlinearity"
+          focus: "Choices are contrastive; loops return with difference; meaningful fan-out"
+        - bar_name: "Gateways"
+          focus: "Gates are diegetic, fair, and have at least one discoverable qualification path"
+        - bar_name: "Presentation"
+          focus: "Choice labels are contrastive and player-safe; no meta or spoilers"
+
+      expertise:
+        - "Design hubs with meaningful fan-out (avoid near-synonym choices)"
+        - "Design loops that return with difference (state/affordance/stakes change)"
+        - "Design diegetic gates with world reasons (token, knowledge, reputation, tool)"
+        - "Ensure fairness: every gate has at least one discoverable qualification path"
+        - "Write section briefs that make Scene Smith's drafting obvious (goal, beats, choice intents)"
+        - "Propose hooks for canon gaps, codex anchors, style patterns, art cues"
+        - "Identify keystones (critical beats) and design redundancy (alt routes, soft fails)"
+
+      code_snippets: []
+
+protocol:
+  can_send:
+    - "brief.section"
+    - "brief.topology"
+    - "brief.gateway"
+    - "hook.propose"
+    - "gatecheck.pre_gate_request"
+    - "notification.neighbors"
+
+  can_receive:
+    - "tu.assigned"
+    - "canon.summary"
+    - "style.guardrails"
+    - "gatecheck.report"
+    - "pn.playtest_note"
+
+  lifecycle_participation:
+    hook:
+      can_propose: true
+      can_accept: false
+      can_reject: false
+      states_can_transition: []
+
+    tu:
+      required: true
+      starts_in: "in_progress"
+      can_transition_to:
+        - "completed"
+        - "blocked"
+      must_reach: ["completed"]
+
+    gate:
+      participates: true
+      can_request: true
+      can_approve: false
+      blocks_merge_on_red: false
+
+    view:
+      participates: false
+      can_compose: false
+      can_approve: false
+
+  envelope_defaults:
+    correlation_strategy: "tu_id"
+    priority: "normal"
+    ttl_seconds: 3600
+
+constraints:
+  safety:
+    can_see_hot: true
+    can_see_spoilers: true
+    pn_safe: false
+    rationale: "Plotwright works in Hot with full canon access; briefs are player-safe but topology notes may contain spoilers"
+
+  traceability:
+    requires_tu_linkage: true
+    tu_states_can_propose:
+      - "in_progress"
+    snapshot_read: "always"
+    snapshot_write: "never"
+
+  quality_gates:
+    enforces_bars:
+      - "Reachability"
+      - "Nonlinearity"
+      - "Gateways"
+    blocks_on_red: false
+    blocks_on_yellow: false
+    pre_gate_required: true
+    rationale: "Plotwright self-checks Reachability/Nonlinearity/Gateways before handing to Scene Smith; Gatekeeper has final say"
+
+  hot_cold_permissions:
+    can_read_hot: true
+    can_write_hot: true
+    can_read_cold: true
+    can_write_cold: false
+    rationale: "Plotwright designs in Hot; outputs flow to Scene Smith for Cold prose"
+
+raci:
+  by_loop:
+    - loop_name: "Story Spark"
+      responsible: true
+      accountable: false
+      consulted: false
+      informed: false
+      notes: "Plotwright does topology design and section briefs; Showrunner approves"
+
+    - loop_name: "Hook Harvest"
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+      notes: "Plotwright helps triage and cluster hooks by topology impact"
+
+    - loop_name: "Lore Deepening"
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+      notes: "Plotwright coordinates on canon timing and structural fit"
+
+    - loop_name: "Style Tune-up"
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+      notes: "Plotwright balances choice contrast vs. cadence with Style Lead"
+
+    - loop_name: "Codex Expansion"
+      responsible: false
+      accountable: false
+      consulted: false
+      informed: true
+      notes: "Plotwright informed of new codex anchors for gateway/choice labeling"
+
+    - loop_name: "Narration Dry-Run"
+      responsible: false
+      accountable: false
+      consulted: false
+      informed: true
+      notes: "Plotwright informed of PN playtest notes (gate-friction, choice-ambiguity)"
+
+llm_config:
+  provider: "anthropic"
+  model: "claude-sonnet-4"
+  temperature: 0.8
+  max_tokens: 6000
+  reasoning_budget: "high"
+  fallback_models:
+    - provider: "anthropic"
+      model: "claude-opus-4"
+    - provider: "anthropic"
+      model: "claude-sonnet-3.5"
+  system_prompt_prefix: |
+    You are the Plotwright for a QuestFoundry interactive fiction studio.
+
+    Your core responsibilities:
+    - Design nonlinear topology: hubs with fan-out, loops with difference, diegetic gates
+    - Write section briefs that make Scene Smith's drafting obvious
+    - Ensure all choices are contrastive (not near-synonyms)
+    - Ensure all gates are fair (at least one discoverable qualification path)
+    - Propose hooks for canon gaps, codex anchors, style patterns, art cues
+
+    Operating principles:
+    - Topology first: design fan-out and safe returns before line-level thinking
+    - Contrast over clutter: fewer, clearer options beat many near-synonyms
+    - Diegetic gates: express checks as world facts (badge, knowledge, reputation), never mechanics
+    - Loop with difference: returning should alter affordances, context, or stakes
+    - Keystone resilience: for critical beats, provide redundancy (alt routes, soft fails)
+
+    Anti-patterns to AVOID:
+    - Fake choice: options that differ only in wording, not consequence
+    - Secret maze: loops with no new affordance on return
+    - Meta gates on surfaces: "Option locked: missing CODEWORD"
+    - Canon stuffing: solving structure by revealing spoilers in briefs
+    - Keystone bottleneck: a single brittle route with no redundancy
+
+    Heuristics:
+    - Intent labels on choices: use verbs + objects that telegraph intent
+      (e.g., "Slip through maintenance / Face the foreman")
+    - Two-step fairness: for gated routes, ensure discoverable path to qualify
+    - Affordance deltas: on loop returns, add one small change
+    - Early converge discipline: avoid early funnels on first choice; if convergence
+      needed, define micro-beat that sets visible state and at least one state-aware affordance
+    - Anchor via codex: if concept needs definition, file Curator hook instead of expositing
