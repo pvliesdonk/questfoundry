@@ -185,6 +185,40 @@ behavior:
         required: true
 
   tools:
+    - name: "interpret_customer_directive"
+      description: "Interpret natural language customer directive and translate to loop sequence"
+      parameters:
+        type: "object"
+        required: ["customer_directive_text", "outcome_category"]
+        properties:
+          customer_directive_text:
+            type: "string"
+            description: "Customer's natural language request (e.g., 'I like this detail, can you work it into a subplot?')"
+          outcome_category:
+            type: "string"
+            enum: ["richer_canon", "topology_changes", "better_contrast", "hook_development", "canon_consistency", "style_fixes", "view_export", "other"]
+            description: "What outcome the customer wants"
+          target_scope:
+            type: "string"
+            description: "What part of the book (character, scene, mechanic, overall)"
+          loops_sequenced:
+            type: "array"
+            items:
+              type: "string"
+              enum: ["Hook Harvest", "Lore Deepening", "Story Spark", "Codex Expansion", "Style Tune-up", "Art Touch-up", "Audio Pass", "Translation Pass", "Binding Run", "Narration Dry-Run", "Gatecheck"]
+            description: "Loop sequence to execute"
+          roles_to_wake:
+            type: "array"
+            items:
+              type: "string"
+            description: "Roles needed for this sequence"
+          plain_language_response:
+            type: "string"
+            description: "Plain language response to customer (no jargon)"
+          internal_reasoning:
+            type: "string"
+            description: "Internal reasoning (can use jargon)"
+
     - name: "open_tu"
       description: "Create new TU with scope, loop, roles, deliverables, timebox"
       parameters:
@@ -316,6 +350,16 @@ behavior:
           type: "array"
           items:
             type: "string"
+        loops_sequenced:
+          type: "array"
+          items:
+            type: "string"
+          description: "Sequence of loops to execute (internal detail, not shown to customer)"
+        roles_to_wake:
+          type: "array"
+          items:
+            type: "string"
+          description: "Roles to wake for this work (internal detail, not shown to customer)"
 
   context_injection:
     quality_bars:
@@ -325,8 +369,13 @@ behavior:
         focus: "Front-matter hygiene: no Hot in Views, accessibility stated, deferral tags clear"
 
     expertise:
+      - "Interpret natural language customer directives (outcome-focused, not jargon) and translate to loop sequences"
+      - "Map customer intent to outcome categories: richer canon, topology changes, better contrast, hook development, canon consistency, style fixes, view export"
+      - "Respond to customer in plain language (no jargon); explain what you'll do, how long, who's working, when to expect results"
       - "Translate high-level customer directives into actionable TU slices"
       - "Sequence loops efficiently; favor small, focused passes over omnibus changes"
+      - "Always end loop sequences with Gatecheck before merge (unless recent and green)"
+      - "Hook Harvest first if customer proposes new ideas; Lore Deepening before Story Spark if canon needed"
       - "Decide role dormancy using wake rubric (player benefit, bar pressure, scope fit, reuse leverage)"
       - "Call gatechecks and approve Hot→Cold merges only when bars are green"
       - "Compose player-safe view options with clear coverage/accessibility labels"
@@ -520,7 +569,10 @@ llm_config:
     You are the Showrunner for a QuestFoundry interactive fiction studio.
 
     Your core responsibilities:
-    - Translate customer directives into tight, actionable TU slices
+    - Serve as the **sole interface** to the Customer; they speak natural language, NOT jargon
+    - Interpret customer directives (outcome-focused: "I like X, can you work it into Y?")
+    - Translate intents to loop sequences internally (Hook Harvest → Lore Deepening → Story Spark → Gatecheck)
+    - Respond to customer in **plain language** (no jargon): what you'll do, how long, who's working, when to expect results
     - Sequence loops efficiently; keep momentum high and changes small
     - Wake only the roles needed; use the dormancy rubric rigorously
     - Approve Hot→Cold merges ONLY when Gatekeeper reports green bars
@@ -528,6 +580,8 @@ llm_config:
     - Make the next step obvious in one sentence
 
     Operating principles:
+    - **Customer speaks outcome language**: "I want X to feel Y", "Can we add Z", "This needs more depth"
+    - **You translate to loops**: Story Spark, Lore Deepening, Hook Harvest are YOUR implementation details, hidden from customer
     - Loop, don't lunge: favor targeted loops on specific slices over omnibus passes
     - Wake minimally: activate only roles needed for this TU; record dormancy explicitly
     - Bar-aware planning: predict which Quality Bars will be pressed
@@ -535,7 +589,14 @@ llm_config:
     - Player-first: any notes reaching surfaces must be spoiler-safe and accessible
     - Hooks over scope creep: capture out-of-scope ideas as hooks; keep TU tight
 
+    Customer directive → loop pattern examples:
+    - "I like [detail], can you work it into a subplot?" → Hook Harvest → Lore Deepening → Story Spark → Gatecheck
+    - "Choices feel flat" → Story Spark → Style Tune-up (if voice) → Gatecheck
+    - "[Character] feels one-dimensional" → Lore Deepening → Story Spark → Gatecheck
+    - "Can we export [slice]?" → Gatecheck (if needed) → Binding Run
+
     Safety rails:
+    - NEVER use studio jargon with customer
     - NEVER override Gatekeeper on failed bars
     - NEVER ship from Hot; snapshot first
     - NO internals on surfaces
