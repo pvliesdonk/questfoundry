@@ -1,0 +1,354 @@
+# QuestFoundry Loop Pattern: Translation Pass
+# Layer 5 Definition — validates against spec/03-schemas/definitions/loop_pattern.schema.json
+
+metadata:
+  version: "0.1.0"
+  schema_ref: "../../03-schemas/definitions/loop_pattern.schema.json"
+  name: "translation_pass"
+  description: "Build language packs with localized surfaces, register maps, and coverage tracking; maintains diegetic phrasing and player-safety"
+  layer0_guide_ref: "../../00-north-star/LOOPS/translation_pass.md"
+  created: "2025-11-19"
+  updated: "2025-11-19"
+
+identity:
+  canonical_name: "Translation Pass"
+  aliases:
+    - "Localization Pass"
+    - "Language Pack Build"
+  purpose: >
+    Deliver faithful, readable language packs without shrinking meaning or leaking spoilers.
+    Balance register, idiom, and cultural clarity across manuscript, PN phrasing, codex entries,
+    captions/alt text, and UI labels.
+  outcome: >
+    Language Pack with localized surfaces, register map, glossary, coverage report. Ready for
+    Gatekeeper checks and merge to Cold.
+
+topology:
+  nodes:
+    - id: "showrunner_scope_target"
+      role: "Showrunner"
+      intent: "tu.scope"
+      description: "Set target language and scope (full manuscript vs slice)"
+
+    - id: "translator_build_pack"
+      role: "Translator"
+      intent: "translation.build_pack"
+      description: "Localize surfaces; maintain register map and glossary; track coverage"
+
+    - id: "style_register_review"
+      role: "Style Lead"
+      intent: "style.review_register"
+      description: "Ensure localized voice consistent with Style intent"
+
+    - id: "curator_terminology_sync"
+      role: "Codex Curator"
+      intent: "codex.sync_glossary"
+      description: "Coordinate terminology choices; validate bilingual glossary"
+      optional: true
+
+    - id: "pn_phrasing_review"
+      role: "Player-Narrator"
+      intent: "pn.review_localized"
+      description: "Test localized PN phrasing patterns for natural delivery"
+      optional: true
+
+    - id: "gatekeeper_pre_gate"
+      role: "Gatekeeper"
+      intent: "gate.pre_gate"
+      description: "Check Presentation (no spoilers), Accessibility (captions work), Style (register preserved)"
+
+    - id: "showrunner_package_handoff"
+      role: "Showrunner"
+      intent: "tu.package"
+      description: "Package Language Pack; notify Binder about localization availability"
+
+  edges:
+    - from: "showrunner_scope_target"
+      to: "translator_build_pack"
+      condition: null
+
+    - from: "translator_build_pack"
+      to: "style_register_review"
+      condition: null
+
+    - from: "style_register_review"
+      to: "curator_terminology_sync"
+      condition: "Terminology concerns flagged"
+
+    - from: "style_register_review"
+      to: "pn_phrasing_review"
+      condition: "PN phrasing patterns included"
+
+    - from: "style_register_review"
+      to: "gatekeeper_pre_gate"
+      condition: "No consultations needed OR consultations complete"
+
+    - from: "curator_terminology_sync"
+      to: "gatekeeper_pre_gate"
+      condition: null
+
+    - from: "pn_phrasing_review"
+      to: "gatekeeper_pre_gate"
+      condition: null
+
+    - from: "gatekeeper_pre_gate"
+      to: "translator_build_pack"
+      condition: "Issues require revision"
+
+    - from: "gatekeeper_pre_gate"
+      to: "showrunner_package_handoff"
+      condition: "All checks pass"
+
+  exit_conditions:
+    - condition: "Language Pack packaged and ready for merge"
+      next_state: "completed"
+      triggers:
+        - "tu.close"
+
+    - condition: "Gatekeeper blocks on spoilers or broken diegetic phrasing"
+      next_state: "blocked"
+      triggers:
+        - "gate.blocked"
+
+protocol_flow:
+  message_sequences:
+    - sequence_id: "scope_and_build"
+      description: "Showrunner sets target; Translator builds pack"
+      steps:
+        - from: "Showrunner"
+          to: "Translator"
+          intent: "tu.scope"
+          payload:
+            - "target_language (ISO 639-1 code)"
+            - "scope (full manuscript vs specific sections)"
+            - "priority_surfaces (manuscript, codex, captions, UI labels)"
+
+        - from: "Translator"
+          to: "State"
+          intent: "translation.build_pack"
+          payload:
+            - "localized_manuscript (section-by-section)"
+            - "register_map (formality, pronouns, slang mapping)"
+            - "glossary_slice (bilingual terminology)"
+            - "pn_phrasing_patterns (diegetic gates in target language)"
+            - "caption_alt_text (localized image/audio captions)"
+            - "coverage_percent"
+            - "unlocalized_segments (with fallback policy)"
+            - "open_issues"
+
+    - sequence_id: "quality_reviews"
+      description: "Style/Curator/PN review localized content"
+      steps:
+        - from: "Style Lead"
+          to: "State"
+          intent: "style.review_register"
+          payload:
+            - "register_preserved (boolean)"
+            - "voice_consistent (boolean)"
+            - "idiom_concerns (list)"
+
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.sync_glossary"
+          payload:
+            - "terminology_aligned (boolean)"
+            - "glossary_conflicts (list)"
+          condition: "Terminology concerns flagged"
+
+        - from: "Player-Narrator"
+          to: "State"
+          intent: "pn.review_localized"
+          payload:
+            - "phrasing_natural (boolean)"
+            - "cadence_concerns (list)"
+            - "diegetic_preserved (boolean)"
+          condition: "PN phrasing patterns included"
+
+    - sequence_id: "pre_gate"
+      description: "Gatekeeper validates Presentation, Accessibility, Style"
+      steps:
+        - from: "Gatekeeper"
+          to: "State"
+          intent: "gate.pre_gate"
+          payload:
+            - "presentation_check (no spoilers in localized text)"
+            - "accessibility_check (captions work in target language)"
+            - "style_check (register preserved)"
+            - "diegetic_check (gates remain in-world)"
+            - "overall_status (green, needs_revision, blocked)"
+
+    - sequence_id: "package_handoff"
+      description: "Showrunner packages Language Pack"
+      steps:
+        - from: "Showrunner"
+          to: "State"
+          intent: "tu.package"
+          payload:
+            - "language_pack_id"
+            - "target_language"
+            - "coverage_percent"
+            - "binder_notified (boolean)"
+
+gates:
+  merge_gates:
+    - name: "presentation_safety_localized"
+      condition: "No spoilers in any localized surface; diegetic phrasing maintained"
+      enforced_by: "Gatekeeper"
+
+    - name: "accessibility_preserved"
+      condition: "Captions/alt text work in target language and culture"
+      enforced_by: "Gatekeeper"
+
+    - name: "style_consistency"
+      condition: "Register and voice consistent with Style intent"
+      enforced_by: "Gatekeeper"
+
+traceability:
+  tu_lifecycle:
+    creates_tus: true
+    updates_tu_status: true
+    transitions:
+      - from: "proposed"
+        to: "in_progress"
+        trigger: "Showrunner opens Translation Pass TU"
+      - from: "in_progress"
+        to: "completed"
+        trigger: "Language Pack packaged and Gatekeeper approves"
+      - from: "in_progress"
+        to: "blocked"
+        trigger: "Gatekeeper blocks on spoilers or broken phrasing"
+
+  produces_hot:
+    - "language_packs (with register maps, glossaries, coverage reports)"
+    - "hooks (codex-anchor, style-decision, source-rewrite)"
+
+  produces_cold:
+    - "language_packs_merged (completed packs merge to Cold)"
+
+  snapshot_dependencies:
+    reads_from_cold:
+      - "snapshots[view_id].manuscript"
+      - "snapshots[view_id].codex_entries"
+      - "snapshots[view_id].style_addenda"
+      - "snapshots[view_id].art_plans (for caption localization)"
+      - "snapshots[view_id].audio_plans (for text equivalent localization)"
+    writes_to_cold:
+      - "snapshots[view_id].language_packs[target_language]"
+
+roles:
+  primary:
+    - role: "Translator"
+      raci: "responsible"
+      required: true
+
+  supporting:
+    - role: "Showrunner"
+      raci: "accountable"
+      required: true
+
+    - role: "Style Lead"
+      raci: "consulted"
+      required: true
+
+    - role: "Gatekeeper"
+      raci: "consulted"
+      required: true
+
+    - role: "Codex Curator"
+      raci: "consulted"
+      required: false
+      wake_condition: "Terminology concerns flagged"
+
+    - role: "Player-Narrator"
+      raci: "consulted"
+      required: false
+      wake_condition: "PN phrasing patterns included"
+
+    - role: "Book Binder"
+      raci: "informed"
+      required: false
+
+context:
+  required_state:
+    - "cold_sot.snapshots[view_id] (source surfaces for localization)"
+
+  optional_state:
+    - "hot.researcher_sensitivity_guidance (cultural concerns)"
+
+  quality_bar_focus:
+    - bar_name: "Presentation"
+      pressure: "high"
+      rationale: "All localized surfaces must be player-safe; no spoilers; diegetic phrasing maintained"
+
+    - bar_name: "Accessibility"
+      pressure: "high"
+      rationale: "Captions/alt text must work in target language and culture; honor accessibility guidelines"
+
+    - bar_name: "Style"
+      pressure: "high"
+      rationale: "Register and voice must be consistent with Style intent; culturally appropriate"
+
+success_criteria:
+  required:
+    - "Language Pack compiles without orphan labels"
+    - "Register map published with exemplars"
+    - "Coverage % stated; gaps documented with fallback policy"
+    - "Diegetic gate phrasing preserved in target language"
+    - "Captions/alt text localized and accessible"
+    - "Gatekeeper green on Presentation, Accessibility, Style"
+
+  definition_of_done:
+    - "Language Pack complete with all components"
+    - "Style Lead approves register and voice"
+    - "Curator/PN consultations complete (if needed)"
+    - "Gatekeeper pre-gate green"
+    - "Showrunner packages and notifies Binder"
+
+failure_modes:
+  - mode: "Machine translation without cultural adaptation"
+    remedy: "Translator reviews and adapts idioms/register to target culture; coordinate with Style for voice consistency"
+
+  - mode: "Diegetic phrasing breaks in translation"
+    remedy: "Translator rewrites to maintain in-world feel; consult PN for natural alternatives; avoid meta-talk"
+
+  - mode: "Orphan labels or broken anchors after localization"
+    remedy: "Complete coverage check; coordinate with Binder for anchor resolution; test all UI labels"
+
+  - mode: "Cultural insensitivity in localized content"
+    remedy: "Consult Researcher for cultural sensitivity; adapt or remove problematic elements; coordinate with Style/Curator"
+
+handoffs:
+  from_loops:
+    - loop: "Style Tune-up"
+      artifact: "style_addenda (register, voice)"
+      trigger: "Style guidance needed for localization"
+
+    - loop: "Codex Expansion"
+      artifact: "codex_entries (source terminology)"
+      trigger: "Codex terms need localization"
+
+    - loop: "Binding Run"
+      artifact: "current Cold snapshot (source surfaces)"
+      trigger: "Translator needs source surfaces"
+
+  to_loops:
+    - loop: "Binding Run"
+      artifact: "language_packs (for multilingual export)"
+      condition: "Translation Pass complete; ready for inclusion"
+
+execution:
+  max_iterations: 2
+  timebox_minutes: 180
+  timeout_behavior: "complete_with_partial_coverage"
+  error_handling:
+    - error: "Target language resources unavailable"
+      response: "Defer translation; document gap; proceed with source language only"
+
+    - error: "Diegetic phrasing cannot be preserved"
+      response: "Escalate to Showrunner; may need source text revision to enable clean localization"
+
+    - error: "Cultural sensitivity issues"
+      response: "Consult Researcher; coordinate with Style/Curator for appropriate adaptation; escalate if unresolvable"
+
+    - error: "Coverage too low for quality release"
+      response: "Document gaps clearly; provide fallback policy (source language for unlocalized segments); defer partial coverage release"
