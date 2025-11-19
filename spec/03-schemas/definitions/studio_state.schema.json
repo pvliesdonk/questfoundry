@@ -1,0 +1,555 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.dev/schemas/definitions/studio_state.schema.json",
+  "title": "Studio State",
+  "description": "Shared state object for LangGraph execution. This maps to a TypedDict/Pydantic model that all nodes (roles) read from and write to. Encapsulates Hot/Cold SoT, protocol state, quality gates, and execution metadata.",
+  "type": "object",
+  "required": ["meta", "hot_sot", "cold_sot", "protocol", "execution"],
+
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["project_id", "current_tu", "current_loop"],
+      "description": "Project and execution metadata",
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "description": "Unique project identifier"
+        },
+        "project_name": {
+          "type": "string",
+          "description": "Human-readable project name"
+        },
+        "project_metadata_ref": {
+          "type": "string",
+          "description": "Path to project_metadata artifact (spec/03-schemas/project_metadata.schema.json)"
+        },
+        "current_tu": {
+          "type": "string",
+          "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+          "description": "Current Trace Unit ID tracking this work (e.g., 'TU-2025-11-19-SR01')"
+        },
+        "current_loop": {
+          "type": "string",
+          "description": "Current loop ID being executed (e.g., 'hook_harvest', 'story_spark')"
+        },
+        "current_snapshot": {
+          "type": "string",
+          "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$",
+          "description": "Current Cold snapshot reference (e.g., 'Cold @ 2025-11-19')"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "State last updated timestamp (ISO 8601)"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Execution session identifier for this loop run"
+        }
+      }
+    },
+
+    "hot_sot": {
+      "type": "object",
+      "description": "Hot Source of Truth: work-in-progress artifacts, drafts, spoilers, internal reasoning. From Layer 0 SOURCES_OF_TRUTH.md.",
+      "properties": {
+        "hooks": {
+          "type": "array",
+          "description": "Hook Cards (spec/03-schemas/hook_card.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to hook_card.schema.json - runtime validates each item"
+          }
+        },
+        "tus": {
+          "type": "array",
+          "description": "Trace Unit Briefs (spec/03-schemas/tu_brief.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to tu_brief.schema.json"
+          }
+        },
+        "canon_packs": {
+          "type": "array",
+          "description": "Canon Packs: spoiler-level story facts (spec/03-schemas/canon_pack.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to canon_pack.schema.json"
+          }
+        },
+        "style_addenda": {
+          "type": "array",
+          "description": "Style Addenda: voice/register/motifs (spec/03-schemas/style_addendum.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to style_addendum.schema.json"
+          }
+        },
+        "research_memos": {
+          "type": "array",
+          "description": "Research Memos: fact-checking results (spec/03-schemas/research_memo.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to research_memo.schema.json"
+          }
+        },
+        "art_plans": {
+          "type": "array",
+          "description": "Art Plans: illustration specifications (spec/03-schemas/art_plan.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to art_plan.schema.json"
+          }
+        },
+        "audio_plans": {
+          "type": "array",
+          "description": "Audio Plans: sound cue specifications (spec/03-schemas/audio_plan.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to audio_plan.schema.json"
+          }
+        },
+        "edit_notes": {
+          "type": "array",
+          "description": "Edit Notes: copyediting instructions (spec/03-schemas/edit_notes.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to edit_notes.schema.json"
+          }
+        },
+        "world_genesis_manifest": {
+          "type": "object",
+          "description": "World Genesis Manifest: proactive worldbuilding (spec/03-schemas/world_genesis_manifest.schema.json)"
+        },
+        "canon_transfer_packages": {
+          "type": "array",
+          "description": "Canon Transfer Packages: cross-project canon import/export (spec/03-schemas/canon_transfer_package.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to canon_transfer_package.schema.json"
+          }
+        }
+      }
+    },
+
+    "cold_sot": {
+      "type": "object",
+      "description": "Cold Source of Truth: validated, player-safe, export-ready content. From Layer 0 SOURCES_OF_TRUTH.md.",
+      "properties": {
+        "current_snapshot": {
+          "type": "string",
+          "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$",
+          "description": "Active Cold snapshot identifier"
+        },
+        "snapshots": {
+          "type": "array",
+          "description": "Immutable Cold snapshots with manifests",
+          "items": {
+            "type": "object",
+            "required": ["id", "created", "manifest"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$",
+                "description": "Snapshot identifier"
+              },
+              "created": {
+                "type": "string",
+                "format": "date",
+                "description": "Snapshot creation date"
+              },
+              "manifest": {
+                "type": "object",
+                "description": "Reference to cold_manifest.schema.json - top-level file index with SHA-256 hashes"
+              },
+              "book": {
+                "type": "object",
+                "description": "Reference to cold_book.schema.json - story structure and bibliographic metadata"
+              },
+              "art_manifest": {
+                "type": "object",
+                "description": "Reference to cold_art_manifest.schema.json - asset mappings with provenance"
+              },
+              "fonts": {
+                "type": "object",
+                "description": "Reference to cold_fonts.schema.json - font file mappings"
+              },
+              "build_lock": {
+                "type": "object",
+                "description": "Reference to cold_build_lock.schema.json - tool version pinning"
+              }
+            }
+          }
+        },
+        "codex_entries": {
+          "type": "array",
+          "description": "Player-safe encyclopedia entries (spec/03-schemas/codex_entry.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to codex_entry.schema.json"
+          }
+        },
+        "language_packs": {
+          "type": "array",
+          "description": "Localization language packs (spec/03-schemas/language_pack.schema.json)",
+          "items": {
+            "type": "object",
+            "description": "Reference to language_pack.schema.json"
+          }
+        }
+      }
+    },
+
+    "protocol": {
+      "type": "object",
+      "description": "Layer 4 protocol state: message tracking, correlation, envelope history",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "description": "Current loop correlation ID for message grouping"
+        },
+        "message_history": {
+          "type": "array",
+          "description": "Protocol messages sent/received during this loop execution",
+          "items": {
+            "type": "object",
+            "required": ["id", "intent", "sender", "receiver", "time"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Message ID (URN or UUID)"
+              },
+              "intent": {
+                "type": "string",
+                "description": "Layer 4 intent (from 04-protocol/INTENTS.md)"
+              },
+              "sender": {
+                "type": "string",
+                "description": "Sender role abbreviation"
+              },
+              "receiver": {
+                "type": "string",
+                "description": "Receiver role abbreviation or '*' for broadcast"
+              },
+              "time": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Message timestamp"
+              },
+              "payload_type": {
+                "type": "string",
+                "description": "Layer 3 schema name"
+              },
+              "refs": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Referenced artifact IDs"
+              },
+              "reply_to": {
+                "type": "string",
+                "description": "Message ID this is replying to"
+              }
+            }
+          }
+        },
+        "pending_messages": {
+          "type": "array",
+          "description": "Messages awaiting reply (for ack/error tracking)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "message_id": {"type": "string"},
+              "sent_at": {"type": "string", "format": "date-time"},
+              "expected_reply_intent": {"type": "string"},
+              "timeout_at": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    },
+
+    "artifacts": {
+      "type": "object",
+      "description": "Current working artifacts (mutable during loop execution). Each key is an artifact identifier, value is the artifact object validated against Layer 3 schema.",
+      "additionalProperties": {
+        "description": "Artifact data validated against appropriate Layer 3 schema based on type field"
+      },
+      "properties": {
+        "current_hook": {
+          "type": "object",
+          "description": "Hook Card currently being worked on (validates against hook_card.schema.json)"
+        },
+        "current_tu": {
+          "type": "object",
+          "description": "TU Brief for current trace unit (validates against tu_brief.schema.json)"
+        },
+        "current_canon_pack": {
+          "type": "object",
+          "description": "Canon Pack being developed (validates against canon_pack.schema.json)"
+        },
+        "current_gatecheck": {
+          "type": "object",
+          "description": "Current gatecheck report (validates against gatecheck_report.schema.json)"
+        }
+      }
+    },
+
+    "gates": {
+      "type": "object",
+      "description": "Quality gate evaluation results and status from Layer 0 QUALITY_BARS.md",
+      "properties": {
+        "current_gatecheck": {
+          "type": "object",
+          "description": "Current gatecheck report (full structure from gatecheck_report.schema.json)"
+        },
+        "bars_status": {
+          "type": "object",
+          "description": "Current status of each of the 8 quality bars",
+          "properties": {
+            "Integrity": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "No dead references, valid IDs"
+            },
+            "Reachability": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "Critical beats reachable from start"
+            },
+            "Nonlinearity": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "Hubs/loops/gateways meaningful"
+            },
+            "Gateways": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "Coherent diegetic checks"
+            },
+            "Style": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "Voice/register/motifs consistent"
+            },
+            "Determinism": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "Asset promises reproducible"
+            },
+            "Presentation": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "No spoilers on player surfaces"
+            },
+            "Accessibility": {
+              "enum": ["green", "yellow", "red", "not_checked"],
+              "description": "Navigation clear, alt text present"
+            }
+          }
+        },
+        "last_gatecheck_result": {
+          "enum": ["pass", "conditional_pass", "block"],
+          "description": "Result of most recent gatecheck"
+        },
+        "remediation_tasks": {
+          "type": "array",
+          "description": "Tasks from gatecheck for yellow/red bars",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bar": {"type": "string"},
+              "status": {"enum": ["yellow", "red"]},
+              "issue": {"type": "string"},
+              "smallest_viable_fix": {"type": "string"},
+              "owner": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+
+    "roles": {
+      "type": "object",
+      "description": "Role activation and dormancy tracking from Layer 0 ROLE_INDEX.md",
+      "properties": {
+        "active": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Currently active role IDs"
+        },
+        "dormant": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Currently dormant role IDs"
+        },
+        "wake_signals": {
+          "type": "array",
+          "description": "Pending wake signals for dormant roles",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role_id": {"type": "string"},
+              "reason": {"type": "string"},
+              "wake_at_node": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+
+    "execution": {
+      "type": "object",
+      "description": "Runtime execution metadata and control",
+      "required": ["iteration_count", "current_node"],
+      "properties": {
+        "iteration_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current iteration count (for loop detection)"
+        },
+        "current_node": {
+          "type": "string",
+          "description": "Currently executing node ID"
+        },
+        "node_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "node_id": {"type": "string"},
+              "started_at": {"type": "string", "format": "date-time"},
+              "completed_at": {"type": "string", "format": "date-time"},
+              "duration_ms": {"type": "integer"},
+              "status": {"enum": ["success", "error", "skipped"]}
+            }
+          },
+          "description": "History of node executions in this loop run"
+        },
+        "errors": {
+          "type": "array",
+          "description": "Errors encountered during execution",
+          "items": {
+            "type": "object",
+            "required": ["code", "message", "node"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Error code (from Layer 4 error taxonomy)"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message"
+              },
+              "node": {
+                "type": "string",
+                "description": "Node where error occurred"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "details": {
+                "type": "object",
+                "description": "Additional error context"
+              },
+              "recoverable": {
+                "type": "boolean",
+                "description": "Can execution continue after this error?"
+              }
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Non-fatal warnings",
+          "items": {
+            "type": "object",
+            "properties": {
+              "message": {"type": "string"},
+              "node": {"type": "string"},
+              "timestamp": {"type": "string", "format": "date-time"}
+            }
+          }
+        },
+        "checkpoints": {
+          "type": "array",
+          "description": "State checkpoints for resumability (LangGraph persistence)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "checkpoint_id": {"type": "string"},
+              "node_id": {"type": "string"},
+              "timestamp": {"type": "string", "format": "date-time"},
+              "state_hash": {"type": "string"}
+            }
+          }
+        },
+        "human_interactions": {
+          "type": "array",
+          "description": "Human interaction history (human.question/human.response)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "question_id": {"type": "string"},
+              "question": {"type": "string"},
+              "asked_at": {"type": "string", "format": "date-time"},
+              "answer": {"type": "string"},
+              "answered_at": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    },
+
+    "validation": {
+      "type": "object",
+      "description": "Runtime validation tracking",
+      "properties": {
+        "schema_registry_version": {
+          "type": "string",
+          "description": "Version of Layer 3 schemas loaded"
+        },
+        "validation_failures": {
+          "type": "array",
+          "description": "Failed validation attempts during this run",
+          "items": {
+            "type": "object",
+            "properties": {
+              "artifact_type": {"type": "string"},
+              "artifact_id": {"type": "string"},
+              "schema_path": {"type": "string"},
+              "errors": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "timestamp": {"type": "string", "format": "date-time"},
+              "node": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+
+    "filesystem": {
+      "type": "object",
+      "description": "Filesystem state tracking (Hot/Cold SoT on disk)",
+      "properties": {
+        "hot_sot_path": {
+          "type": "string",
+          "description": "Path to Hot SoT directory (e.g., '.qf/hot')"
+        },
+        "cold_sot_path": {
+          "type": "string",
+          "description": "Path to Cold SoT directory (e.g., '.qf/cold')"
+        },
+        "pending_writes": {
+          "type": "array",
+          "description": "Artifacts pending write to filesystem",
+          "items": {
+            "type": "object",
+            "properties": {
+              "artifact_type": {"type": "string"},
+              "artifact_id": {"type": "string"},
+              "target_path": {"type": "string"},
+              "hot_cold": {"enum": ["hot", "cold"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}
