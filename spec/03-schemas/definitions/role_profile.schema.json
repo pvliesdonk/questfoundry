@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://questfoundry.dev/schemas/definitions/role_profile.schema.json",
   "title": "Role Profile",
-  "description": "Executable definition of a QuestFoundry role (agent node) that encapsulates Layers 0-4 semantics for LangGraph runtime execution. This schema defines how a role behaves, what artifacts it processes, which protocol operations it can perform, and what constraints it must enforce.",
+  "description": "Executable definition of a QuestFoundry role (agent node) that encapsulates Layers 0-4 semantics for LangGraph runtime execution. This schema defines how a role behaves, what artifacts it processes, which protocol operations it can perform, and what constraints it must enforce.\n\nIMPORTANT: This is a Layer 5 implementation schema. The planning/execution split (e.g., role_type, service_config) are purely implementation choices and do not reflect conceptual changes to Layers 0-4. From a human team perspective, there is still ONE Illustrator role, ONE Book Binder role, etc. How that role is executed (reasoning agent vs production executor vs service) is an internal runtime decision.",
   "type": "object",
   "required": ["id", "identity", "interface", "behavior", "protocol", "constraints"],
 
@@ -51,6 +51,11 @@
           "type": "array",
           "items": {"type": "string"},
           "description": "Alternative names for onboarding clarity (e.g., 'Plot Drafter', 'World Bible Author')"
+        },
+        "role_type": {
+          "enum": ["reasoning_agent", "production_executor", "service"],
+          "default": "reasoning_agent",
+          "description": "Layer 5 implementation pattern (does NOT reflect conceptual role split in Layers 0-4):\n- reasoning_agent: Full LLM with complex reasoning and decision-making (default for most roles)\n- production_executor: Thin LLM wrapper + heavy tool orchestration (e.g., Illustrator with Stable Diffusion)\n- service: Pure tool execution, no LLM reasoning (e.g., Export Service)\n\nNOTE: This is purely an implementation detail. From a human/conceptual perspective, there is still ONE role (e.g., 'Illustrator' or 'Book Binder'). How that role is executed internally is a runtime optimization choice."
         }
       }
     },
@@ -226,7 +231,7 @@
         },
         "tools": {
           "type": "array",
-          "description": "Tools available to this role during execution (e.g., file I/O, validation, protocol messaging)",
+          "description": "Tools available to this role during execution (e.g., file I/O, validation, protocol messaging, external APIs)",
           "items": {
             "type": "object",
             "required": ["name", "enabled"],
@@ -242,17 +247,87 @@
                   "evaluate_quality_bar",
                   "create_hook",
                   "update_tu",
-                  "query_codex"
+                  "query_codex",
+                  "stable_diffusion",
+                  "pandoc_export",
+                  "elevenlabs_tts"
                 ]
               },
               "enabled": {
                 "type": "boolean",
                 "description": "Is this tool active for this role?"
               },
+              "tool_type": {
+                "enum": ["internal", "external_api", "file_system"],
+                "default": "internal",
+                "description": "Tool category for runtime routing:\n- internal: Studio-internal tools (Hot/Cold access, protocol messaging)\n- external_api: External service APIs (Stable Diffusion, Pandoc, TTS)\n- file_system: Direct file operations"
+              },
               "config": {
                 "type": "object",
                 "description": "Tool-specific configuration",
                 "additionalProperties": true
+              },
+              "api_spec": {
+                "type": "object",
+                "description": "External API configuration (for production executors using external_api tools). Layer 5 implementation detail for service orchestration.",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "description": "API provider identifier",
+                    "examples": ["stability_ai", "pandoc", "elevenlabs", "comfyui", "openai_dalle"]
+                  },
+                  "endpoint": {
+                    "type": "string",
+                    "description": "API endpoint URL or command"
+                  },
+                  "retry_policy": {
+                    "type": "object",
+                    "description": "Retry behavior for transient failures",
+                    "properties": {
+                      "max_retries": {
+                        "type": "integer",
+                        "default": 3,
+                        "minimum": 0,
+                        "maximum": 10
+                      },
+                      "backoff_strategy": {
+                        "enum": ["linear", "exponential", "fixed"],
+                        "default": "exponential",
+                        "description": "How to increase delay between retries"
+                      },
+                      "backoff_base_ms": {
+                        "type": "integer",
+                        "default": 1000,
+                        "description": "Base delay in milliseconds for backoff calculation"
+                      }
+                    }
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "description": "Request timeout in milliseconds"
+                  },
+                  "quality_thresholds": {
+                    "type": "array",
+                    "description": "Quality validation checks after tool execution",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "check": {
+                          "type": "string",
+                          "description": "What to check (e.g., 'file_exists', 'image_dimensions', 'audio_duration')"
+                        },
+                        "requirement": {
+                          "type": "string",
+                          "description": "Expected value or condition"
+                        },
+                        "on_failure": {
+                          "enum": ["retry", "warn", "fail"],
+                          "description": "Action when check fails"
+                        }
+                      }
+                    }
+                  }
+                }
               },
               "required": {
                 "type": "boolean",
@@ -587,7 +662,7 @@
 
     "llm_config": {
       "type": "object",
-      "description": "LLM provider and model configuration for this role. Runtime uses this to instantiate the appropriate LLM client.",
+      "description": "LLM provider and model configuration for this role. Runtime uses this to instantiate the appropriate LLM client. OPTIONAL for role_type='service' (pure tool execution with no LLM). REQUIRED for role_type='reasoning_agent' and 'production_executor'.",
       "properties": {
         "provider": {
           "enum": ["openai", "anthropic", "ollama", "google", "azure_openai"],
@@ -632,6 +707,39 @@
           "type": "array",
           "items": {"type": "string"},
           "description": "Fallback models if primary fails (in order of preference)"
+        }
+      }
+    },
+
+    "service_config": {
+      "type": "object",
+      "description": "Configuration for production executor and service roles. Layer 5 implementation detail for tool orchestration and service execution. OPTIONAL for reasoning_agent roles (rarely needed). Typically used by role_type='production_executor' or 'service'.",
+      "properties": {
+        "execution_mode": {
+          "enum": ["synchronous", "asynchronous", "batch"],
+          "default": "synchronous",
+          "description": "How this service executes tasks:\n- synchronous: Wait for completion before returning\n- asynchronous: Start task and poll for completion\n- batch: Process multiple requests together"
+        },
+        "concurrency_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Maximum concurrent executions (for asynchronous/batch modes)"
+        },
+        "default_timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "description": "Default timeout for service operations in milliseconds"
+        },
+        "quality_validation_enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable post-execution quality validation checks?"
+        },
+        "determinism_logging_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable automatic logging of execution parameters for reproducibility (e.g., Stable Diffusion seeds)?"
         }
       }
     },
