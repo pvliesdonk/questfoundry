@@ -1,0 +1,496 @@
+# QuestFoundry Loop Pattern: Codex Expansion
+# Layer 5 Definition — validates against spec/03-schemas/definitions/loop_pattern.schema.json
+
+metadata:
+  version: "0.1.0"
+  schema_ref: "../../03-schemas/definitions/loop_pattern.schema.json"
+  name: "codex_expansion"
+  description: "Publish player-safe knowledge from canon into codex entries with crosslinks"
+  layer0_guide_ref: "../../00-north-star/LOOPS/codex_expansion.md"
+  created: "2025-11-19"
+  updated: "2025-11-19"
+
+identity:
+  canonical_name: "Codex Expansion"
+  aliases:
+    - "Codex Pass"
+    - "Reference Publishing"
+  purpose: >
+    Turn canon (often spoiler-heavy) into player-safe codex pages with clear cross-references.
+    Improve comprehension without leaking twists or internal plumbing.
+  outcome: >
+    Codex entries and crosslink maps (in Hot) derived from canon and ready to merge to Cold
+    after gatecheck. Taxonomy/clarity hooks may also be addressed here.
+
+topology:
+  nodes:
+    - id: "showrunner_initiate"
+      role: "Showrunner"
+      intent: "tu.open"
+      description: "Open TU with scope (topic/batch), trigger conditions, deliverables"
+
+    - id: "curator_select_topics"
+      role: "Codex Curator"
+      intent: "codex.select_topics"
+      description: "Select topics from canon deltas, manuscript term frequency, taxonomy hooks; prioritize player-value"
+
+    - id: "curator_draft_entries"
+      role: "Codex Curator"
+      intent: "codex.draft"
+      description: "Draft entries from Lore summaries: Overview → Usage → Context → See also → Notes → Lineage"
+
+    - id: "lore_spoiler_sweep"
+      role: "Lore Weaver"
+      intent: "canon.spoiler_sweep"
+      description: "Compare entries against spoiler-level canon; mask revelations; flag misleading neutralizations"
+
+    - id: "style_pass"
+      role: "Style Lead"
+      intent: "style.review"
+      description: "Ensure clarity, consistent terminology, motif harmonization, reading level"
+
+    - id: "curator_link_audit"
+      role: "Codex Curator"
+      intent: "codex.audit"
+      description: "Check all cross-references resolve; create stubs or prune loops; ensure ≥2 See-also per entry"
+
+    - id: "curator_glossary"
+      role: "Codex Curator"
+      intent: "codex.glossary"
+      description: "Write glossary slice for PN/Translator/Style alignment"
+
+    - id: "translator_review"
+      role: "Translator"
+      intent: "translation.terminology_review"
+      description: "Review glossary for localization constraints; flag untranslatable terms"
+      optional: true
+
+    - id: "gatekeeper_pre_check"
+      role: "Gatekeeper"
+      intent: "gatecheck.run"
+      description: "Pre-check Presentation Safety (no spoilers), Integrity (links resolve), Style"
+
+    - id: "curator_package"
+      role: "Codex Curator"
+      intent: "codex.package"
+      description: "Package Codex Pack (entries + crosslink map + coverage report + spoiler hygiene note)"
+
+    - id: "showrunner_approve"
+      role: "Showrunner"
+      intent: "tu.close"
+      description: "Approve package or request iteration; notify Binder/PN of new player-safe surfaces"
+
+  edges:
+    - from: "showrunner_initiate"
+      to: "curator_select_topics"
+      condition: null
+
+    - from: "curator_select_topics"
+      to: "curator_draft_entries"
+      condition: null
+
+    - from: "curator_draft_entries"
+      to: "lore_spoiler_sweep"
+      condition: null
+
+    - from: "lore_spoiler_sweep"
+      to: "style_pass"
+      condition: "No misleading neutralizations OR workarounds found"
+
+    - from: "lore_spoiler_sweep"
+      to: "curator_draft_entries"
+      condition: "Misleading neutralizations found; defer entries or find workarounds"
+
+    - from: "style_pass"
+      to: "curator_link_audit"
+      condition: null
+
+    - from: "curator_link_audit"
+      to: "curator_glossary"
+      condition: "Links resolve OR stubs created with plan"
+
+    - from: "curator_link_audit"
+      to: "curator_draft_entries"
+      condition: "Broken links require re-drafting or pruning"
+
+    - from: "curator_glossary"
+      to: "translator_review"
+      condition: "Localization constraints or new terminology"
+
+    - from: "curator_glossary"
+      to: "gatekeeper_pre_check"
+      condition: "No Translator review needed"
+
+    - from: "translator_review"
+      to: "gatekeeper_pre_check"
+      condition: null
+
+    - from: "gatekeeper_pre_check"
+      to: "curator_package"
+      condition: "Pre-check green OR yellow with acceptable notes"
+
+    - from: "gatekeeper_pre_check"
+      to: "curator_draft_entries"
+      condition: "Pre-check red (spoiler leaks, broken links, accessibility issues)"
+
+    - from: "curator_package"
+      to: "showrunner_approve"
+      condition: null
+
+  exit_conditions:
+    - condition: "Showrunner approves package (pre-gate green, entries player-safe)"
+      next_state: "completed"
+      triggers:
+        - "merge.request"
+
+    - condition: "Showrunner requests iteration (pre-gate yellow/red, spoiler risks)"
+      next_state: "in_progress"
+      triggers:
+        - "tu.update"
+
+    - condition: "Blocked: Cannot create player-safe entries without revealing spoilers"
+      next_state: "blocked"
+      triggers:
+        - "tu.blocked"
+
+protocol_flow:
+  message_sequences:
+    - sequence_id: "initiate"
+      description: "Showrunner opens TU with scope and trigger conditions"
+      steps:
+        - from: "Showrunner"
+          to: "Codex Curator"
+          intent: "tu.open"
+          payload:
+            - "tu_id"
+            - "scope (topic/batch: e.g., 'dock-terms', 'Act I entities')"
+            - "trigger (after Lore Deepening, new manuscript terms, PN comprehension issues)"
+            - "deliverables (Codex Pack: entries + crosslink map + glossary)"
+
+    - sequence_id: "draft_and_sweep"
+      description: "Curator drafts entries, Lore sweeps for spoilers"
+      steps:
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.select_topics"
+          payload:
+            - "topics_selected (prioritized by player-value: comprehension bottlenecks first)"
+            - "canon_pack_refs"
+            - "manuscript_term_frequency"
+
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.draft"
+          payload:
+            - "entry_id"
+            - "title"
+            - "overview (2-4 sentences, neutral)"
+            - "usage"
+            - "context"
+            - "see_also (array of entry IDs)"
+            - "notes"
+            - "lineage"
+
+        - from: "Lore Weaver"
+          to: "State"
+          intent: "canon.spoiler_sweep"
+          payload:
+            - "entry_id"
+            - "spoilers_found (causality, hidden allegiances, timeline reveals)"
+            - "neutralization_status (safe / misleading / deferred)"
+            - "workarounds (if needed)"
+
+    - sequence_id: "style_and_audit"
+      description: "Style Lead reviews clarity, Curator audits links"
+      steps:
+        - from: "Style Lead"
+          to: "State"
+          intent: "style.review"
+          payload:
+            - "entry_ids_reviewed"
+            - "edit_notes (clarity, terminology, reading level)"
+            - "approved (boolean)"
+
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.audit"
+          payload:
+            - "scope"
+            - "broken_links (array)"
+            - "orphans (array)"
+            - "loops (array of arrays)"
+            - "stubs_needed (array)"
+            - "recommendations"
+
+    - sequence_id: "glossary_and_translation"
+      description: "Curator creates glossary, Translator reviews if needed"
+      steps:
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.glossary"
+          payload:
+            - "glossary_id"
+            - "terms (term, definition, register, disambiguation, localization_cue)"
+            - "audience (PN, Translator, Style, Scene)"
+
+        - from: "Translator"
+          to: "State"
+          intent: "translation.terminology_review"
+          payload:
+            - "glossary_id"
+            - "flagged_terms (untranslatable, idiom conflicts)"
+            - "alternative_suggestions"
+          condition: "Localization constraints exist"
+
+    - sequence_id: "pre_check_and_package"
+      description: "Gatekeeper checks safety, Curator packages, Showrunner approves"
+      steps:
+        - from: "Gatekeeper"
+          to: "State"
+          intent: "gatecheck.run"
+          payload:
+            - "check_type: codex_pre_check"
+            - "bars_checked: [Presentation, Integrity, Style]"
+            - "status (green/yellow/red)"
+            - "spoiler_leaks_found (array)"
+            - "broken_links_found (array)"
+            - "accessibility_issues (array)"
+
+        - from: "Codex Curator"
+          to: "State"
+          intent: "codex.package"
+          payload:
+            - "codex_pack_id"
+            - "entries (array)"
+            - "crosslink_map"
+            - "coverage_report (new terms covered, remaining red-links)"
+            - "spoiler_hygiene_note (summary of masked details, deferred entries)"
+
+        - from: "Showrunner"
+          to: "State"
+          intent: "tu.close"
+          payload:
+            - "tu_id"
+            - "decision (approve/iterate)"
+            - "notifications (Binder, PN: new player-safe surfaces available)"
+
+gates:
+  pre_gates:
+    - gate_id: "codex_pre_check"
+      role: "Gatekeeper"
+      bars_checked:
+        - "Presentation"
+        - "Integrity"
+        - "Style"
+      timing: "after_link_audit"
+      blocking: false
+      advisory_only: false
+      rationale: "Ensure no spoilers, links resolve, clarity maintained before packaging"
+
+  merge_gates:
+    - gate_id: "final_codex_gate"
+      role: "Gatekeeper"
+      bars_checked:
+        - "Presentation"
+        - "Integrity"
+      timing: "before_merge"
+      blocking: true
+      advisory_only: false
+      rationale: "Block merge if spoiler leaks or broken links remain"
+
+traceability:
+  tu_lifecycle:
+    creates_tus: false
+    updates_tu_status: true
+    transitions:
+      - from: "proposed"
+        to: "in_progress"
+        trigger: "Showrunner opens TU"
+      - from: "in_progress"
+        to: "gatecheck"
+        trigger: "Curator packages, Gatekeeper runs pre-check"
+      - from: "gatecheck"
+        to: "completed"
+        trigger: "Showrunner approves package after green pre-check"
+      - from: "gatecheck"
+        to: "in_progress"
+        trigger: "Pre-check yellow/red, iteration needed"
+      - from: "in_progress"
+        to: "blocked"
+        trigger: "Cannot create player-safe entries without spoilers"
+
+  produces_hot:
+    - "codex_packs"
+    - "codex_entries"
+    - "crosslink_maps"
+    - "glossary_slices"
+    - "coverage_reports"
+    - "spoiler_hygiene_notes"
+
+  produces_cold: []
+
+  snapshot_dependencies:
+    reads_from_cold:
+      - "current_snapshot.codex_entries (baseline for alignment)"
+      - "current_snapshot.style_addenda (for register/tone)"
+    writes_to_cold: []
+
+roles:
+  primary:
+    - role: "Codex Curator"
+      raci: "responsible"
+      required: true
+
+  supporting:
+    - role: "Showrunner"
+      raci: "accountable"
+      required: true
+
+    - role: "Lore Weaver"
+      raci: "consulted"
+      required: true
+      wake_condition: "Always (spoiler sweep is mandatory)"
+
+    - role: "Style Lead"
+      raci: "consulted"
+      required: true
+      wake_condition: "Always (clarity and terminology alignment)"
+
+    - role: "Gatekeeper"
+      raci: "consulted"
+      required: true
+
+    - role: "Translator"
+      raci: "informed"
+      required: false
+      wake_condition: "Localization constraints or new terminology"
+
+    - role: "Player-Narrator"
+      raci: "informed"
+      required: false
+      wake_condition: "New player-safe surfaces available"
+
+context:
+  required_state:
+    - "hot_sot.canon_packs (with player_safe_summaries)"
+    - "cold_sot.current_snapshot.codex_entries (baseline)"
+
+  optional_state:
+    - "hot_sot.sections (for term frequency and context)"
+    - "hot_sot.style_addenda (for register/tone)"
+    - "hot_sot.translation_notes (for localization constraints)"
+    - "hot_sot.pn_notes (for comprehension issues)"
+    - "hot_sot.hooks (taxonomy/clarity gaps)"
+
+  quality_bar_focus:
+    - bar_name: "Presentation"
+      pressure: "very_high"
+      rationale: "CRITICAL spoiler boundary: canon→codex translation must strip ALL spoilers"
+
+    - bar_name: "Integrity"
+      pressure: "high"
+      rationale: "Crosslinks must resolve; no orphans, no loops, anchors stable"
+
+    - bar_name: "Style"
+      pressure: "medium"
+      rationale: "Clarity, consistent terminology, reading level, motif alignment"
+
+    - bar_name: "Accessibility"
+      pressure: "medium"
+      rationale: "Meaningful headings, descriptive links, simple sentences"
+
+success_criteria:
+  required:
+    - "High-frequency manuscript terms have matching codex entries"
+    - "No spoilers; PN can reference entries safely"
+    - "All See-also links resolve; no dead ends; ≥2 links per entry"
+    - "Reading level and tone align with Style Lead"
+    - "Localization notes present where needed"
+    - "Traceability present (TU-ID lineages in each entry)"
+    - "Gatekeeper reports Presentation and Integrity bars green"
+
+  optional:
+    - "Translator glossary reviewed and approved"
+    - "Stubs created with expansion plan for red-links"
+    - "Hooks filed for deferred entries or taxonomy conflicts"
+
+  definition_of_done:
+    - "Codex Pack merged to Cold via Showrunner approval"
+    - "Entries are 100% player-safe (no twist causality, hidden allegiances, gate logic)"
+    - "Links audited and working across export formats"
+    - "Binder and PN notified of new surfaces"
+
+failure_modes:
+  - mode: "Accidental spoilers"
+    remedy: "Move detail back to canon notes; rewrite with neutral phrasing; if misleading, defer entry"
+
+  - mode: "Over-technical voice"
+    remedy: "Style Lead simplifies; add actionable examples; prioritize player-value over lore depth"
+
+  - mode: "Link rot (broken See-also references)"
+    remedy: "Add stubs with expansion plan OR reduce See-also fan-out"
+
+  - mode: "Taxonomy creep into canon (Curator inventing backstory)"
+    remedy: "Escalate to Lore Weaver; Curator does NOT invent deep lore, only summarizes"
+
+  - mode: "Orphan entries (no inbound links, no affordance)"
+    remedy: "Add inbound links from related entries OR prune if no player-value"
+
+  - mode: "See-also loops (A→B→C→A)"
+    remedy: "Prune circular chains; prioritize breadth over recursion"
+
+handoffs:
+  from_loops:
+    - loop: "Lore Deepening"
+      artifact: "canon_packs (with player_safe_summaries)"
+      trigger: "New canon available to publish"
+
+    - loop: "Story Spark"
+      artifact: "sections (with new terms)"
+      trigger: "New manuscript terms need codex anchors"
+
+    - loop: "Hook Harvest"
+      artifact: "taxonomy_hooks (clarity gaps, missing anchors)"
+      trigger: "Taxonomy/clarity hooks accepted"
+
+    - loop: "Narration Dry-Run"
+      artifact: "pn_notes (comprehension bottlenecks)"
+      trigger: "PN reports unclear terms or missing references"
+
+    - loop: "Translation Pass"
+      artifact: "translation_notes (terminology conflicts)"
+      trigger: "Translator needs term stabilization"
+
+  to_loops:
+    - loop: "Translation Pass"
+      artifact: "glossary_slices"
+      condition: "New terminology or register changes"
+
+    - loop: "Binding Run"
+      artifact: "codex_entries (with stable anchors)"
+      condition: "Codex Expansion complete, ready for export"
+
+    - loop: "Gatecheck"
+      artifact: "codex_pack, spoiler_hygiene_note, pre_check_report"
+      condition: "Codex Expansion complete, ready for final gate"
+
+    - loop: "Hook Harvest"
+      artifact: "hooks (missing Lore summaries, taxonomy conflicts)"
+      condition: "Curator identifies gaps during drafting"
+
+execution:
+  max_iterations: 2
+  timebox_minutes: 90
+  timeout_behavior: "defer_remaining_entries"
+  error_handling:
+    - error: "Lore Weaver unavailable for spoiler sweep"
+      response: "Block: spoiler sweep is mandatory; cannot proceed without Lore validation"
+
+    - error: "Cannot create player-safe entry without revealing spoilers"
+      response: "Defer entry; add hook: 'deferred:spoiler-risk'; proceed with remaining topics"
+
+    - error: "Pre-gate red (spoiler leaks found)"
+      response: "Iterate: Curator re-drafts with Lore guidance; Gatekeeper re-checks"
+
+    - error: "Broken links cannot be resolved (referenced entries don't exist)"
+      response: "Create stubs with expansion plan OR prune See-also fan-out"
