@@ -3,8 +3,9 @@
 > **Migration Plan and Progress Tracker**
 >
 > **Started:** 2025-11-19
-> **Target Completion:** TBD
-> **Current Phase:** Phase 1 (Foundation) — ✅ **COMPLETE**
+> **Layer 5 Definitions Completed:** 2025-11-20
+> **Current Phase:** Phase 4 (Validation) — ✅ **COMPLETE**
+> **Next Phase:** Phase 5 (Runtime Integration) — 📋 **PENDING**
 
 ---
 
@@ -116,66 +117,111 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 
 ---
 
-### Phase 2: Pilot Role Profiles 🚧 IN PROGRESS
+### Phase 2: All Role Profiles ✅ COMPLETE (2025-11-20)
 
-**Goal:** Create executable role profiles for core roles needed for Hook Harvest loop.
+**Goal:** Create executable role profiles for ALL 16 roles (15 studio roles + 1 service split).
 
 **Deliverables:**
-- [ ] `spec/05-definitions/roles/showrunner.yaml`
-  - [ ] Identity from Layer 1 charter
-  - [ ] Interface: Opens TUs, coordinates loops
-  - [ ] Protocol: All intents (orchestrator role)
-  - [ ] Prompt template: `templates/showrunner_prompt.j2`
-- [ ] `spec/05-definitions/roles/plotwright.yaml`
-  - [ ] Identity from Layer 1 charter
-  - [ ] Interface: Inputs (story_spark), Outputs (hook_card)
-  - [ ] Protocol: `hook.create`, `hook.update_status`
-  - [ ] Prompt template: `templates/plotwright_prompt.j2`
-- [ ] `spec/05-definitions/roles/gatekeeper.yaml`
-  - [ ] Identity from Layer 1 charter
-  - [ ] Interface: Inputs (hook_card, tu_brief), Outputs (gatecheck_report)
-  - [ ] Protocol: `gate.report.submit`, `gate.decision`
-  - [ ] Prompt template: `templates/gatekeeper_prompt.j2`
-  - [ ] Quality bars: All 8 bars
-- [ ] Additional roles as needed for Hook Harvest
+- [x] All 16 role profiles created and validated:
+  - [x] **Always-on (2):** Showrunner (SR), Gatekeeper (GK)
+  - [x] **Default-on (5):** Plotwright (PW), Scene Smith (SS), Style Lead (ST), Lore Writer (LW), Codex Curator (CC)
+  - [x] **Optional (9):** Researcher (RS), Art Director (AD), Illustrator (IL), Audio Director (AUD), Audio Producer (AUP), Translator (TR), Book Binder (BB), Export Service (ES), Player-Narrator (PN)
+- [x] 7 prompt templates created:
+  - [x] `templates/player_narrator_prompt.j2` (549 lines, dual-mode: workshop + audience)
+  - [x] `templates/researcher_prompt.j2` (569 lines)
+  - [x] `templates/art_director_prompt.j2` (672 lines)
+  - [x] `templates/audio_director_prompt.j2` (539 lines)
+  - [x] `templates/plotwright_prompt.j2`
+  - [x] `templates/scene_smith_prompt.j2`
+  - [x] `templates/style_lead_prompt.j2`
+- [x] Schema extended with planning+execution model support:
+  - [x] Added `identity.role_type` (reasoning_agent, production_executor, service)
+  - [x] Made `llm_config` optional (not required for service roles)
+  - [x] Added `service_config` for production executors and services
+  - [x] Enhanced `behavior.tools` with `tool_type` and `api_spec`
 
 **Validation:**
-```bash
-qf validate-definition roles/showrunner.yaml
-qf validate-definition roles/plotwright.yaml
-qf validate-definition roles/gatekeeper.yaml
-```
+All 16 role files validate against `role_profile.schema.json` ✅
 
 **Key Decisions:**
-- TBD
+- **Planning+Execution Split (ADR-004):** Implemented hybrid model for production roles
+- **Player-Narrator Dual Modes:** Workshop/dry-run + audience/production
+- **Book Binder Refactoring:** Split into Book Binder (planning) + Export Service (execution)
 
 ---
 
-### Phase 3: Pilot Loop Pattern 📋 PENDING
+### Phase 3: All Loop Patterns ✅ COMPLETE (2025-11-20)
 
-**Goal:** Create executable loop pattern for Hook Harvest.
+**Goal:** Create executable loop patterns for ALL 10 core production loops.
 
 **Deliverables:**
-- [ ] `spec/05-definitions/loops/hook_harvest.yaml`
-  - [ ] Topology: Entry node (showrunner), nodes (showrunner, plotwright, gatekeeper), edges
-  - [ ] Protocol flow: Map Layer 4 FLOWS/hook_harvest.md to message sequences
-  - [ ] Gates: Gatecheck required, bars (Integrity, Reachability)
-  - [ ] Traceability: TU lifecycle (hot-proposed → stabilizing)
-  - [ ] Execution: max_iterations=5, error_handling
-- [ ] Conditional routing: gatekeeper decision → END or plotwright (rework)
+- [x] All 10 loop patterns created and validated:
+  - [x] **Discovery (2):** Story Spark, Hook Harvest
+  - [x] **Refinement (3):** Lore Deepening, Codex Expansion, Style Tune-up
+  - [x] **Assets (2):** Art Touch-up, Audio Pass
+  - [x] **Localization (1):** Translation Pass
+  - [x] **Export (1):** Binding Run
+  - [x] **Reflection (1):** Narration Dry-Run
+- [x] All loops include:
+  - [x] Complete topology (entry_node, nodes with role_id, edges with conditions)
+  - [x] Protocol flow message sequences mapped to Layer 4
+  - [x] Quality gates with specific bars checked
+  - [x] Traceability requirements (TU lifecycle, produces_cold)
+  - [x] Execution configuration (error handling, timeouts, observability)
+- [x] Support for plan-only merges (Art Touch-up, Audio Pass, Binding Run)
+- [x] Conditional routing based on gatekeeper decisions and role states
 
 **Validation:**
-```bash
-qf validate-definition loops/hook_harvest.yaml
-qf test-loop hook_harvest --dry-run
-```
+All 10 loop files validate against `loop_pattern.schema.json` ✅
 
 **Key Decisions:**
-- TBD
+- **Plan-Only Merges:** Directors can merge plans without waiting for production executors
+- **Dual-Mode Narration:** PN supports both workshop (playtest) and audience (production) modes
+- **Conditional Edges:** Proper condition objects with evaluators (not just strings)
 
 ---
 
-### Phase 4: Runtime Engine 📋 PENDING
+### Phase 4: Validation & Quality Assurance ✅ COMPLETE (2025-11-20)
+
+**Goal:** Validate all definitions against schemas and fix any issues.
+
+**Deliverables:**
+- [x] Validation infrastructure:
+  - [x] `validate_definitions.py` - Comprehensive validator using jsonschema
+  - [x] Automated fix scripts for common issues:
+    - [x] `fix_validation_errors.py` - Role common issues
+    - [x] `fix_loop_errors.py` - Loop id/entry_node/role_id
+    - [x] `fix_missing_sections.py` - Minimal sections for incomplete roles
+    - [x] `fix_loop_edges.py` - Edge/exit/message structures
+    - [x] `fix_final_errors.py` - Enum and format cleanup
+- [x] Validation results:
+  - [x] **26/26 files passing** (16 roles + 10 loops)
+  - [x] **0 errors, 0 warnings**
+  - [x] All abbreviations conform to `^[A-Z]{2,4}$` pattern
+  - [x] All required fields present
+  - [x] All enum values valid
+  - [x] All cross-references consistent
+- [x] Documentation updated:
+  - [x] `spec/05-definitions/README.md` - Status updated to COMPLETE
+  - [x] Directory structure reflects all 16 roles and 10 loops
+  - [x] Migration status shows Phases 1-4 complete
+
+**Validation:**
+```bash
+python3 validate_definitions.py
+# Result: 26 passed, 0 warnings, 0 errors ✅
+```
+
+**Key Fixes Applied:**
+- Role abbreviations: AuD→AUD, AuP→AUP
+- Missing required fields added (id, charter_ref, prompt, enabled, state_key)
+- Edge structures fixed (from/to→source/target, string conditions→objects)
+- Traceability fields corrected (produces_cold: array→boolean, tu_lifecycle.required added)
+- Enum values standardized (completed→cold-merged, info→INFO, default_dormant→optional)
+
+---
+
+### Phase 5: Runtime Integration 📋 PENDING
 
 **Goal:** Build the generic execution engine (`lib/runtime`).
 
@@ -220,28 +266,42 @@ qf run hook_harvest
 
 ---
 
-### Phase 5: Full Migration 📋 PENDING
+### Phase 6: Quality Gates & Transitions 📋 PENDING
 
-**Goal:** Migrate all roles, loops, and quality gates; deprecate old code.
+**Goal:** Complete reusable quality bar validators and lifecycle transitions.
 
 **Deliverables:**
-- [ ] All 15 roles migrated to `spec/05-definitions/roles/`
-- [ ] All 12 loops migrated to `spec/05-definitions/loops/`
 - [ ] All 8 quality bars migrated to `spec/05-definitions/quality_gates/`
+  - [ ] `integrity.yaml` - Anchors/links resolution
+  - [ ] `reachability.yaml` - No dead-ends validation
+  - [ ] `nonlinearity.yaml` - Meaningful fan-out checks
+  - [ ] `gateways.yaml` - Diegetic phrasing validation
+  - [ ] `style.yaml` - Register consistency checks
+  - [ ] `determinism.yaml` - Reproducibility logging validation
+  - [ ] `presentation.yaml` - Spoiler-safety checks
+  - [ ] `accessibility.yaml` - A11y compliance validation
 - [ ] All Layer 4 lifecycles migrated to `spec/05-definitions/transitions/`
+  - [ ] `hook_lifecycle.yaml` - Hook Card state machine
+  - [ ] `tu_lifecycle.yaml` - Trace Unit state machine
+  - [ ] `gate_lifecycle.yaml` - Gate state machine
+  - [ ] `view_lifecycle.yaml` - View/Export state machine
+- [ ] Additional loop definitions:
+  - [ ] `full_production_run.yaml` - Meta-loop orchestrating multiple loops
+  - [ ] `gatecheck.yaml` - Standalone gatecheck loop
 - [ ] Deprecation markers added to `lib/python/`, `spec/05-behavior/`, `lib/compiler/`
 - [ ] Update all documentation to reference new architecture
-- [ ] CI/CD updated to use `lib/runtime`
 
 **Validation:**
 ```bash
-# Run all loops
-for loop in story_spark hook_harvest lore_deepening codex_expansion; do
-  qf run $loop --dry-run
+# Validate all quality gates
+for gate in spec/05-definitions/quality_gates/*.yaml; do
+  qf validate-definition $gate
 done
 
-# Validate all definitions
-qf validate-all-definitions
+# Validate all transitions
+for transition in spec/05-definitions/transitions/*.yaml; do
+  qf validate-definition $transition
+done
 ```
 
 **Key Decisions:**
@@ -255,11 +315,14 @@ qf validate-all-definitions
 
 | Phase | Status | Started | Completed | Duration |
 |-------|--------|---------|-----------|----------|
-| Phase 1: Foundation | ✅ Complete | 2025-11-19 | 2025-11-19 | 1 day |
-| Phase 2: Pilot Roles | 🚧 In Progress | - | - | - |
-| Phase 3: Pilot Loop | 📋 Pending | - | - | - |
-| Phase 4: Runtime Engine | 📋 Pending | - | - | - |
-| Phase 5: Full Migration | 📋 Pending | - | - | - |
+| Phase 1: Foundation & Schemas | ✅ Complete | 2025-11-19 | 2025-11-19 | 1 day |
+| Phase 2: All Role Profiles | ✅ Complete | 2025-11-19 | 2025-11-20 | 2 days |
+| Phase 3: All Loop Patterns | ✅ Complete | 2025-11-19 | 2025-11-20 | 2 days |
+| Phase 4: Validation & QA | ✅ Complete | 2025-11-20 | 2025-11-20 | <1 day |
+| Phase 5: Runtime Integration | 📋 Pending | - | - | - |
+| Phase 6: Quality Gates & Transitions | 📋 Pending | - | - | - |
+
+**Summary:** 4/6 phases complete (66%) — All definitions validated and ready for runtime
 
 ### Detailed Progress (Phase 1)
 
@@ -280,12 +343,34 @@ qf validate-all-definitions
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Create `roles/showrunner.yaml` | 📋 Pending | - |
-| Create `roles/plotwright.yaml` | 📋 Pending | - |
-| Create `roles/gatekeeper.yaml` | 📋 Pending | - |
-| Create `templates/showrunner_prompt.j2` | 📋 Pending | - |
-| Create `templates/plotwright_prompt.j2` | 📋 Pending | - |
-| Create `templates/gatekeeper_prompt.j2` | 📋 Pending | - |
+| Create all 16 role profiles | ✅ Complete | 16/16 validated against schema |
+| Extend `role_profile.schema.json` | ✅ Complete | Added planning+execution model support |
+| Create 7 prompt templates | ✅ Complete | ~4,000 lines total |
+| Player-Narrator dual-mode | ✅ Complete | Workshop + audience modes |
+| Book Binder refactoring | ✅ Complete | Split into BB (planning) + ES (service) |
+| Schema backward compatibility | ✅ Complete | All new fields optional with defaults |
+
+### Detailed Progress (Phase 3)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create all 10 loop patterns | ✅ Complete | 10/10 validated against schema |
+| Map protocol flows | ✅ Complete | Layer 4 message sequences mapped |
+| Define quality gates | ✅ Complete | Bars specified for each loop |
+| Traceability requirements | ✅ Complete | TU lifecycle and produces_cold |
+| Conditional routing | ✅ Complete | Proper condition objects with evaluators |
+| Plan-only merge support | ✅ Complete | Art/Audio/Binding loops |
+
+### Detailed Progress (Phase 4)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create validation script | ✅ Complete | `validate_definitions.py` |
+| Create automated fix scripts | ✅ Complete | 5 scripts for common issues |
+| Validate all 16 roles | ✅ Complete | 0 errors, 0 warnings |
+| Validate all 10 loops | ✅ Complete | 0 errors, 0 warnings |
+| Cross-reference checks | ✅ Complete | Abbreviations, RACI, intents |
+| Update documentation | ✅ Complete | README.md and MIGRATION.md |
 
 ---
 
@@ -357,6 +442,120 @@ qf validate-all-definitions
 - Eventually delete old code after migration complete
 
 **Status:** Implemented (marked in README files)
+
+---
+
+### ADR-004: Planning+Execution Model (2025-11-20)
+
+**Context:** Some roles (Illustrator, Audio Producer, Export Service) are primarily tool orchestration rather than LLM reasoning. Book Binder does both planning (decide structure) AND execution (generate files).
+
+**Decision:** Implement three-tier role type model:
+1. **reasoning_agent** (default): Full LLM with complex reasoning
+2. **production_executor**: Thin LLM wrapper + heavy tool orchestration
+3. **service**: Pure tool execution, no LLM
+
+**Rationale:**
+- Illustrator and Audio Producer are 95% Stable Diffusion/audio API calls, 5% LLM validation
+- Book Binder planning (select sections, resolve anchors) is separate from execution (Pandoc)
+- Export Service needs zero LLM reasoning - pure file generation
+- Hybrid approach handles edge cases (retry logic, quality thresholds) while optimizing for tool-heavy workflows
+
+**Implementation:**
+- Schema changes (all backward-compatible):
+  - Added optional `identity.role_type` field
+  - Made `llm_config` optional (not required for service roles)
+  - Added optional `service_config` for execution mode, timeouts, quality validation
+  - Enhanced `behavior.tools` with `tool_type` and `api_spec` for external APIs
+- Role splits:
+  - Illustrator: `production_executor` with Haiku @ 0.1 temp + Stable Diffusion API
+  - Audio Producer: `production_executor` with Haiku @ 0.1 temp + audio synthesis
+  - Book Binder → Book Binder (reasoning_agent, planning) + Export Service (service, execution)
+
+**Consequences:**
+- Optimizes cost and latency for production roles
+- Maintains architectural consistency (all roles are "nodes" in graph)
+- Clean separation: planning (LLM reasoning) vs execution (tool orchestration)
+- **CRITICAL:** This is Layer 5 implementation detail ONLY. Conceptually (Layers 0-4), there is still ONE Illustrator role, ONE Book Binder role from human team perspective.
+
+**Status:** Implemented
+
+---
+
+### ADR-005: Human-Facing CLI/Runtime Design (2025-11-20)
+
+**Context:** The runtime needs to interface with humans (authors, project managers, developers). How should the CLI and runtime communicate with humans?
+
+**Decision:** Design the interface with these principles:
+1. **Humans are the customers** - They drive the project
+2. **Showrunner is the product owner** - It orchestrates the studio on behalf of humans
+3. **Humans don't speak jargon** - Use natural language, not technical terms
+
+**Rationale:**
+- Authors shouldn't need to know "Hot SoT", "TU lifecycle", "gatecheck states"
+- The runtime translates between human intent and studio protocol
+- Showrunner acts as intermediary: understands both human goals and studio operations
+- CLI should accept natural requests: "write a scene about...", "review the story", "export the book"
+
+**Implementation Guidelines for Phase 5:**
+
+```bash
+# GOOD - Natural language
+qf write "a tense scene in the cargo bay where the crew discovers smuggled goods"
+qf review story
+qf export book --format epub
+
+# BAD - Jargon-heavy
+qf run story_spark --tu-id TU-2025-001 --hot-proposed
+qf invoke gatekeeper --bars Integrity,Reachability --gatecheck
+```
+
+**CLI Architecture:**
+```
+Human Request (natural language)
+    ↓
+CLI Parser (intent recognition)
+    ↓
+Showrunner Agent (translates to studio protocol)
+    ↓
+Loop Orchestration (executes appropriate loop)
+    ↓
+Studio Roles (work collaboratively)
+    ↓
+Showrunner (summarizes results for human)
+    ↓
+CLI Output (natural language, not jargon)
+```
+
+**Example Interaction:**
+```
+$ qf write "The captain confronts the pilot about the missing fuel"
+
+Showrunner: I'll work with Scene Smith to draft this scene.
+            Checking with Lore Writer for any relevant backstory...
+
+Scene Smith: [Drafting scene...]
+
+Showrunner: Scene complete! Here's a preview:
+            [Shows first few paragraphs]
+
+            Would you like me to:
+            - Refine the dialogue
+            - Add more tension
+            - Check for plot holes
+
+$ qf refine dialogue
+
+Showrunner: Working with Style Lead on sharper dialogue...
+```
+
+**Consequences:**
+- More accessible to non-technical users
+- Showrunner becomes critical "translation layer"
+- CLI needs intent recognition (LLM or pattern matching)
+- Reduced learning curve for new users
+- Better alignment with "studio of AI agents" metaphor
+
+**Status:** Design approved, implementation pending Phase 5
 
 ---
 
@@ -454,69 +653,84 @@ qf validate-all-definitions
 
 ## Next Steps
 
-### Immediate (Phase 2)
+### Immediate (Phase 5 - Runtime Integration)
 
-1. **Create Showrunner Role Profile**
-   - Read `spec/01-roles/charters/showrunner.md`
-   - Extract identity, interface, protocol permissions
-   - Write `roles/showrunner.yaml`
-   - Create `templates/showrunner_prompt.j2`
-   - Validate against `role_profile.schema.json`
+1. **Initialize Runtime Package**
+   - Set up `lib/runtime/pyproject.toml`
+   - Define dependencies: langgraph, langchain-core, pydantic, typer, jinja2
+   - Create package structure: `src/questfoundry/{cli,core,io,validation}/`
+   - Set up development environment and testing framework
 
-2. **Create Plotwright Role Profile**
-   - Read `spec/01-roles/charters/plotwright.md`
-   - Read `spec/05-behavior/adapters/plotwright.adapter.yaml` (reference)
-   - Extract prompt logic into Jinja2 template
-   - Write `roles/plotwright.yaml`
-   - Create `templates/plotwright_prompt.j2`
-   - Validate against `role_profile.schema.json`
+2. **Implement Schema Registry**
+   - Create `validation/registry.py`
+   - Load L3 schemas dynamically from `spec/03-schemas/artifacts/`
+   - Implement `validate_artifact(type: str, data: dict) -> bool`
+   - Add caching for schema loading
+   - Test against all 28 artifact schemas
 
-3. **Create Gatekeeper Role Profile**
-   - Read `spec/01-roles/charters/gatekeeper.md`
-   - Map 8 quality bars to validation logic
-   - Write `roles/gatekeeper.yaml`
-   - Create `templates/gatekeeper_prompt.j2`
-   - Validate against `role_profile.schema.json`
+3. **Implement Node Factory**
+   - Create `core/node.py`
+   - Load role_profile.yaml and validate against meta-schema
+   - Implement Jinja2 template rendering with context injection
+   - Bind tools based on role profile configuration
+   - Return LangChain Runnable for each role
+   - Handle role_type differences (reasoning_agent vs production_executor vs service)
 
-### Short-Term (Phase 3)
+4. **Implement Graph Factory**
+   - Create `core/graph.py`
+   - Load loop_pattern.yaml and validate against meta-schema
+   - Create LangGraph StateGraph from topology
+   - Add nodes via NodeFactory
+   - Add edges (direct and conditional)
+   - Compile with checkpointer (SQLite)
+   - Handle max_iterations and error handling
 
-4. **Create Hook Harvest Loop Pattern**
-   - Read `spec/00-north-star/LOOPS/hook_harvest.md`
-   - Read `spec/04-protocol/FLOWS/hook_harvest.md`
-   - Map nodes and edges
-   - Define conditional routing (gatekeeper decision)
-   - Write `loops/hook_harvest.yaml`
-   - Validate against `loop_pattern.schema.json`
+5. **Implement Natural Language CLI**
+   - Create `cli.py` with Typer
+   - Implement natural language commands per ADR-005:
+     - `qf write <description>` - Create new content
+     - `qf review [story|scene|dialogue]` - Quality check
+     - `qf export <format>` - Generate output
+     - `qf refine <aspect>` - Improve specific elements
+   - Intent recognition via LLM or pattern matching
+   - Showrunner integration as "product owner" layer
+   - Human-friendly output (no jargon)
 
-5. **Test Definitions**
-   - Write validation script: `scripts/validate-definitions.py`
-   - Validate all role profiles and loop patterns
-   - Generate test reports
+### Short-Term (Phase 5 - Testing & Refinement)
 
-### Medium-Term (Phase 4)
-
-6. **Build Runtime Components**
-   - Initialize `lib/runtime` package
-   - Implement SchemaRegistry
-   - Implement NodeFactory
-   - Implement GraphFactory
-   - Implement CLI
-
-7. **Integration Testing**
-   - Dry-run Hook Harvest loop
-   - Mock LLM execution
-   - Full execution with real LLM
+6. **Integration Testing**
+   - Dry-run mode (no LLM calls, validate graph structure)
+   - Mock LLM mode (predefined responses)
+   - Full execution with real LLM (start with simple loop)
    - Validate artifacts against Layer 3 schemas
+   - Performance profiling and optimization
 
-### Long-Term (Phase 5)
+7. **End-to-End Workflow Testing**
+   - Test complete author workflow: ideation → drafting → review → export
+   - Test error handling and recovery
+   - Test human interruption and continuation
+   - Verify natural language interface usability
 
-8. **Complete Migration**
-   - Migrate remaining 12 roles
-   - Migrate remaining 11 loops
-   - Migrate quality gates and transitions
-   - Update documentation
-   - Deprecate old code
-   - Celebrate! 🎉
+### Medium-Term (Phase 6 - Quality Gates & Transitions)
+
+8. **Complete Reusable Components**
+   - Create 8 quality gate validators in `quality_gates/`
+   - Create 4 lifecycle transitions in `transitions/`
+   - Define Full Production Run meta-loop
+   - Define standalone Gatecheck loop
+   - Validate all new definitions
+
+9. **Deprecation & Documentation**
+   - Add deprecation markers to `lib/python/`, `spec/05-behavior/`, `lib/compiler/`
+   - Update all documentation to reference new architecture
+   - Create migration guide for existing projects
+   - Update CI/CD to use `lib/runtime`
+
+10. **Celebration! 🎉**
+    - Complete migration from imperative to declarative
+    - All 16 roles, 10+ loops, 8 quality gates operational
+    - Natural language interface for human authors
+    - Schema-validated, testable, maintainable architecture
 
 ---
 
@@ -544,6 +758,6 @@ qf validate-all-definitions
 
 ---
 
-**Last Updated:** 2025-11-19
+**Last Updated:** 2025-11-20
 **Author:** Claude (AI Assistant)
-**Status:** Living Document (updated throughout migration)
+**Status:** Living Document — Phases 1-4 complete (66%), ready for runtime integration
