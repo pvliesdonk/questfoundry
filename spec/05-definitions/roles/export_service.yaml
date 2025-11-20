@@ -1,0 +1,134 @@
+metadata:
+  version: 0.1.0
+  schema_ref: ../../03-schemas/definitions/role_profile.schema.json
+  name: export_service
+  description: 'Pure service: executes Pandoc/EPUB/PDF generation from Book Binder''s view structure (no LLM reasoning)'
+  layer0_guide_ref: ../../01-roles/charters/book_binder.md
+  created: '2025-11-19'
+  updated: '2025-11-19'
+identity:
+  name: Export Service
+  abbreviation: ES
+  canonical_name: Export Service
+  aliases:
+  - Build Service
+  - Format Generator
+  mission: 'Execute view structure to generate export files (EPUB, PDF, HTML, Markdown). Pure tool orchestration with no LLM
+    reasoning. Validate structure, call Pandoc/export tools with retry logic, validate output quality, package files.
+
+    '
+  dormancy_policy: optional
+  wake_conditions:
+  - Book Binder completes view structure and requests export (not plan-only)
+  role_type: service
+  charter_ref: spec/01-roles/charters/export_service.md
+responsibilities:
+  scope:
+    in_scope:
+    - 'Execute view structures: validate completeness, call export tools (Pandoc)'
+    - 'Generate formats: EPUB, PDF, HTML, Markdown, plain text'
+    - 'Package outputs: export files + build logs'
+    - 'Quality validation: file exists, anchors resolve, format-specific checks'
+    - 'Retry logic: handle export failures with backoff'
+    out_of_scope:
+    - Deciding structure or what to include (Book Binder's lane)
+    - Resolving content conflicts or canon issues
+    - Layout design decisions (follows Binder's specifications)
+  authority:
+    may_decide_alone:
+    - Technical export parameters within view constraints
+    - Retry attempts for tool failures
+    - Temporary file management
+    must_defer:
+    - View structure interpretation to Book Binder
+    - Quality bar outcomes to Gatekeeper
+  inputs:
+    hot:
+    - view_structure (from Book Binder)
+    - export_config (format-specific settings)
+  outputs:
+    hot:
+    - name: export_files
+      description: Generated EPUB, PDF, HTML, etc.
+      format: binary
+    - name: build_logs
+      description: Export process logs, errors, warnings
+      format: text
+  tools:
+  - name: pandoc_export
+    enabled: true
+    tool_type: external_api
+    required: true
+    config:
+      provider: pandoc
+    api_spec:
+      provider: pandoc
+      endpoint: local_command
+      retry_policy:
+        max_retries: 2
+        backoff_strategy: exponential
+        backoff_base_ms: 1000
+      timeout_ms: 120000
+      quality_thresholds:
+      - check: file_exists
+        requirement: output_path
+        on_failure: fail
+      - check: file_size_nonzero
+        requirement: 'min_size_bytes: 100'
+        on_failure: fail
+  - name: validate_view_structure
+    enabled: true
+    tool_type: internal
+    description: Validate view structure has required fields for export
+  - name: check_anchors
+    enabled: true
+    tool_type: internal
+    description: Verify all internal anchors resolve correctly
+participation:
+  loops:
+    responsible:
+    - loop: Binding Run
+      role: responsible
+      description: Execute view structure when not plan-only; generate export files
+  definition_of_done:
+  - Export files generated in requested formats
+  - All anchors resolve correctly
+  - Build logs complete with any warnings
+  - Output files pass format-specific validation
+constraints:
+  safety:
+    can_see_hot: true
+    can_see_spoilers: false
+    pn_safe: false
+    rationale: Export Service reads view structures (Hot) but produces player-safe exports per Book Binder specifications
+  quality_bars:
+  - bar_name: Integrity
+    rationale: All anchors must resolve; no broken links in exports
+service_config:
+  execution_mode: synchronous
+  default_timeout_ms: 120000
+  quality_validation_enabled: true
+  determinism_logging_enabled: false
+normative_references:
+  layer0:
+  - ../../00-north-star/QUALITY_BARS.md
+  layer1:
+  - ../../01-roles/charters/book_binder.md
+lineage:
+  created_by: tu-studio-spec-migration
+  created: '2025-11-19'
+  updated: '2025-11-19'
+  notes: Extracted from Book Binder as separate service; Book Binder handles planning, Export Service handles execution
+id: export_service
+interface:
+  inputs: []
+  outputs: []
+behavior:
+  prompt:
+    template: file://../templates/export_service_prompt.j2
+    template_engine: jinja2
+  tools: []
+protocol:
+  intents:
+    can_send: []
+    can_receive: []

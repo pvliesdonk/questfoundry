@@ -136,7 +136,64 @@ See `hook_card.schema.json` for a complete reference example.
 
 ---
 
-## Schema Index (28 Total)
+## Directory Structure
+
+```
+spec/03-schemas/
+├── README.md                      # This file
+├── CHANGELOG.md                   # Version history
+├── definitions/                   # Meta-schemas for Layer 5 definitions (NEW)
+│   ├── role_profile.schema.json   # Role agent definition schema
+│   ├── loop_pattern.schema.json   # Graph topology schema
+│   ├── studio_state.schema.json   # LangGraph state schema
+│   ├── transition_rule.schema.json # Lifecycle state machine schema
+│   └── quality_gate.schema.json   # Quality bar validation schema
+├── *.schema.json                  # 28 artifact and system schemas
+└── ...
+```
+
+### Meta-Schemas (Layer 5 Definitions)
+
+**NEW (2025-11-19):** The `definitions/` subdirectory contains **meta-schemas** that define the structure of Layer 5 executable definitions. These schemas enable the "Cartridge Architecture" migration where specifications become directly executable by the LangGraph runtime.
+
+**Meta-Schemas:**
+
+- **`role_profile.schema.json`** — Defines how roles are configured as LangGraph agent nodes
+  - Identity, interface (I/O contracts), behavior (prompts, tools), protocol permissions, constraints
+  - Maps Layer 0-4 semantics (dormancy, RACI, Hot/Cold, traceability, quality bars, protocol intents)
+  - Used to validate: `spec/05-definitions/roles/*.yaml`
+
+- **`loop_pattern.schema.json`** — Defines how loops are configured as LangGraph StateGraphs
+  - Topology (nodes, edges, entry point), protocol flows, gates, traceability, execution parameters
+  - Maps Layer 0 loops and Layer 4 protocol flows to graph structure
+  - Used to validate: `spec/05-definitions/loops/*.yaml`
+
+- **`studio_state.schema.json`** — Defines the shared state structure for LangGraph execution
+  - Hot/Cold SoT artifacts, protocol message history, quality gate status, execution metadata
+  - Maps to TypedDict/Pydantic model that all nodes operate on
+  - Used by runtime to initialize and validate state
+
+- **`transition_rule.schema.json`** — Defines reusable lifecycle state machine rules
+  - Hook, TU, Gate, View lifecycle transitions from Layer 4 LIFECYCLES/
+  - Authorization, preconditions, effects, validation, error handling
+  - Used to validate: `spec/05-definitions/transitions/*.yaml`
+
+- **`quality_gate.schema.json`** — Defines reusable quality bar validation rules
+  - Automated checks for the 8 quality bars from Layer 0 QUALITY_BARS.md
+  - Validation logic, status thresholds, remediation guidance, blocking policy
+  - Used to validate: `spec/05-definitions/quality_gates/*.yaml`
+
+**Purpose:**
+These meta-schemas enable a declarative, data-driven execution model where the spec itself becomes executable code (the "cartridge") interpreted by a generic runtime (the "console"). See `spec/05-definitions/README.md` for the complete Cartridge Architecture explanation.
+
+**Relationship to Artifact Schemas:**
+- **Artifact schemas (below):** Define the structure of work products (hooks, TUs, canon packs, etc.)
+- **Meta-schemas (above):** Define the structure of execution definitions (roles, loops, gates, etc.)
+- Both use JSON Schema Draft 2020-12 for validation
+
+---
+
+## Schema Index (28 Total + 5 Meta-Schemas)
 
 ### Artifact Schemas (22)
 

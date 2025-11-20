@@ -1,0 +1,418 @@
+# Tool Registry Plugin Interface
+#
+# This YAML schema defines the contract for tool registry plugins.
+# Tools are external capabilities (APIs, CLIs) that roles can invoke during execution.
+
+interface_name: "ToolRegistry"
+interface_version: "1.0.0"
+plugin_type: "tool_provider"
+
+description: |
+  Tool Registry plugins provide access to external tools and APIs.
+  Each tool wraps a specific capability (image generation, document conversion, etc.)
+  and exposes it through a unified interface compatible with LangChain.
+
+# Required methods
+methods:
+  get_tool:
+    description: "Get tool instance with specified configuration"
+    inputs:
+      tool_id:
+        type: "string"
+        required: true
+        description: "Tool identifier"
+        examples:
+          - "stable_diffusion"
+          - "pandoc"
+          - "audio_synthesis"
+          - "web_search"
+          - "lore_index"
+
+      config:
+        type: "object"
+        required: false
+        description: "Tool-specific configuration"
+        examples:
+          - model: "sdxl-1.0"
+            steps: 30
+            guidance_scale: 7.5
+
+    outputs:
+      tool:
+        type: "BaseTool"
+        description: "LangChain-compatible tool instance"
+
+    errors:
+      - name: "ToolNotFoundError"
+        description: "Requested tool not registered"
+      - name: "ConfigurationError"
+        description: "Invalid configuration for tool"
+      - name: "ToolInitializationError"
+        description: "Tool failed to initialize"
+
+  list_available_tools:
+    description: "List all registered tools"
+    inputs: {}
+    outputs:
+      tools:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            tool_id:
+              type: "string"
+              description: "Tool identifier"
+            name:
+              type: "string"
+              description: "Human-readable name"
+            description:
+              type: "string"
+              description: "What the tool does"
+            category:
+              type: "string"
+              enum: ["image_generation", "document_conversion", "audio", "search", "data"]
+            required_config:
+              type: "array"
+              items: { type: "string" }
+              description: "Required configuration keys"
+
+  register_tool:
+    description: "Register new tool implementation"
+    inputs:
+      tool_id:
+        type: "string"
+        required: true
+      tool_class:
+        type: "class"
+        required: true
+        description: "Tool class implementing BaseTool"
+      metadata:
+        type: "object"
+        required: false
+
+    outputs:
+      success:
+        type: "boolean"
+
+# Tool interface specification
+tool_interface:
+  description: "All tools must implement this interface"
+  base_class: "BaseTool"
+  required_methods:
+    _run:
+      description: "Synchronous execution"
+      inputs:
+        input:
+          type: "string | dict"
+          description: "Tool input (string or structured dict)"
+      outputs:
+        result:
+          type: "string | dict"
+          description: "Tool output"
+
+    _arun:
+      description: "Asynchronous execution (optional)"
+      inputs:
+        input:
+          type: "string | dict"
+      outputs:
+        result:
+          type: "string | dict"
+
+  required_properties:
+    name:
+      type: "string"
+      description: "Tool name for LLM"
+    description:
+      type: "string"
+      description: "Tool description for LLM to understand when to use it"
+
+# Standard tool definitions
+standard_tools:
+  stable_diffusion:
+    name: "Stable Diffusion Image Generator"
+    description: "Generate images from text prompts using Stable Diffusion"
+    category: "image_generation"
+    input_schema:
+      type: "object"
+      required: ["prompt"]
+      properties:
+        prompt:
+          type: "string"
+          description: "Image description"
+        model:
+          type: "string"
+          enum: ["sdxl-1.0", "sd-2.1"]
+          default: "sdxl-1.0"
+        steps:
+          type: "integer"
+          default: 30
+        guidance_scale:
+          type: "float"
+          default: 7.5
+        width:
+          type: "integer"
+          default: 1024
+        height:
+          type: "integer"
+          default: 1024
+    output_schema:
+      type: "object"
+      properties:
+        image_url:
+          type: "string"
+          description: "URL or file path to generated image"
+        seed:
+          type: "integer"
+          description: "Random seed used (for reproducibility)"
+
+  pandoc:
+    name: "Pandoc Document Converter"
+    description: "Convert documents between formats (markdown, epub, pdf, etc.)"
+    category: "document_conversion"
+    input_schema:
+      type: "object"
+      required: ["input", "from", "to"]
+      properties:
+        input:
+          type: "string"
+          description: "Input file path or content"
+        from:
+          type: "string"
+          enum: ["markdown", "html", "docx", "epub"]
+        to:
+          type: "string"
+          enum: ["epub", "pdf", "html", "docx", "markdown"]
+        output:
+          type: "string"
+          description: "Output file path"
+        options:
+          type: "array"
+          items: { type: "string" }
+          description: "Additional pandoc CLI options"
+    output_schema:
+      type: "object"
+      properties:
+        output_path:
+          type: "string"
+          description: "Path to converted file"
+        success:
+          type: "boolean"
+
+  audio_synthesis:
+    name: "Audio Synthesis"
+    description: "Generate audio (voice, music, sound effects)"
+    category: "audio"
+    input_schema:
+      type: "object"
+      required: ["text", "type"]
+      properties:
+        text:
+          type: "string"
+          description: "Text to synthesize (for voice) or description (for music/SFX)"
+        type:
+          type: "string"
+          enum: ["voice", "music", "sfx"]
+        voice_id:
+          type: "string"
+          description: "Voice model identifier (for type=voice)"
+        duration:
+          type: "float"
+          description: "Target duration in seconds (for music/SFX)"
+    output_schema:
+      type: "object"
+      properties:
+        audio_url:
+          type: "string"
+          description: "URL or file path to generated audio"
+        duration:
+          type: "float"
+          description: "Actual duration in seconds"
+
+  web_search:
+    name: "Web Search"
+    description: "Search the web for information"
+    category: "search"
+    input_schema:
+      type: "object"
+      required: ["query"]
+      properties:
+        query:
+          type: "string"
+          description: "Search query"
+        num_results:
+          type: "integer"
+          default: 5
+    output_schema:
+      type: "object"
+      properties:
+        results:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              title: { type: "string" }
+              url: { type: "string" }
+              snippet: { type: "string" }
+
+  lore_index:
+    name: "Lore Index Lookup"
+    description: "Search and retrieve lore entries from the codex"
+    category: "data"
+    input_schema:
+      type: "object"
+      required: ["query"]
+      properties:
+        query:
+          type: "string"
+          description: "Lore search query (keywords or semantic)"
+        source:
+          type: "string"
+          enum: ["hot", "cold", "both"]
+          default: "both"
+        limit:
+          type: "integer"
+          default: 5
+    output_schema:
+      type: "object"
+      properties:
+        entries:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              tu_id: { type: "string" }
+              title: { type: "string" }
+              content: { type: "string" }
+              source: { type: "string" }
+              relevance_score: { type: "float" }
+
+# Configuration schema
+configuration:
+  tools_config_path:
+    type: "string"
+    required: false
+    default: "~/.questfoundry/tools.yaml"
+    description: "Path to tools configuration file"
+
+  api_keys:
+    type: "object"
+    required: false
+    description: "API keys for various services"
+    properties:
+      stable_diffusion:
+        type: "string"
+        env_var: "STABLE_DIFFUSION_API_KEY"
+      elevenlabs:
+        type: "string"
+        env_var: "ELEVENLABS_API_KEY"
+      serp_api:
+        type: "string"
+        env_var: "SERP_API_KEY"
+
+  tool_defaults:
+    type: "object"
+    required: false
+    description: "Default configurations for specific tools"
+    examples:
+      stable_diffusion:
+        model: "sdxl-1.0"
+        steps: 30
+      pandoc:
+        options: ["--standalone"]
+
+# Implementation example
+example_implementation: |
+  # Base tool class
+  from langchain_core.tools import BaseTool
+  from typing import Any
+
+  class StableDiffusionTool(BaseTool):
+      name = "stable_diffusion"
+      description = "Generate images from text prompts"
+
+      def __init__(self, config: dict):
+          self.api_key = config.get("api_key")
+          self.model = config.get("model", "sdxl-1.0")
+
+      def _run(self, input: dict) -> dict:
+          # Call Stable Diffusion API
+          import requests
+
+          response = requests.post(
+              "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+              headers={
+                  "Authorization": f"Bearer {self.api_key}",
+                  "Content-Type": "application/json"
+              },
+              json={
+                  "text_prompts": [{"text": input["prompt"]}],
+                  "cfg_scale": input.get("guidance_scale", 7.5),
+                  "steps": input.get("steps", 30),
+                  "width": input.get("width", 1024),
+                  "height": input.get("height", 1024)
+              }
+          )
+
+          if response.status_code == 200:
+              # Save image and return URL
+              data = response.json()
+              image_url = self._save_image(data["artifacts"][0]["base64"])
+              return {"image_url": image_url, "seed": data["artifacts"][0]["seed"]}
+          else:
+              raise Exception(f"Stable Diffusion API error: {response.text}")
+
+# Usage example
+example_usage: |
+  # Get tool registry
+  from questfoundry.plugins.tools import get_tool_registry
+
+  # Initialize registry
+  registry = get_tool_registry()
+
+  # Get tool instance
+  sd_tool = registry.get_tool(
+      tool_id="stable_diffusion",
+      config={
+          "api_key": "sk-...",
+          "model": "sdxl-1.0",
+          "steps": 30
+      }
+  )
+
+  # Use tool
+  result = sd_tool.invoke({
+      "prompt": "A tense scene in a cargo bay, cinematic lighting",
+      "width": 1024,
+      "height": 1024
+  })
+
+  print(f"Generated image: {result['image_url']}")
+
+  # Bind to LLM
+  from langchain_anthropic import ChatAnthropic
+
+  llm = ChatAnthropic(model="claude-3-5-haiku-20241022")
+  llm_with_tools = llm.bind_tools([sd_tool])
+
+  # LLM can now invoke tool automatically
+
+# Testing requirements
+testing:
+  unit_tests:
+    - "Test get_tool with valid tool_id"
+    - "Test get_tool with invalid tool_id raises ToolNotFoundError"
+    - "Test tool registration"
+    - "Test list_available_tools returns correct format"
+
+  integration_tests:
+    - "Test Stable Diffusion tool generates image"
+    - "Test Pandoc tool converts document"
+    - "Test tool invocation from LLM"
+    - "Test error handling when API fails"
+
+# Plugin registration
+registration:
+  registry_key: "tool_provider"
+  discovery_path: "questfoundry.plugins.tools"
+  config_file: "~/.questfoundry/tools.yaml"

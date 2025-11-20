@@ -1,0 +1,397 @@
+metadata:
+  version: 0.1.0
+  schema_ref: ../../03-schemas/definitions/loop_pattern.schema.json
+  name: binding_run
+  description: Assemble player-safe export view from Cold snapshot with navigation and front matter
+  layer0_guide_ref: ../../00-north-star/LOOPS/binding_run.md
+  created: '2025-11-19'
+  updated: '2025-11-19'
+identity:
+  canonical_name: Binding Run
+  aliases:
+  - Export Assembly
+  - View Generation
+  purpose: 'Assemble a player-safe export view of the book from a specific Cold snapshot. Package manuscript, codex, and optional
+    surfaces (art/audio/translations) without leaking spoilers or internal plumbing.
+
+    '
+  outcome: 'A stamped export bundle (Markdown/HTML/EPUB/PDF) with front-matter metadata (snapshot ID, options used) and a
+    View Log. No new canon is created; this loop does NOT write to Cold content (only View Log for traceability).
+
+    '
+topology:
+  nodes:
+  - id: showrunner_select
+    role: Showrunner
+    intent: snapshot.select
+    description: Choose Cold snapshot and export options (art/audio/languages/layout)
+    role_id: Showrunner
+  - id: binder_confirm
+    role: Book Binder
+    intent: view.confirm
+    description: Verify snapshot is Cold-only and options are feasible
+    role_id: Book Binder
+  - id: binder_assemble_manuscript
+    role: Book Binder
+    intent: view.assemble_manuscript
+    description: Compile hyperlinked sections, build TOC, mark terminals, generate player-safe checklists
+    role_id: Book Binder
+  - id: binder_attach_codex
+    role: Book Binder
+    intent: view.attach_codex
+    description: Include codex entries with crosslinks, validate See-also references
+    role_id: Book Binder
+  - id: binder_include_surfaces
+    role: Book Binder
+    intent: view.include_surfaces
+    description: Attach art/audio/translations per options (plans vs assets, coverage flags)
+    role_id: Book Binder
+  - id: binder_integrity_pass
+    role: Book Binder
+    intent: view.validate_integrity
+    description: Validate all anchors/links/refs across formats; identify broken links, orphans, collisions
+    role_id: Book Binder
+  - id: binder_accessibility_pass
+    role: Book Binder
+    intent: view.validate_accessibility
+    description: Check alt text, descriptive links, headings, contrast; flag gaps
+    role_id: Book Binder
+  - id: binder_stamp_metadata
+    role: Book Binder
+    intent: view.stamp
+    description: Create front matter with snapshot ID, options, coverage, accessibility summary
+    role_id: Book Binder
+  - id: binder_export_formats
+    role: Book Binder
+    intent: view.export
+    description: Generate MD/HTML/EPUB/PDF with verified anchors across formats
+    role_id: Book Binder
+  - id: style_sanity_check
+    role: Style Lead
+    intent: style.sanity_check
+    description: Quick check on tone consistency in visible surfaces (titles/captions)
+    optional: true
+    role_id: Style Lead
+  - id: translator_coverage_check
+    role: Translator
+    intent: translation.coverage_check
+    description: Verify translation coverage flags and link integrity if translations included
+    optional: true
+    role_id: Translator
+  - id: gatekeeper_spot_check
+    role: Gatekeeper
+    intent: gatecheck.spot_check
+    description: Spot-check Presentation Safety, Integrity, Style on built bundle before distribution
+    role_id: Gatekeeper
+  - id: binder_generate_view_log
+    role: Book Binder
+    intent: view.log
+    description: Update View Log with TUs merged, options, limitations for traceability
+    role_id: Book Binder
+  - id: showrunner_approve
+    role: Showrunner
+    intent: view.approve
+    description: Approve distribution or request iteration; notify PN if dry-run bundle
+    role_id: Showrunner
+  edges:
+  - source: showrunner_select
+    target: binder_confirm
+    type: direct
+  - source: binder_confirm
+    target: binder_assemble_manuscript
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Snapshot is Cold-only AND options are feasible
+  - source: binder_confirm
+    target: showrunner_select
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Snapshot contains Hot paths OR options conflict (abort and re-select)
+  - source: binder_assemble_manuscript
+    target: binder_attach_codex
+    type: direct
+  - source: binder_attach_codex
+    target: binder_include_surfaces
+    type: direct
+  - source: binder_include_surfaces
+    target: binder_integrity_pass
+    type: direct
+  - source: binder_integrity_pass
+    target: binder_accessibility_pass
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Integrity PASS OR issues documented in hooks (can proceed with warnings)
+  - source: binder_integrity_pass
+    target: binder_confirm
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Integrity FAIL with blocking issues (rebuild needed)
+  - source: binder_accessibility_pass
+    target: binder_stamp_metadata
+    type: direct
+  - source: binder_stamp_metadata
+    target: binder_export_formats
+    type: direct
+  - source: binder_export_formats
+    target: style_sanity_check
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Style Lead available and sanity check requested
+  - source: binder_export_formats
+    target: translator_coverage_check
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Translations included and Translator available
+  - source: binder_export_formats
+    target: gatekeeper_spot_check
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: No optional checks OR optional checks complete
+  - source: style_sanity_check
+    target: gatekeeper_spot_check
+    type: direct
+  - source: translator_coverage_check
+    target: gatekeeper_spot_check
+    type: direct
+  - source: gatekeeper_spot_check
+    target: binder_generate_view_log
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Spot-check green OR yellow with acceptable notes
+  - source: gatekeeper_spot_check
+    target: binder_confirm
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: Spot-check red (spoiler leaks, broken links, accessibility blockers)
+  - source: binder_generate_view_log
+    target: showrunner_approve
+    type: direct
+  exit_conditions:
+  - name: success
+    condition: Showrunner approves bundle for distribution
+  - name: success
+    condition: Showrunner requests iteration (spot-check issues or options change)
+  - name: success
+    condition: 'Blocked: Cannot assemble from snapshot without upstream fixes'
+  entry_node: Showrunner
+protocol_flow:
+  message_sequences:
+  - step: 1
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Showrunner selects snapshot and options, Binder confirms feasibility
+  - step: 2
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Binder assembles manuscript, codex, optional surfaces
+  - step: 3
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Binder validates integrity/accessibility and stamps metadata
+  - step: 4
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Binder exports formats, optional roles sanity-check, Gatekeeper spots
+  - step: 5
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Binder generates View Log, Showrunner approves distribution
+gates:
+  pre_gates:
+  - gate_id: binder_integrity_check
+    role: Book Binder
+    bars_checked:
+    - Integrity
+    timing: after_surface_inclusion
+    blocking: false
+    advisory_only: false
+    rationale: Self-check integrity before export; can proceed with documented warnings
+  - gate_id: binder_accessibility_check
+    role: Book Binder
+    bars_checked:
+    - Accessibility
+    timing: after_integrity_pass
+    blocking: false
+    advisory_only: false
+    rationale: Self-check accessibility; flag gaps for future work
+  merge_gates:
+  - gate_id: export_spot_check
+    role: Gatekeeper
+    bars_checked:
+    - Presentation
+    - Integrity
+    - Style
+    - Accessibility
+    timing: before_distribution
+    blocking: true
+    advisory_only: false
+    rationale: Block distribution if spoiler leaks, broken links, or critical accessibility issues
+traceability:
+  tu_lifecycle:
+    creates_tus: false
+    updates_tu_status: true
+    transitions:
+    - from: proposed
+      to: in_progress
+      trigger: Showrunner selects snapshot and opens binding TU
+    - from: in_progress
+      to: completed
+      trigger: Showrunner approves bundle after spot-check green
+    - from: in_progress
+      to: blocked
+      trigger: Cannot assemble without upstream fixes (broken links, missing content)
+    required: true
+  produces_hot:
+  - hooks (when binding reveals upstream issues)
+  produces_cold: true
+  snapshot_dependencies:
+    reads_from_cold:
+    - snapshots[snapshot_id].manuscript
+    - snapshots[snapshot_id].codex_entries
+    - snapshots[snapshot_id].style_addenda
+    - snapshots[snapshot_id].translations (optional)
+    - snapshots[snapshot_id].art_plans (optional)
+    - snapshots[snapshot_id].audio_plans (optional)
+    writes_to_cold:
+    - snapshots[snapshot_id].view_log
+roles:
+  primary:
+  - role: Book Binder
+    raci: responsible
+    required: true
+  supporting:
+  - role: Showrunner
+    raci: accountable
+    required: true
+  - role: Gatekeeper
+    raci: consulted
+    required: true
+  - role: Style Lead
+    raci: consulted
+    required: false
+    wake_condition: Sanity check on visible surfaces (titles/captions)
+  - role: Translator
+    raci: consulted
+    required: false
+    wake_condition: Translations included; verify coverage flags and link integrity
+  - role: Player-Narrator
+    raci: informed
+    required: false
+    wake_condition: Bundle is for dry-run playtest
+context:
+  required_state:
+  - cold_sot.snapshots[snapshot_id] (full snapshot contents)
+  optional_state:
+  - gates.current_gatecheck (latest gatekeeper notes)
+  - hot_sot.style_addenda (for label guidance)
+  quality_bar_focus:
+  - bar_name: Integrity
+    pressure: very_high
+    rationale: All anchors/links must resolve across formats; no orphans, no 404s
+  - bar_name: Presentation
+    pressure: very_high
+    rationale: No spoilers, no internals on any surface (front matter, labels, navigation)
+  - bar_name: Accessibility
+    pressure: high
+    rationale: Alt text, descriptive links, headings, contrast, text equivalents for audio
+  - bar_name: Style
+    pressure: medium
+    rationale: Tone consistency in visible surfaces (titles, captions, labels)
+success_criteria:
+  required:
+  - Bundle built from exactly one Cold snapshot (no Hot paths)
+  - All links/anchors resolve across formats (MD/HTML/EPUB/PDF)
+  - No orphan sections (every section reachable from TOC)
+  - Terminals marked clearly (story endpoints obvious)
+  - Codex coverage sufficient; See-also links resolve
+  - Alt text present for non-decorative images; descriptive (not technique)
+  - Descriptive link text (no 'click here' or 'see here')
+  - Proper heading structure (no skipped levels, meaningful titles)
+  - Options correctly reflected in front matter (art/audio/translations)
+  - Translations flagged complete/incomplete with coverage percentages
+  - Front matter stamped with snapshot ID, options, accessibility, coverage, limitations
+  - View Log updated with TUs merged (player-safe titles), known limitations
+  - No internals on surfaces (codewords, gate logic, seeds/models, technique)
+  - Gatekeeper spot-check green (Presentation + Integrity + Accessibility)
+  optional:
+  - Style sanity check confirms tone consistency
+  - Translator coverage check confirms accuracy
+  - Anchor Map generated for debugging
+  - Assembly Notes document harmless normalizations
+  definition_of_done:
+  - Bundle approved by Showrunner for distribution
+  - PN receives bundle if dry-run playtest
+  - View Log written to Cold for traceability
+  - Known limitations disclosed in front matter
+failure_modes:
+- mode: Built from Hot or mixed sources
+  remedy: 'ABORT: Rebuild from Cold snapshot only; verify snapshot ID format'
+- mode: Spoiler in captions/front matter
+  remedy: Propose hook to Art Director / Lore Weaver; move detail to canon notes; rewrite surface text player-safe
+- mode: Broken anchors across formats
+  remedy: 'If harmless (format-specific quirk): normalize. If content issue: propose hook to owner; re-bind after fix'
+- mode: Accessibility gaps (missing alt text, non-descriptive links)
+  remedy: Flag in front matter as limitation; propose hooks to Art Director / Scene Smith / Codex Curator
+- mode: Mismatched options (front matter claims 'full art' but no renders)
+  remedy: Correct front matter to reflect actual inclusions; update View Log with accurate status
+- mode: Locale anchor collisions (EN/NL slugs conflict)
+  remedy: Propose hook to Translator; add locale prefix (/en/, /nl/) or unique slugs; re-export
+handoffs:
+  from_loops:
+  - loop: Gatecheck
+    artifact: gatecheck_report (latest bars status)
+    trigger: Before binding; use report ID in front matter
+  - loop: Story Spark
+    artifact: manuscript sections (in Cold snapshot)
+    trigger: After merge to Cold; content ready for export
+  - loop: Codex Expansion
+    artifact: codex_entries (in Cold snapshot)
+    trigger: After merge to Cold; entries ready for inclusion
+  - loop: Style Tune-up
+    artifact: style_addenda (in Cold snapshot)
+    trigger: For label/typography guidance
+  - loop: Translation Pass
+    artifact: translation slices (in Cold snapshot)
+    trigger: If translations included in export options
+  to_loops:
+  - loop: Narration Dry-Run
+    artifact: export_bundle (for PN playtest)
+    condition: Bundle approved for dry-run
+  - loop: Hook Harvest
+    artifact: hooks (broken anchors, missing content, label issues)
+    condition: Binding reveals upstream issues
+  - loop: Scene Smith / Codex Curator / Style Lead
+    artifact: hooks (specific upstream fixes needed)
+    condition: Integrity/Accessibility/Presentation issues found
+execution:
+  max_iterations: 2
+  timebox_minutes: 45
+  timeout_behavior: defer_optional_surfaces
+  error_handling:
+    on_validation_error: retry
+    on_bar_failure: rework
+    on_protocol_error: retry
+    max_retries: 2
+    retry_backoff: exponential
+    notes: '[{''error'': ''Snapshot contains Hot paths'', ''response'': ''ABORT: Report to Showrunner; re-select Cold snapshot''},
+      {''error'': ''Broken links cannot be resolved (missing content)'', ''response'': ''Propose hooks to owners; document
+      limitation in front matter; re-bind after upstream fixes''}, {''error'': ''Spot-check red (spoiler leaks)'', ''response'':
+      ''Iterate: Propose hooks to content owners; re-export after upstream fixes''}, {''error'': ''Cross-format anchor failures
+      (EPUB/PDF specific)'', ''response'': ''If format-specific quirk: apply harmless normalization. If content issue: propose
+      hook''}, {''error'': "Optional surface missing (options claim ''full art'' but no renders)", ''response'': ''Downgrade
+      option in front matter (plans only); update View Log; notify Showrunner''}]'
+id: binding_run
