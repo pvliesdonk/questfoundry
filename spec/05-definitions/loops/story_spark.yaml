@@ -252,7 +252,6 @@ roles:
   - role_id: Researcher
     wake_condition: Topology involves real-world constraints or factual claims
     rubric_threshold: 4
-    role_id: Researcher
 context:
   hot_cold_mode: hot
   required_artifacts:

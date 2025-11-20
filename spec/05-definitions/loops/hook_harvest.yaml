@@ -295,7 +295,6 @@ roles:
   - role_id: Researcher
     wake_condition: High volume of factual hooks with uncertainty
     rubric_threshold: 4
-    role_id: Researcher
 context:
   hot_cold_mode: hot
   required_artifacts:
