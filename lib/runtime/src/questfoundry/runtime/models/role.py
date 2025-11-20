@@ -1,0 +1,77 @@
+"""
+Role profile models - represents a role_profile.schema.json definition.
+
+Based on spec: components/node_factory.md
+"""
+
+from typing import Any, Dict, List, Literal, Optional
+
+
+class RoleProfile:
+    """Represents a role profile YAML definition."""
+
+    def __init__(self, data: Dict[str, Any]):
+        """Initialize from parsed YAML data."""
+        self.raw = data
+
+        # Extract key fields
+        self.id = data.get("id", "")
+        self.name = data.get("identity", {}).get("name", "")
+        self.abbreviation = data.get("identity", {}).get("abbreviation", "")
+        self.role_type = data.get("role_type", "reasoning_agent")
+        self.dormancy_policy = data.get("dormancy_policy", "active")
+
+        # Behavior config
+        behavior = data.get("behavior", {})
+        self.prompt = behavior.get("prompt", {})
+        self.tools = behavior.get("tools", [])
+        self.model_config = behavior.get("model_config", {})
+
+        # LLM config (fallback)
+        llm_config = data.get("llm_config", {})
+        if not self.model_config:
+            self.model_config = {
+                "model": llm_config.get("model", "claude-3-5-sonnet-20241022"),
+                "temperature": llm_config.get("temperature", 0.7),
+                "max_tokens": llm_config.get("max_tokens", 4096)
+            }
+
+        # Protocol info
+        protocol = data.get("protocol", {})
+        self.can_send = protocol.get("can_send", [])
+        self.can_receive = protocol.get("can_receive", [])
+
+        # Wake condition (for default_dormant)
+        self.wake_conditions = data.get("wake_conditions", [])
+
+    def get_model(self) -> str:
+        """Get model name from config."""
+        return self.model_config.get("model", "claude-3-5-sonnet-20241022")
+
+    def get_temperature(self) -> float:
+        """Get temperature from config."""
+        return float(self.model_config.get("temperature", 0.7))
+
+    def get_max_tokens(self) -> int:
+        """Get max_tokens from config."""
+        return int(self.model_config.get("max_tokens", 4096))
+
+    def should_execute(self, state: Dict[str, Any]) -> bool:
+        """
+        Determine if this role should execute based on dormancy policy.
+
+        Policies:
+        - active: Always execute (default)
+        - optional: Execute if explicitly requested in context
+        - default_dormant: Execute only if wake condition is met
+        """
+        if self.dormancy_policy == "active":
+            return True
+        elif self.dormancy_policy == "optional":
+            # Check if explicitly enabled in loop context
+            return state.get("loop_context", {}).get(f"enable_{self.id}", False)
+        elif self.dormancy_policy == "default_dormant":
+            # Would need to evaluate wake_condition here
+            # For now, return False (can be extended)
+            return False
+        return True

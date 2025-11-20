@@ -1,0 +1,48 @@
+[tool.poetry]
+name = "questfoundry-runtime"
+version = "0.1.0"
+description = "QuestFoundry runtime engine - transforms YAML role and loop definitions into executable LangGraph StateGraphs"
+authors = ["QuestFoundry Contributors"]
+readme = "README.md"
+packages = [{ include = "questfoundry", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+langgraph = "^0.1.0"
+langchain-core = "^0.1.0"
+langchain-anthropic = "^0.1.0"
+pydantic = "^2.0"
+typer = { version = "^0.12", extras = ["all"] }
+rich = "^13.0"
+jinja2 = "^3.1"
+pyyaml = "^6.0"
+jsonschema = "^4.20"
+asteval = "^0.9"
+json-logic = "^0.9"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0"
+pytest-cov = "^4.0"
+black = "^23.0"
+ruff = "^0.1"
+mypy = "^1.0"
+
+[tool.poetry.scripts]
+qf = "questfoundry.runtime.cli.main:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
