@@ -11,6 +11,7 @@ python = "^3.11"
 langgraph = "^0.1.0"
 langchain-core = "^0.1.0"
 langchain-anthropic = "^0.1.0"
+langchain-openai = "^0.1.0"
 pydantic = "^2.0"
 typer = { version = "^0.12", extras = ["all"] }
 rich = "^13.0"

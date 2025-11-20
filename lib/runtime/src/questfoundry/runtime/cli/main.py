@@ -15,6 +15,7 @@ from rich.panel import Panel
 from rich.markdown import Markdown
 
 from questfoundry.runtime.cli.parser import CLIParser
+from questfoundry.runtime.cli.showrunner import Showrunner, ParsedIntent
 from questfoundry.runtime.core.graph_factory import GraphFactory
 from questfoundry.runtime.core.state_manager import StateManager
 
@@ -38,6 +39,7 @@ console = Console()
 parser = CLIParser()
 graph_factory = GraphFactory()
 state_manager = StateManager()
+showrunner = Showrunner(graph_factory=graph_factory, state_manager=state_manager)
 
 
 @app.command()
@@ -52,38 +54,30 @@ def write(
         qf write "a tense cargo bay confrontation"
     """
     try:
-        # Parse command
-        command = parser.parse(f"write {text}")
-        if not command:
-            console.print("[red]Error: Could not parse command[/red]")
-            sys.exit(1)
-
-        # Add mode to context
-        command.context["narration_mode"] = mode
-
-        # Initialize state
-        state = state_manager.initialize_state(
-            loop_id=command.loop_id,
-            context=command.context
-        )
-
-        # Create and invoke graph
-        graph = graph_factory.create_loop_graph(command.loop_id, command.context)
-
         console.print(Panel(
-            f"[bold]Executing {command.loop_id}[/bold]\nTU: {state['tu_id']}",
+            f"[bold]Writing new scene[/bold]\n{text}",
             style="blue"
         ))
 
-        # Invoke graph (would do actual LLM calls here)
-        # For now, just show state
-        console.print(f"\n[green]✓ Created TU {state['tu_id']}[/green]")
-        console.print(f"  Loop: {command.loop_id}")
-        console.print(f"  Status: {state['tu_lifecycle']}")
-        if command.context.get("scene_text"):
-            console.print(f"  Content: {command.context['scene_text']}")
+        # Create parsed intent
+        intent = ParsedIntent(
+            action="write",
+            args=[text],
+            flags={"mode": mode},
+            loop_id="story_spark"
+        )
 
-        console.print("\n[yellow]Note: Full LLM execution requires API keys and configuration[/yellow]")
+        # Execute through Showrunner
+        result = showrunner.execute_request(f"write {text}", intent)
+
+        # Display result
+        if result.success:
+            console.print(Panel(result.summary, style="green", title="✓ Success"))
+        else:
+            console.print(Panel(result.summary, style="red", title="✗ Error"))
+            if result.error:
+                logger.error(f"Execution error: {result.error}")
+            sys.exit(1)
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -102,28 +96,30 @@ def review(
         qf review story
     """
     try:
-        # Parse command
-        command = parser.parse(f"review {target}")
-        if not command:
-            console.print("[red]Error: Could not parse command[/red]")
-            sys.exit(1)
-
-        # Initialize state
-        state = state_manager.initialize_state(
-            loop_id=command.loop_id,
-            context=command.context
-        )
-
         console.print(Panel(
-            f"[bold]Reviewing {target}[/bold]\nTU: {state['tu_id']}",
+            f"[bold]Reviewing {target}[/bold]",
             style="blue"
         ))
 
-        console.print(f"\n[green]✓ Started review TU {state['tu_id']}[/green]")
-        console.print(f"  Loop: {command.loop_id}")
-        console.print(f"  Target: {target}")
+        # Create parsed intent
+        intent = ParsedIntent(
+            action="review",
+            args=[target],
+            flags={},
+            loop_id="hook_harvest"
+        )
 
-        console.print("\n[yellow]Note: Full review requires API keys and configuration[/yellow]")
+        # Execute through Showrunner
+        result = showrunner.execute_request(f"review {target}", intent)
+
+        # Display result
+        if result.success:
+            console.print(Panel(result.summary, style="green", title="✓ Success"))
+        else:
+            console.print(Panel(result.summary, style="red", title="✗ Error"))
+            if result.error:
+                logger.error(f"Execution error: {result.error}")
+            sys.exit(1)
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

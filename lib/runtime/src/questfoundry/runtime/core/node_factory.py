@@ -6,6 +6,7 @@ STRICT component - role → Runnable transformation is the core contract.
 """
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -144,7 +145,7 @@ class NodeFactory:
             logger.warning(f"Unknown template engine: {template_engine}")
             return template_str
 
-    def select_llm(self, role: RoleProfile) -> Optional[Any]:
+    def select_llm(self, role: RoleProfile) -> Optional[Dict[str, Any]]:
         """
         Select appropriate LLM based on role type and model config.
 
@@ -157,24 +158,26 @@ class NodeFactory:
             role: RoleProfile with role_type and model_config
 
         Returns:
-            LLM instance or None for service type
+            LLM configuration dict or None for service type
 
         Note:
-            Actual LLM instantiation deferred to plugin layer.
-            This returns LLM specification.
+            Provider can be overridden via QF_LLM_PROVIDER environment variable.
+            Model can be overridden via QF_DEFAULT_MODEL environment variable.
         """
         if role.role_type == "service":
             # Service type - no LLM needed
             return None
 
-        # For now, return config dict for plugin layer
-        # In real implementation, this would call get_llm_adapter()
-        model = role.get_model()
+        # Check for environment variable overrides
+        provider = os.getenv("QF_LLM_PROVIDER", "anthropic")
+        model = os.getenv("QF_DEFAULT_MODEL") or role.get_model()
         temperature = role.get_temperature()
         max_tokens = role.get_max_tokens()
 
+        logger.info(f"Selected LLM provider: {provider}, model: {model}")
+
         return {
-            "type": "anthropic",
+            "type": provider,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -217,10 +220,47 @@ class NodeFactory:
                 # 3. Render prompt
                 prompt = self.render_prompt(role, state)
 
-                # 4. Create mock result
-                # In real implementation, this would invoke LLM
-                # For now, return mock data for testing
-                result = f"[{role.name}] {prompt[:100]}..."
+                # 4. Invoke LLM or tools based on role type
+                llm_config = self.select_llm(role)
+
+                if llm_config:
+                    provider = llm_config.get("type", "anthropic")
+
+                    # Import appropriate LLM adapter
+                    try:
+                        if provider == "anthropic":
+                            from questfoundry.runtime.plugins.llm.anthropic import (
+                                AnthropicAdapter
+                            )
+                            adapter = AnthropicAdapter()
+                        elif provider == "openai":
+                            from questfoundry.runtime.plugins.llm.openai import (
+                                OpenAIAdapter
+                            )
+                            adapter = OpenAIAdapter()
+                        else:
+                            raise ValueError(f"Unsupported LLM provider: {provider}")
+
+                        # Get LLM instance
+                        llm = adapter.get_llm(
+                            model=llm_config["model"],
+                            temperature=llm_config["temperature"],
+                            max_tokens=llm_config["max_tokens"]
+                        )
+
+                        # Invoke LLM with prompt
+                        logger.info(f"Invoking {provider} LLM for role {role.id}")
+                        response = llm.invoke(prompt)
+                        result = response.content if hasattr(response, 'content') else str(response)
+                        logger.info(f"LLM response received: {len(result)} characters")
+
+                    except Exception as e:
+                        logger.error(f"LLM invocation failed for {role.id}: {e}")
+                        raise
+                else:
+                    # Service type - tool-only execution (not yet implemented)
+                    result = f"[{role.name}] Service execution (tools not yet implemented)"
+                    logger.warning(f"Service-type role {role.id} executed without tools")
 
                 # 5. Update state with artifact
                 artifact = {
