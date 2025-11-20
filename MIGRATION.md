@@ -4,8 +4,9 @@
 >
 > **Started:** 2025-11-19
 > **Layer 5 Definitions Completed:** 2025-11-20
-> **Current Phase:** Phase 4 (Validation) — ✅ **COMPLETE**
-> **Next Phase:** Phase 5 (Runtime Integration) — 📋 **PENDING**
+> **Runtime Specifications Created:** 2025-11-20
+> **Current Phase:** Phase 5 (Runtime Integration) — 🚧 **IN PROGRESS**
+> **Next Phase:** Phase 6 (Quality Gates & Transitions) — 📋 **PENDING**
 
 ---
 
@@ -221,48 +222,76 @@ python3 validate_definitions.py
 
 ---
 
-### Phase 5: Runtime Integration 📋 PENDING
+### Phase 5: Runtime Integration 🚧 IN PROGRESS (Started 2025-11-20)
 
 **Goal:** Build the generic execution engine (`lib/runtime`).
 
+**Strategy:** Following ADR-006 (Spec-Driven Runtime Development), we create comprehensive specifications first, then use AI agents to implement from specs.
+
+#### Subphase 5A: Runtime Specifications ✅ COMPLETE (2025-11-20)
+
+**Deliverables:**
+- [x] Create `spec/06-runtime/` directory structure
+- [x] Write `ARCHITECTURE.md` - Foundational runtime architecture spec
+  - [x] Three-tier approach: Strict core, Plugin providers, Flexible interface
+  - [x] Complete component breakdown
+  - [x] Implementation guidance for AI agents
+- [x] Core mechanism specs (STRICT components):
+  - [x] `components/graph_factory.md` - Loop → StateGraph transformation
+  - [x] `components/node_factory.md` - Role → Runnable transformation
+  - [x] `components/state_manager.md` - StudioState lifecycle management
+  - [x] `components/edge_evaluator.md` - Conditional edge evaluation
+- [x] Flexible interface specs:
+  - [x] `components/cli.md` - Natural language CLI parser
+- [x] Plugin interface schemas:
+  - [x] `interfaces/llm_adapter.yaml` - LLM provider plugin contract
+  - [x] `interfaces/tool_registry.yaml` - Tool provider plugin contract
+
+**Key Principles Applied:**
+1. **Strict on core mechanisms**: Graph construction, state management, edge evaluation specified precisely
+2. **Plugin-based providers**: LLM adapters and tool registry use plugin architecture (LangChain patterns)
+3. **Flexible on interface**: CLI and output formatting allow creative UX iteration
+
+#### Subphase 5B: Runtime Implementation 📋 PENDING
+
 **Deliverables:**
 - [ ] Package initialization: `lib/runtime/pyproject.toml`
-  - [ ] Stack: Python 3.11+, langgraph, langchain-core, pydantic, typer, jinja2
-  - [ ] Structure: `src/questfoundry/{cli,core,io,validation}/`
-- [ ] Component: Schema Registry (`validation/registry.py`)
-  - [ ] Load L3 schemas dynamically
-  - [ ] Expose `validate_artifact(type: str, data: dict) -> bool`
-- [ ] Component: Node Factory (`core/node.py`)
-  - [ ] Load role_profile.yaml
-  - [ ] Render Jinja2 prompts with context injection
-  - [ ] Bind tools
-  - [ ] Return LangChain Runnable
-- [ ] Component: Graph Factory (`core/graph.py`)
-  - [ ] Load loop_pattern.yaml
-  - [ ] Create LangGraph StateGraph
-  - [ ] Add nodes via NodeFactory
-  - [ ] Add edges (direct and conditional)
-  - [ ] Compile with checkpointer
-- [ ] Component: CLI (`cli.py`)
-  - [ ] `qf run <loop_id>` command
-  - [ ] Load state from `.qf/state.json`
-  - [ ] Build and invoke graph
-  - [ ] Stream output, save artifacts
+  - [ ] Stack: Python 3.11+, langgraph, langchain-core, pydantic, typer, jinja2, rich
+  - [ ] Structure: `src/questfoundry/runtime/{core,plugins,cli}/`
+- [ ] Core components (implement from specs):
+  - [ ] Schema Registry (`core/schema_registry.py`) - Load and validate YAML against schemas
+  - [ ] Node Factory (`core/node_factory.py`) - Transform roles to Runnables
+  - [ ] Graph Factory (`core/graph_factory.py`) - Transform loops to StateGraphs
+  - [ ] State Manager (`core/state_manager.py`) - StudioState lifecycle
+  - [ ] Edge Evaluator (`core/edge_evaluator.py`) - Condition evaluation
+  - [ ] Protocol Router (`core/protocol_router.py`) - Message routing
+- [ ] Plugin implementations:
+  - [ ] Anthropic LLM Adapter (`plugins/llm/anthropic.py`)
+  - [ ] Tool Registry (`plugins/tools/registry.py`)
+  - [ ] Stable Diffusion tool (`plugins/tools/stable_diffusion.py`)
+  - [ ] Pandoc tool (`plugins/tools/pandoc.py`)
+- [ ] CLI components:
+  - [ ] Command Parser (`cli/parser.py`) - Natural language → loop invocation
+  - [ ] Showrunner Agent (`cli/showrunner.py`) - Translation layer
+  - [ ] Output Formatter (`cli/formatter.py`) - Human-readable results
+  - [ ] Main CLI (`cli/main.py`) - Entry point (`qf` command)
 
 **Validation:**
 ```bash
 # Dry-run (no LLM calls)
-qf run hook_harvest --dry-run
+qf write "test scene" --dry-run
 
 # Mock LLM
-qf run hook_harvest --mock-llm
+qf write "test scene" --mock-llm
 
 # Full execution
-qf run hook_harvest
+qf write "test scene"
+qf review story
+qf export epub
 ```
 
 **Key Decisions:**
-- TBD
+- ADR-006: Spec-driven development with AI implementation (see below)
 
 ---
 
@@ -319,10 +348,12 @@ done
 | Phase 2: All Role Profiles | ✅ Complete | 2025-11-19 | 2025-11-20 | 2 days |
 | Phase 3: All Loop Patterns | ✅ Complete | 2025-11-19 | 2025-11-20 | 2 days |
 | Phase 4: Validation & QA | ✅ Complete | 2025-11-20 | 2025-11-20 | <1 day |
-| Phase 5: Runtime Integration | 📋 Pending | - | - | - |
+| Phase 5: Runtime Integration | 🚧 In Progress | 2025-11-20 | - | - |
+| • Subphase 5A: Runtime Specs | ✅ Complete | 2025-11-20 | 2025-11-20 | <1 day |
+| • Subphase 5B: Implementation | 📋 Pending | - | - | - |
 | Phase 6: Quality Gates & Transitions | 📋 Pending | - | - | - |
 
-**Summary:** 4/6 phases complete (66%) — All definitions validated and ready for runtime
+**Summary:** 4/6 phases complete + Phase 5 specs complete (70%) — Runtime specifications ready for AI-driven implementation
 
 ### Detailed Progress (Phase 1)
 
@@ -371,6 +402,37 @@ done
 | Validate all 10 loops | ✅ Complete | 0 errors, 0 warnings |
 | Cross-reference checks | ✅ Complete | Abbreviations, RACI, intents |
 | Update documentation | ✅ Complete | README.md and MIGRATION.md |
+
+### Detailed Progress (Phase 5A - Runtime Specifications)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Create `spec/06-runtime/` structure | ✅ Complete | components/, interfaces/, flows/ subdirs |
+| Write ARCHITECTURE.md | ✅ Complete | 400+ lines, three-tier approach |
+| Graph Factory spec | ✅ Complete | Loop → StateGraph transformation |
+| Node Factory spec | ✅ Complete | Role → Runnable transformation |
+| State Manager spec | ✅ Complete | StudioState lifecycle |
+| Edge Evaluator spec | ✅ Complete | Conditional edge evaluation |
+| CLI spec | ✅ Complete | Natural language parser (flexible) |
+| LLM Adapter interface | ✅ Complete | Plugin contract YAML schema |
+| Tool Registry interface | ✅ Complete | Plugin contract YAML schema |
+| ADR-006 documentation | ✅ Complete | Spec-driven development approach |
+| MIGRATION.md update | ✅ Complete | Phase 5 progress and ADR-006 |
+
+### Detailed Progress (Phase 5B - Runtime Implementation)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Package initialization | 📋 Pending | pyproject.toml, directory structure |
+| Schema Registry | 📋 Pending | Load and validate YAML |
+| Node Factory | 📋 Pending | Implement from spec |
+| Graph Factory | 📋 Pending | Implement from spec |
+| State Manager | 📋 Pending | Implement from spec |
+| Edge Evaluator | 📋 Pending | Implement from spec |
+| Protocol Router | 📋 Pending | Implement from spec |
+| LLM plugins | 📋 Pending | Anthropic, OpenAI adapters |
+| Tool plugins | 📋 Pending | SD, Pandoc, audio tools |
+| CLI implementation | 📋 Pending | Parser, Showrunner, Formatter |
 
 ---
 
@@ -556,6 +618,68 @@ Showrunner: Working with Style Lead on sharper dialogue...
 - Better alignment with "studio of AI agents" metaphor
 
 **Status:** Design approved, implementation pending Phase 5
+
+---
+
+### ADR-006: Spec-Driven Runtime Development (2025-11-20)
+
+**Context:** Phase 5 requires building a complex runtime engine with multiple interdependent components. The team discussed whether to write code directly or create specifications first.
+
+**Decision:** Create comprehensive specifications in `spec/06-runtime/` before implementation, then use AI coding agents (GitHub Copilot, Claude Haiku, etc.) to generate implementation from specs.
+
+**Rationale:**
+- Validates the Cartridge Architecture: "The Spec is the Cartridge, Runtime is the Console"
+- Specifications force clarity about component boundaries and contracts
+- AI agents work better with detailed specifications than vague requirements
+- Specs serve as both design documentation AND implementation instructions
+- Allows parallel development (specs define interfaces, implementations can be done independently)
+- Reduces risk of architectural drift during implementation
+
+**Approach:**
+
+**Three-Tier Architecture:**
+1. **Strict Core Mechanisms** ⚙️
+   - Components: Graph Factory, Node Factory, State Manager, Edge Evaluator, Protocol Router
+   - Specification style: Precise algorithms, strict contracts, detailed error handling
+   - Reason: These are mechanical foundations; variation breaks the spec-to-runtime contract
+
+2. **Plugin-Based Providers** 🔌
+   - Components: LLM Adapters, Tool Registry, Storage Backends
+   - Specification style: YAML interface schemas defining plugin contracts
+   - Reason: Flexibility, testability, future-proofing; use LangChain provider patterns
+
+3. **Flexible Interface Design** 🎨
+   - Components: CLI Parser, Showrunner, Output Formatter
+   - Specification style: Guidelines and examples, not strict requirements
+   - Reason: UX is subjective; allow creativity and iteration based on feedback
+
+**Deliverables Created:**
+- `spec/06-runtime/ARCHITECTURE.md` - Foundational architecture specification
+- `spec/06-runtime/components/` - Component specifications
+  - `graph_factory.md` - Loop → StateGraph transformation (STRICT)
+  - `node_factory.md` - Role → Runnable transformation (STRICT)
+  - `state_manager.md` - StudioState lifecycle management (STRICT)
+  - `edge_evaluator.md` - Conditional edge evaluation (STRICT)
+  - `cli.md` - Natural language CLI parser (FLEXIBLE)
+- `spec/06-runtime/interfaces/` - Plugin interface schemas
+  - `llm_adapter.yaml` - LLM provider plugin contract
+  - `tool_registry.yaml` - Tool provider plugin contract
+
+**Implementation Guidance:**
+1. Start with strict components (in order): Schema Registry → State Manager → Node Factory → Graph Factory → Edge Evaluator → Protocol Router
+2. Use plugin interfaces from day one (easier to start with plugins than refactor later)
+3. Defer flexible components (build CLI after core works)
+4. Test with real Layer 5 YAML files (actual definitions from `spec/05-definitions/`)
+5. Reference schemas constantly (schema compliance is non-negotiable)
+
+**Consequences:**
+- More upfront design time, but faster and more correct implementation
+- Specs become primary documentation (code is derivative)
+- Easier onboarding (new developers read specs, not code)
+- AI agents can implement independently from detailed specs
+- Reduces "implementation surprises" (unknowns discovered during spec writing, not coding)
+
+**Status:** Specifications complete, implementation pending
 
 ---
 
