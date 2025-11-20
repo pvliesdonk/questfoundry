@@ -1,10 +1,10 @@
 # Layer 5 — Executable Definitions (The Cartridge)
 
-> **Status:** 🚧 **IN PROGRESS** — Migration from spec/05-behavior to schema-driven definitions
+> **Status:** ✅ **COMPLETE** — All 16 roles and 10 loops fully defined and validated
 >
-> **Last Updated:** 2025-11-19
+> **Last Updated:** 2025-11-20
 >
-> **Migration:** This layer represents a strategic pivot to declarative, schema-driven execution. See `../MIGRATION.md` for the complete migration plan and current status.
+> **Migration:** Layer 5 definitions are complete and schema-validated. All role profiles and loop patterns validate against their meta-schemas. See `../MIGRATION.md` for the complete migration plan.
 
 ---
 
@@ -133,34 +133,48 @@ All definitions validate against **meta-schemas** in `spec/03-schemas/definition
 ```
 spec/05-definitions/
 ├── README.md                      # This file
-├── roles/                         # Role profile definitions
-│   ├── plotwright.yaml            # Plotwright agent definition
-│   ├── gatekeeper.yaml            # Gatekeeper agent definition
-│   ├── showrunner.yaml            # Showrunner agent definition
-│   ├── scene_smith.yaml           # Scene Smith agent definition
-│   ├── lore_weaver.yaml           # Lore Weaver agent definition
-│   ├── codex_curator.yaml         # Codex Curator agent definition
-│   ├── style_lead.yaml            # Style Lead agent definition
-│   ├── book_binder.yaml           # Book Binder agent definition
-│   ├── player_narrator.yaml       # Player-Narrator agent definition
-│   └── ...                        # Other roles (dormant by default)
-├── loops/                         # Loop pattern definitions
-│   ├── hook_harvest.yaml          # Hook Harvest graph topology
-│   ├── story_spark.yaml           # Story Spark graph topology
-│   ├── lore_deepening.yaml        # Lore Deepening graph topology
-│   ├── codex_expansion.yaml       # Codex Expansion graph topology
-│   ├── gatecheck.yaml             # Gatecheck (standalone) graph topology
-│   └── ...                        # Other loops
+├── roles/                         # Role profile definitions (16 total)
+│   ├── showrunner.yaml            # SR - Always-on coordinator
+│   ├── gatekeeper.yaml            # GK - Always-on quality enforcer
+│   ├── plotwright.yaml            # PW - Story structure (default_on)
+│   ├── scene_smith.yaml           # SS - Prose drafting (default_on)
+│   ├── style_lead.yaml            # ST - Voice consistency (default_on)
+│   ├── lore_weaver.yaml           # LW - Canon development (default_on)
+│   ├── codex_curator.yaml         # CC - Knowledge graph (default_on)
+│   ├── researcher.yaml            # RS - Fact validation (optional)
+│   ├── art_director.yaml          # AD - Visual planning (optional)
+│   ├── illustrator.yaml           # IL - Image production (optional, production_executor)
+│   ├── audio_director.yaml        # AUD - Audio planning (optional)
+│   ├── audio_producer.yaml        # AUP - Audio production (optional, production_executor)
+│   ├── translator.yaml            # TR - Localization (optional)
+│   ├── book_binder.yaml           # BB - View structure planning (optional)
+│   ├── export_service.yaml        # ES - File generation (optional, service)
+│   └── player_narrator.yaml       # PN - Performance & playtest (optional)
+├── loops/                         # Loop pattern definitions (10 core loops)
+│   ├── story_spark.yaml           # Discovery loop for story structure
+│   ├── hook_harvest.yaml          # Discovery loop for creative ideas
+│   ├── lore_deepening.yaml        # Refinement loop for canon
+│   ├── codex_expansion.yaml       # Refinement loop for knowledge
+│   ├── style_tune_up.yaml         # Refinement loop for voice
+│   ├── art_touch_up.yaml          # Assets loop for visuals
+│   ├── audio_pass.yaml            # Assets loop for audio
+│   ├── translation_pass.yaml      # Localization loop
+│   ├── binding_run.yaml           # Export loop for views
+│   └── narration_dry_run.yaml     # Reflection loop for playtest
 ├── templates/                     # Jinja2 prompt templates
-│   ├── plotwright_prompt.j2       # Plotwright system prompt
-│   ├── gatekeeper_prompt.j2       # Gatekeeper system prompt
-│   └── ...                        # Other role prompts
-├── transitions/                   # Reusable lifecycle state machine rules
+│   ├── player_narrator_prompt.j2  # PN dual-mode prompt (workshop + audience)
+│   ├── researcher_prompt.j2       # RS fact validation prompt
+│   ├── art_director_prompt.j2     # AD visual planning prompt
+│   ├── audio_director_prompt.j2   # AUD audio planning prompt
+│   ├── plotwright_prompt.j2       # PW story structure prompt
+│   ├── scene_smith_prompt.j2      # SS prose drafting prompt
+│   └── style_lead_prompt.j2       # ST voice consistency prompt
+├── transitions/                   # Reusable lifecycle state machine rules (PENDING)
 │   ├── hook_lifecycle.yaml        # Hook Card state transitions
 │   ├── tu_lifecycle.yaml          # Trace Unit state transitions
 │   ├── gate_lifecycle.yaml        # Gate state transitions
 │   └── view_lifecycle.yaml        # View/Export state transitions
-└── quality_gates/                 # Reusable quality bar validation rules
+└── quality_gates/                 # Reusable quality bar validation rules (PENDING)
     ├── integrity.yaml             # Integrity bar validation
     ├── reachability.yaml          # Reachability bar validation
     ├── nonlinearity.yaml          # Nonlinearity bar validation
@@ -412,7 +426,7 @@ qf run my_loop
 
 ### Phase 1: Foundation ✅ COMPLETE (2025-11-19)
 - [x] Meta-schemas created in `spec/03-schemas/definitions/`
-  - [x] `role_profile.schema.json`
+  - [x] `role_profile.schema.json` (extended with planning+execution model support)
   - [x] `loop_pattern.schema.json`
   - [x] `studio_state.schema.json`
   - [x] `transition_rule.schema.json`
@@ -420,30 +434,59 @@ qf run my_loop
 - [x] Directory structure created (`roles/`, `loops/`, `templates/`, `transitions/`, `quality_gates/`)
 - [x] README.md written (this file)
 
-### Phase 2: Pilot Roles (IN PROGRESS)
-- [ ] Showrunner role profile
-- [ ] Plotwright role profile
-- [ ] Gatekeeper role profile
-- [ ] Scene Smith role profile
-- [ ] Lore Weaver role profile
-- [ ] Codex Curator role profile
+### Phase 2: All Roles ✅ COMPLETE (2025-11-20)
+- [x] Showrunner (SR) - Always-on coordinator
+- [x] Gatekeeper (GK) - Always-on quality enforcer
+- [x] Plotwright (PW) - Story structure (default_on)
+- [x] Scene Smith (SS) - Prose drafting (default_on)
+- [x] Style Lead (ST) - Voice consistency (default_on)
+- [x] Lore Writer (LW) - Canon development (default_on)
+- [x] Codex Curator (CC) - Knowledge graph (default_on)
+- [x] Researcher (RS) - Fact validation (optional)
+- [x] Art Director (AD) - Visual planning (optional)
+- [x] Illustrator (IL) - Image production (optional, production_executor)
+- [x] Audio Director (AUD) - Audio planning (optional)
+- [x] Audio Producer (AUP) - Audio production (optional, production_executor)
+- [x] Translator (TR) - Localization (optional)
+- [x] Book Binder (BB) - View structure planning (optional)
+- [x] Export Service (ES) - File generation (optional, service)
+- [x] Player-Narrator (PN) - Performance & playtest (optional)
 
-### Phase 3: Pilot Loop (PENDING)
-- [ ] Hook Harvest loop pattern
-- [ ] Protocol flow mapping (Layer 4 → graph edges)
-- [ ] Quality gate integration
+**16/16 roles complete** (15 studio roles + 1 service split)
 
-### Phase 4: Runtime Integration (PENDING)
+### Phase 3: All Loops ✅ COMPLETE (2025-11-20)
+- [x] Story Spark - Discovery loop for new story structure
+- [x] Hook Harvest - Discovery loop for creative ideas
+- [x] Lore Deepening - Refinement loop for canon development
+- [x] Codex Expansion - Refinement loop for knowledge curation
+- [x] Style Tune-up - Refinement loop for voice consistency
+- [x] Art Touch-up - Assets loop for visual planning + generation
+- [x] Audio Pass - Assets loop for audio planning + generation
+- [x] Translation Pass - Localization loop for multi-language support
+- [x] Binding Run - Export loop for view generation
+- [x] Narration Dry-Run - Reflection loop for UX playtesting
+
+**10/10 core loops complete**
+
+### Phase 4: Validation ✅ COMPLETE (2025-11-20)
+- [x] All 16 role YAML files validate against `role_profile.schema.json`
+- [x] All 10 loop YAML files validate against `loop_pattern.schema.json`
+- [x] Cross-reference consistency checks pass
+- [x] Zero validation errors, zero warnings
+
+**26/26 definitions passing validation**
+
+### Phase 5: Runtime Integration (PENDING)
 - [ ] NodeFactory implementation (`lib/runtime/core/node.py`)
 - [ ] GraphFactory implementation (`lib/runtime/core/graph.py`)
 - [ ] SchemaRegistry implementation (`lib/runtime/validation/registry.py`)
 - [ ] CLI implementation (`lib/runtime/cli.py`)
 
-### Phase 5: Full Migration (PENDING)
-- [ ] All 15 roles migrated
-- [ ] All 12 loops migrated
-- [ ] All 8 quality gates migrated
-- [ ] Deprecate `spec/05-behavior/` and `lib/python/`
+### Phase 6: Quality Gates & Transitions (PENDING)
+- [ ] Transition rule definitions for Hook, TU, Gate, View lifecycles
+- [ ] Quality gate validation rule definitions for all 8 bars
+- [ ] Full Production Run meta-loop definition
+- [ ] Gatecheck standalone loop definition
 
 ---
 

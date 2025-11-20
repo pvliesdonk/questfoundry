@@ -1,426 +1,319 @@
-# QuestFoundry Loop Pattern: Lore Deepening
-# Layer 5 Definition — validates against spec/03-schemas/definitions/loop_pattern.schema.json
-
 metadata:
-  version: "0.1.0"
-  schema_ref: "../../03-schemas/definitions/loop_pattern.schema.json"
-  name: "lore_deepening"
-  description: "Turn accepted hooks into cohesive, spoiler-level canon"
-  type: "Refinement"
-  layer0_loop_ref: "../../00-north-star/LOOPS/lore_deepening.md"
-  created: "2025-11-19"
-  updated: "2025-11-19"
+  version: 0.1.0
+  schema_ref: ../../03-schemas/definitions/loop_pattern.schema.json
+  name: lore_deepening
+  description: Turn accepted hooks into cohesive, spoiler-level canon
+  type: Refinement
+  layer0_loop_ref: ../../00-north-star/LOOPS/lore_deepening.md
+  created: '2025-11-19'
+  updated: '2025-11-19'
   timebox_minutes: 90
-
 topology:
-  entry_node: "showrunner_initiate"
-
+  entry_node: showrunner_initiate
   nodes:
-    - id: "showrunner_initiate"
-      role: "Showrunner"
-      description: "Open TU, cluster accepted hooks by theme, confirm Researcher dormancy"
-      next: "lore_frame_questions"
-
-    - id: "lore_frame_questions"
-      role: "Lore Weaver"
-      description: "For each theme/cluster, write 1-3 line canon question"
-      config_override:
-        tools:
-          - "frame_canon_question"
-        prompt_template:
-          variables:
-            - name: "task"
-              value: "Frame precise canon questions for each theme/cluster"
-      next: "lore_draft_answers"
-
-    - id: "lore_draft_answers"
-      role: "Lore Weaver"
-      description: "Draft canon answers: backstory, causal chain, timeline anchors, constraints"
-      config_override:
-        tools:
-          - "draft_canon_answer"
-          - "maintain_knowledge_ledger"
-      next: "lore_check_contradictions"
-
-    - id: "lore_check_contradictions"
-      role: "Lore Weaver"
-      description: "Compare against Cold, identify clashes, propose reconciliations or mark deliberate mysteries"
-      config_override:
-        tools:
-          - "check_contradictions"
-      next: "consult_researcher"
-
-    - id: "consult_researcher"
-      role: "Researcher"
-      description: "Validate real-world claims, attach citations, upgrade/downgrade uncertainty"
-      condition: "researcher_active"
-      config_override:
-        prompt_template:
-          variables:
-            - name: "task"
-              value: "Validate factual claims in canon answers, provide citations or uncertainty posture"
-      next: "lore_downstream_notes"
-
-    - id: "lore_downstream_notes"
-      role: "Lore Weaver"
-      description: "List consequences for gateways, loops, hubs (Plotwright) and beats (Scene Smith)"
-      config_override:
-        tools:
-          - "write_downstream_notes"
-      next: "consult_plotwright"
-
-    - id: "consult_plotwright"
-      role: "Plotwright"
-      description: "Sanity-check topology implications, request/accept constraints on gateways/loops"
-      config_override:
-        prompt_template:
-          variables:
-            - name: "task"
-              value: "Review canon for topology implications: gate reasons, loop differences, structural fit"
-      next: "consult_scene_smith"
-
-    - id: "consult_scene_smith"
-      role: "Scene Smith"
-      description: "Note prose adjustments suggested by new canon (tone, tells, callbacks)"
-      config_override:
-        prompt_template:
-          variables:
-            - name: "task"
-              value: "Review canon for prose implications: foreshadow, callbacks, description updates"
-      next: "consult_style"
-
-    - id: "consult_style"
-      role: "Style Lead"
-      description: "Ensure lore tone/voice fits setting register, flag motif opportunities"
-      config_override:
-        prompt_template:
-          variables:
-            - name: "task"
-              value: "Review canon for tone/voice fit, motif threading opportunities"
-      next: "lore_player_safe_summaries"
-
-    - id: "lore_player_safe_summaries"
-      role: "Lore Weaver"
-      description: "Write bland, non-revealing summaries for Codex Curator"
-      config_override:
-        tools:
-          - "write_player_safe_summary"
-      next: "lore_package_canon_pack"
-
-    - id: "lore_package_canon_pack"
-      role: "Lore Weaver"
-      description: "Package Canon Pack with all components"
-      config_override:
-        prompt_template:
-          variables:
-            - name: "task"
-              value: "Package Canon Pack: title, answer, timeline, entities, constraints, sensitivity, upstream/downstream, notes"
-      next: "gatekeeper_pre_gate"
-
-    - id: "gatekeeper_pre_gate"
-      role: "Gatekeeper"
-      description: "Pre-gate review for Integrity/Reachability/Gateways/Presentation risks"
-      config_override:
-        prompt_template:
-          variables:
-            - name: "check_type"
-              value: "pre_gate"
-            - name: "task"
-              value: "Review canon for Integrity (contradictions), Gateways (consistency), Presentation (spoiler segregation)"
-        tools:
-          - "run_integrity_check"
-          - "run_gateways_check"
-          - "run_presentation_check"
-      next: "showrunner_handoff"
-
-    - id: "showrunner_handoff"
-      role: "Showrunner"
-      description: "Send player-safe summaries to Codex Expansion, topology/prose notes to Story Spark/Scene Smith"
-      config_override:
-        tools:
-          - "close_tu"
-          - "notify_handoffs"
-      next: null  # Exit loop
-
+  - id: showrunner_initiate
+    role: Showrunner
+    description: Open TU, cluster accepted hooks by theme, confirm Researcher dormancy
+    next: lore_frame_questions
+    role_id: Showrunner
+  - id: lore_frame_questions
+    role: Lore Weaver
+    description: For each theme/cluster, write 1-3 line canon question
+    config_override:
+      tools:
+      - frame_canon_question
+      prompt_template:
+        variables:
+        - name: task
+          value: Frame precise canon questions for each theme/cluster
+    next: lore_draft_answers
+    role_id: Lore Weaver
+  - id: lore_draft_answers
+    role: Lore Weaver
+    description: 'Draft canon answers: backstory, causal chain, timeline anchors, constraints'
+    config_override:
+      tools:
+      - draft_canon_answer
+      - maintain_knowledge_ledger
+    next: lore_check_contradictions
+    role_id: Lore Weaver
+  - id: lore_check_contradictions
+    role: Lore Weaver
+    description: Compare against Cold, identify clashes, propose reconciliations or mark deliberate mysteries
+    config_override:
+      tools:
+      - check_contradictions
+    next: consult_researcher
+    role_id: Lore Weaver
+  - id: consult_researcher
+    role: Researcher
+    description: Validate real-world claims, attach citations, upgrade/downgrade uncertainty
+    condition: researcher_active
+    config_override:
+      prompt_template:
+        variables:
+        - name: task
+          value: Validate factual claims in canon answers, provide citations or uncertainty posture
+    next: lore_downstream_notes
+    role_id: Researcher
+  - id: lore_downstream_notes
+    role: Lore Weaver
+    description: List consequences for gateways, loops, hubs (Plotwright) and beats (Scene Smith)
+    config_override:
+      tools:
+      - write_downstream_notes
+    next: consult_plotwright
+    role_id: Lore Weaver
+  - id: consult_plotwright
+    role: Plotwright
+    description: Sanity-check topology implications, request/accept constraints on gateways/loops
+    config_override:
+      prompt_template:
+        variables:
+        - name: task
+          value: 'Review canon for topology implications: gate reasons, loop differences, structural fit'
+    next: consult_scene_smith
+    role_id: Plotwright
+  - id: consult_scene_smith
+    role: Scene Smith
+    description: Note prose adjustments suggested by new canon (tone, tells, callbacks)
+    config_override:
+      prompt_template:
+        variables:
+        - name: task
+          value: 'Review canon for prose implications: foreshadow, callbacks, description updates'
+    next: consult_style
+    role_id: Scene Smith
+  - id: consult_style
+    role: Style Lead
+    description: Ensure lore tone/voice fits setting register, flag motif opportunities
+    config_override:
+      prompt_template:
+        variables:
+        - name: task
+          value: Review canon for tone/voice fit, motif threading opportunities
+    next: lore_player_safe_summaries
+    role_id: Style Lead
+  - id: lore_player_safe_summaries
+    role: Lore Weaver
+    description: Write bland, non-revealing summaries for Codex Curator
+    config_override:
+      tools:
+      - write_player_safe_summary
+    next: lore_package_canon_pack
+    role_id: Lore Weaver
+  - id: lore_package_canon_pack
+    role: Lore Weaver
+    description: Package Canon Pack with all components
+    config_override:
+      prompt_template:
+        variables:
+        - name: task
+          value: 'Package Canon Pack: title, answer, timeline, entities, constraints, sensitivity, upstream/downstream, notes'
+    next: gatekeeper_pre_gate
+    role_id: Lore Weaver
+  - id: gatekeeper_pre_gate
+    role: Gatekeeper
+    description: Pre-gate review for Integrity/Reachability/Gateways/Presentation risks
+    config_override:
+      prompt_template:
+        variables:
+        - name: check_type
+          value: pre_gate
+        - name: task
+          value: Review canon for Integrity (contradictions), Gateways (consistency), Presentation (spoiler segregation)
+      tools:
+      - run_integrity_check
+      - run_gateways_check
+      - run_presentation_check
+    next: showrunner_handoff
+    role_id: Gatekeeper
+  - id: showrunner_handoff
+    role: Showrunner
+    description: Send player-safe summaries to Codex Expansion, topology/prose notes to Story Spark/Scene Smith
+    config_override:
+      tools:
+      - close_tu
+      - notify_handoffs
+    next: null
+    role_id: Showrunner
   edges:
-    - from: "showrunner_initiate"
-      to: "lore_frame_questions"
-      type: "direct"
-      intent: "tu.open"
-
-    - from: "lore_frame_questions"
-      to: "lore_draft_answers"
-      type: "direct"
-      intent: "canon.question.framed"
-
-    - from: "lore_draft_answers"
-      to: "lore_check_contradictions"
-      type: "direct"
-      intent: "canon.answer.drafted"
-
-    - from: "lore_check_contradictions"
-      to: "consult_researcher"
-      type: "conditional"
-      condition: "state.roles.active contains 'Researcher'"
-      intent: "canon.contradiction.checked"
-
-    - from: "lore_check_contradictions"
-      to: "lore_downstream_notes"
-      type: "conditional"
-      condition: "state.roles.active does not contain 'Researcher'"
-      intent: "canon.contradiction.checked"
-
-    - from: "consult_researcher"
-      to: "lore_downstream_notes"
-      type: "direct"
-      intent: "research.validated"
-
-    - from: "lore_downstream_notes"
-      to: "consult_plotwright"
-      type: "direct"
-      intent: "notes.downstream.written"
-
-    - from: "consult_plotwright"
-      to: "consult_scene_smith"
-      type: "direct"
-      intent: "plotwright.feedback"
-
-    - from: "consult_scene_smith"
-      to: "consult_style"
-      type: "direct"
-      intent: "scene_smith.feedback"
-
-    - from: "consult_style"
-      to: "lore_player_safe_summaries"
-      type: "direct"
-      intent: "style.feedback"
-
-    - from: "lore_player_safe_summaries"
-      to: "lore_package_canon_pack"
-      type: "direct"
-      intent: "summary.player_safe.written"
-
-    - from: "lore_package_canon_pack"
-      to: "gatekeeper_pre_gate"
-      type: "direct"
-      intent: "canon.pack.packaged"
-
-    - from: "gatekeeper_pre_gate"
-      to: "showrunner_handoff"
-      type: "direct"
-      intent: "gate.pre_gate_note"
-
+  - source: showrunner_initiate
+    target: lore_frame_questions
+    type: direct
+  - source: lore_frame_questions
+    target: lore_draft_answers
+    type: direct
+  - source: lore_draft_answers
+    target: lore_check_contradictions
+    type: direct
+  - source: lore_check_contradictions
+    target: consult_researcher
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: state.roles.active contains 'Researcher'
+  - source: lore_check_contradictions
+    target: lore_downstream_notes
+    type: conditional
+    condition:
+      evaluator: python_expression
+      expression: state.roles.active does not contain 'Researcher'
+  - source: consult_researcher
+    target: lore_downstream_notes
+    type: direct
+  - source: lore_downstream_notes
+    target: consult_plotwright
+    type: direct
+  - source: consult_plotwright
+    target: consult_scene_smith
+    type: direct
+  - source: consult_scene_smith
+    target: consult_style
+    type: direct
+  - source: consult_style
+    target: lore_player_safe_summaries
+    type: direct
+  - source: lore_player_safe_summaries
+    target: lore_package_canon_pack
+    type: direct
+  - source: lore_package_canon_pack
+    target: gatekeeper_pre_gate
+    type: direct
+  - source: gatekeeper_pre_gate
+    target: showrunner_handoff
+    type: direct
   exit_conditions:
-    - condition: "state.meta.current_tu.status == 'completed'"
-      description: "TU completed: Canon Pack(s) created, summaries written, handoffs issued"
-    - condition: "state.execution.iteration_count >= 2"
-      description: "Max iterations reached (safety limit for canon revision rounds)"
-
+  - name: success
+    condition: state.meta.current_tu.status == 'completed'
+  - name: success
+    condition: state.execution.iteration_count >= 2
 protocol_flow:
   message_sequences:
-    - name: "initiate_lore_deepening"
-      description: "Showrunner opens TU and clusters accepted hooks"
-      steps:
-        - role: "Showrunner"
-          intent: "tu.open"
-          payload_type: "tu"
-          target: null
-          correlation: "tu_id"
-
-    - name: "canonization_flow"
-      description: "Lore Weaver frames questions, drafts answers, checks contradictions"
-      steps:
-        - role: "Lore Weaver"
-          intent: "canon.question.framed"
-          payload_type: "canon_questions"
-          target: null
-          correlation: "tu_id"
-        - role: "Lore Weaver"
-          intent: "canon.answer.drafted"
-          payload_type: "canon_pack"
-          target: null
-          correlation: "tu_id"
-        - role: "Lore Weaver"
-          intent: "canon.contradiction.checked"
-          payload_type: "contradiction_report"
-          target: null
-          correlation: "tu_id"
-
-    - name: "research_validation"
-      description: "Researcher validates factual claims (if active)"
-      steps:
-        - role: "Lore Weaver"
-          intent: "research.request"
-          payload_type: "canon_pack"
-          target: "Researcher"
-          correlation: "tu_id"
-        - role: "Researcher"
-          intent: "research.validated"
-          payload_type: "research_memo"
-          target: "Lore Weaver"
-          correlation: "tu_id"
-
-    - name: "consultation_cascade"
-      description: "Plotwright, Scene Smith, Style provide feedback in sequence"
-      steps:
-        - role: "Plotwright"
-          intent: "plotwright.feedback"
-          payload_type: "topology_notes"
-          target: "Lore Weaver"
-          correlation: "tu_id"
-        - role: "Scene Smith"
-          intent: "scene_smith.feedback"
-          payload_type: "prose_notes"
-          target: "Lore Weaver"
-          correlation: "tu_id"
-        - role: "Style Lead"
-          intent: "style.feedback"
-          payload_type: "style_notes"
-          target: "Lore Weaver"
-          correlation: "tu_id"
-
-    - name: "gatekeeper_pre_gate"
-      description: "Gatekeeper runs pre-gate on canon pack"
-      steps:
-        - role: "Lore Weaver"
-          intent: "gate.pre_gate_request"
-          payload_type: "canon_pack"
-          target: "Gatekeeper"
-          correlation: "tu_id"
-        - role: "Gatekeeper"
-          intent: "gate.pre_gate_note"
-          payload_type: "pre_gate_note"
-          target: "Lore Weaver"
-          correlation: "tu_id"
-
-    - name: "complete_lore_deepening"
-      description: "Showrunner hands off summaries and notes to follow-up loops"
-      steps:
-        - role: "Showrunner"
-          intent: "tu.close"
-          payload_type: "tu"
-          target: null
-          correlation: "tu_id"
-        - role: "Showrunner"
-          intent: "summary.handoff"
-          payload_type: "player_safe_summary"
-          target: "Codex Expansion"
-          correlation: "next_loop"
-        - role: "Showrunner"
-          intent: "notes.handoff"
-          payload_type: "downstream_notes"
-          target: ["Story Spark", "Scene Smith"]
-          correlation: "next_loop"
-
+  - step: 1
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Showrunner opens TU and clusters accepted hooks
+  - step: 2
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Lore Weaver frames questions, drafts answers, checks contradictions
+  - step: 3
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Researcher validates factual claims (if active)
+  - step: 4
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Plotwright, Scene Smith, Style provide feedback in sequence
+  - step: 5
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Gatekeeper runs pre-gate on canon pack
+  - step: 6
+    sender: UNKNOWN
+    receiver: UNKNOWN
+    intent: unknown
+    description: Showrunner hands off summaries and notes to follow-up loops
 gates:
-  gatecheck_required: false  # Lore Deepening pre-gates; full gatecheck happens before merge to Cold
+  gatecheck_required: false
   quality_bars_checked:
-    - bar_name: "Integrity"
-      mode: "advisory"
-      description: "Gatekeeper previews for canon contradictions with prior packs or Cold"
-    - bar_name: "Gateways"
-      mode: "advisory"
-      description: "Gatekeeper checks that diegetic rationales are consistent"
-    - bar_name: "Presentation"
-      mode: "advisory"
-      description: "Gatekeeper verifies player-safe summaries have no spoilers"
-
+  - bar_name: Integrity
+    mode: advisory
+    description: Gatekeeper previews for canon contradictions with prior packs or Cold
+  - bar_name: Gateways
+    mode: advisory
+    description: Gatekeeper checks that diegetic rationales are consistent
+  - bar_name: Presentation
+    mode: advisory
+    description: Gatekeeper verifies player-safe summaries have no spoilers
   gate_points:
-    - node_id: "gatekeeper_pre_gate"
-      type: "advisory"
-      blocking: false
-      on_red: "log_warning"
-      on_yellow: "log_info"
-      on_green: "continue"
-
+  - node_id: gatekeeper_pre_gate
+    type: advisory
+    blocking: false
+    on_red: log_warning
+    on_yellow: log_info
+    on_green: continue
+    bars_checked:
+    - Integrity
+    - Style
+    - Presentation
   pre_gate_requirements:
-    - "Canon questions framed"
-    - "Canon answers drafted with timeline anchors"
-    - "Contradictions checked (reconciled or marked deliberate mystery)"
-    - "Researcher validation complete (if active)"
-    - "Player-safe summaries written"
-
+    artifacts_complete:
+    - Canon questions framed
+    - Canon answers drafted with timeline anchors
+    - Contradictions checked (reconciled or marked deliberate mystery)
+    - Researcher validation complete (if active)
+    - Player-safe summaries written
 traceability:
   tu_lifecycle:
     required: true
-    starts_in: "proposed"
-    must_reach: ["completed"]
+    starts_in: hot-proposed
+    must_reach: cold-merged
     transitions:
-      - from: "proposed"
-        to: "in_progress"
-        trigger: "Showrunner opens TU and clusters hooks by theme"
-      - from: "in_progress"
-        to: "completed"
-        trigger: "Canon Packs packaged, summaries written, handoffs issued"
-
-  produces_cold: false  # Lore Deepening produces Hot canon; Showrunner merges to Cold after full gatecheck
-
+    - from: proposed
+      to: in_progress
+      trigger: Showrunner opens TU and clusters hooks by theme
+    - from: in_progress
+      to: completed
+      trigger: Canon Packs packaged, summaries written, handoffs issued
+  produces_cold: false
   produces_hot:
-    - artifact_type: "canon_pack"
-      description: "Spoiler-level Canon Pack: answers, timeline, invariants/constraints, entity/state deltas"
-    - artifact_type: "player_safe_summary"
-      description: "Short abstracts for Curator (player-safe)"
-    - artifact_type: "downstream_notes"
-      description: "Concrete effects for Plotwright (gate reasons, loop differences), Scene (beats), Style (motifs)"
-    - artifact_type: "factual_appendix"
-      description: "Citations or uncorroborated:<risk> list"
-    - artifact_type: "pre_gate_note"
-      description: "Gatekeeper pre-gate note: anticipated bar risks"
-    - artifact_type: "tu"
-      description: "Completed TU record"
-
-  snapshot_handling: "read_only"  # Lore Deepening reads Cold for contradiction checking, doesn't create snapshots
-
+  - artifact_type: canon_pack
+    description: 'Spoiler-level Canon Pack: answers, timeline, invariants/constraints, entity/state deltas'
+  - artifact_type: player_safe_summary
+    description: Short abstracts for Curator (player-safe)
+  - artifact_type: downstream_notes
+    description: Concrete effects for Plotwright (gate reasons, loop differences), Scene (beats), Style (motifs)
+  - artifact_type: factual_appendix
+    description: Citations or uncorroborated:<risk> list
+  - artifact_type: pre_gate_note
+    description: 'Gatekeeper pre-gate note: anticipated bar risks'
+  - artifact_type: tu
+    description: Completed TU record
+  snapshot_handling:
+    requires_snapshot_ref: true
+    creates_snapshot: false
 roles:
   required:
-    - role: "Showrunner"
-      rationale: "Accountable for entire Lore Deepening loop"
-    - role: "Lore Weaver"
-      rationale: "Responsible for all canon drafting and packaging"
-    - role: "Gatekeeper"
-      rationale: "Consulted for pre-gate review"
-
+  - Showrunner
+  - Lore Weaver
+  - Gatekeeper
   optional:
-    - role: "Researcher"
-      wake_condition: "If active, validates factual claims and provides citations"
-      default_active: false
-    - role: "Plotwright"
-      wake_condition: "Always consulted for topology implications"
-      default_active: true
-    - role: "Scene Smith"
-      wake_condition: "Always consulted for prose adjustment notes"
-      default_active: true
-    - role: "Style Lead"
-      wake_condition: "Always consulted for tone/voice/motif fit"
-      default_active: true
-
+  - Researcher
+  - Plotwright
+  - Scene Smith
+  - Style Lead
   wake_dormant:
-    - role: "Researcher"
-      condition: "High volume of factual hooks with uncertainty or real-world claims"
-      rubric_threshold: 4
-
+  - role_id: Researcher
+    wake_condition: High volume of factual hooks with uncertainty or real-world claims
+    rubric_threshold: 4
+    role_id: Researcher
 context:
-  hot_cold_mode: "hot"
-
+  hot_cold_mode: hot
   required_artifacts:
-    - artifact_type: "hook"
-      source: "hot_sot.hooks"
-      filter: "$.hot_sot.hooks[?@.status == 'accepted']"
-      min_count: 1
-      description: "Accepted hooks requiring canonization"
-
-    - artifact_type: "snapshot"
-      source: "cold_sot.current_snapshot"
-      description: "Current Cold snapshot for contradiction checking"
-
+  - artifact_type: hook
+    source: hot_sot.hooks
+    filter: $.hot_sot.hooks[?@.status == 'accepted']
+    min_count: 1
+    description: Accepted hooks requiring canonization
+    state_key: artifacts.hook
+  - artifact_type: snapshot
+    source: cold_sot.current_snapshot
+    description: Current Cold snapshot for contradiction checking
+    state_key: artifacts.snapshot
   required_state_keys:
-    - "meta.current_tu"
-    - "hot_sot.hooks"
-    - "hot_sot.canon_packs"
-    - "cold_sot.current_snapshot"
-    - "roles.active"
-    - "roles.dormant"
-
+  - meta.current_tu
+  - hot_sot.hooks
+  - hot_sot.canon_packs
+  - cold_sot.current_snapshot
+  - roles.active
+  - roles.dormant
   state_initialization:
     artifacts:
       canon_questions: []
@@ -431,109 +324,94 @@ context:
       downstream_notes: []
       canon_packs: []
       pre_gate_note: null
-
 success_criteria:
   required_artifacts:
-    - artifact_type: "canon_pack"
-      location: "hot_sot"
-      validation: "Contains title, answer, timeline, entities, constraints, sensitivity, upstream/downstream, notes"
-    - artifact_type: "player_safe_summary"
-      location: "hot_sot"
-      validation: "Summaries are bland, non-revealing, player-safe"
-    - artifact_type: "downstream_notes"
-      location: "hot_sot"
-      validation: "Notes issued to Plotwright/Scene/Style as needed"
-
+  - artifact_type: canon_pack
+    location: hot_sot
+    validation: Contains title, answer, timeline, entities, constraints, sensitivity, upstream/downstream, notes
+  - artifact_type: player_safe_summary
+    location: hot_sot
+    validation: Summaries are bland, non-revealing, player-safe
+  - artifact_type: downstream_notes
+    location: hot_sot
+    validation: Notes issued to Plotwright/Scene/Style as needed
   required_state:
-    - condition: "Each accepted hook is canonized, deferred, or rejected with rationale"
-      validation: "All accepted hooks have corresponding canon entries or deferral notes"
-    - condition: "Canon resolves prior contradictions OR marks deliberate mystery with bounds"
-      validation: "Contradiction reports show reconciliation or bounded mystery"
-    - condition: "Topology/prose impacts are enumerated and handed off"
-      validation: "Downstream notes exist for affected roles"
-    - condition: "Spoilers separated from player-safe summaries"
-      validation: "Summaries pass Presentation bar (no spoilers)"
-    - condition: "Factual claims carry citations or explicit risk flags"
-      validation: "Research posture recorded (citations or uncorroborated:<risk>)"
-    - condition: "TU status is completed"
-      validation: "state.meta.current_tu.status == 'completed'"
-
-  bars_must_be_green: []  # No blocking bars; Gatekeeper provides advisory pre-gate only
-
-  tu_final_state: "completed"
-
+  - condition: Each accepted hook is canonized, deferred, or rejected with rationale
+    validation: All accepted hooks have corresponding canon entries or deferral notes
+  - condition: Canon resolves prior contradictions OR marks deliberate mystery with bounds
+    validation: Contradiction reports show reconciliation or bounded mystery
+  - condition: Topology/prose impacts are enumerated and handed off
+    validation: Downstream notes exist for affected roles
+  - condition: Spoilers separated from player-safe summaries
+    validation: Summaries pass Presentation bar (no spoilers)
+  - condition: Factual claims carry citations or explicit risk flags
+    validation: Research posture recorded (citations or uncorroborated:<risk>)
+  - condition: TU status is completed
+    validation: state.meta.current_tu.status == 'completed'
+  bars_must_be_green: []
+  tu_final_state: cold-merged
 execution:
   max_iterations: 2
   default_iteration_limit: 2
-  iteration_strategy: "canon_revision_rounds"
-
-  timeout_seconds: 5400  # 90 minutes
-
+  iteration_strategy: canon_revision_rounds
+  timeout_seconds: 5400
   checkpointing:
     enabled: true
-    frequency: "per_phase"
+    frequency: per_phase
     save_points:
-      - "after_lore_draft_answers"
-      - "after_lore_downstream_notes"
-      - "after_lore_player_safe_summaries"
-      - "after_gatekeeper_pre_gate"
-
+    - after_lore_draft_answers
+    - after_lore_downstream_notes
+    - after_lore_player_safe_summaries
+    - after_gatekeeper_pre_gate
   error_handling:
-    on_node_failure: "log_and_continue"
-    on_timeout: "close_with_partial_canon_packs"
-    on_iteration_limit: "defer_remaining_hooks"
-
+    on_node_failure: log_and_continue
+    on_timeout: close_with_partial_canon_packs
+    on_iteration_limit: defer_remaining_hooks
   human_interaction:
     allowed: true
     trigger_conditions:
-      - "Canon contradictions cannot be reconciled programmatically"
-      - "Researcher posture is high risk and surfaces would mislead"
-      - "Style/PN phrasing risks accidental reveals across multiple sections"
-      - "Topology implications require major restructure"
-
+    - Canon contradictions cannot be reconciled programmatically
+    - Researcher posture is high risk and surfaces would mislead
+    - Style/PN phrasing risks accidental reveals across multiple sections
+    - Topology implications require major restructure
   observability:
-    log_level: "info"
+    log_level: INFO
     trace_messages: true
     record_consultations: true
     metrics:
-      - "hooks_canonized"
-      - "canon_packs_created"
-      - "contradictions_resolved"
-      - "deliberate_mysteries_marked"
-      - "player_safe_summaries_count"
-      - "downstream_notes_count"
-      - "research_validations"
-
-# Success criteria from Layer 0
+    - hooks_canonized
+    - canon_packs_created
+    - contradictions_resolved
+    - deliberate_mysteries_marked
+    - player_safe_summaries_count
+    - downstream_notes_count
+    - research_validations
 success_conditions:
-  - "Each accepted hook is either canonized, deferred with reason, or rejected with rationale"
-  - "Canon resolves prior contradictions OR marks deliberate mystery with bounds"
-  - "Topology/prose impacts are enumerated and handed off"
-  - "Spoilers are separated from player-safe summaries"
-  - "Factual claims carry citations or explicit risk flags"
-
-# Failure modes and remedies from Layer 0
+- Each accepted hook is either canonized, deferred with reason, or rejected with rationale
+- Canon resolves prior contradictions OR marks deliberate mystery with bounds
+- Topology/prose impacts are enumerated and handed off
+- Spoilers are separated from player-safe summaries
+- Factual claims carry citations or explicit risk flags
 failure_modes:
-  - symptom: "Canon sprawl (too many moving parts)"
-    remedy: "Split into smaller themed entries; stage merges"
-  - symptom: "Hidden spoiler leak to codex"
-    remedy: "Move detail back to canon notes; codex receives summary only"
-  - symptom: "Topology unacknowledged"
-    remedy: "Route a Story Spark mini to adjust gateways/loops"
-  - symptom: "Research dormant but high-risk claims"
-    remedy: "Keep neutral PN/Binder wording; schedule research revisit TU"
-
-# Handoffs from Layer 0
+- symptom: Canon sprawl (too many moving parts)
+  remedy: Split into smaller themed entries; stage merges
+- symptom: Hidden spoiler leak to codex
+  remedy: Move detail back to canon notes; codex receives summary only
+- symptom: Topology unacknowledged
+  remedy: Route a Story Spark mini to adjust gateways/loops
+- symptom: Research dormant but high-risk claims
+  remedy: Keep neutral PN/Binder wording; schedule research revisit TU
 handoffs:
-  - target: "Codex Expansion"
-    deliverables:
-      - "Player-safe summaries (abstracts for player-facing entries)"
-  - target: "Story Spark"
-    deliverables:
-      - "Topology notes (gateway reasons, loop differences, hub pressure)"
-  - target: "Scene Smith"
-    deliverables:
-      - "Prose notes (foreshadow, callbacks, description updates, tells)"
-  - target: "Gatecheck"
-    deliverables:
-      - "Canon Packs ready for full gatecheck before merge to Cold"
+- target: Codex Expansion
+  deliverables:
+  - Player-safe summaries (abstracts for player-facing entries)
+- target: Story Spark
+  deliverables:
+  - Topology notes (gateway reasons, loop differences, hub pressure)
+- target: Scene Smith
+  deliverables:
+  - Prose notes (foreshadow, callbacks, description updates, tells)
+- target: Gatecheck
+  deliverables:
+  - Canon Packs ready for full gatecheck before merge to Cold
+id: lore_deepening

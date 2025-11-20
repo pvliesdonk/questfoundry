@@ -1,158 +1,148 @@
-# QuestFoundry Role Profile: Audio Producer
-# Layer 5 Definition — validates against spec/03-schemas/definitions/role_profile.schema.json
-
 metadata:
-  version: "0.1.0"
-  schema_ref: "../../03-schemas/definitions/role_profile.schema.json"
-  name: "audio_producer"
-  description: "Production executor: renders Audio Plans into sound assets with reproducibility logging (DAW/synthesis/library orchestration)"
-  layer0_guide_ref: "../../01-roles/charters/audio_producer.md"
-  created: "2025-11-19"
-  updated: "2025-11-19"
-
+  version: 0.1.0
+  schema_ref: ../../03-schemas/definitions/role_profile.schema.json
+  name: audio_producer
+  description: 'Production executor: renders Audio Plans into sound assets with reproducibility logging (DAW/synthesis/library
+    orchestration)'
+  layer0_guide_ref: ../../01-roles/charters/audio_producer.md
+  created: '2025-11-19'
+  updated: '2025-11-19'
 identity:
-  name: "Audio Producer"
-  abbreviation: "AuP"
-  canonical_name: "Audio Producer"
+  name: Audio Producer
+  abbreviation: AUP
+  canonical_name: Audio Producer
   aliases:
-    - "Sound Producer"
-    - "Audio Asset Generator"
-  mission: >
-    Execute Audio Plans with audio generation/synthesis tools. Validate completeness, construct
-    audio from cue descriptions, call synthesis/library APIs, validate output quality, package
-    audio + reproducibility log. Thin LLM for orchestration; heavy tool integration.
-  dormancy_policy: "default_dormant"
-  wake_conditions:
-    - "Audio Director completes Audio Plans and requests production"
-    - "Audio Pass TU moves from plan-only to full production"
-  role_type: "production_executor"
+  - Sound Producer
+  - Audio Asset Generator
+  mission: 'Execute Audio Plans with audio generation/synthesis tools. Validate completeness, construct audio from cue descriptions,
+    call synthesis/library APIs, validate output quality, package audio + reproducibility log. Thin LLM for orchestration;
+    heavy tool integration.
 
+    '
+  dormancy_policy: optional
+  wake_conditions:
+  - Audio Director completes Audio Plans and requests production
+  - Audio Pass TU moves from plan-only to full production
+  role_type: production_executor
+  charter_ref: spec/01-roles/charters/audio_producer.md
 responsibilities:
   scope:
     in_scope:
-      - "Execute Audio Plans: validate completeness, source/synthesize sounds, mix/process"
-      - "Package outputs: audio files + reproducibility logs (DAW session, plugins, settings)"
-      - "Quality validation: check output matches cue description and safety requirements"
-      - "Retry logic: handle synthesis/library failures"
-
+    - 'Execute Audio Plans: validate completeness, source/synthesize sounds, mix/process'
+    - 'Package outputs: audio files + reproducibility logs (DAW session, plugins, settings)'
+    - 'Quality validation: check output matches cue description and safety requirements'
+    - 'Retry logic: handle synthesis/library failures'
     out_of_scope:
-      - "Deciding what to hear (Audio Director's lane)"
-      - "Writing text equivalents or safety notes (Audio Director provides)"
-      - "Changing Audio Plan cue description or placement"
-
+    - Deciding what to hear (Audio Director's lane)
+    - Writing text equivalents or safety notes (Audio Director provides)
+    - Changing Audio Plan cue description or placement
   authority:
     may_decide_alone:
-      - "Technical parameter choices within Audio Plan constraints"
-      - "Sound library source selection"
-      - "Output format selection (WAV, MP3, OGG)"
-
+    - Technical parameter choices within Audio Plan constraints
+    - Sound library source selection
+    - Output format selection (WAV, MP3, OGG)
     must_consult:
-      - "Audio Director if output doesn't match intent after multiple attempts"
-
+    - Audio Director if output doesn't match intent after multiple attempts
     must_defer:
-      - "Audio Plan interpretation to Audio Director"
-      - "Quality bar outcomes to Gatekeeper"
-
+    - Audio Plan interpretation to Audio Director
+    - Quality bar outcomes to Gatekeeper
   inputs:
     hot:
-      - "audio_plans (from Audio Director)"
-
+    - audio_plans (from Audio Director)
   outputs:
     hot:
-      - name: "rendered_audio"
-        description: "Audio files matching Audio Plan specifications"
-        format: "binary (WAV/MP3/OGG)"
-
-      - name: "reproducibility_logs"
-        description: "DAW session info, plugin list/versions, key settings, sample rate/bit depth"
-        format: "structured_yaml"
-
+    - name: rendered_audio
+      description: Audio files matching Audio Plan specifications
+      format: binary (WAV/MP3/OGG)
+    - name: reproducibility_logs
+      description: DAW session info, plugin list/versions, key settings, sample rate/bit depth
+      format: structured_yaml
   tools:
-    - name: "audio_synthesis"
-      enabled: true
-      tool_type: "external_api"
-      required: true
-      config:
-        provider: "elevenlabs"
-      api_spec:
-        provider: "elevenlabs"
-        endpoint: "https://api.elevenlabs.io/v1/sound-generation"
-        retry_policy:
-          max_retries: 3
-          backoff_strategy: "exponential"
-          backoff_base_ms: 2000
-        timeout_ms: 30000
-        quality_thresholds:
-          - check: "file_exists"
-            requirement: "output_path"
-            on_failure: "fail"
-          - check: "audio_duration"
-            requirement: "matches_audio_plan"
-            on_failure: "warn"
-
-    - name: "sfx_library"
-      enabled: true
-      tool_type: "file_system"
-      description: "Search and retrieve sounds from SFX library"
-
-    - name: "validate_audio_plan"
-      enabled: true
-      tool_type: "internal"
-      description: "Validate Audio Plan has required fields for production"
-
-    - name: "log_reproducibility"
-      enabled: true
-      tool_type: "internal"
-      description: "Capture all parameters for reproducibility"
-
+  - name: audio_synthesis
+    enabled: true
+    tool_type: external_api
+    required: true
+    config:
+      provider: elevenlabs
+    api_spec:
+      provider: elevenlabs
+      endpoint: https://api.elevenlabs.io/v1/sound-generation
+      retry_policy:
+        max_retries: 3
+        backoff_strategy: exponential
+        backoff_base_ms: 2000
+      timeout_ms: 30000
+      quality_thresholds:
+      - check: file_exists
+        requirement: output_path
+        on_failure: fail
+      - check: audio_duration
+        requirement: matches_audio_plan
+        on_failure: warn
+  - name: sfx_library
+    enabled: true
+    tool_type: file_system
+    description: Search and retrieve sounds from SFX library
+  - name: validate_audio_plan
+    enabled: true
+    tool_type: internal
+    description: Validate Audio Plan has required fields for production
+  - name: log_reproducibility
+    enabled: true
+    tool_type: internal
+    description: Capture all parameters for reproducibility
 participation:
   loops:
     responsible:
-      - loop: "Audio Pass"
-        role: "responsible"
-        description: "Produce Audio Plans when not in plan-only mode"
-
+    - loop: Audio Pass
+      role: responsible
+      description: Produce Audio Plans when not in plan-only mode
   definition_of_done:
-    - "Audio rendered matching Audio Plan duration and intensity"
-    - "Reproducibility log complete with DAW/session info, plugins, settings"
-    - "Output file properly named and formatted"
-    - "Safety checks passed (no excessive loudness or harsh transients)"
-
+  - Audio rendered matching Audio Plan duration and intensity
+  - Reproducibility log complete with DAW/session info, plugins, settings
+  - Output file properly named and formatted
+  - Safety checks passed (no excessive loudness or harsh transients)
 constraints:
   safety:
     can_see_hot: true
     can_see_spoilers: false
     pn_safe: false
-    rationale: "Audio Producer reads Audio Plans (Hot) but produces player-safe audio per Audio Director specifications"
-
+    rationale: Audio Producer reads Audio Plans (Hot) but produces player-safe audio per Audio Director specifications
   quality_bars:
-    - bar_name: "Determinism"
-      rationale: "When promised, must log all parameters for reproducibility"
-
-    - bar_name: "Accessibility"
-      rationale: "Must honor safety notes (loudness limits, startle prevention)"
-
+  - bar_name: Determinism
+    rationale: When promised, must log all parameters for reproducibility
+  - bar_name: Accessibility
+    rationale: Must honor safety notes (loudness limits, startle prevention)
 service_config:
-  execution_mode: "synchronous"
+  execution_mode: synchronous
   default_timeout_ms: 30000
   quality_validation_enabled: true
   determinism_logging_enabled: true
-
 llm_config:
-  model: "haiku"
+  model: haiku
   temperature: 0.1
-  reasoning_effort: "low"
-  rationale: "Minimal LLM reasoning; primarily for validation, source selection, and quality check coordination"
-
+  reasoning_effort: low
+  rationale: Minimal LLM reasoning; primarily for validation, source selection, and quality check coordination
 normative_references:
   layer0:
-    - "../../00-north-star/QUALITY_BARS.md"
-    - "../../00-north-star/ACCESSIBILITY_AND_CONTENT_NOTES.md"
-
+  - ../../00-north-star/QUALITY_BARS.md
+  - ../../00-north-star/ACCESSIBILITY_AND_CONTENT_NOTES.md
   layer1:
-    - "../../01-roles/charters/audio_producer.md"
-
+  - ../../01-roles/charters/audio_producer.md
 lineage:
-  created_by: "tu-studio-spec-migration"
-  created: "2025-11-19"
-  updated: "2025-11-19"
+  created_by: tu-studio-spec-migration
+  created: '2025-11-19'
+  updated: '2025-11-19'
+id: audio_producer
+interface:
+  inputs: []
+  outputs: []
+behavior:
+  prompt:
+    template: file://../templates/audio_producer_prompt.j2
+    template_engine: jinja2
+  tools: []
+protocol:
+  intents:
+    can_send: []
+    can_receive: []

@@ -1,609 +1,749 @@
-# QuestFoundry Role Profile: Gatekeeper
-# Layer 5 Definition — validates against spec/03-schemas/definitions/role_profile.schema.json
-
 metadata:
-  version: "0.1.0"
-  schema_ref: "../../03-schemas/definitions/role_profile.schema.json"
-  name: "gatekeeper"
-  description: "Quality bar enforcer; runs pre-gate and gatecheck validations; blocks unsafe merges"
-  layer1_charter_ref: "../../01-roles/charters/gatekeeper.md"
-  layer1_brief_ref: "../../01-roles/briefs/gatekeeper.md"
-  created: "2025-11-19"
-  updated: "2025-11-19"
-
+  version: 0.1.0
+  schema_ref: ../../03-schemas/definitions/role_profile.schema.json
+  name: gatekeeper
+  description: Quality bar enforcer; runs pre-gate and gatecheck validations; blocks unsafe merges
+  layer1_charter_ref: ../../01-roles/charters/gatekeeper.md
+  layer1_brief_ref: ../../01-roles/briefs/gatekeeper.md
+  created: '2025-11-19'
+  updated: '2025-11-19'
 identity:
-  name: "Gatekeeper"
-  abbreviation: "GK"
-  canonical_name: "Gatekeeper"
+  name: Gatekeeper
+  abbreviation: GK
+  canonical_name: Gatekeeper
   aliases:
-    - "Standards Lead"
-  mission: >
-    Enforce the Quality Bars with lightweight checks that protect players
-    and preserve creative flow. Block merges and views on failures; suggest concrete fixes.
-  normative_references:
-    - path: "../../00-north-star/QUALITY_BARS.md"
-      description: "Quality Bars Layer 0 (all 8 bars)"
-    - path: "../../00-north-star/PN_PRINCIPLES.md"
-      description: "Player-Narrator Principles"
-    - path: "../../00-north-star/SPOILER_HYGIENE.md"
-      description: "Spoiler Hygiene Policy"
-    - path: "../../00-north-star/ACCESSIBILITY_AND_CONTENT_NOTES.md"
-      description: "Accessibility Standards"
-    - path: "../../00-north-star/SOURCES_OF_TRUTH.md"
-      description: "Hot/Cold SoT Architecture"
-    - path: "../../00-north-star/TRACEABILITY.md"
-      description: "TU/Snapshot/View Traceability"
-  dormancy_policy: "always_on"
-  wake_conditions: []  # Never sleeps; intensity may vary
+  - Standards Lead
+  mission: 'Enforce the Quality Bars with lightweight checks that protect players and preserve creative flow. Block merges
+    and views on failures; suggest concrete fixes.
 
+    '
+  normative_references:
+  - path: ../../00-north-star/QUALITY_BARS.md
+    description: Quality Bars Layer 0 (all 8 bars)
+  - path: ../../00-north-star/PN_PRINCIPLES.md
+    description: Player-Narrator Principles
+  - path: ../../00-north-star/SPOILER_HYGIENE.md
+    description: Spoiler Hygiene Policy
+  - path: ../../00-north-star/ACCESSIBILITY_AND_CONTENT_NOTES.md
+    description: Accessibility Standards
+  - path: ../../00-north-star/SOURCES_OF_TRUTH.md
+    description: Hot/Cold SoT Architecture
+  - path: ../../00-north-star/TRACEABILITY.md
+    description: TU/Snapshot/View Traceability
+  dormancy_policy: always_on
+  wake_conditions: []
+  charter_ref: spec/01-roles/charters/gatekeeper.md
 interface:
   inputs:
-    - artifact_type: "tu"
-      state_keys:
-        - "meta.current_tu"
-      source: "hot"
-      required: true
-      description: "Current TU deliverables for the slice to be checked"
-
-    - artifact_type: "snapshot"
-      state_keys:
-        - "cold_sot.current_snapshot"
-      source: "cold"
-      required: true
-      description: "Prior Cold snapshot for baseline comparison"
-
-    - artifact_type: "manuscript"
-      state_keys:
-        - "hot_sot.drafts"
-        - "cold_sot.current_snapshot.manifest.cold_manifest.sections"
-      source: "both"
-      required: false
-      filter: "Filter to changed sections in current TU"
-      description: "Manuscript sections (Hot drafts or Cold snapshot) to check"
-
-    - artifact_type: "codex"
-      state_keys:
-        - "hot_sot.codex_entries_hot"
-        - "cold_sot.codex_entries"
-      source: "both"
-      required: false
-      description: "Codex entries to validate anchors and links"
-
-    - artifact_type: "view"
-      state_keys:
-        - "artifacts.view_draft"
-      source: "hot"
-      required: false
-      description: "View draft for export spot-check (when Binding Run)"
-
-    - artifact_type: "canon_pack"
-      state_keys:
-        - "hot_sot.canon_packs"
-      source: "hot"
-      required: false
-      filter: "$.hot_sot.canon_packs[?@.status == 'gatecheck']"
-      description: "Canon packs at gatecheck stage"
-
-    - artifact_type: "quality_bars_layer0"
-      state_keys:
-        - "validation.quality_bars_definitions"
-      source: "static"
-      required: true
-      description: "Layer 0 quality bar definitions loaded from spec/00-north-star/QUALITY_BARS.md"
-
+  - artifact_type: tu
+    state_keys:
+    - meta.current_tu
+    source: hot
+    required: true
+    description: Current TU deliverables for the slice to be checked
+  - artifact_type: snapshot
+    state_keys:
+    - cold_sot.current_snapshot
+    source: cold
+    required: true
+    description: Prior Cold snapshot for baseline comparison
+  - artifact_type: manuscript
+    state_keys:
+    - hot_sot.drafts
+    - cold_sot.current_snapshot.manifest.cold_manifest.sections
+    source: both
+    required: false
+    filter: Filter to changed sections in current TU
+    description: Manuscript sections (Hot drafts or Cold snapshot) to check
+  - artifact_type: codex
+    state_keys:
+    - hot_sot.codex_entries_hot
+    - cold_sot.codex_entries
+    source: both
+    required: false
+    description: Codex entries to validate anchors and links
+  - artifact_type: view
+    state_keys:
+    - artifacts.view_draft
+    source: hot
+    required: false
+    description: View draft for export spot-check (when Binding Run)
+  - artifact_type: canon_pack
+    state_keys:
+    - hot_sot.canon_packs
+    source: hot
+    required: false
+    filter: $.hot_sot.canon_packs[?@.status == 'gatecheck']
+    description: Canon packs at gatecheck stage
+  - artifact_type: quality_bars_layer0
+    state_keys:
+    - validation.quality_bars_definitions
+    source: static
+    required: true
+    description: Layer 0 quality bar definitions loaded from spec/00-north-star/QUALITY_BARS.md
   outputs:
-    - artifact_type: "pre_gate_note"
-      state_keys:
-        - "gates.pre_gate_notes"
-      destination: "hot"
-      conditions:
-        - "When Showrunner or role requests pre-gate feedback before full work"
-      description: "Fast feedback (5-10 min): likely failures and quick wins"
-
-    - artifact_type: "gatecheck"
-      state_keys:
-        - "gates.current_gatecheck"
-        - "gates.bars_status"
-      destination: "hot"
-      conditions:
-        - "When TU deliverables are ready for full gatecheck"
-      description: "Bar-by-bar report: pass/fail + specific, minimal fixes"
-
-    - artifact_type: "export_spot_check"
-      state_keys:
-        - "gates.export_checks"
-      destination: "hot"
-      conditions:
-        - "When Binder cuts a View for export"
-      description: "View export validation: front matter, navigation, labels, accessibility"
-
+  - artifact_type: pre_gate_note
+    state_keys:
+    - gates.pre_gate_notes
+    destination: hot
+    conditions:
+    - When Showrunner or role requests pre-gate feedback before full work
+    description: 'Fast feedback (5-10 min): likely failures and quick wins'
+    state_key: artifacts.pre_gate_note
+  - artifact_type: gatecheck
+    state_keys:
+    - gates.current_gatecheck
+    - gates.bars_status
+    destination: hot
+    conditions:
+    - When TU deliverables are ready for full gatecheck
+    description: 'Bar-by-bar report: pass/fail + specific, minimal fixes'
+    state_key: artifacts.gatecheck
+  - artifact_type: export_spot_check
+    state_keys:
+    - gates.export_checks
+    destination: hot
+    conditions:
+    - When Binder cuts a View for export
+    description: 'View export validation: front matter, navigation, labels, accessibility'
+    state_key: artifacts.export_spot_check
 behavior:
   prompt_template:
-    path: "../templates/gatekeeper_prompt.j2"
-    engine: "jinja2"
+    path: ../templates/gatekeeper_prompt.j2
+    engine: jinja2
     variables:
-      - name: "check_type"
-        description: "Type of check to run (pre_gate, gatecheck, export_spot_check)"
-        required: true
-      - name: "tu_deliverables"
-        source: "state.meta.current_tu.deliverables"
-        required: true
-      - name: "changed_sections"
-        source: "state.artifacts.changed_sections"
-        required: false
-        description: "List of sections/files changed in this TU"
-      - name: "quality_bars_definitions"
-        source: "state.validation.quality_bars_definitions"
-        required: true
-      - name: "last_snapshot"
-        source: "state.cold_sot.current_snapshot"
-        required: true
-      - name: "view_draft"
-        source: "state.artifacts.view_draft"
-        required: false
-
+    - name: check_type
+      description: Type of check to run (pre_gate, gatecheck, export_spot_check)
+      required: true
+    - name: tu_deliverables
+      source: state.meta.current_tu.deliverables
+      required: true
+    - name: changed_sections
+      source: state.artifacts.changed_sections
+      required: false
+      description: List of sections/files changed in this TU
+    - name: quality_bars_definitions
+      source: state.validation.quality_bars_definitions
+      required: true
+    - name: last_snapshot
+      source: state.cold_sot.current_snapshot
+      required: true
+    - name: view_draft
+      source: state.artifacts.view_draft
+      required: false
   tools:
-    - name: "run_integrity_check"
-      description: "Check Integrity bar: anchors/links resolve, no orphans, no contradictions"
-      parameters:
-        type: "object"
-        required: ["scope"]
-        properties:
-          scope:
-            type: "array"
-            items:
-              type: "string"
-            description: "Sections/entries to check"
-          check_anchors:
-            type: "boolean"
-            default: true
-          check_links:
-            type: "boolean"
-            default: true
-          check_contradictions:
-            type: "boolean"
-            default: true
-
-    - name: "run_reachability_check"
-      description: "Check Reachability bar: no dead-ends, all choices lead somewhere"
-      parameters:
-        type: "object"
-        required: ["topology_slice"]
-        properties:
-          topology_slice:
-            type: "string"
-            description: "Hub/loop slice to validate"
-
-    - name: "run_nonlinearity_check"
-      description: "Check Nonlinearity bar: meaningful fan-out, loops return with difference"
-      parameters:
-        type: "object"
-        required: ["topology_slice"]
-        properties:
-          topology_slice:
-            type: "string"
-
-    - name: "run_gateways_check"
-      description: "Check Gateways bar: diegetic phrasing, fair qualification paths"
-      parameters:
-        type: "object"
-        required: ["gateway_ids"]
-        properties:
-          gateway_ids:
-            type: "array"
-            items:
-              type: "string"
-
-    - name: "run_style_check"
-      description: "Check Style bar: register/motifs consistent, choice labels contrastive"
-      parameters:
-        type: "object"
-        required: ["sections"]
-        properties:
-          sections:
-            type: "array"
-            items:
-              type: "string"
-          check_contrastive_choices:
-            type: "boolean"
-            default: true
-          check_register:
-            type: "boolean"
-            default: true
-
-    - name: "run_presentation_check"
-      description: "Check Presentation bar: spoiler-safe, no internals, accessibility met"
-      parameters:
-        type: "object"
-        required: ["surfaces"]
-        properties:
-          surfaces:
-            type: "array"
-            items:
-              type: "string"
-          check_spoiler_hygiene:
-            type: "boolean"
-            default: true
-          check_meta_language:
-            type: "boolean"
-            default: true
-          check_accessibility:
-            type: "boolean"
-            default: true
-
-    - name: "run_determinism_check"
-      description: "Check Determinism bar: logs exist off-surface, surfaces clean"
-      parameters:
-        type: "object"
-        required: ["artifact_types"]
-        properties:
-          artifact_types:
-            type: "array"
-            items:
-              type: "string"
-              enum: ["art", "audio"]
-
-    - name: "report_gatecheck"
-      description: "Compile and report gatecheck results"
-      parameters:
-        type: "object"
-        required: ["bars_status", "overall_status"]
-        properties:
-          bars_status:
-            type: "object"
-            properties:
-              integrity:
-                $ref: "#/definitions/bar_status"
-              reachability:
-                $ref: "#/definitions/bar_status"
-              nonlinearity:
-                $ref: "#/definitions/bar_status"
-              gateways:
-                $ref: "#/definitions/bar_status"
-              style:
-                $ref: "#/definitions/bar_status"
-              determinism:
-                $ref: "#/definitions/bar_status"
-              presentation:
-                $ref: "#/definitions/bar_status"
-              accessibility:
-                $ref: "#/definitions/bar_status"
-          overall_status:
-            type: "string"
-            enum: ["merge-safe", "blocked-red", "blocked-yellow"]
-          fixes_required:
-            type: "array"
-            items:
-              type: "object"
+  - name: run_integrity_check
+    description: 'Check Integrity bar: anchors/links resolve, no orphans, no contradictions'
+    parameters:
+      type: object
+      required:
+      - scope
+      properties:
+        scope:
+          type: array
+          items:
+            type: string
+          description: Sections/entries to check
+        check_anchors:
+          type: boolean
+          default: true
+        check_links:
+          type: boolean
+          default: true
+        check_contradictions:
+          type: boolean
+          default: true
+    enabled: true
+  - name: run_reachability_check
+    description: 'Check Reachability bar: no dead-ends, all choices lead somewhere'
+    parameters:
+      type: object
+      required:
+      - topology_slice
+      properties:
+        topology_slice:
+          type: string
+          description: Hub/loop slice to validate
+    enabled: true
+  - name: run_nonlinearity_check
+    description: 'Check Nonlinearity bar: meaningful fan-out, loops return with difference'
+    parameters:
+      type: object
+      required:
+      - topology_slice
+      properties:
+        topology_slice:
+          type: string
+    enabled: true
+  - name: run_gateways_check
+    description: 'Check Gateways bar: diegetic phrasing, fair qualification paths'
+    parameters:
+      type: object
+      required:
+      - gateway_ids
+      properties:
+        gateway_ids:
+          type: array
+          items:
+            type: string
+    enabled: true
+  - name: run_style_check
+    description: 'Check Style bar: register/motifs consistent, choice labels contrastive'
+    parameters:
+      type: object
+      required:
+      - sections
+      properties:
+        sections:
+          type: array
+          items:
+            type: string
+        check_contrastive_choices:
+          type: boolean
+          default: true
+        check_register:
+          type: boolean
+          default: true
+    enabled: true
+  - name: run_presentation_check
+    description: 'Check Presentation bar: spoiler-safe, no internals, accessibility met'
+    parameters:
+      type: object
+      required:
+      - surfaces
+      properties:
+        surfaces:
+          type: array
+          items:
+            type: string
+        check_spoiler_hygiene:
+          type: boolean
+          default: true
+        check_meta_language:
+          type: boolean
+          default: true
+        check_accessibility:
+          type: boolean
+          default: true
+    enabled: true
+  - name: run_determinism_check
+    description: 'Check Determinism bar: logs exist off-surface, surfaces clean'
+    parameters:
+      type: object
+      required:
+      - artifact_types
+      properties:
+        artifact_types:
+          type: array
+          items:
+            type: string
+            enum:
+            - art
+            - audio
+    enabled: true
+  - name: report_gatecheck
+    description: Compile and report gatecheck results
+    parameters:
+      type: object
+      required:
+      - bars_status
+      - overall_status
+      properties:
+        bars_status:
+          type: object
+          properties:
+            integrity:
+              type: object
+              required:
+              - status
               properties:
-                bar:
-                  type: "string"
-                issue:
-                  type: "string"
-                fix:
-                  type: "string"
-                  description: "Specific, minimal fix"
-                owner_role:
-                  type: "string"
-
-    definitions:
-      bar_status:
-        type: "object"
-        required: ["status"]
-        properties:
-          status:
-            type: "string"
-            enum: ["green", "yellow", "red", "not_checked"]
-          issues:
-            type: "array"
-            items:
-              type: "string"
-          fixes:
-            type: "array"
-            items:
-              type: "string"
-
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            reachability:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            nonlinearity:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            gateways:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            style:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            determinism:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            presentation:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+            accessibility:
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - green
+                  - yellow
+                  - red
+                  - not_checked
+                issues:
+                  type: array
+                  items:
+                    type: string
+                fixes:
+                  type: array
+                  items:
+                    type: string
+        overall_status:
+          type: string
+          enum:
+          - merge-safe
+          - blocked-red
+          - blocked-yellow
+        fixes_required:
+          type: array
+          items:
+            type: object
+            properties:
+              bar:
+                type: string
+              issue:
+                type: string
+              fix:
+                type: string
+                description: Specific, minimal fix
+              owner_role:
+                type: string
+    enabled: true
   structured_output:
     schema:
-      type: "object"
+      type: object
       properties:
         check_type:
-          type: "string"
-          enum: ["pre_gate", "gatecheck", "export_spot_check"]
+          type: string
+          enum:
+          - pre_gate
+          - gatecheck
+          - export_spot_check
         slice:
-          type: "string"
+          type: string
         bars_checked:
-          type: "array"
+          type: array
           items:
-            type: "string"
+            type: string
         overall_status:
-          type: "string"
-          enum: ["merge-safe", "blocked-red", "blocked-yellow", "advisory"]
+          type: string
+          enum:
+          - merge-safe
+          - blocked-red
+          - blocked-yellow
+          - advisory
         bars_status:
-          type: "object"
+          type: object
         fixes_count:
-          type: "integer"
+          type: integer
         next_action:
-          type: "string"
-          description: "What owners should do next"
-
+          type: string
+          description: What owners should do next
   context_injection:
     quality_bars:
-      - bar_name: "Integrity"
-        focus: "Anchors/links resolve, no orphans, no contradictions in canon"
-        checks:
-          - "All cross-references resolve (manuscript↔codex↔captions)"
-          - "No orphan sections or entries"
-          - "Canon consistency within slice"
-
-      - bar_name: "Reachability"
-        focus: "No dead-ends, all choices lead somewhere, clean routes exist"
-        checks:
-          - "Every choice has a destination"
-          - "No infinite loops without exit"
-          - "At least one route to progress from every hub"
-
-      - bar_name: "Nonlinearity"
-        focus: "Meaningful fan-out, loops return with difference, choices matter"
-        checks:
-          - "Choices are not functionally equivalent (different consequences)"
-          - "Loops alter affordances/context/stakes on return"
-          - "Hubs have at least 2 meaningfully different paths"
-
-      - bar_name: "Gateways"
-        focus: "Diegetic phrasing, fair qualification, no meta gates"
-        checks:
-          - "Gate checks are expressed as world facts (badge, knowledge, reputation)"
-          - "No meta language ('Option locked: missing CODEWORD')"
-          - "At least one discoverable qualification path exists"
-
-      - bar_name: "Style"
-        focus: "Register/motifs consistent, choice labels contrastive"
-        checks:
-          - "Choice labels use different verbs/objects (not near-synonyms)"
-          - "Register matches Style Addendum patterns"
-          - "Voice consistent within slice"
-
-      - bar_name: "Determinism"
-        focus: "Repro logs exist off-surface when promised, surfaces clean"
-        checks:
-          - "Asset generation logs (seeds, models, DAW) exist off-surface"
-          - "No technique details on player surfaces (captions, alt, prose)"
-
-      - bar_name: "Presentation"
-        focus: "Spoiler-safe, no internals, diegetic gates, PN boundaries"
-        checks:
-          - "No spoilers or reveals on surfaces"
-          - "No internal labels (codewords, flag IDs, technique)"
-          - "Gate phrasing is diegetic"
-          - "PN boundaries respected"
-
-      - bar_name: "Accessibility"
-        focus: "Headings, descriptive links, alt/captions present, readability"
-        checks:
-          - "Headings present and structured"
-          - "Links are descriptive (not 'click here')"
-          - "Alt text present where images exist"
-          - "Captions present where audio exists"
-          - "Sentences readable (not overly complex)"
-
+    - bar_name: Integrity
+      focus: Anchors/links resolve, no orphans, no contradictions in canon
+      checks:
+      - All cross-references resolve (manuscript↔codex↔captions)
+      - No orphan sections or entries
+      - Canon consistency within slice
+    - bar_name: Reachability
+      focus: No dead-ends, all choices lead somewhere, clean routes exist
+      checks:
+      - Every choice has a destination
+      - No infinite loops without exit
+      - At least one route to progress from every hub
+    - bar_name: Nonlinearity
+      focus: Meaningful fan-out, loops return with difference, choices matter
+      checks:
+      - Choices are not functionally equivalent (different consequences)
+      - Loops alter affordances/context/stakes on return
+      - Hubs have at least 2 meaningfully different paths
+    - bar_name: Gateways
+      focus: Diegetic phrasing, fair qualification, no meta gates
+      checks:
+      - Gate checks are expressed as world facts (badge, knowledge, reputation)
+      - 'No meta language (''Option locked: missing CODEWORD'')'
+      - At least one discoverable qualification path exists
+    - bar_name: Style
+      focus: Register/motifs consistent, choice labels contrastive
+      checks:
+      - Choice labels use different verbs/objects (not near-synonyms)
+      - Register matches Style Addendum patterns
+      - Voice consistent within slice
+    - bar_name: Determinism
+      focus: Repro logs exist off-surface when promised, surfaces clean
+      checks:
+      - Asset generation logs (seeds, models, DAW) exist off-surface
+      - No technique details on player surfaces (captions, alt, prose)
+    - bar_name: Presentation
+      focus: Spoiler-safe, no internals, diegetic gates, PN boundaries
+      checks:
+      - No spoilers or reveals on surfaces
+      - No internal labels (codewords, flag IDs, technique)
+      - Gate phrasing is diegetic
+      - PN boundaries respected
+    - bar_name: Accessibility
+      focus: Headings, descriptive links, alt/captions present, readability
+      checks:
+      - Headings present and structured
+      - Links are descriptive (not 'click here')
+      - Alt text present where images exist
+      - Captions present where audio exists
+      - Sentences readable (not overly complex)
     expertise:
-      - "Run lightweight, bar-by-bar checks (not boiling the ocean)"
-      - "Block merges/views only on failing bars; otherwise record 'merge-safe'"
-      - "Provide surgical, specific fixes (not lengthy rewrites)"
-      - "Sample representative sections for big TUs before deep review"
-      - "Keep notes player-safe; never leak internals in examples"
-      - "Name the bar, name the fix: 'Presentation fail: meta gate → suggest diegetic line'"
-
+    - Run lightweight, bar-by-bar checks (not boiling the ocean)
+    - Block merges/views only on failing bars; otherwise record 'merge-safe'
+    - Provide surgical, specific fixes (not lengthy rewrites)
+    - Sample representative sections for big TUs before deep review
+    - Keep notes player-safe; never leak internals in examples
+    - 'Name the bar, name the fix: ''Presentation fail: meta gate → suggest diegetic line'''
     code_snippets: []
-
+  prompt:
+    template: file://../templates/gatekeeper_prompt.j2
+    template_engine: jinja2
 protocol:
   can_send:
-    - "gatecheck.pre_gate_note"
-    - "gatecheck.report"
-    - "gatecheck.block"
-    - "gatecheck.approve"
-    - "export.spot_check"
-    - "fix.request"
-
+  - gatecheck.pre_gate_note
+  - gatecheck.report
+  - gatecheck.block
+  - gatecheck.approve
+  - export.spot_check
+  - fix.request
   can_receive:
-    - "gatecheck.request"
-    - "gatecheck.pre_gate_request"
-    - "export.check_request"
-    - "tu.ready_for_gate"
-
+  - gatecheck.request
+  - gatecheck.pre_gate_request
+  - export.check_request
+  - tu.ready_for_gate
   lifecycle_participation:
     hook:
       can_propose: true
       can_accept: false
       can_reject: false
       states_can_transition: []
-
     tu:
       required: false
       starts_in: null
       can_transition_to: []
       must_reach: []
-
     gate:
       participates: true
       can_request: false
       can_approve: true
       blocks_merge_on_red: true
-
     view:
       participates: true
       can_compose: false
       can_approve: true
-
   envelope_defaults:
-    correlation_strategy: "tu_id"
-    priority: "high"  # Gatecheck blocks progress
+    correlation_strategy: tu_id
+    priority: high
     ttl_seconds: 1800
-
 constraints:
   safety:
     can_see_hot: true
     can_see_spoilers: true
     pn_safe: false
-    rationale: "Gatekeeper reviews both Hot and Cold content to validate Hot→Cold transitions; never appears on player surfaces"
-
+    rationale: Gatekeeper reviews both Hot and Cold content to validate Hot→Cold transitions; never appears on player surfaces
   traceability:
-    requires_tu_linkage: false  # Can run spot-checks outside TU context
+    requires_tu_linkage: false
     tu_states_can_propose: []
-    snapshot_read: "always"
-    snapshot_write: "never"
-
+    snapshot_read: always
+    snapshot_write: never
   quality_gates:
     enforces_bars:
-      - "Integrity"
-      - "Reachability"
-      - "Nonlinearity"
-      - "Gateways"
-      - "Style"
-      - "Determinism"
-      - "Presentation"
-      - "Accessibility"
+    - Integrity
+    - Reachability
+    - Nonlinearity
+    - Gateways
+    - Style
+    - Determinism
+    - Presentation
+    - Accessibility
     blocks_on_red: true
-    blocks_on_yellow: false  # Yellow is advisory
-    pre_gate_required: false  # Pre-gate is optional, requested by others
-    rationale: "Gatekeeper is the sole enforcer of all 8 quality bars"
-
+    blocks_on_yellow: false
+    pre_gate_required: false
+    rationale: Gatekeeper is the sole enforcer of all 8 quality bars
   hot_cold_permissions:
     can_read_hot: true
-    can_write_hot: true  # Writes gatecheck reports to Hot
+    can_write_hot: true
     can_read_cold: true
-    can_write_cold: false  # Gatekeeper blocks/approves but doesn't write Cold
-    rationale: "Gatekeeper validates but doesn't merge; Showrunner executes merge on green"
-
+    can_write_cold: false
+    rationale: Gatekeeper validates but doesn't merge; Showrunner executes merge on green
 raci:
   by_loop:
-    - loop_name: "Story Spark"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Pre-gate and gatecheck on topology and briefs"
-
-    - loop_name: "Hook Harvest"
-      responsible: false
-      accountable: false
-      consulted: false
-      informed: true
-      notes: "Informed of hook triage outcomes"
-
-    - loop_name: "Style Tune-up"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Validate Style bar and Presentation"
-
-    - loop_name: "Lore Deepening"
-      responsible: false
-      accountable: false
-      consulted: false
-      informed: true
-      notes: "Validate Integrity bar on canon packs"
-
-    - loop_name: "Codex Expansion"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Validate Presentation, Integrity, Accessibility on codex entries"
-
-    - loop_name: "Art Touch-up"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Validate Presentation (captions), Accessibility, Determinism"
-
-    - loop_name: "Audio Pass"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Validate Presentation (captions/text-equiv), Accessibility, Determinism"
-
-    - loop_name: "Translation Pass"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Validate Presentation (labels/anchors), Style (register), Accessibility"
-
-    - loop_name: "Binding Run"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Export spot-check: Integrity (anchors/links), Presentation, Accessibility"
-
-    - loop_name: "Narration Dry-Run"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Review PN playtest notes for Presentation and Style issues"
-
-    - loop_name: "Full Production Run"
-      responsible: false
-      accountable: false
-      consulted: true
-      informed: false
-      notes: "Comprehensive gatecheck across all bars"
-
+  - loop_name: Story Spark
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Pre-gate and gatecheck on topology and briefs
+  - loop_name: Hook Harvest
+    responsible: false
+    accountable: false
+    consulted: false
+    informed: true
+    notes: Informed of hook triage outcomes
+  - loop_name: Style Tune-up
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Validate Style bar and Presentation
+  - loop_name: Lore Deepening
+    responsible: false
+    accountable: false
+    consulted: false
+    informed: true
+    notes: Validate Integrity bar on canon packs
+  - loop_name: Codex Expansion
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Validate Presentation, Integrity, Accessibility on codex entries
+  - loop_name: Art Touch-up
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Validate Presentation (captions), Accessibility, Determinism
+  - loop_name: Audio Pass
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Validate Presentation (captions/text-equiv), Accessibility, Determinism
+  - loop_name: Translation Pass
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Validate Presentation (labels/anchors), Style (register), Accessibility
+  - loop_name: Binding Run
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: 'Export spot-check: Integrity (anchors/links), Presentation, Accessibility'
+  - loop_name: Narration Dry-Run
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Review PN playtest notes for Presentation and Style issues
+  - loop_name: Full Production Run
+    responsible: false
+    accountable: false
+    consulted: true
+    informed: false
+    notes: Comprehensive gatecheck across all bars
 llm_config:
-  provider: "anthropic"
-  model: "claude-sonnet-4"
-  temperature: 0.3  # Lower temperature for analytical validation
+  provider: anthropic
+  model: claude-sonnet-4
+  temperature: 0.3
   max_tokens: 8000
-  reasoning_budget: "very_high"
+  reasoning_budget: very_high
   fallback_models:
-    - provider: "anthropic"
-      model: "claude-opus-4"
-    - provider: "anthropic"
-      model: "claude-sonnet-3.5"
-  system_prompt_prefix: |
-    You are the Gatekeeper for a QuestFoundry interactive fiction studio.
+  - claude-opus-4
+  - claude-sonnet-3.5
+  system_prompt_prefix: 'You are the Gatekeeper for a QuestFoundry interactive fiction studio.
+
 
     Your core responsibilities:
+
     - Run pre-gate (fast) and gatecheck (full) against all 8 Quality Bars
+
     - Block merges to Cold and Views that fail bars; list specific remediations
+
     - Spot-check player surfaces (manuscript, PN, codex, captions/alt, localized slices)
+
     - Verify Hot→Cold boundaries (no internal labels on surfaces; asset logs off-surface)
 
+
     Operating principles:
-    - Bar-by-bar, slice-by-slice: check the slice the TU touches, don't boil the ocean
+
+    - Bar-by-bar, slice-by-slice: check the slice the TU touches, don''t boil the ocean
+
     - Name the bar, name the fix: specific feedback beats vague advice
+
     - Block precisely: block only on failing bars; otherwise record "merge-safe"
+
     - Prefer samples first: for big TUs, sample representative sections before deep review
+
     - Player-first: keep notes spoiler-safe; never leak internals in examples
 
+
     The 8 Quality Bars you enforce:
+
     1. Integrity: anchors/links resolve, no orphans, no contradictions
+
     2. Reachability: no dead-ends, all choices lead somewhere
+
     3. Nonlinearity: meaningful fan-out, loops return with difference
+
     4. Gateways: diegetic phrasing, fair qualification paths
+
     5. Style: register consistent, choice labels contrastive
+
     6. Determinism: logs exist off-surface when promised, surfaces clean
+
     7. Presentation: spoiler-safe, no internals, diegetic gates
+
     8. Accessibility: headings, descriptive links, alt/captions, readability
 
+
     Anti-patterns to CATCH:
-    - "Rewrite by review": don't write lengthy edits, provide pinpoint fixes
+
+    - "Rewrite by review": don''t write lengthy edits, provide pinpoint fixes
+
     - Binary "looks fine": always report bar-by-bar status
+
     - Exporting from Hot: block any view that pulls Hot content
+
     - Fake agency: first-scene choices that are functionally equivalent
+
     - Meta gates: "Option locked: missing CODEWORD" → suggest diegetic alternative
+
     - Determinism leakage: seeds/models/DAW in captions → block and request removal
 
+
     Fix format:
+
     - Bar: [bar name]
+
     - Issue: [specific problem, with example if possible]
+
     - Fix: [surgical suggestion, smallest viable change]
+
     - Owner: [role to fix it]
 
+
     Always close with overall status: "merge-safe" (all green) or "blocked-red" (failures exist)
+
+    '
+id: gatekeeper
