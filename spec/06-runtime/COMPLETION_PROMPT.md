@@ -51,12 +51,20 @@ result = f"[{role.name}] {prompt[:100]}..."
 # 4. Invoke LLM or tools based on role type
 llm_config = self.select_llm(role)
 
-if llm_config and llm_config.get("type") == "anthropic":
-    # Import LLM adapter
-    from questfoundry.runtime.plugins.llm.anthropic import AnthropicAdapter
+if llm_config:
+    provider = llm_config.get("type", "anthropic")
+
+    # Import appropriate LLM adapter
+    if provider == "anthropic":
+        from questfoundry.runtime.plugins.llm.anthropic import AnthropicAdapter
+        adapter = AnthropicAdapter()
+    elif provider == "openai":
+        from questfoundry.runtime.plugins.llm.openai import OpenAIAdapter
+        adapter = OpenAIAdapter()
+    else:
+        raise ValueError(f"Unsupported LLM provider: {provider}")
 
     # Get LLM instance
-    adapter = AnthropicAdapter()
     llm = adapter.get_llm(
         model=llm_config["model"],
         temperature=llm_config["temperature"],
@@ -84,9 +92,15 @@ else:
 
 #### 2. Complete LLM Adapter Implementation
 
-**File**: `lib/runtime/src/questfoundry/runtime/plugins/llm/anthropic.py`
+**Files**:
+- `lib/runtime/src/questfoundry/runtime/plugins/llm/anthropic.py`
+- `lib/runtime/src/questfoundry/runtime/plugins/llm/openai.py` (CREATE NEW)
 
-**Current**: Stub implementation
+**Current**: Stub implementations
+
+#### 2a. Anthropic Adapter
+
+**File**: `lib/runtime/src/questfoundry/runtime/plugins/llm/anthropic.py`
 
 **Make It Work**:
 ```python
@@ -157,6 +171,96 @@ python -c "from questfoundry.runtime.plugins.llm.anthropic import AnthropicAdapt
            adapter = AnthropicAdapter(); \
            llm = adapter.get_llm(); \
            print(llm.invoke('Say hello in 5 words'))"
+```
+
+#### 2b. OpenAI Adapter (NEW)
+
+**File**: `lib/runtime/src/questfoundry/runtime/plugins/llm/openai.py` (CREATE NEW)
+
+**Implementation**:
+```python
+"""OpenAI LLM adapter using LangChain."""
+
+from langchain_openai import ChatOpenAI
+from typing import Optional
+import os
+
+
+class OpenAIAdapter:
+    """OpenAI LLM adapter using LangChain."""
+
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize adapter with API key."""
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+
+        if not self.api_key:
+            raise ValueError(
+                "OpenAI API key not found. "
+                "Set OPENAI_API_KEY environment variable."
+            )
+
+    def get_llm(
+        self,
+        model: str = "gpt-4-turbo-preview",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        **kwargs
+    ) -> ChatOpenAI:
+        """
+        Get OpenAI LLM instance.
+
+        Args:
+            model: Model identifier (gpt-4-turbo-preview, gpt-4, gpt-3.5-turbo, etc.)
+            temperature: Sampling temperature (0.0-2.0)
+            max_tokens: Maximum tokens to generate
+            **kwargs: Additional configuration
+
+        Returns:
+            Configured ChatOpenAI instance
+        """
+        return ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            openai_api_key=self.api_key,
+            **kwargs
+        )
+
+    def list_available_models(self) -> list[dict]:
+        """List available OpenAI models."""
+        return [
+            {
+                "model_id": "gpt-4-turbo-preview",
+                "name": "GPT-4 Turbo",
+                "context_window": 128000
+            },
+            {
+                "model_id": "gpt-4",
+                "name": "GPT-4",
+                "context_window": 8192
+            },
+            {
+                "model_id": "gpt-3.5-turbo",
+                "name": "GPT-3.5 Turbo",
+                "context_window": 16385
+            }
+        ]
+```
+
+**Test**:
+```bash
+export OPENAI_API_KEY="sk-..."
+python -c "from questfoundry.runtime.plugins.llm.openai import OpenAIAdapter; \
+           adapter = OpenAIAdapter(); \
+           llm = adapter.get_llm(model='gpt-3.5-turbo'); \
+           print(llm.invoke('Say hello in 5 words'))"
+```
+
+**Update pyproject.toml** to include OpenAI:
+```toml
+[tool.poetry.dependencies]
+# ... existing dependencies ...
+langchain-openai = "^0.1.0"  # Add this line
 ```
 
 **Spec Reference**: `spec/06-runtime/interfaces/llm_adapter.yaml`
@@ -373,7 +477,7 @@ def write(text: str):
 
 ## Testing Your Changes
 
-### Test 1: LLM Adapter
+### Test 1a: Anthropic LLM Adapter
 
 ```bash
 cd lib/runtime
@@ -384,6 +488,22 @@ python -c "
 from questfoundry.runtime.plugins.llm.anthropic import AnthropicAdapter
 adapter = AnthropicAdapter()
 llm = adapter.get_llm(model='claude-3-5-haiku-20241022', temperature=0.1)
+response = llm.invoke('Say hello in exactly 3 words')
+print(response.content)
+"
+```
+
+### Test 1b: OpenAI LLM Adapter
+
+```bash
+cd lib/runtime
+export OPENAI_API_KEY="sk-..."
+
+# Test OpenAI adapter directly
+python -c "
+from questfoundry.runtime.plugins.llm.openai import OpenAIAdapter
+adapter = OpenAIAdapter()
+llm = adapter.get_llm(model='gpt-3.5-turbo', temperature=0.1)
 response = llm.invoke('Say hello in exactly 3 words')
 print(response.content)
 "
@@ -499,19 +619,65 @@ def execute_loop_with_progress(self, loop_id: str, context: dict) -> StudioState
 Before running, ensure:
 
 ```bash
-# 1. Install dependencies
+# 1. Install dependencies (including OpenAI support)
 cd lib/runtime
+poetry add langchain-openai  # Add OpenAI support
 poetry install
 
-# 2. Set API key
-export ANTHROPIC_API_KEY="sk-ant-api03-..."
+# 2. Set API keys (choose one or both)
+export ANTHROPIC_API_KEY="sk-ant-api03-..."  # For Anthropic models
+export OPENAI_API_KEY="sk-..."                # For OpenAI models
 
 # 3. Verify installation
 poetry run python -c "import langgraph; print(langgraph.__version__)"
 poetry run python -c "import langchain_anthropic; print('LangChain Anthropic OK')"
+poetry run python -c "import langchain_openai; print('LangChain OpenAI OK')"
 
 # 4. Run CLI
 poetry run qf --help
+```
+
+### Provider Configuration
+
+By default, roles use the model specified in their YAML definition. To switch providers:
+
+**Option 1: Environment Variable (Global Override)**
+```bash
+# Use OpenAI for all roles
+export QF_LLM_PROVIDER="openai"
+export QF_DEFAULT_MODEL="gpt-4-turbo-preview"
+
+# Use Anthropic for all roles (default)
+export QF_LLM_PROVIDER="anthropic"
+export QF_DEFAULT_MODEL="claude-3-5-sonnet-20241022"
+```
+
+**Option 2: Per-Role Configuration**
+Modify role YAML files to specify provider in `behavior.model_config`:
+```yaml
+behavior:
+  model_config:
+    provider: openai         # or "anthropic"
+    model: gpt-4-turbo-preview
+    temperature: 0.7
+    max_tokens: 4096
+```
+
+**Option 3: Runtime Override (Advanced)**
+Modify `NodeFactory.select_llm()` to read from environment or config file:
+```python
+def select_llm(self, role: RoleProfile):
+    # Check environment override
+    provider = os.getenv("QF_LLM_PROVIDER", "anthropic")
+    model = os.getenv("QF_DEFAULT_MODEL") or role.get_model()
+
+    return {
+        "type": provider,
+        "model": model,
+        "temperature": role.get_temperature(),
+        "max_tokens": role.get_max_tokens(),
+        "role_type": role.role_type
+    }
 ```
 
 ---
@@ -521,11 +687,14 @@ poetry run qf --help
 Your implementation is complete when:
 
 1. ✅ `AnthropicAdapter.get_llm()` returns working ChatAnthropic instance
-2. ✅ NodeFactory invokes real LLM instead of returning mock data
-3. ✅ Showrunner executes complete loops end-to-end
-4. ✅ CLI command `qf write "test"` produces real LLM output
-5. ✅ All integration tests still pass with real LLM
-6. ✅ Error handling works (API key missing, rate limits, etc.)
+2. ✅ `OpenAIAdapter.get_llm()` returns working ChatOpenAI instance
+3. ✅ NodeFactory invokes real LLM instead of returning mock data
+4. ✅ NodeFactory supports both Anthropic and OpenAI providers
+5. ✅ Showrunner executes complete loops end-to-end
+6. ✅ CLI command `qf write "test"` produces real LLM output
+7. ✅ Provider can be switched via environment variable
+8. ✅ All integration tests still pass with real LLM
+9. ✅ Error handling works (API key missing, rate limits, etc.)
 
 ---
 
@@ -533,21 +702,36 @@ Your implementation is complete when:
 
 ### Issue: "API key not found"
 ```bash
-# Verify environment variable
+# Verify environment variables
 echo $ANTHROPIC_API_KEY
+echo $OPENAI_API_KEY
 
-# Or set in code temporarily
-export ANTHROPIC_API_KEY="sk-ant-..."
+# Set the one you're using
+export ANTHROPIC_API_KEY="sk-ant-..."  # For Anthropic
+export OPENAI_API_KEY="sk-..."          # For OpenAI
 ```
 
-### Issue: "Module not found: langchain_anthropic"
+### Issue: "Module not found: langchain_anthropic" or "langchain_openai"
 ```bash
 # Reinstall dependencies
 cd lib/runtime
+poetry add langchain-openai  # If OpenAI support missing
 poetry install --no-cache
 
-# Verify langchain-anthropic is installed
+# Verify both are installed
 poetry show langchain-anthropic
+poetry show langchain-openai
+```
+
+### Issue: "Wrong provider being used"
+```bash
+# Check provider selection in NodeFactory
+# Add debug logging to see which adapter is loaded:
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Or force provider via environment
+export QF_LLM_PROVIDER="openai"  # or "anthropic"
 ```
 
 ### Issue: "Graph compilation fails"
@@ -588,14 +772,18 @@ After implementation, update:
 
 Before submitting:
 
-- [ ] LLM adapter works with real API calls
+- [ ] Anthropic adapter works with real API calls
+- [ ] OpenAI adapter works with real API calls
 - [ ] NodeFactory uses LLM adapter instead of mocks
+- [ ] NodeFactory supports both providers (anthropic and openai)
+- [ ] Provider can be switched via environment variable
 - [ ] Showrunner executes complete loops
 - [ ] CLI `qf write` command works end-to-end
 - [ ] All tests pass with real LLM (or skip if no API key)
-- [ ] Error messages are helpful
+- [ ] Error messages are helpful (including wrong provider errors)
 - [ ] Code is clean and follows existing patterns
 - [ ] Logging is appropriate (INFO for normal, DEBUG for details)
+- [ ] `langchain-openai` added to pyproject.toml dependencies
 
 ---
 
