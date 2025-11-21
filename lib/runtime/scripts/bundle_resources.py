@@ -107,6 +107,17 @@ def create_bundle(spec_root: Path, bundle_root: Path) -> None:
             encoding="utf-8"
         )
 
+        # Create __init__.py in all subdirectories to make them importable packages
+        for subdir in dst.rglob("*"):
+            if subdir.is_dir() and not (subdir / "__init__.py").exists():
+                init_file = subdir / "__init__.py"
+                rel_path = subdir.relative_to(dst)
+                init_file.write_text(
+                    f'"""Bundled resources from {spec_layer}/{rel_path}."""\n',
+                    encoding="utf-8"
+                )
+                print(f"  Created __init__.py in {bundle_name}/{rel_path}/")
+
     # Create root __init__.py
     (bundle_root / "__init__.py").write_text(
         '"""Bundled QuestFoundry spec resources for distribution."""\n',
