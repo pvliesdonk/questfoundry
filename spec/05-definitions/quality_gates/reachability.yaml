@@ -1,0 +1,164 @@
+# Reachability Quality Gate
+# Ensures critical beats (keystones, required items) are reachable via at least one viable path
+
+bar_name: Reachability
+
+bar_definition:
+  what_it_means: "'Must-see' beats (plot keystones, required items) are reachable from at least one path without paradoxes."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#2-reachability"
+
+validation_checks:
+  - check_id: keystones_reachable
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot.hooks"
+      expression: "all(keystone in reachable_from_start for keystone in keystones)"
+      parameters:
+        keystone_marker: "tags:keystone"
+        start_hook: "entry_point"
+        max_depth: 1000
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "{{count}} keystone beats are unreachable: {{keystone_ids}}"
+    examples:
+      - scenario: "Keystone beat can be reached via normal play"
+        passes: true
+        explanation: "Player can navigate to keystone"
+      - scenario: "Keystone is locked behind impossible condition"
+        passes: false
+        explanation: "No valid path exists"
+
+  - check_id: gateway_keys_obtainable
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot.gateway_maps"
+      expression: "all(gateway.condition_key in obtainable_codewords for gateway in gateways)"
+      parameters:
+        check_condition_paths: true
+        allow_alternative_routes: true
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "{{count}} gateways have unobtainable keys: {{gateway_conditions}}"
+    examples:
+      - scenario: "Gateway requires 'met_foreman' codeword and at least one path sets it"
+        passes: true
+        explanation: "Key is obtainable"
+      - scenario: "Gateway requires codeword that no path can set"
+        passes: false
+        explanation: "Locked content with no key"
+
+  - check_id: no_paradoxical_requirements
+    check_type: graph_analysis
+    validator:
+      method: custom_function
+      target: "hot_sot"
+      expression: "check_circular_dependencies"
+      parameters:
+        check_codeword_chains: true
+        max_dependency_depth: 5
+    pass_condition: "circular_deps.length == 0"
+    severity: critical
+    failure_message: "Found {{count}} paradoxical requirement chains: {{chains}}"
+
+  - check_id: alternative_paths_exist
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot.hooks"
+      expression: "keystones_have_multiple_paths"
+      parameters:
+        min_alternative_paths: 2
+        keystone_marker: "tags:keystone"
+    pass_condition: "single_path_keystones.length <= allowed_count"
+    severity: warning
+    failure_message: "{{count}} keystones have only one path (fragile): {{keystone_ids}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 3
+
+remediation:
+  common_failures:
+    - issue: "Locked content with no key"
+      fix: "Add an alternative key path or remove the lock entirely"
+      check_ids: ["gateway_keys_obtainable"]
+      examples:
+        - "Gate requires 'found_artifact' but no path grants it → add discovery scene or unlock gate"
+
+    - issue: "Unrealistic dependency chain"
+      fix: "Reduce dependency depth or provide a second independent route"
+      check_ids: ["no_paradoxical_requirements"]
+      examples:
+        - "Need A to get B, need B to get C, need C to get A → break the cycle"
+
+    - issue: "Keystone unreachable due to early funnel"
+      fix: "Add branch before funnel that leads to keystone, or make keystone reachable after funnel"
+      check_ids: ["keystones_reachable"]
+      examples:
+        - "Player choices converge before keystone scene → add alternate path or move keystone"
+
+    - issue: "Single point of failure for critical beat"
+      fix: "Add redundant path to keystone for robustness"
+      check_ids: ["alternative_paths_exist"]
+      examples:
+        - "Only one way to meet key character → add second encounter location"
+
+  smallest_viable_fix_template: "Add path to {{unreachable_keystone}} or unlock {{blocking_gateway}}"
+
+  owner_assignment:
+    PW: ["keystones_reachable", "gateway_keys_obtainable", "no_paradoxical_requirements", "alternative_paths_exist"]
+    SS: ["keystones_reachable"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: false
+
+applicable_to:
+  artifact_types:
+    - hook_card
+    - gateway_map
+  loops:
+    - story_spark
+    - hook_harvest
+  hot_cold: cold
+
+automation:
+  fully_automated: true
+  requires_llm: false
+  requires_human: false
+  evaluation_timeout: 60
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Reachability ensures players can actually experience all critical content"
+  test_cases:
+    - name: "All keystones reachable from entry point"
+      artifact:
+        hooks:
+          - id: "HK-20250121-001"
+            tags: ["entry_point"]
+            choices: [{target: "HK-20250121-002"}]
+          - id: "HK-20250121-002"
+            tags: ["keystone"]
+            choices: []
+      expected_status: green
+      expected_failures: []
+
+    - name: "Keystone behind impossible gateway"
+      artifact:
+        hooks:
+          - id: "HK-20250121-001"
+            choices: [{target: "HK-20250121-002", condition: "has_impossible_item"}]
+          - id: "HK-20250121-002"
+            tags: ["keystone"]
+      expected_status: red
+      expected_failures: ["keystones_reachable", "gateway_keys_obtainable"]

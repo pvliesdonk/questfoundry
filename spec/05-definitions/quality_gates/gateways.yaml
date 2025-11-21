@@ -1,0 +1,127 @@
+# Gateways Quality Gate
+# Ensures conditions are consistent, enforceable, and spoiler-safe
+
+bar_name: Gateways
+
+bar_definition:
+  what_it_means: "Conditions (codewords, items, states) are consistent across sections and can be enforced by the PN without leaks. Diegetic phrasing required."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#4-gateways"
+
+validation_checks:
+  - check_id: conditions_clear
+    check_type: content_safety
+    validator:
+      method: llm_eval
+      target: "hot_sot.gateway_maps.*.condition"
+      expression: "Check if condition is single, clear, and unambiguous"
+      parameters:
+        llm_prompt: "Is this gateway condition clear and enforceable? Does it have exactly one condition, not compound?"
+    pass_condition: "ambiguous_conditions.length == 0"
+    severity: critical
+    failure_message: "{{count}} gateway conditions are ambiguous or compound: {{gateway_ids}}"
+
+  - check_id: diegetic_phrasing
+    check_type: content_safety
+    validator:
+      method: llm_eval
+      target: "hot_sot.gateway_maps.*.surface_text"
+      expression: "Check if PN can enforce condition without exposing internals"
+      parameters:
+        llm_prompt: "Does this gateway use in-world phrasing? Can PN enforce it without mentioning codewords/state?"
+        forbidden_terms: ["codeword", "state", "variable", "flag"]
+    pass_condition: "violations.length == 0"
+    severity: critical
+    failure_message: "{{count}} gateways use non-diegetic phrasing: {{examples}}"
+
+  - check_id: consistency_across_sections
+    check_type: reference_resolution
+    validator:
+      method: custom_function
+      target: "hot_sot.gateway_maps"
+      expression: "check_gateway_consistency"
+      parameters:
+        check_positive_negative: true
+        check_contradictions: true
+    pass_condition: "contradictions.length == 0"
+    severity: critical
+    failure_message: "{{count}} gateway condition contradictions: {{issues}}"
+
+  - check_id: no_unwinnable_states
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot"
+      expression: "check_for_dead_states"
+      parameters:
+        check_required_codewords: true
+        check_fail_forward: true
+    pass_condition: "unwinnable_states.length == 0"
+    severity: warning
+    failure_message: "Found {{count}} potentially unwinnable states: {{state_descriptions}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 2
+
+remediation:
+  common_failures:
+    - issue: "Ambiguous condition wording"
+      fix: "Rewrite condition and surface phrasing to be clear and singular"
+      check_ids: ["conditions_clear"]
+      examples:
+        - "'If you have the key or the lockpick' → split into two separate gateways"
+
+    - issue: "PN phrasing leaks internals"
+      fix: "Rephrase using in-world language that PN can enforce naturally"
+      check_ids: ["diegetic_phrasing"]
+      examples:
+        - "'If codeword met_foreman is set' → 'If the foreman vouched for you'"
+
+    - issue: "Positive/negative condition mismatch"
+      fix: "Reconcile conditions so 'has X' and 'unless has X' are consistent"
+      check_ids: ["consistency_across_sections"]
+      examples:
+        - "One gate requires 'alliance_made', another blocks on 'alliance_made' → fix logic"
+
+    - issue: "Hidden unwinnable state"
+      fix: "Add catch-up path or fail-forward beat so player can still progress"
+      check_ids: ["no_unwinnable_states"]
+      examples:
+        - "Missing required item blocks progression → add alternative path or let player proceed differently"
+
+  smallest_viable_fix_template: "Rephrase {{gateway_id}} diegetically or fix {{condition_contradiction}}"
+
+  owner_assignment:
+    PW: ["conditions_clear", "consistency_across_sections", "no_unwinnable_states"]
+    PN: ["diegetic_phrasing"]
+    GK: ["conditions_clear", "consistency_across_sections"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: false
+
+applicable_to:
+  artifact_types:
+    - gateway_map
+    - hook_card
+  loops:
+    - story_spark
+    - hook_harvest
+  hot_cold: cold
+
+automation:
+  fully_automated: false
+  requires_llm: true
+  requires_human: false
+  evaluation_timeout: 60
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Gateways ensure conditions are player-safe and enforceable by PN without breaking immersion"

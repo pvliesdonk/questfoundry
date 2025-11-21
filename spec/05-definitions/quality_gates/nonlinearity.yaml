@@ -1,0 +1,165 @@
+# Nonlinearity Quality Gate
+# Ensures hubs, loops, and gateways exist where intended and matter to play
+
+bar_name: Nonlinearity
+
+bar_definition:
+  what_it_means: "Hubs, loops, and gateways exist where intended and matter to play (not decorative). First-choice integrity: early choices must have meaningful consequences."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#3-nonlinearity"
+
+validation_checks:
+  - check_id: hubs_present
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot.hooks"
+      expression: "all(hub_id in hook_ids for hub_id in planned_hubs)"
+      parameters:
+        hub_marker: "tags:hub"
+        min_outgoing_edges: 3
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "Planned hubs not present in topology: {{missing_hubs}}"
+
+  - check_id: loops_meaningful
+    check_type: graph_analysis
+    validator:
+      method: custom_function
+      target: "hot_sot.hooks"
+      expression: "check_loop_has_consequence"
+      parameters:
+        check_codeword_changes: true
+        check_state_mutations: true
+        loop_marker: "tags:loop"
+    pass_condition: "cosmetic_loops.length == 0"
+    severity: warning
+    failure_message: "{{count}} loops have no meaningful consequence (cosmetic): {{loop_ids}}"
+    examples:
+      - scenario: "Loop returns with changed stakes via codeword"
+        passes: true
+        explanation: "Loop alters downstream options"
+      - scenario: "Loop returns identical to first visit"
+        passes: false
+        explanation: "Cosmetic loop with no impact"
+
+  - check_id: first_choice_integrity
+    check_type: content_safety
+    validator:
+      method: llm_eval
+      target: "convergence_points"
+      expression: "Check if converged section reflects entering state in first paragraph and at least one affordance"
+      parameters:
+        llm_prompt: "Does this convergence point properly acknowledge the player's previous choice (lexical, behavioral, or situational)?"
+        check_first_paragraph: true
+        check_affordances: true
+    pass_condition: "violations.length == 0"
+    severity: critical
+    failure_message: "{{count}} convergence points lack first-choice integrity: {{section_ids}}"
+    examples:
+      - scenario: "Two paths converge, next scene first paragraph reflects both entry states"
+        passes: true
+        explanation: "First-choice integrity maintained"
+      - scenario: "Sibling choices converge to identical text"
+        passes: false
+        explanation: "Early funnel with no acknowledgment"
+
+  - check_id: gateways_deliberate
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot.gateway_maps"
+      expression: "all(gateway.purpose in ['plot_lock', 'character_arc', 'puzzle'] for gateway in gateways)"
+      parameters:
+        require_justification: true
+    pass_condition: "result == true"
+    severity: warning
+    failure_message: "{{count}} gateways lack clear purpose: {{gateway_ids}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 2
+
+remediation:
+  common_failures:
+    - issue: "Cosmetic loop (no state change)"
+      fix: "Have the loop return alter stakes, tone, or options via codeword or state mutation"
+      check_ids: ["loops_meaningful"]
+      examples:
+        - "Player revisits location → add codeword showing time has passed, NPCs remember previous visit"
+
+    - issue: "Hub too thin (not enough branches)"
+      fix: "Add branches with distinct outcomes or merge hub into linear path if unnecessary"
+      check_ids: ["hubs_present"]
+      examples:
+        - "Hub with only 2 exits that quickly reconverge → add third meaningful branch or remove hub"
+
+    - issue: "Early funnel with identical convergence"
+      fix: "Revise convergence point first paragraph to reflect both entry paths, add conditional affordance"
+      check_ids: ["first_choice_integrity"]
+      examples:
+        - "Player chose aggression or diplomacy, but next scene treats both identically → add dialogue variation"
+
+    - issue: "Decorative gateway"
+      fix: "Either make gateway meaningful (tie to character arc or plot) or remove condition"
+      check_ids: ["gateways_deliberate"]
+      examples:
+        - "Gateway requires item that serves no other purpose → tie item to character arc or remove lock"
+
+  smallest_viable_fix_template: "Add consequence to {{loop_id}} or acknowledge {{choice}} in {{convergence_section}}"
+
+  owner_assignment:
+    PW: ["hubs_present", "loops_meaningful", "first_choice_integrity", "gateways_deliberate"]
+    SS: ["first_choice_integrity"]
+    ST: ["first_choice_integrity"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: false
+
+applicable_to:
+  artifact_types:
+    - hook_card
+    - gateway_map
+    - canon_pack
+  loops:
+    - story_spark
+    - hook_harvest
+  hot_cold: cold
+
+automation:
+  fully_automated: false
+  requires_llm: true
+  requires_human: false
+  evaluation_timeout: 90
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Nonlinearity ensures choices matter and aren't just cosmetic. First-choice integrity is critical."
+  test_cases:
+    - name: "Hub with meaningful branches"
+      artifact:
+        id: "HK-20250121-100"
+        tags: ["hub"]
+        choices:
+          - {target: "HK-20250121-101", sets_codeword: "path_a"}
+          - {target: "HK-20250121-102", sets_codeword: "path_b"}
+          - {target: "HK-20250121-103", sets_codeword: "path_c"}
+      expected_status: green
+      expected_failures: []
+
+    - name: "Loop with no state change"
+      artifact:
+        id: "HK-20250121-200"
+        tags: ["loop"]
+        choices:
+          - {target: "HK-20250121-201"}
+          - {target: "HK-20250121-100"}  # returns to hub
+      expected_status: yellow
+      expected_failures: ["loops_meaningful"]

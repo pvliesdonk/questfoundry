@@ -1,0 +1,129 @@
+# Style Quality Gate
+# Ensures voice, register, motifs align with Style Lead guardrails
+
+bar_name: Style
+
+bar_definition:
+  what_it_means: "Prose voice, register, motifs align with the Style Lead's guardrails. Visual/aesthetic cues align with style. PN remains in-voice."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#5-style"
+
+validation_checks:
+  - check_id: voice_consistency
+    check_type: style_consistency
+    validator:
+      method: llm_eval
+      target: "artifacts.canon_pack.prose"
+      expression: "Compare prose voice against style_addenda guidelines"
+      parameters:
+        llm_prompt: "Does this prose maintain consistent voice with the style guide? Check for: register (formal/casual), tone (dry/earnest), and narrative perspective. Return 'pass' or 'fail' with specific examples."
+        style_ref: "hot_sot.style_addenda[0]"
+        sample_size: 3
+    pass_condition: "result == 'pass'"
+    severity: warning
+    failure_message: "Voice drift detected: {{explanation}}"
+
+  - check_id: caption_alignment
+    check_type: style_consistency
+    validator:
+      method: llm_eval
+      target: "artifacts.*.visual_plans.*.caption"
+      expression: "Check if captions feel like the same book"
+      parameters:
+        llm_prompt: "Do these image captions maintain consistent aesthetic and tone with each other and the style guide?"
+    pass_condition: "result == 'pass'"
+    severity: warning
+    failure_message: "Caption style inconsistency: {{details}}"
+
+  - check_id: pn_in_voice
+    check_type: style_consistency
+    validator:
+      method: llm_eval
+      target: "artifacts.hook_card.pn_lines"
+      expression: "Check PN phrasing matches agreed register"
+      parameters:
+        llm_prompt: "Does the Player-Narrator's voice match the established register (e.g., dry/sardonic/earnest)?"
+        style_register: "hot_sot.style_addenda[0].register"
+    pass_condition: "result == 'pass'"
+    severity: warning
+    failure_message: "PN voice inconsistent with style: {{explanation}}"
+
+  - check_id: motif_consistency
+    check_type: style_consistency
+    validator:
+      method: custom_function
+      target: "artifacts"
+      expression: "check_motif_usage"
+      parameters:
+        check_recurring_elements: true
+        style_motifs_ref: "hot_sot.style_addenda[0].motifs"
+    pass_condition: "violations.length == 0"
+    severity: info
+    failure_message: "Motif usage issues: {{details}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 3
+
+remediation:
+  common_failures:
+    - issue: "Tone wobble between sections"
+      fix: "Run Style Tune-up loop to reconcile voice across sections"
+      check_ids: ["voice_consistency"]
+      examples:
+        - "Section A is formal, Section B is colloquial → adjust to unified register"
+
+    - issue: "Over-exposition in player-facing text"
+      fix: "Move technical/detailed exposition to codex; keep player surface lean"
+      check_ids: ["voice_consistency"]
+      examples:
+        - "Long technical explanation in scene → summarize scene, add full detail to codex entry"
+
+    - issue: "Captions don't match book's aesthetic"
+      fix: "Revise captions to align with visual guardrails"
+      check_ids: ["caption_alignment"]
+      examples:
+        - "Modern slang in historical fantasy setting → rephrase in period-appropriate language"
+
+    - issue: "PN breaks character"
+      fix: "Revise PN lines to match established register"
+      check_ids: ["pn_in_voice"]
+      examples:
+        - "Earnest PN suddenly sarcastic → adjust to maintain consistent voice"
+
+  smallest_viable_fix_template: "Revise {{section_id}} prose to match {{style_guideline}}"
+
+  owner_assignment:
+    ST: ["voice_consistency", "caption_alignment", "pn_in_voice", "motif_consistency"]
+    PN: ["pn_in_voice"]
+    AD: ["caption_alignment"]
+
+blocking_policy:
+  blocks_on_red: false
+  blocks_on_yellow: false
+  can_defer: true  # Style can be deferred with ST approval for rapid iteration
+
+applicable_to:
+  artifact_types:
+    - canon_pack
+    - hook_card
+    - visual_plan
+  loops:
+    - story_spark
+    - style_tune_up
+  hot_cold: cold
+
+automation:
+  fully_automated: false
+  requires_llm: true
+  requires_human: true  # ST final review recommended
+  evaluation_timeout: 120
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Style is subjective; LLM evaluation assists but ST has final say. Can be deferred for iteration."
