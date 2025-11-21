@@ -52,25 +52,25 @@ def _extract_zip(archive_path: Path, target_dir: Path) -> None:
         try:
             archive.extractall(extract_root)
 
-            # Locate the directory that contains 05-behavior
+            # Locate the directory that contains 05-definitions
             # Some release zips contain a top-level 'spec' directory (spec-all.zip),
             # while GitHub repo zipballs contain the repo root with a nested 'spec/'.
             candidate_root: Path | None = None
 
-            # Check if 05-behavior is directly in extract root
-            if (extract_root / "05-behavior").is_dir():
+            # Check if 05-definitions is directly in extract root
+            if (extract_root / "05-definitions").is_dir():
                 candidate_root = extract_root
             else:
-                # Search for 05-behavior in subdirectories
-                for subdir in extract_root.rglob("05-behavior"):
+                # Search for 05-definitions in subdirectories
+                for subdir in extract_root.rglob("05-definitions"):
                     if subdir.is_dir():
-                        # Found 05-behavior, its parent is the spec root
+                        # Found 05-definitions, its parent is the spec root
                         candidate_root = subdir.parent
                         break
 
             if candidate_root is None:
                 raise SpecFetchError(
-                    "Downloaded archive is missing a spec/05-behavior/ directory"
+                    "Downloaded archive is missing a spec/05-definitions/ directory"
                 )
 
             if target_dir.exists():
@@ -81,7 +81,7 @@ def _extract_zip(archive_path: Path, target_dir: Path) -> None:
 
 
 def _is_valid_spec_root(spec_root: Path) -> bool:
-    return (spec_root / "05-behavior").is_dir()
+    return (spec_root / "05-definitions").is_dir()
 
 
 def _fetch_release_info(tag: str | None = None) -> dict[str, Any]:
@@ -140,7 +140,7 @@ def download_latest_release_spec(
         _extract_zip(archive_path, spec_dir)
 
     if not _is_valid_spec_root(spec_dir):
-        raise SpecFetchError("Downloaded spec archive is missing 05-behavior/")
+        raise SpecFetchError("Downloaded spec archive is missing 05-definitions/")
 
     metadata = {"tag": tag_name, "source": archive_url}
     (spec_dir / ".questfoundry-spec.json").write_text(

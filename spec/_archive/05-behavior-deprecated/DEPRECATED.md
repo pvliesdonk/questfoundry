@@ -18,6 +18,7 @@ This Layer 5 behavior specification has been replaced by the new "Cartridge" arc
 The behavior layer was reorganized following the "Cartridge Pivot" (ADR-002):
 
 **Layer 5 (NEW):**
+
 - **Roles:** `spec/05-definitions/roles/` - 16 role profiles with full YAML definitions
 - **Loops:** `spec/05-definitions/loops/` - 10 loop patterns as state machines
 - **Quality Gates:** `spec/05-definitions/quality_gates/` - 8 reusable quality bar validators
@@ -25,6 +26,7 @@ The behavior layer was reorganized following the "Cartridge Pivot" (ADR-002):
 - **Templates:** `spec/05-definitions/templates/` - Reusable templates
 
 **Layer 5 (OLD - THIS DIRECTORY):**
+
 - Adapters, expertises, playbooks, procedures, snippets
 - These primitives have been consolidated into role profiles and loop patterns
 

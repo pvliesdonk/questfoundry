@@ -1,10 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(gh --version:*)",
-      "Bash(cat:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(gh *)",
+      "Bash(git *)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

@@ -16,7 +16,7 @@ Located in `spec/` — The canonical definition of QuestFoundry
 - **Layer 2** (`spec/02-dictionary/`) — Common language (artifacts, taxonomies, glossary)
 - **Layer 3** (`spec/03-schemas/`) — JSON schemas (machine validation)
 - **Layer 4** (`spec/04-protocol/`) — Communication protocol (intents, lifecycles, flows)
-- **Layer 5** (`spec/05-behavior/`) — Atomic behavior primitives (expertises, procedures, playbooks, adapters)
+- **Layer 5** (`spec/05-definitions/`) — Executable definitions (roles, loops, quality gates, transitions)
 
 ### Implementation (Layer 6)
 
@@ -41,7 +41,7 @@ Located in `cli/` — Command-line interface tools
 │   ├── 02-dictionary/
 │   ├── 03-schemas/
 │   ├── 04-protocol/
-│   ├── 05-behavior/      # Atomic behavior primitives (v2)
+│   ├── 05-definitions/   # Executable definitions (Cartridge Architecture)
 │   ├── manifests/        # Manifest schemas
 │   ├── AGENTS.md
 │   └── README.md
@@ -111,15 +111,17 @@ QuestFoundry operates as a **virtual studio**:
 - **Hot** = internal, spoilers allowed, work-in-progress
 - **Cold** = player-facing, no spoilers, validated and canonical
 
-### V2 Architecture (Composable Behavior)
+### Cartridge Architecture (Executable Definitions)
 
-QuestFoundry v2 introduces **atomic, composable behavior primitives** to eliminate duplication:
+QuestFoundry uses the **Cartridge Architecture** where specifications ARE executable code:
 
-- **Expertises** (`spec/05-behavior/expertises/`) — Domain-specific knowledge for each role
-- **Procedures** (`spec/05-behavior/procedures/`) — Reusable workflow steps with YAML frontmatter
-- **Snippets** (`spec/05-behavior/snippets/`) — Small reusable text blocks
-- **Playbooks** (`spec/05-behavior/playbooks/`) — Loop definitions referencing procedures
-- **Adapters** (`spec/05-behavior/adapters/`) — Role configurations referencing expertises
+- **Role Profiles** (`spec/05-definitions/roles/`) — Complete role definitions with behavior and interfaces
+- **Loop Patterns** (`spec/05-definitions/loops/`) — Executable loop state machines
+- **Quality Gates** (`spec/05-definitions/quality_gates/`) — Reusable quality bar validators
+- **Transitions** (`spec/05-definitions/transitions/`) — Lifecycle state machines
+- **Templates** (`spec/05-definitions/templates/`) — Jinja2 prompt templates
+
+(The previous v2 atomic behavior primitives in `05-behavior/` have been archived to `spec/_archive/05-behavior-deprecated/`)
 
 The **spec compiler** (`lib/compiler/`) assembles these primitives into:
 

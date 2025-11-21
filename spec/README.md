@@ -57,7 +57,7 @@ The specification is deliberately **layered** for clarity, testability, and trac
 
 ### For AI Agents (Running Roles)
 
-1. **Browse behavior primitives**: [`05-behavior/`](05-behavior/)
+1. **Browse executable definitions**: [`05-definitions/`](05-definitions/)
 2. **Compile manifests**: Run `qf-compile` (from `questfoundry-compiler` package) to generate runtime artifacts
 3. **Execute with PlaybookExecutor**: Use the generic executor from compiled manifests (in `questfoundry-py`)
 4. **Or generate web agent prompts**: Use `qf-generate` (from `cli/prompt_generator/`) for third-party chat UIs
@@ -75,7 +75,7 @@ QuestFoundry is organized into **7 layers**, each with clear separation of conce
 | **2** | **Common Language** | Data dictionary, artifact templates        | ✅ 100%    | [`02-dictionary/README.md`](02-dictionary/README.md) |
 | **3** | **Schemas**         | JSON Schema specifications (Draft 2020-12) | ✅ 100%    | [`03-schemas/README.md`](03-schemas/README.md)       |
 | **4** | **Protocol**        | Message envelopes, intents, state machines | ✅ 100%    | [`04-protocol/README.md`](04-protocol/README.md)     |
-| **5** | **Behavior**        | Atomic behavior primitives (v2)            | ✅ 100%    | [`05-behavior/README.md`](05-behavior/README.md)     |
+| **5** | **Definitions**     | Executable definitions (Cartridge Architecture) | ✅ 100%    | [`05-definitions/README.md`](05-definitions/README.md) |
 | **6** | **Libraries**       | Python SDK, validators, clients            | 🚧 Active  | `../lib/python/` and `../lib/compiler/`      |
 | **7** | **CLI**             | Command-line interface tools               | 🚧 Active  | `../cli/prompt_generator/`                   |
 
@@ -280,7 +280,7 @@ spec/
 │   ├── LIFECYCLES/         # State machines (hooks, TUs)
 │   ├── FLOWS/              # Message sequence diagrams
 │   └── EXAMPLES/           # 20+ example messages
-├── 05-behavior/            # Layer 5: Atomic behavior primitives
+├── 05-definitions/         # Layer 5: Executable definitions (roles, loops, quality gates)
 │   ├── expertises/         # Domain expertise per role
 │   ├── procedures/         # Reusable workflow steps with YAML frontmatter
 │   ├── snippets/           # Small reusable text blocks
@@ -319,7 +319,7 @@ spec/
 - [`04-protocol/INTENTS.md`](04-protocol/INTENTS.md) — Complete intent catalog
 - [`04-protocol/LIFECYCLES/`](04-protocol/LIFECYCLES/) — State machines for hooks & TUs
 - [`03-schemas/README.md`](03-schemas/README.md) — Schema generation methodology
-- [`05-behavior/README.md`](05-behavior/README.md) — Behavior primitives architecture
+- [`05-definitions/README.md`](05-definitions/README.md) — Executable definitions architecture
 
 **Implementation:**
 

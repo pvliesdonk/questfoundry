@@ -62,10 +62,10 @@ jobs:
           zip -r ../spec-artifacts/spec-schemas.zip 03-schemas 04-protocol
           cd ..
 
-      - name: Build spec-behavior.zip
+      - name: Build spec-definitions.zip
         run: |
           cd spec
-          zip -r ../spec-artifacts/spec-behavior.zip 05-behavior
+          zip -r ../spec-artifacts/spec-definitions.zip 05-definitions
           cd ..
 
       - name: Create GitHub Release
@@ -79,4 +79,4 @@ jobs:
             --notes "Full specification release (Layers 0-5). See commit history for changes." \
             ./spec-artifacts/spec-all.zip \
             ./spec-artifacts/spec-schemas.zip \
-            ./spec-artifacts/spec-behavior.zip
+            ./spec-artifacts/spec-definitions.zip
