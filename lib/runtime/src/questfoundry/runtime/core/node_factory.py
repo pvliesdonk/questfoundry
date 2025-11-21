@@ -123,7 +123,23 @@ class NodeFactory:
                     except Exception as e:
                         logger.warning(f"Failed to read template from monorepo: {e}")
 
-            # Strategy 2: Try bundled resources (production)
+            # Strategy 2: Try downloaded spec (cached from GitHub releases)
+            if template_str is None:
+                try:
+                    from questfoundry.runtime.core.spec_fetcher import get_cached_spec_path
+
+                    cached_spec = get_cached_spec_path()
+                    if cached_spec:
+                        # Remove leading ../ from template path
+                        clean_path = template_path.lstrip('../')
+                        downloaded_template = cached_spec / "05-definitions" / clean_path
+                        if downloaded_template.exists():
+                            template_str = downloaded_template.read_text(encoding='utf-8')
+                            logger.debug(f"Loaded template from downloaded spec: {clean_path}")
+                except Exception as e:
+                    logger.debug(f"Failed to load from downloaded spec: {e}")
+
+            # Strategy 3: Try bundled resources (production)
             if template_str is None:
                 try:
                     # Templates are bundled in resources/definitions/templates/
@@ -137,7 +153,7 @@ class NodeFactory:
                 except Exception as e:
                     logger.debug(f"Failed to load from bundled resources: {e}")
 
-            # Strategy 3: Fallback - use system prompt only
+            # Strategy 4: Fallback - use system prompt only
             if template_str is None:
                 logger.warning(f"Template not found via any method, using fallback for role {role.id}")
                 # Return system prompt from role config if available

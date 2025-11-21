@@ -351,14 +351,93 @@ def test_graph(
 
 
 @app.command()
+def download_spec(
+    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Specific spec version to download (e.g., spec-v1.0.0)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force re-download even if already cached"),
+    show_path: bool = typer.Option(False, "--show-path", "-p", help="Show the downloaded spec path")
+):
+    """
+    Download the latest QuestFoundry spec from GitHub releases.
+
+    This downloads spec releases to ~/.cache/questfoundry/spec/, allowing you to
+    use newer specs without reinstalling the package.
+
+    Examples:
+        qf download-spec                    # Download latest spec release
+        qf download-spec --tag spec-v1.0.0  # Download specific version
+        qf download-spec --force            # Force re-download
+
+    Environment Variables:
+        QF_SPEC_SOURCE: Control which spec to use (auto/monorepo/bundled/download)
+            - Set to 'download' to always use downloaded spec
+    """
+    try:
+        from questfoundry.runtime.core.spec_fetcher import (
+            download_latest_release_spec,
+            SpecFetchError
+        )
+
+        # Show downloading message
+        version_info = f" ({tag})" if tag else " (latest)"
+        console.print(f"\n[bold]Downloading spec{version_info}...[/bold]\n")
+
+        # Download spec
+        spec_path = download_latest_release_spec(tag=tag, force=force)
+
+        # Get version from metadata
+        metadata_file = spec_path / ".questfoundry-spec.json"
+        version_str = tag or "latest"
+        if metadata_file.exists():
+            import json
+            metadata = json.loads(metadata_file.read_text())
+            version_str = metadata.get("tag", version_str)
+
+        # Show success message
+        console.print(Panel(
+            f"[bold green]✓ Spec downloaded successfully[/bold green]\n\n"
+            f"[bold]Version:[/bold] {version_str}\n"
+            f"[bold]Location:[/bold] {spec_path if show_path else '~/.cache/questfoundry/spec/'}",
+            style="green",
+            border_style="green",
+            title="Download Complete"
+        ))
+
+        console.print("\n[dim]To use the downloaded spec, set: QF_SPEC_SOURCE=download[/dim]")
+        console.print("[dim]Or use QF_SPEC_SOURCE=auto to auto-select (monorepo → bundled → download)[/dim]")
+
+    except SpecFetchError as e:
+        console.print(Panel(
+            f"[red]Failed to download spec:[/red]\n{e}",
+            style="red",
+            border_style="red",
+            title="Download Failed"
+        ))
+        logger.error(f"Spec download failed: {e}", exc_info=True)
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        sys.exit(1)
+
+
+@app.command()
 def version():
     """Show version information."""
+    from questfoundry.runtime.core.spec_fetcher import get_spec_source_preference
+    import os
+
     console.print("[bold]QuestFoundry Runtime[/bold]")
     console.print("Version: 0.1.0")
     console.print("Status: Phase 6 - CLI/Runtime Architecture Fix")
     console.print("\nArchitecture:")
     console.print("  • Primary: Natural language → Showrunner role")
     console.print("  • Debug: Direct loop invocation (qf loop)")
+
+    # Show spec source info
+    spec_source = get_spec_source_preference()
+    console.print(f"\nSpec Source: {spec_source}")
+    if spec_source != "auto":
+        console.print(f"  [dim](Set via QF_SPEC_SOURCE={os.getenv('QF_SPEC_SOURCE')})[/dim]")
 
 
 @app.callback()
