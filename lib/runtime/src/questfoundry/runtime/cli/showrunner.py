@@ -1,13 +1,17 @@
 """
-Showrunner Agent - Translation layer between human requests and studio protocol.
+Showrunner Interface - LLM-backed role with customer communication mandate.
 
-Based on spec: components/showrunner_agent.md
-FLEXIBLE component - natural language interface design.
+Based on spec: components/showrunner_agent.md v2.0.0
+Architecture: Showrunner is a role (from showrunner.yaml), not infrastructure.
+
+NOTE: This is a transitional implementation. The full LLM-backed interpretation
+will be added in Phase 6B once the interpret_customer_directive tool is defined.
+For now, uses deterministic mapping but maintains the correct interface structure.
 """
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from questfoundry.runtime.core.graph_factory import GraphFactory
 from questfoundry.runtime.core.state_manager import StateManager
@@ -17,8 +21,395 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class ShowrunnerResponse:
+    """Response from Showrunner after interpreting customer directive."""
+    success: bool
+    plain_language_response: str
+    loops_executed: List[str]
+    suggested_next_steps: List[str]
+    error: Optional[str] = None
+
+
+@dataclass
+class InterpretationResult:
+    """Internal result from interpreting a customer directive."""
+    loops_sequenced: List[str]
+    plain_language_explanation: str
+    context_for_loops: Dict[str, Any]
+
+
+class ShowrunnerInterface:
+    """
+    Interface to the Showrunner role (LLM-backed agent with customer mandate).
+
+    The Showrunner is defined in spec/05-definitions/roles/showrunner.yaml and
+    loaded like any other role. Its mandate is to interpret customer directives
+    and coordinate internal studio operations.
+
+    Key Principles:
+    - Showrunner is a role, not infrastructure
+    - Customer talks in natural language (no jargon)
+    - Showrunner decides which loops to run
+    - Internal operations are hidden from customer
+    - Responses are plain language only
+    """
+
+    def __init__(
+        self,
+        graph_factory: Optional[GraphFactory] = None,
+        state_manager: Optional[StateManager] = None,
+        role_profile: Optional[Any] = None
+    ):
+        """
+        Initialize Showrunner interface.
+
+        Args:
+            graph_factory: GraphFactory instance (creates new if not provided)
+            state_manager: StateManager instance (creates new if not provided)
+            role_profile: Showrunner role profile from showrunner.yaml (loads if not provided)
+        """
+        self.graph_factory = graph_factory or GraphFactory()
+        self.state_manager = state_manager or StateManager()
+
+        # Load Showrunner role profile
+        if role_profile is None:
+            try:
+                self.role = self.graph_factory.schema_registry.load_role("showrunner")
+                logger.info(f"Loaded Showrunner role: {self.role.name}")
+            except Exception as e:
+                logger.warning(f"Could not load showrunner.yaml: {e}")
+                self.role = None
+        else:
+            self.role = role_profile
+
+    def interpret_and_execute(
+        self,
+        customer_message: str,
+        verbose: bool = False
+    ) -> ShowrunnerResponse:
+        """
+        Interpret customer directive and execute appropriate work.
+
+        This is the primary method called by the CLI. It:
+        1. Interprets the customer's natural language request
+        2. Decides which loops to run (currently deterministic, will be LLM)
+        3. Executes loops internally
+        4. Translates results to plain language
+
+        Args:
+            customer_message: Natural language request from customer
+            verbose: Whether to show detailed execution info
+
+        Returns:
+            ShowrunnerResponse with plain language response and next steps
+        """
+        try:
+            logger.info(f"[bold]Showrunner interpreting:[/bold] {customer_message}")
+
+            # 1. Interpret customer directive
+            # TODO: Replace with LLM-backed interpretation using interpret_customer_directive tool
+            interpretation = self._interpret_directive_deterministic(customer_message)
+
+            if verbose:
+                logger.info(f"Interpretation: {interpretation.loops_sequenced}")
+                logger.info(f"Context: {list(interpretation.context_for_loops.keys())}")
+
+            # 2. Execute loops internally (customer doesn't see this)
+            loops_executed = []
+            final_states = {}
+
+            for loop_id in interpretation.loops_sequenced:
+                try:
+                    logger.info(f"[cyan]Executing:[/cyan] {loop_id}")
+                    final_state = self._execute_loop_internal(
+                        loop_id,
+                        interpretation.context_for_loops
+                    )
+                    loops_executed.append(loop_id)
+                    final_states[loop_id] = final_state
+
+                    if verbose:
+                        tu_id = final_state.get("tu_id", "unknown")
+                        logger.info(f"[green]Completed:[/green] {loop_id} → TU {tu_id}")
+
+                except Exception as e:
+                    logger.error(f"Loop {loop_id} failed: {e}", exc_info=verbose)
+                    return ShowrunnerResponse(
+                        success=False,
+                        plain_language_response=f"I ran into an issue while working on that: {str(e)}",
+                        loops_executed=loops_executed,
+                        suggested_next_steps=[],
+                        error=str(e)
+                    )
+
+            # 3. Translate results to plain language
+            plain_response = self._generate_plain_language_response(
+                interpretation,
+                final_states,
+                customer_message
+            )
+
+            # 4. Suggest next steps
+            next_steps = self._suggest_next_steps(
+                interpretation.loops_sequenced,
+                final_states
+            )
+
+            logger.info("[bold green]Request completed successfully[/bold green]")
+
+            return ShowrunnerResponse(
+                success=True,
+                plain_language_response=plain_response,
+                loops_executed=loops_executed,
+                suggested_next_steps=next_steps,
+                error=None
+            )
+
+        except Exception as e:
+            logger.error(f"Showrunner failed: {e}", exc_info=True)
+            return ShowrunnerResponse(
+                success=False,
+                plain_language_response=f"I apologize, but I encountered an error: {str(e)}",
+                loops_executed=[],
+                suggested_next_steps=[],
+                error=str(e)
+            )
+
+    def _interpret_directive_deterministic(
+        self,
+        customer_message: str
+    ) -> InterpretationResult:
+        """
+        Deterministic interpretation of customer directive.
+
+        TODO: Replace with LLM-backed interpretation in Phase 6B.
+        This is a transitional implementation that maintains the correct interface.
+
+        Args:
+            customer_message: Natural language request
+
+        Returns:
+            InterpretationResult with loops to run and context
+        """
+        message_lower = customer_message.lower()
+        context: Dict[str, Any] = {}
+
+        # Pattern matching for common requests
+        if any(word in message_lower for word in ["write", "create", "draft", "scene"]):
+            # Customer wants to create content
+            loops = ["story_spark"]
+            context["scene_text"] = customer_message
+            context["mode"] = "workshop"
+            explanation = "I'll work on creating that content for you."
+
+        elif any(word in message_lower for word in ["review", "harvest", "refine", "improve"]):
+            # Customer wants review/refinement
+            loops = ["hook_harvest"]
+            context["mode"] = "review"
+            explanation = "I'll review the story and identify interesting narrative hooks."
+
+        elif any(word in message_lower for word in ["lore", "backstory", "background", "worldbuilding"]):
+            # Customer wants lore development
+            loops = ["lore_deepening"]
+            context["topic"] = customer_message
+            explanation = "I'll develop that aspect of the world's lore."
+
+        elif any(word in message_lower for word in ["codex", "encyclopedia", "reference"]):
+            # Customer wants codex expansion
+            loops = ["codex_expansion"]
+            context["entry"] = customer_message
+            explanation = "I'll expand the codex with that information."
+
+        elif any(word in message_lower for word in ["style", "voice", "tone"]):
+            # Customer wants style tuning
+            loops = ["style_tune_up"]
+            explanation = "I'll review and tune the narrative style."
+
+        elif any(word in message_lower for word in ["translate", "translation", "language"]):
+            # Customer wants translation
+            loops = ["translation_pass"]
+            # Extract target language from message
+            for lang in ["spanish", "french", "german", "italian", "portuguese"]:
+                if lang in message_lower:
+                    context["target_language"] = lang.capitalize()
+                    break
+            explanation = f"I'll translate the content to {context.get('target_language', 'the requested language')}."
+
+        elif any(word in message_lower for word in ["export", "publish", "bind"]):
+            # Customer wants binding/export
+            loops = ["binding_run"]
+            context["format"] = "markdown"
+            explanation = "I'll prepare the content for export."
+
+        else:
+            # Default: treat as a writing request
+            loops = ["story_spark"]
+            context["scene_text"] = customer_message
+            context["mode"] = "workshop"
+            explanation = "I'll work on that for you."
+
+        return InterpretationResult(
+            loops_sequenced=loops,
+            plain_language_explanation=explanation,
+            context_for_loops=context
+        )
+
+    def _execute_loop_internal(
+        self,
+        loop_id: str,
+        context: Dict[str, Any]
+    ) -> StudioState:
+        """
+        Execute a single loop internally (customer doesn't see this).
+
+        Args:
+            loop_id: Loop identifier
+            context: Context dict for loop initialization
+
+        Returns:
+            Final StudioState after loop completion
+        """
+        # Initialize state
+        state = self.state_manager.initialize_state(loop_id, context)
+
+        # Create and execute loop graph
+        graph = self.graph_factory.create_loop_graph(loop_id)
+        final_state = graph.invoke(state)
+
+        return final_state
+
+    def _generate_plain_language_response(
+        self,
+        interpretation: InterpretationResult,
+        final_states: Dict[str, StudioState],
+        original_message: str
+    ) -> str:
+        """
+        Generate plain language response for customer (no jargon).
+
+        Args:
+            interpretation: The interpretation result
+            final_states: Final states from executed loops
+            original_message: Original customer message
+
+        Returns:
+            Plain language response string
+        """
+        # Start with the explanation
+        response_lines = [interpretation.plain_language_explanation, ""]
+
+        # Add summary of what was created (no technical jargon)
+        for loop_id, state in final_states.items():
+            artifacts = state.get("artifacts", {})
+            if artifacts:
+                response_lines.append("Created:")
+                for artifact_key, artifact_data in artifacts.items():
+                    # Translate artifact keys to customer-friendly names
+                    friendly_name = self._translate_artifact_name(artifact_key)
+                    response_lines.append(f"  • {friendly_name}")
+                response_lines.append("")
+
+        # Add quality status in plain language
+        for loop_id, state in final_states.items():
+            quality_bars = state.get("quality_bars", {})
+            if quality_bars:
+                issues = []
+                for bar_name, bar_data in quality_bars.items():
+                    status = bar_data.get("status", "unknown")
+                    if status in ["yellow", "red"]:
+                        friendly_bar = self._translate_bar_name(bar_name)
+                        issues.append(friendly_bar)
+
+                if issues:
+                    response_lines.append("Areas that need attention:")
+                    for issue in issues:
+                        response_lines.append(f"  • {issue}")
+                    response_lines.append("")
+                else:
+                    response_lines.append("Everything looks good!")
+                    response_lines.append("")
+
+        return "\n".join(response_lines).strip()
+
+    def _suggest_next_steps(
+        self,
+        loops_executed: List[str],
+        final_states: Dict[str, StudioState]
+    ) -> List[str]:
+        """
+        Suggest next steps in plain language (no commands).
+
+        Args:
+            loops_executed: List of loops that were executed
+            final_states: Final states from loops
+
+        Returns:
+            List of suggested next step strings
+        """
+        suggestions = []
+
+        # Suggest based on what was just done
+        if "story_spark" in loops_executed:
+            suggestions.append("Review and refine the content")
+            suggestions.append("Add backstory or lore details")
+
+        if "hook_harvest" in loops_executed:
+            suggestions.append("Export the content to see how it looks")
+            suggestions.append("Fine-tune the narrative style")
+
+        if "lore_deepening" in loops_executed:
+            suggestions.append("Update the codex with the new lore")
+            suggestions.append("Review how it integrates with the story")
+
+        if "binding_run" in loops_executed:
+            suggestions.append("Preview the exported content")
+            suggestions.append("Generate narration for testing")
+
+        # Check quality bars for suggestions
+        for loop_id, state in final_states.items():
+            quality_bars = state.get("quality_bars", {})
+            for bar_name, bar_data in quality_bars.items():
+                status = bar_data.get("status", "unknown")
+                if status == "yellow" or status == "red":
+                    friendly_bar = self._translate_bar_name(bar_name)
+                    suggestions.append(f"Address {friendly_bar}")
+
+        return suggestions[:5]  # Limit to 5 suggestions
+
+    def _translate_artifact_name(self, artifact_key: str) -> str:
+        """Translate technical artifact key to customer-friendly name."""
+        translations = {
+            "hot_draft": "Draft content",
+            "cold_canon": "Final content",
+            "hooks": "Narrative hooks",
+            "lore_entry": "Lore entry",
+            "codex_entry": "Codex entry",
+            "style_report": "Style analysis",
+            "translation": "Translated content",
+            "view": "Exported content"
+        }
+        return translations.get(artifact_key, artifact_key.replace("_", " ").title())
+
+    def _translate_bar_name(self, bar_name: str) -> str:
+        """Translate technical quality bar name to customer-friendly description."""
+        translations = {
+            "integrity": "content consistency",
+            "reachability": "story flow",
+            "nonlinearity": "narrative choices",
+            "gateways": "progression logic",
+            "style": "writing style",
+            "determinism": "asset consistency",
+            "presentation": "formatting and accessibility"
+        }
+        return translations.get(bar_name.lower(), bar_name.replace("_", " "))
+
+
+# Legacy classes for backward compatibility during transition
+# TODO: Remove in Phase 6C after all references are updated
+
+@dataclass
 class ParsedIntent:
-    """Parsed command intent."""
+    """Deprecated: Legacy class for backward compatibility."""
     action: str
     args: List[str]
     flags: Dict[str, str]
@@ -26,17 +417,8 @@ class ParsedIntent:
 
 
 @dataclass
-class LoopExecutionPlan:
-    """Plan for loop execution."""
-    loop_id: str
-    context: Dict[str, Any]
-    dependencies: List[str]
-    mode: str = "workshop"
-
-
-@dataclass
 class ExecutionResult:
-    """Result of loop execution."""
+    """Deprecated: Legacy class for backward compatibility."""
     success: bool
     summary: str
     artifacts: Dict[str, Any]
@@ -46,341 +428,38 @@ class ExecutionResult:
     error: Optional[str] = None
 
 
+# Legacy Showrunner class (for backward compatibility)
+# TODO: Remove in Phase 6C
 class Showrunner:
     """
-    Orchestrate AI agents on behalf of human authors.
+    Deprecated: Legacy orchestrator class.
 
-    The Showrunner translates natural language requests into studio protocol
-    execution, manages loop orchestration, and presents results in human-friendly format.
+    Use ShowrunnerInterface instead. This class is kept for backward
+    compatibility during transition.
     """
 
-    def __init__(
-        self,
-        graph_factory: Optional[GraphFactory] = None,
-        state_manager: Optional[StateManager] = None
-    ):
-        """
-        Initialize Showrunner.
-
-        Args:
-            graph_factory: GraphFactory instance (creates new if not provided)
-            state_manager: StateManager instance (creates new if not provided)
-        """
-        self.graph_factory = graph_factory or GraphFactory()
-        self.state_manager = state_manager or StateManager()
-
-    def execute_request(
-        self,
-        command: str,
-        parsed_intent: ParsedIntent,
-        user_context: Optional[Dict[str, Any]] = None
-    ) -> ExecutionResult:
-        """
-        Execute a human request through studio loops.
-
-        Steps:
-        1. Determine which loop(s) to run
-        2. Prepare context for loop
-        3. Create and execute loop
-        4. Translate results
-        5. Return formatted output
-
-        Args:
-            command: Original human command
-            parsed_intent: Parsed command (action, args, flags)
-            user_context: Optional project context
-
-        Returns:
-            ExecutionResult with artifacts and summary
-        """
-        try:
-            logger.info(f"[bold]Executing:[/bold] {command}")
-
-            # 1. Map intent to loop execution plan
-            plan = self.map_intent_to_loop(parsed_intent, user_context)
-
-            # 2. Execute dependencies first (if any)
-            for dep_loop_id in plan.dependencies:
-                logger.info(f"Executing dependency: [bold cyan]{dep_loop_id}[/bold cyan]")
-                self._execute_single_loop(dep_loop_id, {})
-
-            # 3. Execute primary loop
-            final_state = self._execute_single_loop(plan.loop_id, plan.context)
-
-            # 4. Translate results to human-friendly format
-            result = self.translate_results(final_state, plan.loop_id, command)
-
-            logger.info(f"[bold green]Request completed successfully[/bold green]: {result.tu_id}")
-            return result
-
-        except Exception as e:
-            logger.error(f"Request execution failed: {e}", exc_info=True)
-            return ExecutionResult(
-                success=False,
-                summary=f"Execution failed: {str(e)}",
-                artifacts={},
-                tu_id="",
-                quality_status={},
-                next_steps=[],
-                error=str(e)
-            )
-
-    def map_intent_to_loop(
-        self,
-        intent: ParsedIntent,
-        user_context: Optional[Dict[str, Any]] = None
-    ) -> LoopExecutionPlan:
-        """
-        Determine which loop(s) to execute based on intent.
-
-        Intent Mapping:
-        - "write <text>" → story_spark
-        - "review story" → hook_harvest
-        - "add lore <topic>" → lore_deepening
-        - "expand codex <entry>" → codex_expansion
-        - "tune style" → style_tune_up
-        - "add art <desc>" → art_touch_up
-        - "add audio <desc>" → audio_pass
-        - "translate <lang>" → translation_pass
-        - "narrate <scene>" → narration_dry_run
-        - "export <format>" → binding_run
-
-        Args:
-            intent: Parsed command intent
-            user_context: Optional project state
-
-        Returns:
-            LoopExecutionPlan with loop_id, context, dependencies
-        """
-        # Context is already prepared by CLI, just pass through
-        context = self.prepare_context(intent, intent.loop_id, user_context)
-
-        # Check for special cases requiring dependencies
-        dependencies: List[str] = []
-        if intent.loop_id == "narration_dry_run":
-            # Narration requires binding first
-            dependencies.append("binding_run")
-
-        return LoopExecutionPlan(
-            loop_id=intent.loop_id,
-            context=context,
-            dependencies=dependencies,
-            mode=intent.flags.get("mode", "workshop")
+    def __init__(self, graph_factory=None, state_manager=None):
+        """Initialize with a ShowrunnerInterface internally."""
+        self._interface = ShowrunnerInterface(
+            graph_factory=graph_factory,
+            state_manager=state_manager
+        )
+        logger.warning(
+            "Showrunner class is deprecated. Use ShowrunnerInterface instead."
         )
 
-    def prepare_context(
-        self,
-        intent: ParsedIntent,
-        loop_id: str,
-        user_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Prepare context dict for loop initialization.
+    def execute_request(self, command: str, parsed_intent: ParsedIntent, user_context=None):
+        """Legacy execute_request method."""
+        # Convert to natural language and use new interface
+        result = self._interface.interpret_and_execute(command)
 
-        Extract parameters from intent and user context,
-        format them for loop's expected context schema.
-
-        Args:
-            intent: Parsed command intent
-            loop_id: Target loop identifier
-            user_context: Optional project state
-
-        Returns:
-            Context dict ready for StateManager.initialize_state()
-        """
-        context: Dict[str, Any] = {}
-
-        # Add user context if provided
-        if user_context:
-            context.update(user_context)
-
-        # Add intent-specific context
-        if loop_id == "story_spark":
-            # Extract scene text from args
-            scene_text = " ".join(intent.args) if intent.args else ""
-            context["scene_text"] = scene_text
-            context["mode"] = intent.flags.get("mode", "workshop")
-
-        elif loop_id == "hook_harvest":
-            # Review mode - fetch hot artifacts
-            context["mode"] = "review"
-            # In real implementation, would fetch hot artifacts from storage
-            context["hot_artifacts"] = []
-
-        elif loop_id == "lore_deepening":
-            # Extract lore topic
-            topic = " ".join(intent.args) if intent.args else ""
-            context["topic"] = topic
-
-        elif loop_id == "translation_pass":
-            # Extract target language
-            target_language = intent.args[0] if intent.args else "Spanish"
-            context["target_language"] = target_language
-
-        elif loop_id == "binding_run":
-            # Extract format
-            format_type = intent.args[0] if intent.args else "markdown"
-            context["format"] = format_type
-
-        # Add mode from flags
-        if "mode" in intent.flags:
-            context["mode"] = intent.flags["mode"]
-
-        logger.debug(f"Prepared context for {loop_id}: {list(context.keys())}")
-        return context
-
-    def _execute_single_loop(
-        self,
-        loop_id: str,
-        context: Dict[str, Any],
-        progress_callback: Optional[Callable[[str], None]] = None
-    ) -> StudioState:
-        """
-        Execute a single loop and return final state.
-
-        Args:
-            loop_id: Loop pattern identifier
-            context: Prepared context dict
-            progress_callback: Optional function to call with progress updates
-
-        Returns:
-            Final StudioState after loop completion
-        """
-        logger.info(f"[bold cyan]>[/bold cyan] Starting loop: [bold]{loop_id}[/bold]")
-
-        # 1. Initialize state
-        state = self.state_manager.initialize_state(loop_id, context)
-
-        # 2. Create loop graph
-        graph = self.graph_factory.create_loop_graph(loop_id)
-
-        # 3. Execute graph
-        logger.info(f"Invoking compiled graph for {loop_id}")
-
-        # Call progress callback if provided
-        if progress_callback:
-            progress_callback(f"Starting {loop_id}")
-
-        # Invoke the graph with the initial state
-        final_state = graph.invoke(state)
-
-        logger.info(f"[bold green]DONE[/bold green] Completed loop: [bold]{loop_id}[/bold] | TU: {final_state['tu_id']}")
-
-        if progress_callback:
-            progress_callback(f"Completed {loop_id}")
-
-        return final_state
-
-    def translate_results(
-        self,
-        state: StudioState,
-        loop_id: str,
-        original_command: str
-    ) -> ExecutionResult:
-        """
-        Translate studio state into human-readable results.
-
-        Extract artifacts, format summary, suggest next steps.
-
-        Args:
-            state: Final StudioState from loop execution
-            loop_id: Which loop was executed
-            original_command: Original human command
-
-        Returns:
-            ExecutionResult with human-friendly summary and next steps
-        """
-        tu_id = state["tu_id"]
-        lifecycle = state["tu_lifecycle"]
-        artifacts = state["artifacts"]
-
-        # Extract quality status
-        quality_status = {}
-        for bar_name, bar_data in state["quality_bars"].items():
-            status = bar_data.get("status", "unknown")
-            emoji = self._status_emoji(status)
-            quality_status[bar_name] = f"{emoji} {status}"
-
-        # Generate summary based on loop type
-        summary_lines = [
-            f"✓ Completed {loop_id}",
-            f"Trace Unit: {tu_id}",
-            f"Status: {lifecycle}",
-            ""
-        ]
-
-        # Add artifact summary
-        if artifacts:
-            summary_lines.append("Artifacts created:")
-            for artifact_key, artifact_data in artifacts.items():
-                content = artifact_data.get("content", "")
-                content_preview = content[:80] + "..." if len(content) > 80 else content
-                summary_lines.append(f"  • {artifact_key}: {content_preview}")
-            summary_lines.append("")
-
-        # Add quality status
-        if quality_status:
-            summary_lines.append("Quality Status:")
-            for bar, status in quality_status.items():
-                summary_lines.append(f"  • {bar}: {status}")
-            summary_lines.append("")
-
-        # Suggest next steps
-        next_steps = self._suggest_next_steps(loop_id, state)
-        if next_steps:
-            summary_lines.append("Next steps:")
-            for step in next_steps:
-                summary_lines.append(f"  • {step}")
-
-        summary = "\n".join(summary_lines)
-
+        # Convert ShowrunnerResponse to ExecutionResult
         return ExecutionResult(
-            success=True,
-            summary=summary,
-            artifacts=artifacts,
-            tu_id=tu_id,
-            quality_status=quality_status,
-            next_steps=next_steps,
-            error=None
+            success=result.success,
+            summary=result.plain_language_response,
+            artifacts={},
+            tu_id="legacy",
+            quality_status={},
+            next_steps=result.suggested_next_steps,
+            error=result.error
         )
-
-    def _status_emoji(self, status: str) -> str:
-        """Get emoji for quality bar status."""
-        status_map = {
-            "green": "🟢",
-            "yellow": "🟡",
-            "red": "🔴",
-            "gray": "⚫",
-            "unknown": "⚪"
-        }
-        return status_map.get(status.lower(), "⚪")
-
-    def _suggest_next_steps(self, loop_id: str, state: StudioState) -> List[str]:
-        """
-        Suggest next commands based on loop type and state.
-
-        Args:
-            loop_id: Which loop was executed
-            state: Final state
-
-        Returns:
-            List of suggested next command strings
-        """
-        suggestions = []
-        lifecycle = state["tu_lifecycle"]
-
-        if loop_id == "story_spark":
-            if lifecycle == "hot-proposed":
-                suggestions.append("Run 'qf review story' to refine and approve")
-                suggestions.append(f"Run 'qf show {state['tu_id']}' to view full content")
-                suggestions.append("Run 'qf add lore <topic>' if you need backstory")
-
-        elif loop_id == "hook_harvest":
-            suggestions.append("Run 'qf export epub' to preview accepted content")
-            suggestions.append("Run 'qf tune style' to fix any style issues")
-
-        elif loop_id == "binding_run":
-            suggestions.append("Run 'qf narrate <chapter>' to generate audio preview")
-            suggestions.append("Run 'qf export <format>' for final output")
-
-        return suggestions
