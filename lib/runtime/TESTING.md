@@ -8,7 +8,7 @@ This guide covers how to test the QuestFoundry runtime with real LLM providers.
 
 ```bash
 cd lib/runtime
-poetry install
+uv sync
 ```
 
 ### Option 1: Test with OpenAI
@@ -19,10 +19,10 @@ export QF_DEFAULT_MODEL="gpt-3.5-turbo"
 export OPENAI_API_KEY="sk-..."
 
 # Run manual tests
-poetry run python tests/test_manual_llm.py
+uv run python tests/test_manual_llm.py
 
 # Or test CLI directly
-poetry run qf write "a tense cargo bay scene"
+uv run qf write "a tense cargo bay scene"
 ```
 
 ### Option 2: Test with Anthropic
@@ -33,10 +33,10 @@ export QF_DEFAULT_MODEL="claude-3-5-haiku-20241022"
 export ANTHROPIC_API_KEY="sk-ant-..."
 
 # Run manual tests
-poetry run python tests/test_manual_llm.py
+uv run python tests/test_manual_llm.py
 
 # Or test CLI directly
-poetry run qf write "the captain discovers missing fuel"
+uv run qf write "the captain discovers missing fuel"
 ```
 
 ---
@@ -46,27 +46,32 @@ poetry run qf write "the captain discovers missing fuel"
 The `tests/test_manual_llm.py` script runs 5 test categories:
 
 ### 1. **OpenAI Adapter Test**
+
 - Tests direct OpenAI API integration
 - Verifies ChatOpenAI wrapper
 - Validates response format
 
 ### 2. **Anthropic Adapter Test**
+
 - Tests direct Anthropic API integration
 - Verifies ChatAnthropic wrapper
 - Validates response format
 
 ### 3. **NodeFactory LLM Integration**
+
 - Tests NodeFactory with real LLM calls
 - Verifies provider selection logic
 - Checks artifact creation
 
 ### 4. **Story Spark Loop (End-to-End)**
+
 - Tests complete loop execution
 - Validates Showrunner orchestration
 - Checks quality bar updates
 - Verifies result translation
 
 ### 5. **Provider Switching**
+
 - Tests dynamic provider selection
 - Validates environment variable overrides
 - Ensures both providers work
@@ -144,13 +149,14 @@ TEST SUMMARY
 
 ```bash
 # Simple test
-poetry run qf write "a short scene"
+uv run qf write "a short scene"
 
 # With mode flag
-poetry run qf write "an action sequence" --mode production
+uv run qf write "an action sequence" --mode production
 ```
 
 **Expected Output**:
+
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Writing new scene       ┃
@@ -178,17 +184,17 @@ questfoundry.runtime.core.graph_factory - INFO - Creating loop graph: story_spar
 ### Test Review Command
 
 ```bash
-poetry run qf review story
+uv run qf review story
 ```
 
 ### Test Utility Commands
 
 ```bash
 # List loops
-poetry run qf list-loops
+uv run qf list-loops
 
 # List roles
-poetry run qf list-roles
+uv run qf list-roles
 ```
 
 ---
@@ -200,6 +206,7 @@ poetry run qf list-roles
 **Problem**: Missing or invalid API key
 
 **Solution**:
+
 ```bash
 # Verify environment variables
 echo $OPENAI_API_KEY
@@ -215,9 +222,10 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 **Problem**: Dependencies not installed
 
 **Solution**:
+
 ```bash
 cd lib/runtime
-poetry install
+uv sync
 ```
 
 ### Error: "Wrong provider being used"
@@ -225,6 +233,7 @@ poetry install
 **Problem**: Provider environment variable not set
 
 **Solution**:
+
 ```bash
 # Force provider
 export QF_LLM_PROVIDER="openai"  # or "anthropic"
@@ -235,6 +244,7 @@ export QF_LLM_PROVIDER="openai"  # or "anthropic"
 **Problem**: Too many API requests
 
 **Solution**:
+
 - Wait a few seconds and retry
 - Use a different model
 - Check API quota/billing
@@ -244,12 +254,13 @@ export QF_LLM_PROVIDER="openai"  # or "anthropic"
 **Problem**: YAML validation or graph structure issue
 
 **Solution**:
+
 ```bash
 # Run schema validation
-poetry run qf test-schema
+uv run qf test-schema
 
 # Check specific loop
-poetry run qf test-graph story_spark
+uv run qf test-graph story_spark
 ```
 
 ---
@@ -267,14 +278,14 @@ for loop in story_spark hook_harvest lore_deepening codex_expansion \
             style_tune_up art_touch_up audio_pass translation_pass \
             narration_dry_run binding_run; do
   echo "Testing $loop..."
-  poetry run qf test-graph $loop
+  uv run qf test-graph $loop
 done
 ```
 
 ### Measure Execution Time
 
 ```bash
-time poetry run qf write "test scene"
+time uv run qf write "test scene"
 ```
 
 ---
@@ -287,7 +298,7 @@ The manual LLM tests are automatically skipped if API keys are not present:
 
 ```bash
 # In CI/CD, just run unit tests
-poetry run pytest tests/test_core_integration.py -v
+uv run pytest tests/test_core_integration.py -v
 ```
 
 ### Run LLM Tests in CI (Optional)
@@ -296,7 +307,7 @@ Add API keys as secrets and run:
 
 ```bash
 export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-poetry run python tests/test_manual_llm.py
+uv run python tests/test_manual_llm.py
 ```
 
 ---
@@ -317,19 +328,19 @@ After successful testing:
 
 ```bash
 # Setup
-cd lib/runtime && poetry install
+cd lib/runtime && uv sync
 
 # Test with OpenAI
 export QF_LLM_PROVIDER="openai" OPENAI_API_KEY="sk-..."
-poetry run python tests/test_manual_llm.py
+uv run python tests/test_manual_llm.py
 
 # Test with Anthropic
 export QF_LLM_PROVIDER="anthropic" ANTHROPIC_API_KEY="sk-ant-..."
-poetry run python tests/test_manual_llm.py
+uv run python tests/test_manual_llm.py
 
 # CLI test
-poetry run qf write "test scene"
+uv run qf write "test scene"
 
 # List commands
-poetry run qf --help
+uv run qf --help
 ```
