@@ -1,0 +1,198 @@
+# Presentation Quality Gate
+# Ensures player-facing surfaces contain no spoilers or internal plumbing
+
+bar_name: Presentation
+
+bar_definition:
+  what_it_means: "Player-facing surfaces (manuscript, codex, PN) contain no spoilers or internal plumbing. All visible text respects spoiler hygiene and uses in-world language."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#7-presentation"
+
+validation_checks:
+  - check_id: no_spoilers_in_choices
+    check_type: content_safety
+    validator:
+      method: llm_eval
+      target: "artifacts.hook_card.choices.*.text"
+      expression: "Check if choice text reveals outcomes or future plot points"
+      parameters:
+        llm_prompt: "Does this choice text contain spoilers, meta-commentary, or reveal consequences before the player experiences them?"
+        forbidden_patterns: ["you will", "this leads to", "spoiler:"]
+    pass_condition: "violations.length == 0"
+    severity: critical
+    failure_message: "{{count}} choices contain spoilers: {{examples}}"
+
+  - check_id: codex_spoiler_safe
+    check_type: content_safety
+    validator:
+      method: llm_eval
+      target: "artifacts.codex_entry.player_text"
+      expression: "Check codex entries for spoilers or hidden gate logic"
+      parameters:
+        llm_prompt: "Does this codex entry reveal spoilers, show internal gate logic, or expose information players shouldn't know yet?"
+        check_for: ["future plot", "gate conditions", "internal state"]
+    pass_condition: "spoilers.length == 0"
+    severity: critical
+    failure_message: "{{count}} codex entries contain spoilers: {{entry_ids}}"
+
+  - check_id: pn_no_plumbing_leaks
+    check_type: content_safety
+    validator:
+      method: regex_pattern
+      target: "artifacts.hook_card.pn_lines"
+      expression: "\\b(codeword|state|variable|flag|condition|set_|has_)\\b"
+      parameters:
+        case_sensitive: false
+        check_diegetic: true
+    pass_condition: "matches.length == 0"
+    severity: critical
+    failure_message: "{{count}} PN lines leak internal plumbing: {{examples}}"
+    examples:
+      - scenario: "PN says 'If the foreman vouched for you'"
+        passes: true
+        explanation: "Diegetic, in-world phrasing"
+      - scenario: "PN says 'If codeword met_foreman is set'"
+        passes: false
+        explanation: "Exposes internal state mechanism"
+
+  - check_id: no_technique_talk
+    check_type: content_safety
+    validator:
+      method: regex_pattern
+      target: "artifacts.*.player_visible_text"
+      expression: "\\b(seed|model|prompt|DAW|session|render|generate|SD|stable.?diffusion)\\b"
+      parameters:
+        case_sensitive: false
+        exclude_metadata: true
+    pass_condition: "matches.length == 0"
+    severity: critical
+    failure_message: "{{count}} instances of technique talk in player-facing text: {{examples}}"
+
+  - check_id: diegetic_transit_present
+    check_type: content_safety
+    validator:
+      method: custom_function
+      target: "artifacts.hook_card.anchor_jumps"
+      expression: "check_transit_coverage"
+      parameters:
+        require_transit: true
+        allow_fast_travel: false
+    pass_condition: "missing_transit.length == 0"
+    severity: warning
+    failure_message: "{{count}} anchor jumps lack diegetic transit (teleporting): {{jump_ids}}"
+
+  - check_id: internal_labels_hidden
+    check_type: content_safety
+    validator:
+      method: regex_pattern
+      target: "artifacts.*.player_visible_text"
+      expression: "\\b(HK-\\d|TU-\\d|node_|role_|loop_|artifact_)\\b"
+      parameters:
+        check_ids: true
+        check_internal_refs: true
+    pass_condition: "matches.length == 0"
+    severity: critical
+    failure_message: "{{count}} internal labels visible in player text: {{examples}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 2
+
+remediation:
+  common_failures:
+    - issue: "Choice text reveals outcome"
+      fix: "Rephrase choice to be decision-focused, not outcome-focused"
+      check_ids: ["no_spoilers_in_choices"]
+      examples:
+        - "'Take the shortcut (you'll get caught)' → 'Take the shortcut through the alley'"
+
+    - issue: "Codex reveals future plot"
+      fix: "Move spoiler detail to canon notes; keep codex player-safe"
+      check_ids: ["codex_spoiler_safe"]
+      examples:
+        - "Codex says 'the traitor is X' before reveal → remove or add 'suspected' qualifier"
+
+    - issue: "PN mentions codewords/state"
+      fix: "Rephrase to diegetic checks using in-world language"
+      check_ids: ["pn_no_plumbing_leaks"]
+      examples:
+        - "'If has_key' → 'If you found the old brass key'"
+
+    - issue: "Image caption mentions technical process"
+      fix: "Replace technical description with in-world visual description"
+      check_ids: ["no_technique_talk"]
+      examples:
+        - "'Generated with SD1.5, seed 12345' → 'A weathered oak door, hinges rusted'"
+
+    - issue: "Anchor jump has no narrative bridge"
+      fix: "Add diegetic transit paragraph or scene explaining travel"
+      check_ids: ["diegetic_transit_present"]
+      examples:
+        - "Instant jump to dungeon → add 'You descend the stone stairs...'"
+
+    - issue: "Internal ID visible in manuscript"
+      fix: "Replace with player-safe reference or in-world term"
+      check_ids: ["internal_labels_hidden"]
+      examples:
+        - "'See HK-20250121-005' → 'See: The Captain's Quarters'"
+
+  smallest_viable_fix_template: "Rephrase {{artifact_id}} to hide {{leak_type}} using in-world language"
+
+  owner_assignment:
+    PW: ["no_spoilers_in_choices", "diegetic_transit_present"]
+    SS: ["no_spoilers_in_choices"]
+    PN: ["pn_no_plumbing_leaks"]
+    CC: ["codex_spoiler_safe"]
+    AD: ["no_technique_talk"]
+    GK: ["no_spoilers_in_choices", "codex_spoiler_safe", "pn_no_plumbing_leaks", "internal_labels_hidden"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: false
+
+applicable_to:
+  artifact_types:
+    - hook_card
+    - codex_entry
+    - canon_pack
+    - visual_plan
+    - manuscript_view
+  loops:
+    - story_spark
+    - codex_expansion
+    - binding_run
+  hot_cold: cold
+
+automation:
+  fully_automated: false
+  requires_llm: true
+  requires_human: false
+  evaluation_timeout: 60
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Presentation is critical for player experience - no breaking immersion with spoilers or plumbing"
+  test_cases:
+    - name: "Clean choice with no spoilers"
+      artifact:
+        choice_text: "Ask the captain about the missing crew"
+      expected_status: green
+      expected_failures: []
+
+    - name: "Choice that spoils outcome"
+      artifact:
+        choice_text: "Confront the captain (he's the traitor)"
+      expected_status: red
+      expected_failures: ["no_spoilers_in_choices"]
+
+    - name: "PN line with technical leak"
+      artifact:
+        pn_line: "If codeword met_captain is true, you may proceed"
+      expected_status: red
+      expected_failures: ["pn_no_plumbing_leaks"]

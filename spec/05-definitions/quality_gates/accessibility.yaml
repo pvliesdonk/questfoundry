@@ -1,0 +1,213 @@
+# Accessibility Quality Gate
+# Ensures navigation is clear, alt text present, sensory considerations respected
+
+bar_name: Accessibility
+
+bar_definition:
+  what_it_means: "Navigation is clear and predictable. Alt text present for all images. Sensory considerations respected (avoid flashing, provide content notes where appropriate)."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#8-accessibility"
+
+validation_checks:
+  - check_id: alt_text_present
+    check_type: accessibility_audit
+    validator:
+      method: custom_function
+      target: "artifacts.*.visual_plans"
+      expression: "check_alt_text_coverage"
+      parameters:
+        require_alt_text: true
+        check_descriptive: true
+        check_spoiler_free: true
+    pass_condition: "missing_alt_text.length == 0"
+    severity: critical
+    failure_message: "{{count}} images lack alt text: {{image_ids}}"
+
+  - check_id: alt_text_descriptive
+    check_type: accessibility_audit
+    validator:
+      method: llm_eval
+      target: "artifacts.*.visual_plans.*.alt_text"
+      expression: "Check if alt text describes composition/intent without spoilers"
+      parameters:
+        llm_prompt: "Does this alt text describe what's in the image (composition, mood, elements) without revealing spoilers? Avoid phrases like 'image of' or 'picture showing'."
+        min_words: 5
+        max_words: 50
+    pass_condition: "inadequate_alt_text.length == 0"
+    severity: warning
+    failure_message: "{{count}} images have inadequate alt text: {{examples}}"
+
+  - check_id: link_text_informative
+    check_type: accessibility_audit
+    validator:
+      method: regex_pattern
+      target: "artifacts.hook_card.choices.*.text"
+      expression: "^(click here|here|link|read more|continue)$"
+      parameters:
+        case_sensitive: false
+        check_context: true
+    pass_condition: "uninformative_links.length == 0"
+    severity: warning
+    failure_message: "{{count}} links have uninformative text: {{examples}}"
+    examples:
+      - scenario: "Link text: 'Investigate the captain's quarters'"
+        passes: true
+        explanation: "Descriptive, tells user where they're going"
+      - scenario: "Link text: 'Click here'"
+        passes: false
+        explanation: "Uninformative, doesn't describe destination"
+
+  - check_id: navigation_markers_present
+    check_type: accessibility_audit
+    validator:
+      method: custom_function
+      target: "artifacts.hook_card"
+      expression: "check_navigation_aids"
+      parameters:
+        check_breadcrumbs: true
+        check_section_headers: true
+        check_back_links: true
+    pass_condition: "missing_markers.length == 0"
+    severity: warning
+    failure_message: "{{count}} sections lack navigation aids: {{section_ids}}"
+
+  - check_id: content_warnings_present
+    check_type: accessibility_audit
+    validator:
+      method: custom_function
+      target: "artifacts.canon_pack"
+      expression: "check_content_notes"
+      parameters:
+        check_for_triggers: ["violence", "horror", "death", "trauma"]
+        require_cw_tag: true
+    pass_condition: "missing_warnings.length == 0"
+    severity: warning
+    failure_message: "{{count}} sections with sensitive content lack warnings: {{section_ids}}"
+
+  - check_id: no_sensory_overload
+    check_type: accessibility_audit
+    validator:
+      method: custom_function
+      target: "artifacts.*.visual_plans"
+      expression: "check_sensory_safety"
+      parameters:
+        check_flashing: true
+        check_rapid_animation: true
+        check_high_contrast: true
+    pass_condition: "violations.length == 0"
+    severity: critical
+    failure_message: "{{count}} visual plans risk sensory overload: {{details}}"
+
+  - check_id: heading_structure
+    check_type: accessibility_audit
+    validator:
+      method: custom_function
+      target: "artifacts.manuscript_view"
+      expression: "check_heading_hierarchy"
+      parameters:
+        require_h1: true
+        check_skip_levels: true
+    pass_condition: "violations.length == 0"
+    severity: info
+    failure_message: "Heading structure issues: {{details}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 3
+
+remediation:
+  common_failures:
+    - issue: "Image has no alt text"
+      fix: "Add descriptive alt text coordinating with Art Director"
+      check_ids: ["alt_text_present"]
+      examples:
+        - "Visual plan complete but no alt text → add 'A dimly lit cargo bay, crates stacked haphazardly'"
+
+    - issue: "Alt text too generic or spoilery"
+      fix: "Revise to describe composition/mood without revealing plot"
+      check_ids: ["alt_text_descriptive"]
+      examples:
+        - "'Picture of the traitor' → 'A shadowed figure stands at the airlock controls'"
+
+    - issue: "Link text is 'click here' or generic"
+      fix: "Replace with descriptive text explaining destination"
+      check_ids: ["link_text_informative"]
+      examples:
+        - "'Click here' → 'Examine the captain's personal logs'"
+
+    - issue: "Long section with no navigation aids"
+      fix: "Add section headers, breadcrumbs, or 'back to hub' links"
+      check_ids: ["navigation_markers_present"]
+      examples:
+        - "10-section deep dive with no way back → add 'Return to bridge' link"
+
+    - issue: "Violent scene lacks content warning"
+      fix: "Add content note flagging potentially distressing material"
+      check_ids: ["content_warnings_present"]
+      examples:
+        - "Combat scene → add 'Content note: Violence, injury description'"
+
+    - issue: "Visual plan includes flashing/strobing"
+      fix: "Adjust composition plan or add warning and alternative"
+      check_ids: ["no_sensory_overload"]
+      examples:
+        - "Rapid flashing lights → change to steady glow or add seizure warning"
+
+  smallest_viable_fix_template: "Add {{missing_element}} to {{artifact_id}}"
+
+  owner_assignment:
+    AD: ["alt_text_present", "alt_text_descriptive", "no_sensory_overload"]
+    PW: ["link_text_informative", "navigation_markers_present", "content_warnings_present"]
+    BB: ["heading_structure"]
+    SR: ["content_warnings_present"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: false
+
+applicable_to:
+  artifact_types:
+    - visual_plan
+    - hook_card
+    - canon_pack
+    - manuscript_view
+  loops:
+    - art_touch_up
+    - binding_run
+  hot_cold: cold
+
+automation:
+  fully_automated: false
+  requires_llm: true
+  requires_human: true  # Human review recommended for content warnings
+  evaluation_timeout: 45
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Accessibility ensures the work is navigable and safe for all readers. Alt text and content warnings are critical."
+  test_cases:
+    - name: "Visual plan with good alt text"
+      artifact:
+        image_id: "img_001"
+        alt_text: "A cluttered cargo bay with rust-streaked walls and dim overhead lighting"
+      expected_status: green
+      expected_failures: []
+
+    - name: "Visual plan missing alt text"
+      artifact:
+        image_id: "img_002"
+        alt_text: ""
+      expected_status: red
+      expected_failures: ["alt_text_present"]
+
+    - name: "Uninformative link text"
+      artifact:
+        choice_text: "click here"
+      expected_status: yellow
+      expected_failures: ["link_text_informative"]

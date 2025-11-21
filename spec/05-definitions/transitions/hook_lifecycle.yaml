@@ -1,0 +1,294 @@
+# Hook Card Lifecycle - State machine transitions
+# Based on spec: 04-protocol/LIFECYCLES/hooks.md
+
+lifecycle_type: hook
+
+metadata:
+  description: "Hook Card lifecycle: tracking follow-up ideas from proposal through canonization"
+  lifecycle_ref: "spec/04-protocol/LIFECYCLES/hooks.md"
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+
+states:
+  - proposed
+  - accepted
+  - in-progress
+  - resolved
+  - canonized
+  - deferred
+  - rejected
+
+terminal_states:
+  - canonized
+  - rejected
+
+entry_state: proposed
+
+transitions:
+  # proposed → accepted (SR triage approval)
+  - from_state: proposed
+    to_state: accepted
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "artifacts.current_hook.header.status"
+          condition: "== 'proposed'"
+          error_message: "Hook must be in proposed state"
+        - key: "artifacts.current_hook.proposed_next_step.owner_r"
+          condition: "!= null"
+          error_message: "Hook must have owner role assigned"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "accepted"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+      protocol_messages:
+        - sender: "SR"
+          receiver: "{{hook.proposed_next_step.owner_r}}"
+          intent: "hook.assigned"
+          payload_template:
+            hook_id: "{{hook.header.id}}"
+            message: "Hook accepted and assigned to you"
+
+  # proposed → deferred (SR parks for later)
+  - from_state: proposed
+    to_state: deferred
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.deferral_reason"
+          condition: "!= null"
+          error_message: "Deferral requires reason"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "deferred"
+        - artifact_key: "artifacts.current_hook"
+          field: "metadata.deferral_reason"
+          value: "{{payload.deferral_reason}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+  # proposed → rejected (SR rejects)
+  - from_state: proposed
+    to_state: rejected
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.rejection_reason"
+          condition: "!= null"
+          error_message: "Rejection requires reason"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "rejected"
+        - artifact_key: "artifacts.current_hook"
+          field: "metadata.rejection_reason"
+          value: "{{payload.rejection_reason}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+  # accepted → in-progress (Owner begins work)
+  - from_state: accepted
+    to_state: in-progress
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["{{hook.proposed_next_step.owner_r}}"]
+    preconditions:
+      state_requirements:
+        - key: "artifacts.current_hook.header.status"
+          condition: "== 'accepted'"
+          error_message: "Hook must be accepted before starting work"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "in-progress"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+      role_signals:
+        - role_id: "{{hook.proposed_next_step.owner_r}}"
+          action: "wake"
+          reason: "Hook work started"
+
+  # accepted → deferred (If blocked)
+  - from_state: accepted
+    to_state: deferred
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR", "{{hook.proposed_next_step.owner_r}}"]
+    preconditions:
+      state_requirements:
+        - key: "payload.deferral_reason"
+          condition: "!= null"
+          error_message: "Deferral requires reason"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "deferred"
+        - artifact_key: "artifacts.current_hook"
+          field: "metadata.deferral_reason"
+          value: "{{payload.deferral_reason}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+  # in-progress → resolved (Work complete)
+  - from_state: in-progress
+    to_state: resolved
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["{{hook.proposed_next_step.owner_r}}"]
+    preconditions:
+      artifact_validation:
+        required: true
+        schema_ref: "hook_card.schema.json"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "resolved"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+      protocol_messages:
+        - sender: "{{hook.proposed_next_step.owner_r}}"
+          receiver: "SR"
+          intent: "hook.completed"
+          payload_template:
+            hook_id: "{{hook.header.id}}"
+            message: "Hook work completed, ready for gatecheck"
+
+  # in-progress → deferred (If blocked)
+  - from_state: in-progress
+    to_state: deferred
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR", "{{hook.proposed_next_step.owner_r}}"]
+    preconditions:
+      state_requirements:
+        - key: "payload.deferral_reason"
+          condition: "!= null"
+          error_message: "Deferral requires reason"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "deferred"
+        - artifact_key: "artifacts.current_hook"
+          field: "metadata.deferral_reason"
+          value: "{{payload.deferral_reason}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+  # resolved → canonized (After Cold merge)
+  - from_state: resolved
+    to_state: canonized
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.cold_location"
+          condition: "!= null"
+          error_message: "Canonization requires Cold location reference"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "canonized"
+        - artifact_key: "artifacts.current_hook"
+          field: "locations_links.cold_ref"
+          value: "{{payload.cold_location}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+      filesystem_operations:
+        - operation: "create_snapshot"
+          hot_cold: "cold"
+          path: "{{payload.cold_location}}"
+          artifact_ref: "artifacts.current_hook"
+
+  # resolved → in-progress (Rework needed)
+  - from_state: resolved
+    to_state: in-progress
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["{{hook.proposed_next_step.owner_r}}"]
+    preconditions:
+      state_requirements:
+        - key: "payload.rework_reason"
+          condition: "!= null"
+          error_message: "Rework requires reason"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "in-progress"
+        - artifact_key: "artifacts.current_hook"
+          field: "metadata.rework_reason"
+          value: "{{payload.rework_reason}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+  # deferred → accepted (Reactivating)
+  - from_state: deferred
+    to_state: accepted
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR"]
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "accepted"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+  # deferred → rejected (Abandoning)
+  - from_state: deferred
+    to_state: rejected
+    intent: "hook.update_status"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.rejection_reason"
+          condition: "!= null"
+          error_message: "Rejection requires reason"
+    effects:
+      artifact_updates:
+        - artifact_key: "artifacts.current_hook"
+          field: "header.status"
+          value: "rejected"
+        - artifact_key: "artifacts.current_hook"
+          field: "metadata.rejection_reason"
+          value: "{{payload.rejection_reason}}"
+        - artifact_key: "artifacts.current_hook"
+          field: "header.edited"
+          value: "{{current_timestamp}}"
+
+error_handling:
+  on_precondition_failure: "block"
+  on_effect_failure: "rollback"
+  error_intent: "error"
+  rollback_strategy: "full"

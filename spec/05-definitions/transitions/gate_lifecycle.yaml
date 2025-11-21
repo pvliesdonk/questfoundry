@@ -1,0 +1,216 @@
+# Gate (Gatecheck) Lifecycle - Quality bar enforcement decision flow
+# Based on spec: 04-protocol/LIFECYCLES/gate.md
+
+lifecycle_type: gate
+
+metadata:
+  description: "Gatecheck lifecycle: quality bar validation and decision flow for Cold merge approval"
+  lifecycle_ref: "spec/04-protocol/LIFECYCLES/gate.md"
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "No Cold merge without gatekeeper approval. All bars must be evaluated."
+
+states:
+  - pre-gate
+  - gatecheck
+  - "decision:pass"
+  - "decision:conditional-pass"
+  - "decision:block"
+  - deferred
+
+terminal_states:
+  - "decision:pass"
+  - "decision:conditional-pass"
+  - "decision:block"
+
+entry_state: pre-gate
+
+transitions:
+  # pre-gate → gatecheck (Pre-gate passed, ready for full check)
+  - from_state: pre-gate
+    to_state: gatecheck
+    intent: "gate.submit"
+    authorization:
+      allowed_senders: ["GK"]
+    preconditions:
+      state_requirements:
+        - key: "artifacts.gatecheck_report.pre_gate_complete"
+          condition: "== true"
+          error_message: "Pre-gate review must be complete"
+        - key: "artifacts.gatecheck_report.critical_flags"
+          condition: "len(value) == 0"
+          error_message: "Cannot proceed to gatecheck with critical red flags"
+    effects:
+      state_updates:
+        - key: "artifacts.gatecheck_report.status"
+          value: "gatecheck"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.gatecheck_started"
+          value: "{{current_timestamp}}"
+          operation: "set"
+
+  # pre-gate → deferred (TU deferred before gatecheck)
+  - from_state: pre-gate
+    to_state: deferred
+    intent: "gate.defer"
+    authorization:
+      allowed_senders: ["SR", "GK"]
+    preconditions:
+      state_requirements:
+        - key: "payload.deferral_reason"
+          condition: "!= null"
+          error_message: "Deferral requires reason"
+    effects:
+      state_updates:
+        - key: "artifacts.gatecheck_report.status"
+          value: "deferred"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.deferral_reason"
+          value: "{{payload.deferral_reason}}"
+          operation: "set"
+
+  # gatecheck → decision:pass (All bars green)
+  - from_state: gatecheck
+    to_state: "decision:pass"
+    intent: "gate.decision"
+    authorization:
+      allowed_senders: ["GK"]
+    preconditions:
+      state_requirements:
+        - key: "artifacts.gatecheck_report.bars"
+          condition: "all(bar.status == 'green' for bar in value.values())"
+          error_message: "Pass decision requires all bars green"
+      artifact_validation:
+        required: true
+        schema_ref: "gatecheck_report.schema.json"
+    effects:
+      state_updates:
+        - key: "artifacts.gatecheck_report.status"
+          value: "decision:pass"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.decision"
+          value: "pass"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.decided_at"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "GK"
+          receiver: "SR"
+          intent: "gate.approved"
+          payload_template:
+            tu_id: "{{tu.id}}"
+            decision: "pass"
+            message: "All quality bars green, approved for Cold merge"
+
+  # gatecheck → decision:conditional-pass (Some bars yellow)
+  - from_state: gatecheck
+    to_state: "decision:conditional-pass"
+    intent: "gate.decision"
+    authorization:
+      allowed_senders: ["GK"]
+    preconditions:
+      state_requirements:
+        - key: "artifacts.gatecheck_report.bars"
+          condition: "all(bar.status in ['green', 'yellow'] for bar in value.values()) and any(bar.status == 'yellow' for bar in value.values())"
+          error_message: "Conditional pass requires no red bars and at least one yellow"
+        - key: "artifacts.gatecheck_report.remediation_plan"
+          condition: "!= null"
+          error_message: "Conditional pass requires time-boxed remediation plan"
+      artifact_validation:
+        required: true
+        schema_ref: "gatecheck_report.schema.json"
+    effects:
+      state_updates:
+        - key: "artifacts.gatecheck_report.status"
+          value: "decision:conditional-pass"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.decision"
+          value: "conditional_pass"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.decided_at"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "GK"
+          receiver: "SR"
+          intent: "gate.conditional_approval"
+          payload_template:
+            tu_id: "{{tu.id}}"
+            decision: "conditional_pass"
+            yellow_bars: "{{gatecheck_report.yellow_bar_summary}}"
+            remediation_plan: "{{gatecheck_report.remediation_plan}}"
+
+  # gatecheck → decision:block (One or more bars red)
+  - from_state: gatecheck
+    to_state: "decision:block"
+    intent: "gate.decision"
+    authorization:
+      allowed_senders: ["GK"]
+    preconditions:
+      state_requirements:
+        - key: "artifacts.gatecheck_report.bars"
+          condition: "any(bar.status == 'red' for bar in value.values())"
+          error_message: "Block decision requires at least one red bar"
+        - key: "artifacts.gatecheck_report.remediation_notes"
+          condition: "len(value) > 0"
+          error_message: "Block decision requires remediation notes with smallest viable fixes"
+      artifact_validation:
+        required: true
+        schema_ref: "gatecheck_report.schema.json"
+    effects:
+      state_updates:
+        - key: "artifacts.gatecheck_report.status"
+          value: "decision:block"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.decision"
+          value: "block"
+          operation: "set"
+        - key: "artifacts.gatecheck_report.decided_at"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "GK"
+          receiver: "SR"
+          intent: "gate.blocked"
+          payload_template:
+            tu_id: "{{tu.id}}"
+            decision: "block"
+            red_bars: "{{gatecheck_report.red_bar_summary}}"
+            remediation_required: true
+        - sender: "GK"
+          receiver: "{{responsible_roles}}"
+          intent: "gate.remediation_required"
+          payload_template:
+            tu_id: "{{tu.id}}"
+            notes: "{{gatecheck_report.remediation_notes}}"
+
+error_handling:
+  on_precondition_failure: "block"
+  on_effect_failure: "rollback"
+  error_intent: "gate.error"
+  rollback_strategy: "full"
+
+validation:
+  verify_state_consistency: true
+  verify_artifact_integrity: true
+  required_fields:
+    - "title"
+    - "mode"
+    - "bars"
+    - "decision"
+
+# Quality bar status mapping
+bar_status_rules:
+  green:
+    description: "No failures, all checks passed"
+    allows_merge: true
+  yellow:
+    description: "Warning-level failures, conditional pass with remediation plan"
+    allows_merge: true
+    requires_remediation_plan: true
+  red:
+    description: "Critical failures, blocks merge"
+    allows_merge: false
+    requires_remediation: true

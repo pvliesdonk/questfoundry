@@ -1,0 +1,247 @@
+# View/Export Lifecycle - Export and PN dry-run flow
+# Based on spec: 04-protocol/LIFECYCLES/view.md
+
+lifecycle_type: view
+
+metadata:
+  description: "View/Export lifecycle: reproducible, player-safe exports from Cold snapshots with PN dry-run feedback"
+  lifecycle_ref: "spec/04-protocol/LIFECYCLES/view.md"
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Cold-only inputs. PN and Binder consume only Cold snapshots, never Hot material."
+
+states:
+  - snapshot-selected
+  - export-binding
+  - pn-dry-run
+  - feedback-collected
+  - view-published
+  - export-failed
+
+terminal_states:
+  - view-published
+  - export-failed
+
+entry_state: snapshot-selected
+
+transitions:
+  # snapshot-selected → export-binding (Binder starts export generation)
+  - from_state: snapshot-selected
+    to_state: export-binding
+    intent: "view.bind"
+    authorization:
+      allowed_senders: ["BB"]
+    preconditions:
+      snapshot_requirements:
+        snapshot_must_exist: true
+        snapshot_ref_required: true
+      state_requirements:
+        - key: "artifacts.view_log.cold_snapshot_ref"
+          condition: "!= null"
+          error_message: "Export requires valid Cold snapshot reference"
+        - key: "artifacts.view_log.export_targets"
+          condition: "len(value) > 0"
+          error_message: "Export requires at least one target format (PDF, HTML, EPUB)"
+      quality_bars:
+        - bar: "Presentation"
+          required_status: "green"
+        - bar: "Accessibility"
+          required_status: "yellow"
+    effects:
+      state_updates:
+        - key: "artifacts.view_log.status"
+          value: "export-binding"
+          operation: "set"
+        - key: "artifacts.view_log.binding_started"
+          value: "{{current_timestamp}}"
+          operation: "set"
+
+  # snapshot-selected → export-failed (Binding errors prevent export)
+  - from_state: snapshot-selected
+    to_state: export-failed
+    intent: "view.bind_failed"
+    authorization:
+      allowed_senders: ["BB"]
+    preconditions:
+      state_requirements:
+        - key: "payload.error"
+          condition: "!= null"
+          error_message: "Bind failure requires error details"
+    effects:
+      state_updates:
+        - key: "artifacts.view_log.status"
+          value: "export-failed"
+          operation: "set"
+        - key: "artifacts.view_log.error"
+          value: "{{payload.error}}"
+          operation: "set"
+        - key: "artifacts.view_log.failed_at"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "BB"
+          receiver: "SR"
+          intent: "view.export_failed"
+          payload_template:
+            view_title: "{{view_log.title}}"
+            error: "{{payload.error}}"
+
+  # export-binding → pn-dry-run (Export artifacts ready for PN)
+  - from_state: export-binding
+    to_state: pn-dry-run
+    intent: "view.bound"
+    authorization:
+      allowed_senders: ["BB"]
+    preconditions:
+      artifact_validation:
+        required: true
+        schema_ref: "view_log.schema.json"
+      state_requirements:
+        - key: "artifacts.view_log.export_artifacts"
+          condition: "len(value) > 0"
+          error_message: "Bound view must have generated export artifacts"
+    effects:
+      state_updates:
+        - key: "artifacts.view_log.status"
+          value: "pn-dry-run"
+          operation: "set"
+        - key: "artifacts.view_log.binding_completed"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "BB"
+          receiver: "PN"
+          intent: "view.ready_for_playtest"
+          payload_template:
+            view_title: "{{view_log.title}}"
+            snapshot_ref: "{{view_log.cold_snapshot_ref}}"
+            artifacts: "{{view_log.export_artifacts}}"
+      role_signals:
+        - role_id: "PN"
+          action: "wake"
+          reason: "View ready for dry-run playtest"
+
+  # export-binding → export-failed (Binding errors during generation)
+  - from_state: export-binding
+    to_state: export-failed
+    intent: "view.bind_failed"
+    authorization:
+      allowed_senders: ["BB"]
+    preconditions:
+      state_requirements:
+        - key: "payload.error"
+          condition: "!= null"
+          error_message: "Bind failure requires error details"
+    effects:
+      state_updates:
+        - key: "artifacts.view_log.status"
+          value: "export-failed"
+          operation: "set"
+        - key: "artifacts.view_log.error"
+          value: "{{payload.error}}"
+          operation: "set"
+        - key: "artifacts.view_log.failed_at"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "BB"
+          receiver: "SR"
+          intent: "view.export_failed"
+          payload_template:
+            view_title: "{{view_log.title}}"
+            error: "{{payload.error}}"
+
+  # pn-dry-run → feedback-collected (PN dry-run complete, issues logged)
+  - from_state: pn-dry-run
+    to_state: feedback-collected
+    intent: "view.feedback"
+    authorization:
+      allowed_senders: ["PN"]
+    preconditions:
+      state_requirements:
+        - key: "payload.pn_playtest_notes"
+          condition: "!= null"
+          error_message: "Feedback requires PN playtest notes"
+    effects:
+      state_updates:
+        - key: "artifacts.view_log.status"
+          value: "feedback-collected"
+          operation: "set"
+        - key: "artifacts.view_log.pn_playtest_notes"
+          value: "{{payload.pn_playtest_notes}}"
+          operation: "set"
+        - key: "artifacts.view_log.playtest_completed"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "PN"
+          receiver: "SR"
+          intent: "view.playtest_complete"
+          payload_template:
+            view_title: "{{view_log.title}}"
+            notes: "{{payload.pn_playtest_notes}}"
+            issues_found: "{{payload.issues_count}}"
+
+  # feedback-collected → view-published (View archived and announced)
+  - from_state: feedback-collected
+    to_state: view-published
+    intent: "view.publish"
+    authorization:
+      allowed_senders: ["SR", "BB"]
+    preconditions:
+      artifact_validation:
+        required: true
+        schema_ref: "view_log.schema.json"
+    effects:
+      state_updates:
+        - key: "artifacts.view_log.status"
+          value: "view-published"
+          operation: "set"
+        - key: "artifacts.view_log.published_at"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      filesystem_operations:
+        - operation: "write"
+          hot_cold: "cold"
+          path: "views/{{view_log.id}}"
+          artifact_ref: "artifacts.view_log"
+      protocol_messages:
+        - sender: "SR"
+          receiver: "*"
+          intent: "view.announced"
+          payload_template:
+            view_title: "{{view_log.title}}"
+            snapshot_ref: "{{view_log.cold_snapshot_ref}}"
+            formats: "{{view_log.export_targets}}"
+
+error_handling:
+  on_precondition_failure: "block"
+  on_effect_failure: "rollback"
+  error_intent: "view.error"
+  rollback_strategy: "full"
+
+validation:
+  verify_state_consistency: true
+  verify_artifact_integrity: true
+  required_fields:
+    - "title"
+    - "cold_snapshot_ref"
+    - "export_targets"
+
+# Cold-only enforcement rules
+cold_only_rules:
+  pn_input_validation:
+    description: "PN consumes only Cold snapshots, never Hot material"
+    enforce_snapshot_ref: true
+    reject_hot_artifacts: true
+
+  binder_input_validation:
+    description: "Book Binder uses only Cold snapshots for exports"
+    enforce_snapshot_ref: true
+    reject_hot_artifacts: true
+
+  spoiler_hygiene_check:
+    description: "All exported content must respect spoiler hygiene"
+    check_presentation_bar: true
+    require_player_safe: true
