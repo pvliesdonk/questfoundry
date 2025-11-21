@@ -667,8 +667,8 @@ raci:
     informed: false
     notes: Book Binder provides bundle for PN playtest
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: auto
+  model_tier: long-context
   temperature: 0.5
   max_tokens: 4000
   reasoning_budget: medium

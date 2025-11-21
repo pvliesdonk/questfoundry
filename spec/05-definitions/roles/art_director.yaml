@@ -505,7 +505,8 @@ cross_domain_coordination:
   action: Escalate via Showrunner; request Lore/Plot decisions instead of baking spoilers/structure into visuals
 execution:
   llm_config:
-    model: sonnet-4.5
+    provider: auto
+    model_tier: creative-writing
     temperature: 0.7
     reasoning_effort: medium
     rationale: Medium temperature for creative composition planning while maintaining player-safety; medium reasoning for

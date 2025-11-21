@@ -546,8 +546,8 @@ raci:
     informed: false
     notes: Codex Curator applies edit notes to codex entries for clarity and register
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: auto
+  model_tier: long-context
   temperature: 0.6
   max_tokens: 4000
   reasoning_budget: medium

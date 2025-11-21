@@ -116,7 +116,8 @@ service_config:
   quality_validation_enabled: true
   determinism_logging_enabled: true
 llm_config:
-  model: haiku
+  provider: auto
+  model_tier: creative-writing
   temperature: 0.1
   reasoning_effort: low
   rationale: Minimal LLM reasoning; primarily for validation, prompt construction, and retry logic coordination

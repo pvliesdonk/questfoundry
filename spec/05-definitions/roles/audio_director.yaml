@@ -488,7 +488,8 @@ cross_domain_coordination:
   action: Escalate via Showrunner; request Lore/Plot guidance instead of implying unrevealed information via audio
 execution:
   llm_config:
-    model: sonnet-4.5
+    provider: auto
+    model_tier: creative-writing
     temperature: 0.7
     reasoning_effort: medium
     rationale: Medium temperature for creative audio design while maintaining player-safety; medium reasoning for balancing

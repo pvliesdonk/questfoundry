@@ -365,8 +365,8 @@ raci:
     informed: false
     notes: Scene Smith fixes phrasing based on PN feedback
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: auto
+  model_tier: creative-writing
   temperature: 0.8
   max_tokens: 8000
   reasoning_budget: high

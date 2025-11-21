@@ -157,6 +157,15 @@ Only create files that serve a clear, non-redundant purpose and are actively mai
 
 ## Code Standards
 
+### Unicode Compatibility
+
+**All code, scripts, and documentation must support Unicode (UTF-8) encoding.**
+
+- Python scripts must handle Unicode characters in console output (checkmarks ✓, crosses ✗, etc.)
+- Use UTF-8 encoding for all file I/O operations
+- On Windows, configure console output to use UTF-8 (see example in project scripts)
+- Never remove Unicode characters from output or replace them with ASCII alternatives without explicit user request
+
 ### Markdown Guidelines
 
 - All Markdown files (`*.md`) must follow consistent formatting

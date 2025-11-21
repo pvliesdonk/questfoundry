@@ -534,8 +534,8 @@ raci:
     informed: false
     notes: Style Lead reviews codex entry phrasing for clarity and register
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: auto
+  model_tier: validation
   temperature: 0.7
   max_tokens: 4000
   reasoning_budget: high

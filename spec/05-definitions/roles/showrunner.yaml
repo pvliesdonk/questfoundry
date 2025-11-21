@@ -589,8 +589,8 @@ raci:
     informed: false
     notes: Domain owners are Responsible per slice; Showrunner coordinates
 llm_config:
-  provider: openai
-  model: gpt-4o
+  provider: auto
+  model_tier: customer-facing
   temperature: 0.7
   max_tokens: 4000
   reasoning_budget: medium

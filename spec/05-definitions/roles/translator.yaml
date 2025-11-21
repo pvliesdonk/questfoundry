@@ -243,7 +243,8 @@ cross_domain_coordination:
   action: Validate caption portability; coordinate VO scripts for target language
 execution:
   llm_config:
-    model: sonnet-4.5
+    provider: auto
+    model_tier: creative-writing
     temperature: 0.7
     reasoning_effort: medium
     rationale: Medium temperature for natural-sounding translations; medium reasoning for cultural adaptation and register

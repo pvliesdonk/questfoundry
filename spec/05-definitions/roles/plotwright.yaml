@@ -475,8 +475,8 @@ raci:
     informed: true
     notes: Plotwright informed of PN playtest notes (gate-friction, choice-ambiguity)
 llm_config:
-  provider: openai
-  model: gpt-4o
+  provider: auto
+  model_tier: structured-thinking
   temperature: 0.8
   max_tokens: 6000
   reasoning_budget: high

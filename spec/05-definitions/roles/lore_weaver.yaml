@@ -486,8 +486,8 @@ raci:
     informed: false
     notes: Lore Weaver ensures topology intent respects canon
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: auto
+  model_tier: structured-thinking
   temperature: 0.7
   max_tokens: 8000
   reasoning_budget: high

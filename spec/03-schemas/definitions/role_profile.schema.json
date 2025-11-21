@@ -662,16 +662,20 @@
 
     "llm_config": {
       "type": "object",
-      "description": "LLM provider and model configuration for this role. Runtime uses this to instantiate the appropriate LLM client. OPTIONAL for role_type='service' (pure tool execution with no LLM). REQUIRED for role_type='reasoning_agent' and 'production_executor'.",
+      "description": "LLM provider and model configuration for this role. Runtime uses this to instantiate the appropriate LLM client. OPTIONAL for role_type='service' (pure tool execution with no LLM). REQUIRED for role_type='reasoning_agent' and 'production_executor'. Two modes: (1) Explicit: provider + model, or (2) Tier-based: provider='auto' + model_tier.",
       "properties": {
         "provider": {
-          "enum": ["openai", "anthropic", "ollama", "google", "azure_openai"],
-          "description": "LLM provider"
+          "enum": ["openai", "anthropic", "ollama", "google", "azure_openai", "auto"],
+          "description": "LLM provider. Use 'auto' with model_tier to let runtime select provider based on availability and configuration."
         },
         "model": {
           "type": "string",
-          "description": "Model identifier (e.g., 'gpt-4', 'claude-3-opus-20240229', 'llama2')",
+          "description": "Model identifier (e.g., 'gpt-4', 'claude-3-opus-20240229', 'llama2'). Required if provider != 'auto'.",
           "examples": ["gpt-4-turbo-preview", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "gemini-1.5-pro", "llama2:70b"]
+        },
+        "model_tier": {
+          "enum": ["creative-writing", "structured-thinking", "validation", "customer-facing", "quick-feedback", "long-context"],
+          "description": "Model tier for automatic provider/model selection. Maps to work type: creative-writing (prose), structured-thinking (planning), validation (quality checks), customer-facing (communication), quick-feedback (fast iteration), long-context (large manuscripts). Required if provider='auto'."
         },
         "temperature": {
           "type": "number",

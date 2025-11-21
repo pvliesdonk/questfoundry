@@ -436,7 +436,8 @@ cross_domain_coordination:
   action: Coordinate with Style Lead and Gatekeeper; escalate policy changes via ADR if needed
 execution:
   llm_config:
-    model: sonnet-4.5
+    provider: auto
+    model_tier: structured-thinking
     temperature: 0.3
     reasoning_effort: low
     rationale: Lower temperature for factual accuracy; low reasoning for focused citation and neutral phrasing tasks

@@ -663,8 +663,8 @@ raci:
     informed: false
     notes: Comprehensive gatecheck across all bars
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: auto
+  model_tier: validation
   temperature: 0.3
   max_tokens: 8000
   reasoning_budget: very_high
