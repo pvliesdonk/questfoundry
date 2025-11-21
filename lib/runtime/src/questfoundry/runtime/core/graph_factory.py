@@ -181,15 +181,16 @@ class GraphFactory:
         # Create routing function
         routing_fn = self.edge_evaluator.create_routing_function(edge.raw)
 
-        # Add conditional edge
+        # Add conditional edge with correct API
+        # LangGraph expects 'path' parameter, not 'condition'
         graph.add_conditional_edges(
             source=edge.source,
+            path=routing_fn,
             path_map={
                 edge.target: edge.target,
                 edge.source: edge.source,
                 END: END
-            },
-            condition=routing_fn
+            }
         )
 
         logger.debug(f"Added conditional edge: {edge.source} → {edge.target}")
@@ -276,13 +277,14 @@ class GraphFactory:
                         return END
                     return "continue"
 
+                # Use correct API: 'path' parameter instead of 'condition'
                 graph.add_conditional_edges(
                     source=exit_node,
+                    path=exit_condition,
                     path_map={
                         END: END,
                         "continue": exit_node  # Loop back
-                    },
-                    condition=exit_condition
+                    }
                 )
 
                 logger.debug(f"Added exit condition from: {exit_node}")

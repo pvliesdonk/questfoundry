@@ -11,6 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+try:
+    from importlib.resources import files
+except ImportError:
+    # Fallback for Python < 3.9
+    from importlib_resources import files
+
 from jinja2 import Template, TemplateError
 
 from questfoundry.runtime.models.state import StudioState
@@ -103,18 +109,42 @@ class NodeFactory:
         if template_str.startswith("file://"):
             # File-based template
             template_path = template_str[7:]  # Remove "file://"
+            template_str = None
 
-            # Resolve relative to spec directory
+            # Strategy 1: Try monorepo spec directory (development)
             if not Path(template_path).is_absolute():
-                spec_root = Path(__file__).parent.parent.parent.parent.parent.parent / "spec"
-                template_path = spec_root / "05-definitions" / template_path
+                # Navigate up from lib/runtime/src/questfoundry/runtime/core/node_factory.py
+                # to find spec/ directory
+                monorepo_spec = Path(__file__).parent.parent.parent.parent.parent.parent / "spec" / "05-definitions" / template_path
+                if monorepo_spec.exists():
+                    try:
+                        template_str = monorepo_spec.read_text(encoding='utf-8')
+                        logger.debug(f"Loaded template from monorepo: {monorepo_spec}")
+                    except Exception as e:
+                        logger.warning(f"Failed to read template from monorepo: {e}")
 
-            try:
-                with open(template_path) as f:
-                    template_str = f.read()
-            except FileNotFoundError:
-                logger.error(f"Template file not found: {template_path}")
-                return f"[Template not found: {template_path}]"
+            # Strategy 2: Try bundled resources (production)
+            if template_str is None:
+                try:
+                    # Templates are bundled in resources/definitions/templates/
+                    resource_path = template_path.lstrip('../')  # Remove leading ../
+                    if resource_path.startswith('templates/'):
+                        resource_path = resource_path[10:]  # Remove 'templates/' prefix
+
+                    resource = files("questfoundry.runtime.resources.definitions.templates").joinpath(resource_path)
+                    template_str = resource.read_text(encoding='utf-8')
+                    logger.debug(f"Loaded template from bundled resources: {resource_path}")
+                except Exception as e:
+                    logger.debug(f"Failed to load from bundled resources: {e}")
+
+            # Strategy 3: Fallback - use system prompt only
+            if template_str is None:
+                logger.warning(f"Template not found via any method, using fallback for role {role.id}")
+                # Return system prompt from role config if available
+                system_prompt = role.model_config.get("system_prompt_prefix", "")
+                if system_prompt:
+                    return system_prompt
+                return f"Execute role: {role.name}"
 
         # Render template
         if template_engine == "jinja2":
