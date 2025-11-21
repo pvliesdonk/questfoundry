@@ -128,12 +128,24 @@ class GraphFactory:
         """
         for node_id in loop.get_node_ids():
             try:
-                # Create node runnable
-                node_runnable = self.node_factory.create_role_node(node_id)
+                # Get the role_id for this node
+                role_id = loop.get_node_role_id(node_id)
 
-                # Add to graph
+                # Handle special "Multi" role (parallel execution not yet implemented)
+                if role_id == "Multi":
+                    logger.warning(f"Skipping node [yellow]{node_id}[/yellow]: Multi-role parallel execution not yet implemented")
+                    # Create a pass-through placeholder node
+                    def multi_placeholder(state):
+                        logger.info(f"[dim]Placeholder for parallel node: {node_id}[/dim]")
+                        return state
+                    node_runnable = multi_placeholder
+                else:
+                    # Create node runnable using role_id
+                    node_runnable = self.node_factory.create_role_node(role_id)
+
+                # Add to graph with node_id as the graph node name
                 graph.add_node(node_id, node_runnable)
-                logger.debug(f"Added node: {node_id}")
+                logger.debug(f"Added node: [cyan]{node_id}[/cyan] → role: [bold]{role_id}[/bold]")
 
             except Exception as e:
                 logger.error(f"Failed to add node {node_id}: {e}")

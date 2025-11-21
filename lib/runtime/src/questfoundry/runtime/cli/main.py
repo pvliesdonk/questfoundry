@@ -5,7 +5,6 @@ Based on spec: components/cli.md
 Uses Typer framework for natural language-friendly CLI.
 """
 
-import logging
 import sys
 from typing import Optional
 
@@ -18,13 +17,11 @@ from questfoundry.runtime.cli.parser import CLIParser
 from questfoundry.runtime.cli.showrunner import Showrunner, ParsedIntent
 from questfoundry.runtime.core.graph_factory import GraphFactory
 from questfoundry.runtime.core.state_manager import StateManager
+from questfoundry.runtime.logging_config import setup_logging, get_logger
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Set up Rich logging
+setup_logging(level="INFO", show_time=False, show_path=False)
+logger = get_logger(__name__)
 
 # Create app
 app = typer.Typer(

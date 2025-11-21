@@ -73,3 +73,24 @@ class LoopPattern:
     def has_node(self, node_id: str) -> bool:
         """Check if a node exists in topology."""
         return node_id in self.get_node_ids()
+
+    def get_node_role_id(self, node_id: str) -> str:
+        """
+        Get the role_id for a given node_id.
+
+        Args:
+            node_id: The node identifier (e.g., "showrunner_initiate")
+
+        Returns:
+            The role_id field from the node definition (e.g., "Showrunner")
+
+        Raises:
+            ValueError: If node_id doesn't exist in topology
+        """
+        for node in self.nodes:
+            if isinstance(node, dict) and node.get("id") == node_id:
+                role_id = node.get("role_id")
+                if not role_id:
+                    raise ValueError(f"Node {node_id} missing role_id field")
+                return role_id
+        raise ValueError(f"Node {node_id} not found in loop topology")

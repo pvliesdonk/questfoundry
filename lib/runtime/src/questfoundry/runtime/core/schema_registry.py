@@ -157,8 +157,12 @@ class SchemaRegistry:
         if role_id in self._role_cache:
             return self._role_cache[role_id]
 
+        # Normalize role_id to match filename convention
+        # "Showrunner" -> "showrunner", "Scene Smith" -> "scene_smith"
+        normalized_role_id = role_id.lower().replace(" ", "_")
+
         # Load YAML
-        yaml_path = self.definitions_root / "roles" / f"{role_id}.yaml"
+        yaml_path = self.definitions_root / "roles" / f"{normalized_role_id}.yaml"
         data = self.load_yaml(yaml_path)
 
         # Load schema

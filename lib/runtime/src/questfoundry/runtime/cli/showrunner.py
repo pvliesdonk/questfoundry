@@ -94,14 +94,14 @@ class Showrunner:
             ExecutionResult with artifacts and summary
         """
         try:
-            logger.info(f"Executing request: {command}")
+            logger.info(f"[bold]Executing:[/bold] {command}")
 
             # 1. Map intent to loop execution plan
             plan = self.map_intent_to_loop(parsed_intent, user_context)
 
             # 2. Execute dependencies first (if any)
             for dep_loop_id in plan.dependencies:
-                logger.info(f"Executing dependency: {dep_loop_id}")
+                logger.info(f"Executing dependency: [bold cyan]{dep_loop_id}[/bold cyan]")
                 self._execute_single_loop(dep_loop_id, {})
 
             # 3. Execute primary loop
@@ -110,7 +110,7 @@ class Showrunner:
             # 4. Translate results to human-friendly format
             result = self.translate_results(final_state, plan.loop_id, command)
 
-            logger.info(f"Request completed successfully: {result.tu_id}")
+            logger.info(f"[bold green]Request completed successfully[/bold green]: {result.tu_id}")
             return result
 
         except Exception as e:
@@ -246,7 +246,7 @@ class Showrunner:
         Returns:
             Final StudioState after loop completion
         """
-        logger.info(f"Executing loop: {loop_id}")
+        logger.info(f"[bold cyan]>[/bold cyan] Starting loop: [bold]{loop_id}[/bold]")
 
         # 1. Initialize state
         state = self.state_manager.initialize_state(loop_id, context)
@@ -264,7 +264,7 @@ class Showrunner:
         # Invoke the graph with the initial state
         final_state = graph.invoke(state)
 
-        logger.info(f"Loop {loop_id} completed. TU: {final_state['tu_id']}")
+        logger.info(f"[bold green]DONE[/bold green] Completed loop: [bold]{loop_id}[/bold] | TU: {final_state['tu_id']}")
 
         if progress_callback:
             progress_callback(f"Completed {loop_id}")
