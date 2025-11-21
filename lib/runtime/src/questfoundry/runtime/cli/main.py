@@ -359,17 +359,44 @@ def version():
 
 @app.callback()
 def main(
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging")
+    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (-v: INFO, -vv: DEBUG, -vvv: full details)")
 ):
     """
     QuestFoundry Runtime - Natural language interface to studio production.
 
     Primary workflow: qf ask "<your request in plain language>"
     Debug workflow: qf loop <loop_id> --context "key=value"
+
+    Verbosity levels:
+        (none): WARNING - Only show warnings and errors
+        -v:     INFO - Show general progress information
+        -vv:    DEBUG - Show detailed debugging info
+        -vvv:   DEBUG + full details - Show everything including library logs
     """
-    if verbose:
-        import logging
-        logging.getLogger().setLevel(logging.DEBUG)
+    import logging
+    from questfoundry.runtime.logging_config import setup_logging, set_level
+
+    # Map verbosity count to logging level
+    if verbose == 0:
+        level = "WARNING"
+        show_path = False
+    elif verbose == 1:
+        level = "INFO"
+        show_path = False
+    elif verbose == 2:
+        level = "DEBUG"
+        show_path = True
+    else:  # verbose >= 3
+        level = "DEBUG"
+        show_path = True
+        # At -vvv, also enable verbose logging from libraries
+        logging.getLogger("httpx").setLevel(logging.INFO)
+        logging.getLogger("httpcore").setLevel(logging.INFO)
+        logging.getLogger("openai").setLevel(logging.INFO)
+        logging.getLogger("anthropic").setLevel(logging.INFO)
+
+    # Reconfigure logging with appropriate level
+    setup_logging(level=level, show_time=(verbose >= 2), show_path=show_path)
 
 
 if __name__ == "__main__":
