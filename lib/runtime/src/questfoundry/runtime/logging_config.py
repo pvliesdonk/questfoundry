@@ -48,11 +48,14 @@ def setup_logging(
         >>> logger = logging.getLogger(__name__)
         >>> logger.info("Starting QuestFoundry runtime")
     """
-    # Create Rich console with custom theme (force UTF-8 for Unicode support)
+    # Create Rich console with custom theme (force UTF-8 for Unicode support on Windows)
+    if sys.platform == "win32":
+        # Reconfigure stderr to use UTF-8 encoding without closing the underlying buffer
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
     console = Console(
         theme=QUESTFOUNDRY_THEME,
         stderr=True,  # Log to stderr by default
-        file=io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace'),
     )
 
     # Create Rich handler

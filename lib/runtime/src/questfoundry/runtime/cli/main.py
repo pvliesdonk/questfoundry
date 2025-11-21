@@ -29,9 +29,13 @@ app = typer.Typer(
     add_completion=False
 )
 
-# Create console for rich output (force UTF-8 for Unicode support)
-import io
-console = Console(file=io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace'))
+# Create console for rich output (force UTF-8 for Unicode support on Windows)
+if sys.platform == "win32":
+    import io
+    import codecs
+    # Reconfigure stdout to use UTF-8 encoding without closing the underlying buffer
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+console = Console()
 
 # Initialize components (lazy-loaded)
 _graph_factory: Optional[GraphFactory] = None
