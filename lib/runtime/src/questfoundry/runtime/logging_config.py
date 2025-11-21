@@ -5,6 +5,7 @@ Provides beautiful, readable logging output using Rich console formatting.
 
 from __future__ import annotations
 
+import io
 import logging
 import sys
 from typing import Optional
@@ -47,10 +48,11 @@ def setup_logging(
         >>> logger = logging.getLogger(__name__)
         >>> logger.info("Starting QuestFoundry runtime")
     """
-    # Create Rich console with custom theme
+    # Create Rich console with custom theme (force UTF-8 for Unicode support)
     console = Console(
         theme=QUESTFOUNDRY_THEME,
         stderr=True,  # Log to stderr by default
+        file=io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace'),
     )
 
     # Create Rich handler
