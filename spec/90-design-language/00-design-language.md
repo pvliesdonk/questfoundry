@@ -64,31 +64,37 @@ Lean into:
 ### 3.1 Core Colors
 
 **Brand Ink**  
+
 - Hex: `#1E1A2B`  
 - Use: Primary text, outlines, key icons.  
 - Character: Deep inky violet/brown — evokes ink on paper, less harsh than pure black.
 
 **Codex Parchment**  
+
 - Hex: `#F7F3EA`  
 - Use: Light-mode background, cards, docs body.  
 - Character: Warm off-white, subtle “page” feel.
 
 **Workshop Steel**  
+
 - Hex: `#252832`  
 - Use: Dark-mode background, primary dark panels.  
 - Character: Neutral dark with a hint of blue-grey; feels like a clean machine surface.
 
 **Forge Ember**  
+
 - Hex: `#D8633A`  
 - Use: Primary accent (CTAs, primary states, active icons, highlights).  
 - Character: Warm orange-red, “spark of the forge”.
 
 **Verdant Note**  
+
 - Hex: `#3A8F76`  
 - Use: Secondary accent (secondary actions, success, “in-flow” or “healthy” indicators).  
 - Character: Cool teal-green, balances the warmth of Ember.
 
 **Brass Trim**  
+
 - Hex: `#C49A4A`  
 - Use: Decorative details, seals, borders, high-emphasis highlights in icons.  
 - Character: Aged metal detail; use sparingly.
@@ -290,6 +296,8 @@ Primary mark: the text **“QuestFoundry”** set in the primary serif.
 - Detail:
   - Prefer a subtle, story-coded detail:
     - Tail of the “Q” suggests a page, ribbon, or small spark.
+- Tagline & extras:
+  - No tagline, no surrounding icon lockup; the primary logo is the bare wordmark.
 - Color:
   - Light mode: Ink text on Parchment/white.
   - Dark mode: Parchment text on Steel, with small Ember underline or spark if desired.
@@ -302,10 +310,39 @@ Used for:
 - Sidebar icon in the WebUI.
 - Social / repo avatars.
 
-Options (pick one canonical):
+Canonical option:
 
-- **“QF” Monogram:** serif Q and F inside a rounded square, Parchment on Steel, with a tiny Ember spark.
-- **Codex Corner:** abstract book-page corner with a small Ember dot in the fold.
+- **“QF” Monogram Badge:** serif Q and F inside a softly rounded square badge. Letters share the same cap height and stroke weight, with the Q only slightly wider than the F so the pair feels visually balanced. Together they occupy most of the badge with small, even margins, so the monogram reads clearly even at favicon sizes. The tail of the Q curves like a small page corner or ribbon into the lower-right area and ends near a tiny spark mark.
+
+### 7.3 Favicon
+
+- Based on the **“QF” Monogram Badge** compact mark.
+- Optimized for 16×16 and 32×32:
+  - Slightly heavier outlines and strokes so the letters survive downscaling.
+  - Simplified inner shapes and a very minimal Q-tail spark (dot or tiny wedge).
+  - Maintain clear Q and F silhouettes; avoid overly tight counters or decorative flourishes.
+
+### 7.4 Touch / Avatar Icon
+
+- Based on the **“QF” Monogram Badge**, scaled for large square canvases (e.g. 512×512).
+- Composition:
+  - The rounded square badge fills most of the frame with even margins.
+  - The “QF” monogram uses the same balanced proportions as the compact mark but can use slightly more expressive Q-tail curvature.
+  - The Q-tail and spark help occupy empty corners without overcomplicating the silhouette.
+- Usage:
+  - Social avatars (GitHub org, Twitter/X, product avatars).
+  - App launcher icons where a centered badge is expected.
+
+### 7.5 Social / Open Graph Card
+
+- Based on the **Codex Studio** metaphor and core hero visual language.
+- Composition (1200×630 or similar 16:9):
+  - A wide codex workshop table seen from above, with an open codex, scattered pages, a few role tool icons, and loop seals arranged as a tidy workspace.
+  - The QuestFoundry wordmark appears cleanly in one corner or along the top.
+  - Reserve generous whitespace on one side for overlay text in product surfaces.
+- Usage:
+  - Default link preview image for the main site and docs.
+  - Social sharing card for major release notes or landing pages.
 
 ---
 
@@ -376,6 +413,46 @@ Example for **Story Spark**:
 For larger illustrations (landing page hero, empty states):
 
 > Metaphorical flat vector illustration of a cozy codex workshop where stories are forged. A workbench with books, tools, and glowing symbols representing roles and loops (tools for roles, seals for loops). No characters needed, focus on tools and symbols. Flat codex-inspired style, warm parchment and ink palette with forge ember orange and verdant teal accents, a little brass trim. Clean outlines, no gradients, no textures. Composition should work in a wide 16:9 banner crop, with safe whitespace for text overlay on one side.
+
+---
+
+### 8.6 Template: Logo Wordmark Prompt
+
+Use this prompt for generating the primary QuestFoundry wordmark:
+
+> Flat vector wordmark logo of the text “QuestFoundry” for a story-forging workshop WebUI. The word “QuestFoundry” is set in a modern, bookish serif typeface, with a subtle emphasis difference between “Quest” and “Foundry” (slightly stronger weight or contrast on “Foundry”). The tail of the “Q” curves down and around like a page corner or ribbon, ending in a tiny spark shape, hinting at forging stories. Clean, calm composition, no tagline, no extra icons, just the wordmark. Flat, minimal, codex-inspired UI style, clean 1–1.5 px outlines in deep inky violet, no gradients, no textures, no 3D, slightly rounded details where appropriate. The wordmark should be readable at small sizes and work on both light and dark backgrounds. Use only a limited palette: parchment off-white, deep inky violet (#1E1A2B), dark steel grey (#252832), forge ember orange (#D8633A) for the small spark or accent, verdant teal-green (#3A8F76) very sparingly if needed, and a touch of brass gold (#C49A4A) only for tiny trim if it helps, plus simple neutrals. Background transparent.
+
+---
+
+### 8.7 Template: Compact Mark Prompt
+
+Use this prompt for generating the “QF” compact logo badge:
+
+> Flat vector compact logo icon for QuestFoundry, using a “QF” monogram for a story-forging workshop WebUI. A softly rounded square badge with the letters “Q” and “F” in a modern, bookish serif, arranged side by side with balanced proportions: the “Q” is not much wider than the “F”, both share the same cap height and stroke weight, and together they occupy most of the badge, with only small, even margins on all sides (no large empty corners). The tail of the “Q” curves like a small page corner or ribbon into the lower-right area and ends near a tiny spark mark, helping visually fill the badge while still keeping the monogram very legible. No extra pictograms, just the monogram inside the badge. Flat, minimal, codex-inspired UI icon, clean 1–1.5 px outlines in deep inky violet, slightly cute rounded badge shape, no gradients, no textures, no 3D. The monogram should remain clearly legible at small favicon and app icon sizes. Use parchment off-white fill for the badge, deep inky violet (#1E1A2B) outlines and letterforms, forge ember orange (#D8633A) for the small spark accent near the Q-tail, optional tiny brass gold (#C49A4A) trim if helpful, plus simple neutrals. Background transparent.
+
+---
+
+### 8.8 Template: Favicon Prompt
+
+Use this prompt for generating the favicon (16×16 / 32×32) derived from the compact mark:
+
+> Flat vector favicon icon for QuestFoundry, derived from the existing “QF” compact logo badge. Use the same softly rounded square badge and “QF” monogram, but simplify details so it remains readable at 16×16 and 32×32 pixels: keep the Q and F thick enough, reduce any tiny inner gaps, and render the Q-tail spark as a very simple dot or tiny wedge. The letters should still be clearly recognizable as Q and F at favicon size. Flat, minimal, codex-inspired UI icon, with slightly heavier clean outlines in deep inky violet, no gradients, no textures, no 3D. Use parchment off-white badge fill, deep inky violet (#1E1A2B) outlines and letters, and a single small forge ember orange (#D8633A) accent for the spark or a corner highlight, no extra colors. Background transparent.
+
+---
+
+### 8.9 Template: Touch / Avatar Icon Prompt
+
+Use this prompt for generating the large touch / avatar icon derived from the compact mark:
+
+> Flat vector touch / avatar icon for QuestFoundry, derived from the “QF” compact logo badge, for use at large sizes such as 512×512 on social and profile avatars. A centered, softly rounded square badge that fills most of the canvas with even margins, with the “QF” monogram inside using the same modern, bookish serif and balanced proportions as the compact mark: Q and F share cap height and stroke weight, and together fill the badge comfortably. At this larger size, the Q-tail is slightly more expressive, curling like a page corner or ribbon into the lower-right and ending at a clear, crisp ember spark, helping to occupy empty space without cluttering the silhouette. Flat, minimal, codex-inspired UI icon, clean appropriately scaled outlines in deep inky violet, no gradients, no textures, no 3D. Use parchment off-white badge fill, deep inky violet (#1E1A2B) outlines and letterforms, forge ember orange (#D8633A) for the spark and a small accent edge if desired, with very subtle use of verdant teal-green (#3A8F76) or brass gold (#C49A4A) only if it does not reduce legibility, plus simple neutrals. Background transparent or a solid neutral compatible with both light and dark UI.
+
+---
+
+### 8.10 Template: Social / Open Graph Card Prompt
+
+Use this prompt for generating the social / Open Graph card:
+
+> Flat vector social / Open Graph card illustration for QuestFoundry, used as a 1200×630 (or similar) link preview image. A wide 16:9 codex workshop scene viewed from above: a central work table holding an open codex, scattered pages, a small cluster of role tool icons (such as a GM screen, quill, compass) and a few loop seals, arranged like a tidy-but-lived-in workspace. The QuestFoundry wordmark sits cleanly in one corner or along the top, with generous empty space reserved on one side for overlay text if needed. Flat, minimal, codex-inspired vector illustration, clean inky outlines, slightly cute rounded shapes, no gradients, no textures, no 3D. The scene should read clearly when scaled down to typical social preview sizes. Use the core palette: warm parchment background with table and objects in deep inky violet (#1E1A2B), dark steel grey (#252832), forge ember orange (#D8633A), verdant teal-green (#3A8F76), and small brass gold (#C49A4A) trim, plus simple neutrals. Background should be a solid color or very simple flat vignette, not noisy.
 
 ---
 
