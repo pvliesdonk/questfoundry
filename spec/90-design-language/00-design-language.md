@@ -28,22 +28,34 @@ The system must work consistently across:
 
 ### 2.1 Narrative Metaphor
 
-Core metaphor: **The Codex Workshop**
+Core metaphor: **The Codex Studio**
 
-- A workshop where **roles are tools** (each role is a specialized instrument).
-- **Loops are seals** (each loop is a recurring kind of pass or certification).
-- The studio produces **codices**: structured books, flows, and assets.
+QuestFoundry’s visuals should look like a **fantasy story studio**:
+
+- A campaign planner’s table,
+- A writer’s desk,
+- A cartographer’s map,
+- A narrator’s script.
+
+The name “QuestFoundry” is kept for history and flavor, but the imagery does **not** use forges, anvils, hammers, molten metal, or industrial workshops.
+
+Instead, the design language shows:
+
+- **Showrunner** as a campaign lead behind a GM-style screen.
+- **Plotwright** as someone working on a quest map.
+- **Scene Smith** as a scene writer at the page level.
+- Other roles as scribes, editors, archivists, narrators, etc.
 
 Avoid:
 
-- Corporate “dashboard SaaS” clichés.
-- Heavy industrial or grimdark aesthetics.
-- Hyper-real illustrations; we stay in flat, symbolic territory.
+- Heavy industrial or mechanical imagery.
+- Technical graphs, flowcharts, UML-style diagrams in icons.
+- Sci-fi control rooms and corporate dashboards.
 
 Lean into:
 
-- Simple, friendly shapes.
-- Clear metaphors that map to the north-star spec: trace units, loops, roles, hot/cold SoT.
+- Parchment, codices, scrolls, maps, GM screens, notebooks, quills.
+- The feeling of a **writer’s room + DM’s table** for fantasy adventures.
 
 ---
 
@@ -192,6 +204,15 @@ Lean into:
 ---
 
 ## 6. Iconography & Visual Grammar
+
+Iconography should show **what the roles actually do** in their day-to-day work:
+
+- Planning campaigns at a table,
+- Drawing quest maps,
+- Writing scenes on pages,
+- Reviewing and sealing passes.
+
+We avoid abstract “tool” icons like generic gears or industrial tools, and instead show **work scenes and objects** that belong on a fantasy writer’s desk or DM’s table.
 
 ### 6.1 Roles as Tools
 
