@@ -31,8 +31,9 @@ class RoleProfile:
         llm_config = data.get("llm_config", {})
         if not self.model_config:
             self.model_config = {
-                "provider": llm_config.get("provider", "anthropic"),
-                "model": llm_config.get("model", "claude-3-5-sonnet-20241022"),
+                "provider": llm_config.get("provider", "auto"),
+                "model_tier": llm_config.get("model_tier", "flagship"),
+                "model": llm_config.get("model"),  # Backward compat (specific model name)
                 "temperature": llm_config.get("temperature", 0.7),
                 "max_tokens": llm_config.get("max_tokens", 4096)
             }
@@ -46,12 +47,21 @@ class RoleProfile:
         self.wake_conditions = data.get("wake_conditions", [])
 
     def get_provider(self) -> str:
-        """Get provider name from config."""
-        return self.model_config.get("provider", "anthropic")
+        """Get provider name from config (or 'auto' for automatic selection)."""
+        return self.model_config.get("provider", "auto")
 
     def get_model(self) -> str:
-        """Get model name from config."""
+        """Get model name from config (backward compatibility)."""
         return self.model_config.get("model", "claude-3-5-sonnet-20241022")
+
+    def get_model_tier(self) -> str:
+        """
+        Get model tier from config.
+
+        Returns:
+            Model tier name (e.g., "creative-writing", "structured-thinking")
+        """
+        return self.model_config.get("model_tier", "creative-writing")
 
     def get_temperature(self) -> float:
         """Get temperature from config."""

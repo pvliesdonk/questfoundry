@@ -16,6 +16,7 @@ from jinja2 import Template, TemplateError
 from questfoundry.runtime.models.state import StudioState
 from questfoundry.runtime.models.role import RoleProfile
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
+from questfoundry.runtime.core.provider_manager import ProviderManager
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class NodeFactory:
     def __init__(self, schema_registry: Optional[SchemaRegistry] = None):
         """Initialize node factory."""
         self.schema_registry = schema_registry or SchemaRegistry()
+        self.provider_manager = ProviderManager()
         self._role_cache: Dict[str, RoleProfile] = {}
 
     def load_role(self, role_id: str) -> RoleProfile:
@@ -154,6 +156,10 @@ class NodeFactory:
         2. production_executor: Thin LLM wrapper + heavy tool orchestration
         3. service: Pure tool execution, no LLM needed
 
+        Uses ProviderManager for:
+        - Provider auto-detection and selection
+        - Model tier resolution (work-type → actual model)
+
         Args:
             role: RoleProfile with role_type and model_config
 
@@ -168,16 +174,38 @@ class NodeFactory:
             # Service type - no LLM needed
             return None
 
-        # Get provider from role YAML (with environment variable override)
-        provider = os.getenv("QF_LLM_PROVIDER") or role.get_provider()
-        model = os.getenv("QF_DEFAULT_MODEL") or role.get_model()
+        # 1. Select provider (auto-detect or from role YAML)
+        preferred_provider = os.getenv("QF_LLM_PROVIDER") or role.get_provider()
+        provider = self.provider_manager.select_provider(preferred_provider)
+
+        # 2. Resolve model tier to actual model name
+        # Check for explicit model override first (backward compatibility)
+        if os.getenv("QF_DEFAULT_MODEL"):
+            model = os.getenv("QF_DEFAULT_MODEL")
+            logger.info(f"Using model override from QF_DEFAULT_MODEL: {model}")
+        else:
+            # Get tier from role (or use specific model if tier not specified)
+            model_tier = role.get_model_tier()
+
+            # Check if role specifies a specific model (backward compatibility)
+            specific_model = role.model_config.get("model")
+            if specific_model:
+                # Use specific model directly
+                model = specific_model
+                logger.info(f"Using specific model from role config: {model}")
+            else:
+                # Resolve tier to provider-specific model
+                model = self.provider_manager.resolve_model(provider, model_tier)
+                logger.info(f"Resolved tier '{model_tier}' to {provider}:{model}")
+
+        # 3. Get other parameters
         temperature = role.get_temperature()
         max_tokens = role.get_max_tokens()
 
-        logger.info(f"Selected LLM provider: {provider}, model: {model}")
+        logger.info(f"Selected LLM - provider: {provider}, model: {model}, temperature: {temperature}")
 
         return {
-            "type": provider,
+            "provider": provider,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -224,25 +252,12 @@ class NodeFactory:
                 llm_config = self.select_llm(role)
 
                 if llm_config:
-                    provider = llm_config.get("type", "anthropic")
+                    provider = llm_config.get("provider")
 
-                    # Import appropriate LLM adapter
+                    # Create LLM client via ProviderManager
                     try:
-                        if provider == "anthropic":
-                            from questfoundry.runtime.plugins.llm.anthropic import (
-                                AnthropicAdapter
-                            )
-                            adapter = AnthropicAdapter()
-                        elif provider == "openai":
-                            from questfoundry.runtime.plugins.llm.openai import (
-                                OpenAIAdapter
-                            )
-                            adapter = OpenAIAdapter()
-                        else:
-                            raise ValueError(f"Unsupported LLM provider: {provider}")
-
-                        # Get LLM instance
-                        llm = adapter.get_llm(
+                        llm = self.provider_manager.create_llm_client(
+                            provider=provider,
                             model=llm_config["model"],
                             temperature=llm_config["temperature"],
                             max_tokens=llm_config["max_tokens"]

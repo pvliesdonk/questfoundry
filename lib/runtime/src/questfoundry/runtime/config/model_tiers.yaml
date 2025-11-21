@@ -1,0 +1,90 @@
+# Model Tier Configuration
+# Maps work types to provider-specific models
+#
+# Tiers are designed for specific QuestFoundry roles/tasks:
+# - creative-writing: Prose generation (Scene Smith)
+# - structured-thinking: Topology/planning (Plotwright, Showrunner)
+# - validation: Quality checks (Gatekeeper, Style Lead)
+# - customer-facing: Natural language communication (Showrunner)
+# - quick-feedback: Fast iterations/reviews
+
+model_tiers:
+  # Creative Writing: Best prose quality, storytelling
+  # Used by: Scene Smith, Style Lead
+  creative-writing:
+    anthropic: claude-3-5-sonnet-20241022
+    openai: gpt-4o
+    google: gemini-1.5-pro
+    ollama: llama3.1:70b
+    litellm: gpt-4o
+
+  # Structured Thinking: Complex reasoning, planning, topology
+  # Used by: Plotwright, Showrunner, Lore Weaver
+  structured-thinking:
+    anthropic: claude-3-opus-20240229
+    openai: o1-preview
+    google: gemini-1.5-pro
+    ollama: deepseek-r1:70b
+    litellm: o1-preview
+
+  # Validation: Quality checks, consistency verification
+  # Used by: Gatekeeper, Style Lead (lightweight checks)
+  validation:
+    anthropic: claude-3-5-haiku-20241022
+    openai: gpt-4o-mini
+    google: gemini-1.5-flash
+    ollama: llama3.1:8b
+    litellm: gpt-3.5-turbo
+
+  # Customer Facing: Natural, empathetic communication
+  # Used by: Showrunner (interpreting customer requests)
+  customer-facing:
+    anthropic: claude-3-5-sonnet-20241022
+    openai: gpt-4o
+    google: gemini-1.5-pro
+    ollama: llama3.1:70b
+    litellm: gpt-4o
+
+  # Quick Feedback: Fast iteration, suggestions
+  # Used by: All roles for rapid prototyping/testing
+  quick-feedback:
+    anthropic: claude-3-5-haiku-20241022
+    openai: gpt-4o-mini
+    google: gemini-1.5-flash
+    ollama: llama3.1:8b
+    litellm: gpt-3.5-turbo
+
+  # Long Context: Extended context windows for large manuscripts
+  # Used by: Book Binder, Codex Curator
+  long-context:
+    anthropic: claude-3-5-sonnet-20241022  # 200k tokens
+    openai: gpt-4o  # 128k tokens
+    google: gemini-1.5-pro  # 2M tokens
+    ollama: llama3.1:70b  # 128k tokens
+    litellm: gpt-4o
+
+# Fallback order when tier is not specified
+default_tier: creative-writing
+
+# Provider fallback order when auto-selecting
+provider_priority:
+  - anthropic
+  - openai
+  - google
+  - ollama
+  - litellm
+
+# Role-specific tier recommendations (can be overridden in role YAML)
+role_tier_recommendations:
+  showrunner: customer-facing
+  plotwright: structured-thinking
+  scene_smith: creative-writing
+  gatekeeper: validation
+  style_lead: validation
+  lore_weaver: structured-thinking
+  codex_curator: long-context
+  book_binder: long-context
+  audio_director: creative-writing
+  art_director: creative-writing
+  player_narrator: customer-facing
+  translator: creative-writing
