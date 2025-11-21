@@ -168,8 +168,8 @@ class NodeFactory:
             # Service type - no LLM needed
             return None
 
-        # Check for environment variable overrides
-        provider = os.getenv("QF_LLM_PROVIDER", "anthropic")
+        # Get provider from role YAML (with environment variable override)
+        provider = os.getenv("QF_LLM_PROVIDER") or role.get_provider()
         model = os.getenv("QF_DEFAULT_MODEL") or role.get_model()
         temperature = role.get_temperature()
         max_tokens = role.get_max_tokens()

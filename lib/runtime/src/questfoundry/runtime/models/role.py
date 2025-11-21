@@ -31,6 +31,7 @@ class RoleProfile:
         llm_config = data.get("llm_config", {})
         if not self.model_config:
             self.model_config = {
+                "provider": llm_config.get("provider", "anthropic"),
                 "model": llm_config.get("model", "claude-3-5-sonnet-20241022"),
                 "temperature": llm_config.get("temperature", 0.7),
                 "max_tokens": llm_config.get("max_tokens", 4096)
@@ -43,6 +44,10 @@ class RoleProfile:
 
         # Wake condition (for default_dormant)
         self.wake_conditions = data.get("wake_conditions", [])
+
+    def get_provider(self) -> str:
+        """Get provider name from config."""
+        return self.model_config.get("provider", "anthropic")
 
     def get_model(self) -> str:
         """Get model name from config."""

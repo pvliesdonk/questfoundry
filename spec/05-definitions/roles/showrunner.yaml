@@ -589,14 +589,14 @@ raci:
     informed: false
     notes: Domain owners are Responsible per slice; Showrunner coordinates
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: openai
+  model: gpt-4o
   temperature: 0.7
   max_tokens: 4000
   reasoning_budget: medium
   fallback_models:
-  - claude-sonnet-3.5
-  - claude-opus-4
+  - gpt-4-turbo
+  - gpt-4
   system_prompt_prefix: 'You are the Showrunner for a QuestFoundry interactive fiction studio.
 
 

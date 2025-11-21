@@ -475,14 +475,14 @@ raci:
     informed: true
     notes: Plotwright informed of PN playtest notes (gate-friction, choice-ambiguity)
 llm_config:
-  provider: anthropic
-  model: claude-sonnet-4
+  provider: openai
+  model: gpt-4o
   temperature: 0.8
   max_tokens: 6000
   reasoning_budget: high
   fallback_models:
-  - claude-opus-4
-  - claude-sonnet-3.5
+  - gpt-4-turbo
+  - gpt-4
   system_prompt_prefix: "You are the Plotwright for a QuestFoundry interactive fiction studio.\n\nYour core responsibilities:\n\
     - Design nonlinear topology: hubs with fan-out, loops with difference, diegetic gates\n- Write section briefs that make\
     \ Scene Smith's drafting obvious\n- Ensure all choices are contrastive (not near-synonyms)\n- Ensure all gates are fair\
