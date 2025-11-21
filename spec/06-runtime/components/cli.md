@@ -1,14 +1,14 @@
-# CLI Parser Component Specification
+# CLI Component Specification
 
 **Component Type**: FLEXIBLE (Interface Design)
-**Version**: 1.0.0
-**Last Updated**: 2025-11-20
+**Version**: 2.0.0
+**Last Updated**: 2025-11-21
 
 ---
 
 ## Purpose
 
-Parse natural language commands from humans and translate to studio loop invocations.
+Provide a **natural language interface** to the Showrunner role, which interprets customer directives and coordinates studio operations internally. The CLI is a thin layer that passes customer messages to the Showrunner and displays responses.
 
 ---
 
@@ -16,229 +16,354 @@ Parse natural language commands from humans and translate to studio loop invocat
 
 This component is intentionally **FLEXIBLE** to allow for creative UX iteration. The requirements below are guidelines, not strict contracts. Implementers should prioritize:
 
-1. **Natural language over jargon** - Users say "write", not "invoke story_spark"
-2. **Helpful error messages** - Suggest corrections, don't just fail
-3. **Discoverability** - `qf help` should teach users what they can do
-4. **Progressive disclosure** - Simple commands for common tasks, advanced options when needed
+1. **Natural conversation over commands** - Customers talk to Showrunner in natural language
+2. **Hide studio jargon** - Customers don't need to know about "story_spark" or "hook_harvest" loops
+3. **Showrunner is sole interface** - Showrunner interprets, decides loops, and responds
+4. **Debug mode for advanced users** - Direct loop invocation available for debugging/auditing
 
 ---
 
-## Command Patterns
+## Primary Interface: Natural Language
 
-### Basic Patterns (Required)
+### Philosophy
+
+**Customers talk to the Showrunner, not to loops.** The CLI is a conduit for conversation between the customer and the Showrunner role. The Showrunner (an LLM-backed agent) interprets customer requests, decides which studio loops to run, coordinates internal roles, and responds in plain language.
+
+### Primary Command: `ask`
 
 ```bash
-# Writing content
-qf write <description>           # → story_spark loop
-qf write "tense cargo bay scene"
+qf ask "<natural language directive>"
+```
 
-# Reviewing content
-qf review story                  # → hook_harvest loop
-qf review <tu_id>                # Review specific TU
+**Examples**:
 
-# Adding lore
-qf add lore <topic>              # → lore_deepening loop
-qf add lore "ancient temple structure"
+```bash
+# Story creation
+qf ask "Can you create a mystery story about a space station with approximately 50k words?"
 
-# Style tuning
-qf tune style                    # → style_tune_up loop
+# Content refinement
+qf ask "I like the scar subplot, can you work that into the main narrative?"
 
-# Art and audio
-qf add art <description>         # → art_touch_up loop
-qf add audio <description>       # → audio_pass loop
+# Character development
+qf ask "This character feels flat, can you give them more depth?"
+
+# Lore expansion
+qf ask "Tell me more about the ancient temple ruins mentioned in chapter 3"
+
+# Style adjustments
+qf ask "The tone in act 2 feels inconsistent, can you smooth it out?"
+
+# Export requests
+qf ask "I'd like to export the current manuscript as an EPUB file"
 
 # Translation
-qf translate <language>          # → translation_pass loop
-qf translate "Spanish"
+qf ask "Can you translate this to Spanish?"
 
-# Exporting
-qf export <format>               # → binding_run loop
-qf export epub
-qf export pdf
-
-# Narration
-qf narrate <scene>               # → narration_dry_run loop
-qf narrate "chapter 3"
+# Audio/Visual
+qf ask "I need narration for the final chapter"
 ```
 
-### Advanced Patterns (Optional)
+### How It Works
+
+1. **Customer sends natural language message** via `qf ask "..."`
+2. **CLI passes message** to Showrunner role (loaded from `spec/05-definitions/roles/showrunner.yaml`)
+3. **Showrunner interprets** using LLM (Claude Sonnet 4) and decides:
+   - What the customer wants (outcome category)
+   - Which loops need to run (internal decision)
+   - Which roles to wake if dormant
+   - How to sequence the work
+4. **Studio executes internally** - Customer doesn't see loops or TUs
+5. **Showrunner responds** in plain language (no jargon)
+6. **CLI displays response** with helpful feedback
+
+### Example Interaction
 
 ```bash
-# Direct loop invocation
-qf loop <loop_id> [options]
+$ qf ask "Create a tense scene in the cargo bay"
+
+Showrunner: I'll create that scene for you. I'm drafting a high-tension
+cargo bay scene with clear stakes and choices. This will take about
+2 minutes.
+
+[Internal: Showrunner opens TU, runs story_spark loop, coordinates
+Plotwright and Scene Smith roles, runs quality checks - customer
+doesn't see this]
+
+Showrunner: Done! I've created a cargo bay confrontation scene where
+your protagonist must choose between trusting the crew or securing
+the cargo. The scene includes three meaningful choice points and sets
+up tension for the next act. Would you like me to refine anything?
+
+Next steps:
+• Say "review the scene" to see quality feedback
+• Say "adjust the stakes" if you want different tension
+• Say "show me the scene" to read the full content
+```
+
+**Notice**:
+
+- Customer uses natural language ("Create a tense scene")
+- Showrunner responds in plain language (no "story_spark loop" jargon)
+- Internal operations (loops, TUs, roles) are hidden
+- Customer gets actionable next steps in natural language
+
+---
+
+## Secondary Interface: Debug Mode
+
+### Philosophy
+
+**For debugging, auditing, or advanced use**, direct loop invocation is available. This bypasses the Showrunner's decision-making and invokes loops directly. Use this when:
+
+- Testing a specific loop in isolation
+- Debugging loop behavior
+- Auditing quality checks
+- You're a "micro-managing customer" who knows studio internals
+
+**Warning**: Debug mode exposes studio jargon and internal operations. This is **not** the intended customer experience.
+
+### Debug Command: `loop`
+
+```bash
+qf loop <loop_id> [context options]
+```
+
+**Examples**:
+
+```bash
+# Direct loop invocation (bypasses Showrunner)
 qf loop story_spark --context scene_text="cargo bay scene"
+qf loop hook_harvest --context mode="review"
+qf loop lore_deepening --context lore_topic="ancient temples"
+qf loop style_tune_up
+qf loop binding_run --context export_format="epub"
 
-# State inspection
-qf status                        # Show all active TUs
+# With additional flags
+qf loop story_spark --context scene_text="test" --mode workshop --verbose
+```
+
+**CLI Output** (with warning):
+
+```bash
+$ qf loop story_spark --context scene_text="cargo bay"
+
+⚠️  Debug Mode: Bypassing Showrunner mandate
+    You are directly invoking internal studio operations.
+    For normal use, prefer: qf ask "Create a cargo bay scene"
+
+Executing loop: story_spark
+TU opened: TU-2025-042
+Status: hot-proposed
+
+[Shows technical details: loop execution, node progression, quality bars]
+
+Loop completed successfully.
+```
+
+### When to Use Debug Mode
+
+| Use Case | Command | Notes |
+|----------|---------|-------|
+| **Normal use** | `qf ask "..."` | Showrunner interprets and decides |
+| **Testing loops** | `qf loop <loop_id>` | Bypass Showrunner for debugging |
+| **Auditing quality** | `qf loop gatecheck` | Check specific quality bars |
+| **Learning internals** | `qf loop --help` | See available loops and options |
+
+---
+
+## Utility Commands
+
+### Status and Inspection
+
+```bash
+# Project status
+qf status                        # Show active TUs and progress
 qf status <tu_id>                # Show specific TU details
-qf bars <tu_id>                  # Show quality bars
 
-# Project management
-qf list scenes                   # List all scenes in canon
-qf list lore                     # List all lore entries
+# Quality inspection
+qf bars <tu_id>                  # Show quality bars for TU
+
+# Content listing
+qf list scenes                   # List all scenes
+qf list lore                     # List lore entries
+qf list tus                      # List all TUs
+
+# Content display
 qf show <tu_id>                  # Display TU content
+qf show <scene_id>               # Display scene
+```
 
-# Configuration
+### Configuration
+
+```bash
 qf config set <key> <value>
 qf config get <key>
+qf config list
+```
+
+### Help
+
+```bash
+qf help                          # General help
+qf help ask                      # Help for natural language interface
+qf help loop                     # Help for debug mode
+qf help concepts                 # Explain key concepts
 ```
 
 ---
 
-## Command to Loop Mapping
+## Implementation Approach
 
-| Command Pattern | Loop ID | Context Mapping |
-|-----------------|---------|-----------------|
-| `write <text>` | story_spark | `scene_text: <text>` |
-| `review story` | hook_harvest | `mode: review` |
-| `add lore <topic>` | lore_deepening | `lore_topic: <topic>` |
-| `tune style` | style_tune_up | `mode: tune` |
-| `add art <desc>` | art_touch_up | `art_description: <desc>` |
-| `add audio <desc>` | audio_pass | `audio_description: <desc>` |
-| `translate <lang>` | translation_pass | `target_language: <lang>` |
-| `export <format>` | binding_run | `export_format: <format>` |
-| `narrate <scene>` | narration_dry_run | `scene_id: <scene>, mode: workshop` |
-
----
-
-## Implementation Approaches
-
-### Approach 1: Regex-Based Parser (Simple)
-
-```python
-import re
-from typing import NamedTuple
-
-class Command(NamedTuple):
-    action: str
-    args: list[str]
-    flags: dict[str, str]
-
-def parse_command(input: str) -> Command:
-    """
-    Parse command using regex patterns.
-
-    Example:
-    "qf write 'tense cargo bay scene'" →
-    Command(action="write", args=["tense cargo bay scene"], flags={})
-    """
-    # Remove 'qf' prefix if present
-    input = input.removeprefix("qf ").strip()
-
-    # Extract flags (--key value or --key=value)
-    flags = {}
-    flag_pattern = r'--(\w+)(?:=|\\s+)(\\S+)'
-    for match in re.finditer(flag_pattern, input):
-        flags[match.group(1)] = match.group(2)
-    input = re.sub(flag_pattern, '', input).strip()
-
-    # Split into action and args
-    parts = input.split(None, 1)  # Split on first whitespace
-    action = parts[0] if parts else ""
-    args = [parts[1]] if len(parts) > 1 else []
-
-    return Command(action=action, args=args, flags=flags)
-```
-
-### Approach 2: Click/Typer Framework (Recommended)
+### Primary Interface: Showrunner Integration
 
 ```python
 import typer
-from typing import Optional
+from rich.console import Console
+from questfoundry.runtime.core import SchemaRegistry
+from questfoundry.runtime.cli import ShowrunnerInterface
 
 app = typer.Typer()
+console = Console()
 
 @app.command()
-def write(
-    description: str = typer.Argument(..., help="Scene description"),
-    mode: str = typer.Option("workshop", help="Writing mode")
-):
-    """Write a new scene."""
-    from questfoundry.runtime import GraphFactory
+def ask(message: str):
+    """
+    Primary interface: Talk to the Showrunner in natural language.
 
-    factory = GraphFactory()
-    loop = factory.create_loop_graph(
-        loop_id="story_spark",
-        context={"scene_text": description, "mode": mode}
-    )
+    The Showrunner interprets your request, decides which loops to run,
+    and responds in plain language. You don't need to know about loops,
+    TUs, or other studio jargon.
 
-    # Execute loop (delegated to Showrunner)
-    from questfoundry.runtime.cli import Showrunner
-    showrunner = Showrunner()
-    result = showrunner.execute_loop(loop, context)
+    Examples:
+        qf ask "Create a mystery story about a detective"
+        qf ask "Make the protagonist more relatable"
+        qf ask "Export as EPUB"
+    """
+    # Load Showrunner role from YAML definition
+    registry = SchemaRegistry()
+    showrunner_role = registry.load_role("showrunner")
 
-    # Display result
-    typer.echo(f"✓ Created scene {result['tu_id']}")
+    # Create Showrunner interface
+    showrunner = ShowrunnerInterface(role=showrunner_role)
 
-@app.command()
-def review(
-    target: str = typer.Argument("story", help="What to review")
-):
-    """Review content for quality."""
-    # Similar pattern...
+    # Interpret and execute (Showrunner decides loops internally)
+    console.print(f"[dim]Showrunner:[/dim]", end=" ")
+    result = showrunner.interpret_and_execute(message)
+
+    # Display plain language response (no jargon)
+    console.print(result.plain_language_response)
+
+    # Display next steps if available
+    if result.suggested_next_steps:
+        console.print("\n[bold]Next steps:[/bold]")
+        for step in result.suggested_next_steps:
+            console.print(f"• {step}")
 
 if __name__ == "__main__":
     app()
 ```
 
-### Approach 3: Natural Language Parser (Advanced)
+### Debug Interface: Direct Loop Invocation
 
 ```python
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_anthropic import ChatAnthropic
-
-def parse_natural_language(input: str) -> dict:
+@app.command()
+def loop(
+    loop_id: str = typer.Argument(..., help="Loop to execute"),
+    context: str = typer.Option("", help="Context as JSON or key=value pairs"),
+    mode: str = typer.Option("workshop", help="Execution mode"),
+    verbose: bool = typer.Option(False, help="Show detailed execution logs")
+):
     """
-    Use LLM to parse natural language into structured command.
+    Debug/audit mode: Directly invoke a loop (bypasses Showrunner).
 
-    Example:
-    "I want to write a tense scene in the cargo bay" →
-    {
-        "action": "write",
-        "loop_id": "story_spark",
-        "context": {"scene_text": "tense scene in the cargo bay"}
-    }
+    ⚠️  WARNING: This bypasses the Showrunner's decision-making.
+    For normal use, prefer: qf ask "<natural language>"
+
+    This command exposes internal studio operations and is intended
+    for debugging, testing, and auditing purposes.
+
+    Examples:
+        qf loop story_spark --context scene_text="test scene"
+        qf loop hook_harvest --context mode="review"
+        qf loop gatecheck --verbose
     """
-    llm = ChatAnthropic(model="claude-3-5-haiku-20241022", temperature=0)
+    # Display warning
+    console.print("[yellow]⚠️  Debug Mode: Bypassing Showrunner mandate[/yellow]")
+    console.print("[dim]    You are directly invoking internal studio operations.[/dim]")
+    console.print(f"[dim]    For normal use, prefer: qf ask \"...\"[/dim]\n")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a command parser for QuestFoundry CLI.
-        Parse user input into structured command.
+    # Parse context
+    context_dict = parse_context(context)
 
-        Available commands:
-        - write: Create new scene (story_spark loop)
-        - review: Review content (hook_harvest loop)
-        - add lore: Add lore entry (lore_deepening loop)
-        - export: Export book (binding_run loop)
+    # Execute loop directly
+    from questfoundry.runtime.core import GraphFactory, StateManager
 
-        Return JSON: {"action": "...", "loop_id": "...", "context": {...}}
-        """),
-        ("human", "{input}")
-    ])
+    factory = GraphFactory()
+    state_mgr = StateManager()
 
-    chain = prompt | llm
-    result = chain.invoke({"input": input})
+    graph = factory.create_loop_graph(loop_id)
+    initial_state = state_mgr.initialize_state(context_dict)
 
-    return json.loads(result.content)
+    console.print(f"Executing loop: [bold]{loop_id}[/bold]")
+
+    result = graph.invoke(initial_state)
+
+    # Display technical details (allowed in debug mode)
+    console.print(f"\n[green]Loop completed successfully[/green]")
+    console.print(f"TU: {result['tu_id']}")
+    console.print(f"Status: {result['tu_lifecycle']}")
+
+    if verbose:
+        # Show detailed execution logs
+        display_execution_details(result)
 ```
 
 ---
 
 ## Output Formatting
 
-### Success Output (Rich Formatting)
+### Success Output (Natural Language Interface)
 
 ```python
-from rich.console import Console
-from rich.table import Table
-
-def display_success(result: dict):
+def display_showrunner_response(result):
     """
-    Display successful loop execution result.
+    Display Showrunner's plain language response.
 
     Example:
-    ✓ Created scene TU-2025-042 "Cargo Bay Confrontation"
-    Status: hot-proposed (needs review)
+    Showrunner: I've created that mystery story for you. The protagonist
+    is a detective investigating disappearances on a space station. I've
+    set up three acts with escalating tension and multiple suspects. The
+    story is currently in draft form with about 45,000 words.
+
+    Next steps:
+    • Say "review the story" to see quality feedback and refine
+    • Say "adjust the pacing" if you want different tension curves
+    • Say "show me act 1" to read the opening
+    """
+    console = Console()
+
+    # Showrunner response (plain language, no jargon)
+    console.print(f"[bold cyan]Showrunner:[/bold cyan] {result.plain_language_response}")
+
+    # Next steps (still in plain language)
+    if result.suggested_next_steps:
+        console.print("\n[bold]Next steps:[/bold]")
+        for step in result.suggested_next_steps:
+            console.print(f"• {step}")
+```
+
+### Success Output (Debug Mode)
+
+```python
+def display_debug_result(result):
+    """
+    Display technical details in debug mode.
+
+    Example:
+    ✓ Loop completed: story_spark
+    TU: TU-2025-042
+    Status: hot-proposed
+    Artifacts: 5 created, 2 updated
 
     Quality Bars:
     ┌────────────────┬────────┬──────────────────────────┐
@@ -249,42 +374,20 @@ def display_success(result: dict):
     │ Presentation   │ ⚫     │ Not checked yet          │
     └────────────────┴────────┴──────────────────────────┘
 
-    Next steps:
-    • Run 'qf review story' to refine and approve
-    • Run 'qf show TU-2025-042' to view full content
+    Internal details:
+    • Nodes executed: 12
+    • Roles invoked: Showrunner, Plotwright, Scene Smith, Gatekeeper
+    • Duration: 127s
     """
     console = Console()
 
-    # Header
-    console.print(f"✓ Created scene {result['tu_id']}", style="green bold")
-    console.print(f"Status: {result['tu_lifecycle']} (needs review)")
+    console.print(f"✓ Loop completed: [bold]{result['loop_id']}[/bold]", style="green")
+    console.print(f"TU: {result['tu_id']}")
+    console.print(f"Status: {result['tu_lifecycle']}")
 
-    # Quality bars table
+    # Quality bars (technical view allowed in debug mode)
     table = Table(title="Quality Bars")
-    table.add_column("Bar", style="cyan")
-    table.add_column("Status")
-    table.add_column("Feedback")
-
-    for bar_name, bar_status in result['quality_bars'].items():
-        status_icon = {
-            "green": "🟢",
-            "yellow": "🟡",
-            "red": "🔴",
-            "not_checked": "⚫"
-        }[bar_status['status']]
-
-        table.add_row(
-            bar_name,
-            status_icon,
-            bar_status.get('feedback', 'Not checked yet')
-        )
-
-    console.print(table)
-
-    # Next steps
-    console.print("\nNext steps:", style="bold")
-    console.print("• Run 'qf review story' to refine and approve")
-    console.print(f"• Run 'qf show {result['tu_id']}' to view full content")
+    # ... (similar to before, but without "next steps" guidance)
 ```
 
 ### Error Output
@@ -292,32 +395,44 @@ def display_success(result: dict):
 ```python
 def display_error(error: Exception, context: dict):
     """
-    Display helpful error message with suggestions.
+    Display helpful error message.
 
-    Example:
-    ✗ Loop execution failed
+    Natural Language Interface:
+    ✗ I ran into a problem creating that scene
 
-    Error: Quality bar 'Integrity' is red
-    Reason: Scene logic has plot holes
+    Issue: The scene conflicts with established lore about the temple ruins.
 
     Suggestions:
-    • Review the scene for logical inconsistencies
-    • Run 'qf review story' to see detailed feedback
-    • Check 'qf show TU-2025-042' for the full content
+    • Say "adjust to match the lore" to fix the conflict
+    • Say "show me the lore" to review what's established
+    • Say "override the lore" if you want to change canon
 
-    Need help? Run 'qf help review' for guidance.
+    Debug Mode:
+    ✗ Loop execution failed: story_spark
+
+    Error: Quality bar 'Integrity' is red
+    Reason: Canon collision detected in node 'lore_check'
+
+    Technical details:
+    • Failed node: consult_lore (line 72 in story_spark.yaml)
+    • State snapshot: /tmp/qf-state-abc123.json
+    • Logs: /tmp/qf-logs-abc123.log
     """
     console = Console()
 
-    console.print("✗ Loop execution failed", style="red bold")
-    console.print(f"\nError: {error}", style="red")
-
-    # Contextual suggestions
-    console.print("\nSuggestions:", style="yellow bold")
-    for suggestion in generate_suggestions(error, context):
-        console.print(f"• {suggestion}")
-
-    console.print("\nNeed help? Run 'qf help' for guidance.", style="dim")
+    if context.get("debug_mode"):
+        # Technical error output
+        console.print("✗ Loop execution failed", style="red bold")
+        console.print(f"Error: {error}", style="red")
+        console.print("\nTechnical details:", style="dim")
+        # ... show technical details
+    else:
+        # Plain language error output
+        console.print("✗ I ran into a problem", style="red bold")
+        console.print(f"\nIssue: {error.user_message}", style="red")
+        console.print("\nSuggestions:", style="yellow bold")
+        for suggestion in error.suggestions:
+            console.print(f"• {suggestion}")
 ```
 
 ---
@@ -331,97 +446,153 @@ def help(topic: Optional[str] = None):
     Display help for commands.
 
     Examples:
-    qf help            # General help
-    qf help write      # Help for 'write' command
-    qf help concepts   # Explain key concepts
+        qf help            # General help
+        qf help ask        # Help for natural language interface
+        qf help loop       # Help for debug mode
+        qf help concepts   # Explain key concepts
     """
     if topic is None:
         display_general_help()
-    elif topic in COMMANDS:
-        display_command_help(topic)
-    elif topic in CONCEPTS:
-        display_concept_help(topic)
+    elif topic == "ask":
+        display_ask_help()
+    elif topic == "loop":
+        display_loop_help()
+    elif topic == "concepts":
+        display_concepts_help()
     else:
-        typer.echo(f"Unknown topic: {topic}")
-        typer.echo("Try 'qf help' for available topics.")
+        console.print(f"Unknown topic: {topic}")
+        console.print("Try 'qf help' for available topics.")
 
 def display_general_help():
     """Display general help."""
     console = Console()
 
     console.print("QuestFoundry CLI", style="bold cyan")
-    console.print("Create interactive fiction with AI collaboration\n")
+    console.print("Talk to your AI studio in natural language\n")
 
-    console.print("Common commands:", style="bold")
-    console.print("  qf write <description>    Write a new scene")
-    console.print("  qf review story           Review and refine content")
-    console.print("  qf add lore <topic>       Add lore entry")
-    console.print("  qf export <format>        Export book (epub, pdf)")
-    console.print("  qf status                 Show project status")
+    console.print("[bold]Primary Interface:[/bold]")
+    console.print("  qf ask \"<natural language>\"")
+    console.print("  Talk to the Showrunner, who interprets your requests")
+    console.print("  and coordinates the studio to deliver what you need.\n")
 
-    console.print("\nFor detailed help:", style="dim")
-    console.print("  qf help <command>         Command-specific help")
-    console.print("  qf help concepts          Understand key concepts")
+    console.print("[bold]Examples:[/bold]")
+    console.print("  qf ask \"Create a mystery story\"")
+    console.print("  qf ask \"Make the protagonist deeper\"")
+    console.print("  qf ask \"Export as EPUB\"\n")
+
+    console.print("[bold]Debug Mode (Advanced):[/bold]")
+    console.print("  qf loop <loop_id>          # Directly invoke loops")
+    console.print("  qf status                  # Show project status")
+    console.print("  qf show <tu_id>            # Display content\n")
+
+    console.print("[dim]For detailed help:[/dim]")
+    console.print("  qf help ask                # Natural language interface")
+    console.print("  qf help loop               # Debug mode")
+    console.print("  qf help concepts           # Key concepts")
+
+def display_concepts_help():
+    """Explain key concepts."""
+    console = Console()
+
+    console.print("Key Concepts", style="bold cyan\n")
+
+    console.print("[bold]Showrunner[/bold]")
+    console.print("The Showrunner is your AI product owner who interprets")
+    console.print("your natural language requests, decides what work needs")
+    console.print("to be done, and coordinates 15 specialized studio roles")
+    console.print("to deliver. You talk to the Showrunner, not to loops.\n")
+
+    console.print("[bold]Primary vs Debug Interface[/bold]")
+    console.print("• Primary (qf ask): Natural language conversation")
+    console.print("  - You say what you want, Showrunner figures out how")
+    console.print("  - No need to know loops, TUs, or studio jargon")
+    console.print("• Debug (qf loop): Direct loop invocation")
+    console.print("  - Bypasses Showrunner's decision-making")
+    console.print("  - Exposes internal studio operations")
+    console.print("  - For testing, debugging, and auditing\n")
+
+    console.print("[bold]Why Two Interfaces?[/bold]")
+    console.print("The primary interface (qf ask) is how you normally work.")
+    console.print("Debug mode (qf loop) is like a 'micro-managing customer'")
+    console.print("who overrides the Showrunner to control internals directly.")
+    console.print("Use debug mode for testing and auditing, not normal work.")
 ```
 
 ---
 
 ## Testing Requirements
 
-1. **Test command parsing**:
-   - Simple commands: `"write scene"`
-   - Quoted args: `"write 'complex scene description'"`
-   - Flags: `"write scene --mode workshop"`
+1. **Test natural language interface**:
+   - Various customer directives map to correct loop sequences
+   - Responses are in plain language (no jargon)
+   - Suggested next steps are helpful and actionable
 
-2. **Test command mapping**:
-   - Each command maps to correct loop
-   - Context extracted correctly
-   - Flags passed through
+2. **Test debug mode**:
+   - Direct loop invocation works correctly
+   - Warning message displays clearly
+   - Technical details are shown appropriately
 
 3. **Test error handling**:
-   - Unknown commands
-   - Missing required arguments
-   - Invalid flags
+   - Errors in natural language mode show plain language messages
+   - Errors in debug mode show technical details
+   - Suggestions are contextual and helpful
 
-4. **Test output formatting**:
-   - Success messages render correctly
-   - Error messages are helpful
-   - Tables format properly
+4. **Test Showrunner integration**:
+   - Showrunner role loads from YAML
+   - LLM invocation works (Claude Sonnet 4)
+   - Tool calling (`interpret_customer_directive`) works
+   - Structured output parsing works
 
 5. **Test help system**:
-   - General help works
-   - Command-specific help works
-   - Suggestions are relevant
+   - General help explains primary vs debug interfaces
+   - Concepts help educates about Showrunner role
+   - Examples use natural language
 
 ---
 
 ## Dependencies
 
-- **typer** or **click**: CLI framework
+- **typer**: CLI framework
 - **rich**: Beautiful terminal output
-- **LangChain** (optional): Natural language parsing
+- **questfoundry.runtime.core**: SchemaRegistry, GraphFactory, NodeFactory
+- **questfoundry.runtime.cli**: ShowrunnerInterface
+- **LangChain**: LLM integration (Claude Sonnet 4)
 
 ---
 
 ## UX Principles
 
-1. **Zero to productive**: New users can run `qf write "first scene"` without reading docs
-2. **Progressive complexity**: Advanced users can access full power via flags and options
-3. **Fail gracefully**: Typos and mistakes lead to helpful suggestions, not crashes
-4. **Visual feedback**: Use color, emoji, and formatting to guide users
-5. **Memorable patterns**: Commands should feel natural ("write", "review", "export")
+1. **Natural conversation first**: Customers talk to Showrunner, not to commands
+2. **Hide complexity**: Loops, TUs, roles are internal studio operations
+3. **Plain language responses**: No jargon in normal mode
+4. **Debug when needed**: Advanced users can access internals
+5. **Clear separation**: Primary vs debug workflows are distinct
+
+---
+
+## Migration from v1.0.0
+
+**Breaking Changes**:
+
+- `qf write "<text>"` → `qf ask "Create a scene with <text>"`
+- `qf review story` → `qf ask "Review the story"`
+- `qf add lore <topic>` → `qf ask "Tell me about <topic>"`
+
+**Debug Mode Alternative**:
+
+- For testing: `qf loop story_spark --context scene_text="<text>"`
+- This bypasses Showrunner and invokes loops directly
 
 ---
 
 ## Future Enhancements (Ideas)
 
-- **Interactive mode**: `qf interactive` for conversational workflow
-- **Aliases**: `qf w` as shortcut for `qf write`
-- **Shell completion**: Tab completion for commands and arguments
-- **Command history**: `qf history` to see recent commands
-- **Undo**: `qf undo` to revert last action
-- **Templates**: `qf write --template action_scene`
-- **Batch operations**: `qf batch review --all-proposed`
+- **Interactive mode**: `qf interactive` for ongoing conversation
+- **Conversation history**: Showrunner remembers context across requests
+- **Clarification questions**: Showrunner asks when directive is ambiguous
+- **Multi-turn workflows**: Complex requests span multiple turns
+- **Streaming responses**: Real-time updates as Showrunner works
+- **Voice interface**: Speak to Showrunner via audio input
 
 ---
 
@@ -429,9 +600,11 @@ def display_general_help():
 
 - **ADR-005**: Human-Facing CLI/Runtime Design (MIGRATION.md)
 - **Showrunner Agent**: components/showrunner_agent.md
-- **Typer Docs**: https://typer.tiangolo.com/
-- **Rich Docs**: https://rich.readthedocs.io/
+- **Showrunner Role**: ../spec/05-definitions/roles/showrunner.yaml
+- **North Star**: ../spec/00-north-star/WORKING_MODEL.md
+- **Typer Docs**: <https://typer.tiangolo.com/>
+- **Rich Docs**: <https://rich.readthedocs.io/>
 
 ---
 
-**IMPLEMENTATION NOTE**: This is a FLEXIBLE component. Creativity and user experience are priorities. Iterate based on real user feedback. The spec above is guidance, not gospel.
+**IMPLEMENTATION NOTE**: This is a FLEXIBLE component. Creativity and user experience are priorities. The Showrunner should feel like a helpful collaborator, not a command interpreter. Iterate based on real user feedback.

@@ -1,621 +1,625 @@
 # Showrunner Agent Component Specification
 
-**Component Type**: FLEXIBLE (Interface Design)
-**Version**: 1.0.0
-**Last Updated**: 2025-11-20
+**Component Type**: ROLE AGENT (LLM-Backed)
+**Version**: 2.0.0
+**Last Updated**: 2025-11-21
 
 ---
 
 ## Purpose
 
-The Showrunner is the **translation layer** between human natural language requests and studio protocol execution. It acts as the "product owner" of the studio, orchestrating AI agents on behalf of human authors.
+The Showrunner is an **LLM-backed agent role** (like Plotwright, Scene Smith, and all other studio roles) with the special mandate of **customer communication**. It interprets natural language directives from customers, decides which loops to run, coordinates internal studio operations, and responds in plain language.
 
 ---
 
-## Design Philosophy (from ADR-005)
+## Key Principle
 
-**Core Principles**:
-1. **Humans are the customers** - They drive the project
-2. **Showrunner is the product owner** - It orchestrates the studio on behalf of humans
-3. **Humans don't speak jargon** - Use natural language, not technical terms
-
-**Translation Responsibilities**:
-- **Input**: Human request in natural language
-- **Processing**: Map to appropriate loop(s), prepare context
-- **Execution**: Invoke loop(s) with proper state
-- **Monitoring**: Track execution progress
-- **Output**: Translate studio results back to human-friendly summary
+**The Showrunner is a role, not infrastructure.** It is defined in `spec/05-definitions/roles/showrunner.yaml` and loaded like any other role at runtime. The difference is its mandate: while other roles focus on creative work (writing scenes, checking lore, etc.), the Showrunner focuses on interpreting customer needs and coordinating the studio to deliver.
 
 ---
 
 ## Architecture Position
 
 ```
-Human Request (natural language)
+Customer (Human)
+    ↓ (natural language: "Create a mystery story...")
+CLI (thin passthrough)
+    ↓ (passes message)
+Showrunner Agent (LLM-backed role from showrunner.yaml)  ← THIS COMPONENT
+    ↓ (interprets with LLM, calls tools, decides loops)
+    │
+    ├→ interpret_customer_directive() tool
+    │   - Uses LLM to understand customer intent
+    │   - Decides which loops to run
+    │   - Determines role dormancy changes
+    │   - Generates plain language response
+    │
+    ├→ open_tu() tool
+    │   - Opens Trace Unit for work
+    │
+    ├→ approve_merge() tool
+    │   - Approves merging hot→cold
+    │
+    └→ decide_dormancy() tool
+        - Wakes/sleeps roles based on need
     ↓
-CLI Parser (intent recognition)
+Loop Execution (internal - customer doesn't see)
     ↓
-Showrunner Agent (translates to studio protocol)  ← THIS COMPONENT
+Studio Roles collaborate (Plotwright, Scene Smith, etc.)
     ↓
-Loop Orchestration (executes appropriate loop)
+Results returned to Showrunner
     ↓
-Studio Roles (work collaboratively)
+Showrunner responds in plain language
     ↓
-Showrunner (summarizes results for human)  ← THIS COMPONENT
+CLI displays response
     ↓
-CLI Output (natural language, not jargon)
+Customer
 ```
+
+---
+
+## How Showrunner Works
+
+### 1. Role Definition (Source of Truth)
+
+The Showrunner's behavior is defined in `spec/05-definitions/roles/showrunner.yaml`:
+
+- **Mission** (lines 18-20): Customer's trusted interface, translate directives to work
+- **LLM Config** (lines 592-596): Claude Sonnet 4, temperature 0.7
+- **System Prompt** (lines 600-666): Instructions for interpreting customer requests
+- **Tools** (lines 174-229): Structured tools the Showrunner can call
+
+### 2. Loading at Runtime
+
+```python
+from questfoundry.runtime.core import SchemaRegistry
+
+# Load Showrunner role definition
+registry = SchemaRegistry()
+showrunner_role = registry.load_role("showrunner")  # Loads showrunner.yaml
+
+# Showrunner is now a RoleProfile instance, like any other role
+```
+
+### 3. LLM-Driven Interpretation
+
+When a customer sends a message, the Showrunner:
+
+1. **Receives natural language** from CLI
+2. **Uses LLM (Claude Sonnet 4)** with system prompt from YAML
+3. **Calls `interpret_customer_directive` tool** with structured output
+4. **LLM decides** which loops to run (not deterministic mapping)
+5. **Executes loops internally** (customer doesn't see this)
+6. **Returns plain language response** (no jargon)
+
+### 4. The `interpret_customer_directive` Tool
+
+From `showrunner.yaml` lines 174-213:
+
+```yaml
+- name: interpret_customer_directive
+  description: Interpret a customer's natural language directive and determine what work to do
+  input_schema:
+    type: object
+    properties:
+      customer_directive_text:
+        type: string
+        description: The exact text the customer provided
+      outcome_category:
+        type: string
+        enum: [richer_canon, clearer_codex, better_style, ready_to_ship, meta_request]
+        description: What the customer wants to achieve
+      loops_sequenced:
+        type: array
+        description: Ordered list of loop names to run
+      plain_language_response:
+        type: string
+        description: What to say back to the customer (NO JARGON)
+      roles_to_wake:
+        type: array
+        description: Roles to wake from dormancy
+```
+
+**This is LLM-driven decision-making**, not deterministic mapping. The LLM (Claude Sonnet 4) uses the system prompt to understand customer intent and decide the loop sequence.
 
 ---
 
 ## Responsibilities
 
-### 1. Request Translation
-- Parse human intent from CLI commands
-- Map to appropriate loop pattern(s)
-- Extract parameters and context from natural language
-- Prepare initial StudioState
+### 1. Customer Communication (Primary Mandate)
 
-### 2. Loop Orchestration
-- Invoke GraphFactory to create loop
-- Initialize state with proper context
-- Execute loop (invoke compiled graph)
-- Handle errors and retries
+- **Interpret** natural language directives using LLM
+- **Decide** which loops to run (via `interpret_customer_directive` tool)
+- **Respond** in plain language (no studio jargon)
+- **Guide** customer with suggested next steps
 
-### 3. Progress Monitoring
-- Track loop execution state
-- Provide progress indicators to user
-- Allow interruption and human feedback
-- Log execution for observability
+### 2. Work Coordination (Internal)
 
-### 4. Result Translation
-- Aggregate artifacts from state
-- Translate studio protocol outputs to human language
-- Format results for CLI display
-- Suggest next steps to user
+- **Open TUs** for work slices (via `open_tu` tool)
+- **Sequence loops** based on customer needs
+- **Wake dormant roles** when needed
+- **Approve merges** when quality bars are green
+- **Close TUs** when work is complete
 
-### 5. Multi-Loop Coordination (Advanced)
-- Sequence multiple loops (e.g., story_spark → hook_harvest)
-- Pass artifacts between loops
-- Maintain overall project context
-- Coordinate dependencies
+### 3. Studio Product Owner
+
+- **Prioritize** work based on customer directives
+- **Decide role dormancy** to manage costs
+- **Gatekeep quality** - don't merge until bars are green
+- **Maintain coherence** across the project
 
 ---
 
-## Input/Output Contract
+## Implementation
 
-### Execute Request
-```python
-Input:
-    command: str                # e.g., "write scene about cargo bay"
-    parsed_intent: ParsedIntent # From CLI parser
-    user_context: dict         # Project state, preferences
-
-Output:
-    ExecutionResult            # Contains artifacts, summary, next steps
-```
-
----
-
-## Core Methods
-
-### 1. Execute Request
+### Core Interface: `ShowrunnerInterface`
 
 ```python
-def execute_request(
-    command: str,
-    parsed_intent: ParsedIntent,
-    user_context: Optional[dict] = None
-) -> ExecutionResult:
+from questfoundry.runtime.core import SchemaRegistry, NodeFactory
+from rich.console import Console
+
+class ShowrunnerInterface:
     """
-    Execute a human request through studio loops.
+    Interface to the Showrunner role (LLM-backed agent).
 
-    Steps:
-    1. Determine which loop(s) to run
-    2. Prepare context for loop
-    3. Create and execute loop
-    4. Translate results
-    5. Return formatted output
+    This class loads the Showrunner role from showrunner.yaml and
+    provides methods to interpret customer directives and execute work.
+    """
 
-    Args:
-        command: Original human command
-        parsed_intent: Parsed command (action, args, flags)
-        user_context: Optional project context
+    def __init__(self, role: Optional[RoleProfile] = None):
+        """
+        Initialize Showrunner interface.
 
-    Returns:
-        ExecutionResult with artifacts and summary
+        Args:
+            role: Optional RoleProfile. If not provided, loads from showrunner.yaml
+        """
+        if role is None:
+            registry = SchemaRegistry()
+            role = registry.load_role("showrunner")
 
-    Example:
-        command = "write a tense scene in the cargo bay"
-        parsed_intent = ParsedIntent(
-            action="write",
-            args=["a tense scene in the cargo bay"],
-            loop_id="story_spark"
+        self.role = role
+        self.node_factory = NodeFactory()
+        self.console = Console()
+
+    def interpret_and_execute(self, customer_message: str) -> ShowrunnerResponse:
+        """
+        Interpret customer message and execute appropriate work.
+
+        This is the main entry point for customer communication.
+
+        Steps:
+        1. Create Showrunner node from role definition
+        2. Render prompt template with customer message
+        3. Invoke LLM (Claude Sonnet 4) with system prompt and tools
+        4. LLM calls interpret_customer_directive tool with structured output
+        5. Parse tool call to get loop sequence and response
+        6. Execute loops internally (customer doesn't see)
+        7. Return plain language response
+
+        Args:
+            customer_message: Natural language directive from customer
+
+        Returns:
+            ShowrunnerResponse with plain language response and metadata
+
+        Example:
+            >>> showrunner = ShowrunnerInterface()
+            >>> response = showrunner.interpret_and_execute(
+            ...     "Create a mystery story about a detective"
+            ... )
+            >>> print(response.plain_language_response)
+            I'll create that mystery story for you. I'm setting up a detective
+            story with investigation structure and plot twists. This will take
+            about 3-5 minutes...
+
+        Example interaction flow:
+            Customer: "Create a tense scene in the cargo bay"
+
+            [Internal: Showrunner node invokes LLM with system prompt]
+
+            LLM (via interpret_customer_directive tool):
+            {
+                "customer_directive_text": "Create a tense scene in the cargo bay",
+                "outcome_category": "richer_canon",
+                "loops_sequenced": ["Story Spark", "Hook Harvest", "Gatecheck"],
+                "plain_language_response": "I'll create that cargo bay scene with
+                    high tension and meaningful choices. This will take about 2
+                    minutes...",
+                "roles_to_wake": []
+            }
+
+            [Internal: Execute story_spark loop]
+            [Internal: Execute hook_harvest loop]
+            [Internal: Execute gatecheck loop]
+
+            Showrunner: Done! I've created a cargo bay confrontation scene...
+        """
+        # Create Showrunner node (uses role definition from YAML)
+        showrunner_node = self.node_factory.create_role_node("showrunner")
+
+        # Prepare state with customer message
+        state = {
+            "messages": [{
+                "role": "user",
+                "content": customer_message
+            }],
+            "context": {
+                "customer_directive": customer_message
+            }
+        }
+
+        # Invoke Showrunner node (LLM interpretation happens here)
+        # The LLM uses system prompt from showrunner.yaml and calls tools
+        result_state = showrunner_node(state)
+
+        # Extract tool call result (interpret_customer_directive)
+        tool_calls = self._extract_tool_calls(result_state)
+        interpretation = tool_calls.get("interpret_customer_directive", {})
+
+        # Get plain language response and loop sequence
+        response_text = interpretation.get("plain_language_response", "")
+        loops_to_run = interpretation.get("loops_sequenced", [])
+        roles_to_wake = interpretation.get("roles_to_wake", [])
+
+        # Execute loops internally (customer doesn't see this)
+        for loop_id in loops_to_run:
+            self._execute_loop_internal(loop_id, state)
+
+        # Return response
+        return ShowrunnerResponse(
+            plain_language_response=response_text,
+            loops_executed=loops_to_run,
+            roles_awoken=roles_to_wake,
+            suggested_next_steps=self._generate_next_steps(result_state)
         )
 
-        result = execute_request(command, parsed_intent)
-        # result.summary = "✓ Created scene TU-2025-042..."
-    """
+    def _execute_loop_internal(self, loop_id: str, context: dict) -> dict:
+        """
+        Execute a loop internally (hidden from customer).
+
+        Args:
+            loop_id: Loop to execute (e.g., "Story Spark", "Hook Harvest")
+            context: Current state context
+
+        Returns:
+            Updated state after loop execution
+        """
+        from questfoundry.runtime.core import GraphFactory, StateManager
+
+        # Normalize loop_id (from human-readable to filename)
+        normalized_loop_id = loop_id.lower().replace(" ", "_")
+
+        # Create and execute loop graph
+        factory = GraphFactory()
+        graph = factory.create_loop_graph(normalized_loop_id)
+
+        state_mgr = StateManager()
+        initial_state = state_mgr.initialize_state(context)
+
+        final_state = graph.invoke(initial_state)
+
+        return final_state
+
+    def _extract_tool_calls(self, state: dict) -> dict:
+        """Extract tool calls from LLM response."""
+        # Parse tool calls from LLM response
+        # This depends on LangChain's tool calling format
+        messages = state.get("messages", [])
+        for msg in reversed(messages):
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                return {tc.name: tc.args for tc in msg.tool_calls}
+        return {}
+
+    def _generate_next_steps(self, state: dict) -> list[str]:
+        """Generate suggested next steps for customer."""
+        # Based on final state, suggest natural language next steps
+        tu_status = state.get("meta", {}).get("current_tu", {}).get("status")
+
+        if tu_status == "hot-proposed":
+            return [
+                "Say \"review the work\" to see quality feedback and refine",
+                "Say \"show me what you created\" to read the content",
+                "Say \"adjust the tone\" if you want style changes"
+            ]
+        elif tu_status == "cold-merged":
+            return [
+                "Say \"export as EPUB\" to generate a downloadable book",
+                "Say \"create another scene\" to continue the story",
+                "Say \"translate to Spanish\" for a localized version"
+            ]
+        else:
+            return [
+                "Say \"what's the status?\" to see project progress",
+                "Say \"help\" to learn what I can do"
+            ]
 ```
 
-### 2. Map Intent to Loop
+### Response Data Model
 
 ```python
-def map_intent_to_loop(
-    intent: ParsedIntent,
-    user_context: Optional[dict] = None
-) -> LoopExecutionPlan:
-    """
-    Determine which loop(s) to execute based on intent.
+from dataclasses import dataclass
 
-    Intent Mapping:
-    - "write <text>" → story_spark
-    - "review story" → hook_harvest
-    - "add lore <topic>" → lore_deepening
-    - "expand codex <entry>" → codex_expansion
-    - "tune style" → style_tune_up
-    - "add art <desc>" → art_touch_up
-    - "add audio <desc>" → audio_pass
-    - "translate <lang>" → translation_pass
-    - "narrate <scene>" → narration_dry_run
-    - "export <format>" → binding_run
+@dataclass
+class ShowrunnerResponse:
+    """Response from Showrunner after interpreting customer message."""
 
-    Returns:
-        LoopExecutionPlan with:
-        - loop_id: Which loop to run
-        - context: Prepared context dict
-        - dependencies: Other loops to run first (if any)
-
-    Example:
-        intent = ParsedIntent(action="write", args=["cargo bay scene"])
-        plan = map_intent_to_loop(intent)
-        # plan.loop_id = "story_spark"
-        # plan.context = {"scene_text": "cargo bay scene"}
-    """
-```
-
-### 3. Prepare Context
-
-```python
-def prepare_context(
-    intent: ParsedIntent,
-    loop_id: str,
-    user_context: Optional[dict] = None
-) -> dict:
-    """
-    Prepare context dict for loop initialization.
-
-    Extract parameters from intent and user context,
-    format them for loop's expected context schema.
-
-    Args:
-        intent: Parsed command intent
-        loop_id: Target loop identifier
-        user_context: Optional project state
-
-    Returns:
-        Context dict ready for StateManager.initialize_state()
-
-    Example (story_spark):
-        intent = ParsedIntent(action="write", args=["cargo bay"])
-        context = prepare_context(intent, "story_spark")
-        # context = {
-        #     "scene_text": "cargo bay",
-        #     "mode": "workshop"
-        # }
-
-    Example (translation_pass):
-        intent = ParsedIntent(action="translate", args=["Spanish"])
-        context = prepare_context(intent, "translation_pass")
-        # context = {
-        #     "target_language": "Spanish",
-        #     "snapshot_ref": "SNAP-2025-042-01"
-        # }
-    """
-```
-
-### 4. Execute Loop
-
-```python
-def execute_loop(
-    loop_id: str,
-    context: dict,
-    progress_callback: Optional[Callable] = None
-) -> StudioState:
-    """
-    Execute a loop and return final state.
-
-    Steps:
-    1. Create loop graph (via GraphFactory)
-    2. Initialize state (via StateManager)
-    3. Invoke compiled graph
-    4. Monitor execution (call progress_callback if provided)
-    5. Return final state
-
-    Args:
-        loop_id: Loop pattern identifier
-        context: Prepared context dict
-        progress_callback: Optional function to call with progress updates
-
-    Returns:
-        Final StudioState after loop completion
-
-    Example:
-        state = execute_loop(
-            loop_id="story_spark",
-            context={"scene_text": "cargo bay"},
-            progress_callback=lambda node: print(f"Executing {node}...")
-        )
-
-        # During execution, callbacks:
-        # "Executing plotwright..."
-        # "Executing scene_smith..."
-        # "Executing gatekeeper..."
-    """
-```
-
-### 5. Translate Results
-
-```python
-def translate_results(
-    state: StudioState,
-    loop_id: str,
-    original_command: str
-) -> ExecutionResult:
-    """
-    Translate studio state into human-readable results.
-
-    Extract artifacts, format summary, suggest next steps.
-
-    Args:
-        state: Final StudioState from loop execution
-        loop_id: Which loop was executed
-        original_command: Original human command
-
-    Returns:
-        ExecutionResult with:
-        - summary: Human-friendly summary
-        - artifacts: Key artifacts created
-        - tu_id: Trace Unit ID
-        - quality_status: Quality bar summary
-        - next_steps: Suggested next commands
-
-    Example:
-        state = <final state from story_spark>
-        result = translate_results(state, "story_spark", "write cargo bay")
-
-        # result.summary = '''
-        # ✓ Created scene TU-2025-042 "Cargo Bay Confrontation"
-        # Status: hot-proposed (needs review)
-        #
-        # Quality Bars:
-        # • Integrity: 🟢 Story logic is sound
-        # • Style: 🟡 Minor voice issues
-        # • Presentation: ⚫ Not checked yet
-        #
-        # Next steps:
-        # • Run 'qf review story' to refine and approve
-        # • Run 'qf show TU-2025-042' to view full content
-        # '''
-    """
+    plain_language_response: str     # What to say to customer (no jargon)
+    loops_executed: list[str]        # Internal detail (for logging)
+    roles_awoken: list[str]          # Internal detail (for logging)
+    suggested_next_steps: list[str]  # Natural language suggestions
 ```
 
 ---
 
-## Data Models
+## Example: Customer Asks for Story
 
-### ParsedIntent
-```python
-class ParsedIntent:
-    action: str              # "write", "review", "add", etc.
-    args: list[str]          # Command arguments
-    flags: dict[str, str]    # Optional flags (--mode, --format, etc.)
-    loop_id: str             # Mapped loop identifier
+### Input
+
+```bash
+qf ask "Create a mystery story about a detective on a space station"
 ```
 
-### LoopExecutionPlan
+### Internal Processing
+
 ```python
-class LoopExecutionPlan:
-    loop_id: str                     # Primary loop to execute
-    context: dict                    # Prepared context
-    dependencies: list[str]          # Loops to run first (if any)
-    mode: str                        # "workshop" or "production"
+# 1. CLI passes message to ShowrunnerInterface
+showrunner = ShowrunnerInterface()
+response = showrunner.interpret_and_execute(
+    "Create a mystery story about a detective on a space station"
+)
+
+# 2. Showrunner node is created from showrunner.yaml
+showrunner_node = node_factory.create_role_node("showrunner")
+
+# 3. LLM (Claude Sonnet 4) is invoked with:
+#    - System prompt from showrunner.yaml lines 600-666
+#    - Customer message: "Create a mystery story..."
+#    - Available tools: interpret_customer_directive, open_tu, etc.
+
+# 4. LLM calls interpret_customer_directive tool:
+{
+    "customer_directive_text": "Create a mystery story about a detective on a space station",
+    "outcome_category": "richer_canon",
+    "loops_sequenced": ["Story Spark", "Hook Harvest", "Gatecheck"],
+    "plain_language_response": "I'll create that detective mystery for you. I'm
+        setting up a space station investigation with clues, suspects, and plot
+        twists. This will take about 3-5 minutes as I draft the story structure
+        and initial scenes.",
+    "roles_to_wake": []  # No dormant roles need waking
+}
+
+# 5. Execute loops internally (customer doesn't see):
+#    - story_spark loop: Draft topology, section briefs, prose
+#    - hook_harvest loop: Triage hooks, refine scenes
+#    - gatecheck loop: Run quality validators
+
+# 6. Return plain language response to customer
 ```
 
-### ExecutionResult
-```python
-class ExecutionResult:
-    success: bool                    # Overall success
-    summary: str                     # Human-readable summary
-    artifacts: dict[str, Artifact]   # Key artifacts created
-    tu_id: str                       # Trace Unit ID
-    quality_status: dict             # Quality bar summary
-    next_steps: list[str]            # Suggested next commands
-    error: Optional[str]             # Error message if failed
+### Output
+
+```bash
+Showrunner: I'll create that detective mystery for you. I'm setting up
+a space station investigation with clues, suspects, and plot twists.
+This will take about 3-5 minutes as I draft the story structure and
+initial scenes.
+
+[Internal work happens - customer doesn't see loop execution]
+
+Showrunner: Done! I've created a detective mystery set on Space Station
+Kepler-442. Your protagonist is Detective Sarah Chen investigating a
+series of disappearances in the hydroponics section. The story has three
+acts with escalating tension, multiple suspects with alibis, and a twist
+involving the station's life support system. The manuscript is currently
+about 12,000 words in draft form.
+
+Next steps:
+• Say "review the story" to see quality feedback and refine
+• Say "show me act 1" to read the opening investigation
+• Say "adjust the pacing" if you want different tension curves
 ```
+
+**Notice**:
+
+- Customer never sees loop names ("story_spark", "hook_harvest")
+- Customer never sees TU IDs or technical details
+- Response is conversational and plain language
+- Next steps are also in natural language
 
 ---
 
-## Example Interactions
+## Contrast with Other Roles
 
-### Example 1: Write Scene
+### Showrunner vs Other Roles
 
-**Human Input**:
-```bash
-$ qf write "The captain confronts the pilot about the missing fuel"
-```
+| Aspect | Showrunner | Plotwright | Scene Smith | Gatekeeper |
+|--------|-----------|-----------|-------------|------------|
+| **Loaded from** | showrunner.yaml | plotwright.yaml | scene_smith.yaml | gatekeeper.yaml |
+| **LLM-backed** | Yes (Claude Sonnet 4) | Yes (Claude Sonnet 4) | Yes (Claude Sonnet 4) | Yes (Claude Sonnet 4) |
+| **Created by** | NodeFactory | NodeFactory | NodeFactory | NodeFactory |
+| **Mandate** | Customer communication | Plot topology | Prose drafting | Quality validation |
+| **Tools** | interpret_customer_directive, open_tu, approve_merge | write_section_brief, add_topology_note | draft_section, add_micro_context | run_integrity_check, run_style_check |
+| **Sees customer** | Yes (sole interface) | No (internal role) | No (internal role) | No (internal role) |
+| **Decides loops** | Yes (via LLM interpretation) | No | No | No |
 
-**Showrunner Processing**:
+**Key Insight**: Showrunner is not special infrastructure. It's a role that happens to have the customer communication mandate. Plotwright decides plot topology, Scene Smith decides prose style, Gatekeeper decides quality - Showrunner decides which loops to run.
+
+---
+
+## Debug Mode: Bypassing Showrunner
+
+When using `qf loop <loop_id>` (debug mode), you bypass the Showrunner entirely:
+
 ```python
-# 1. Parse intent (done by CLI parser)
-intent = ParsedIntent(
-    action="write",
-    args=["The captain confronts the pilot about the missing fuel"],
-    loop_id="story_spark"
-)
+# Debug mode: Direct loop invocation
+$ qf loop story_spark --context scene_text="test scene"
 
-# 2. Prepare context
-context = prepare_context(intent, "story_spark")
-# context = {"scene_text": "The captain confronts the pilot about the missing fuel"}
+# This does NOT invoke Showrunner role at all
+# It directly creates and executes the loop graph
+factory = GraphFactory()
+graph = factory.create_loop_graph("story_spark")
+result = graph.invoke(initial_state)
 
-# 3. Execute loop
-state = execute_loop("story_spark", context)
-
-# 4. Translate results
-result = translate_results(state, "story_spark", original_command)
+# You are "micro-managing" - telling the studio exactly what to do
+# instead of letting Showrunner interpret and decide
 ```
 
-**Human Output**:
-```
-✓ Created scene TU-2025-042 "Fuel Confrontation"
-Status: hot-proposed (needs review)
+This is useful for:
 
-Preview:
-"Captain Rivera's jaw tightened as she studied the fuel logs.
-Three hundred liters. Gone. And pilot Chen's hands were shaking..."
+- Testing specific loops in isolation
+- Debugging loop behavior
+- Auditing quality checks
+- Advanced users who know studio internals
 
-Quality Status:
-• Integrity: 🟢 Story logic is sound
-• Style: 🟡 Minor voice inconsistencies
-• Presentation: ⚫ Not checked yet
+But it's NOT the intended customer workflow.
 
-Next steps:
-• Run 'qf review story' to refine and approve
-• Run 'qf show TU-2025-042' to view full content
-• Run 'qf add lore "fuel theft protocols"' if you need backstory
-```
+---
 
-### Example 2: Review Story
+## System Prompt (from showrunner.yaml)
 
-**Human Input**:
-```bash
-$ qf review story
-```
+Key excerpts from the Showrunner's system prompt (lines 600-666):
 
-**Showrunner Processing**:
-```python
-# 1. Map to hook_harvest loop
-intent = ParsedIntent(action="review", loop_id="hook_harvest")
+> **You are the Showrunner** — the studio's product owner and sole interface to the Customer. Your job: interpret their natural language directives, open TUs, decide which loops to run, wake dormant roles if needed, and respond in plain language.
+>
+> **The Customer speaks natural language, NOT jargon.** They say "create a mystery story" not "run story_spark loop." They say "make this character deeper" not "invoke hook_harvest with character focus."
+>
+> **Loop sequencing examples from customer directives:**
+>
+> - "I like [detail], can you work it into a subplot?" → Hook Harvest → Lore Deepening → Story Spark → Gatecheck
+> - "Choices feel flat" → Story Spark → Style Tune-up → Gatecheck
+> - "Export this as EPUB" → Gatecheck → Binding Run
+>
+> **NEVER use studio jargon with the Customer.** Don't say "I'll run story_spark loop" - say "I'll create that scene for you." Don't say "TU-2025-042" - say "the cargo bay scene we just created."
+>
+> **Loop, don't lunge.** Prefer targeted loops on specific slices over massive restructures. Small, high-signal work cycles.
 
-# 2. Prepare context (fetch hot-proposed TUs)
-context = {
-    "mode": "review",
-    "hot_artifacts": fetch_hot_artifacts()
-}
+This prompt guides the LLM's decision-making when interpreting customer directives.
 
-# 3. Execute loop
-state = execute_loop("hook_harvest", context)
+---
 
-# 4. Translate results
-result = translate_results(state, "hook_harvest", "review story")
-```
+## Testing Requirements
 
-**Human Output**:
-```
-✓ Reviewed 3 scenes and 5 hooks
+1. **Test role loading**:
+   - Showrunner role loads from showrunner.yaml
+   - System prompt is correctly applied
+   - Tools are available for LLM to call
 
-Accepted:
-• TU-2025-042 "Fuel Confrontation" → Ready for gatecheck
-• TU-2025-041 "Discovery in Bay 7"→ Ready for gatecheck
+2. **Test LLM interpretation**:
+   - Various customer directives result in correct loop sequences
+   - `interpret_customer_directive` tool is called with valid structure
+   - Plain language responses contain no jargon
 
-Needs Work:
-• TU-2025-043 "Chase through corridors" → Style inconsistencies
+3. **Test loop execution**:
+   - Loops execute based on LLM decisions
+   - Internal execution is hidden from customer output
+   - Results are aggregated correctly
 
-Hooks Triaged:
-• 5 narrative hooks → Sent to Lore Deepening
-• 2 factual hooks → Flagged for Researcher
+4. **Test tool calling**:
+   - `interpret_customer_directive` tool works
+   - `open_tu` tool creates valid TUs
+   - `approve_merge` tool validates quality bars
 
-Next steps:
-• Run 'qf export epub' to preview accepted content
-• Run 'qf tune style' to fix TU-2025-043
-```
-
-### Example 3: Multi-Loop Sequence
-
-**Human Input**:
-```bash
-$ qf narrate chapter1
-```
-
-**Showrunner Processing**:
-```python
-# 1. Map to narration_dry_run (requires binding_run first)
-plan = LoopExecutionPlan(
-    loop_id="narration_dry_run",
-    dependencies=["binding_run"],  # Need bound manuscript first
-    context={"chapter": "chapter1", "mode": "workshop"}
-)
-
-# 2. Execute dependency
-binding_state = execute_loop("binding_run", {"format": "markdown"})
-
-# 3. Execute primary loop with snapshot
-context = {
-    "chapter": "chapter1",
-    "mode": "workshop",
-    "snapshot_ref": binding_state["snapshot_ref"]
-}
-narration_state = execute_loop("narration_dry_run", context)
-
-# 4. Translate results
-result = translate_results(narration_state, "narration_dry_run", "narrate chapter1")
-```
-
-**Human Output**:
-```
-✓ Generated narration preview for Chapter 1
-
-Audio Duration: ~15 minutes
-Narrative Style: Third-person past tense
-Pacing: Moderate (workshop mode - includes pauses for feedback)
-
-Sample:
-[Play button] "Captain Rivera stood at the viewport, studying
-the fuel logs with growing unease..."
-
-Issues Flagged:
-• Scene transition at 3:45 feels abrupt
-• Character voice for Chen needs refinement at 8:20
-
-Next steps:
-• Run 'qf add audio <description>' to add background music
-• Run 'qf narrate chapter1 --mode production' for final version
-```
+5. **Test natural language responses**:
+   - No loop names in customer-facing text
+   - No TU IDs in customer-facing text
+   - Suggested next steps are actionable and plain language
 
 ---
 
 ## Error Handling
 
+### LLM Errors
+
+```python
+try:
+    response = showrunner.interpret_and_execute(customer_message)
+except LLMError as e:
+    console.print("[red]I'm having trouble understanding that request.[/red]")
+    console.print(f"\nIssue: {e.user_message}")
+    console.print("\nSuggestions:")
+    console.print("• Try rephrasing your request")
+    console.print("• Say \"help\" to see what I can do")
+```
+
 ### Loop Execution Errors
 
 ```python
 try:
-    state = execute_loop(loop_id, context)
-except FileNotFoundError as e:
-    return ExecutionResult(
-        success=False,
-        error=f"Loop '{loop_id}' not found. Run 'qf list-loops' to see available loops."
+    final_state = execute_loop_internal(loop_id, context)
+except GatecheckFailure as e:
+    # Showrunner should communicate failure in plain language
+    return ShowrunnerResponse(
+        plain_language_response=f"I ran into a quality issue: {e.customer_message}.
+            Would you like me to try adjusting it?",
+        loops_executed=[loop_id],
+        suggested_next_steps=[
+            "Say \"adjust it\" to let me refine the work",
+            "Say \"show me the issue\" to see what went wrong"
+        ]
     )
-except ValidationError as e:
-    return ExecutionResult(
-        success=False,
-        error=f"Invalid context for loop '{loop_id}': {e}"
-    )
-except LLMError as e:
-    return ExecutionResult(
-        success=False,
-        error=f"LLM invocation failed: {e}. Check API key and rate limits."
-    )
-```
-
-### User Interruption
-
-```python
-# Allow Ctrl+C to gracefully stop execution
-try:
-    state = execute_loop(loop_id, context, progress_callback)
-except KeyboardInterrupt:
-    return ExecutionResult(
-        success=False,
-        summary="Execution interrupted by user. Partial state saved.",
-        artifacts=state.get("artifacts", {}),
-        error="User interruption"
-    )
-```
-
----
-
-## Progress Indicators
-
-Use Rich library for beautiful CLI feedback:
-
-```python
-from rich.progress import Progress, SpinnerColumn, TextColumn
-
-def execute_loop_with_progress(loop_id: str, context: dict) -> StudioState:
-    """Execute loop with progress bar."""
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        transient=True,
-    ) as progress:
-        task = progress.add_task(f"Running {loop_id}...", total=None)
-
-        def progress_callback(node_id: str):
-            progress.update(task, description=f"Executing {node_id}...")
-
-        state = execute_loop(loop_id, context, progress_callback)
-
-    return state
 ```
 
 ---
 
 ## Configuration
 
-### Showrunner Behavior Settings
+Showrunner behavior is configured in its role YAML (`showrunner.yaml`):
 
 ```yaml
-# ~/.questfoundry/showrunner.yaml
-verbosity: normal          # quiet, normal, verbose
-show_progress: true       # Show progress indicators
-auto_next_steps: true     # Suggest next commands
-preview_length: 200       # Characters to preview in summary
-quality_emoji: true       # Use emoji for quality bars (🟢🟡🔴)
+llm_config:
+  provider: anthropic
+  model: claude-sonnet-4  # Fast, intelligent, good at tool calling
+  temperature: 0.7        # Balanced creativity and consistency
+  max_tokens: 4000        # Enough for complex loop sequences
+
+tools:
+  - name: interpret_customer_directive
+    # ... (see showrunner.yaml for full definition)
+
+system_prompt: |
+  You are the Showrunner — the studio's product owner and sole interface
+  to the Customer. Your job: interpret their natural language directives...
 ```
 
----
-
-## Testing Requirements
-
-1. **Test intent mapping**: All CLI commands map to correct loops
-2. **Test context preparation**: Context matches loop requirements
-3. **Test loop execution**: Loops execute and return valid state
-4. **Test result translation**: Human-readable summaries are generated
-5. **Test error handling**: Graceful failures with helpful messages
-6. **Test multi-loop**: Sequences execute in correct order
+No separate configuration file needed - everything is in the role YAML.
 
 ---
 
 ## Implementation Guidance
 
 ### Start Simple
-1. Implement single-loop execution first (story_spark)
-2. Add result translation
-3. Add progress indicators
-4. Add multi-loop support
-5. Add advanced features (interruption, context management)
+
+1. **Load Showrunner role** from YAML
+2. **Create Showrunner node** via NodeFactory
+3. **Invoke with customer message** and parse tool calls
+4. **Execute single loop** based on LLM decision
+5. **Return plain language response**
+
+### Then Enhance
+
+6. **Add multi-loop sequencing** (Story Spark → Hook Harvest → Gatecheck)
+7. **Add role dormancy** decisions (wake Researcher when needed)
+8. **Add TU lifecycle** management (open → in_progress → completed)
+9. **Add error recovery** (retry on LLM errors, adjust on quality failures)
+10. **Add conversation history** (multi-turn interactions)
 
 ### Defer Complexity
-- Don't implement multi-loop coordination initially
-- Start with simple success/failure results
-- Add rich formatting incrementally
 
-### Integrate with CLI
-The Showrunner should be called by CLI main:
-
-```python
-# cli/main.py
-from questfoundry.runtime.cli.showrunner import Showrunner
-
-@app.command()
-def write(text: str):
-    """Write a new scene."""
-    showrunner = Showrunner()
-    intent = ParsedIntent(action="write", args=[text], loop_id="story_spark")
-    result = showrunner.execute_request(f"write {text}", intent)
-    console.print(result.summary)
-```
+- Don't implement custom prompt engineering - use system prompt from YAML
+- Don't implement deterministic mapping - let LLM decide
+- Don't optimize for speed initially - get correctness first
+- Don't add streaming responses until basic flow works
 
 ---
 
 ## References
 
+- **Showrunner Role Definition**: `spec/05-definitions/roles/showrunner.yaml`
+- **North Star**: `spec/00-north-star/WORKING_MODEL.md`
+- **CLI Specification**: `spec/06-runtime/components/cli.md`
+- **NodeFactory**: `lib/runtime/src/questfoundry/runtime/core/node_factory.py`
 - **ADR-005**: Human-Facing CLI/Runtime Design (MIGRATION.md)
-- **CLI Parser**: `components/cli.md`
-- **Graph Factory**: `components/graph_factory.md`
-- **State Manager**: `components/state_manager.md`
 
 ---
 
-**IMPLEMENTATION NOTE**: This is a FLEXIBLE component. The spec provides structure, but UX details can be refined based on user feedback. Focus on making the interaction natural and helpful for humans.
+**IMPLEMENTATION NOTE**: The Showrunner is a role, not infrastructure. Treat it like Plotwright or Scene Smith - load from YAML, create via NodeFactory, invoke with state. The only difference is its mandate: customer communication and loop coordination.
