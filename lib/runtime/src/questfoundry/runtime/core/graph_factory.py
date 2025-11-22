@@ -322,21 +322,12 @@ class GraphFactory:
             Compiled graph ready for invocation
 
         Note:
-            Sets recursion_limit=100 to allow deeper agent conversations.
-            Default LangGraph limit is 25, which is too low for complex loops.
+            recursion_limit is set at invocation time (in showrunner.py),
+            not during compilation.
         """
         try:
-            # Compile with increased recursion limit for complex agent interactions
-            # 100 iterations allows for deeper reasoning and multi-turn conversations
-            # while still preventing infinite loops
-            compiled = graph.compile(
-                checkpointer=None,  # No checkpointing for now
-                # Increase recursion limit from default 25 to 100
-                # This allows complex loops (like story_spark with multiple role consultations)
-                # to complete without hitting the limit
-                recursion_limit=100
-            )
-            logger.info("Graph compiled successfully (recursion_limit=100)")
+            compiled = graph.compile()
+            logger.info("Graph compiled successfully")
             return compiled
 
         except Exception as e:

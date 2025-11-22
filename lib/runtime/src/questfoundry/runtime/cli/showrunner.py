@@ -309,7 +309,13 @@ class ShowrunnerInterface:
 
         # Create and execute loop graph
         graph = self.graph_factory.create_loop_graph(loop_id)
-        final_state = graph.invoke(state)
+
+        # Execute with increased recursion limit (default is 25, which is too low)
+        # This allows complex multi-agent conversations to complete
+        final_state = graph.invoke(
+            state,
+            config={"recursion_limit": 100}
+        )
 
         return final_state
 

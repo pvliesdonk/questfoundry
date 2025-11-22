@@ -292,7 +292,8 @@ def loop(
         graph = graph_factory.create_loop_graph(loop_id)
 
         logger.info(f"Invoking loop: {loop_id}")
-        final_state = graph.invoke(state)
+        # Execute with increased recursion limit (default is 25, which is too low)
+        final_state = graph.invoke(state, config={"recursion_limit": 100})
 
         # Close trace handler if created
         if trace_handler:
