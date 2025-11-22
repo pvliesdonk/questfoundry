@@ -114,8 +114,9 @@ class NodeFactory:
             # Strategy 1: Try monorepo spec directory (development)
             if not Path(template_path).is_absolute():
                 # Navigate up from lib/runtime/src/questfoundry/runtime/core/node_factory.py
-                # to find spec/ directory
-                monorepo_spec = Path(__file__).parent.parent.parent.parent.parent.parent / "spec" / "05-definitions" / template_path
+                # to find spec/ directory at monorepo root
+                # node_factory.py → core/ → runtime/ → questfoundry/ → src/ → runtime/ → lib/ → monorepo root
+                monorepo_spec = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "spec" / "05-definitions" / template_path
                 if monorepo_spec.exists():
                     try:
                         template_str = monorepo_spec.read_text(encoding='utf-8')
