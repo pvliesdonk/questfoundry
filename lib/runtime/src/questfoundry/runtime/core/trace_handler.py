@@ -92,16 +92,41 @@ class TraceHandler:
         payload = message.get("payload", {})
         envelope = message.get("envelope", {})
 
-        # Create header
-        header = f"[bold cyan]{sender}[/bold cyan] → [bold magenta]{receiver}[/bold magenta]"
+        # Format timestamp
+        time_str = ""
         if timestamp:
-            # Format timestamp nicely (just time portion)
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                 time_str = dt.strftime("%H:%M:%S")
-                header += f" [dim]({time_str})[/dim]"
             except:
                 pass
+
+        # Different formatting based on intent type
+        if intent == "role_started":
+            # Live progress indicator - simple, inline
+            role_name = payload.get("role_name", sender)
+            self.console.print(f"[cyan]⏳ {role_name}[/cyan] [dim]started ({time_str})[/dim]")
+            return
+
+        elif intent == "role_completed":
+            # Show completion with extracted insight
+            role_name = payload.get("role_name", sender)
+            insight = payload.get("insight", "")
+
+            if insight:
+                self.console.print(
+                    f"[green]✓ {role_name}[/green] [dim]({time_str})[/dim]\n"
+                    f"  [dim]{insight}[/dim]"
+                )
+            else:
+                self.console.print(f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]")
+            return
+
+        # Standard message formatting for other intents
+        # Create header
+        header = f"[bold cyan]{sender}[/bold cyan] → [bold magenta]{receiver}[/bold magenta]"
+        if time_str:
+            header += f" [dim]({time_str})[/dim]"
 
         # Create content
         content_lines = [f"[bold]Intent:[/bold] {intent}"]
