@@ -169,6 +169,34 @@ class NodeFactory:
                 template = Template(template_str)
 
                 # Prepare context
+                # Build tu_scope object from state
+                tu_scope = {
+                    "id": state.get("tu_id", ""),
+                    "slice": state.get("loop_context", {}).get("slice", "full_work"),
+                    "loop": state.get("loop_id", ""),
+                    "deliverables": state.get("loop_context", {}).get("deliverables", []),
+                    "timebox_minutes": state.get("loop_context", {}).get("timebox_minutes"),
+                    "mode": state.get("loop_context", {}).get("mode", "workshop"),
+                }
+
+                # Build snapshot objects from state
+                from datetime import datetime
+                current_time = datetime.utcnow().isoformat() + "Z"
+
+                current_snapshot = {
+                    "id": state.get("snapshot_ref") or f"SNAP-{state.get('tu_id', 'unknown')}-current",
+                    "timestamp": state.get("updated_at", current_time),
+                    "tu_id": state.get("tu_id", ""),
+                    "lifecycle": state.get("tu_lifecycle", ""),
+                }
+
+                last_snapshot = {
+                    "id": state.get("snapshot_ref") or f"SNAP-{state.get('tu_id', 'unknown')}-last",
+                    "timestamp": state.get("created_at", current_time),
+                    "tu_id": state.get("tu_id", ""),
+                    "lifecycle": state.get("tu_lifecycle", ""),
+                }
+
                 context = {
                     "tu_id": state.get("tu_id", ""),
                     "tu_lifecycle": state.get("tu_lifecycle", ""),
@@ -180,7 +208,22 @@ class NodeFactory:
                     "snapshot_ref": state.get("snapshot_ref"),
                     "error": state.get("error"),
                     "role_id": role.id,
-                    "role_name": role.name
+                    "role_name": role.name,
+                    # Template-expected variables
+                    "tu_scope": tu_scope,
+                    "current_snapshot": current_snapshot,
+                    "last_snapshot": last_snapshot,
+                    "current_tu": {  # For showrunner template
+                        "id": state.get("tu_id", ""),
+                        "slice": tu_scope["slice"],
+                        "loop": tu_scope["loop"],
+                        "status": state.get("tu_lifecycle", ""),
+                        "deliverables": tu_scope["deliverables"],
+                        "roles_awake": [],  # TODO: track active roles
+                        "timebox_minutes": tu_scope.get("timebox_minutes"),
+                        "risks": [],  # TODO: track risks
+                    },
+                    "customer_directive": state.get("loop_context", {}).get("customer_request", ""),
                 }
 
                 rendered = template.render(**context)
