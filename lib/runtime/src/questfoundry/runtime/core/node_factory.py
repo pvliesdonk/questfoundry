@@ -33,18 +33,21 @@ class NodeFactory:
     def __init__(
         self,
         schema_registry: Optional[SchemaRegistry] = None,
-        state_manager: Optional[Any] = None
+        state_manager: Optional[Any] = None,
+        preferred_provider: Optional[str] = None
     ):
         """Initialize node factory.
 
         Args:
             schema_registry: SchemaRegistry instance (creates new if not provided)
             state_manager: Optional StateManager for tracing messages
+            preferred_provider: Preferred provider (e.g., "ollama") or fallback chain (e.g., "ollama,openai")
         """
         self.schema_registry = schema_registry or SchemaRegistry()
         self.provider_manager = ProviderManager()
         self._role_cache: Dict[str, RoleProfile] = {}
         self.state_manager = state_manager  # For message tracing
+        self.preferred_provider = preferred_provider  # Store for use in select_llm
 
     def load_role(self, role_id: str) -> RoleProfile:
         """
@@ -274,9 +277,18 @@ class NodeFactory:
             # Service type - no LLM needed
             return None
 
-        # 1. Select provider (auto-detect or from role YAML)
-        preferred_provider = os.getenv("QF_LLM_PROVIDER") or role.get_provider()
-        provider = self.provider_manager.select_provider(preferred_provider)
+        # 1. Select provider (priority: env var > CLI > role YAML > auto)
+        # Build provider preference with fallback chain if provided
+        preferred_provider = os.getenv("QF_LLM_PROVIDER") or self.preferred_provider or role.get_provider()
+
+        # Parse fallback chain if comma-separated (e.g., "ollama,openai")
+        fallback_chain = None
+        if preferred_provider and "," in preferred_provider:
+            providers = [p.strip() for p in preferred_provider.split(",")]
+            preferred_provider = providers[0]  # First is preferred
+            fallback_chain = providers[1:]  # Rest are fallbacks
+
+        provider = self.provider_manager.select_provider(preferred_provider, fallback_chain)
 
         # 2. Resolve model tier to actual model name
         # Check for explicit model override first (backward compatibility)
@@ -348,16 +360,36 @@ class NodeFactory:
                 return {}  # Return empty dict = no state changes
 
             try:
-                # 2. Render prompt
+                # 2. Send "role_started" progress indicator (live feedback)
+                if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
+                    if self.state_manager._trace_handler:
+                        try:
+                            start_message = {
+                                "sender": role.id,
+                                "receiver": "system",
+                                "intent": "role_started",
+                                "payload": {
+                                    "role_name": role.name,
+                                },
+                                "timestamp": datetime.utcnow().isoformat() + "Z",
+                                "envelope": {
+                                    "tu_id": state["tu_id"],
+                                }
+                            }
+                            self.state_manager._trace_handler.trace_message(start_message)
+                        except Exception as e:
+                            logger.warning(f"Trace handler error: {e}")
+
+                # 3. Render prompt
                 prompt = self.render_prompt(role, state)
 
-                # 3. Invoke LLM or tools based on role type
+                # 4. Invoke LLM or tools based on role type
                 llm_config = self.select_llm(role)
 
                 if llm_config:
                     provider = llm_config.get("provider")
 
-                    # Create LLM client via ProviderManager
+                    # Create LLM client via ProviderManager (cached)
                     try:
                         llm = self.provider_manager.create_llm_client(
                             provider=provider,
@@ -366,11 +398,47 @@ class NodeFactory:
                             max_tokens=llm_config["max_tokens"]
                         )
 
-                        # Invoke LLM with prompt
+                        # Add JSON format instructions for all providers
+                        # Critical: All roles MUST output valid JSON
+                        json_prompt = (
+                            f"{prompt}\n\n"
+                            "IMPORTANT: Your response MUST be valid JSON only. "
+                            "Do not include any text before or after the JSON object. "
+                            "Do not use markdown code blocks. "
+                            "Output only the raw JSON object."
+                        )
+
+                        # Invoke LLM with JSON-instructed prompt
                         logger.info(f"Invoking {provider} LLM for role {role.id}")
-                        response = llm.invoke(prompt)
+                        response = llm.invoke(json_prompt)
                         result = response.content if hasattr(response, 'content') else str(response)
-                        logger.info(f"LLM response received: {len(result)} characters")
+
+                        # Send role_completed with extracted insight
+                        if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
+                            if self.state_manager._trace_handler:
+                                try:
+                                    # Extract useful insight from result (first 150 chars as preview)
+                                    insight = result[:150].strip()
+                                    if len(result) > 150:
+                                        insight += "..."
+
+                                    completed_message = {
+                                        "sender": role.id,
+                                        "receiver": "system",
+                                        "intent": "role_completed",
+                                        "payload": {
+                                            "role_name": role.name,
+                                            "insight": insight,
+                                            "length": len(result)
+                                        },
+                                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                                        "envelope": {
+                                            "tu_id": state["tu_id"],
+                                        }
+                                    }
+                                    self.state_manager._trace_handler.trace_message(completed_message)
+                                except Exception as e:
+                                    logger.warning(f"Trace handler error: {e}")
 
                     except Exception as e:
                         logger.error(f"LLM invocation failed for {role.id}: {e}")
@@ -418,9 +486,7 @@ class NodeFactory:
                         except Exception as e:
                             logger.warning(f"Trace handler error: {e}")
 
-                logger.info(f"Executed role: {role.id} ({role.name})")
-
-                # 6. Return ONLY changed fields (partial update)
+                # 7. Return ONLY changed fields (partial update)
                 # Note: Reducers (Annotated types) handle merging artifacts and messages
                 # Don't manually merge - just return the new values
                 return {

@@ -28,15 +28,17 @@ class GraphFactory:
         schema_registry: Optional[SchemaRegistry] = None,
         node_factory: Optional[NodeFactory] = None,
         edge_evaluator: Optional[EdgeEvaluator] = None,
-        state_manager: Optional[StateManager] = None
+        state_manager: Optional[StateManager] = None,
+        preferred_provider: Optional[str] = None
     ):
         """Initialize graph factory with dependent components."""
         self.schema_registry = schema_registry or SchemaRegistry()
         self.state_manager = state_manager or StateManager()
-        # Pass state_manager to node_factory for message tracing
+        # Pass state_manager and preferred_provider to node_factory
         self.node_factory = node_factory or NodeFactory(
             self.schema_registry,
-            state_manager=self.state_manager
+            state_manager=self.state_manager,
+            preferred_provider=preferred_provider
         )
         self.edge_evaluator = edge_evaluator or EdgeEvaluator()
 

@@ -94,7 +94,8 @@ def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
     trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
-    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)")
+    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
 ):
     """
     Primary interface: Talk to the Showrunner in natural language.
@@ -143,12 +144,13 @@ def ask(
             border_style="blue"
         ))
 
-        # Get Showrunner with trace handler
-        if trace_handler:
-            # Create custom Showrunner with trace-enabled state manager
+        # Get Showrunner with trace handler and/or provider preference
+        if trace_handler or provider:
+            # Create custom Showrunner with trace-enabled state manager and provider preference
             state_manager = get_state_manager(trace_handler=trace_handler)
+            graph_factory = GraphFactory(state_manager=state_manager, preferred_provider=provider)
             showrunner = ShowrunnerInterface(
-                graph_factory=get_graph_factory(),
+                graph_factory=graph_factory,
                 state_manager=state_manager
             )
         else:
@@ -203,7 +205,8 @@ def loop(
     mode: str = typer.Option("workshop", "--mode", "-m", help="Execution mode (workshop or production)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
     trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
-    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)")
+    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
 ):
     """
     Debug/audit mode: Directly invoke a loop (bypasses Showrunner).
@@ -279,10 +282,10 @@ def loop(
         state_manager = get_state_manager(trace_handler=trace_handler)
         state = state_manager.initialize_state(loop_id, context_dict)
 
-        # Create graph factory with state_manager (for tracing)
-        if trace_handler:
-            # Create new graph factory with trace-enabled state_manager
-            graph_factory = GraphFactory(state_manager=state_manager)
+        # Create graph factory with state_manager (for tracing) and/or provider preference
+        if trace_handler or provider:
+            # Create new graph factory with trace-enabled state_manager and provider preference
+            graph_factory = GraphFactory(state_manager=state_manager, preferred_provider=provider)
         else:
             graph_factory = get_graph_factory()
 
