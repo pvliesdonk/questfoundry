@@ -302,17 +302,20 @@ class NodeFactory:
             "role_type": role.role_type
         }
 
-    def create_role_node(self, role_id: str) -> Callable[[StudioState], StudioState]:
+    def create_role_node(self, role_id: str) -> Callable[[StudioState], Dict[str, Any]]:
         """
         Create complete Runnable node for StateGraph.
 
         This is the main entry point used by GraphFactory.
 
         Returns a function with signature:
-        def role_node(state: StudioState) -> StudioState:
+        def role_node(state: StudioState) -> Dict[str, Any]:
             # Execute role logic
-            # Update state
-            # Return new state
+            # Return partial state update (only changed fields)
+
+        This follows LangGraph's recommended pattern for avoiding concurrent
+        update conflicts: nodes return only the fields they want to change,
+        not the entire state dict.
 
         Args:
             role_id: Role identifier (e.g., "plotwright")
@@ -323,22 +326,22 @@ class NodeFactory:
         # Load role once
         role = self.load_role(role_id)
 
-        def role_node(state: StudioState) -> StudioState:
-            """Execute role and update state."""
+        def role_node(state: StudioState) -> Dict[str, Any]:
+            """Execute role and update state.
+
+            Returns:
+                Partial state update dict (only changed fields)
+            """
             # 1. Check dormancy
             if not self.should_execute_role(role, state):
                 logger.debug(f"Role {role.id} is dormant, skipping execution")
-                return state
-
-            # 2. Update current_node
-            new_state = {**state}
-            new_state["current_node"] = role.id
+                return {}  # Return empty dict = no state changes
 
             try:
-                # 3. Render prompt
+                # 2. Render prompt
                 prompt = self.render_prompt(role, state)
 
-                # 4. Invoke LLM or tools based on role type
+                # 3. Invoke LLM or tools based on role type
                 llm_config = self.select_llm(role)
 
                 if llm_config:
@@ -367,7 +370,7 @@ class NodeFactory:
                     result = f"[{role.name}] Service execution (tools not yet implemented)"
                     logger.warning(f"Service-type role {role.id} executed without tools")
 
-                # 5. Update state with artifact
+                # 4. Create artifact
                 artifact = {
                     "artifact_type": "output",
                     "content": result,
@@ -381,12 +384,7 @@ class NodeFactory:
                     }
                 }
 
-                new_state["artifacts"] = {
-                    **new_state.get("artifacts", {}),
-                    role.id: artifact
-                }
-
-                # 6. Add protocol message
+                # 5. Create protocol message
                 message = {
                     "sender": role.id,
                     "receiver": "broadcast",
@@ -402,15 +400,22 @@ class NodeFactory:
                     }
                 }
 
-                new_state["messages"] = new_state.get("messages", []) + [message]
-
                 logger.info(f"Executed role: {role.id} ({role.name})")
-                return new_state
+
+                # 6. Return ONLY changed fields (partial update)
+                # Note: Reducers (Annotated types) handle merging artifacts and messages
+                # Don't manually merge - just return the new values
+                return {
+                    "artifacts": {role.id: artifact},
+                    "messages": [message]
+                }
 
             except Exception as e:
                 logger.error(f"Error executing role {role.id}: {e}")
-                new_state["error"] = str(e)
-                new_state["retry_count"] = new_state.get("retry_count", 0) + 1
-                return new_state
+                # Return partial update with error info
+                return {
+                    "error": str(e),
+                    "retry_count": state.get("retry_count", 0) + 1
+                }
 
         return role_node

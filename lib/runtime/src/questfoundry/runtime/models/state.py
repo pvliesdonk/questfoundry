@@ -4,8 +4,9 @@ StudioState and related TypedDict/Pydantic models for runtime execution.
 Based on spec: components/state_manager.md
 """
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Annotated
 from datetime import datetime
+import operator
 
 
 class Artifact(TypedDict):
@@ -38,7 +39,16 @@ class Message(TypedDict):
 
 
 class StudioState(TypedDict):
-    """Complete state for loop execution."""
+    """Complete state for loop execution.
+
+    Uses Annotated types with reducers to handle concurrent updates from
+    multiple nodes executing in the same LangGraph step.
+
+    Reducers:
+        - artifacts: Merge dicts (later values win for duplicate keys)
+        - messages: Concatenate lists (all messages preserved)
+        - quality_bars: Merge dicts (later values win)
+    """
     # Core identity
     tu_id: str  # Trace Unit ID (e.g., "TU-2025-042")
     tu_lifecycle: Literal[
@@ -53,12 +63,12 @@ class StudioState(TypedDict):
     loop_id: str  # Which loop is running
     loop_context: Dict[str, Any]  # Loop-specific context
 
-    # Artifacts and quality
-    artifacts: Dict[str, Any]  # Generated artifacts by ID
-    quality_bars: Dict[str, BarStatus]  # 8 quality dimensions
+    # Artifacts and quality (with reducers for concurrent updates)
+    artifacts: Annotated[Dict[str, Any], operator.or_]  # Merge dicts
+    quality_bars: Annotated[Dict[str, BarStatus], operator.or_]  # Merge dicts
 
-    # Protocol
-    messages: List[Message]  # All messages exchanged
+    # Protocol (with reducer for concurrent updates)
+    messages: Annotated[List[Message], operator.add]  # Concatenate lists
 
     # Traceability
     snapshot_ref: Optional[str]  # Read-only snapshot reference
