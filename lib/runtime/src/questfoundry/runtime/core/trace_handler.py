@@ -37,11 +37,16 @@ class TraceHandler:
         Args:
             output_file: Optional file path to write trace to
             console: Rich Console for screen output (if None, creates new one)
-            verbose: If True, show full payload; if False, show summary only
+            verbose: If True, show full payload in console; if False, show summary only
+
+        Note:
+            File output ALWAYS contains full messages regardless of verbose setting,
+            as files are for detailed debugging and analysis.
         """
         self.output_file = output_file
         self.console = console or Console()
-        self.verbose = verbose
+        # Auto-enable verbose for console if writing to file (debugging mode)
+        self.verbose = verbose or (output_file is not None)
         self._file_handle: Optional[TextIO] = None
         self._message_count = 0
 
@@ -51,7 +56,7 @@ class TraceHandler:
             self._file_handle = self.output_file.open("w", encoding="utf-8")
             self._write_header()
 
-        logger.debug(f"Trace handler initialized (file: {output_file}, verbose: {verbose})")
+        logger.debug(f"Trace handler initialized (file: {output_file}, verbose: {self.verbose})")
 
     def _write_header(self):
         """Write trace file header."""
