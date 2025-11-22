@@ -32,9 +32,13 @@ class GraphFactory:
     ):
         """Initialize graph factory with dependent components."""
         self.schema_registry = schema_registry or SchemaRegistry()
-        self.node_factory = node_factory or NodeFactory(self.schema_registry)
-        self.edge_evaluator = edge_evaluator or EdgeEvaluator()
         self.state_manager = state_manager or StateManager()
+        # Pass state_manager to node_factory for message tracing
+        self.node_factory = node_factory or NodeFactory(
+            self.schema_registry,
+            state_manager=self.state_manager
+        )
+        self.edge_evaluator = edge_evaluator or EdgeEvaluator()
 
         self._graph_cache: Dict[str, Any] = {}
 

@@ -30,11 +30,21 @@ logger = logging.getLogger(__name__)
 class NodeFactory:
     """Transform role profiles into LangGraph-compatible Runnable nodes."""
 
-    def __init__(self, schema_registry: Optional[SchemaRegistry] = None):
-        """Initialize node factory."""
+    def __init__(
+        self,
+        schema_registry: Optional[SchemaRegistry] = None,
+        state_manager: Optional[Any] = None
+    ):
+        """Initialize node factory.
+
+        Args:
+            schema_registry: SchemaRegistry instance (creates new if not provided)
+            state_manager: Optional StateManager for tracing messages
+        """
         self.schema_registry = schema_registry or SchemaRegistry()
         self.provider_manager = ProviderManager()
         self._role_cache: Dict[str, RoleProfile] = {}
+        self.state_manager = state_manager  # For message tracing
 
     def load_role(self, role_id: str) -> RoleProfile:
         """
@@ -399,6 +409,14 @@ class NodeFactory:
                         "snapshot_ref": state.get("snapshot_ref")
                     }
                 }
+
+                # 6. Trace message if state_manager has trace handler
+                if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
+                    if self.state_manager._trace_handler:
+                        try:
+                            self.state_manager._trace_handler.trace_message(message)
+                        except Exception as e:
+                            logger.warning(f"Trace handler error: {e}")
 
                 logger.info(f"Executed role: {role.id} ({role.name})")
 

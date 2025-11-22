@@ -9,11 +9,14 @@ import copy
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from questfoundry.runtime.models.state import (
     StudioState, BarStatus, Message, QUALITY_BARS, VALID_TRANSITIONS
 )
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.core.trace_handler import TraceHandler
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +24,15 @@ logger = logging.getLogger(__name__)
 class StateManager:
     """Manage StudioState lifecycle and mutations throughout loop execution."""
 
-    def __init__(self):
-        """Initialize state manager."""
+    def __init__(self, trace_handler: Optional["TraceHandler"] = None):
+        """
+        Initialize state manager.
+
+        Args:
+            trace_handler: Optional trace handler to capture protocol messages
+        """
         self._sequence_numbers: Dict[int, int] = {}
+        self._trace_handler = trace_handler
 
     def generate_tu_id(self) -> str:
         """
@@ -334,7 +343,8 @@ class StateManager:
         1. Validate message structure
         2. Add envelope requirements
         3. Append to state["messages"]
-        4. Return updated state
+        4. Trace message if handler configured
+        5. Return updated state
 
         Args:
             state: Current state
@@ -349,6 +359,13 @@ class StateManager:
 
         if "tu_id" not in message["envelope"]:
             message["envelope"]["tu_id"] = state["tu_id"]
+
+        # Trace message if handler configured
+        if self._trace_handler:
+            try:
+                self._trace_handler.trace_message(message)
+            except Exception as e:
+                logger.warning(f"Trace handler error: {e}")
 
         return self.update_state(
             state,

@@ -51,9 +51,24 @@ def get_graph_factory() -> GraphFactory:
     return _graph_factory
 
 
-def get_state_manager() -> StateManager:
-    """Lazy-load state manager."""
+def get_state_manager(trace_handler=None) -> StateManager:
+    """
+    Get or create state manager.
+
+    Args:
+        trace_handler: Optional trace handler to pass to new StateManager
+
+    Note: If state_manager already exists and trace_handler is provided,
+    creates a new instance with the trace handler.
+    """
     global _state_manager
+
+    # If trace handler is provided, always create new instance
+    # (don't reuse cached one without trace handler)
+    if trace_handler is not None:
+        return StateManager(trace_handler=trace_handler)
+
+    # Otherwise use cached instance
     if _state_manager is None:
         _state_manager = StateManager()
     return _state_manager
@@ -77,7 +92,9 @@ def get_showrunner() -> ShowrunnerInterface:
 @app.command()
 def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
+    trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
+    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)")
 ):
     """
     Primary interface: Talk to the Showrunner in natural language.
@@ -90,8 +107,35 @@ def ask(
         qf ask "I like the scar subplot, can you work that into the narrative?"
         qf ask "This character feels flat, can you give them more depth?"
         qf ask "Review the story and harvest any interesting hooks"
+        qf ask "Create a story" --trace
+        qf ask "Create a story" --trace --trace-file messages.log
     """
     try:
+        # Create trace handler if --trace enabled
+        trace_handler = None
+        if trace:
+            from pathlib import Path
+            from questfoundry.runtime.core.trace_handler import TraceHandler
+
+            # Create output file path if trace_file specified
+            output_file = Path(trace_file) if trace_file else None
+
+            trace_handler = TraceHandler(
+                output_file=output_file,
+                console=console,
+                verbose=verbose
+            )
+
+            console.print(Panel(
+                "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
+                "Agent-to-agent communication will be captured and displayed.\n"
+                f"{'Output: Console and file' if output_file else 'Output: Console only'}",
+                style="cyan",
+                border_style="cyan",
+                title="Trace Mode"
+            ))
+            console.print()
+
         # Display customer message
         console.print(Panel(
             f"[bold]Your Request:[/bold]\n{message}",
@@ -99,9 +143,22 @@ def ask(
             border_style="blue"
         ))
 
-        # Get Showrunner and interpret request
-        showrunner = get_showrunner()
+        # Get Showrunner with trace handler
+        if trace_handler:
+            # Create custom Showrunner with trace-enabled state manager
+            state_manager = get_state_manager(trace_handler=trace_handler)
+            showrunner = ShowrunnerInterface(
+                graph_factory=get_graph_factory(),
+                state_manager=state_manager
+            )
+        else:
+            showrunner = get_showrunner()
+
         result = showrunner.interpret_and_execute(message, verbose=verbose)
+
+        # Close trace handler if created
+        if trace_handler:
+            trace_handler.close()
 
         # Display result in plain language (no jargon)
         if result.success:
@@ -144,7 +201,9 @@ def loop(
     loop_id: str = typer.Argument(..., help="Loop ID (e.g., story_spark, hook_harvest)"),
     context: Optional[str] = typer.Option(None, "--context", "-c", help="Context as key=value pairs"),
     mode: str = typer.Option("workshop", "--mode", "-m", help="Execution mode (workshop or production)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
+    trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
+    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)")
 ):
     """
     Debug/audit mode: Directly invoke a loop (bypasses Showrunner).
@@ -156,7 +215,8 @@ def loop(
     Examples:
         qf loop story_spark --context "scene_text=tense cargo bay scene"
         qf loop hook_harvest --mode workshop --verbose
-        qf loop gatecheck --verbose
+        qf loop gatecheck --verbose --trace
+        qf loop story_spark --trace --trace-file messages.log
     """
     try:
         # Display warning banner
@@ -185,18 +245,55 @@ def loop(
         # Display execution info
         console.print(f"\n[bold]Loop:[/bold] {loop_id}")
         console.print(f"[bold]Context:[/bold] {context_dict}")
+        if trace:
+            trace_target = trace_file if trace_file else "console"
+            console.print(f"[bold]Trace:[/bold] enabled → {trace_target}")
         console.print()
 
-        # Initialize state
-        state_manager = get_state_manager()
+        # Create trace handler if --trace enabled
+        trace_handler = None
+        if trace:
+            from pathlib import Path
+            from questfoundry.runtime.core.trace_handler import TraceHandler
+
+            # Create output file path if trace_file specified
+            output_file = Path(trace_file) if trace_file else None
+
+            trace_handler = TraceHandler(
+                output_file=output_file,
+                console=console,
+                verbose=verbose
+            )
+
+            console.print(Panel(
+                "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
+                "Agent-to-agent communication will be captured and displayed.\n"
+                f"{'Output: Console and file' if output_file else 'Output: Console only'}",
+                style="cyan",
+                border_style="cyan",
+                title="Trace Mode"
+            ))
+            console.print()
+
+        # Initialize state with trace handler
+        state_manager = get_state_manager(trace_handler=trace_handler)
         state = state_manager.initialize_state(loop_id, context_dict)
 
-        # Create and execute loop graph
-        graph_factory = get_graph_factory()
+        # Create graph factory with state_manager (for tracing)
+        if trace_handler:
+            # Create new graph factory with trace-enabled state_manager
+            graph_factory = GraphFactory(state_manager=state_manager)
+        else:
+            graph_factory = get_graph_factory()
+
         graph = graph_factory.create_loop_graph(loop_id)
 
         logger.info(f"Invoking loop: {loop_id}")
         final_state = graph.invoke(state)
+
+        # Close trace handler if created
+        if trace_handler:
+            trace_handler.close()
 
         # Display results (technical format for debug mode)
         console.print(Panel(

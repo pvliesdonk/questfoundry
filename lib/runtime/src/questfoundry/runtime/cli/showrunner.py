@@ -68,8 +68,9 @@ class ShowrunnerInterface:
             state_manager: StateManager instance (creates new if not provided)
             role_profile: Showrunner role profile from showrunner.yaml (loads if not provided)
         """
-        self.graph_factory = graph_factory or GraphFactory()
         self.state_manager = state_manager or StateManager()
+        # Pass state_manager to graph_factory for message tracing
+        self.graph_factory = graph_factory or GraphFactory(state_manager=self.state_manager)
 
         # Load Showrunner role profile
         if role_profile is None:
