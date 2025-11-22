@@ -5,6 +5,7 @@ Based on spec: components/node_factory.md
 STRICT component - role → Runnable transformation is the core contract.
 """
 
+import json
 import logging
 import os
 from collections.abc import Callable
@@ -222,19 +223,30 @@ class NodeFactory:
                     "lifecycle": state.get("tu_lifecycle", ""),
                 }
 
+                # Extract hot_sot data for template variables
+                hot_sot = state.get("hot_sot", {})
+                cold_sot = state.get("cold_sot", {})
+
                 context = {
                     "tu_id": state.get("tu_id", ""),
                     "tu_lifecycle": state.get("tu_lifecycle", ""),
                     "current_node": state.get("current_node", ""),
                     "loop_context": state.get("loop_context", {}),
-                    "artifacts": state.get("artifacts", {}),
+                    "artifacts": state.get("artifacts", {}),  # Legacy, for debug
+                    "hot_sot": hot_sot,  # Full hot SoT
+                    "cold_sot": cold_sot,  # Full cold SoT
                     "quality_bars": state.get("quality_bars", {}),
                     "messages": state.get("messages", []),
                     "snapshot_ref": state.get("snapshot_ref"),
                     "error": state.get("error"),
                     "role_id": role.id,
                     "role_name": role.name,
-                    # Template-expected variables
+                    # Template-expected variables from hot_sot
+                    "section_briefs": hot_sot.get("section_briefs", []),
+                    "style_addendum": hot_sot.get("style_notes"),
+                    "lore_summaries": hot_sot.get("lore_notes"),
+                    "codex_entries": cold_sot.get("codex", {}),
+                    # Legacy variables
                     "tu_scope": tu_scope,
                     "current_snapshot": current_snapshot,
                     "last_snapshot": last_snapshot,
@@ -261,6 +273,99 @@ class NodeFactory:
         else:
             logger.warning(f"Unknown template engine: {template_engine}")
             return template_str
+
+    def extract_artifacts(self, role: RoleProfile, llm_output: str, tu_id: str) -> dict[str, Any]:
+        """
+        Extract artifacts from LLM JSON output and map to hot_sot keys.
+
+        This bridges the gap between:
+        1. LLM structured output fields (e.g., "briefs_written")
+        2. Spec-defined hot_sot keys (e.g., "hot_sot.section_briefs")
+
+        Args:
+            role: RoleProfile with outputs specification
+            llm_output: Raw JSON string from LLM
+            tu_id: Trace Unit ID for artifact metadata
+
+        Returns:
+            Dict with hot_sot updates
+
+        Example:
+            Plotwright outputs {"briefs_written": ["id1", "id2"]}
+            → Returns {"hot_sot": {"section_briefs": ["id1", "id2"]}}
+
+        Note:
+            Hot SoT is in-memory for Phase 1. Future: Redis/Memory backend.
+            Cold SoT will use SQLite/File for persistence.
+        """
+        try:
+            # 1. Parse JSON output
+            output_data = json.loads(llm_output)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse LLM output as JSON for {role.id}: {e}")
+            logger.debug(f"Raw output: {llm_output[:500]}")
+            return {}
+
+        hot_sot_updates = {}
+
+        # 2. Get role's output specification from YAML
+        role_outputs = role.raw.get("interface", {}).get("outputs", [])
+
+        # 3. Map LLM output fields to hot_sot keys
+        # The structured_output schema defines what fields the LLM outputs
+        # The outputs list defines where those should be stored (destination: hot → hot_sot)
+
+        for output_spec in role_outputs:
+            artifact_type = output_spec.get("artifact_type")
+            state_key = output_spec.get("state_key", "")
+            destination = output_spec.get("destination", "hot")
+
+            if not state_key or destination != "hot":
+                continue
+
+            # Extract the hot_sot key from state_key
+            # Examples:
+            #   "artifacts.section_briefs" → "section_briefs" (legacy format, still works)
+            #   "hot_sot.section_briefs" → "section_briefs"
+            if state_key.startswith("artifacts."):
+                hot_key = state_key.replace("artifacts.", "")
+            elif state_key.startswith("hot_sot."):
+                hot_key = state_key.replace("hot_sot.", "")
+            else:
+                hot_key = artifact_type
+
+            # Try to find matching data in LLM output
+            # Common patterns:
+            # - section_briefs → briefs_written
+            # - topology_notes → topology_updated / topology_notes
+            # - hooks → hooks_proposed
+
+            value = None
+
+            # Try exact match first
+            if hot_key in output_data:
+                value = output_data[hot_key]
+            # Try common field name patterns
+            elif f"{artifact_type}_written" in output_data:
+                value = output_data[f"{artifact_type}_written"]
+            elif f"{artifact_type}s_written" in output_data:  # plural
+                value = output_data[f"{artifact_type}s_written"]
+            elif f"{artifact_type}_proposed" in output_data:
+                value = output_data[f"{artifact_type}_proposed"]
+            elif "briefs_written" in output_data and artifact_type == "section_briefs":
+                # Specific mapping for plotwright briefs
+                value = output_data["briefs_written"]
+
+            if value is not None:
+                hot_sot_updates[hot_key] = value
+                logger.debug(f"Mapped {role.id} output to hot_sot.{hot_key}")
+
+        # 4. Store full LLM output for debugging (in artifacts, not hot_sot)
+        # This preserves raw output without polluting the hot_sot structure
+        return {
+            "hot_sot": hot_sot_updates,
+            "artifacts": {f"_{role.id}_raw_output": output_data},  # Debug info
+        }
 
     def select_llm(self, role: RoleProfile) -> dict[str, Any | None]:
         """
@@ -463,16 +568,8 @@ class NodeFactory:
                     result = f"[{role.name}] Service execution (tools not yet implemented)"
                     logger.warning(f"Service-type role {role.id} executed without tools")
 
-                # 4. Create artifact
-                artifact = {
-                    "artifact_type": "output",
-                    "content": result,
-                    "role_id": role.id,
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "tu_id": state["tu_id"],
-                    "state_key": f"artifacts.hot.outputs.{role.id}",
-                    "metadata": {"prompt_length": len(prompt), "model": role.get_model()},
-                }
+                # 4. Extract artifacts from LLM output
+                extracted_artifacts = self.extract_artifacts(role, result, state["tu_id"])
 
                 # 5. Create protocol message
                 message = {
@@ -495,10 +592,14 @@ class NodeFactory:
                         except Exception as e:
                             logger.warning(f"Trace handler error: {e}")
 
-                # 7. Return ONLY changed fields (partial update)
+                # 7. Return extracted artifacts mapped to spec-defined state keys
                 # Note: Reducers (Annotated types) handle merging artifacts and messages
                 # Don't manually merge - just return the new values
-                return {"artifacts": {role.id: artifact}, "messages": [message]}
+                # Unpack extracted_artifacts to put hot_sot and artifacts at top level
+                return {
+                    **extracted_artifacts,  # Unpacks hot_sot and artifacts
+                    "messages": [message],
+                }
 
             except Exception as e:
                 logger.error(f"Error executing role {role.id}: {e}")

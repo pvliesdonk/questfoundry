@@ -228,7 +228,7 @@ class ShowrunnerInterface:
         if any(word in message_lower for word in ["write", "create", "draft", "scene"]):
             # Customer wants to create content
             loops = ["story_spark"]
-            context["scene_text"] = customer_message
+            context["customer_request"] = customer_message
             context["mode"] = "workshop"
             explanation = "I'll work on creating that content for you."
 
@@ -276,7 +276,7 @@ class ShowrunnerInterface:
         else:
             # Default: treat as a writing request
             loops = ["story_spark"]
-            context["scene_text"] = customer_message
+            context["customer_request"] = customer_message
             context["mode"] = "workshop"
             explanation = "I'll work on that for you."
 

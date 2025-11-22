@@ -88,13 +88,40 @@ class StateManager:
                 "timestamp": None,
             }
 
+        # Initialize Hot/Cold Sources of Truth
+        # Hot: working drafts, proposals, hooks, WIP
+        hot_sot = {
+            "tus": [],  # All TUs in hot
+            "hooks": [],  # Proposed/accepted hooks
+            "topology_notes": None,
+            "section_briefs": [],
+            "draft_sections": [],
+            "hooks_generated": [],
+            "style_notes": None,
+            "lore_notes": None,
+            "curator_notes": None,
+            "canon_packs": [],
+            "style_addenda": [],
+        }
+
+        # Cold: stable canon, export-safe content
+        cold_sot = {
+            "current_snapshot": None,
+            "snapshots": [],
+            "canon": {},
+            "codex": {},
+            "manuscript": {},
+        }
+
         state: StudioState = {
             "tu_id": tu_id,
             "tu_lifecycle": "hot-proposed",
             "current_node": "",  # Will be set by GraphFactory
             "loop_id": loop_id,
             "loop_context": context.copy(),
-            "artifacts": {},
+            "hot_sot": hot_sot,
+            "cold_sot": cold_sot,
+            "artifacts": {},  # DEPRECATED - keep for backwards compatibility
             "quality_bars": quality_bars,
             "messages": [],
             "snapshot_ref": None,

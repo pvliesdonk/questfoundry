@@ -46,8 +46,14 @@ class StudioState(TypedDict):
     Uses Annotated types with reducers to handle concurrent updates from
     multiple nodes executing in the same LangGraph step.
 
+    Hot/Cold Sources of Truth:
+        - hot_sot: Working drafts, proposals, hooks, WIP content (not export-safe)
+        - cold_sot: Stable canon, export-safe content, canonical snapshots
+
     Reducers:
-        - artifacts: Merge dicts (later values win for duplicate keys)
+        - hot_sot: Merge dicts (later values win for duplicate keys)
+        - cold_sot: Merge dicts (later values win for duplicate keys)
+        - artifacts: Merge dicts (DEPRECATED - use hot_sot)
         - messages: Concatenate lists (all messages preserved)
         - quality_bars: Merge dicts (later values win)
     """
@@ -61,8 +67,14 @@ class StudioState(TypedDict):
     loop_id: str  # Which loop is running
     loop_context: dict[str, Any]  # Loop-specific context
 
-    # Artifacts and quality (with reducers for concurrent updates)
+    # Sources of Truth (Hot/Cold architecture per spec/00-north-star/SOURCES_OF_TRUTH.md)
+    hot_sot: Annotated[dict[str, Any], operator.or_]  # Hot: drafts, proposals, hooks, WIP
+    cold_sot: Annotated[dict[str, Any], operator.or_]  # Cold: stable canon, export-safe content
+
+    # Legacy artifacts (DEPRECATED - transitioning to hot_sot/cold_sot)
     artifacts: Annotated[dict[str, Any], operator.or_]  # Merge dicts
+
+    # Quality bars (with reducer for concurrent updates)
     quality_bars: Annotated[dict[str, BarStatus], operator.or_]  # Merge dicts
 
     # Protocol (with reducer for concurrent updates)
