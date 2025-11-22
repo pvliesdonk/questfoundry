@@ -5,6 +5,7 @@ Based on spec: components/cli.md v2.0.0
 Architecture: Natural language primary, debug mode secondary.
 """
 
+import signal
 import sys
 from typing import Optional
 
@@ -21,6 +22,29 @@ from questfoundry.runtime.logging_config import setup_logging, get_logger
 # Set up Rich logging
 setup_logging(level="INFO", show_time=False, show_path=False)
 logger = get_logger(__name__)
+
+# Track active trace handlers for cleanup on interrupt
+_active_trace_handlers = []
+
+
+def cleanup_and_exit(signum=None, frame=None):
+    """Gracefully shut down on interrupt (Ctrl-C)."""
+    console = Console()
+    console.print("\n[yellow]⚠️  Interrupted by user. Cleaning up...[/yellow]")
+
+    # Close any active trace handlers
+    for handler in _active_trace_handlers:
+        try:
+            handler.close()
+        except Exception as e:
+            logger.warning(f"Error closing trace handler: {e}")
+
+    console.print("[green]✓ Cleanup complete[/green]")
+    sys.exit(130)  # Standard exit code for SIGINT
+
+
+# Register signal handler for Ctrl-C
+signal.signal(signal.SIGINT, cleanup_and_exit)
 
 # Create app
 app = typer.Typer(
@@ -126,6 +150,9 @@ def ask(
                 console=console,
                 verbose=verbose
             )
+
+            # Register for cleanup on interrupt
+            _active_trace_handlers.append(trace_handler)
 
             console.print(Panel(
                 "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
@@ -267,6 +294,9 @@ def loop(
                 console=console,
                 verbose=verbose
             )
+
+            # Register for cleanup on interrupt
+            _active_trace_handlers.append(trace_handler)
 
             console.print(Panel(
                 "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
