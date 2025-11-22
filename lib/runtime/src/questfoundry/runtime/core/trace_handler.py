@@ -25,10 +25,7 @@ class TraceHandler:
     """Capture and log agent-to-agent protocol messages."""
 
     def __init__(
-        self,
-        output_file: Path | None = None,
-        console: Console | None = None,
-        verbose: bool = True
+        self, output_file: Path | None = None, console: Console | None = None, verbose: bool = True
     ):
         """
         Initialize trace handler.
@@ -63,7 +60,7 @@ class TraceHandler:
             header = {
                 "trace_started": datetime.utcnow().isoformat() + "Z",
                 "format": "QuestFoundry Protocol Trace",
-                "version": "1.0"
+                "version": "1.0",
             }
             self._file_handle.write(json.dumps(header, indent=2) + "\n\n")
             self._file_handle.write("=" * 80 + "\n")
@@ -119,11 +116,12 @@ class TraceHandler:
 
             if insight:
                 self.console.print(
-                    f"[green]✓ {role_name}[/green] [dim]({time_str})[/dim]\n"
-                    f"  [dim]{insight}[/dim]"
+                    f"[green]✓ {role_name}[/green] [dim]({time_str})[/dim]\n  [dim]{insight}[/dim]"
                 )
             else:
-                self.console.print(f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]")
+                self.console.print(
+                    f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
+                )
             return
 
         # Standard message formatting for other intents
@@ -159,12 +157,7 @@ class TraceHandler:
         content = "\n".join(content_lines)
 
         # Display panel
-        self.console.print(Panel(
-            content,
-            title=header,
-            border_style="cyan",
-            padding=(0, 1)
-        ))
+        self.console.print(Panel(content, title=header, border_style="cyan", padding=(0, 1)))
 
     def _write_to_file(self, message: Message):
         """Write message to trace file."""

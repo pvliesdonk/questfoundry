@@ -13,16 +13,18 @@ from rich.logging import RichHandler
 from rich.theme import Theme
 
 # Custom theme for QuestFoundry
-QUESTFOUNDRY_THEME = Theme({
-    "logging.level.debug": "dim cyan",
-    "logging.level.info": "bold blue",
-    "logging.level.warning": "bold yellow",
-    "logging.level.error": "bold red",
-    "logging.level.critical": "bold white on red",
-    "log.time": "dim",
-    "log.message": "white",
-    "log.path": "dim cyan",
-})
+QUESTFOUNDRY_THEME = Theme(
+    {
+        "logging.level.debug": "dim cyan",
+        "logging.level.info": "bold blue",
+        "logging.level.warning": "bold yellow",
+        "logging.level.error": "bold red",
+        "logging.level.critical": "bold white on red",
+        "log.time": "dim",
+        "log.message": "white",
+        "log.path": "dim cyan",
+    }
+)
 
 
 def setup_logging(
@@ -48,7 +50,7 @@ def setup_logging(
     # Create Rich console with custom theme (force UTF-8 for Unicode support on Windows)
     if sys.platform == "win32":
         # Reconfigure stderr to use UTF-8 encoding without closing the underlying buffer
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     console = Console(
         theme=QUESTFOUNDRY_THEME,

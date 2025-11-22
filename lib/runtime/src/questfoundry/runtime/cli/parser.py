@@ -30,6 +30,7 @@ class Command:
 
     Use ShowrunnerInterface.interpret_and_execute() instead.
     """
+
     action: str
     loop_id: str
     context: dict[str, Any]

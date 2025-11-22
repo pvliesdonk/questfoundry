@@ -117,7 +117,9 @@ def _find_spec_root() -> Path:
 
 
 SPEC_ROOT = _find_spec_root()
-DEFINITIONS_ROOT = SPEC_ROOT / "05-definitions" if SPEC_ROOT != Path("__BUNDLED_RESOURCES__") else None
+DEFINITIONS_ROOT = (
+    SPEC_ROOT / "05-definitions" if SPEC_ROOT != Path("__BUNDLED_RESOURCES__") else None
+)
 SCHEMAS_ROOT = SPEC_ROOT / "03-schemas" if SPEC_ROOT != Path("__BUNDLED_RESOURCES__") else None
 
 
@@ -140,7 +142,9 @@ class SchemaRegistry:
             self.using_bundled = False
             self.schemas_root = schemas_root or SCHEMAS_ROOT
             self.definitions_root = definitions_root or DEFINITIONS_ROOT
-            logger.debug(f"Using file-based spec: definitions={self.definitions_root}, schemas={self.schemas_root}")
+            logger.debug(
+                f"Using file-based spec: definitions={self.definitions_root}, schemas={self.schemas_root}"
+            )
 
         # Cache for loaded schemas
         self._schema_cache: dict[str, dict[str, Any]] = {}
@@ -168,8 +172,10 @@ class SchemaRegistry:
         try:
             if self.using_bundled:
                 # Load from bundled resources
-                resource = files("questfoundry.runtime.resources.schemas.definitions").joinpath(schema_name)
-                schema_text = resource.read_text(encoding='utf-8')
+                resource = files("questfoundry.runtime.resources.schemas.definitions").joinpath(
+                    schema_name
+                )
+                schema_text = resource.read_text(encoding="utf-8")
                 schema = json.loads(schema_text)
                 logger.debug(f"Loaded schema from bundled resources: {schema_name}")
             else:
@@ -178,7 +184,7 @@ class SchemaRegistry:
                 if not schema_path.exists():
                     raise FileNotFoundError(f"Schema not found: {schema_path}")
 
-                with open(schema_path, encoding='utf-8') as f:
+                with open(schema_path, encoding="utf-8") as f:
                     schema = json.load(f)
                 logger.debug(f"Loaded schema from file: {schema_name}")
 
@@ -214,14 +220,18 @@ class SchemaRegistry:
                 # Extract the part after 'definitions/'
                 if "roles" in path_str:
                     resource_path = yaml_path.name  # Just the filename
-                    resource = files("questfoundry.runtime.resources.definitions.roles").joinpath(resource_path)
+                    resource = files("questfoundry.runtime.resources.definitions.roles").joinpath(
+                        resource_path
+                    )
                 elif "loops" in path_str:
                     resource_path = yaml_path.name
-                    resource = files("questfoundry.runtime.resources.definitions.loops").joinpath(resource_path)
+                    resource = files("questfoundry.runtime.resources.definitions.loops").joinpath(
+                        resource_path
+                    )
                 else:
                     raise FileNotFoundError(f"Unknown bundled resource type: {yaml_path}")
 
-                yaml_text = resource.read_text(encoding='utf-8')
+                yaml_text = resource.read_text(encoding="utf-8")
                 data = yaml.safe_load(yaml_text)
                 logger.debug(f"Loaded YAML from bundled resources: {resource_path}")
             else:
@@ -229,7 +239,7 @@ class SchemaRegistry:
                 if not yaml_path.exists():
                     raise FileNotFoundError(f"YAML file not found: {yaml_path}")
 
-                with open(yaml_path, encoding='utf-8') as f:
+                with open(yaml_path, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
                 logger.debug(f"Loaded YAML from file: {yaml_path}")
 
@@ -242,11 +252,7 @@ class SchemaRegistry:
         except (ImportError, AttributeError) as e:
             raise FileNotFoundError(f"YAML file not found in bundled resources: {yaml_path} ({e})")
 
-    def validate_against_schema(
-        self,
-        data: dict[str, Any],
-        schema: dict[str, Any]
-    ) -> None:
+    def validate_against_schema(self, data: dict[str, Any], schema: dict[str, Any]) -> None:
         """
         Validate data against schema using jsonschema Draft 2020-12.
 
@@ -361,11 +367,7 @@ class SchemaRegistry:
         logger.info(f"Loaded loop: {loop_id} ({loop.name})")
         return loop
 
-    def validate_definition(
-        self,
-        yaml_path: Path,
-        schema_type: str
-    ) -> bool:
+    def validate_definition(self, yaml_path: Path, schema_type: str) -> bool:
         """
         Validate a YAML file against a schema.
 
@@ -382,8 +384,7 @@ class SchemaRegistry:
         data = self.load_yaml(yaml_path)
 
         schema_name = (
-            "role_profile.schema.json" if schema_type == "role"
-            else "loop_pattern.schema.json"
+            "role_profile.schema.json" if schema_type == "role" else "loop_pattern.schema.json"
         )
         schema = self.load_schema(schema_name)
 

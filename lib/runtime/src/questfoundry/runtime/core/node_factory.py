@@ -35,7 +35,7 @@ class NodeFactory:
         self,
         schema_registry: SchemaRegistry | None = None,
         state_manager: Any | None = None,
-        preferred_provider: str | None = None
+        preferred_provider: str | None = None,
     ):
         """Initialize node factory.
 
@@ -130,10 +130,15 @@ class NodeFactory:
                 # Navigate up from lib/runtime/src/questfoundry/runtime/core/node_factory.py
                 # to find spec/ directory at monorepo root
                 # node_factory.py → core/ → runtime/ → questfoundry/ → src/ → runtime/ → lib/ → monorepo root
-                monorepo_spec = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "spec" / "05-definitions" / template_path
+                monorepo_spec = (
+                    Path(__file__).parent.parent.parent.parent.parent.parent.parent
+                    / "spec"
+                    / "05-definitions"
+                    / template_path
+                )
                 if monorepo_spec.exists():
                     try:
-                        template_str = monorepo_spec.read_text(encoding='utf-8')
+                        template_str = monorepo_spec.read_text(encoding="utf-8")
                         logger.debug(f"Loaded template from monorepo: {monorepo_spec}")
                     except Exception as e:
                         logger.warning(f"Failed to read template from monorepo: {e}")
@@ -146,10 +151,10 @@ class NodeFactory:
                     cached_spec = get_cached_spec_path()
                     if cached_spec:
                         # Remove leading ../ from template path
-                        clean_path = template_path.lstrip('../')
+                        clean_path = template_path.lstrip("../")
                         downloaded_template = cached_spec / "05-definitions" / clean_path
                         if downloaded_template.exists():
-                            template_str = downloaded_template.read_text(encoding='utf-8')
+                            template_str = downloaded_template.read_text(encoding="utf-8")
                             logger.debug(f"Loaded template from downloaded spec: {clean_path}")
                 except Exception as e:
                     logger.debug(f"Failed to load from downloaded spec: {e}")
@@ -158,19 +163,23 @@ class NodeFactory:
             if template_str is None:
                 try:
                     # Templates are bundled in resources/definitions/templates/
-                    resource_path = template_path.lstrip('../')  # Remove leading ../
-                    if resource_path.startswith('templates/'):
+                    resource_path = template_path.lstrip("../")  # Remove leading ../
+                    if resource_path.startswith("templates/"):
                         resource_path = resource_path[10:]  # Remove 'templates/' prefix
 
-                    resource = files("questfoundry.runtime.resources.definitions.templates").joinpath(resource_path)
-                    template_str = resource.read_text(encoding='utf-8')
+                    resource = files(
+                        "questfoundry.runtime.resources.definitions.templates"
+                    ).joinpath(resource_path)
+                    template_str = resource.read_text(encoding="utf-8")
                     logger.debug(f"Loaded template from bundled resources: {resource_path}")
                 except Exception as e:
                     logger.debug(f"Failed to load from bundled resources: {e}")
 
             # Strategy 4: Fallback - use system prompt only
             if template_str is None:
-                logger.warning(f"Template not found via any method, using fallback for role {role.id}")
+                logger.warning(
+                    f"Template not found via any method, using fallback for role {role.id}"
+                )
                 # Return system prompt from role config if available
                 system_prompt = role.model_config.get("system_prompt_prefix", "")
                 if system_prompt:
@@ -195,10 +204,12 @@ class NodeFactory:
 
                 # Build snapshot objects from state
                 from datetime import datetime
+
                 current_time = datetime.utcnow().isoformat() + "Z"
 
                 current_snapshot = {
-                    "id": state.get("snapshot_ref") or f"SNAP-{state.get('tu_id', 'unknown')}-current",
+                    "id": state.get("snapshot_ref")
+                    or f"SNAP-{state.get('tu_id', 'unknown')}-current",
                     "timestamp": state.get("updated_at", current_time),
                     "tu_id": state.get("tu_id", ""),
                     "lifecycle": state.get("tu_lifecycle", ""),
@@ -280,7 +291,9 @@ class NodeFactory:
 
         # 1. Select provider (priority: env var > CLI > role YAML > auto)
         # Build provider preference with fallback chain if provided
-        preferred_provider = os.getenv("QF_LLM_PROVIDER") or self.preferred_provider or role.get_provider()
+        preferred_provider = (
+            os.getenv("QF_LLM_PROVIDER") or self.preferred_provider or role.get_provider()
+        )
 
         # Parse fallback chain if comma-separated (e.g., "ollama,openai")
         fallback_chain = None
@@ -315,14 +328,16 @@ class NodeFactory:
         temperature = role.get_temperature()
         max_tokens = role.get_max_tokens()
 
-        logger.info(f"Selected LLM - provider: {provider}, model: {model}, temperature: {temperature}")
+        logger.info(
+            f"Selected LLM - provider: {provider}, model: {model}, temperature: {temperature}"
+        )
 
         return {
             "provider": provider,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "role_type": role.role_type
+            "role_type": role.role_type,
         }
 
     def create_role_node(self, role_id: str) -> Callable[[StudioState], dict[str, Any]]:
@@ -362,7 +377,7 @@ class NodeFactory:
 
             try:
                 # 2. Send "role_started" progress indicator (live feedback)
-                if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
+                if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
                     if self.state_manager._trace_handler:
                         try:
                             start_message = {
@@ -375,7 +390,7 @@ class NodeFactory:
                                 "timestamp": datetime.utcnow().isoformat() + "Z",
                                 "envelope": {
                                     "tu_id": state["tu_id"],
-                                }
+                                },
                             }
                             self.state_manager._trace_handler.trace_message(start_message)
                         except Exception as e:
@@ -396,7 +411,7 @@ class NodeFactory:
                             provider=provider,
                             model=llm_config["model"],
                             temperature=llm_config["temperature"],
-                            max_tokens=llm_config["max_tokens"]
+                            max_tokens=llm_config["max_tokens"],
                         )
 
                         # Add JSON format instructions for all providers
@@ -412,10 +427,10 @@ class NodeFactory:
                         # Invoke LLM with JSON-instructed prompt
                         logger.info(f"Invoking {provider} LLM for role {role.id}")
                         response = llm.invoke(json_prompt)
-                        result = response.content if hasattr(response, 'content') else str(response)
+                        result = response.content if hasattr(response, "content") else str(response)
 
                         # Send role_completed with extracted insight
-                        if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
+                        if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
                             if self.state_manager._trace_handler:
                                 try:
                                     # Include FULL result for trace (no truncation)
@@ -427,14 +442,16 @@ class NodeFactory:
                                         "payload": {
                                             "role_name": role.name,
                                             "insight": result,  # Full result, not truncated
-                                            "length": len(result)
+                                            "length": len(result),
                                         },
                                         "timestamp": datetime.utcnow().isoformat() + "Z",
                                         "envelope": {
                                             "tu_id": state["tu_id"],
-                                        }
+                                        },
                                     }
-                                    self.state_manager._trace_handler.trace_message(completed_message)
+                                    self.state_manager._trace_handler.trace_message(
+                                        completed_message
+                                    )
                                 except Exception as e:
                                     logger.warning(f"Trace handler error: {e}")
 
@@ -454,10 +471,7 @@ class NodeFactory:
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "tu_id": state["tu_id"],
                     "state_key": f"artifacts.hot.outputs.{role.id}",
-                    "metadata": {
-                        "prompt_length": len(prompt),
-                        "model": role.get_model()
-                    }
+                    "metadata": {"prompt_length": len(prompt), "model": role.get_model()},
                 }
 
                 # 5. Create protocol message
@@ -465,19 +479,16 @@ class NodeFactory:
                     "sender": role.id,
                     "receiver": "broadcast",
                     "intent": "artifact_created",
-                    "payload": {
-                        "artifact_id": role.id,
-                        "artifact_type": "output"
-                    },
+                    "payload": {"artifact_id": role.id, "artifact_type": "output"},
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "envelope": {
                         "tu_id": state["tu_id"],
-                        "snapshot_ref": state.get("snapshot_ref")
-                    }
+                        "snapshot_ref": state.get("snapshot_ref"),
+                    },
                 }
 
                 # 6. Trace message if state_manager has trace handler
-                if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
+                if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
                     if self.state_manager._trace_handler:
                         try:
                             self.state_manager._trace_handler.trace_message(message)
@@ -487,25 +498,17 @@ class NodeFactory:
                 # 7. Return ONLY changed fields (partial update)
                 # Note: Reducers (Annotated types) handle merging artifacts and messages
                 # Don't manually merge - just return the new values
-                return {
-                    "artifacts": {role.id: artifact},
-                    "messages": [message]
-                }
+                return {"artifacts": {role.id: artifact}, "messages": [message]}
 
             except Exception as e:
                 logger.error(f"Error executing role {role.id}: {e}")
                 # Return partial update with error info
-                return {
-                    "error": str(e),
-                    "retry_count": state.get("retry_count", 0) + 1
-                }
+                return {"error": str(e), "retry_count": state.get("retry_count", 0) + 1}
 
         return role_node
 
     def create_multi_role_node(
-        self,
-        sub_nodes: list[dict[str, Any]],
-        node_id: str
+        self, sub_nodes: list[dict[str, Any]], node_id: str
     ) -> Callable[[StudioState], dict[str, Any]]:
         """
         Create a multi-role parallel execution node.
@@ -543,23 +546,31 @@ class NodeFactory:
                 role_execution_pairs.append((role_name, role_id, role_node, task))
                 logger.debug(f"Loaded role for parallel execution: {role_name} ({role_id})")
             except Exception as e:
-                logger.warning(f"Failed to load role {role_name} ({role_id}) for parallel node: {e}")
+                logger.warning(
+                    f"Failed to load role {role_name} ({role_id}) for parallel node: {e}"
+                )
                 # Continue with other roles even if one fails to load
 
         if not role_execution_pairs:
             logger.error(f"No valid roles loaded for multi-role node {node_id}")
+
             # Return a placeholder that logs the error
             def error_node(state: StudioState) -> dict[str, Any]:
                 return {"error": f"Multi-role node {node_id} has no valid roles"}
+
             return error_node
 
         def multi_role_node(state: StudioState) -> dict[str, Any]:
             """Execute multiple roles in parallel and merge results."""
-            logger.info(f"[bold cyan]Executing parallel node:[/bold cyan] {node_id} with {len(role_execution_pairs)} roles")
+            logger.info(
+                f"[bold cyan]Executing parallel node:[/bold cyan] {node_id} with {len(role_execution_pairs)} roles"
+            )
 
             # Execute all roles in parallel using ThreadPoolExecutor
             results = []
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(role_execution_pairs)) as executor:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(role_execution_pairs)
+            ) as executor:
                 # Submit all role executions
                 futures = {}
                 for role_name, role_id, role_node, task in role_execution_pairs:
@@ -568,7 +579,9 @@ class NodeFactory:
                     futures[future] = (role_name, role_id)
 
                 # Collect results as they complete
-                for future in concurrent.futures.as_completed(futures, timeout=600):  # 10 min total timeout
+                for future in concurrent.futures.as_completed(
+                    futures, timeout=600
+                ):  # 10 min total timeout
                     role_name, role_id = futures[future]
                     try:
                         result = future.result(timeout=300)  # 5 min per role
@@ -600,17 +613,18 @@ class NodeFactory:
                     errors.append(result["error"])
 
             # Build final merged state update
-            merged_state = {
-                "artifacts": merged_artifacts,
-                "messages": merged_messages
-            }
+            merged_state = {"artifacts": merged_artifacts, "messages": merged_messages}
 
             # If any errors occurred, include them in the merged state
             if errors:
                 merged_state["error"] = "; ".join(errors)
-                logger.warning(f"Parallel node {node_id} completed with errors: {merged_state['error']}")
+                logger.warning(
+                    f"Parallel node {node_id} completed with errors: {merged_state['error']}"
+                )
             else:
-                logger.info(f"[bold green]Parallel node {node_id} completed successfully[/bold green]")
+                logger.info(
+                    f"[bold green]Parallel node {node_id} completed successfully[/bold green]"
+                )
 
             return merged_state
 

@@ -36,11 +36,11 @@ class OpenAIAdapter:
         # Defer LangChain import to avoid hard dependency
         try:
             from langchain_openai import ChatOpenAI
+
             self.ChatOpenAI = ChatOpenAI
         except ImportError:
             raise ImportError(
-                "langchain-openai not installed. "
-                "Install with: pip install langchain-openai"
+                "langchain-openai not installed. Install with: pip install langchain-openai"
             )
 
     def get_llm(
@@ -48,7 +48,7 @@ class OpenAIAdapter:
         model: str = "gpt-4-turbo-preview",
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Any:
         """
         Get LangChain ChatModel instance for OpenAI.
@@ -67,8 +67,7 @@ class OpenAIAdapter:
         """
         if model not in self.SUPPORTED_MODELS:
             logger.warning(
-                f"Model {model} not in validated list. "
-                f"Supported models: {self.SUPPORTED_MODELS}"
+                f"Model {model} not in validated list. Supported models: {self.SUPPORTED_MODELS}"
             )
 
         try:
@@ -77,7 +76,7 @@ class OpenAIAdapter:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 openai_api_key=self.api_key,
-                **kwargs
+                **kwargs,
             )
 
             logger.info(f"Created ChatOpenAI instance: {model}")
@@ -99,19 +98,19 @@ class OpenAIAdapter:
                 "model_id": "gpt-4-turbo-preview",
                 "name": "GPT-4 Turbo Preview",
                 "context_window": 128000,
-                "description": "Most capable GPT-4 model with extended context"
+                "description": "Most capable GPT-4 model with extended context",
             },
             {
                 "model_id": "gpt-4",
                 "name": "GPT-4",
                 "context_window": 8192,
-                "description": "Standard GPT-4 model"
+                "description": "Standard GPT-4 model",
             },
             {
                 "model_id": "gpt-3.5-turbo",
                 "name": "GPT-3.5 Turbo",
                 "context_window": 16385,
-                "description": "Fast and cost-effective model"
+                "description": "Fast and cost-effective model",
             },
         ]
 
@@ -154,7 +153,7 @@ def get_llm(
     model: str = "gpt-4-turbo-preview",
     temperature: float = 0.7,
     max_tokens: int = 4096,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Any:
     """
     Convenience function to get LLM instance.
@@ -169,9 +168,4 @@ def get_llm(
         LangChain ChatModel instance
     """
     adapter = get_openai_adapter()
-    return adapter.get_llm(
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        **kwargs
-    )
+    return adapter.get_llm(model=model, temperature=temperature, max_tokens=max_tokens, **kwargs)

@@ -43,7 +43,9 @@ class ProviderManager:
         """
         self.available_providers = self._detect_providers()
         self.tier_mapping = self._load_tier_mapping(tier_config_path)
-        self._llm_cache: dict[tuple, Any] = {}  # Cache LLM clients by (provider, model, temp, max_tokens)
+        self._llm_cache: dict[
+            tuple, Any
+        ] = {}  # Cache LLM clients by (provider, model, temp, max_tokens)
         logger.info(f"Detected providers: {', '.join(self.available_providers) or 'none'}")
 
     def _load_tier_mapping(self, tier_config_path: Path | None = None) -> dict[str, Any]:
@@ -73,8 +75,7 @@ class ProviderManager:
                 return config
         except FileNotFoundError:
             logger.warning(
-                f"Model tier config not found: {tier_config_path}. "
-                "Using fallback defaults."
+                f"Model tier config not found: {tier_config_path}. Using fallback defaults."
             )
             return self._get_fallback_tier_mapping()
         except Exception as e:
@@ -158,9 +159,7 @@ class ProviderManager:
         return available
 
     def select_provider(
-        self,
-        preferred_provider: str | None = None,
-        fallback_chain: list[str | None] = None
+        self, preferred_provider: str | None = None, fallback_chain: list[str | None] = None
     ) -> str:
         """
         Select best available provider.
@@ -205,8 +204,7 @@ class ProviderManager:
         # Last resort: use first available
         selected = self.available_providers[0]
         logger.warning(
-            f"Provider '{preferred_provider}' and fallbacks unavailable. "
-            f"Using: {selected}"
+            f"Provider '{preferred_provider}' and fallbacks unavailable. Using: {selected}"
         )
         return selected
 
@@ -280,12 +278,7 @@ class ProviderManager:
         return model_spec
 
     def create_llm_client(
-        self,
-        provider: str,
-        model: str,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        **kwargs
+        self, provider: str, model: str, temperature: float = 0.7, max_tokens: int = 4096, **kwargs
     ) -> Any:
         """
         Create or retrieve cached LangChain LLM client for the specified provider.
@@ -345,8 +338,7 @@ class ProviderManager:
             from langchain_anthropic import ChatAnthropic
         except ImportError:
             raise ImportError(
-                "langchain-anthropic not installed. "
-                "Install with: pip install langchain-anthropic"
+                "langchain-anthropic not installed. Install with: pip install langchain-anthropic"
             )
 
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -358,7 +350,7 @@ class ProviderManager:
             temperature=temperature,
             max_tokens=max_tokens,
             anthropic_api_key=api_key,
-            **kwargs
+            **kwargs,
         )
 
     def _create_openai_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
@@ -367,8 +359,7 @@ class ProviderManager:
             from langchain_openai import ChatOpenAI
         except ImportError:
             raise ImportError(
-                "langchain-openai not installed. "
-                "Install with: pip install langchain-openai"
+                "langchain-openai not installed. Install with: pip install langchain-openai"
             )
 
         api_key = os.getenv("OPENAI_API_KEY")
@@ -383,7 +374,7 @@ class ProviderManager:
             max_tokens=max_tokens,
             openai_api_key=api_key,
             model_kwargs={"response_format": {"type": "json_object"}},
-            **kwargs
+            **kwargs,
         )
 
     def _create_google_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
@@ -407,7 +398,7 @@ class ProviderManager:
             max_output_tokens=max_tokens,
             google_api_key=api_key,
             generation_config={"response_mime_type": "application/json"},
-            **kwargs
+            **kwargs,
         )
 
     def _create_ollama_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
@@ -416,12 +407,13 @@ class ProviderManager:
             from langchain_ollama import ChatOllama
         except ImportError:
             raise ImportError(
-                "langchain-ollama not installed. "
-                "Install with: pip install langchain-ollama"
+                "langchain-ollama not installed. Install with: pip install langchain-ollama"
             )
 
         # Support both OLLAMA_HOST (official, preferred) and OLLAMA_API_BASE (alternate)
-        base_url = os.getenv("OLLAMA_HOST") or os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+        base_url = os.getenv("OLLAMA_HOST") or os.getenv(
+            "OLLAMA_API_BASE", "http://localhost:11434"
+        )
 
         # Force JSON output format for all Ollama models
         # This ensures structured responses are properly formatted
@@ -431,7 +423,7 @@ class ProviderManager:
             num_predict=max_tokens,
             base_url=base_url,
             format="json",  # Critical: Forces JSON-only responses
-            **kwargs
+            **kwargs,
         )
 
     def _create_litellm_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
@@ -440,8 +432,7 @@ class ProviderManager:
             from langchain_community.chat_models import ChatLiteLLM
         except ImportError:
             raise ImportError(
-                "langchain-community not installed. "
-                "Install with: pip install langchain-community"
+                "langchain-community not installed. Install with: pip install langchain-community"
             )
 
         api_base = os.getenv("LITELLM_API_BASE")
@@ -458,7 +449,7 @@ class ProviderManager:
             api_base=api_base,
             api_key=api_key,
             model_kwargs={"response_format": {"type": "json_object"}},
-            **kwargs
+            **kwargs,
         )
 
     def get_config_summary(self) -> dict[str, Any]:

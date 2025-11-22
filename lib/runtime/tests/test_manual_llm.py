@@ -37,11 +37,11 @@ def test_openai_adapter():
         from questfoundry.runtime.plugins.llm.openai import OpenAIAdapter
 
         adapter = OpenAIAdapter()
-        llm = adapter.get_llm(model='gpt-3.5-turbo', temperature=0.1)
+        llm = adapter.get_llm(model="gpt-3.5-turbo", temperature=0.1)
 
         print("📤 Sending: 'Say hello in exactly 3 words'")
-        response = llm.invoke('Say hello in exactly 3 words')
-        result = response.content if hasattr(response, 'content') else str(response)
+        response = llm.invoke("Say hello in exactly 3 words")
+        result = response.content if hasattr(response, "content") else str(response)
 
         print(f"📥 Received: {result}")
         print("✅ OpenAI adapter working!")
@@ -65,11 +65,11 @@ def test_anthropic_adapter():
         from questfoundry.runtime.plugins.llm.anthropic import AnthropicAdapter
 
         adapter = AnthropicAdapter()
-        llm = adapter.get_llm(model='claude-3-5-haiku-20241022', temperature=0.1)
+        llm = adapter.get_llm(model="claude-3-5-haiku-20241022", temperature=0.1)
 
         print("📤 Sending: 'Say hello in exactly 3 words'")
-        response = llm.invoke('Say hello in exactly 3 words')
-        result = response.content if hasattr(response, 'content') else str(response)
+        response = llm.invoke("Say hello in exactly 3 words")
+        result = response.content if hasattr(response, "content") else str(response)
 
         print(f"📥 Received: {result}")
         print("✅ Anthropic adapter working!")
@@ -100,9 +100,7 @@ def test_node_factory_llm():
         state_manager = StateManager()
 
         # Create initial state
-        state = state_manager.initialize_state("story_spark", {
-            "scene_text": "A quick test scene"
-        })
+        state = state_manager.initialize_state("story_spark", {"scene_text": "A quick test scene"})
 
         print(f"📋 Testing with provider: {provider}")
         print(f"📋 TU ID: {state['tu_id']}")
@@ -130,6 +128,7 @@ def test_node_factory_llm():
     except Exception as e:
         print(f"❌ NodeFactory test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -146,7 +145,7 @@ def test_story_spark_loop():
         return False
 
     try:
-        from questfoundry.runtime.cli.showrunner import Showrunner, ParsedIntent
+        from questfoundry.runtime.cli.showrunner import ParsedIntent, Showrunner
 
         # Create showrunner
         showrunner = Showrunner()
@@ -156,7 +155,7 @@ def test_story_spark_loop():
             action="write",
             args=["A tense confrontation in the cargo bay"],
             flags={"mode": "workshop"},
-            loop_id="story_spark"
+            loop_id="story_spark",
         )
 
         print(f"📋 Provider: {provider}")
@@ -164,13 +163,10 @@ def test_story_spark_loop():
         print("🚀 Executing story_spark loop...")
 
         # Execute
-        result = showrunner.execute_request(
-            "write A tense confrontation in the cargo bay",
-            intent
-        )
+        result = showrunner.execute_request("write A tense confrontation in the cargo bay", intent)
 
         if result.success:
-            print(f"✅ Loop completed successfully!")
+            print("✅ Loop completed successfully!")
             print(f"📋 TU ID: {result.tu_id}")
             print(f"📊 Artifacts: {len(result.artifacts)}")
             print(f"\n{result.summary}")
@@ -182,6 +178,7 @@ def test_story_spark_loop():
     except Exception as e:
         print(f"❌ Loop test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

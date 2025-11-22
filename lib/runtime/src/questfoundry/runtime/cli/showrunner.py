@@ -43,6 +43,7 @@ class ErrorTrackingHandler(logging.Handler):
 @dataclass
 class ShowrunnerResponse:
     """Response from Showrunner after interpreting customer directive."""
+
     success: bool
     plain_language_response: str
     loops_executed: list[str]
@@ -53,6 +54,7 @@ class ShowrunnerResponse:
 @dataclass
 class InterpretationResult:
     """Internal result from interpreting a customer directive."""
+
     loops_sequenced: list[str]
     plain_language_explanation: str
     context_for_loops: dict[str, Any]
@@ -78,7 +80,7 @@ class ShowrunnerInterface:
         self,
         graph_factory: GraphFactory | None = None,
         state_manager: StateManager | None = None,
-        role_profile: Any | None = None
+        role_profile: Any | None = None,
     ):
         """
         Initialize Showrunner interface.
@@ -104,9 +106,7 @@ class ShowrunnerInterface:
             self.role = role_profile
 
     def interpret_and_execute(
-        self,
-        customer_message: str,
-        verbose: bool = False
+        self, customer_message: str, verbose: bool = False
     ) -> ShowrunnerResponse:
         """
         Interpret customer directive and execute appropriate work.
@@ -148,8 +148,7 @@ class ShowrunnerInterface:
                 try:
                     logger.info(f"[cyan]Executing:[/cyan] {loop_id}")
                     final_state = self._execute_loop_internal(
-                        loop_id,
-                        interpretation.context_for_loops
+                        loop_id, interpretation.context_for_loops
                     )
                     loops_executed.append(loop_id)
                     final_states[loop_id] = final_state
@@ -165,7 +164,7 @@ class ShowrunnerInterface:
                         plain_language_response=f"I ran into an issue while working on that: {str(e)}",
                         loops_executed=loops_executed,
                         suggested_next_steps=[],
-                        error=str(e)
+                        error=str(e),
                     )
 
             # 3. Translate results to plain language
@@ -174,18 +173,17 @@ class ShowrunnerInterface:
                 final_states,
                 customer_message,
                 error_count=error_tracker.error_count,
-                warning_count=error_tracker.warning_count
+                warning_count=error_tracker.warning_count,
             )
 
             # 4. Suggest next steps
-            next_steps = self._suggest_next_steps(
-                interpretation.loops_sequenced,
-                final_states
-            )
+            next_steps = self._suggest_next_steps(interpretation.loops_sequenced, final_states)
 
             # Determine overall success (no exceptions but may have had errors/warnings)
             if error_tracker.error_count > 0:
-                logger.warning(f"[bold yellow]Request completed with {error_tracker.error_count} error(s)[/bold yellow]")
+                logger.warning(
+                    f"[bold yellow]Request completed with {error_tracker.error_count} error(s)[/bold yellow]"
+                )
             else:
                 logger.info("[bold green]Request completed successfully[/bold green]")
 
@@ -194,7 +192,7 @@ class ShowrunnerInterface:
                 plain_language_response=plain_response,
                 loops_executed=loops_executed,
                 suggested_next_steps=next_steps,
-                error=None
+                error=None,
             )
 
         except Exception as e:
@@ -204,16 +202,13 @@ class ShowrunnerInterface:
                 plain_language_response=f"I apologize, but I encountered an error: {str(e)}",
                 loops_executed=[],
                 suggested_next_steps=[],
-                error=str(e)
+                error=str(e),
             )
         finally:
             # Remove error tracking handler
             root_logger.removeHandler(error_tracker)
 
-    def _interpret_directive_deterministic(
-        self,
-        customer_message: str
-    ) -> InterpretationResult:
+    def _interpret_directive_deterministic(self, customer_message: str) -> InterpretationResult:
         """
         Deterministic interpretation of customer directive.
 
@@ -243,7 +238,9 @@ class ShowrunnerInterface:
             context["mode"] = "review"
             explanation = "I'll review the story and identify interesting narrative hooks."
 
-        elif any(word in message_lower for word in ["lore", "backstory", "background", "worldbuilding"]):
+        elif any(
+            word in message_lower for word in ["lore", "backstory", "background", "worldbuilding"]
+        ):
             # Customer wants lore development
             loops = ["lore_deepening"]
             context["topic"] = customer_message
@@ -284,16 +281,10 @@ class ShowrunnerInterface:
             explanation = "I'll work on that for you."
 
         return InterpretationResult(
-            loops_sequenced=loops,
-            plain_language_explanation=explanation,
-            context_for_loops=context
+            loops_sequenced=loops, plain_language_explanation=explanation, context_for_loops=context
         )
 
-    def _execute_loop_internal(
-        self,
-        loop_id: str,
-        context: dict[str, Any]
-    ) -> StudioState:
+    def _execute_loop_internal(self, loop_id: str, context: dict[str, Any]) -> StudioState:
         """
         Execute a single loop internally (customer doesn't see this).
 
@@ -312,10 +303,7 @@ class ShowrunnerInterface:
 
         # Execute with increased recursion limit (default is 25, which is too low)
         # This allows complex multi-agent conversations to complete
-        final_state = graph.invoke(
-            state,
-            config={"recursion_limit": 100}
-        )
+        final_state = graph.invoke(state, config={"recursion_limit": 100})
 
         return final_state
 
@@ -325,7 +313,7 @@ class ShowrunnerInterface:
         final_states: dict[str, StudioState],
         original_message: str,
         error_count: int = 0,
-        warning_count: int = 0
+        warning_count: int = 0,
     ) -> str:
         """
         Generate plain language response for customer (no jargon).
@@ -389,9 +377,7 @@ class ShowrunnerInterface:
         return "\n".join(response_lines).strip()
 
     def _suggest_next_steps(
-        self,
-        loops_executed: list[str],
-        final_states: dict[str, StudioState]
+        self, loops_executed: list[str], final_states: dict[str, StudioState]
     ) -> list[str]:
         """
         Suggest next steps in plain language (no commands).
@@ -443,7 +429,7 @@ class ShowrunnerInterface:
             "codex_entry": "Codex entry",
             "style_report": "Style analysis",
             "translation": "Translated content",
-            "view": "Exported content"
+            "view": "Exported content",
         }
         return translations.get(artifact_key, artifact_key.replace("_", " ").title())
 
@@ -456,7 +442,7 @@ class ShowrunnerInterface:
             "gateways": "progression logic",
             "style": "writing style",
             "determinism": "asset consistency",
-            "presentation": "formatting and accessibility"
+            "presentation": "formatting and accessibility",
         }
         return translations.get(bar_name.lower(), bar_name.replace("_", " "))
 
@@ -464,9 +450,11 @@ class ShowrunnerInterface:
 # Legacy classes for backward compatibility during transition
 # TODO: Remove in Phase 6C after all references are updated
 
+
 @dataclass
 class ParsedIntent:
     """Deprecated: Legacy class for backward compatibility."""
+
     action: str
     args: list[str]
     flags: dict[str, str]
@@ -476,6 +464,7 @@ class ParsedIntent:
 @dataclass
 class ExecutionResult:
     """Deprecated: Legacy class for backward compatibility."""
+
     success: bool
     summary: str
     artifacts: dict[str, Any]
@@ -498,12 +487,9 @@ class Showrunner:
     def __init__(self, graph_factory=None, state_manager=None):
         """Initialize with a ShowrunnerInterface internally."""
         self._interface = ShowrunnerInterface(
-            graph_factory=graph_factory,
-            state_manager=state_manager
+            graph_factory=graph_factory, state_manager=state_manager
         )
-        logger.warning(
-            "Showrunner class is deprecated. Use ShowrunnerInterface instead."
-        )
+        logger.warning("Showrunner class is deprecated. Use ShowrunnerInterface instead.")
 
     def execute_request(self, command: str, parsed_intent: ParsedIntent, user_context=None):
         """Legacy execute_request method."""
@@ -518,5 +504,5 @@ class Showrunner:
             tu_id="legacy",
             quality_status={},
             next_steps=result.suggested_next_steps,
-            error=result.error
+            error=result.error,
         )

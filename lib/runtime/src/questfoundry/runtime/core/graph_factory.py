@@ -29,7 +29,7 @@ class GraphFactory:
         node_factory: NodeFactory | None = None,
         edge_evaluator: EdgeEvaluator | None = None,
         state_manager: StateManager | None = None,
-        preferred_provider: str | None = None
+        preferred_provider: str | None = None,
     ):
         """Initialize graph factory with dependent components."""
         self.schema_registry = schema_registry or SchemaRegistry()
@@ -38,7 +38,7 @@ class GraphFactory:
         self.node_factory = node_factory or NodeFactory(
             self.schema_registry,
             state_manager=self.state_manager,
-            preferred_provider=preferred_provider
+            preferred_provider=preferred_provider,
         )
         self.edge_evaluator = edge_evaluator or EdgeEvaluator()
 
@@ -82,22 +82,16 @@ class GraphFactory:
 
         # Check 1: entry_node in nodes
         if entry_node not in node_ids:
-            raise ValueError(
-                f"Entry node '{entry_node}' not in topology nodes: {node_ids}"
-            )
+            raise ValueError(f"Entry node '{entry_node}' not in topology nodes: {node_ids}")
 
         # Check 2: All edge sources in nodes
         for edge in loop.edges:
             if edge.source not in node_ids:
-                raise ValueError(
-                    f"Edge source '{edge.source}' not in topology nodes: {node_ids}"
-                )
+                raise ValueError(f"Edge source '{edge.source}' not in topology nodes: {node_ids}")
 
             # Check 3: All edge targets in nodes or END
             if edge.target not in node_ids and edge.target != END:
-                raise ValueError(
-                    f"Edge target '{edge.target}' not in topology nodes: {node_ids}"
-                )
+                raise ValueError(f"Edge target '{edge.target}' not in topology nodes: {node_ids}")
 
         # Check 5: At least one exit condition
         if not loop.exit_conditions:
@@ -115,11 +109,7 @@ class GraphFactory:
         graph = StateGraph(StudioState)
         return graph
 
-    def add_nodes(
-        self,
-        graph: StateGraph,
-        loop: LoopPattern
-    ) -> None:
+    def add_nodes(self, graph: StateGraph, loop: LoopPattern) -> None:
         """
         Add all nodes from loop.topology.nodes.
 
@@ -144,19 +134,35 @@ class GraphFactory:
                         # Get sub-nodes for parallel execution
                         sub_nodes = loop.get_node_sub_nodes(node_id)
                         if sub_nodes:
-                            logger.info(f"Creating parallel multi-role node: [cyan]{node_id}[/cyan] with {len(sub_nodes)} sub-roles")
-                            node_runnable = self.node_factory.create_multi_role_node(sub_nodes, node_id)
+                            logger.info(
+                                f"Creating parallel multi-role node: [cyan]{node_id}[/cyan] with {len(sub_nodes)} sub-roles"
+                            )
+                            node_runnable = self.node_factory.create_multi_role_node(
+                                sub_nodes, node_id
+                            )
                         else:
-                            logger.warning(f"Multi-role node {node_id} has no sub_nodes, creating placeholder")
+                            logger.warning(
+                                f"Multi-role node {node_id} has no sub_nodes, creating placeholder"
+                            )
+
                             def multi_placeholder(state):
-                                logger.warning(f"Multi-role node {node_id} executed but has no sub_nodes")
+                                logger.warning(
+                                    f"Multi-role node {node_id} executed but has no sub_nodes"
+                                )
                                 return {}
+
                             node_runnable = multi_placeholder
                     else:
-                        logger.warning(f"Multi-role node {node_id} missing parallel_execution flag, creating placeholder")
+                        logger.warning(
+                            f"Multi-role node {node_id} missing parallel_execution flag, creating placeholder"
+                        )
+
                         def multi_placeholder(state):
-                            logger.warning(f"Multi-role node {node_id} missing parallel_execution=true")
+                            logger.warning(
+                                f"Multi-role node {node_id} missing parallel_execution=true"
+                            )
                             return {}
+
                         node_runnable = multi_placeholder
                 else:
                     # Create node runnable using role_id
@@ -170,11 +176,7 @@ class GraphFactory:
                 logger.error(f"Failed to add node {node_id}: {e}")
                 raise
 
-    def add_direct_edge(
-        self,
-        graph: StateGraph,
-        edge: Any
-    ) -> None:
+    def add_direct_edge(self, graph: StateGraph, edge: Any) -> None:
         """
         Add unconditional edge from source to target.
 
@@ -185,11 +187,7 @@ class GraphFactory:
         graph.add_edge(edge.source, edge.target)
         logger.debug(f"Added direct edge: {edge.source} → {edge.target}")
 
-    def add_conditional_edge(
-        self,
-        graph: StateGraph,
-        edge: Any
-    ) -> None:
+    def add_conditional_edge(self, graph: StateGraph, edge: Any) -> None:
         """
         Add conditional edge with routing function.
 
@@ -205,20 +203,12 @@ class GraphFactory:
         graph.add_conditional_edges(
             source=edge.source,
             path=routing_fn,
-            path_map={
-                edge.target: edge.target,
-                edge.source: edge.source,
-                END: END
-            }
+            path_map={edge.target: edge.target, edge.source: edge.source, END: END},
         )
 
         logger.debug(f"Added conditional edge: {edge.source} → {edge.target}")
 
-    def add_edges(
-        self,
-        graph: StateGraph,
-        loop: LoopPattern
-    ) -> None:
+    def add_edges(self, graph: StateGraph, loop: LoopPattern) -> None:
         """
         Add all edges from loop.topology.edges.
 
@@ -241,11 +231,7 @@ class GraphFactory:
                 logger.error(f"Failed to add edge {edge.source} → {edge.target}: {e}")
                 raise
 
-    def set_entry_point(
-        self,
-        graph: StateGraph,
-        loop: LoopPattern
-    ) -> None:
+    def set_entry_point(self, graph: StateGraph, loop: LoopPattern) -> None:
         """
         Set the entry node for the graph.
 
@@ -257,11 +243,7 @@ class GraphFactory:
         graph.set_entry_point(entry_node)
         logger.debug(f"Set entry point: {entry_node}")
 
-    def add_exit_conditions(
-        self,
-        graph: StateGraph,
-        loop: LoopPattern
-    ) -> None:
+    def add_exit_conditions(self, graph: StateGraph, loop: LoopPattern) -> None:
         """
         Add conditional edges to END for each exit condition from YAML.
 
@@ -323,7 +305,9 @@ class GraphFactory:
                                 # Parse the condition string and evaluate directly
                                 if "state.meta.current_tu.status" in condition_str:
                                     # Example: state.meta.current_tu.status == 'completed'
-                                    target_lifecycle = condition_str.split("==")[1].strip().strip("'\"")
+                                    target_lifecycle = (
+                                        condition_str.split("==")[1].strip().strip("'\"")
+                                    )
                                     if state.get("tu_lifecycle") == target_lifecycle:
                                         logger.info(
                                             f"Exit condition met: {exit_cond.name} "
@@ -374,13 +358,7 @@ class GraphFactory:
 
                 # Add conditional edge
                 # Note: We only map to END because exit nodes shouldn't loop back
-                graph.add_conditional_edges(
-                    source=exit_node,
-                    path=routing_fn,
-                    path_map={
-                        END: END
-                    }
-                )
+                graph.add_conditional_edges(source=exit_node, path=routing_fn, path_map={END: END})
 
                 logger.debug(f"Added exit condition routing from: {exit_node}")
 
@@ -411,11 +389,7 @@ class GraphFactory:
             logger.error(f"Graph compilation failed: {e}")
             raise
 
-    def create_loop_graph(
-        self,
-        loop_id: str,
-        context: dict[str, Any | None] = None
-    ) -> Any:
+    def create_loop_graph(self, loop_id: str, context: dict[str, Any | None] = None) -> Any:
         """
         Complete graph creation flow.
 

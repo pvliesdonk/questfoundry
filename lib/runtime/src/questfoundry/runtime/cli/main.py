@@ -48,13 +48,13 @@ signal.signal(signal.SIGINT, cleanup_and_exit)
 app = typer.Typer(
     name="qf",
     help="QuestFoundry runtime - Natural language interface to studio production",
-    add_completion=False
+    add_completion=False,
 )
 
 # Create console for rich output (force UTF-8 for Unicode support on Windows)
 if sys.platform == "win32":
     # Reconfigure stdout to use UTF-8 encoding without closing the underlying buffer
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 console = Console()
 
 # Initialize components (lazy-loaded)
@@ -99,8 +99,7 @@ def get_showrunner() -> ShowrunnerInterface:
     global _showrunner
     if _showrunner is None:
         _showrunner = ShowrunnerInterface(
-            graph_factory=get_graph_factory(),
-            state_manager=get_state_manager()
+            graph_factory=get_graph_factory(), state_manager=get_state_manager()
         )
     return _showrunner
 
@@ -109,13 +108,23 @@ def get_showrunner() -> ShowrunnerInterface:
 # PRIMARY INTERFACE: Natural Language → Showrunner Role
 # ============================================================================
 
+
 @app.command()
 def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
-    trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
-    trace_file: str | None = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
-    provider: str | None = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
+    trace: bool = typer.Option(
+        False, "--trace", help="Enable trace mode to capture agent communication"
+    ),
+    trace_file: str | None = typer.Option(
+        None, "--trace-file", help="Write trace to file (requires --trace)"
+    ),
+    provider: str | None = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)",
+    ),
 ):
     """
     Primary interface: Talk to the Showrunner in natural language.
@@ -142,31 +151,27 @@ def ask(
             # Create output file path if trace_file specified
             output_file = Path(trace_file) if trace_file else None
 
-            trace_handler = TraceHandler(
-                output_file=output_file,
-                console=console,
-                verbose=verbose
-            )
+            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=verbose)
 
             # Register for cleanup on interrupt
             _active_trace_handlers.append(trace_handler)
 
-            console.print(Panel(
-                "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
-                "Agent-to-agent communication will be captured and displayed.\n"
-                f"{'Output: Console and file' if output_file else 'Output: Console only'}",
-                style="cyan",
-                border_style="cyan",
-                title="Trace Mode"
-            ))
+            console.print(
+                Panel(
+                    "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
+                    "Agent-to-agent communication will be captured and displayed.\n"
+                    f"{'Output: Console and file' if output_file else 'Output: Console only'}",
+                    style="cyan",
+                    border_style="cyan",
+                    title="Trace Mode",
+                )
+            )
             console.print()
 
         # Display customer message
-        console.print(Panel(
-            f"[bold]Your Request:[/bold]\n{message}",
-            style="blue",
-            border_style="blue"
-        ))
+        console.print(
+            Panel(f"[bold]Your Request:[/bold]\n{message}", style="blue", border_style="blue")
+        )
 
         # Get Showrunner with trace handler and/or provider preference
         if trace_handler or provider:
@@ -174,8 +179,7 @@ def ask(
             state_manager = get_state_manager(trace_handler=trace_handler)
             graph_factory = GraphFactory(state_manager=state_manager, preferred_provider=provider)
             showrunner = ShowrunnerInterface(
-                graph_factory=graph_factory,
-                state_manager=state_manager
+                graph_factory=graph_factory, state_manager=state_manager
             )
         else:
             showrunner = get_showrunner()
@@ -188,12 +192,14 @@ def ask(
 
         # Display result in plain language (no jargon)
         if result.success:
-            console.print(Panel(
-                result.plain_language_response,
-                style="green",
-                title="✓ Complete",
-                border_style="green"
-            ))
+            console.print(
+                Panel(
+                    result.plain_language_response,
+                    style="green",
+                    title="✓ Complete",
+                    border_style="green",
+                )
+            )
 
             # Show next steps if available
             if result.suggested_next_steps:
@@ -202,12 +208,11 @@ def ask(
                     console.print(f"  • {step}")
 
         else:
-            console.print(Panel(
-                result.plain_language_response,
-                style="red",
-                title="✗ Issue",
-                border_style="red"
-            ))
+            console.print(
+                Panel(
+                    result.plain_language_response, style="red", title="✗ Issue", border_style="red"
+                )
+            )
             if result.error:
                 logger.error(f"Execution error: {result.error}")
             sys.exit(1)
@@ -222,15 +227,27 @@ def ask(
 # SECONDARY INTERFACE: Debug Mode (Direct Loop Invocation)
 # ============================================================================
 
+
 @app.command()
 def loop(
     loop_id: str = typer.Argument(..., help="Loop ID (e.g., story_spark, hook_harvest)"),
     context: str | None = typer.Option(None, "--context", "-c", help="Context as key=value pairs"),
-    mode: str = typer.Option("workshop", "--mode", "-m", help="Execution mode (workshop or production)"),
+    mode: str = typer.Option(
+        "workshop", "--mode", "-m", help="Execution mode (workshop or production)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
-    trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
-    trace_file: str | None = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
-    provider: str | None = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
+    trace: bool = typer.Option(
+        False, "--trace", help="Enable trace mode to capture agent communication"
+    ),
+    trace_file: str | None = typer.Option(
+        None, "--trace-file", help="Write trace to file (requires --trace)"
+    ),
+    provider: str | None = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)",
+    ),
 ):
     """
     Debug/audit mode: Directly invoke a loop (bypasses Showrunner).
@@ -247,16 +264,18 @@ def loop(
     """
     try:
         # Display warning banner
-        console.print(Panel(
-            "[yellow bold]⚠️  Debug Mode: Bypassing Showrunner Mandate[/yellow bold]\n\n"
-            "You are directly invoking internal studio operations.\n"
-            "This is useful for debugging, testing, and auditing, but should not be\n"
-            "your primary workflow.\n\n"
-            "[dim]For normal use, prefer: qf ask \"...\"[/dim]",
-            style="yellow",
-            border_style="yellow",
-            title="Debug Mode"
-        ))
+        console.print(
+            Panel(
+                "[yellow bold]⚠️  Debug Mode: Bypassing Showrunner Mandate[/yellow bold]\n\n"
+                "You are directly invoking internal studio operations.\n"
+                "This is useful for debugging, testing, and auditing, but should not be\n"
+                "your primary workflow.\n\n"
+                '[dim]For normal use, prefer: qf ask "..."[/dim]',
+                style="yellow",
+                border_style="yellow",
+                title="Debug Mode",
+            )
+        )
 
         # Parse context string into dict
         context_dict = {}
@@ -287,23 +306,21 @@ def loop(
             # Create output file path if trace_file specified
             output_file = Path(trace_file) if trace_file else None
 
-            trace_handler = TraceHandler(
-                output_file=output_file,
-                console=console,
-                verbose=verbose
-            )
+            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=verbose)
 
             # Register for cleanup on interrupt
             _active_trace_handlers.append(trace_handler)
 
-            console.print(Panel(
-                "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
-                "Agent-to-agent communication will be captured and displayed.\n"
-                f"{'Output: Console and file' if output_file else 'Output: Console only'}",
-                style="cyan",
-                border_style="cyan",
-                title="Trace Mode"
-            ))
+            console.print(
+                Panel(
+                    "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
+                    "Agent-to-agent communication will be captured and displayed.\n"
+                    f"{'Output: Console and file' if output_file else 'Output: Console only'}",
+                    style="cyan",
+                    border_style="cyan",
+                    title="Trace Mode",
+                )
+            )
             console.print()
 
         # Initialize state with trace handler
@@ -328,16 +345,18 @@ def loop(
             trace_handler.close()
 
         # Display results (technical format for debug mode)
-        console.print(Panel(
-            f"[bold green]✓ Loop completed[/bold green]\n\n"
-            f"[bold]TU ID:[/bold] {final_state['tu_id']}\n"
-            f"[bold]Lifecycle:[/bold] {final_state['tu_lifecycle']}\n"
-            f"[bold]Artifacts:[/bold] {len(final_state.get('artifacts', {}))}\n"
-            f"[bold]Quality Bars:[/bold] {len(final_state.get('quality_bars', {}))}",
-            style="green",
-            border_style="green",
-            title="Execution Complete"
-        ))
+        console.print(
+            Panel(
+                f"[bold green]✓ Loop completed[/bold green]\n\n"
+                f"[bold]TU ID:[/bold] {final_state['tu_id']}\n"
+                f"[bold]Lifecycle:[/bold] {final_state['tu_lifecycle']}\n"
+                f"[bold]Artifacts:[/bold] {len(final_state.get('artifacts', {}))}\n"
+                f"[bold]Quality Bars:[/bold] {len(final_state.get('quality_bars', {}))}",
+                style="green",
+                border_style="green",
+                title="Execution Complete",
+            )
+        )
 
         # Show verbose info if requested
         if verbose:
@@ -360,6 +379,7 @@ def loop(
 # UTILITY COMMANDS: Discovery and Testing
 # ============================================================================
 
+
 @app.command()
 def list_loops():
     """List all available loops (for debug mode)."""
@@ -376,7 +396,7 @@ def list_loops():
             "style_tune_up",
             "binding_run",
             "art_touch_up",
-            "translation_pass"
+            "translation_pass",
         ]
 
         graph_factory = get_graph_factory()
@@ -401,10 +421,22 @@ def list_roles():
         console.print("[bold]Available Roles:[/bold]\n")
 
         roles = [
-            "plotwright", "scene_smith", "gatekeeper", "style_lead",
-            "lore_weaver", "codex_curator", "audio_producer", "audio_director",
-            "art_director", "illustrator", "player_narrator", "researcher",
-            "translator", "book_binder", "export_service", "showrunner"
+            "plotwright",
+            "scene_smith",
+            "gatekeeper",
+            "style_lead",
+            "lore_weaver",
+            "codex_curator",
+            "audio_producer",
+            "audio_director",
+            "art_director",
+            "illustrator",
+            "player_narrator",
+            "researcher",
+            "translator",
+            "book_binder",
+            "export_service",
+            "showrunner",
         ]
 
         graph_factory = get_graph_factory()
@@ -423,7 +455,7 @@ def list_roles():
 @app.command()
 def test_schema(
     definition_type: str = typer.Argument("role", help="Type: role or loop"),
-    definition_id: str = typer.Argument(..., help="Definition ID (e.g., plotwright)")
+    definition_id: str = typer.Argument(..., help="Definition ID (e.g., plotwright)"),
 ):
     """Test loading and validating a definition."""
     try:
@@ -458,9 +490,7 @@ def test_schema(
 
 
 @app.command()
-def test_graph(
-    loop_id: str = typer.Argument(..., help="Loop ID (e.g., story_spark)")
-):
+def test_graph(loop_id: str = typer.Argument(..., help="Loop ID (e.g., story_spark)")):
     """Test creating and compiling a graph."""
     try:
         console.print(f"[bold]Testing graph: {loop_id}[/bold]\n")
@@ -481,9 +511,15 @@ def test_graph(
 
 @app.command()
 def download_spec(
-    tag: str | None = typer.Option(None, "--tag", "-t", help="Specific spec version to download (e.g., spec-v1.0.0)"),
-    force: bool = typer.Option(False, "--force", "-f", help="Force re-download even if already cached"),
-    show_path: bool = typer.Option(False, "--show-path", "-p", help="Show the downloaded spec path")
+    tag: str | None = typer.Option(
+        None, "--tag", "-t", help="Specific spec version to download (e.g., spec-v1.0.0)"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force re-download even if already cached"
+    ),
+    show_path: bool = typer.Option(
+        False, "--show-path", "-p", help="Show the downloaded spec path"
+    ),
 ):
     """
     Download the latest QuestFoundry spec from GitHub releases.
@@ -518,29 +554,36 @@ def download_spec(
         version_str = tag or "latest"
         if metadata_file.exists():
             import json
+
             metadata = json.loads(metadata_file.read_text())
             version_str = metadata.get("tag", version_str)
 
         # Show success message
-        console.print(Panel(
-            f"[bold green]✓ Spec downloaded successfully[/bold green]\n\n"
-            f"[bold]Version:[/bold] {version_str}\n"
-            f"[bold]Location:[/bold] {spec_path if show_path else '~/.cache/questfoundry/spec/'}",
-            style="green",
-            border_style="green",
-            title="Download Complete"
-        ))
+        console.print(
+            Panel(
+                f"[bold green]✓ Spec downloaded successfully[/bold green]\n\n"
+                f"[bold]Version:[/bold] {version_str}\n"
+                f"[bold]Location:[/bold] {spec_path if show_path else '~/.cache/questfoundry/spec/'}",
+                style="green",
+                border_style="green",
+                title="Download Complete",
+            )
+        )
 
         console.print("\n[dim]To use the downloaded spec, set: QF_SPEC_SOURCE=download[/dim]")
-        console.print("[dim]Or use QF_SPEC_SOURCE=auto to auto-select (monorepo → bundled → download)[/dim]")
+        console.print(
+            "[dim]Or use QF_SPEC_SOURCE=auto to auto-select (monorepo → bundled → download)[/dim]"
+        )
 
     except SpecFetchError as e:
-        console.print(Panel(
-            f"[red]Failed to download spec:[/red]\n{e}",
-            style="red",
-            border_style="red",
-            title="Download Failed"
-        ))
+        console.print(
+            Panel(
+                f"[red]Failed to download spec:[/red]\n{e}",
+                style="red",
+                border_style="red",
+                title="Download Failed",
+            )
+        )
         logger.error(f"Spec download failed: {e}", exc_info=True)
         sys.exit(1)
     except Exception as e:
@@ -572,7 +615,13 @@ def version():
 
 @app.callback()
 def main(
-    verbose: int = typer.Option(0, "--verbose", "-v", count=True, help="Increase verbosity (-v: INFO, -vv: DEBUG, -vvv: full details)")
+    verbose: int = typer.Option(
+        0,
+        "--verbose",
+        "-v",
+        count=True,
+        help="Increase verbosity (-v: INFO, -vv: DEBUG, -vvv: full details)",
+    ),
 ):
     """
     QuestFoundry Runtime - Natural language interface to studio production.

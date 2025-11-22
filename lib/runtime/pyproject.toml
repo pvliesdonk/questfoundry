@@ -32,7 +32,6 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "black>=23.0",
     "ruff>=0.1",
     "mypy>=1.0",
 ]
@@ -51,7 +50,6 @@ packages = ["src/questfoundry"]
 dependencies = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "black>=23.0",
     "ruff>=0.1",
     "mypy>=1.0",
 ]
@@ -62,14 +60,10 @@ bundle = "python scripts/bundle_resources.py"
 # Run tests
 test = "pytest tests/ -v"
 test-cov = "pytest tests/ --cov=questfoundry.runtime --cov-report=term-missing"
-# Linting
+# Linting and formatting
 lint = "ruff check src/ tests/"
-format = "black src/ tests/"
+format = "ruff format src/ tests/"
 typecheck = "mypy src/"
-
-[tool.black]
-line-length = 100
-target-version = ["py311"]
 
 [tool.ruff]
 line-length = 100
@@ -85,6 +79,11 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.11"

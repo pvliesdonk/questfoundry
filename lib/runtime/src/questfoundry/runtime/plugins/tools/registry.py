@@ -38,7 +38,7 @@ class MockTool(Tool):
             "status": "success",
             "tool": self.tool_id,
             "message": f"Mock execution of {self.name}",
-            "input": kwargs
+            "input": kwargs,
         }
 
 
@@ -58,46 +58,30 @@ class ToolRegistry:
         """Register stub implementations for common tools."""
         # Image generation
         self._tools["stable_diffusion"] = MockTool(
-            "stable_diffusion",
-            "Stable Diffusion",
-            "Generate images using Stable Diffusion"
+            "stable_diffusion", "Stable Diffusion", "Generate images using Stable Diffusion"
         )
 
         # Audio synthesis
         self._tools["audio_synthesis"] = MockTool(
-            "audio_synthesis",
-            "Audio Synthesis",
-            "Generate audio/music using synthesis"
+            "audio_synthesis", "Audio Synthesis", "Generate audio/music using synthesis"
         )
 
         # Document conversion
-        self._tools["pandoc"] = MockTool(
-            "pandoc",
-            "Pandoc",
-            "Convert documents between formats"
-        )
+        self._tools["pandoc"] = MockTool("pandoc", "Pandoc", "Convert documents between formats")
 
         # Web search
         self._tools["web_search"] = MockTool(
-            "web_search",
-            "Web Search",
-            "Search the web for information"
+            "web_search", "Web Search", "Search the web for information"
         )
 
         # Lore index lookup
         self._tools["lore_index"] = MockTool(
-            "lore_index",
-            "Lore Index",
-            "Look up entries in the lore/codex index"
+            "lore_index", "Lore Index", "Look up entries in the lore/codex index"
         )
 
         logger.info(f"Registered {len(self._tools)} stub tools")
 
-    def get_tool(
-        self,
-        tool_id: str,
-        config: dict[str, Any | None] = None
-    ) -> Tool | None:
+    def get_tool(self, tool_id: str, config: dict[str, Any | None] = None) -> Tool | None:
         """
         Get tool by ID.
 
@@ -120,11 +104,7 @@ class ToolRegistry:
 
         return tool
 
-    def register_tool(
-        self,
-        tool_id: str,
-        tool: Tool
-    ) -> None:
+    def register_tool(self, tool_id: str, tool: Tool) -> None:
         """
         Register a tool implementation.
 
@@ -185,10 +165,7 @@ def get_tool_registry() -> ToolRegistry:
     return _registry
 
 
-def get_tool(
-    tool_id: str,
-    config: dict[str, Any | None] = None
-) -> Tool | None:
+def get_tool(tool_id: str, config: dict[str, Any | None] = None) -> Tool | None:
     """
     Convenience function to get tool from registry.
 

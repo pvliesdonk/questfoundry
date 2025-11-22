@@ -4,14 +4,14 @@ Integration tests for QuestFoundry runtime.
 Tests the core components against real YAML definitions.
 """
 
-import pytest
-from pathlib import Path
 
+import pytest
+
+from questfoundry.runtime.core.edge_evaluator import EdgeEvaluator
+from questfoundry.runtime.core.graph_factory import GraphFactory
+from questfoundry.runtime.core.node_factory import NodeFactory
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.core.state_manager import StateManager
-from questfoundry.runtime.core.node_factory import NodeFactory
-from questfoundry.runtime.core.graph_factory import GraphFactory
-from questfoundry.runtime.core.edge_evaluator import EdgeEvaluator
 
 
 class TestSchemaRegistry:
@@ -42,10 +42,22 @@ class TestSchemaRegistry:
     def test_load_all_roles(self, registry):
         """Test loading all 16 roles."""
         role_ids = [
-            "plotwright", "scene_smith", "gatekeeper", "style_lead",
-            "lore_weaver", "codex_curator", "audio_producer", "audio_director",
-            "art_director", "illustrator", "player_narrator", "researcher",
-            "translator", "book_binder", "export_service", "showrunner"
+            "plotwright",
+            "scene_smith",
+            "gatekeeper",
+            "style_lead",
+            "lore_weaver",
+            "codex_curator",
+            "audio_producer",
+            "audio_director",
+            "art_director",
+            "illustrator",
+            "player_narrator",
+            "researcher",
+            "translator",
+            "book_binder",
+            "export_service",
+            "showrunner",
         ]
 
         for role_id in role_ids:
@@ -56,9 +68,16 @@ class TestSchemaRegistry:
     def test_load_all_loops(self, registry):
         """Test loading all 10 loops."""
         loop_ids = [
-            "story_spark", "hook_harvest", "lore_deepening", "codex_expansion",
-            "audio_pass", "narration_dry_run", "style_tune_up", "binding_run",
-            "art_touch_up", "translation_pass"
+            "story_spark",
+            "hook_harvest",
+            "lore_deepening",
+            "codex_expansion",
+            "audio_pass",
+            "narration_dry_run",
+            "style_tune_up",
+            "binding_run",
+            "art_touch_up",
+            "translation_pass",
         ]
 
         for loop_id in loop_ids:
@@ -77,8 +96,7 @@ class TestStateManager:
     def test_initialize_state(self, manager):
         """Test state initialization."""
         state = manager.initialize_state(
-            loop_id="story_spark",
-            context={"scene_text": "cargo bay confrontation"}
+            loop_id="story_spark", context={"scene_text": "cargo bay confrontation"}
         )
 
         assert state is not None
@@ -89,10 +107,7 @@ class TestStateManager:
 
     def test_update_state(self, manager):
         """Test state updates."""
-        state = manager.initialize_state(
-            loop_id="story_spark",
-            context={}
-        )
+        state = manager.initialize_state(loop_id="story_spark", context={})
 
         new_state = manager.update_state(state, {"current_node": "plotwright"})
 
@@ -101,10 +116,7 @@ class TestStateManager:
 
     def test_transition_tu_valid(self, manager):
         """Test valid TU transitions."""
-        state = manager.initialize_state(
-            loop_id="story_spark",
-            context={}
-        )
+        state = manager.initialize_state(loop_id="story_spark", context={})
 
         new_state = manager.transition_tu(state, "stabilizing")
         assert new_state["tu_lifecycle"] == "stabilizing"
@@ -114,10 +126,7 @@ class TestStateManager:
 
     def test_transition_tu_invalid(self, manager):
         """Test invalid TU transitions."""
-        state = manager.initialize_state(
-            loop_id="story_spark",
-            context={}
-        )
+        state = manager.initialize_state(loop_id="story_spark", context={})
 
         # Try invalid transition
         with pytest.raises(ValueError):
@@ -125,10 +134,7 @@ class TestStateManager:
 
     def test_add_artifact(self, manager):
         """Test adding artifacts to state."""
-        state = manager.initialize_state(
-            loop_id="story_spark",
-            context={}
-        )
+        state = manager.initialize_state(loop_id="story_spark", context={})
 
         artifact = {
             "artifact_type": "scene",
@@ -137,7 +143,7 @@ class TestStateManager:
             "timestamp": "2025-11-20T10:35:00Z",
             "tu_id": state["tu_id"],
             "state_key": "artifacts.hot.scenes.test",
-            "metadata": {}
+            "metadata": {},
         }
 
         new_state = manager.add_artifact(state, artifact)
@@ -147,29 +153,26 @@ class TestStateManager:
 
     def test_quality_bars(self, manager):
         """Test quality bar updates."""
-        state = manager.initialize_state(
-            loop_id="story_spark",
-            context={}
-        )
+        state = manager.initialize_state(loop_id="story_spark", context={})
 
         # Update bars
-        new_state = manager.update_quality_bars(state, {
-            "Integrity": {
-                "status": "green",
-                "feedback": "Story logic is sound",
-                "checked_by": "gatekeeper",
-                "timestamp": "2025-11-20T10:40:00Z"
-            }
-        })
+        new_state = manager.update_quality_bars(
+            state,
+            {
+                "Integrity": {
+                    "status": "green",
+                    "feedback": "Story logic is sound",
+                    "checked_by": "gatekeeper",
+                    "timestamp": "2025-11-20T10:40:00Z",
+                }
+            },
+        )
 
         assert new_state["quality_bars"]["Integrity"]["status"] == "green"
 
     def test_bar_threshold_all_green(self, manager):
         """Test all_green threshold."""
-        state = manager.initialize_state(
-            loop_id="story_spark",
-            context={}
-        )
+        state = manager.initialize_state(loop_id="story_spark", context={})
 
         # Mark all bars green
         bars = {}
@@ -178,15 +181,13 @@ class TestStateManager:
                 "status": "green",
                 "feedback": None,
                 "checked_by": "gatekeeper",
-                "timestamp": None
+                "timestamp": None,
             }
 
         new_state = manager.update_quality_bars(state, bars)
 
         result = manager.check_bar_threshold(
-            new_state,
-            ["Integrity", "Reachability", "Nonlinearity"],
-            "all_green"
+            new_state, ["Integrity", "Reachability", "Nonlinearity"], "all_green"
         )
 
         assert result is True
@@ -232,7 +233,7 @@ class TestNodeFactory:
             "error": None,
             "retry_count": 0,
             "created_at": "2025-11-20T10:30:00Z",
-            "updated_at": "2025-11-20T10:30:00Z"
+            "updated_at": "2025-11-20T10:30:00Z",
         }
 
         result_state = node(state)
@@ -265,12 +266,12 @@ class TestEdgeEvaluator:
             "error": None,
             "retry_count": 0,
             "created_at": "2025-11-20T10:30:00Z",
-            "updated_at": "2025-11-20T10:30:00Z"
+            "updated_at": "2025-11-20T10:30:00Z",
         }
 
         condition = {
             "evaluator": "python_expression",
-            "expression": "state['tu_lifecycle'] == 'hot-proposed'"
+            "expression": "state['tu_lifecycle'] == 'hot-proposed'",
         }
 
         result = evaluator.evaluate_condition(condition, state)
@@ -286,8 +287,18 @@ class TestEdgeEvaluator:
             "loop_context": {},
             "artifacts": {},
             "quality_bars": {
-                "Integrity": {"status": "green", "feedback": None, "checked_by": None, "timestamp": None},
-                "Style": {"status": "green", "feedback": None, "checked_by": None, "timestamp": None}
+                "Integrity": {
+                    "status": "green",
+                    "feedback": None,
+                    "checked_by": None,
+                    "timestamp": None,
+                },
+                "Style": {
+                    "status": "green",
+                    "feedback": None,
+                    "checked_by": None,
+                    "timestamp": None,
+                },
             },
             "messages": [],
             "snapshot_ref": None,
@@ -295,13 +306,13 @@ class TestEdgeEvaluator:
             "error": None,
             "retry_count": 0,
             "created_at": "2025-11-20T10:30:00Z",
-            "updated_at": "2025-11-20T10:30:00Z"
+            "updated_at": "2025-11-20T10:30:00Z",
         }
 
         condition = {
             "evaluator": "bar_threshold",
             "bars_checked": ["Integrity", "Style"],
-            "threshold": "all_green"
+            "threshold": "all_green",
         }
 
         result = evaluator.evaluate_condition(condition, state)
@@ -331,19 +342,23 @@ class TestGraphFactory:
 
     def test_create_loop_graph(self, factory):
         """Test creating a graph from loop."""
-        graph = factory.create_loop_graph(
-            loop_id="story_spark",
-            context={"scene_text": "test"}
-        )
+        graph = factory.create_loop_graph(loop_id="story_spark", context={"scene_text": "test"})
 
         assert graph is not None
 
     def test_create_all_loops(self, factory):
         """Test creating graphs for all loops."""
         loop_ids = [
-            "story_spark", "hook_harvest", "lore_deepening", "codex_expansion",
-            "audio_pass", "narration_dry_run", "style_tune_up", "binding_run",
-            "art_touch_up", "translation_pass"
+            "story_spark",
+            "hook_harvest",
+            "lore_deepening",
+            "codex_expansion",
+            "audio_pass",
+            "narration_dry_run",
+            "style_tune_up",
+            "binding_run",
+            "art_touch_up",
+            "translation_pass",
         ]
 
         for loop_id in loop_ids:

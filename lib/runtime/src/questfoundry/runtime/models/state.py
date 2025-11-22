@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 class Artifact(TypedDict):
     """Single artifact in state."""
+
     artifact_type: str  # scene, character, lore_entry, illustration, etc.
     content: str | dict[str, Any]  # Actual artifact content
     role_id: str  # Role that created it
@@ -21,6 +22,7 @@ class Artifact(TypedDict):
 
 class BarStatus(TypedDict):
     """Quality bar status."""
+
     status: Literal["green", "yellow", "red", "not_checked"]
     feedback: str | None
     checked_by: str | None  # Role ID of checker (usually gatekeeper)
@@ -29,6 +31,7 @@ class BarStatus(TypedDict):
 
 class Message(TypedDict):
     """Protocol message between roles."""
+
     sender: str  # Role ID
     receiver: str  # Role ID or "broadcast"
     intent: str  # Protocol intent (e.g., "request_review")
@@ -48,14 +51,10 @@ class StudioState(TypedDict):
         - messages: Concatenate lists (all messages preserved)
         - quality_bars: Merge dicts (later values win)
     """
+
     # Core identity
     tu_id: str  # Trace Unit ID (e.g., "TU-2025-042")
-    tu_lifecycle: Literal[
-        "hot-proposed",
-        "stabilizing",
-        "gatecheck",
-        "cold-merged"
-    ]
+    tu_lifecycle: Literal["hot-proposed", "stabilizing", "gatecheck", "cold-merged"]
 
     # Execution context
     current_node: str  # Currently executing role ID
@@ -91,7 +90,7 @@ QUALITY_BARS = [
     "Style",
     "Determinism",
     "Presentation",
-    "Accessibility"
+    "Accessibility",
 ]
 
 # Valid lifecycle transitions
@@ -99,5 +98,5 @@ VALID_TRANSITIONS = {
     "hot-proposed": ["stabilizing"],
     "stabilizing": ["gatecheck", "hot-proposed"],
     "gatecheck": ["stabilizing", "cold-merged"],
-    "cold-merged": []  # Terminal state
+    "cold-merged": [],  # Terminal state
 }

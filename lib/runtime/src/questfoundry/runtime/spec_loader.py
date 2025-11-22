@@ -21,8 +21,7 @@ try:
 except ImportError:
     # Python 3.11 should have this, but provide a clear error
     raise ImportError(
-        "importlib.resources.files requires Python 3.9+. "
-        "Please upgrade to Python 3.11 or later."
+        "importlib.resources.files requires Python 3.9+. Please upgrade to Python 3.11 or later."
     )
 
 SpecLayer = Literal["schemas", "protocol", "definitions"]
@@ -127,9 +126,7 @@ def load_spec_resource(
     if allow_download:
         # TODO: Implement download from GitHub releases
         # This would use questfoundry_compiler.spec_fetcher
-        raise SpecLoadError(
-            f"Download mode not yet implemented for {layer}/{resource_path}"
-        )
+        raise SpecLoadError(f"Download mode not yet implemented for {layer}/{resource_path}")
 
     # All modes failed
     raise SpecLoadError(

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class StateManager:
     """Manage StudioState lifecycle and mutations throughout loop execution."""
 
-    def __init__(self, trace_handler: "TraceHandler" | None = None):
+    def __init__(self, trace_handler: TraceHandler | None = None):
         """
         Initialize state manager.
 
@@ -52,10 +52,7 @@ class StateManager:
         return f"TU-{year}-{seq:03d}"
 
     def initialize_state(
-        self,
-        loop_id: str,
-        context: dict[str, Any],
-        tu_id: str | None = None
+        self, loop_id: str, context: dict[str, Any], tu_id: str | None = None
     ) -> StudioState:
         """
         Create fresh StudioState for loop execution.
@@ -87,7 +84,7 @@ class StateManager:
                 "status": "not_checked",
                 "feedback": None,
                 "checked_by": None,
-                "timestamp": None
+                "timestamp": None,
             }
 
         state: StudioState = {
@@ -104,17 +101,13 @@ class StateManager:
             "error": None,
             "retry_count": 0,
             "created_at": now,
-            "updated_at": now
+            "updated_at": now,
         }
 
         logger.info(f"Initialized state for loop {loop_id}: TU {tu_id}")
         return state
 
-    def update_state(
-        self,
-        state: StudioState,
-        updates: dict[str, Any]
-    ) -> StudioState:
+    def update_state(self, state: StudioState, updates: dict[str, Any]) -> StudioState:
         """
         Apply updates to state, maintaining immutability.
 
@@ -157,11 +150,7 @@ class StateManager:
 
         return new_state
 
-    def transition_tu(
-        self,
-        state: StudioState,
-        new_lifecycle: str
-    ) -> StudioState:
+    def transition_tu(self, state: StudioState, new_lifecycle: str) -> StudioState:
         """
         Transition TU to new lifecycle stage.
 
@@ -194,25 +183,16 @@ class StateManager:
                 f"Valid transitions from {current}: {VALID_TRANSITIONS.get(current, [])}"
             )
 
-        new_state = self.update_state(
-            state,
-            {"tu_lifecycle": new_lifecycle}
-        )
+        new_state = self.update_state(state, {"tu_lifecycle": new_lifecycle})
 
         # Log transition
         message: Message = {
             "sender": "system",
             "receiver": "broadcast",
             "intent": "lifecycle_transition",
-            "payload": {
-                "from": current,
-                "to": new_lifecycle
-            },
+            "payload": {"from": current, "to": new_lifecycle},
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "envelope": {
-                "tu_id": state["tu_id"],
-                "snapshot_ref": state.get("snapshot_ref")
-            }
+            "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
         new_state = self.add_message(new_state, message)
@@ -220,11 +200,7 @@ class StateManager:
         logger.info(f"TU {state['tu_id']} transitioned: {current} → {new_lifecycle}")
         return new_state
 
-    def add_artifact(
-        self,
-        state: StudioState,
-        artifact: dict[str, Any]
-    ) -> StudioState:
+    def add_artifact(self, state: StudioState, artifact: dict[str, Any]) -> StudioState:
         """
         Add new artifact to state.
 
@@ -245,29 +221,16 @@ class StateManager:
         artifact_type = artifact.get("artifact_type", "unknown")
 
         # Add artifact
-        new_state = self.update_state(
-            state,
-            {
-                "artifacts": {
-                    artifact_id: artifact
-                }
-            }
-        )
+        new_state = self.update_state(state, {"artifacts": {artifact_id: artifact}})
 
         # Log message
         message: Message = {
             "sender": artifact.get("role_id", "unknown"),
             "receiver": "broadcast",
             "intent": "artifact_created",
-            "payload": {
-                "artifact_id": artifact_id,
-                "artifact_type": artifact_type
-            },
+            "payload": {"artifact_id": artifact_id, "artifact_type": artifact_type},
             "timestamp": artifact.get("timestamp", datetime.utcnow().isoformat() + "Z"),
-            "envelope": {
-                "tu_id": state["tu_id"],
-                "snapshot_ref": state.get("snapshot_ref")
-            }
+            "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
         new_state = self.add_message(new_state, message)
@@ -276,9 +239,7 @@ class StateManager:
         return new_state
 
     def update_quality_bars(
-        self,
-        state: StudioState,
-        bar_results: dict[str, BarStatus]
+        self, state: StudioState, bar_results: dict[str, BarStatus]
     ) -> StudioState:
         """
         Update quality bar status.
@@ -310,10 +271,7 @@ class StateManager:
                 raise ValueError(f"Invalid bar status: {status}")
 
         # Update quality bars
-        new_state = self.update_state(
-            state,
-            {"quality_bars": bar_results}
-        )
+        new_state = self.update_state(state, {"quality_bars": bar_results})
 
         # Log message
         message: Message = {
@@ -322,13 +280,10 @@ class StateManager:
             "intent": "quality_check",
             "payload": {
                 "bars_checked": list(bar_results.keys()),
-                "statuses": {k: v.get("status") for k, v in bar_results.items()}
+                "statuses": {k: v.get("status") for k, v in bar_results.items()},
             },
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "envelope": {
-                "tu_id": state["tu_id"],
-                "snapshot_ref": state.get("snapshot_ref")
-            }
+            "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
         new_state = self.add_message(new_state, message)
@@ -336,11 +291,7 @@ class StateManager:
         logger.debug(f"Updated quality bars: {list(bar_results.keys())}")
         return new_state
 
-    def add_message(
-        self,
-        state: StudioState,
-        message: Message
-    ) -> StudioState:
+    def add_message(self, state: StudioState, message: Message) -> StudioState:
         """
         Add protocol message to state.
 
@@ -372,10 +323,7 @@ class StateManager:
             except Exception as e:
                 logger.warning(f"Trace handler error: {e}")
 
-        return self.update_state(
-            state,
-            {"messages": [message]}
-        )
+        return self.update_state(state, {"messages": [message]})
 
     def snapshot_state(self, state: StudioState) -> dict[str, Any]:
         """
@@ -395,17 +343,14 @@ class StateManager:
             "snapshot_id": snapshot_id,
             "tu_id": state["tu_id"],
             "created_at": datetime.utcnow().isoformat() + "Z",
-            "state": copy.deepcopy(state)
+            "state": copy.deepcopy(state),
         }
 
         logger.info(f"Created snapshot: {snapshot_id}")
         return snapshot
 
     def check_bar_threshold(
-        self,
-        state: StudioState,
-        bars_checked: list[str],
-        threshold: str
+        self, state: StudioState, bars_checked: list[str], threshold: str
     ) -> bool:
         """
         Check quality bars against threshold.

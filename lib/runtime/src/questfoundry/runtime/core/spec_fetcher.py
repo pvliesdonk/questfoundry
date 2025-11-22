@@ -175,9 +175,7 @@ def get_cached_spec_path(tag: str | None = None, cache_dir: Path | None = None) 
 
 
 def download_latest_release_spec(
-    cache_dir: Path | None = None,
-    tag: str | None = None,
-    force: bool = False
+    cache_dir: Path | None = None, tag: str | None = None, force: bool = False
 ) -> Path:
     """
     Download the latest QuestFoundry spec release from GitHub.

@@ -34,10 +34,12 @@ class RoleProfile:
         if not self.model_config:
             self.model_config = {
                 "provider": llm_config.get("provider", "auto"),
-                "model_tier": llm_config.get("model_tier", "creative-writing"),  # Changed: use valid tier
+                "model_tier": llm_config.get(
+                    "model_tier", "creative-writing"
+                ),  # Changed: use valid tier
                 "model": llm_config.get("model"),  # Backward compat (specific model name)
                 "temperature": llm_config.get("temperature", 0.7),
-                "max_tokens": llm_config.get("max_tokens", 4096)
+                "max_tokens": llm_config.get("max_tokens", 4096),
             }
 
         # Protocol info

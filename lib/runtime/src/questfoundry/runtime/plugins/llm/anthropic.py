@@ -19,7 +19,7 @@ class AnthropicAdapter:
         "claude-3-5-sonnet-20241022",
         "claude-3-5-haiku-20241022",
         "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229"
+        "claude-3-sonnet-20240229",
     ]
 
     def __init__(self, api_key: str | None = None):
@@ -34,11 +34,11 @@ class AnthropicAdapter:
         # Defer LangChain import to avoid hard dependency
         try:
             from langchain_anthropic import ChatAnthropic
+
             self.ChatAnthropic = ChatAnthropic
         except ImportError:
             raise ImportError(
-                "langchain-anthropic not installed. "
-                "Install with: pip install langchain-anthropic"
+                "langchain-anthropic not installed. Install with: pip install langchain-anthropic"
             )
 
     def get_llm(
@@ -46,7 +46,7 @@ class AnthropicAdapter:
         model: str = "claude-3-5-sonnet-20241022",
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Any:
         """
         Get LangChain ChatModel instance for Claude.
@@ -65,8 +65,7 @@ class AnthropicAdapter:
         """
         if model not in self.SUPPORTED_MODELS:
             raise ValueError(
-                f"Model {model} not supported. "
-                f"Supported models: {self.SUPPORTED_MODELS}"
+                f"Model {model} not supported. Supported models: {self.SUPPORTED_MODELS}"
             )
 
         try:
@@ -75,7 +74,7 @@ class AnthropicAdapter:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_key=self.api_key,
-                **kwargs
+                **kwargs,
             )
 
             logger.info(f"Created ChatAnthropic instance: {model}")
@@ -133,7 +132,7 @@ def get_llm(
     model: str = "claude-3-5-sonnet-20241022",
     temperature: float = 0.7,
     max_tokens: int = 4096,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Any:
     """
     Convenience function to get LLM instance.
@@ -148,9 +147,4 @@ def get_llm(
         LangChain ChatModel instance
     """
     adapter = get_anthropic_adapter()
-    return adapter.get_llm(
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        **kwargs
-    )
+    return adapter.get_llm(model=model, temperature=temperature, max_tokens=max_tokens, **kwargs)

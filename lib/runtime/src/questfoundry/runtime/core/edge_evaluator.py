@@ -21,11 +21,7 @@ logger = logging.getLogger(__name__)
 class EdgeEvaluator:
     """Evaluate conditional edges based on state to determine next node."""
 
-    def evaluate_condition(
-        self,
-        condition: dict[str, Any],
-        state: StudioState
-    ) -> bool:
+    def evaluate_condition(self, condition: dict[str, Any], state: StudioState) -> bool:
         """
         Evaluate condition based on evaluator type.
 
@@ -57,11 +53,7 @@ class EdgeEvaluator:
         else:
             raise ValueError(f"Unknown evaluator: {evaluator_type}")
 
-    def evaluate_python_expression(
-        self,
-        expression: str,
-        state: StudioState
-    ) -> bool:
+    def evaluate_python_expression(self, expression: str, state: StudioState) -> bool:
         """
         Safely evaluate Python expression against state using asteval.
 
@@ -82,7 +74,7 @@ class EdgeEvaluator:
             # Create safe interpreter
             aeval = Interpreter(
                 usersyms=None,  # No user symbols
-                builtins_={}  # No builtins by default
+                builtins_={},  # No builtins by default
             )
 
             # Add safe context variables
@@ -94,7 +86,7 @@ class EdgeEvaluator:
                 "error": state.get("error"),
                 "retry_count": state.get("retry_count", 0),
                 "messages": state.get("messages", []),
-                "loop_context": state.get("loop_context", {})
+                "loop_context": state.get("loop_context", {}),
             }
 
             # Add to interpreter
@@ -117,11 +109,7 @@ class EdgeEvaluator:
             logger.warning(f"Error: {e}")
             return False
 
-    def evaluate_json_logic(
-        self,
-        rules: dict[str, Any],
-        state: StudioState
-    ) -> bool:
+    def evaluate_json_logic(self, rules: dict[str, Any], state: StudioState) -> bool:
         """
         Evaluate JSON Logic rules against state.
 
@@ -145,7 +133,7 @@ class EdgeEvaluator:
                 "messages": state.get("messages", []),
                 "loop_context": state.get("loop_context", {}),
                 "artifacts_count": len(state.get("artifacts", {})),
-                "message_count": len(state.get("messages", []))
+                "message_count": len(state.get("messages", [])),
             }
 
             # Apply rules
@@ -158,10 +146,7 @@ class EdgeEvaluator:
             return False
 
     def evaluate_bar_threshold(
-        self,
-        bars_checked: list[str],
-        threshold: str,
-        state: StudioState
+        self, bars_checked: list[str], threshold: str, state: StudioState
     ) -> bool:
         """
         Evaluate quality bars against threshold.
@@ -213,15 +198,12 @@ class EdgeEvaluator:
             raise ValueError(f"Unknown threshold: {threshold}")
 
         logger.debug(
-            f"Bar threshold check ({threshold}): {bars_checked} → {result} "
-            f"(statuses: {statuses})"
+            f"Bar threshold check ({threshold}): {bars_checked} → {result} (statuses: {statuses})"
         )
         return result
 
     def create_routing_function(
-        self,
-        edge: dict[str, Any],
-        max_retries: int = 3
+        self, edge: dict[str, Any], max_retries: int = 3
     ) -> Callable[[StudioState], str]:
         """
         Create routing function for LangGraph conditional edge.
@@ -237,6 +219,7 @@ class EdgeEvaluator:
         Returns:
             Routing function that takes state and returns next node ID
         """
+
         def routing_function(state: StudioState) -> str:
             condition = edge.get("condition", {})
             source = edge.get("source")
