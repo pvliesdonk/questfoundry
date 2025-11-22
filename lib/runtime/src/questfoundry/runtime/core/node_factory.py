@@ -503,3 +503,117 @@ class NodeFactory:
                 }
 
         return role_node
+
+    def create_multi_role_node(
+        self,
+        sub_nodes: list[dict[str, Any]],
+        node_id: str
+    ) -> Callable[[StudioState], dict[str, Any]]:
+        """
+        Create a multi-role parallel execution node.
+
+        For nodes with role="Multi" and parallel_execution=true, this creates
+        a wrapper that executes multiple roles in parallel and merges their results.
+
+        Args:
+            sub_nodes: List of sub-node definitions, each with 'role' and 'task'
+            node_id: Node identifier for logging
+
+        Returns:
+            Runnable node function that executes roles in parallel
+
+        Example sub_nodes structure:
+            [
+                {"role": "Lore Weaver", "task": "Review narrative hooks..."},
+                {"role": "Plotwright", "task": "Review structural impact..."}
+            ]
+        """
+        import concurrent.futures
+
+        # Load all role nodes upfront
+        role_execution_pairs = []
+        for sub_node in sub_nodes:
+            role_name = sub_node.get("role", "")
+            task = sub_node.get("task", "")
+
+            # Convert role name to role_id (lowercase, replace spaces with underscores)
+            role_id = role_name.lower().replace(" ", "_")
+
+            try:
+                # Create role node for this sub-role
+                role_node = self.create_role_node(role_id)
+                role_execution_pairs.append((role_name, role_id, role_node, task))
+                logger.debug(f"Loaded role for parallel execution: {role_name} ({role_id})")
+            except Exception as e:
+                logger.warning(f"Failed to load role {role_name} ({role_id}) for parallel node: {e}")
+                # Continue with other roles even if one fails to load
+
+        if not role_execution_pairs:
+            logger.error(f"No valid roles loaded for multi-role node {node_id}")
+            # Return a placeholder that logs the error
+            def error_node(state: StudioState) -> dict[str, Any]:
+                return {"error": f"Multi-role node {node_id} has no valid roles"}
+            return error_node
+
+        def multi_role_node(state: StudioState) -> dict[str, Any]:
+            """Execute multiple roles in parallel and merge results."""
+            logger.info(f"[bold cyan]Executing parallel node:[/bold cyan] {node_id} with {len(role_execution_pairs)} roles")
+
+            # Execute all roles in parallel using ThreadPoolExecutor
+            results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(role_execution_pairs)) as executor:
+                # Submit all role executions
+                futures = {}
+                for role_name, role_id, role_node, task in role_execution_pairs:
+                    logger.debug(f"Submitting parallel task for {role_name}: {task[:80]}...")
+                    future = executor.submit(role_node, state)
+                    futures[future] = (role_name, role_id)
+
+                # Collect results as they complete
+                for future in concurrent.futures.as_completed(futures, timeout=600):  # 10 min total timeout
+                    role_name, role_id = futures[future]
+                    try:
+                        result = future.result(timeout=300)  # 5 min per role
+                        logger.info(f"[green]✓[/green] {role_name} completed in parallel")
+                        results.append(result)
+                    except concurrent.futures.TimeoutError:
+                        logger.error(f"Role {role_name} timed out in parallel execution")
+                        results.append({"error": f"Role {role_name} timed out"})
+                    except Exception as e:
+                        logger.error(f"Role {role_name} failed in parallel execution: {e}")
+                        results.append({"error": f"Role {role_name} failed: {str(e)}"})
+
+            # Merge all results into single state update
+            merged_artifacts = {}
+            merged_messages = []
+            errors = []
+
+            for result in results:
+                # Merge artifacts
+                if "artifacts" in result and isinstance(result["artifacts"], dict):
+                    merged_artifacts.update(result["artifacts"])
+
+                # Merge messages
+                if "messages" in result and isinstance(result["messages"], list):
+                    merged_messages.extend(result["messages"])
+
+                # Collect errors
+                if "error" in result:
+                    errors.append(result["error"])
+
+            # Build final merged state update
+            merged_state = {
+                "artifacts": merged_artifacts,
+                "messages": merged_messages
+            }
+
+            # If any errors occurred, include them in the merged state
+            if errors:
+                merged_state["error"] = "; ".join(errors)
+                logger.warning(f"Parallel node {node_id} completed with errors: {merged_state['error']}")
+            else:
+                logger.info(f"[bold green]Parallel node {node_id} completed successfully[/bold green]")
+
+            return merged_state
+
+        return multi_role_node

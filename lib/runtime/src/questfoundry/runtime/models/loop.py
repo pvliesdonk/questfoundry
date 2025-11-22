@@ -94,3 +94,39 @@ class LoopPattern:
                     raise ValueError(f"Node {node_id} missing role_id field")
                 return role_id
         raise ValueError(f"Node {node_id} not found in loop topology")
+
+    def get_node_sub_nodes(self, node_id: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get sub_nodes for a Multi-role node.
+
+        Args:
+            node_id: The node identifier
+
+        Returns:
+            List of sub_node definitions, or None if not a Multi-role node
+
+        Example sub_node structure:
+            [
+                {"role": "Lore Weaver", "task": "Review narrative hooks..."},
+                {"role": "Plotwright", "task": "Review hooks for structural impact..."}
+            ]
+        """
+        for node in self.nodes:
+            if isinstance(node, dict) and node.get("id") == node_id:
+                return node.get("sub_nodes")
+        return None
+
+    def is_parallel_node(self, node_id: str) -> bool:
+        """
+        Check if a node should execute roles in parallel.
+
+        Args:
+            node_id: The node identifier
+
+        Returns:
+            True if node has parallel_execution flag set to True
+        """
+        for node in self.nodes:
+            if isinstance(node, dict) and node.get("id") == node_id:
+                return node.get("parallel_execution", False)
+        return False

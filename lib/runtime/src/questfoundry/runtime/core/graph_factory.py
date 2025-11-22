@@ -137,14 +137,27 @@ class GraphFactory:
                 # Get the role_id for this node
                 role_id = loop.get_node_role_id(node_id)
 
-                # Handle special "Multi" role (parallel execution not yet implemented)
+                # Handle special "Multi" role (parallel execution)
                 if role_id == "Multi":
-                    logger.warning(f"Skipping node [yellow]{node_id}[/yellow]: Multi-role parallel execution not yet implemented")
-                    # Create a pass-through placeholder node
-                    def multi_placeholder(state):
-                        logger.info(f"[dim]Placeholder for parallel node: {node_id}[/dim]")
-                        return state
-                    node_runnable = multi_placeholder
+                    # Check if this is a parallel execution node
+                    if loop.is_parallel_node(node_id):
+                        # Get sub-nodes for parallel execution
+                        sub_nodes = loop.get_node_sub_nodes(node_id)
+                        if sub_nodes:
+                            logger.info(f"Creating parallel multi-role node: [cyan]{node_id}[/cyan] with {len(sub_nodes)} sub-roles")
+                            node_runnable = self.node_factory.create_multi_role_node(sub_nodes, node_id)
+                        else:
+                            logger.warning(f"Multi-role node {node_id} has no sub_nodes, creating placeholder")
+                            def multi_placeholder(state):
+                                logger.warning(f"Multi-role node {node_id} executed but has no sub_nodes")
+                                return {}
+                            node_runnable = multi_placeholder
+                    else:
+                        logger.warning(f"Multi-role node {node_id} missing parallel_execution flag, creating placeholder")
+                        def multi_placeholder(state):
+                            logger.warning(f"Multi-role node {node_id} missing parallel_execution=true")
+                            return {}
+                        node_runnable = multi_placeholder
                 else:
                     # Create node runnable using role_id
                     node_runnable = self.node_factory.create_role_node(role_id)
