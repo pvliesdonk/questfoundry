@@ -6,7 +6,7 @@ Implements plugin provider pattern for tool access.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class ToolRegistry:
 
     def __init__(self):
         """Initialize registry with stub tools."""
-        self._tools: Dict[str, Tool] = {}
+        self._tools: dict[str, Tool] = {}
         self._register_stub_tools()
 
     def _register_stub_tools(self) -> None:
@@ -96,8 +96,8 @@ class ToolRegistry:
     def get_tool(
         self,
         tool_id: str,
-        config: Optional[Dict[str, Any]] = None
-    ) -> Optional[Tool]:
+        config: dict[str, Any | None] = None
+    ) -> Tool | None:
         """
         Get tool by ID.
 
@@ -135,7 +135,7 @@ class ToolRegistry:
         self._tools[tool_id] = tool
         logger.info(f"Registered tool: {tool_id}")
 
-    def list_available_tools(self) -> List[str]:
+    def list_available_tools(self) -> list[str]:
         """
         List all available tools.
 
@@ -156,7 +156,7 @@ class ToolRegistry:
         """
         return tool_id in self._tools
 
-    def get_all_tools(self) -> Dict[str, Tool]:
+    def get_all_tools(self) -> dict[str, Tool]:
         """
         Get all tools.
 
@@ -167,7 +167,7 @@ class ToolRegistry:
 
 
 # Global registry instance
-_registry: Optional[ToolRegistry] = None
+_registry: ToolRegistry | None = None
 
 
 def get_tool_registry() -> ToolRegistry:
@@ -187,8 +187,8 @@ def get_tool_registry() -> ToolRegistry:
 
 def get_tool(
     tool_id: str,
-    config: Optional[Dict[str, Any]] = None
-) -> Optional[Tool]:
+    config: dict[str, Any | None] = None
+) -> Tool | None:
     """
     Convenience function to get tool from registry.
 

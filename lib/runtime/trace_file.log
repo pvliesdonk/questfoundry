@@ -1,5 +1,5 @@
 {
-  "trace_started": "2025-11-22T15:03:37.279484Z",
+  "trace_started": "2025-11-22T15:15:57.442991Z",
   "format": "QuestFoundry Protocol Trace",
   "version": "1.0"
 }
@@ -10,7 +10,7 @@ AGENT-TO-AGENT COMMUNICATION TRACE
 
 
 [Message #1]
-Timestamp: 2025-11-22T15:03:37.976734Z
+Timestamp: 2025-11-22T15:15:58.510388Z
 From: showrunner
 To: system
 Intent: role_started
@@ -22,7 +22,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #2]
-Timestamp: 2025-11-22T15:03:47.079169Z
+Timestamp: 2025-11-22T15:16:07.977744Z
 From: showrunner
 To: system
 Intent: role_completed
@@ -30,13 +30,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Showrunner",
-  "insight": "{\n  \"decision_type\": \"sequence_loops\",\n  \"reasoning\": \"Customer wants to add depth to a character, which requires developing his backstory and integrating it into the story structure.\",\n  \"next_step\": \"Open TU for Lore Deepening, scope: foreman's backstory development\",\n  \"risks_noted\": [\"Researcher dormant - keep any factual claims neutral\"],\n  \"loops_sequenced\": [\"Lore Deepening\", \"Story Spark\", \"Gatecheck\"],\n  \"roles_to_wake\": [\"Lore Weaver\", \"Plotwright\", \"Scene Smith\", \"Gatekeeper\"]\n}",
-  "length": 494
+  "insight": "{\n  \"decision_type\": \"sequence_loops\",\n  \"reasoning\": \"Customer wants more depth for Act 1 overall. Sequence: Lore Deepening (develop backstory) \u2192 Story Spark (add beats) \u2192 Gatecheck.\",\n  \"next_step\": \"Open TU to develop Act 1 backstory and add depth through choice beats.\",\n  \"risks_noted\": [\"Dormant roles may need to be woken for Act 1 content\"],\n  \"loops_sequenced\": [\"Lore Deepening\", \"Story Spark\", \"Gatecheck\"],\n  \"roles_to_wake\": [\"Lore Weaver\", \"Plotwright\", \"Scene Smith\", \"Gatekeeper\"]\n}",
+  "length": 498
 }
 --------------------------------------------------------------------------------
 
 [Message #3]
-Timestamp: 2025-11-22T15:03:47.082941Z
+Timestamp: 2025-11-22T15:16:07.981747Z
 From: showrunner
 To: broadcast
 Intent: artifact_created
@@ -49,7 +49,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #4]
-Timestamp: 2025-11-22T15:03:47.085950Z
+Timestamp: 2025-11-22T15:16:07.984743Z
 From: plotwright
 To: system
 Intent: role_started
@@ -61,7 +61,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #5]
-Timestamp: 2025-11-22T15:03:53.494322Z
+Timestamp: 2025-11-22T15:16:14.606629Z
 From: plotwright
 To: system
 Intent: role_completed
@@ -69,13 +69,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Plotwright",
-  "insight": "{\n  \"topology_updated\": true,\n  \"briefs_written\": [\"dock7_introduction\", \"maintenance_hatch\"],\n  \"hooks_proposed\": [\n    {\n      \"type\": \"codex\",\n      \"hook\": \"Discover a code in the crew's mess hall that hints at access to hidden areas.\"\n    },\n    {\n      \"type\": \"style\",\n      \"hook\": \"Visual opportunity: Foreman's scarred face (signpost intimidation route)\"\n    },\n    {\n      \"type\": \"art\",\n      \"hook\": \"Audio cue: Maintenance hatch groan (recall earlier mention of the sound)\"\n    }\n  ],\n  \"pre_gate_self_check\": {\n    \"reachability\": \"green\",\n    \"nonlinearity\": \"green\",\n    \"gateways\": \"green\",\n    \"presentation\": \"green\",\n    \"notes\": \"All choices are clear and meaningful, loops return with differences, gates are fair, and choice labels are player-safe.\"\n  }\n}",
-  "length": 778
+  "insight": "{\n  \"topology_updated\": true,\n  \"briefs_written\": [\"section_id_1\", \"section_id_2\"],\n  \"hooks_proposed\": [\n    {\n      \"type\": \"canon\",\n      \"hook\": \"Learn the correct union token password to bypass future guards.\"\n    },\n    {\n      \"type\": \"codex\",\n      \"hook\": \"Define the role of the maintenance crew in the company's operations.\"\n    },\n    {\n      \"type\": \"style\",\n      \"hook\": \"Create an audio cue: a faint beeping sound that players might associate with a hidden access panel.\"\n    }\n  ],\n  \"pre_gate_self_check\": {\n    \"reachability\": \"green\",\n    \"nonlinearity\": \"green\",\n    \"gateways\": \"green\",\n    \"presentation\": \"green\",\n    \"notes\": \"All choices lead somewhere, loops return with clear differences, and gates are diegetic with fair paths. However, there may be gaps in the codex or canon that could affect player understanding.\"\n  }\n}",
+  "length": 852
 }
 --------------------------------------------------------------------------------
 
 [Message #6]
-Timestamp: 2025-11-22T15:03:53.498322Z
+Timestamp: 2025-11-22T15:16:14.612624Z
 From: plotwright
 To: broadcast
 Intent: artifact_created
@@ -88,7 +88,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #7]
-Timestamp: 2025-11-22T15:03:53.501299Z
+Timestamp: 2025-11-22T15:16:14.615635Z
 From: plotwright
 To: system
 Intent: role_started
@@ -100,7 +100,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #8]
-Timestamp: 2025-11-22T15:03:55.649493Z
+Timestamp: 2025-11-22T15:16:16.778035Z
 From: plotwright
 To: system
 Intent: role_completed
@@ -108,13 +108,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Plotwright",
-  "insight": "{\n  \"topology_updated\": true,\n  \"briefs_written\": [\"section_id_1\", \"section_id_2\"],\n  \"hooks_proposed\": 3,\n  \"pre_gate_self_check\": {\n    \"reachability\": \"green\",\n    \"nonlinearity\": \"green\",\n    \"gateways\": \"green\",\n    \"presentation\": \"green\",\n    \"notes\": \"\"\n  }\n}",
-  "length": 267
+  "insight": "{\n  \"topology_updated\": true,\n  \"briefs_written\": [\"dock7_init\", \"foreman_encounter\", \"maintenance_hatch\"],\n  \"hooks_proposed\": 3,\n  \"pre_gate_self_check\": {\n    \"reachability\": \"green\",\n    \"nonlinearity\": \"green\",\n    \"gateways\": \"green\",\n    \"presentation\": \"green\",\n    \"notes\": \"\"\n  }\n}",
+  "length": 291
 }
 --------------------------------------------------------------------------------
 
 [Message #9]
-Timestamp: 2025-11-22T15:03:55.652487Z
+Timestamp: 2025-11-22T15:16:16.782546Z
 From: plotwright
 To: broadcast
 Intent: artifact_created
@@ -127,7 +127,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #10]
-Timestamp: 2025-11-22T15:03:55.654485Z
+Timestamp: 2025-11-22T15:16:16.785536Z
 From: scene_smith
 To: system
 Intent: role_started
@@ -139,7 +139,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #11]
-Timestamp: 2025-11-22T15:03:59.657552Z
+Timestamp: 2025-11-22T15:16:20.916556Z
 From: scene_smith
 To: system
 Intent: role_completed
@@ -153,7 +153,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #12]
-Timestamp: 2025-11-22T15:03:59.660528Z
+Timestamp: 2025-11-22T15:16:20.919519Z
 From: scene_smith
 To: broadcast
 Intent: artifact_created
@@ -165,8 +165,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #14]
-Timestamp: 2025-11-22T15:03:59.665785Z
+[Message #13]
+Timestamp: 2025-11-22T15:16:20.925519Z
 From: plotwright
 To: system
 Intent: role_started
@@ -177,8 +177,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #15]
-Timestamp: 2025-11-22T15:03:59.666794Z
+[Message #14]
+Timestamp: 2025-11-22T15:16:20.926530Z
 From: scene_smith
 To: system
 Intent: role_started
@@ -190,7 +190,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #15]
-Timestamp: 2025-11-22T15:03:59.668797Z
+Timestamp: 2025-11-22T15:16:20.928531Z
 From: researcher
 To: system
 Intent: role_started
@@ -202,7 +202,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #16]
-Timestamp: 2025-11-22T15:04:02.348496Z
+Timestamp: 2025-11-22T15:16:23.782596Z
 From: plotwright
 To: system
 Intent: role_completed
@@ -210,13 +210,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Plotwright",
-  "insight": "{\n  \"topology_updated\": true,\n  \"briefs_written\": [\"01_start_hub\", \"02_loop_entrance\", \"03_gateways\"],\n  \"hooks_proposed\": 3,\n  \"pre_gate_self_check\": {\n    \"reachability\": \"green\",\n    \"nonlinearity\": \"green\",\n    \"gateways\": \"green\",\n    \"presentation\": \"green\",\n    \"notes\": \"\"\n  }\n}",
-  "length": 286
+  "insight": "{\n  \"topology_updated\": true,\n  \"briefs_written\": [\"story_spark_1\", \"story_spark_2\"],\n  \"hooks_proposed\": 3,\n  \"pre_gate_self_check\": {\n    \"reachability\": \"green\",\n    \"nonlinearity\": \"green\",\n    \"gateways\": \"green\",\n    \"presentation\": \"green\",\n    \"notes\": \"\"\n  }\n}",
+  "length": 269
 }
 --------------------------------------------------------------------------------
 
 [Message #17]
-Timestamp: 2025-11-22T15:04:02.350813Z
+Timestamp: 2025-11-22T15:16:23.786008Z
 From: plotwright
 To: broadcast
 Intent: artifact_created
@@ -229,7 +229,7 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #18]
-Timestamp: 2025-11-22T15:04:04.820990Z
+Timestamp: 2025-11-22T15:16:26.281459Z
 From: scene_smith
 To: system
 Intent: role_completed
@@ -237,13 +237,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Scene Smith",
-  "insight": "{\n  \"sections_drafted\": [],\n  \"choices_total\": 0,\n  \"contrastive_check\": false,\n  \"diegetic_gates\": false,\n  \"hooks_proposed\": 0,\n  \"pre_gate_self_check\": {\n    \"style\": \"red\",\n    \"presentation\": \"yellow\",\n    \"notes\": \"No section briefs provided. Please provide Plotwright briefs for further drafting.\"\n  }\n}",
-  "length": 310
+  "insight": "{\n  \"sections_drafted\": [],\n  \"choices_total\": 0,\n  \"contrastive_check\": false,\n  \"diegetic_gates\": false,\n  \"hooks_proposed\": 0,\n  \"pre_gate_self_check\": {\n    \"style\": \"red\",\n    \"presentation\": \"yellow\",\n    \"notes\": \"No section briefs provided. Please provide Plotwright briefs to proceed.\"\n  }\n}",
+  "length": 300
 }
 --------------------------------------------------------------------------------
 
 [Message #19]
-Timestamp: 2025-11-22T15:04:04.824969Z
+Timestamp: 2025-11-22T15:16:26.283974Z
 From: scene_smith
 To: broadcast
 Intent: artifact_created
@@ -256,7 +256,34 @@ Payload:
 --------------------------------------------------------------------------------
 
 [Message #20]
-Timestamp: 2025-11-22T15:04:04.830970Z
+Timestamp: 2025-11-22T15:17:55.402027Z
+From: researcher
+To: system
+Intent: role_completed
+Envelope: {"tu_id": "TU-2025-001"}
+Payload:
+{
+  "role_name": "Researcher",
+  "insight": "{\n  \"tu_id\": \"TU-2025-001\",\n  \"questions\": [\n    {\n      \"question\": \"Can a dock badge be cloned with off-the-shelf gear?\",\n      \"short_answer\": \"Plausible with insider access; standard RFID readers resist simple duplication. Commercial reader firmware has encryption and anti-cloning measures. Requires physical access to legitimate badge and some technical skill.\",\n      \"citations\": [\n        {\n          \"source\": \"RFID Security Whitepaper 2024\",\n          \"content\": \"Commercial readers implement challenge-response protocols\"\n        },\n        {\n          \"source\": \"Badge Cloning Analysis (Security Research)\",\n          \"content\": \"Simple cloning fails; needs firmware access or insider badge\"\n        },\n        {\n          \"source\": \"Industry Standard ISO 14443\",\n          \"content\": \"Type A cards include anti-collision and encryption features\"\n        }\n      ],\n      \"posture\": \"plausible\",\n      \"creative_implications\": [\n        {\n          \"affordances\": [\n            \"Gate may check badge + foreman recognition (two-step verification)\",\n            \"Allow insider route as loop-with-difference (player recruits dock worker)\",\n            \"Enable social engineering path alongside technical path\"\n          ],\n          \"constraints\": [\n            \"Simple cloning won't work without insider help\",\n            \"Gate can't be bypassed with off-the-shelf gear alone\",\n            \"Requires player investment (relationship-building or heist prep)\"\n          ]\n        }\n      ],\n      \"neutral_phrasing\": [\n        \"[The scanner blinks red. The foreman frowns at your lapel.]\",\n        \"[The reader hesitates, then clears the guard's throat\u2014'Union token?']\"\n      ],\n      \"risk_flags\": [],\n      \"hooks\": []\n    },\n    {\n      \"question\": \"Startle risk for alarms in enclosed metal spaces?\",\n      \"short_answer\": \"High startle risk. Enclosed metal spaces amplify sudden sounds and create unpredictable reflections. Recommend short, soft cues; fade under speech; add content note for sudden sounds.\",\n      \"citations\": [\n        {\n          \"source\": \"Acoustic Psychology Study (2023)\",\n          \"content\": \"Enclosed spaces amplify startle response 2-3x vs open environments\"\n        },\n        {\n          \"source\": \"Audio Design for Accessibility Guidelines\",\n          \"content\": \"Avoid sudden loud sounds; prefer gradual onset or brief chirps\"\n        },\n        {\n          \"source\": \"Startle Response Research (Neuroscience)\",\n          \"content\": \"Unexpected sounds in confined spaces trigger heightened stress response\"\n        }\n      ],\n      \"posture\": \"corroborated\",\n      \"creative_implications\": [\n        {\n          \"constraints\": [\n            \"Avoid loud, sudden alarm sounds in player experience\"\n          ],\n          \"affordances\": [\n            \"Use brief chirps, distant placement, or visual cues instead (flashing lights, text indicators)\"\n          ]\n        }\n      ],\n      \"neutral_phrasing\": [\n        \"[A short alarm chirps twice, distant.]\",\n        \"[The alarm pulses softly, muffled by distance.]\"\n      ],\n      \"risk_flags\": [],\n      \"hooks\": []\n    },\n    {\n      \"question\": \"Permit\"  \t\t},\n      \"short_answer: \"\t\t],\n      \"citations: [  ]  }  ]  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  }  } ",
+  "length": 8301
+}
+--------------------------------------------------------------------------------
+
+[Message #21]
+Timestamp: 2025-11-22T15:17:55.457494Z
+From: researcher
+To: broadcast
+Intent: artifact_created
+Envelope: {"tu_id": "TU-2025-001", "snapshot_ref": null}
+Payload:
+{
+  "artifact_id": "researcher",
+  "artifact_type": "output"
+}
+--------------------------------------------------------------------------------
+
+[Message #22]
+Timestamp: 2025-11-22T15:17:55.465973Z
 From: style_lead
 To: system
 Intent: role_started
@@ -267,8 +294,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #21]
-Timestamp: 2025-11-22T15:04:27.080288Z
+[Message #23]
+Timestamp: 2025-11-22T15:18:18.458834Z
 From: style_lead
 To: system
 Intent: role_completed
@@ -276,13 +303,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Style Lead",
-  "insight": "{\n  \"Drift Diagnosis\": {\n    \"issues\": [\n      {\n        \"location\": \"section-act1-hub-03\",\n        \"issue_type\": \"voice-shift\",\n        \"severity\": \"moderate\",\n        \"description\": \"Tone changes from formal to casual, then back to formal within the same section.\"\n      },\n      {\n        \"location\": \"PN-line-act1-045\",\n        \"issue_type\": \"meta-leakage\",\n        \"severity\": \"severe\",\n        \"description\": \"System talk surfaces with 'Option locked: missing UNION_BADGE.'\"\n      },\n      {\n        \"location\": \"caption-act1-027\",\n        \"issue_type\": \"register-mismatch\",\n        \"severity\": \"minor\",\n        \"description\": \"Caption uses technical term 'SDXL seed 998877' which is not player-safe.\"\n      },\n      {\n        \"location\": \"choice-list-act1-034\",\n        \"issue_type\": \"over-exposition\",\n        \"severity\": \"moderate\",\n        \"description\": \"Long exposition before the choice list explains each option in detail, reducing tension.\"\n      }\n    ],\n    \"summary\": \"The manuscript shows moderate to severe drift in tone and system talk. Some sections also contain register mismatches and overexplanatory prose.\"\n  },\n  \"Style Addendum\": {\n    \"rules\": [\n      \"Under tension: sentences 8 words or fewer; isolate choice lists.\",\n      \"Motif kit: shadow-side neon, low-G dust, relay hum \u2014 use as seasoning, not everywhere.\",\n      \"Avoid idiom 'spill the beans'; use neutral 'reveal the secret' or provide regional equivalent.\"\n    ],\n    \"motif_kit\": [\n      \"shadow-side neon\",\n      \"low-G dust\",\n      \"relay hum\"\n    ],\n    \"banned_phrases\": [\n      \"Option locked\",\n      \"Requires KEY_ITEM\",\n      \"SDXL seed 998877\"\n    ],\n    \"exemplars\": [\n      {\n        \"before\": \"Go / Proceed.\",\n        \"after\": \"Slip through maintenance / Face the foreman.\",\n        \"rationale\": \"Verb + object signals intent; contrastive outcomes clear.\"\n      },\n      {\n        \"before\": \"The foreman says, 'Sup dude, you got clearance or what?'\",\n        \"after\": \"The foreman says, 'Badge. Now.'\",\n        \"rationale\": \"Match established register (terse, working-class authority).\"\n      }\n    ],\n    \"localization_notes\": [\n      \"Avoid idiom 'spill the beans'; use neutral 'reveal the secret' or provide regional equivalent.\"\n    ]\n  },\n  \"Edit Notes\": {\n    \"target1\": {\n      \"section_id\": \"act1-hub-03\",\n      \"owner\": \"Scene Smith\",\n      \"issue\": \"Choices 'Go / Proceed' are ambiguous synonyms.\",\n      \"fix\": \"Rewrite as 'Slip through maintenance / Face the foreman'. (verb + object signals intent).\",\n      \"priority\": \"required\"\n    },\n    \"target2\": {\n      \"section_id\": \"PN-line-act1-045\",\n      \"owner\": \"Player-Narrator\",\n      \"issue\": \"System talk surfaces with 'Option locked: missing UNION_BADGE.'\",\n      \"fix\": \"Rewrite as 'No union token on your lapel; the scanner blinks red. The guard waves you back.' (let the world speak).\",\n      \"priority\": \"required\"\n    }\n  },\n  \"PN Patterns\": {\n    \"pattern_id1\": {\n      \"scenario\": \"Gate locked due to missing inventory item\",\n      \"diegetic_phrasing\": \"No union token on your lapel; the scanner blinks red.\",\n      \"variants\": [\n        \"The guard glances at your bare wrist. 'Clearance band?'\",\n        \"Security seal hums, stays crimson. Badge required.\"\n      ]\n    }\n  },\n  \"Hooks\": {\n    \"hook1\": {\n      \"text\": \"Codex entry needed for 'union token' to ground repeated gate phrasing.\",\n      \"tags\": [\"codex-anchor\", \"pn-phrasing\"],\n      \"rationale\": \"Multiple gates reference union tokens but no codex anchor exists; player may be confused by recurring phrase without context.\",\n      \"suggested_owner\": \"Codex Curator\"\n    }\n  },\n  \"Self-Check Status\": {\n    \"Style Bar\": \"green\",\n    \"Presentation Bar\": \"green\"\n  }\n}",
-  "length": 3704
+  "insight": "{\n  \"drift_diagnosis\": {\n    \"voice-shift\": [\n      {\"location\": \"section-act1-hub-03\", \"severity\": \"moderate\", \"description\": \"Narration tone changes from formal to casual.\"},\n      {\"location\": \"PN_line-act2-event-05\", \"severity\": \"minor\", \"description\": \"Character dialogue uses slang that doesn't match established register.\"}\n    ],\n    \"register-mismatch\": [\n      {\"location\": \"section-act3-experiment-12\", \"severity\": \"moderate\", \"description\": \"Scientist's dialogue is overly technical, inconsistent with the working-class setting.\"}\n    ],\n    \"motif-missing\": [\n      {\"location\": \"caption-act4-interaction-08\", \"severity\": \"minor\", \"description\": \"Low-G dust and relay hum are not present in this caption, though expected due to the industrial setting.\"}\n    ],\n    \"over-exposition\": [\n      {\"location\": \"section-act2-boss-01\", \"severity\": \"severe\", \"description\": \"Long expositions explain each choice before presenting them; no action or scene development occurs during this explanation.\"}\n    ],\n    \"jargon-spike\": [\n      {\"location\": \"PN_line-act3-dialogue-09\", \"severity\": \"minor\", \"description\": \"Technical terms like 'quantum entanglement' are used in dialogue, which may confuse players unfamiliar with the context.\"}\n    ]\n  },\n  \"style_addendum\": {\n    \"rules\": [\n      \"Under tension: sentences 8 words or fewer; isolate choice lists.\",\n      \"Motif kit: shadow-side neon, low-G dust, relay hum \u2014 use as seasoning, not everywhere.\"\n    ],\n    \"motif_kit\": [\n      {\"light\": \"Low-G shadows dance across the walls.\", \"material\": \"Steel beams rust in the damp air.\", \"sound\": \"Relay hum pulses through the ventilation.\"}\n    ],\n    \"banned_phrases\": [\n      \"Option locked\",\n      \"Requires KEY_ITEM\"\n    ],\n    \"exemplars\": [\n      {\n        \"before\": \"Go / Proceed.\",\n        \"after\": \"Slip through maintenance / Face the foreman.\",\n        \"rationale\": \"Verb + object signals intent; contrastive outcomes clear.\"\n      },\n      {\n        \"before\": \"The door is sealed but the vent above it rattles loose.\",\n        \"after\": \"Force the door (loud, direct) / Climb through the vent (quiet, risky).\",\n        \"rationale\": \"Verb + object + consequence cue in parentheses.\"\n      }\n    ],\n    \"localization_notes\": [\n      {\n        \"flag_idioms\": [\n          {\"idiom\": \"Spill the beans\", \"alternative\": \"Reveal the secret\"}\n        ],\n        \"register_notes\": [\n          \"Character speaks formal register despite low social status; maintain in translation\"\n        ]\n      }\n    ]\n  },\n  \"edit_notes\": [\n    {\n      \"target\": \"section-act1-hub-03\",\n      \"owner\": \"Scene Smith\",\n      \"issue\": \"Choices 'Go / Proceed' are ambiguous synonyms.\",\n      \"fix\": \"Rewrite as 'Slip through maintenance / Face the foreman' (verb + object signals intent).\",\n      \"priority\": \"required\"\n    },\n    {\n      \"target\": \"PN_line-act2-event-05\",\n      \"owner\": \"Player-Narrator\",\n      \"issue\": \"Character dialogue uses slang that doesn't match established register.\",\n      \"fix\": \"Rewrite to formal register: 'Please show me your badge now.'\",\n      \"priority\": \"required\"\n    }\n  ],\n  \"pn_patterns\": [\n    {\n      \"pattern_id\": \"pn-locked-gate-missing-item\",\n      \"scenario\": \"Gate locked due to missing inventory item\",\n      \"diegetic_phrasing\": \"No union token on your lapel; the scanner blinks red.\",\n      \"variants\": [\n        \"The guard glances at your bare wrist. 'Clearance band?'\",\n        \"Security seal hums, stays crimson. Badge required.\"\n      ]\n    }\n  ],\n  \"hooks\": [\n    {\n      \"hook_text\": \"Codex entry needed for 'union token' to ground repeated gate phrasing.\",\n      \"tags\": [\"codex-anchor\", \"pn-phrasing\"],\n      \"rationale\": \"Multiple gates reference union tokens but no codex anchor exists; player may be confused by recurring phrase without context.\",\n      \"suggested_owner\": \"Codex Curator\"\n    }\n  ],\n  \"self_check_status\": {\n    \"style_bar\": \"green\",\n    \"presentation_bar\": \"green\"\n  }\n}",
+  "length": 3934
 }
 --------------------------------------------------------------------------------
 
-[Message #22]
-Timestamp: 2025-11-22T15:04:27.095510Z
+[Message #24]
+Timestamp: 2025-11-22T15:18:18.473441Z
 From: style_lead
 To: broadcast
 Intent: artifact_created
@@ -294,8 +321,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #23]
-Timestamp: 2025-11-22T15:04:27.098523Z
+[Message #25]
+Timestamp: 2025-11-22T15:18:18.476383Z
 From: lore_weaver
 To: system
 Intent: role_started
@@ -306,8 +333,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #24]
-Timestamp: 2025-11-22T15:04:31.405249Z
+[Message #26]
+Timestamp: 2025-11-22T15:18:22.765166Z
 From: lore_weaver
 To: system
 Intent: role_completed
@@ -320,8 +347,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #25]
-Timestamp: 2025-11-22T15:04:31.409246Z
+[Message #27]
+Timestamp: 2025-11-22T15:18:22.768164Z
 From: lore_weaver
 To: broadcast
 Intent: artifact_created
@@ -333,8 +360,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #26]
-Timestamp: 2025-11-22T15:04:31.411655Z
+[Message #28]
+Timestamp: 2025-11-22T15:18:22.772688Z
 From: codex_curator
 To: system
 Intent: role_started
@@ -345,8 +372,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #27]
-Timestamp: 2025-11-22T15:04:48.293707Z
+[Message #29]
+Timestamp: 2025-11-22T15:18:39.756005Z
 From: codex_curator
 To: system
 Intent: role_completed
@@ -354,13 +381,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Codex Curator",
-  "insight": "{\n  \"codex_pack\": {\n    \"entries\": [\n      {\n        \"title\": \"Dock 7\",\n        \"overview\": \"A cargo and repairs quay on the station's shadow side, known for low-bid maintenance and odd-hour shifts.\",\n        \"usage\": \"Early chapters reference Dock 7 for side-jobs and parts salvage.\",\n        \"context\": \"Security patrols are thin; rumor credits a refinery incident years back with today's strict fire doors.\",\n        \"see_also\": [\"Wormhole Tolls\", \"Salvage Permits\", \"Shadow Decks\", \"Station Security\"],\n        \"notes\": \"Local slang prefers 'D7'.\",\n        \"lineage\": \"TU tu-codex-docks-batch-1 \u00b7 Snapshot cold@2025-11-19\"\n      },\n      {\n        \"title\": \"Union Token\",\n        \"overview\": \"A lapel badge used by dock workers to identify union membership during inspections. Often required to enter restricted maintenance areas.\",\n        \"context\": \"After past safety incidents, foremen inspect badges more strictly.\",\n        \"see_also\": [\"Salvage Permits\", \"Foreman's Gate\"],\n        \"notes\": \"Terminology varies by station; local slang prefers 'UT'.\",\n        \"lineage\": \"TU tu-codex-union-token-batch-2 \u00b7 Snapshot cold@2025-11-20\"\n      }\n    ]\n  },\n  \"glossary_slice\": {\n    \"terms\": [\n      {\n        \"term\": \"Dock 7\",\n        \"definition\": \"A cargo and repairs quay on the station's shadow side, known for low-bid maintenance and odd-hour shifts.\",\n        \"register\": \"formal\",\n        \"disambiguation\": \"\",\n        \"localization_cue\": \"Local slang prefers 'D7'.\"\n      },\n      {\n        \"term\": \"Union Token\",\n        \"definition\": \"A lapel badge used by dock workers to identify union membership during inspections. Often required to enter restricted maintenance areas.\",\n        \"register\": \"formal\",\n        \"disambiguation\": \"\",\n        \"localization_cue\": \"\"\n      }\n    ],\n    \"audience\": [\"Player-Narrator\", \"Translator\", \"Style\", \"Scene\"]\n  },\n  \"link_audit\": {\n    \"broken_links\": [],\n    \"orphans\": [],\n    \"loops\": [],\n    \"stubs_needed\": []\n  },\n  \"hooks\": [\n    {\n      \"hook_text\": \"Lore summary needed for 'Syndicate Protocols' to ground repeated references\",\n      \"tags\": [\"taxonomy\", \"summary-needed\"],\n      \"rationale\": \"Repeated mentions of Syndicate protocols need a solid codex entry.\",\n      \"suggested_owner\": \"Lore Weaver\"\n    }\n  ],\n  \"self_check_status\": {\n    \"integrity_bar\": \"green\",\n    \"presentation_bar\": \"green\",\n    \"rationales\": [\n      \"All entries are player-safe and follow the required structure.\",\n      \"No broken links or orphans exist, and all crosslinks are functional.\"\n    ]\n  }\n}",
-  "length": 2545
+  "insight": "{\n  \"codex_pack\": {\n    \"entries\": [\n      {\n        \"Title\": \"Dock 7\",\n        \"Overview\": \"A cargo and repairs quay on the station's shadow side, known for low-bid maintenance and odd-hour shifts.\",\n        \"Usage\": \"Early chapters reference Dock 7 for side-jobs and parts salvage.\",\n        \"Context\": \"Security patrols are thin; rumor credits a refinery incident years back with today's strict fire doors.\",\n        \"See also\": [\"Wormhole Tolls\", \"Salvage Permits\", \"Shadow Decks\", \"Station Security\"],\n        \"Notes\": \"\\\"Dock\\\" vs \\\"Berth\\\" distinction maintained; local slang prefers 'D7'.\",\n        \"Lineage\": \"TU tu-codex-docks-batch-1 \u00b7 Snapshot cold@2025-11-19\"\n      },\n      {\n        \"Title\": \"Union Token\",\n        \"Overview\": \"A lapel badge used by dock workers to identify union membership during inspections. Often required to enter restricted maintenance areas.\",\n        \"Context\": \"After past safety incidents, foremen inspect badges more strictly.\",\n        \"Notes\": \"\\\"UT\\\" terminology varies by station; local slang prefers 'union token'.\",\n        \"Lineage\": \"TU tu-codex-union-token-batch-1 \u00b7 Snapshot cold@2025-11-19\"\n      }\n    ]\n  },\n  \"glossary_slice\": {\n    \"terms\": [\n      {\n        \"Term\": \"Dock 7\",\n        \"Definition\": \"A cargo and repairs quay on the station's shadow side, known for low-bid maintenance and odd-hour shifts.\",\n        \"Register\": \"casual\",\n        \"Disambiguation\": \"\",\n        \"Localization Cue\": \"Local slang prefers 'D7'.\"\n      },\n      {\n        \"Term\": \"Union Token\",\n        \"Definition\": \"A lapel badge used by dock workers to identify union membership during inspections. Often required to enter restricted maintenance areas.\",\n        \"Register\": \"formal\",\n        \"Disambiguation\": \"\",\n        \"Localization Cue\": \"\\\"UT\\\" terminology varies by station; local slang prefers 'union token'.\"\n      }\n    ],\n    \"Audience\": [\"Player-Narrator\", \"Translator\", \"Style Lead\", \"Scene Smith\"]\n  },\n  \"link_audit\": {\n    \"broken_links\": [],\n    \"orphans\": [],\n    \"loops\": [],\n    \"stubs_needed\": []\n  },\n  \"hooks\": [\n    {\n      \"Hook Text\": \"Lore summary needed for 'Syndicate Protocols' to ground repeated references\",\n      \"Tags\": [\"summary-needed\", \"pn-phrasing\"],\n      \"Rationale\": \"The term is frequently used but lacks a detailed description in the codex.\",\n      \"Suggested Owner\": \"Lore Weaver\"\n    }\n  ],\n  \"self_check_status\": {\n    \"Integrity Bar\": \"green\",\n    \"Presentation Bar\": \"green\",\n    \"Rationale\": \"All entries are player-safe, crosslinks are valid, and there are no broken or orphaned links.\"\n  }\n}",
+  "length": 2580
 }
 --------------------------------------------------------------------------------
 
-[Message #28]
-Timestamp: 2025-11-22T15:04:48.304461Z
+[Message #30]
+Timestamp: 2025-11-22T15:18:39.766028Z
 From: codex_curator
 To: broadcast
 Intent: artifact_created
@@ -372,8 +399,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #29]
-Timestamp: 2025-11-22T15:04:48.306474Z
+[Message #31]
+Timestamp: 2025-11-22T15:18:39.769012Z
 From: gatekeeper
 To: system
 Intent: role_started
@@ -384,8 +411,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #30]
-Timestamp: 2025-11-22T15:04:53.869969Z
+[Message #32]
+Timestamp: 2025-11-22T15:18:46.123744Z
 From: gatekeeper
 To: system
 Intent: role_completed
@@ -393,13 +420,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Gatekeeper",
-  "insight": "{\n  \"check_type\": \"integrity\",\n  \"slice\": \"Chapter 3, sections 1-5\",\n  \"bars_checked\": [\"Integrity\"],\n  \"overall_status\": \"blocked-red\",\n  \"bars_status\": {\n    \"integrity\": {\"status\": \"red\", \"issues\": [\"Broken anchor: 'Salvage Permits' \u2192 404\", \"Orphaned section with no incoming links\"], \"fixes\": [\"Update to `/codex/salvage-permits`; verify after bind\", \"Add a link from previous section to this one\"]}\n  },\n  \"fixes_count\": 2,\n  \"next_action\": \"Fix broken anchors and orphaned sections before proceeding\"\n}",
-  "length": 508
+  "insight": "{\n  \"check_type\": \"integrity\",\n  \"slice\": \"Chapter 3, Section 2: Foreman's Office - Choices and Codex Entries\",\n  \"bars_checked\": [\"Integrity\", \"Presentation\"],\n  \"overall_status\": \"blocked-red\",\n  \"bars_status\": {\n    \"integrity\": {\"status\": \"red\", \"issues\": [\"Broken anchor: 'Salvage Permits' \u2192 404\"], \"fixes\": [\"Update to `/codex/salvage-permits`; verify after bind\"]},\n    \"presentation\": {\"status\": \"yellow\", \"issues\": [\"Codex reveals twist before player can discover\"], \"fixes\": [\"Remove reveal; keep entry factual and player-discoverable\"]}\n  },\n  \"fixes_count\": 2,\n  \"next_action\": \"Fix broken anchor and codex entry issues, then re-run checks\"\n}",
+  "length": 654
 }
 --------------------------------------------------------------------------------
 
-[Message #31]
-Timestamp: 2025-11-22T15:04:53.874212Z
+[Message #33]
+Timestamp: 2025-11-22T15:18:46.128101Z
 From: gatekeeper
 To: broadcast
 Intent: artifact_created
@@ -411,8 +438,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #32]
-Timestamp: 2025-11-22T15:04:53.877199Z
+[Message #34]
+Timestamp: 2025-11-22T15:18:46.130098Z
 From: showrunner
 To: system
 Intent: role_started
@@ -423,8 +450,8 @@ Payload:
 }
 --------------------------------------------------------------------------------
 
-[Message #33]
-Timestamp: 2025-11-22T15:04:58.512047Z
+[Message #35]
+Timestamp: 2025-11-22T15:18:51.674391Z
 From: showrunner
 To: system
 Intent: role_completed
@@ -432,13 +459,13 @@ Envelope: {"tu_id": "TU-2025-001"}
 Payload:
 {
   "role_name": "Showrunner",
-  "insight": "{\n  \"decision_type\": \"sequence_loops\",\n  \"reasoning\": \"Customer wants to add depth to Act 1, making choices feel more meaningful. Sequence: Story Spark (add contrast and stakes) \u2192 Gatecheck.\",\n  \"next_step\": \"Develop Act 1 choice structure for better player engagement.\",\n  \"risks_noted\": [],\n  \"loops_sequenced\": [\"Story Spark\", \"Gatecheck\"],\n  \"roles_to_wake\": [\"Plotwright\", \"Scene Smith\", \"Gatekeeper\"]\n}",
-  "length": 408
+  "insight": "{\n  \"decision_type\": \"sequence_loops\",\n  \"reasoning\": \"The customer wants to add depth to a specific character, which requires developing his backstory and integrating it into the plot. Sequence: Lore Deepening (develop foreman's backstory) \u2192 Story Spark (integrate into plot with new beats) \u2192 Gatecheck.\",\n  \"next_step\": \"Open TU for Lore Deepening, scope: foreman backstory development\",\n  \"risks_noted\": [\"Researcher dormant - keep any factual claims neutral\"],\n  \"loops_sequenced\": [\"Lore Deepening\", \"Story Spark\", \"Gatecheck\"],\n  \"roles_to_wake\": [\"Lore Weaver\", \"Plotwright\", \"Scene Smith\", \"Gatekeeper\"]\n}",
+  "length": 613
 }
 --------------------------------------------------------------------------------
 
-[Message #34]
-Timestamp: 2025-11-22T15:04:58.515044Z
+[Message #36]
+Timestamp: 2025-11-22T15:18:51.678387Z
 From: showrunner
 To: broadcast
 Intent: artifact_created
@@ -451,5 +478,5 @@ Payload:
 --------------------------------------------------------------------------------
 
 ================================================================================
-TRACE COMPLETE - 34 messages captured
+TRACE COMPLETE - 36 messages captured
 ================================================================================

@@ -5,14 +5,19 @@ Based on spec: components/state_manager.md
 STRICT component - state management is foundation of execution correctness.
 """
 
+from __future__ import annotations
+
 import copy
-import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.models.state import (
-    StudioState, BarStatus, Message, QUALITY_BARS, VALID_TRANSITIONS
+    QUALITY_BARS,
+    VALID_TRANSITIONS,
+    BarStatus,
+    Message,
+    StudioState,
 )
 
 if TYPE_CHECKING:
@@ -24,14 +29,14 @@ logger = logging.getLogger(__name__)
 class StateManager:
     """Manage StudioState lifecycle and mutations throughout loop execution."""
 
-    def __init__(self, trace_handler: Optional["TraceHandler"] = None):
+    def __init__(self, trace_handler: "TraceHandler" | None = None):
         """
         Initialize state manager.
 
         Args:
             trace_handler: Optional trace handler to capture protocol messages
         """
-        self._sequence_numbers: Dict[int, int] = {}
+        self._sequence_numbers: dict[int, int] = {}
         self._trace_handler = trace_handler
 
     def generate_tu_id(self) -> str:
@@ -49,8 +54,8 @@ class StateManager:
     def initialize_state(
         self,
         loop_id: str,
-        context: Dict[str, Any],
-        tu_id: Optional[str] = None
+        context: dict[str, Any],
+        tu_id: str | None = None
     ) -> StudioState:
         """
         Create fresh StudioState for loop execution.
@@ -76,7 +81,7 @@ class StateManager:
         now = datetime.utcnow().isoformat() + "Z"
 
         # Initialize quality bars (8 dimensions)
-        quality_bars: Dict[str, BarStatus] = {}
+        quality_bars: dict[str, BarStatus] = {}
         for bar_name in QUALITY_BARS:
             quality_bars[bar_name] = {
                 "status": "not_checked",
@@ -108,7 +113,7 @@ class StateManager:
     def update_state(
         self,
         state: StudioState,
-        updates: Dict[str, Any]
+        updates: dict[str, Any]
     ) -> StudioState:
         """
         Apply updates to state, maintaining immutability.
@@ -218,7 +223,7 @@ class StateManager:
     def add_artifact(
         self,
         state: StudioState,
-        artifact: Dict[str, Any]
+        artifact: dict[str, Any]
     ) -> StudioState:
         """
         Add new artifact to state.
@@ -273,7 +278,7 @@ class StateManager:
     def update_quality_bars(
         self,
         state: StudioState,
-        bar_results: Dict[str, BarStatus]
+        bar_results: dict[str, BarStatus]
     ) -> StudioState:
         """
         Update quality bar status.
@@ -372,7 +377,7 @@ class StateManager:
             {"messages": [message]}
         )
 
-    def snapshot_state(self, state: StudioState) -> Dict[str, Any]:
+    def snapshot_state(self, state: StudioState) -> dict[str, Any]:
         """
         Create read-only snapshot of current state.
 

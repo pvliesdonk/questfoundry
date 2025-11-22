@@ -4,13 +4,13 @@ Role profile models - represents a role_profile.schema.json definition.
 Based on spec: components/node_factory.md
 """
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any
 
 
 class RoleProfile:
     """Represents a role profile YAML definition."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize from parsed YAML data."""
         self.raw = data
 
@@ -73,7 +73,7 @@ class RoleProfile:
         """Get max_tokens from config."""
         return int(self.model_config.get("max_tokens", 4096))
 
-    def should_execute(self, state: Dict[str, Any]) -> bool:
+    def should_execute(self, state: dict[str, Any]) -> bool:
         """
         Determine if this role should execute based on dormancy policy.
 

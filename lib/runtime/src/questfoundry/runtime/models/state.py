@@ -4,28 +4,27 @@ StudioState and related TypedDict/Pydantic models for runtime execution.
 Based on spec: components/state_manager.md
 """
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Annotated
-from datetime import datetime
 import operator
+from typing import Annotated, Any, Literal, TypedDict
 
 
 class Artifact(TypedDict):
     """Single artifact in state."""
     artifact_type: str  # scene, character, lore_entry, illustration, etc.
-    content: str | Dict[str, Any]  # Actual artifact content
+    content: str | dict[str, Any]  # Actual artifact content
     role_id: str  # Role that created it
     timestamp: str  # ISO format
     tu_id: str  # Associated Trace Unit
     state_key: str  # Where it lives in hot/cold sources
-    metadata: Dict[str, Any]  # Additional metadata
+    metadata: dict[str, Any]  # Additional metadata
 
 
 class BarStatus(TypedDict):
     """Quality bar status."""
     status: Literal["green", "yellow", "red", "not_checked"]
-    feedback: Optional[str]
-    checked_by: Optional[str]  # Role ID of checker (usually gatekeeper)
-    timestamp: Optional[str]  # ISO format
+    feedback: str | None
+    checked_by: str | None  # Role ID of checker (usually gatekeeper)
+    timestamp: str | None  # ISO format
 
 
 class Message(TypedDict):
@@ -33,9 +32,9 @@ class Message(TypedDict):
     sender: str  # Role ID
     receiver: str  # Role ID or "broadcast"
     intent: str  # Protocol intent (e.g., "request_review")
-    payload: Dict[str, Any]  # Message payload
+    payload: dict[str, Any]  # Message payload
     timestamp: str  # ISO format
-    envelope: Dict[str, Any]  # Envelope requirements (TU ID, snapshot ref, etc.)
+    envelope: dict[str, Any]  # Envelope requirements (TU ID, snapshot ref, etc.)
 
 
 class StudioState(TypedDict):
@@ -61,21 +60,21 @@ class StudioState(TypedDict):
     # Execution context
     current_node: str  # Currently executing role ID
     loop_id: str  # Which loop is running
-    loop_context: Dict[str, Any]  # Loop-specific context
+    loop_context: dict[str, Any]  # Loop-specific context
 
     # Artifacts and quality (with reducers for concurrent updates)
-    artifacts: Annotated[Dict[str, Any], operator.or_]  # Merge dicts
-    quality_bars: Annotated[Dict[str, BarStatus], operator.or_]  # Merge dicts
+    artifacts: Annotated[dict[str, Any], operator.or_]  # Merge dicts
+    quality_bars: Annotated[dict[str, BarStatus], operator.or_]  # Merge dicts
 
     # Protocol (with reducer for concurrent updates)
-    messages: Annotated[List[Message], operator.add]  # Concatenate lists
+    messages: Annotated[list[Message], operator.add]  # Concatenate lists
 
     # Traceability
-    snapshot_ref: Optional[str]  # Read-only snapshot reference
-    parent_tu_id: Optional[str]  # Parent TU if derived
+    snapshot_ref: str | None  # Read-only snapshot reference
+    parent_tu_id: str | None  # Parent TU if derived
 
     # Error handling
-    error: Optional[str]  # Error message if any
+    error: str | None  # Error message if any
     retry_count: int  # Current retry count
 
     # Metadata

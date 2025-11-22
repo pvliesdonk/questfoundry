@@ -5,15 +5,12 @@ Provides beautiful, readable logging output using Rich console formatting.
 
 from __future__ import annotations
 
-import io
 import logging
 import sys
-from typing import Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.theme import Theme
-
 
 # Custom theme for QuestFoundry
 QUESTFOUNDRY_THEME = Theme({

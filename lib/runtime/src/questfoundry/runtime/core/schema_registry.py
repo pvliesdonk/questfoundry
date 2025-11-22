@@ -8,7 +8,7 @@ STRICT component - validation is non-negotiable.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 try:
     from importlib.resources import files
@@ -19,8 +19,8 @@ except ImportError:
 import jsonschema
 import yaml
 
-from questfoundry.runtime.models.role import RoleProfile
 from questfoundry.runtime.models.loop import LoopPattern
+from questfoundry.runtime.models.role import RoleProfile
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +88,8 @@ def _find_spec_root() -> Path:
     if source_pref in ("auto", "download"):
         try:
             from questfoundry.runtime.core.spec_fetcher import (
+                download_latest_release_spec,
                 get_cached_spec_path,
-                download_latest_release_spec
             )
 
             # For 'download' mode, always download fresh spec
@@ -128,7 +128,7 @@ class SchemaRegistry:
     Uses jsonschema Draft 2020-12 for validation.
     """
 
-    def __init__(self, schemas_root: Optional[Path] = None, definitions_root: Optional[Path] = None):
+    def __init__(self, schemas_root: Path | None = None, definitions_root: Path | None = None):
         """Initialize schema registry with paths."""
         # Check if using bundled resources
         if SPEC_ROOT == Path("__BUNDLED_RESOURCES__"):
@@ -143,13 +143,13 @@ class SchemaRegistry:
             logger.debug(f"Using file-based spec: definitions={self.definitions_root}, schemas={self.schemas_root}")
 
         # Cache for loaded schemas
-        self._schema_cache: Dict[str, Dict[str, Any]] = {}
+        self._schema_cache: dict[str, dict[str, Any]] = {}
 
         # Cache for validated definitions
-        self._role_cache: Dict[str, RoleProfile] = {}
-        self._loop_cache: Dict[str, LoopPattern] = {}
+        self._role_cache: dict[str, RoleProfile] = {}
+        self._loop_cache: dict[str, LoopPattern] = {}
 
-    def load_schema(self, schema_name: str) -> Dict[str, Any]:
+    def load_schema(self, schema_name: str) -> dict[str, Any]:
         """
         Load JSON schema file.
 
@@ -190,7 +190,7 @@ class SchemaRegistry:
         except (ImportError, AttributeError, FileNotFoundError) as e:
             raise FileNotFoundError(f"Schema not found: {schema_name} ({e})")
 
-    def load_yaml(self, yaml_path: Path) -> Dict[str, Any]:
+    def load_yaml(self, yaml_path: Path) -> dict[str, Any]:
         """
         Load YAML file.
 
@@ -244,8 +244,8 @@ class SchemaRegistry:
 
     def validate_against_schema(
         self,
-        data: Dict[str, Any],
-        schema: Dict[str, Any]
+        data: dict[str, Any],
+        schema: dict[str, Any]
     ) -> None:
         """
         Validate data against schema using jsonschema Draft 2020-12.

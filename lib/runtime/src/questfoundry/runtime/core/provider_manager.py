@@ -10,7 +10,7 @@ that map to provider-specific models via configuration file.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -34,7 +34,7 @@ class ProviderManager:
         "litellm": "LITELLM_API_BASE",
     }
 
-    def __init__(self, tier_config_path: Optional[Path] = None):
+    def __init__(self, tier_config_path: Path | None = None):
         """
         Initialize provider manager.
 
@@ -43,10 +43,10 @@ class ProviderManager:
         """
         self.available_providers = self._detect_providers()
         self.tier_mapping = self._load_tier_mapping(tier_config_path)
-        self._llm_cache: Dict[tuple, Any] = {}  # Cache LLM clients by (provider, model, temp, max_tokens)
+        self._llm_cache: dict[tuple, Any] = {}  # Cache LLM clients by (provider, model, temp, max_tokens)
         logger.info(f"Detected providers: {', '.join(self.available_providers) or 'none'}")
 
-    def _load_tier_mapping(self, tier_config_path: Optional[Path] = None) -> Dict[str, Any]:
+    def _load_tier_mapping(self, tier_config_path: Path | None = None) -> dict[str, Any]:
         """
         Load model tier mapping from YAML configuration.
 
@@ -67,7 +67,7 @@ class ProviderManager:
             tier_config_path = Path(env_path)
 
         try:
-            with open(tier_config_path, "r", encoding="utf-8") as f:
+            with open(tier_config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
                 logger.info(f"Loaded model tiers from: {tier_config_path}")
                 return config
@@ -81,7 +81,7 @@ class ProviderManager:
             logger.error(f"Failed to load tier config: {e}. Using fallback defaults.")
             return self._get_fallback_tier_mapping()
 
-    def _get_fallback_tier_mapping(self) -> Dict[str, Any]:
+    def _get_fallback_tier_mapping(self) -> dict[str, Any]:
         """Get fallback tier mapping when config file is not available."""
         return {
             "model_tiers": {
@@ -139,7 +139,7 @@ class ProviderManager:
             },
         }
 
-    def _detect_providers(self) -> List[str]:
+    def _detect_providers(self) -> list[str]:
         """
         Detect which providers are available.
 
@@ -159,8 +159,8 @@ class ProviderManager:
 
     def select_provider(
         self,
-        preferred_provider: Optional[str] = None,
-        fallback_chain: Optional[List[str]] = None
+        preferred_provider: str | None = None,
+        fallback_chain: list[str | None] = None
     ) -> str:
         """
         Select best available provider.
@@ -461,7 +461,7 @@ class ProviderManager:
             **kwargs
         )
 
-    def get_config_summary(self) -> Dict[str, Any]:
+    def get_config_summary(self) -> dict[str, Any]:
         """
         Get summary of provider configuration.
 

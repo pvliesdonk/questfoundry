@@ -7,9 +7,10 @@ STRICT component - role → Runnable transformation is the core contract.
 
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 try:
     from importlib.resources import files
@@ -19,10 +20,10 @@ except ImportError:
 
 from jinja2 import Template, TemplateError
 
-from questfoundry.runtime.models.state import StudioState
-from questfoundry.runtime.models.role import RoleProfile
-from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.core.provider_manager import ProviderManager
+from questfoundry.runtime.core.schema_registry import SchemaRegistry
+from questfoundry.runtime.models.role import RoleProfile
+from questfoundry.runtime.models.state import StudioState
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,9 @@ class NodeFactory:
 
     def __init__(
         self,
-        schema_registry: Optional[SchemaRegistry] = None,
-        state_manager: Optional[Any] = None,
-        preferred_provider: Optional[str] = None
+        schema_registry: SchemaRegistry | None = None,
+        state_manager: Any | None = None,
+        preferred_provider: str | None = None
     ):
         """Initialize node factory.
 
@@ -45,7 +46,7 @@ class NodeFactory:
         """
         self.schema_registry = schema_registry or SchemaRegistry()
         self.provider_manager = ProviderManager()
-        self._role_cache: Dict[str, RoleProfile] = {}
+        self._role_cache: dict[str, RoleProfile] = {}
         self.state_manager = state_manager  # For message tracing
         self.preferred_provider = preferred_provider  # Store for use in select_llm
 
@@ -250,7 +251,7 @@ class NodeFactory:
             logger.warning(f"Unknown template engine: {template_engine}")
             return template_str
 
-    def select_llm(self, role: RoleProfile) -> Optional[Dict[str, Any]]:
+    def select_llm(self, role: RoleProfile) -> dict[str, Any | None]:
         """
         Select appropriate LLM based on role type and model config.
 
@@ -324,14 +325,14 @@ class NodeFactory:
             "role_type": role.role_type
         }
 
-    def create_role_node(self, role_id: str) -> Callable[[StudioState], Dict[str, Any]]:
+    def create_role_node(self, role_id: str) -> Callable[[StudioState], dict[str, Any]]:
         """
         Create complete Runnable node for StateGraph.
 
         This is the main entry point used by GraphFactory.
 
         Returns a function with signature:
-        def role_node(state: StudioState) -> Dict[str, Any]:
+        def role_node(state: StudioState) -> dict[str, Any]:
             # Execute role logic
             # Return partial state update (only changed fields)
 
@@ -348,7 +349,7 @@ class NodeFactory:
         # Load role once
         role = self.load_role(role_id)
 
-        def role_node(state: StudioState) -> Dict[str, Any]:
+        def role_node(state: StudioState) -> dict[str, Any]:
             """Execute role and update state.
 
             Returns:

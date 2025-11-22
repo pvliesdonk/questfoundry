@@ -6,7 +6,7 @@ Implements plugin provider pattern for LLM access.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class AnthropicAdapter:
         "claude-3-sonnet-20240229"
     ]
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize Anthropic adapter.
 
@@ -85,7 +85,7 @@ class AnthropicAdapter:
             logger.error(f"Failed to create ChatAnthropic instance: {e}")
             raise
 
-    def list_available_models(self) -> List[str]:
+    def list_available_models(self) -> list[str]:
         """
         List supported models.
 
@@ -108,10 +108,10 @@ class AnthropicAdapter:
 
 
 # Global adapter instance
-_adapter: Optional[AnthropicAdapter] = None
+_adapter: AnthropicAdapter | None = None
 
 
-def get_anthropic_adapter(api_key: Optional[str] = None) -> AnthropicAdapter:
+def get_anthropic_adapter(api_key: str | None = None) -> AnthropicAdapter:
     """
     Get or create Anthropic adapter singleton.
 

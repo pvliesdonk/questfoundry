@@ -18,7 +18,7 @@ TODO: Remove in Phase 6C after all references are updated.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class Command:
     """
     action: str
     loop_id: str
-    context: Dict[str, Any]
+    context: dict[str, Any]
     raw: str
 
 
@@ -50,7 +50,7 @@ class CLIParser:
             "CLIParser is deprecated. Use ShowrunnerInterface.interpret_and_execute() instead."
         )
 
-    def parse(self, command_text: str) -> Optional[Command]:
+    def parse(self, command_text: str) -> Command | None:
         """
         DEPRECATED: Parse command (no longer used).
 

@@ -6,16 +6,16 @@ STRICT component - Every detail in this spec MUST be implemented exactly.
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from questfoundry.runtime.models.state import StudioState
-from questfoundry.runtime.models.loop import LoopPattern
-from questfoundry.runtime.core.schema_registry import SchemaRegistry
-from questfoundry.runtime.core.node_factory import NodeFactory
 from questfoundry.runtime.core.edge_evaluator import EdgeEvaluator
+from questfoundry.runtime.core.node_factory import NodeFactory
+from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.core.state_manager import StateManager
+from questfoundry.runtime.models.loop import LoopPattern
+from questfoundry.runtime.models.state import StudioState
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,11 @@ class GraphFactory:
 
     def __init__(
         self,
-        schema_registry: Optional[SchemaRegistry] = None,
-        node_factory: Optional[NodeFactory] = None,
-        edge_evaluator: Optional[EdgeEvaluator] = None,
-        state_manager: Optional[StateManager] = None,
-        preferred_provider: Optional[str] = None
+        schema_registry: SchemaRegistry | None = None,
+        node_factory: NodeFactory | None = None,
+        edge_evaluator: EdgeEvaluator | None = None,
+        state_manager: StateManager | None = None,
+        preferred_provider: str | None = None
     ):
         """Initialize graph factory with dependent components."""
         self.schema_registry = schema_registry or SchemaRegistry()
@@ -42,7 +42,7 @@ class GraphFactory:
         )
         self.edge_evaluator = edge_evaluator or EdgeEvaluator()
 
-        self._graph_cache: Dict[str, Any] = {}
+        self._graph_cache: dict[str, Any] = {}
 
     def load_loop(self, loop_id: str) -> LoopPattern:
         """
@@ -414,7 +414,7 @@ class GraphFactory:
     def create_loop_graph(
         self,
         loop_id: str,
-        context: Optional[Dict[str, Any]] = None
+        context: dict[str, Any | None] = None
     ) -> Any:
         """
         Complete graph creation flow.

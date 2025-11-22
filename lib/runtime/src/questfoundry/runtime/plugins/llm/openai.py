@@ -6,7 +6,7 @@ Implements plugin provider pattern for LLM access.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class OpenAIAdapter:
         "gpt-3.5-turbo-16k",
     ]
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize OpenAI adapter.
 
@@ -87,7 +87,7 @@ class OpenAIAdapter:
             logger.error(f"Failed to create ChatOpenAI instance: {e}")
             raise
 
-    def list_available_models(self) -> List[Dict[str, Any]]:
+    def list_available_models(self) -> list[dict[str, Any]]:
         """
         List supported models with metadata.
 
@@ -129,10 +129,10 @@ class OpenAIAdapter:
 
 
 # Global adapter instance
-_adapter: Optional[OpenAIAdapter] = None
+_adapter: OpenAIAdapter | None = None
 
 
-def get_openai_adapter(api_key: Optional[str] = None) -> OpenAIAdapter:
+def get_openai_adapter(api_key: str | None = None) -> OpenAIAdapter:
     """
     Get or create OpenAI adapter singleton.
 

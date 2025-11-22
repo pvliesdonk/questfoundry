@@ -7,7 +7,8 @@ Security is paramount - never execute untrusted code.
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from asteval import Interpreter
 from json_logic import jsonLogic
@@ -22,7 +23,7 @@ class EdgeEvaluator:
 
     def evaluate_condition(
         self,
-        condition: Dict[str, Any],
+        condition: dict[str, Any],
         state: StudioState
     ) -> bool:
         """
@@ -118,7 +119,7 @@ class EdgeEvaluator:
 
     def evaluate_json_logic(
         self,
-        rules: Dict[str, Any],
+        rules: dict[str, Any],
         state: StudioState
     ) -> bool:
         """
@@ -219,7 +220,7 @@ class EdgeEvaluator:
 
     def create_routing_function(
         self,
-        edge: Dict[str, Any],
+        edge: dict[str, Any],
         max_retries: int = 3
     ) -> Callable[[StudioState], str]:
         """

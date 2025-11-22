@@ -11,11 +11,10 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TextIO
+from typing import TextIO
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.syntax import Syntax
 
 from questfoundry.runtime.models.state import Message
 
@@ -27,8 +26,8 @@ class TraceHandler:
 
     def __init__(
         self,
-        output_file: Optional[Path] = None,
-        console: Optional[Console] = None,
+        output_file: Path | None = None,
+        console: Console | None = None,
         verbose: bool = True
     ):
         """
@@ -47,7 +46,7 @@ class TraceHandler:
         self.console = console or Console()
         # Auto-enable verbose for console if writing to file (debugging mode)
         self.verbose = verbose or (output_file is not None)
-        self._file_handle: Optional[TextIO] = None
+        self._file_handle: TextIO | None = None
         self._message_count = 0
 
         # Open file if specified
@@ -146,7 +145,7 @@ class TraceHandler:
         if self.verbose and payload:
             # Show full payload as formatted JSON
             payload_json = json.dumps(payload, indent=2)
-            content_lines.append(f"\n[bold]Payload:[/bold]")
+            content_lines.append("\n[bold]Payload:[/bold]")
             content_lines.append(f"[dim]{payload_json}[/dim]")
         elif payload:
             # Show summary only

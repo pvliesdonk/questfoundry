@@ -4,13 +4,13 @@ Loop pattern models - represents a loop_pattern.schema.json definition.
 Based on spec: components/graph_factory.md
 """
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any
 
 
 class Edge:
     """Represents an edge in loop topology."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize from edge definition."""
         self.raw = data
         self.source = data.get("source", "")
@@ -22,7 +22,7 @@ class Edge:
 class ExitCondition:
     """Represents an exit condition for the loop."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize from exit condition definition."""
         self.raw = data
         self.name = data.get("name", "")
@@ -32,7 +32,7 @@ class ExitCondition:
 class LoopPattern:
     """Represents a loop pattern YAML definition."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize from parsed YAML data."""
         self.raw = data
 
@@ -48,12 +48,12 @@ class LoopPattern:
         self.nodes = topology.get("nodes", [])
 
         # Parse edges
-        self.edges: List[Edge] = []
+        self.edges: list[Edge] = []
         for edge_data in topology.get("edges", []):
             self.edges.append(Edge(edge_data))
 
         # Parse exit conditions
-        self.exit_conditions: List[ExitCondition] = []
+        self.exit_conditions: list[ExitCondition] = []
         for exit_cond_data in topology.get("exit_conditions", []):
             self.exit_conditions.append(ExitCondition(exit_cond_data))
 
@@ -62,7 +62,7 @@ class LoopPattern:
         self.required_roles = roles.get("required", [])
         self.optional_roles = roles.get("optional", [])
 
-    def get_node_ids(self) -> List[str]:
+    def get_node_ids(self) -> list[str]:
         """Get all node IDs in the topology."""
         return [node if isinstance(node, str) else node.get("id", "") for node in self.nodes]
 
@@ -95,7 +95,7 @@ class LoopPattern:
                 return role_id
         raise ValueError(f"Node {node_id} not found in loop topology")
 
-    def get_node_sub_nodes(self, node_id: str) -> Optional[List[Dict[str, Any]]]:
+    def get_node_sub_nodes(self, node_id: str) -> list[dict[str, Any | None]]:
         """
         Get sub_nodes for a Multi-role node.
 

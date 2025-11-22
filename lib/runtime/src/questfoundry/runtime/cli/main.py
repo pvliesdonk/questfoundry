@@ -7,17 +7,15 @@ Architecture: Natural language primary, debug mode secondary.
 
 import signal
 import sys
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.markdown import Markdown
 
 from questfoundry.runtime.cli.showrunner import ShowrunnerInterface
 from questfoundry.runtime.core.graph_factory import GraphFactory
 from questfoundry.runtime.core.state_manager import StateManager
-from questfoundry.runtime.logging_config import setup_logging, get_logger
+from questfoundry.runtime.logging_config import get_logger, setup_logging
 
 # Set up Rich logging
 setup_logging(level="INFO", show_time=False, show_path=False)
@@ -55,16 +53,14 @@ app = typer.Typer(
 
 # Create console for rich output (force UTF-8 for Unicode support on Windows)
 if sys.platform == "win32":
-    import io
-    import codecs
     # Reconfigure stdout to use UTF-8 encoding without closing the underlying buffer
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 console = Console()
 
 # Initialize components (lazy-loaded)
-_graph_factory: Optional[GraphFactory] = None
-_state_manager: Optional[StateManager] = None
-_showrunner: Optional[ShowrunnerInterface] = None
+_graph_factory: GraphFactory | None = None
+_state_manager: StateManager | None = None
+_showrunner: ShowrunnerInterface | None = None
 
 
 def get_graph_factory() -> GraphFactory:
@@ -118,8 +114,8 @@ def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
     trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
-    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
-    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
+    trace_file: str | None = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
+    provider: str | None = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
 ):
     """
     Primary interface: Talk to the Showrunner in natural language.
@@ -140,6 +136,7 @@ def ask(
         trace_handler = None
         if trace:
             from pathlib import Path
+
             from questfoundry.runtime.core.trace_handler import TraceHandler
 
             # Create output file path if trace_file specified
@@ -228,12 +225,12 @@ def ask(
 @app.command()
 def loop(
     loop_id: str = typer.Argument(..., help="Loop ID (e.g., story_spark, hook_harvest)"),
-    context: Optional[str] = typer.Option(None, "--context", "-c", help="Context as key=value pairs"),
+    context: str | None = typer.Option(None, "--context", "-c", help="Context as key=value pairs"),
     mode: str = typer.Option("workshop", "--mode", "-m", help="Execution mode (workshop or production)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
     trace: bool = typer.Option(False, "--trace", help="Enable trace mode to capture agent communication"),
-    trace_file: Optional[str] = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
-    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
+    trace_file: str | None = typer.Option(None, "--trace-file", help="Write trace to file (requires --trace)"),
+    provider: str | None = typer.Option(None, "--provider", "-p", help="Preferred provider (e.g., 'ollama' or 'ollama,openai' for fallback)")
 ):
     """
     Debug/audit mode: Directly invoke a loop (bypasses Showrunner).
@@ -284,6 +281,7 @@ def loop(
         trace_handler = None
         if trace:
             from pathlib import Path
+
             from questfoundry.runtime.core.trace_handler import TraceHandler
 
             # Create output file path if trace_file specified
@@ -471,9 +469,9 @@ def test_graph(
         graph_factory = get_graph_factory()
         graph = graph_factory.create_loop_graph(loop_id)
 
-        console.print(f"[green]✓ Graph compiled successfully[/green]")
+        console.print("[green]✓ Graph compiled successfully[/green]")
         console.print(f"  Loop: {loop_id}")
-        console.print(f"  Ready to invoke")
+        console.print("  Ready to invoke")
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -483,7 +481,7 @@ def test_graph(
 
 @app.command()
 def download_spec(
-    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Specific spec version to download (e.g., spec-v1.0.0)"),
+    tag: str | None = typer.Option(None, "--tag", "-t", help="Specific spec version to download (e.g., spec-v1.0.0)"),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-download even if already cached"),
     show_path: bool = typer.Option(False, "--show-path", "-p", help="Show the downloaded spec path")
 ):
@@ -504,8 +502,8 @@ def download_spec(
     """
     try:
         from questfoundry.runtime.core.spec_fetcher import (
+            SpecFetchError,
             download_latest_release_spec,
-            SpecFetchError
         )
 
         # Show downloading message
@@ -554,8 +552,9 @@ def download_spec(
 @app.command()
 def version():
     """Show version information."""
-    from questfoundry.runtime.core.spec_fetcher import get_spec_source_preference
     import os
+
+    from questfoundry.runtime.core.spec_fetcher import get_spec_source_preference
 
     console.print("[bold]QuestFoundry Runtime[/bold]")
     console.print("Version: 0.1.0")
@@ -588,7 +587,8 @@ def main(
         -vvv:   DEBUG + full details - Show everything including library logs
     """
     import logging
-    from questfoundry.runtime.logging_config import setup_logging, set_level
+
+    from questfoundry.runtime.logging_config import setup_logging
 
     # Map verbosity count to logging level
     if verbose == 0:

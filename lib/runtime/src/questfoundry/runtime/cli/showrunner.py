@@ -10,8 +10,8 @@ For now, uses deterministic mapping but maintains the correct interface structur
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 from questfoundry.runtime.core.graph_factory import GraphFactory
 from questfoundry.runtime.core.state_manager import StateManager
@@ -27,8 +27,8 @@ class ErrorTrackingHandler(logging.Handler):
         super().__init__()
         self.error_count = 0
         self.warning_count = 0
-        self.errors: List[str] = []
-        self.warnings: List[str] = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
 
     def emit(self, record: logging.LogRecord) -> None:
         """Track error and warning messages."""
@@ -45,17 +45,17 @@ class ShowrunnerResponse:
     """Response from Showrunner after interpreting customer directive."""
     success: bool
     plain_language_response: str
-    loops_executed: List[str]
-    suggested_next_steps: List[str]
-    error: Optional[str] = None
+    loops_executed: list[str]
+    suggested_next_steps: list[str]
+    error: str | None = None
 
 
 @dataclass
 class InterpretationResult:
     """Internal result from interpreting a customer directive."""
-    loops_sequenced: List[str]
+    loops_sequenced: list[str]
     plain_language_explanation: str
-    context_for_loops: Dict[str, Any]
+    context_for_loops: dict[str, Any]
 
 
 class ShowrunnerInterface:
@@ -76,9 +76,9 @@ class ShowrunnerInterface:
 
     def __init__(
         self,
-        graph_factory: Optional[GraphFactory] = None,
-        state_manager: Optional[StateManager] = None,
-        role_profile: Optional[Any] = None
+        graph_factory: GraphFactory | None = None,
+        state_manager: StateManager | None = None,
+        role_profile: Any | None = None
     ):
         """
         Initialize Showrunner interface.
@@ -227,7 +227,7 @@ class ShowrunnerInterface:
             InterpretationResult with loops to run and context
         """
         message_lower = customer_message.lower()
-        context: Dict[str, Any] = {}
+        context: dict[str, Any] = {}
 
         # Pattern matching for common requests
         if any(word in message_lower for word in ["write", "create", "draft", "scene"]):
@@ -292,7 +292,7 @@ class ShowrunnerInterface:
     def _execute_loop_internal(
         self,
         loop_id: str,
-        context: Dict[str, Any]
+        context: dict[str, Any]
     ) -> StudioState:
         """
         Execute a single loop internally (customer doesn't see this).
@@ -322,7 +322,7 @@ class ShowrunnerInterface:
     def _generate_plain_language_response(
         self,
         interpretation: InterpretationResult,
-        final_states: Dict[str, StudioState],
+        final_states: dict[str, StudioState],
         original_message: str,
         error_count: int = 0,
         warning_count: int = 0
@@ -390,9 +390,9 @@ class ShowrunnerInterface:
 
     def _suggest_next_steps(
         self,
-        loops_executed: List[str],
-        final_states: Dict[str, StudioState]
-    ) -> List[str]:
+        loops_executed: list[str],
+        final_states: dict[str, StudioState]
+    ) -> list[str]:
         """
         Suggest next steps in plain language (no commands).
 
@@ -468,8 +468,8 @@ class ShowrunnerInterface:
 class ParsedIntent:
     """Deprecated: Legacy class for backward compatibility."""
     action: str
-    args: List[str]
-    flags: Dict[str, str]
+    args: list[str]
+    flags: dict[str, str]
     loop_id: str
 
 
@@ -478,11 +478,11 @@ class ExecutionResult:
     """Deprecated: Legacy class for backward compatibility."""
     success: bool
     summary: str
-    artifacts: Dict[str, Any]
+    artifacts: dict[str, Any]
     tu_id: str
-    quality_status: Dict[str, str]
-    next_steps: List[str]
-    error: Optional[str] = None
+    quality_status: dict[str, str]
+    next_steps: list[str]
+    error: str | None = None
 
 
 # Legacy Showrunner class (for backward compatibility)
