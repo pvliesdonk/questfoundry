@@ -417,18 +417,15 @@ class NodeFactory:
                         if self.state_manager and hasattr(self.state_manager, '_trace_handler'):
                             if self.state_manager._trace_handler:
                                 try:
-                                    # Extract useful insight from result (first 150 chars as preview)
-                                    insight = result[:150].strip()
-                                    if len(result) > 150:
-                                        insight += "..."
-
+                                    # Include FULL result for trace (no truncation)
+                                    # Critical: Roles need to see complete messages to self-stabilize
                                     completed_message = {
                                         "sender": role.id,
                                         "receiver": "system",
                                         "intent": "role_completed",
                                         "payload": {
                                             "role_name": role.name,
-                                            "insight": insight,
+                                            "insight": result,  # Full result, not truncated
                                             "length": len(result)
                                         },
                                         "timestamp": datetime.utcnow().isoformat() + "Z",

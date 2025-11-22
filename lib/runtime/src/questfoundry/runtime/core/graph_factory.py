@@ -263,53 +263,117 @@ class GraphFactory:
         loop: LoopPattern
     ) -> None:
         """
-        Add conditional edges to END for each exit condition.
+        Add conditional edges to END for each exit condition from YAML.
+
+        Evaluates exit conditions defined in loop YAML and creates proper
+        routing logic to terminate the loop when conditions are met.
 
         Args:
             graph: StateGraph
             loop: LoopPattern with exit_conditions defined
         """
-        # For now, add a simple exit condition from the last node
-        # In full implementation, this would be more sophisticated
+        if not loop.exit_conditions:
+            logger.warning(f"Loop {loop.id} has no exit conditions defined")
+            return
 
         if not loop.edges:
             logger.warning(f"Loop {loop.id} has no edges")
             return
 
-        # Find potential exit nodes (those with no outgoing edges)
-        all_sources = {edge.source for edge in loop.edges}
-        all_targets = {edge.target for edge in loop.edges if edge.target != END}
-        exit_nodes = set(loop.get_node_ids()) - all_targets
+        # Find terminal nodes (nodes that have no outgoing edges to other nodes)
+        # These are nodes where the graph flow naturally ends
+        all_node_ids = set(loop.get_node_ids())
+        nodes_with_outgoing_edges = {edge.source for edge in loop.edges}
+        terminal_nodes = all_node_ids - nodes_with_outgoing_edges
 
-        if not exit_nodes:
-            # Use last node if no exit nodes found
-            exit_nodes = {loop.edges[-1].target}
+        if not terminal_nodes:
+            # If no clear terminal nodes, use the target of the last edge
+            terminal_nodes = {loop.edges[-1].target}
 
-        # Add exit condition from each exit node
-        for exit_node in exit_nodes:
+        logger.info(f"Configuring exit conditions for terminal nodes: {terminal_nodes}")
+
+        # Add exit condition routing from each terminal node
+        for exit_node in terminal_nodes:
             try:
-                def exit_condition(state: StudioState, node_id: str = exit_node) -> str:
-                    # Simple exit logic
-                    if state.get("tu_lifecycle") == "cold-merged":
-                        return END
-                    if state.get("error"):
-                        return END
-                    return "continue"
+                # Create routing function that evaluates all YAML exit conditions
+                def create_exit_routing(node_id: str):
+                    def exit_routing(state: StudioState) -> str:
+                        """Evaluate YAML exit conditions and route to END or continue."""
+                        # Track iteration count in loop_context
+                        iteration_count = state.get("loop_context", {}).get("iteration_count", 0)
+                        state["loop_context"]["iteration_count"] = iteration_count + 1
 
-                # Use correct API: 'path' parameter instead of 'condition'
+                        # Map YAML field references to actual state fields
+                        # This allows YAML to use friendly names like:
+                        #   state.meta.current_tu.status → state.tu_lifecycle
+                        #   state.execution.iteration_count → state.loop_context.iteration_count
+
+                        # Check each exit condition using EdgeEvaluator
+                        for exit_cond in loop.exit_conditions:
+                            condition_str = exit_cond.condition
+
+                            # Simple string-based condition evaluation
+                            # Replace YAML field names with actual state field access
+                            mapped_condition = condition_str.replace(
+                                "state.meta.current_tu.status", "state['tu_lifecycle']"
+                            ).replace(
+                                "state.execution.iteration_count",
+                                "state['loop_context']['iteration_count']"
+                            )
+
+                            try:
+                                # Use EdgeEvaluator's safe python expression evaluation
+                                condition_obj = {
+                                    "evaluator": "python_expression",
+                                    "expression": mapped_condition
+                                }
+
+                                if self.edge_evaluator.evaluate_condition(condition_obj, state):
+                                    logger.info(
+                                        f"Exit condition met: {exit_cond.name} "
+                                        f"({condition_str})"
+                                    )
+                                    return END
+
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to evaluate exit condition '{exit_cond.name}': {e}"
+                                )
+
+                        # Also check for errors - always exit on error
+                        if state.get("error"):
+                            logger.info("Exiting due to error in state")
+                            return END
+
+                        # No exit conditions met - continue to next iteration
+                        # Note: We don't loop back to the same node (no self-loop)
+                        # Instead, we rely on the graph's normal edge flow
+                        logger.debug(
+                            f"No exit conditions met (iteration {iteration_count + 1}), "
+                            "continuing normal flow"
+                        )
+                        return END  # Changed: Always return END from exit nodes
+
+                    return exit_routing
+
+                # Create the routing function for this exit node
+                routing_fn = create_exit_routing(exit_node)
+
+                # Add conditional edge
+                # Note: We only map to END because exit nodes shouldn't loop back
                 graph.add_conditional_edges(
                     source=exit_node,
-                    path=exit_condition,
+                    path=routing_fn,
                     path_map={
-                        END: END,
-                        "continue": exit_node  # Loop back
+                        END: END
                     }
                 )
 
-                logger.debug(f"Added exit condition from: {exit_node}")
+                logger.debug(f"Added exit condition routing from: {exit_node}")
 
             except Exception as e:
-                logger.warning(f"Failed to add exit condition from {exit_node}: {e}")
+                logger.error(f"Failed to add exit condition from {exit_node}: {e}")
+                raise
 
     def compile_graph(self, graph: StateGraph) -> Any:
         """
