@@ -19,6 +19,7 @@ except ImportError:
 import jsonschema
 import yaml
 
+from questfoundry.runtime.exceptions import ResourceLoadError, SchemaValidationError
 from questfoundry.runtime.models.loop import LoopPattern
 from questfoundry.runtime.models.role import RoleProfile
 

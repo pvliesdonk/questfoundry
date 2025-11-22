@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.exceptions import StateError
 from questfoundry.runtime.models.state import (
     QUALITY_BARS,
     VALID_TRANSITIONS,
@@ -178,9 +179,17 @@ class StateManager:
         current = state["tu_lifecycle"]
 
         if new_lifecycle not in VALID_TRANSITIONS.get(current, []):
-            raise ValueError(
-                f"Invalid transition: {current} → {new_lifecycle}\n"
-                f"Valid transitions from {current}: {VALID_TRANSITIONS.get(current, [])}"
+            valid_transitions = VALID_TRANSITIONS.get(current, [])
+            raise StateError(
+                f"Invalid lifecycle transition: {current} → {new_lifecycle}",
+                tu_id=state["tu_id"],
+                current_state=current,
+                suggestions=[
+                    f"Valid transitions from '{current}': {', '.join(valid_transitions)}"
+                    if valid_transitions
+                    else f"'{current}' is a terminal state with no valid transitions",
+                    "Check spec/components/state_manager.md for lifecycle documentation",
+                ],
             )
 
         new_state = self.update_state(state, {"tu_lifecycle": new_lifecycle})
@@ -261,14 +270,28 @@ class StateManager:
         # Validate bar names
         for bar_name in bar_results.keys():
             if bar_name not in QUALITY_BARS:
-                raise ValueError(f"Unknown quality bar: {bar_name}")
+                raise StateError(
+                    f"Unknown quality bar: '{bar_name}'",
+                    tu_id=state["tu_id"],
+                    suggestions=[
+                        f"Valid quality bars: {', '.join(QUALITY_BARS)}",
+                        "Check spec/components/state_manager.md for quality bar definitions",
+                    ],
+                )
 
         # Validate statuses
         valid_statuses = {"green", "yellow", "red", "not_checked"}
         for bar_name, bar_status in bar_results.items():
             status = bar_status.get("status", "not_checked")
             if status not in valid_statuses:
-                raise ValueError(f"Invalid bar status: {status}")
+                raise StateError(
+                    f"Invalid status '{status}' for quality bar '{bar_name}'",
+                    tu_id=state["tu_id"],
+                    suggestions=[
+                        f"Valid statuses: {', '.join(valid_statuses)}",
+                        "Quality bar status must be one of: green, yellow, red, not_checked",
+                    ],
+                )
 
         # Update quality bars
         new_state = self.update_state(state, {"quality_bars": bar_results})
@@ -390,4 +413,11 @@ class StateManager:
             return any(s != "not_checked" for s in statuses)
 
         else:
-            raise ValueError(f"Unknown threshold: {threshold}")
+            raise StateError(
+                f"Unknown quality bar threshold: '{threshold}'",
+                tu_id=state["tu_id"],
+                suggestions=[
+                    "Valid thresholds: all_green, mostly_green, no_red, any_progress",
+                    "Check edge evaluator configuration for correct threshold value",
+                ],
+            )

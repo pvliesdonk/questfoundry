@@ -14,6 +14,8 @@ from typing import Any
 
 import yaml
 
+from questfoundry.runtime.exceptions import ProviderError
+
 logger = logging.getLogger(__name__)
 
 
@@ -175,9 +177,17 @@ class ProviderManager:
             RuntimeError: If no providers are available
         """
         if not self.available_providers:
-            raise RuntimeError(
-                "No LLM providers available. Set at least one API key: "
-                "ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, or configure Ollama/LiteLLM"
+            raise ProviderError(
+                "No LLM providers available",
+                suggestions=[
+                    "Set at least one API key environment variable:",
+                    "  • ANTHROPIC_API_KEY for Anthropic Claude",
+                    "  • OPENAI_API_KEY for OpenAI GPT",
+                    "  • GOOGLE_API_KEY for Google Gemini",
+                    "Or configure a local provider:",
+                    "  • Ollama (no API key required)",
+                    "  • LiteLLM with LITELLM_API_BASE",
+                ],
             )
 
         # If "auto" or None, use first available
@@ -322,7 +332,15 @@ class ProviderManager:
         elif provider == "litellm":
             client = self._create_litellm_client(model, temperature, max_tokens, **kwargs)
         else:
-            raise ValueError(f"Unsupported provider: {provider}")
+            raise ProviderError(
+                f"Unsupported provider: '{provider}'",
+                provider_name=provider,
+                suggestions=[
+                    f"Available providers: {', '.join(self.available_providers)}",
+                    "Use 'auto' to automatically select the first available provider",
+                    "Check CONTRIBUTING.md for provider configuration details",
+                ],
+            )
 
         # Cache and return
         self._llm_cache[cache_key] = client
@@ -336,14 +354,28 @@ class ProviderManager:
         """
         try:
             from langchain_anthropic import ChatAnthropic
-        except ImportError:
-            raise ImportError(
-                "langchain-anthropic not installed. Install with: pip install langchain-anthropic"
-            )
+        except ImportError as e:
+            raise ProviderError(
+                "Anthropic provider package not installed",
+                provider_name="anthropic",
+                suggestions=[
+                    "Install with: pip install langchain-anthropic",
+                    "Or use uv: uv add langchain-anthropic",
+                    "Or choose a different provider with --provider flag",
+                ],
+            ) from e
 
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+            raise ProviderError(
+                "ANTHROPIC_API_KEY environment variable not set",
+                provider_name="anthropic",
+                suggestions=[
+                    "Set the API key: export ANTHROPIC_API_KEY='your-key-here'",
+                    "Get an API key from: https://console.anthropic.com/",
+                    "Or use a different provider with --provider flag",
+                ],
+            )
 
         return ChatAnthropic(
             model=model,
@@ -357,14 +389,28 @@ class ProviderManager:
         """Create OpenAI client with JSON mode enabled."""
         try:
             from langchain_openai import ChatOpenAI
-        except ImportError:
-            raise ImportError(
-                "langchain-openai not installed. Install with: pip install langchain-openai"
-            )
+        except ImportError as e:
+            raise ProviderError(
+                "OpenAI provider package not installed",
+                provider_name="openai",
+                suggestions=[
+                    "Install with: pip install langchain-openai",
+                    "Or use uv: uv add langchain-openai",
+                    "Or choose a different provider with --provider flag",
+                ],
+            ) from e
 
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
+            raise ProviderError(
+                "OPENAI_API_KEY environment variable not set",
+                provider_name="openai",
+                suggestions=[
+                    "Set the API key: export OPENAI_API_KEY='your-key-here'",
+                    "Get an API key from: https://platform.openai.com/api-keys",
+                    "Or use a different provider with --provider flag",
+                ],
+            )
 
         # Force JSON output format for structured responses
         # Note: response_format requires the prompt to mention JSON
@@ -381,15 +427,28 @@ class ProviderManager:
         """Create Google AI Studio client with JSON mode enabled."""
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
-        except ImportError:
-            raise ImportError(
-                "langchain-google-genai not installed. "
-                "Install with: pip install langchain-google-genai"
-            )
+        except ImportError as e:
+            raise ProviderError(
+                "Google AI provider package not installed",
+                provider_name="google",
+                suggestions=[
+                    "Install with: pip install langchain-google-genai",
+                    "Or use uv: uv add langchain-google-genai",
+                    "Or choose a different provider with --provider flag",
+                ],
+            ) from e
 
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set")
+            raise ProviderError(
+                "GOOGLE_API_KEY environment variable not set",
+                provider_name="google",
+                suggestions=[
+                    "Set the API key: export GOOGLE_API_KEY='your-key-here'",
+                    "Get an API key from: https://makersuite.google.com/app/apikey",
+                    "Or use a different provider with --provider flag",
+                ],
+            )
 
         # Force JSON output format for structured responses
         return ChatGoogleGenerativeAI(
@@ -405,10 +464,16 @@ class ProviderManager:
         """Create Ollama client (local or remote) with JSON mode enabled."""
         try:
             from langchain_ollama import ChatOllama
-        except ImportError:
-            raise ImportError(
-                "langchain-ollama not installed. Install with: pip install langchain-ollama"
-            )
+        except ImportError as e:
+            raise ProviderError(
+                "Ollama provider package not installed",
+                provider_name="ollama",
+                suggestions=[
+                    "Install with: pip install langchain-ollama",
+                    "Or use uv: uv add langchain-ollama",
+                    "Also ensure Ollama is running: ollama serve",
+                ],
+            ) from e
 
         # Support both OLLAMA_HOST (official, preferred) and OLLAMA_API_BASE (alternate)
         base_url = os.getenv("OLLAMA_HOST") or os.getenv(
@@ -430,14 +495,28 @@ class ProviderManager:
         """Create LiteLLM client (proxy) with JSON mode enabled."""
         try:
             from langchain_community.chat_models import ChatLiteLLM
-        except ImportError:
-            raise ImportError(
-                "langchain-community not installed. Install with: pip install langchain-community"
-            )
+        except ImportError as e:
+            raise ProviderError(
+                "LiteLLM provider package not installed",
+                provider_name="litellm",
+                suggestions=[
+                    "Install with: pip install langchain-community",
+                    "Or use uv: uv add langchain-community",
+                    "Or choose a different provider with --provider flag",
+                ],
+            ) from e
 
         api_base = os.getenv("LITELLM_API_BASE")
         if not api_base:
-            raise ValueError("LITELLM_API_BASE environment variable not set")
+            raise ProviderError(
+                "LITELLM_API_BASE environment variable not set",
+                provider_name="litellm",
+                suggestions=[
+                    "Set the API base: export LITELLM_API_BASE='http://localhost:4000'",
+                    "Start LiteLLM server: litellm --config config.yaml",
+                    "Or use a different provider with --provider flag",
+                ],
+            )
 
         api_key = os.getenv("LITELLM_API_KEY", "sk-1234")  # LiteLLM may not require key
 
