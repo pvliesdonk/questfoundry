@@ -10,7 +10,7 @@ For now, uses deterministic mapping but maintains the correct interface structur
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from questfoundry.runtime.core.graph_factory import GraphFactory
@@ -18,6 +18,26 @@ from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.models.state import StudioState
 
 logger = logging.getLogger(__name__)
+
+
+class ErrorTrackingHandler(logging.Handler):
+    """Logging handler that tracks error and warning counts during execution."""
+
+    def __init__(self):
+        super().__init__()
+        self.error_count = 0
+        self.warning_count = 0
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Track error and warning messages."""
+        if record.levelno >= logging.ERROR:
+            self.error_count += 1
+            self.errors.append(record.getMessage())
+        elif record.levelno == logging.WARNING:
+            self.warning_count += 1
+            self.warnings.append(record.getMessage())
 
 
 @dataclass
@@ -104,6 +124,11 @@ class ShowrunnerInterface:
         Returns:
             ShowrunnerResponse with plain language response and next steps
         """
+        # Install error tracking handler
+        error_tracker = ErrorTrackingHandler()
+        root_logger = logging.getLogger()
+        root_logger.addHandler(error_tracker)
+
         try:
             logger.info(f"[bold]Showrunner interpreting:[/bold] {customer_message}")
 
@@ -147,7 +172,9 @@ class ShowrunnerInterface:
             plain_response = self._generate_plain_language_response(
                 interpretation,
                 final_states,
-                customer_message
+                customer_message,
+                error_count=error_tracker.error_count,
+                warning_count=error_tracker.warning_count
             )
 
             # 4. Suggest next steps
@@ -156,10 +183,14 @@ class ShowrunnerInterface:
                 final_states
             )
 
-            logger.info("[bold green]Request completed successfully[/bold green]")
+            # Determine overall success (no exceptions but may have had errors/warnings)
+            if error_tracker.error_count > 0:
+                logger.warning(f"[bold yellow]Request completed with {error_tracker.error_count} error(s)[/bold yellow]")
+            else:
+                logger.info("[bold green]Request completed successfully[/bold green]")
 
             return ShowrunnerResponse(
-                success=True,
+                success=error_tracker.error_count == 0,  # Success only if no errors
                 plain_language_response=plain_response,
                 loops_executed=loops_executed,
                 suggested_next_steps=next_steps,
@@ -175,6 +206,9 @@ class ShowrunnerInterface:
                 suggested_next_steps=[],
                 error=str(e)
             )
+        finally:
+            # Remove error tracking handler
+            root_logger.removeHandler(error_tracker)
 
     def _interpret_directive_deterministic(
         self,
@@ -283,7 +317,9 @@ class ShowrunnerInterface:
         self,
         interpretation: InterpretationResult,
         final_states: Dict[str, StudioState],
-        original_message: str
+        original_message: str,
+        error_count: int = 0,
+        warning_count: int = 0
     ) -> str:
         """
         Generate plain language response for customer (no jargon).
@@ -292,6 +328,8 @@ class ShowrunnerInterface:
             interpretation: The interpretation result
             final_states: Final states from executed loops
             original_message: Original customer message
+            error_count: Number of errors that occurred during execution
+            warning_count: Number of warnings that occurred during execution
 
         Returns:
             Plain language response string
@@ -311,24 +349,36 @@ class ShowrunnerInterface:
                 response_lines.append("")
 
         # Add quality status in plain language
+        # Combine quality bar issues with error/warning counts
+        all_issues = []
+
+        # Check quality bars
         for loop_id, state in final_states.items():
             quality_bars = state.get("quality_bars", {})
             if quality_bars:
-                issues = []
                 for bar_name, bar_data in quality_bars.items():
                     status = bar_data.get("status", "unknown")
                     if status in ["yellow", "red"]:
                         friendly_bar = self._translate_bar_name(bar_name)
-                        issues.append(friendly_bar)
+                        all_issues.append(friendly_bar)
 
-                if issues:
-                    response_lines.append("Areas that need attention:")
-                    for issue in issues:
-                        response_lines.append(f"  • {issue}")
-                    response_lines.append("")
-                else:
-                    response_lines.append("Everything looks good!")
-                    response_lines.append("")
+        # Add execution errors/warnings
+        if error_count > 0:
+            error_msg = f"{error_count} error" + ("s" if error_count > 1 else "")
+            all_issues.append(f"{error_msg} occurred during processing")
+        if warning_count > 0:
+            warning_msg = f"{warning_count} warning" + ("s" if warning_count > 1 else "")
+            all_issues.append(f"{warning_msg} occurred during processing")
+
+        # Show appropriate status message
+        if all_issues:
+            response_lines.append("Areas that need attention:")
+            for issue in all_issues:
+                response_lines.append(f"  • {issue}")
+            response_lines.append("")
+        else:
+            response_lines.append("Everything looks good!")
+            response_lines.append("")
 
         return "\n".join(response_lines).strip()
 
