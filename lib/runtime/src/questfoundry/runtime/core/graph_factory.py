@@ -297,43 +297,58 @@ class GraphFactory:
             try:
                 # Create routing function that evaluates all YAML exit conditions
                 def create_exit_routing(node_id: str):
+                    # Use closure to track iteration count (stateful but doesn't mutate state)
+                    iteration_counter = {"count": 0}
+
                     def exit_routing(state: StudioState) -> str:
                         """Evaluate YAML exit conditions and route to END or continue."""
-                        # Track iteration count in loop_context
-                        iteration_count = state.get("loop_context", {}).get("iteration_count", 0)
-                        state["loop_context"]["iteration_count"] = iteration_count + 1
+                        # Increment iteration count in closure (safe, doesn't mutate state)
+                        iteration_counter["count"] += 1
+                        current_iteration = iteration_counter["count"]
 
-                        # Map YAML field references to actual state fields
-                        # This allows YAML to use friendly names like:
-                        #   state.meta.current_tu.status → state.tu_lifecycle
-                        #   state.execution.iteration_count → state.loop_context.iteration_count
+                        logger.debug(f"Exit routing check at iteration {current_iteration}")
 
-                        # Check each exit condition using EdgeEvaluator
+                        # Check each exit condition using direct evaluation
                         for exit_cond in loop.exit_conditions:
                             condition_str = exit_cond.condition
 
-                            # Simple string-based condition evaluation
-                            # Replace YAML field names with actual state field access
-                            mapped_condition = condition_str.replace(
-                                "state.meta.current_tu.status", "state['tu_lifecycle']"
-                            ).replace(
-                                "state.execution.iteration_count",
-                                "state['loop_context']['iteration_count']"
-                            )
-
+                            # Map YAML field references to actual values for evaluation
+                            # This allows YAML to use friendly names
                             try:
-                                # Use EdgeEvaluator's safe python expression evaluation
-                                condition_obj = {
-                                    "evaluator": "python_expression",
-                                    "expression": mapped_condition
-                                }
+                                # Replace YAML field names with actual state access
+                                # state.meta.current_tu.status → tu_lifecycle
+                                # state.execution.iteration_count → current_iteration
 
-                                if self.edge_evaluator.evaluate_condition(condition_obj, state):
-                                    logger.info(
-                                        f"Exit condition met: {exit_cond.name} "
-                                        f"({condition_str})"
-                                    )
-                                    return END
+                                # Simple condition evaluation without asteval
+                                # Parse the condition string and evaluate directly
+                                if "state.meta.current_tu.status" in condition_str:
+                                    # Example: state.meta.current_tu.status == 'completed'
+                                    target_lifecycle = condition_str.split("==")[1].strip().strip("'\"")
+                                    if state.get("tu_lifecycle") == target_lifecycle:
+                                        logger.info(
+                                            f"Exit condition met: {exit_cond.name} "
+                                            f"(tu_lifecycle == {target_lifecycle})"
+                                        )
+                                        return END
+
+                                elif "state.execution.iteration_count" in condition_str:
+                                    # Example: state.execution.iteration_count >= 2
+                                    if ">=" in condition_str:
+                                        threshold = int(condition_str.split(">=")[1].strip())
+                                        if current_iteration >= threshold:
+                                            logger.info(
+                                                f"Exit condition met: {exit_cond.name} "
+                                                f"(iteration {current_iteration} >= {threshold})"
+                                            )
+                                            return END
+                                    elif ">" in condition_str:
+                                        threshold = int(condition_str.split(">")[1].strip())
+                                        if current_iteration > threshold:
+                                            logger.info(
+                                                f"Exit condition met: {exit_cond.name} "
+                                                f"(iteration {current_iteration} > {threshold})"
+                                            )
+                                            return END
 
                             except Exception as e:
                                 logger.warning(
@@ -345,14 +360,12 @@ class GraphFactory:
                             logger.info("Exiting due to error in state")
                             return END
 
-                        # No exit conditions met - continue to next iteration
-                        # Note: We don't loop back to the same node (no self-loop)
-                        # Instead, we rely on the graph's normal edge flow
+                        # No exit conditions met - continue to END (terminal node behavior)
                         logger.debug(
-                            f"No exit conditions met (iteration {iteration_count + 1}), "
-                            "continuing normal flow"
+                            f"No exit conditions met (iteration {current_iteration}), "
+                            "ending execution"
                         )
-                        return END  # Changed: Always return END from exit nodes
+                        return END  # Terminal nodes always go to END
 
                     return exit_routing
 

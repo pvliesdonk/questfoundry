@@ -1,0 +1,100 @@
+{
+  "trace_started": "2025-11-22T14:52:10.339155Z",
+  "format": "QuestFoundry Protocol Trace",
+  "version": "1.0"
+}
+
+================================================================================
+AGENT-TO-AGENT COMMUNICATION TRACE
+================================================================================
+
+
+[Message #1]
+Timestamp: 2025-11-22T14:52:11.072915Z
+From: showrunner
+To: system
+Intent: role_started
+Envelope: {"tu_id": "TU-2025-001"}
+Payload:
+{
+  "role_name": "Showrunner"
+}
+--------------------------------------------------------------------------------
+
+[Message #2]
+Timestamp: 2025-11-22T14:52:25.778600Z
+From: showrunner
+To: system
+Intent: role_completed
+Envelope: {"tu_id": "TU-2025-001"}
+Payload:
+{
+  "role_name": "Showrunner",
+  "insight": "{\n  \"customer_message\": \"You haven\u2019t given me a creative directive yet\u2014just the overall operating brief for how I should work with you. To keep moment...",
+  "length": 1780
+}
+--------------------------------------------------------------------------------
+
+[Message #3]
+Timestamp: 2025-11-22T14:52:25.780565Z
+From: showrunner
+To: broadcast
+Intent: artifact_created
+Envelope: {"tu_id": "TU-2025-001", "snapshot_ref": null}
+Payload:
+{
+  "artifact_id": "showrunner",
+  "artifact_type": "output"
+}
+--------------------------------------------------------------------------------
+
+[Message #4]
+Timestamp: 2025-11-22T14:52:25.785401Z
+From: plotwright
+To: system
+Intent: role_started
+Envelope: {"tu_id": "TU-2025-001"}
+Payload:
+{
+  "role_name": "Plotwright"
+}
+--------------------------------------------------------------------------------
+
+[Message #5]
+Timestamp: 2025-11-22T14:52:25.786386Z
+From: showrunner
+To: system
+Intent: role_started
+Envelope: {"tu_id": "TU-2025-001"}
+Payload:
+{
+  "role_name": "Showrunner"
+}
+--------------------------------------------------------------------------------
+
+[Message #6]
+Timestamp: 2025-11-22T14:52:42.030450Z
+From: showrunner
+To: system
+Intent: role_completed
+Envelope: {"tu_id": "TU-2025-001"}
+Payload:
+{
+  "role_name": "Showrunner",
+  "insight": "{\n  \"customer_message\": \"Right now we\u2019re at a very high-level \u201cstory spark\u201d phase for an entire work, but you haven\u2019t told me what kind of story, medi...",
+  "length": 2490
+}
+--------------------------------------------------------------------------------
+
+[Message #7]
+Timestamp: 2025-11-22T14:52:42.032428Z
+From: showrunner
+To: broadcast
+Intent: artifact_created
+Envelope: {"tu_id": "TU-2025-001", "snapshot_ref": null}
+Payload:
+{
+  "artifact_id": "showrunner",
+  "artifact_type": "output"
+}
+--------------------------------------------------------------------------------

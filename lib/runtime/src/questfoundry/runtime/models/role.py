@@ -27,12 +27,14 @@ class RoleProfile:
         self.tools = behavior.get("tools", [])
         self.model_config = behavior.get("model_config", {})
 
-        # LLM config (fallback)
-        llm_config = data.get("llm_config", {})
+        # LLM config (check both execution.llm_config and root llm_config for compatibility)
+        execution = data.get("execution", {})
+        llm_config = execution.get("llm_config", data.get("llm_config", {}))
+
         if not self.model_config:
             self.model_config = {
                 "provider": llm_config.get("provider", "auto"),
-                "model_tier": llm_config.get("model_tier", "flagship"),
+                "model_tier": llm_config.get("model_tier", "creative-writing"),  # Changed: use valid tier
                 "model": llm_config.get("model"),  # Backward compat (specific model name)
                 "temperature": llm_config.get("temperature", 0.7),
                 "max_tokens": llm_config.get("max_tokens", 4096)
