@@ -545,12 +545,14 @@ class NodeFactory:
                         response = llm.invoke(json_prompt)
                         result = response.content if hasattr(response, "content") else str(response)
 
-                        # Send role_completed with extracted insight
+                        # Send role_completed with extracted insight and prompt context
                         if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
                             if self.state_manager._trace_handler:
                                 try:
                                     # Include FULL result for trace (no truncation)
                                     # Critical: Roles need to see complete messages to self-stabilize
+                                    # Also include the rendered prompt so we can debug
+                                    # cross-role communication and prompt construction.
                                     completed_message = {
                                         "sender": role.id,
                                         "receiver": "system",
@@ -559,6 +561,12 @@ class NodeFactory:
                                             "role_name": role.name,
                                             "insight": result,  # Full result, not truncated
                                             "length": len(result),
+                                            # NOTE: This is the rendered role prompt *before*
+                                            # JSON-format instructions are appended.
+                                            # TODO: Ideally we'd also capture a structured view
+                                            # of the prompt components (system vs. user vs. tools)
+                                            # rather than a single flattened string.
+                                            "prompt": prompt,
                                         },
                                         "timestamp": datetime.utcnow().isoformat() + "Z",
                                         "envelope": {
