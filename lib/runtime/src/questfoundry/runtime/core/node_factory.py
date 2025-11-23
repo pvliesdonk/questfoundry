@@ -400,6 +400,12 @@ class NodeFactory:
             os.getenv("QF_LLM_PROVIDER") or self.preferred_provider or role.get_provider()
         )
 
+        # If provider comes from env/CLI and is not "auto", treat it as
+        # an explicit choice and enable strict provider selection. In that
+        # mode we will not silently fall back to unrelated providers.
+        env_or_cli_provider = os.getenv("QF_LLM_PROVIDER") or self.preferred_provider
+        strict_provider_selection = bool(env_or_cli_provider) and preferred_provider != "auto"
+
         # Parse fallback chain if comma-separated (e.g., "ollama,openai")
         fallback_chain = None
         if preferred_provider and "," in preferred_provider:
@@ -407,7 +413,9 @@ class NodeFactory:
             preferred_provider = providers[0]  # First is preferred
             fallback_chain = providers[1:]  # Rest are fallbacks
 
-        provider = self.provider_manager.select_provider(preferred_provider, fallback_chain)
+        provider = self.provider_manager.select_provider(
+            preferred_provider, fallback_chain, strict=strict_provider_selection
+        )
 
         # 2. Resolve model tier to actual model name
         # Check for explicit model override first (backward compatibility)
@@ -443,6 +451,9 @@ class NodeFactory:
             "temperature": temperature,
             "max_tokens": max_tokens,
             "role_type": role.role_type,
+            # Provider selection metadata used for graceful fallback
+            "fallback_chain": fallback_chain,
+            "strict_provider_selection": strict_provider_selection,
         }
 
     def create_role_node(self, role_id: str) -> Callable[[StudioState], dict[str, Any]]:
@@ -561,7 +572,14 @@ class NodeFactory:
                                     logger.warning(f"Trace handler error: {e}")
 
                     except Exception as e:
+                        # Gracefully handle provider-level failures (e.g. 404, rate limit)
                         logger.error(f"LLM invocation failed for {role.id}: {e}")
+                        # Mark provider as unavailable for subsequent selections in this run
+                        if provider:
+                            self.provider_manager.mark_unavailable(
+                                provider, reason=str(e)
+                            )
+                        # Re-raise so the caller can decide whether to abort or retry
                         raise
                 else:
                     # Service type - tool-only execution (not yet implemented)

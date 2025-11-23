@@ -160,9 +160,25 @@ class ProviderManager:
 
         return available
 
-    def select_provider(
-        self, preferred_provider: str | None = None, fallback_chain: list[str | None] = None
-    ) -> str:
+    def mark_unavailable(self, provider: str, reason: str | None = None) -> None:
+        """Mark provider as unavailable for the remainder of this run.
+
+        This removes the provider from `available_providers` so subsequent
+        selections will skip it (and can fall back or error).
+        """
+        if provider in self.available_providers:
+            self.available_providers.remove(provider)
+            logger.warning(
+                f"Marking provider '{provider}' as unavailable: {reason or 'runtime error'}"
+            )
+
+
+def select_provider(
+        self,
+        preferred_provider: str | None = None,
+        fallback_chain: list[str | None] = None,
+        strict: bool = False,
+) -> str:
         """
         Select best available provider.
 
@@ -211,7 +227,17 @@ class ProviderManager:
                     )
                     return fallback
 
-        # Last resort: use first available
+        # Last resort: either error (strict) or use first available
+        if strict:
+            # When strict is True we treat an explicit provider/fallback list
+            # as authoritative and do NOT silently fall back to some other
+            # configured provider. This is used when the user has set
+            # QF_LLM_PROVIDER or passed --provider on the CLI.
+            raise ProviderError(
+                f"Requested provider '{preferred_provider}' and any fallbacks are not available.",
+                provider_name=preferred_provider,
+            )
+
         selected = self.available_providers[0]
         logger.warning(
             f"Provider '{preferred_provider}' and fallbacks unavailable. Using: {selected}"
