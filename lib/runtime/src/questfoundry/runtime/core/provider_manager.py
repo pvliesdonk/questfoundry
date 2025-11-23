@@ -482,12 +482,20 @@ class ProviderManager:
 
         # Force JSON output format for all Ollama models
         # This ensures structured responses are properly formatted
+        # TODO: Ideal behavior is to:
+        #   - Track per-model context limits (e.g. via model_tiers.yaml)
+        #   - Estimate rendered prompt token count per request
+        #   - Raise a clear error if prompt_tokens + max_tokens exceeds the model's
+        #     context window instead of relying on Ollama's internal truncation
+        num_ctx = int(os.getenv("QF_OLLAMA_NUM_CTX", "32768"))
+
         return ChatOllama(
             model=model,
             temperature=temperature,
             num_predict=max_tokens,
             base_url=base_url,
             format="json",  # Critical: Forces JSON-only responses
+            num_ctx=num_ctx,
             **kwargs,
         )
 
