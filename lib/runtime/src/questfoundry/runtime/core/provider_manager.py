@@ -172,25 +172,29 @@ class ProviderManager:
                 f"Marking provider '{provider}' as unavailable: {reason or 'runtime error'}"
             )
 
-
-def select_provider(
+    def select_provider(
         self,
         preferred_provider: str | None = None,
-        fallback_chain: list[str | None] = None,
+        fallback_chain: list[str | None] | None = None,
         strict: bool = False,
-) -> str:
+    ) -> str:
         """
         Select best available provider.
 
         Args:
             preferred_provider: Preferred provider name (or "auto")
             fallback_chain: Ordered list of fallback providers
+            strict: When True, do not silently fall back to an
+                arbitrary available provider if the requested
+                provider/fallback chain is unavailable.
 
         Returns:
-            Selected provider name
+            Selected provider name.
 
         Raises:
-            RuntimeError: If no providers are available
+            ProviderError: If no providers are available, or if
+                `strict` is True and the requested provider plus
+                fallbacks are not available.
         """
         if not self.available_providers:
             raise ProviderError(
@@ -209,21 +213,24 @@ def select_provider(
         # If "auto" or None, use first available
         if preferred_provider in (None, "auto"):
             selected = self.available_providers[0]
-            logger.info(f"Auto-selected provider: {selected}")
+            logger.info("Auto-selected provider: %s", selected)
             return selected
 
         # Try preferred provider
         if preferred_provider in self.available_providers:
-            logger.info(f"Using preferred provider: {preferred_provider}")
+            logger.info("Using preferred provider: %s", preferred_provider)
             return preferred_provider
 
-        # Try fallback chain
+        # Try fallback chain (if provided)
         if fallback_chain:
             for fallback in fallback_chain:
+                if fallback is None:
+                    continue
                 if fallback in self.available_providers:
                     logger.warning(
-                        f"Preferred provider '{preferred_provider}' unavailable. "
-                        f"Using fallback: {fallback}"
+                        "Preferred provider '%s' unavailable. Using fallback: %s",
+                        preferred_provider,
+                        fallback,
                     )
                     return fallback
 
@@ -240,30 +247,22 @@ def select_provider(
 
         selected = self.available_providers[0]
         logger.warning(
-            f"Provider '{preferred_provider}' and fallbacks unavailable. Using: {selected}"
+            "Provider '%s' and fallbacks unavailable. Using: %s",
+            preferred_provider,
+            selected,
         )
         return selected
 
     def get_recommended_tier(self, role_id: str) -> str:
-        """
-        Get recommended model tier for a role.
+        """Get recommended model tier name for a given role.
 
-        Args:
-            role_id: Role identifier (e.g., "showrunner", "plotwright")
-
-        Returns:
-            Recommended tier name
-
-        Examples:
-            >>> get_recommended_tier("showrunner")
-            "customer-facing"
-
-            >>> get_recommended_tier("scene_smith")
-            "creative-writing"
+        This is used to map role IDs (e.g., "plotwright", "scene_smith")
+        to model tiers defined in the model_tiers.yaml configuration.
+        If no specific recommendation exists for a role, falls back to
+        the configured default tier ("creative-writing" by default).
         """
         recommendations = self.tier_mapping.get("role_tier_recommendations", {})
         default_tier = self.tier_mapping.get("default_tier", "creative-writing")
-
         return recommendations.get(role_id, default_tier)
 
     def resolve_model(
