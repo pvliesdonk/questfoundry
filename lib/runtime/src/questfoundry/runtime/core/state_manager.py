@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.core.cold_store import ColdStore
 from questfoundry.runtime.exceptions import StateError
 from questfoundry.runtime.models.state import (
     QUALITY_BARS,
@@ -30,15 +33,40 @@ logger = logging.getLogger(__name__)
 class StateManager:
     """Manage StudioState lifecycle and mutations throughout loop execution."""
 
-    def __init__(self, trace_handler: TraceHandler | None = None):
+    def __init__(
+        self,
+        trace_handler: TraceHandler | None = None,
+        project_id: str | None = None,
+        project_root: str | Path | None = None,
+    ) -> None:
         """
         Initialize state manager.
 
         Args:
             trace_handler: Optional trace handler to capture protocol messages
+            project_id: Optional project identifier for storage and tracing
+            project_root: Optional base directory for projects; when omitted,
+                defaults to ~/.questfoundry/projects or $QF_PROJECT_DIR.
         """
         self._sequence_numbers: dict[int, int] = {}
         self._trace_handler = trace_handler
+
+        # Project identity (used for Cold SoT persistence)
+        self._project_id = project_id
+
+        # Resolve base dir for projects
+        if project_root is not None:
+            base_dir = Path(project_root).expanduser()
+        else:
+            env_root = os.getenv("QF_PROJECT_DIR")
+            if env_root:
+                base_dir = Path(env_root).expanduser()
+            else:
+                from questfoundry.runtime.core.cold_store import _default_project_root
+
+                base_dir = _default_project_root()
+
+        self._cold_store = ColdStore(base_dir=base_dir)
 
     def generate_tu_id(self) -> str:
         """
@@ -76,6 +104,16 @@ class StateManager:
         if tu_id is None:
             tu_id = self.generate_tu_id()
 
+        # Resolve project identity for storage. Preference order:
+        # 1) Explicit project_id passed into StateManager.__init__
+        # 2) QF_PROJECT_ID environment variable
+        # 3) "default"
+        project_id = (
+            self._project_id
+            or os.getenv("QF_PROJECT_ID")
+            or "default"
+        )
+
         now = datetime.utcnow().isoformat() + "Z"
 
         # Initialize quality bars (8 dimensions)
@@ -105,13 +143,22 @@ class StateManager:
         }
 
         # Cold: stable canon, export-safe content
-        cold_sot = {
+        # Start from default skeleton, then overlay any persisted Cold SoT for this project.
+        cold_sot: dict[str, Any] = {
             "current_snapshot": None,
             "snapshots": [],
             "canon": {},
             "codex": {},
             "manuscript": {},
         }
+        try:
+            persisted = self._cold_store.load_cold(project_id)
+            if persisted is not None:
+                cold_sot.update(persisted)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.error(
+                "Failed to load Cold SoT for project '%s': %s", project_id, e
+            )
 
         state: StudioState = {
             "tu_id": tu_id,
@@ -220,6 +267,25 @@ class StateManager:
             )
 
         new_state = self.update_state(state, {"tu_lifecycle": new_lifecycle})
+
+        # If TU entered cold-merged, persist Cold SoT snapshot for this project
+        if new_lifecycle == "cold-merged":
+            envelope = new_state.get("envelope", {})
+            project_id = envelope.get("project_id") or self._project_id or os.getenv(
+                "QF_PROJECT_ID", "default"
+            )
+            try:
+                # Save full cold_sot and append a snapshot for audit/history
+                self._cold_store.save_cold(project_id, new_state.get("cold_sot", {}))
+                snapshot = self.snapshot_state(new_state)
+                self._cold_store.append_snapshot(project_id, new_state["tu_id"], snapshot)
+            except Exception as e:  # pragma: no cover - defensive
+                logger.error(
+                    "Failed to persist Cold SoT for project '%s' (TU %s): %s",
+                    project_id,
+                    new_state.get("tu_id"),
+                    e,
+                )
 
         # Log transition
         message: Message = {

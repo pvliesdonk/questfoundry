@@ -71,26 +71,34 @@ def get_graph_factory() -> GraphFactory:
     return _graph_factory
 
 
-def get_state_manager(trace_handler=None) -> StateManager:
+def get_state_manager(
+    trace_handler=None,
+    project: str | None = None,
+    project_dir: str | None = None,
+) -> StateManager:
     """
     Get or create state manager.
 
-    Args:
-        trace_handler: Optional trace handler to pass to new StateManager
+    Uses lazy initialization so we can reuse across commands
+    while still supporting --trace options.
 
-    Note: If state_manager already exists and trace_handler is provided,
-    creates a new instance with the trace handler.
+    Args:
+        trace_handler: Optional trace handler for tracing
+        project: Optional project identifier (overrides QF_PROJECT_ID)
+        project_dir: Optional base directory for projects
+                     (overrides QF_PROJECT_DIR, default: ~/.questfoundry/projects)
     """
     global _state_manager
-
-    # If trace handler is provided, always create new instance
-    # (don't reuse cached one without trace handler)
-    if trace_handler is not None:
-        return StateManager(trace_handler=trace_handler)
-
-    # Otherwise use cached instance
     if _state_manager is None:
-        _state_manager = StateManager()
+        _state_manager = StateManager(
+            trace_handler=trace_handler,
+            project_id=project,
+            project_root=project_dir,
+        )
+    else:
+        # Always update trace handler if provided so subsequent state changes are traced
+        if trace_handler is not None:
+            _state_manager._trace_handler = trace_handler  # type: ignore[attr-defined]
     return _state_manager
 
 
@@ -118,6 +126,17 @@ def ask(
     ),
     trace_file: str | None = typer.Option(
         None, "--trace-file", help="Write trace to file (requires --trace)"
+    ),
+    project: str | None = typer.Option(
+        None,
+        "--project",
+        help="Project identifier for storage (default: $QF_PROJECT_ID or 'default')",
+    ),
+    project_dir: str | None = typer.Option(
+        None,
+        "--project-dir",
+        help=("Base directory for QuestFoundry projects "
+              "(default: $QF_PROJECT_DIR or ~/.questfoundry/projects)"),
     ),
     provider: str | None = typer.Option(
         None,
@@ -176,7 +195,11 @@ def ask(
         # Get Showrunner with trace handler and/or provider preference
         if trace_handler or provider:
             # Create custom Showrunner with trace-enabled state manager and provider preference
-            state_manager = get_state_manager(trace_handler=trace_handler)
+            state_manager = get_state_manager(
+                trace_handler=trace_handler,
+                project=project,
+                project_dir=project_dir,
+            )
             graph_factory = GraphFactory(state_manager=state_manager, preferred_provider=provider)
             showrunner = ShowrunnerInterface(
                 graph_factory=graph_factory, state_manager=state_manager
@@ -241,6 +264,17 @@ def loop(
     ),
     trace_file: str | None = typer.Option(
         None, "--trace-file", help="Write trace to file (requires --trace)"
+    ),
+    project: str | None = typer.Option(
+        None,
+        "--project",
+        help="Project identifier for storage (default: $QF_PROJECT_ID or 'default')",
+    ),
+    project_dir: str | None = typer.Option(
+        None,
+        "--project-dir",
+        help=("Base directory for QuestFoundry projects "
+              "(default: $QF_PROJECT_DIR or ~/.questfoundry/projects)"),
     ),
     provider: str | None = typer.Option(
         None,
