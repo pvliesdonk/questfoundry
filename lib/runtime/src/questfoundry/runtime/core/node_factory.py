@@ -116,11 +116,33 @@ class NodeFactory:
         template_str = prompt_config.get("template", "")
         template_engine = prompt_config.get("template_engine", "jinja2")
 
-        if not template_str:
+        # Check if role uses new thin template architecture
+        # Roles with prompt_content in YAML use thin runtime templates
+        has_prompt_content = bool(role.raw.get("prompt_content"))
+
+        if has_prompt_content:
+            # New architecture: Use thin template from runtime/templates/
+            runtime_template_path = (
+                Path(__file__).parent.parent / "templates" / f"{role.id}.j2"
+            )
+
+            if runtime_template_path.exists():
+                try:
+                    template_str = runtime_template_path.read_text(encoding="utf-8")
+                    logger.debug(f"Using thin template for {role.id} with prompt_content from YAML")
+                except Exception as e:
+                    logger.warning(f"Failed to load thin template for {role.id}: {e}")
+                    # Fall through to old template logic
+                    has_prompt_content = False
+            else:
+                logger.warning(f"Role {role.id} has prompt_content but no thin template at {runtime_template_path}")
+                has_prompt_content = False
+
+        if not template_str and not has_prompt_content:
             logger.warning(f"No prompt template for role {role.id}")
             return f"Execute role: {role.name}"
 
-        # Load template
+        # Load template (old architecture fallback)
         if template_str.startswith("file://"):
             # File-based template
             template_path = template_str[7:]  # Remove "file://"
@@ -228,6 +250,7 @@ class NodeFactory:
                 cold_sot = state.get("cold_sot", {})
 
                 context = {
+                    "role": role,  # Full role object for thin templates (identity + prompt_content)
                     "tu_id": state.get("tu_id", ""),
                     "tu_lifecycle": state.get("tu_lifecycle", ""),
                     "current_node": state.get("current_node", ""),

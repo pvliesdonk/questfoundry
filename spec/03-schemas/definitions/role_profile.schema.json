@@ -7,6 +7,100 @@
   "required": ["id", "identity", "interface", "behavior", "protocol", "constraints"],
 
   "properties": {
+    "prompt_content": {
+      "type": "object",
+      "description": "Structured prompt knowledge for this role. Contains operating principles, anti-patterns, heuristics, and guidance extracted from Layer 1 briefs. This content is injected into prompts at runtime, replacing the fat templates with thin injection layers. Optional during migration - roles without this section fall back to legacy template-based prompts.",
+      "properties": {
+        "core_mandate": {
+          "type": "string",
+          "description": "High-level mission statement for this role. Typically 1-3 sentences describing what this role does and why it exists. Rendered prominently in prompt after role name."
+        },
+        "operating_principles": {
+          "type": "array",
+          "description": "Core principles this role follows when working. These shape decision-making and prioritization.",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Principle identifier (e.g., 'topology_first', 'contrast_over_clutter')"
+              },
+              "description": {
+                "type": "string",
+                "description": "Full principle statement (e.g., 'Design fan-out and safe returns before line-level thinking')"
+              }
+            }
+          }
+        },
+        "anti_patterns": {
+          "type": "array",
+          "description": "Common mistakes or bad practices this role must avoid",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Anti-pattern identifier (e.g., 'fake_choice', 'secret_maze')"
+              },
+              "description": {
+                "type": "string",
+                "description": "What makes this a problem (e.g., 'options that differ only in wording, not consequence')"
+              }
+            }
+          }
+        },
+        "heuristics": {
+          "type": "array",
+          "description": "Practical guidelines and patterns for common situations. Heuristics are more tactical than principles.",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Heuristic identifier (e.g., 'intent_labels', 'two_step_fairness')"
+              },
+              "description": {
+                "type": "string",
+                "description": "Guidance for this situation"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Abstract pattern formula (e.g., 'verb + object / verb + object', 'Knowledge → Tool → Access'). NO concrete proper nouns from example projects."
+              },
+              "examples": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Generic examples that illustrate the pattern WITHOUT proper nouns (e.g., ['unlocked door', 'altered dialogue'] NOT ['Dock 7', 'Union Token'])"
+              }
+            }
+          }
+        },
+        "quality_bars_owned": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "Integrity",
+              "Reachability",
+              "Nonlinearity",
+              "Gateways",
+              "Style",
+              "Determinism",
+              "Presentation",
+              "Accessibility"
+            ]
+          },
+          "description": "Which of the 8 quality bars this role is responsible for self-checking before handoff"
+        },
+        "task_guidance": {
+          "type": "string",
+          "description": "Generic task description that applies across loops. Describes WHAT the role produces and HOW to approach the work. Rendered in prompt as 'Your Task' section."
+        }
+      }
+    },
+
     "id": {
       "type": "string",
       "pattern": "^[a-z_]+$",
