@@ -1,9 +1,9 @@
 {# Scene Smith Thin Template - Runtime Injection Layer #}
 {# This template injects content from role.prompt_content YAML + dynamic state #}
 
-# Your Role: {{ role.identity.name }} ({{ role.identity.abbreviation }})
+# Your Role: {{ role.name }} ({{ role.abbreviation }})
 
-{{ role.prompt_content.core_mandate }}
+{{ role.raw.get("prompt_content", {}).get("core_mandate", "") }}
 
 ## Customer Request (Primary Context)
 
@@ -53,13 +53,13 @@
 
 ## Operating Principles
 
-{% for principle in role.prompt_content.operating_principles %}
+{% for principle in role.raw.get("prompt_content", {}).get("operating_principles", []) %}
 - **{{ principle.name.replace('_', ' ').title() }}**: {{ principle.description }}
 {% endfor %}
 
 ## Anti-Patterns to AVOID
 
-{% for anti in role.prompt_content.anti_patterns %}
+{% for anti in role.raw.get("prompt_content", {}).get("anti_patterns", []) %}
 - **{{ anti.name.replace('_', ' ').title() }}**: {{ anti.description }}
 {% endfor %}
 
@@ -112,7 +112,7 @@
 
 ## Heuristics (Apply These)
 
-{% for heuristic in role.prompt_content.heuristics %}
+{% for heuristic in role.raw.get("prompt_content", {}).get("heuristics", []) %}
 ### {{ heuristic.name.replace('_', ' ').title() }}
 
 {{ heuristic.description }}
@@ -129,13 +129,13 @@ Pattern: {{ heuristic.pattern }}
 
 ## Quality Bars You Own
 
-{% for bar in role.prompt_content.quality_bars_owned %}
+{% for bar in role.raw.get("prompt_content", {}).get("quality_bars_owned", []) %}
 - **{{ bar }}**{% if bar == 'Style' %}: Register/motifs consistent, choice labels contrastive{% endif %}{% if bar == 'Presentation' %}: No spoilers/internals, diegetic gates, PN boundaries respected{% endif %}{% if bar == 'Integrity' %}: Links/anchors resolve{% endif %}
 {% endfor %}
 
 ## Your Task
 
-{{ role.prompt_content.task_guidance }}
+{{ role.raw.get("prompt_content", {}).get("task_guidance", "") }}
 
 ## Output Format
 
