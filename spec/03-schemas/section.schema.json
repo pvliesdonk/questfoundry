@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/section.schema.json",
+  "title": "Section",
+  "description": "A prose unit with choices, written by Scene Smith to Plotwright brief. Core manuscript content.",
+  "type": "object",
+  "properties": {
+    "anchor": {
+      "type": "string",
+      "description": "Unique section anchor (format: anchor001, anchor002, etc.)",
+      "pattern": "^anchor\\d{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Section title (player-visible)",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "status": {
+      "type": "string",
+      "description": "Section status",
+      "enum": ["draft", "review", "approved", "cold"]
+    },
+    "author": {
+      "$ref": "#/$defs/role_name",
+      "description": "Author role (typically Scene Smith)"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Origin TU Brief ID",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Last edited date"
+    },
+    "brief_id": {
+      "type": "string",
+      "description": "Reference to section brief (format: SB-NNN)",
+      "pattern": "^SB-\\d{3,}$"
+    },
+    "prose": {
+      "type": "string",
+      "description": "Section prose content (markdown format)",
+      "minLength": 50
+    },
+    "choices": {
+      "type": "array",
+      "description": "Player choices at end of section",
+      "items": {
+        "$ref": "#/$defs/choice"
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["anchor", "title", "status", "author", "edited", "prose", "choices"],
+  "$defs": {
+    "choice": {
+      "type": "object",
+      "description": "A player-facing choice linking to another section",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Choice text (contrastive, shows intent)",
+          "minLength": 5,
+          "maxLength": 200
+        },
+        "target": {
+          "type": "string",
+          "description": "Target section anchor",
+          "pattern": "^anchor\\d{3,}$"
+        },
+        "gate": {
+          "type": "string",
+          "description": "Optional diegetic gate condition",
+          "maxLength": 200
+        }
+      },
+      "required": ["text", "target"]
+    },
+    "role_name": {
+      "type": "string",
+      "enum": [
+        "showrunner", "gatekeeper", "plotwright", "scene_smith", "style_lead",
+        "lore_weaver", "codex_curator", "researcher", "art_director", "illustrator",
+        "audio_director", "audio_producer", "translator", "book_binder", "player_narrator"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

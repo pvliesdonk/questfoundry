@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/pre_gate_note.schema.json",
+  "title": "Pre-Gate Note",
+  "description": "Fast informal feedback from Gatekeeper before formal gatecheck.",
+  "type": "object",
+  "properties": {
+    "tu": {"type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"},
+    "reviewer": {"type": "string", "const": "gatekeeper"},
+    "date": {"type": "string", "format": "date"},
+    "scope": {"type": "string"},
+    "status": {"type": "string", "enum": ["looks_good", "minor_concerns", "needs_work"]},
+    "quick_assessment": {"type": "string"},
+    "bar_notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bar": {"type": "string"},
+          "concern": {"type": "string"},
+          "quick_win": {"type": "string"},
+          "can_defer": {"type": "boolean"}
+        }
+      }
+    }
+  },
+  "required": ["tu", "reviewer", "date", "scope", "status", "quick_assessment"]
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/gateway_map.schema.json",
+  "title": "Gateway Map",
+  "description": "Documents gateways with diegetic checks and fairness paths.",
+  "type": "object",
+  "properties": {
+    "scope": {"type": "string"},
+    "author": {"type": "string", "const": "plotwright"},
+    "tu": {"type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"},
+    "edited": {"type": "string", "format": "date"},
+    "gateways": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "location_from": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "location_to": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "diegetic_check": {"type": "string"},
+          "qualification_paths": {"type": "array", "items": {"type": "string"}},
+          "failure_mode": {"type": "string"},
+          "fairness_notes": {"type": "string"}
+        },
+        "required": ["name", "location_from", "location_to", "diegetic_check", "qualification_paths"]
+      }
+    }
+  },
+  "required": ["scope", "author", "edited", "gateways"]
+}

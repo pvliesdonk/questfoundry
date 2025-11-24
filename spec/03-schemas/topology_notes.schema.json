@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/topology_notes.schema.json",
+  "title": "Topology Notes",
+  "description": "Living document of hubs, loops, gateways, keystones, and safe returns.",
+  "type": "object",
+  "properties": {
+    "scope": {"type": "string"},
+    "author": {"type": "string", "const": "plotwright"},
+    "tu": {"type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"},
+    "edited": {"type": "string", "format": "date"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "hubs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "anchor": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "name": {"type": "string"},
+          "fanout_count": {"type": "integer", "minimum": 3},
+          "routes": {"type": "array", "items": {"type": "string"}},
+          "convergence_notes": {"type": "string"}
+        }
+      }
+    },
+    "loops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "entry": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "return": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "difference": {"type": "string"},
+          "trigger": {"type": "string"}
+        }
+      }
+    },
+    "gateways": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "location": {"type": "string"},
+          "check": {"type": "string"},
+          "qualification": {"type": "string"}
+        }
+      }
+    },
+    "keystones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "anchor": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "why_critical": {"type": "string"},
+          "redundancy": {"type": "string"},
+          "risk": {"type": "string", "enum": ["low", "medium", "high"]}
+        }
+      }
+    }
+  },
+  "required": ["scope", "author", "edited"]
+}

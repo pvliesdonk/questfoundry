@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/safety_checklist.schema.json",
+  "title": "Safety Checklist",
+  "description": "Per-cue audio safety assessment (intensity, onset, duration, frequency).",
+  "type": "object",
+  "properties": {
+    "cue_id": {"type": "string"},
+    "cue_type": {"type": "string", "enum": ["ambience", "effect", "music", "voice"]},
+    "duration_seconds": {"type": "number"},
+    "producer": {"type": "string", "const": "audio_producer"},
+    "created": {"type": "string", "format": "date"},
+    "intensity": {
+      "type": "object",
+      "properties": {
+        "peak_loudness_lufs": {"type": "number"},
+        "dynamic_range_db": {"type": "number"},
+        "rating": {"type": "string", "enum": ["safe", "moderate", "caution"]}
+      }
+    },
+    "onset": {
+      "type": "object",
+      "properties": {
+        "attack_time_ms": {"type": "number"},
+        "startle_risk": {"type": "string", "enum": ["none", "low", "moderate", "high"]},
+        "rating": {"type": "string", "enum": ["safe", "caution"]}
+      }
+    },
+    "frequency_content": {
+      "type": "object",
+      "properties": {
+        "high_frequency_presence": {"type": "string"},
+        "low_frequency_presence": {"type": "string"},
+        "tinnitus_risk": {"type": "string", "enum": ["none", "low"]}
+      }
+    },
+    "overall_rating": {"type": "string", "enum": ["safe", "caution", "warning"]},
+    "recommended_actions": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["cue_id", "cue_type", "producer", "overall_rating"]
+}

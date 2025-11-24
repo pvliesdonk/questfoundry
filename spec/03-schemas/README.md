@@ -8,9 +8,9 @@
 
 ✅ **COMPLETE** — All schemas generated and validated
 
-- **Current version:** `schemas-v0.2.0` (2025-11-05)
-- **Total schemas:** 28 JSON Schema files (Draft 2020-12)
-  - 22 artifact schemas (from Layer 2 templates)
+- **Current version:** `schemas-v0.3.0` (2025-11-24)
+- **Total schemas:** 39 JSON Schema files (Draft 2020-12)
+  - 33 artifact schemas (from Layer 2 templates)
   - 6 system schemas (5 Cold SoT manifests + 1 Hot manifest)
 - **Source:** Layer 2 artifact templates in `02-dictionary/artifacts/*.md`
 - **Note:** Protocol envelope schema (`envelope.schema.json`) lives in `04-protocol/`, not here

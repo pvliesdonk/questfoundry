@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/codex_pack.schema.json",
+  "title": "Codex Pack",
+  "description": "A set of related codex entries with crosslink map and coverage notes.",
+  "type": "object",
+  "properties": {
+    "pack_name": {"type": "string"},
+    "theme": {"type": "string"},
+    "author": {"type": "string", "const": "codex_curator"},
+    "tu": {"type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"},
+    "edited": {"type": "string", "format": "date"},
+    "entry_count": {"type": "integer"},
+    "status": {"type": "string", "enum": ["draft", "review", "approved", "cold"]},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "pattern": "^codex_[a-z_]+$"},
+          "title": {"type": "string"},
+          "category": {"type": "string", "enum": ["character", "location", "organization", "concept", "item"]},
+          "status": {"type": "string", "enum": ["draft", "approved"]},
+          "file": {"type": "string"}
+        }
+      }
+    },
+    "crosslinks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {"type": "string"},
+          "to": {"type": "string"},
+          "link_type": {"type": "string", "enum": ["see-also", "prerequisite", "parent-child"]},
+          "bidirectional": {"type": "boolean"}
+        }
+      }
+    },
+    "coverage_notes": {
+      "type": "object",
+      "properties": {
+        "included": {"type": "array", "items": {"type": "string"}},
+        "deferred": {"type": "array", "items": {"type": "string"}},
+        "gaps": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "required": ["pack_name", "author", "edited", "entries"]
+}

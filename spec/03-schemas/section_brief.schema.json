@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/section_brief.schema.json",
+  "title": "Section Brief",
+  "description": "Instructions from Plotwright to Scene Smith for drafting a section. Defines goal, beats, choice intents.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^SB-\\d{3,}$"
+    },
+    "for_anchor": {
+      "type": "string",
+      "pattern": "^anchor\\d{3,}$"
+    },
+    "topology_context": {
+      "type": "string",
+      "enum": ["Hub", "Loop", "Gateway", "Linear"]
+    },
+    "author": {
+      "type": "string",
+      "const": "plotwright"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "ready", "implemented"]
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 10
+    },
+    "beats": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 2,
+      "maxItems": 6
+    },
+    "choice_intents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "intent": {"type": "string"},
+          "target": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "outcome_difference": {"type": "string"},
+          "gate": {"type": "string"}
+        },
+        "required": ["intent", "target", "outcome_difference"]
+      },
+      "minItems": 2
+    },
+    "expected_outcomes": {
+      "type": "string"
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "required": ["id", "for_anchor", "author", "tu", "edited", "goal", "beats", "choice_intents"]
+}
