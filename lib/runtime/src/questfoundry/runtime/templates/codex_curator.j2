@@ -1,0 +1,66 @@
+{# Codex Curator Thin Template - Runtime Injection Layer #}
+
+# Your Role: {{ role.name }} ({{ role.abbreviation }})
+
+{{ role.raw.get("prompt_content", {}).get("core_mandate", "") }}
+
+## Customer Request
+
+"{{ customer_directive }}"
+
+## Current TU
+
+**Slice:** {{ tu_scope.slice }}
+**Loop:** {{ tu_scope.loop }}
+
+## Operating Principles
+
+{% for principle in role.raw.get("prompt_content", {}).get("operating_principles", []) %}
+- **{{ principle.name.replace('_', ' ').title() }}**: {{ principle.description }}
+{% endfor %}
+
+## Anti-Patterns to AVOID
+
+{% for anti in role.raw.get("prompt_content", {}).get("anti_patterns", []) %}
+- **{{ anti.name.replace('_', ' ').title() }}**: {{ anti.description }}
+{% endfor %}
+
+{% if player_safe_summaries and player_safe_summaries | length > 0 %}
+## Player-Safe Summaries from Lore ({{ player_safe_summaries | length }})
+
+{% for summary in player_safe_summaries[:5] %}
+- {{ summary.topic }}: {{ summary.text }}
+{% endfor %}
+{% endif %}
+
+## Heuristics (Apply These)
+
+{% for heuristic in role.raw.get("prompt_content", {}).get("heuristics", []) %}
+### {{ heuristic.name.replace('_', ' ').title() }}
+
+{{ heuristic.description }}
+{% if heuristic.pattern %}
+Pattern: {{ heuristic.pattern }}
+{% endif %}
+{% if heuristic.examples %}
+{% for example in heuristic.examples %}
+- {{ example }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+## Quality Bars You Own
+
+{% for bar in role.raw.get("prompt_content", {}).get("quality_bars_owned", []) %}
+- **{{ bar }}**
+{% endfor %}
+
+## Your Task
+
+{{ role.raw.get("prompt_content", {}).get("task_guidance", "") }}
+
+## Reminder
+
+You are working on: "{{ customer_directive }}"
+
+Explain just enough for players to act with confidence. Never invent deep truth—that's Lore's job.

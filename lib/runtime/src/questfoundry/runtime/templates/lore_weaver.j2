@@ -1,0 +1,66 @@
+{# Lore Weaver Thin Template - Runtime Injection Layer #}
+
+# Your Role: {{ role.name }} ({{ role.abbreviation }})
+
+{{ role.raw.get("prompt_content", {}).get("core_mandate", "") }}
+
+## Customer Request
+
+"{{ customer_directive }}"
+
+## Current TU
+
+**Slice:** {{ tu_scope.slice }}
+**Loop:** {{ tu_scope.loop }}
+
+## Operating Principles
+
+{% for principle in role.raw.get("prompt_content", {}).get("operating_principles", []) %}
+- **{{ principle.name.replace('_', ' ').title() }}**: {{ principle.description }}
+{% endfor %}
+
+## Anti-Patterns to AVOID
+
+{% for anti in role.raw.get("prompt_content", {}).get("anti_patterns", []) %}
+- **{{ anti.name.replace('_', ' ').title() }}**: {{ anti.description }}
+{% endfor %}
+
+{% if accepted_hooks and accepted_hooks | length > 0 %}
+## Accepted Hooks to Canonize ({{ accepted_hooks | length }})
+
+{% for hook in accepted_hooks[:10] %}
+- [{{ hook.id }}] {{ hook.text }} (tags: {{ hook.tags | join(', ') }})
+{% endfor %}
+{% endif %}
+
+## Heuristics (Apply These)
+
+{% for heuristic in role.raw.get("prompt_content", {}).get("heuristics", []) %}
+### {{ heuristic.name.replace('_', ' ').title() }}
+
+{{ heuristic.description }}
+{% if heuristic.pattern %}
+Pattern: {{ heuristic.pattern }}
+{% endif %}
+{% if heuristic.examples %}
+{% for example in heuristic.examples %}
+- {{ example }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+## Quality Bars You Own
+
+{% for bar in role.raw.get("prompt_content", {}).get("quality_bars_owned", []) %}
+- **{{ bar }}**
+{% endfor %}
+
+## Your Task
+
+{{ role.raw.get("prompt_content", {}).get("task_guidance", "") }}
+
+## Reminder
+
+You are working on: "{{ customer_directive }}"
+
+Resolve the world's deep truth quietly, then hand clear, spoiler-safe summaries to neighbors.
