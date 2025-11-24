@@ -500,17 +500,10 @@ class ProviderManager:
                 ],
             ) from e
 
-        # Support both OLLAMA_HOST (official, preferred) and OLLAMA_API_BASE (alternate)
-        base_url = os.getenv("OLLAMA_HOST") or os.getenv(
-            "OLLAMA_API_BASE", "http://localhost:11434"
-        )
-
-        # Windows workaround: Replace localhost with 127.0.0.1 to avoid DNS resolution issues
-        import platform
-        if platform.system() == "Windows":
-            base_url = base_url.replace("localhost", "127.0.0.1")
-
-        logger.info(f"[OLLAMA] Creating client with base_url={base_url}")
+        # Get Ollama base URL from OLLAMA_HOST environment variable
+        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        logger.debug(f"[OLLAMA] Using base_url: {base_url}")
+        logger.debug(f"[OLLAMA] Creating ChatOllama with model={model}, temp={temperature}, max_tokens={max_tokens}")
 
         # Force JSON output format for all Ollama models
         # This ensures structured responses are properly formatted
@@ -521,21 +514,15 @@ class ProviderManager:
         #     context window instead of relying on Ollama's internal truncation
         num_ctx = int(os.getenv("QF_OLLAMA_NUM_CTX", "32768"))
 
-        try:
-            client = ChatOllama(
-                model=model,
-                temperature=temperature,
-                num_predict=max_tokens,
-                base_url=base_url,
-                format="json",  # Critical: Forces JSON-only responses
-                num_ctx=num_ctx,
-                **kwargs,
-            )
-            logger.info(f"[OLLAMA] Client created successfully")
-            return client
-        except Exception as e:
-            logger.error(f"[OLLAMA] Failed to create client: {e}")
-            raise
+        return ChatOllama(
+            model=model,
+            temperature=temperature,
+            num_predict=max_tokens,
+            base_url=base_url,
+            format="json",  # Critical: Forces JSON-only responses
+            num_ctx=num_ctx,
+            **kwargs,
+        )
 
     def _create_litellm_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
         """Create LiteLLM client (proxy) with JSON mode enabled."""

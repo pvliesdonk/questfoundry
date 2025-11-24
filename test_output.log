@@ -1,0 +1,56 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Your Request:                                                               │
+│ simple two scene chicken detective story                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+ERROR    LLM invocation failed for showrunner: [Errno 11001] getaddrinfo failed
+WARNING  Marking provider 'ollama' as unavailable: [Errno 11001] getaddrinfo
+         failed
+ERROR    Error executing role showrunner: [Errno 11001] getaddrinfo failed
+ERROR    Error executing role plotwright: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role plotwright: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role scene_smith: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role plotwright: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role scene_smith: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role researcher: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+WARNING  Parallel node hook_generation completed with errors: Requested
+         provider 'ollama' and any fallbacks are not available.
+         Provider: ollama; Requested provider 'ollama' and any fallbacks are
+         not available.
+         Provider: ollama; Requested provider 'ollama' and any fallbacks are
+         not available.
+         Provider: ollama
+ERROR    Error executing role style_lead: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role lore_weaver: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role codex_curator: Requested provider 'ollama' and
+         any fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role gatekeeper: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+ERROR    Error executing role showrunner: Requested provider 'ollama' and any
+         fallbacks are not available.
+         Provider: ollama
+WARNING  Request completed with 13 error(s)
+┌────────────────────────────────── ✗ Issue ──────────────────────────────────┐
+│ I'll work on creating that content for you.                                 │
+│                                                                             │
+│ Areas that need attention:                                                  │
+│   • 13 errors occurred during processing                                    │
+│   • 2 warnings occurred during processing                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
