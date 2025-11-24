@@ -439,12 +439,20 @@ class ProviderManager:
 
         # Force JSON output format for structured responses
         # Note: response_format requires the prompt to mention JSON
+        model_kwargs = {"response_format": {"type": "json_object"}}
+
+        # For reasoning models (o1, o3, o4-mini), add reasoning_effort to control token usage
+        # reasoning_effort: "minimal" | "low" | "medium" | "high"
+        # Lower effort = fewer reasoning tokens = faster + cheaper
+        if any(reasoning_prefix in model.lower() for reasoning_prefix in ["o1", "o3", "o4-mini"]):
+            model_kwargs["reasoning_effort"] = "low"  # Balance reasoning quality with token usage
+
         return ChatOpenAI(
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
             openai_api_key=api_key,
-            model_kwargs={"response_format": {"type": "json_object"}},
+            model_kwargs=model_kwargs,
             **kwargs,
         )
 
