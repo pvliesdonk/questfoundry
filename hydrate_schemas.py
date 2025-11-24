@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Schema Hydration Script for QuestFoundry
 Converts stub schemas to complete schemas based on artifact markdown definitions.
@@ -8,6 +7,14 @@ import json
 import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
+
+
+# Constants
+SCHEMA_DRAFT_URL = "https://json-schema.org/draft/2020-12/schema"
+SCHEMA_BASE_URL = "https://questfoundry.liesdonk.nl/schemas"
+ISO8601_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
+SHA256_PATTERN = r"^[a-f0-9]{64}$"
 
 
 class SchemaHydrator:
@@ -25,8 +32,10 @@ class SchemaHydrator:
         description = schema_data.get("description", "")
         props_count = len(schema_data.get("properties", {}))
 
-        # A schema is a stub if it has "stub" in description OR has 0-1 properties
-        return "stub" in description.lower() or props_count <= 1
+        # A schema is a stub if it has "stub" in description OR has 0 properties
+        # Note: We use props_count == 0 rather than <= 1 to avoid false positives
+        # with complete schemas that have a single top-level array field
+        return "stub" in description.lower() or props_count == 0
 
     def find_markdown_file(self, schema_name: str) -> Optional[Path]:
         """Find corresponding markdown file for a schema."""
@@ -168,9 +177,13 @@ class SchemaHydrator:
                                     current_field["constraints"]["enum"] = []
                                 # Extract just the value part (before —)
                                 if '`' in enum_val:
-                                    enum_val = re.findall(r'`([^`]+)`', enum_val)[0]
-                                    # Remove surrounding quotes if present
-                                    enum_val = enum_val.strip('"').strip("'")
+                                    matches = re.findall(r'`([^`]+)`', enum_val)
+                                    if matches:
+                                        enum_val = matches[0]
+                                        # Remove surrounding quotes if present
+                                        enum_val = enum_val.strip('"').strip("'")
+                                    else:
+                                        continue  # Skip if no backticks found
                                 elif '—' in enum_val:
                                     enum_val = enum_val.split('—')[0].strip().strip('"').strip("'")
                                 current_field["constraints"]["enum"].append(enum_val)
@@ -197,12 +210,12 @@ class SchemaHydrator:
             desc_lower = field["description"].lower()
             if "iso 8601" in desc_lower or "timestamp" in desc_lower:
                 prop["format"] = "date-time"
-                prop["pattern"] = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+                prop["pattern"] = ISO8601_PATTERN
             elif "sha-256" in desc_lower or "sha256" in desc_lower:
-                prop["pattern"] = r"^[a-f0-9]{64}$"
+                prop["pattern"] = SHA256_PATTERN
             elif "date" in field["name"].lower() and "yyyy-mm-dd" in desc_lower:
                 prop["format"] = "date"
-                prop["pattern"] = r"^\d{4}-\d{2}-\d{2}$"
+                prop["pattern"] = DATE_PATTERN
 
         return prop
 
@@ -245,7 +258,7 @@ class SchemaHydrator:
                 "type": "string",
                 "format": "date-time",
                 "description": "ISO 8601 timestamp of creation.",
-                "pattern": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+                "pattern": ISO8601_PATTERN
             }
             required.append("created")
 
@@ -254,7 +267,7 @@ class SchemaHydrator:
                 "type": "string",
                 "format": "date-time",
                 "description": "ISO 8601 timestamp of last update.",
-                "pattern": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+                "pattern": ISO8601_PATTERN
             }
             required.append("last_updated")
 
@@ -266,13 +279,13 @@ class SchemaHydrator:
 
         # Build complete schema
         schema = {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "$id": f"https://questfoundry.liesdonk.nl/schemas/{schema_name}.schema.json",
+            "$schema": SCHEMA_DRAFT_URL,
+            "$id": f"{SCHEMA_BASE_URL}/{schema_name}.schema.json",
             "title": title or original_schema.get("title", schema_name.replace("_", " ").title()),
             "description": f"Generated from 02-dictionary/artifacts/{schema_name}.md. {description}" if description else original_schema.get("description", ""),
             "type": "object",
             "properties": properties,
-            "required": sorted(required),
+            "required": required,  # Keep natural field order for better readability
             "additionalProperties": False
         }
 

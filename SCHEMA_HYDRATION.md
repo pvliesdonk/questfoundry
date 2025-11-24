@@ -20,8 +20,9 @@ The schema hydration system:
 A schema is considered a "stub" if it meets **any** of these criteria:
 
 - Contains `"description": "... (stub ...)"` text
-- Has **0 or 1 properties** in the `properties` object (excluding metadata)
-- Missing the `properties` object entirely
+- Has **0 properties** in the `properties` object
+
+Note: The detection uses 0 properties (not ≤1) to avoid false positives with complete schemas that have a single top-level array field.
 
 ### 2. Documentation Mapping
 
