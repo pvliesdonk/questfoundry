@@ -505,6 +505,13 @@ class ProviderManager:
             "OLLAMA_API_BASE", "http://localhost:11434"
         )
 
+        # Windows workaround: Replace localhost with 127.0.0.1 to avoid DNS resolution issues
+        import platform
+        if platform.system() == "Windows":
+            base_url = base_url.replace("localhost", "127.0.0.1")
+
+        logger.info(f"[OLLAMA] Creating client with base_url={base_url}")
+
         # Force JSON output format for all Ollama models
         # This ensures structured responses are properly formatted
         # TODO: Ideal behavior is to:
@@ -514,15 +521,21 @@ class ProviderManager:
         #     context window instead of relying on Ollama's internal truncation
         num_ctx = int(os.getenv("QF_OLLAMA_NUM_CTX", "32768"))
 
-        return ChatOllama(
-            model=model,
-            temperature=temperature,
-            num_predict=max_tokens,
-            base_url=base_url,
-            format="json",  # Critical: Forces JSON-only responses
-            num_ctx=num_ctx,
-            **kwargs,
-        )
+        try:
+            client = ChatOllama(
+                model=model,
+                temperature=temperature,
+                num_predict=max_tokens,
+                base_url=base_url,
+                format="json",  # Critical: Forces JSON-only responses
+                num_ctx=num_ctx,
+                **kwargs,
+            )
+            logger.info(f"[OLLAMA] Client created successfully")
+            return client
+        except Exception as e:
+            logger.error(f"[OLLAMA] Failed to create client: {e}")
+            raise
 
     def _create_litellm_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
         """Create LiteLLM client (proxy) with JSON mode enabled."""
