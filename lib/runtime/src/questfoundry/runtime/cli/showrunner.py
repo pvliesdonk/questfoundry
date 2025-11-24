@@ -305,6 +305,37 @@ class ShowrunnerInterface:
         # This allows complex multi-agent conversations to complete
         final_state = graph.invoke(state, config={"recursion_limit": 100})
 
+        # Transition TU lifecycle based on loop completion
+        # For story_spark and similar loops, if gatekeeper passed, move to cold-merged
+        try:
+            # Check if gatekeeper approved (all bars green or yellow)
+            quality_bars = final_state.get("quality_bars", {})
+            has_red_bars = any(
+                bar.get("status") == "red"
+                for bar in quality_bars.values()
+            )
+
+            if not has_red_bars and final_state.get("tu_lifecycle") == "hot-proposed":
+                # Move through lifecycle: hot-proposed → stabilizing → gatecheck → cold-merged
+                logger.debug(f"Loop {loop_id} completed successfully, transitioning TU lifecycle")
+
+                # Transition to stabilizing
+                final_state = self.state_manager.transition_tu(final_state, "stabilizing")
+
+                # Transition to gatecheck
+                final_state = self.state_manager.transition_tu(final_state, "gatecheck")
+
+                # If no red bars, gatekeeper passed - transition to cold-merged
+                final_state = self.state_manager.transition_tu(final_state, "cold-merged")
+                logger.info(f"TU {final_state['tu_id']} merged to cold storage")
+
+            elif has_red_bars:
+                logger.warning(f"Loop {loop_id} has red quality bars, TU remains in {final_state.get('tu_lifecycle')}")
+
+        except Exception as e:
+            # Log but don't fail - lifecycle transition is not critical for loop execution
+            logger.warning(f"Could not transition TU lifecycle: {e}")
+
         return final_state
 
     def _generate_plain_language_response(
