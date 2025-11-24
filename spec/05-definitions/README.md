@@ -26,12 +26,14 @@
 **Layer 5 Definitions** is the "executable cartridge" that drives the QuestFoundry runtime. While Layers 0-4 define **what** the studio does (roles, loops, artifacts, protocol), Layer 5 defines **how** to execute it as a LangGraph application.
 
 **Core Principle:**
+
 ```
 The Spec (spec/) is the executable source code (The Cartridge).
 The Runtime (lib/runtime) is a generic player (The Console).
 ```
 
 This layer contains:
+
 - **Role Profiles**: Executable agent definitions (prompt templates, tools, I/O contracts)
 - **Loop Patterns**: Graph topologies and protocol flows
 - **Prompt Templates**: Jinja2 templates for role behavior
@@ -45,12 +47,14 @@ All definitions validate against **meta-schemas** in `spec/03-schemas/definition
 ## The Cartridge Philosophy
 
 ### Traditional Approach (spec/05-behavior, DEPRECATED)
+
 - **Imperative**: Python classes hardcode role behavior
 - **Tightly Coupled**: Changing a role requires code changes
 - **Opaque**: Logic buried in methods, hard to inspect/test
 - **Fragile**: No schema validation, runtime errors
 
 ### Cartridge Approach (spec/05-definitions, CURRENT)
+
 - **Declarative**: YAML definitions describe behavior
 - **Loosely Coupled**: Change roles without touching runtime code
 - **Transparent**: All logic visible in spec files
@@ -252,11 +256,13 @@ llm_config:
 ```
 
 **Runtime Processing:**
+
 1. `NodeFactory.load_role_profile("plotwright")` reads `plotwright.yaml`
 2. Validates against `spec/03-schemas/definitions/role_profile.schema.json`
 3. Loads Jinja2 template from `templates/plotwright_prompt.j2`
 4. Injects context: quality bars text, expertise docs, current state
 5. Creates LangChain Runnable:
+
    ```python
    def plotwright_node(state: StudioState) -> StudioState:
        # Filter inputs based on interface.inputs
@@ -330,9 +336,11 @@ execution:
 ```
 
 **Runtime Processing:**
+
 1. `GraphFactory.load_loop_pattern("hook_harvest")` reads `hook_harvest.yaml`
 2. Validates against `spec/03-schemas/definitions/loop_pattern.schema.json`
 3. Creates LangGraph StateGraph:
+
    ```python
    from langgraph.graph import StateGraph, END
 
@@ -371,6 +379,7 @@ execution:
 ### Step 1: Create Role Profile
 
 1. Copy template:
+
    ```bash
    cp spec/05-definitions/_templates/role_profile.template.yaml \
       spec/05-definitions/roles/my_role.yaml
@@ -379,11 +388,13 @@ execution:
 2. Fill in fields (validate against `spec/03-schemas/definitions/role_profile.schema.json`)
 
 3. Create prompt template:
+
    ```bash
    touch spec/05-definitions/templates/my_role_prompt.j2
    ```
 
 4. Test validation:
+
    ```bash
    qf validate-definition roles/my_role.yaml
    ```
@@ -391,6 +402,7 @@ execution:
 ### Step 2: Create Loop Pattern
 
 1. Copy template:
+
    ```bash
    cp spec/05-definitions/_templates/loop_pattern.template.yaml \
       spec/05-definitions/loops/my_loop.yaml
@@ -403,6 +415,7 @@ execution:
 4. Set quality gates and traceability requirements
 
 5. Test validation:
+
    ```bash
    qf validate-definition loops/my_loop.yaml
    ```
@@ -425,6 +438,7 @@ qf run my_loop
 ## Migration Status
 
 ### Phase 1: Foundation ✅ COMPLETE (2025-11-19)
+
 - [x] Meta-schemas created in `spec/03-schemas/definitions/`
   - [x] `role_profile.schema.json` (extended with planning+execution model support)
   - [x] `loop_pattern.schema.json`
@@ -435,6 +449,7 @@ qf run my_loop
 - [x] README.md written (this file)
 
 ### Phase 2: All Roles ✅ COMPLETE (2025-11-20)
+
 - [x] Showrunner (SR) - Always-on coordinator
 - [x] Gatekeeper (GK) - Always-on quality enforcer
 - [x] Plotwright (PW) - Story structure (default_on)
@@ -455,6 +470,7 @@ qf run my_loop
 **16/16 roles complete** (15 studio roles + 1 service split)
 
 ### Phase 3: All Loops ✅ COMPLETE (2025-11-20)
+
 - [x] Story Spark - Discovery loop for new story structure
 - [x] Hook Harvest - Discovery loop for creative ideas
 - [x] Lore Deepening - Refinement loop for canon development
@@ -469,6 +485,7 @@ qf run my_loop
 **10/10 core loops complete**
 
 ### Phase 4: Validation ✅ COMPLETE (2025-11-20)
+
 - [x] All 16 role YAML files validate against `role_profile.schema.json`
 - [x] All 10 loop YAML files validate against `loop_pattern.schema.json`
 - [x] Cross-reference consistency checks pass
@@ -477,12 +494,14 @@ qf run my_loop
 **26/26 definitions passing validation**
 
 ### Phase 5: Runtime Integration (PENDING)
+
 - [ ] NodeFactory implementation (`lib/runtime/core/node.py`)
 - [ ] GraphFactory implementation (`lib/runtime/core/graph.py`)
 - [ ] SchemaRegistry implementation (`lib/runtime/validation/registry.py`)
 - [ ] CLI implementation (`lib/runtime/cli.py`)
 
 ### Phase 6: Quality Gates & Transitions (PENDING)
+
 - [ ] Transition rule definitions for Hook, TU, Gate, View lifecycles
 - [ ] Quality gate validation rule definitions for all 8 bars
 - [ ] Full Production Run meta-loop definition
@@ -493,6 +512,7 @@ qf run my_loop
 ## References
 
 ### Layer 0-4 Specifications
+
 - **Layer 0:** `spec/00-north-star/` — Vision, roles, loops, quality bars
 - **Layer 1:** `spec/01-roles/` — Role charters and briefs
 - **Layer 2:** `spec/02-dictionary/` — Common language and artifact types
@@ -500,6 +520,7 @@ qf run my_loop
 - **Layer 4:** `spec/04-protocol/` — Protocol envelopes, intents, lifecycles
 
 ### Meta-Schemas (Layer 3)
+
 - **Role Profile:** `spec/03-schemas/definitions/role_profile.schema.json`
 - **Loop Pattern:** `spec/03-schemas/definitions/loop_pattern.schema.json`
 - **Studio State:** `spec/03-schemas/definitions/studio_state.schema.json`
@@ -507,11 +528,13 @@ qf run my_loop
 - **Quality Gate:** `spec/03-schemas/definitions/quality_gate.schema.json`
 
 ### Deprecated (Read-Only Reference)
+
 - **spec/05-behavior/** — Old behavior primitives (v1 architecture)
 - **lib/compiler/** — Old spec compiler (replaced by runtime interpretation)
 - **lib/python/** — Old imperative runtime (replaced by lib/runtime)
 
 ### Migration Documentation
+
 - **MIGRATION.md:** Complete migration plan and progress tracker
 - **DECISIONS/:** Architecture Decision Records (ADRs) for major changes
 
@@ -522,12 +545,14 @@ qf run my_loop
 ### Why declarative instead of imperative code?
 
 **Imperative (old):**
+
 - Logic scattered across Python files
 - Hard to understand behavior without reading code
 - Difficult to test prompts in isolation
 - No validation until runtime errors
 
 **Declarative (new):**
+
 - All behavior visible in YAML
 - Easy to understand and modify
 - Can test definitions without running code
@@ -549,6 +574,7 @@ No. The old runtime is deprecated and will be removed. All new development uses 
 ### What if a loop needs custom logic that YAML can't express?
 
 Two options:
+
 1. **Preferred:** Add a custom tool to the runtime tool registry, then reference it in the role profile
 2. **Last resort:** Add a custom validator function to the runtime, then reference it in `loop_pattern.execution.error_handling.custom_checks`
 

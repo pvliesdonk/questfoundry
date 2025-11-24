@@ -36,6 +36,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 ### Why?
 
 **Problems with the Old Architecture (lib/python + spec/05-behavior):**
+
 1. **Imperative Logic**: Role behavior hardcoded in Python classes
 2. **Tight Coupling**: Changing a role requires code changes
 3. **Opaque Behavior**: Logic buried in methods, hard to inspect/test
@@ -43,6 +44,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 5. **Difficult Testing**: Can't test prompts in isolation
 
 **Benefits of the New Architecture (lib/runtime + spec/05-definitions):**
+
 1. **Declarative**: All behavior in YAML, validated against schemas
 2. **Loose Coupling**: Change definitions without touching runtime code
 3. **Transparent**: All logic visible in spec files
@@ -53,6 +55,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 ### Scope
 
 **IN SCOPE:**
+
 - New meta-schemas for roles, loops, state, transitions, quality gates
 - New directory: `spec/05-definitions/` with YAML definitions
 - New runtime: `lib/runtime/` (LangGraph-based)
@@ -62,12 +65,14 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 - Complete CLI: `qf run <loop_id>`
 
 **OUT OF SCOPE:**
+
 - Refactoring `lib/python` (it's deprecated, not updated)
 - Refactoring `spec/05-behavior` (read-only reference)
 - Refactoring `lib/compiler` (replaced by runtime interpretation)
 - Backward compatibility (clean break)
 
 **DEPRECATED (Read-Only Reference):**
+
 - `lib/python/` — Old imperative runtime
 - `spec/05-behavior/` — Old behavior primitives
 - `lib/compiler/` — Old spec compiler
@@ -100,6 +105,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 **Goal:** Establish strict data structures that will drive the runtime.
 
 **Deliverables:**
+
 - [x] Meta-schemas in `spec/03-schemas/definitions/`
   - [x] `role_profile.schema.json` — Agent node definition
   - [x] `loop_pattern.schema.json` — Graph topology definition
@@ -114,6 +120,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 **Commit:** `feat(schemas): Add Layer 5 meta-schemas for Cartridge Architecture`
 
 **Key Decisions:**
+
 1. **Five Meta-Schemas**: Comprehensive schemas capturing all Layer 0-4 semantics
 2. **Directory Structure**: Separate subdirs for roles, loops, templates, transitions, quality_gates
 3. **Validation-First**: All definitions must validate against meta-schemas before runtime loads them
@@ -125,6 +132,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 **Goal:** Create executable role profiles for ALL 16 roles (15 studio roles + 1 service split).
 
 **Deliverables:**
+
 - [x] All 16 role profiles created and validated:
   - [x] **Always-on (2):** Showrunner (SR), Gatekeeper (GK)
   - [x] **Default-on (5):** Plotwright (PW), Scene Smith (SS), Style Lead (ST), Lore Writer (LW), Codex Curator (CC)
@@ -147,6 +155,7 @@ This is a **clean-break migration** from an imperative Python runtime (`lib/pyth
 All 16 role files validate against `role_profile.schema.json` ✅
 
 **Key Decisions:**
+
 - **Planning+Execution Split (ADR-004):** Implemented hybrid model for production roles
 - **Player-Narrator Dual Modes:** Workshop/dry-run + audience/production
 - **Book Binder Refactoring:** Split into Book Binder (planning) + Export Service (execution)
@@ -158,6 +167,7 @@ All 16 role files validate against `role_profile.schema.json` ✅
 **Goal:** Create executable loop patterns for ALL 10 core production loops.
 
 **Deliverables:**
+
 - [x] All 10 loop patterns created and validated:
   - [x] **Discovery (2):** Story Spark, Hook Harvest
   - [x] **Refinement (3):** Lore Deepening, Codex Expansion, Style Tune-up
@@ -178,6 +188,7 @@ All 16 role files validate against `role_profile.schema.json` ✅
 All 10 loop files validate against `loop_pattern.schema.json` ✅
 
 **Key Decisions:**
+
 - **Plan-Only Merges:** Directors can merge plans without waiting for production executors
 - **Dual-Mode Narration:** PN supports both workshop (playtest) and audience (production) modes
 - **Conditional Edges:** Proper condition objects with evaluators (not just strings)
@@ -189,6 +200,7 @@ All 10 loop files validate against `loop_pattern.schema.json` ✅
 **Goal:** Validate all definitions against schemas and fix any issues.
 
 **Deliverables:**
+
 - [x] Validation infrastructure:
   - [x] `validate_definitions.py` - Comprehensive validator using jsonschema
   - [x] Automated fix scripts for common issues:
@@ -210,12 +222,14 @@ All 10 loop files validate against `loop_pattern.schema.json` ✅
   - [x] Migration status shows Phases 1-4 complete
 
 **Validation:**
+
 ```bash
 python3 validate_definitions.py
 # Result: 26 passed, 0 warnings, 0 errors ✅
 ```
 
 **Key Fixes Applied:**
+
 - Role abbreviations: AuD→AUD, AuP→AUP
 - Missing required fields added (id, charter_ref, prompt, enabled, state_key)
 - Edge structures fixed (from/to→source/target, string conditions→objects)
@@ -233,6 +247,7 @@ python3 validate_definitions.py
 #### Subphase 5A: Runtime Specifications ✅ COMPLETE (2025-11-20)
 
 **Deliverables:**
+
 - [x] Create `spec/06-runtime/` directory structure
 - [x] Write `ARCHITECTURE.md` - Foundational runtime architecture spec
   - [x] Three-tier approach: Strict core, Plugin providers, Flexible interface
@@ -250,6 +265,7 @@ python3 validate_definitions.py
   - [x] `interfaces/tool_registry.yaml` - Tool provider plugin contract
 
 **Key Principles Applied:**
+
 1. **Strict on core mechanisms**: Graph construction, state management, edge evaluation specified precisely
 2. **Plugin-based providers**: LLM adapters and tool registry use plugin architecture (LangChain patterns)
 3. **Flexible on interface**: CLI and output formatting allow creative UX iteration
@@ -257,6 +273,7 @@ python3 validate_definitions.py
 #### Subphase 5B: Runtime Implementation ✅ COMPLETE (2025-11-20)
 
 **Deliverables:**
+
 - [x] Package initialization: `lib/runtime/pyproject.toml`
   - [x] Stack: Python 3.11+, langgraph, langchain-core, langchain-anthropic, langchain-openai, pydantic, typer, jinja2, rich
   - [x] Structure: `src/questfoundry/runtime/{core,plugins,cli,models}/`
@@ -281,6 +298,7 @@ python3 validate_definitions.py
 **Total Implementation:** ~3,400 lines of production code + 638 lines of tests
 
 **Validation:**
+
 ```bash
 # Verify installation
 cd lib/runtime && poetry install
@@ -296,6 +314,7 @@ poetry run pytest tests/test_core_integration.py -v
 ```
 
 **Key Achievements:**
+
 - Real LLM integration (no mocks) - both Anthropic and OpenAI
 - Showrunner orchestration layer provides natural language interface
 - All 16 roles and 10 loops load and compile successfully
@@ -303,6 +322,7 @@ poetry run pytest tests/test_core_integration.py -v
 - Comprehensive error handling and logging
 
 **Key Decisions:**
+
 - ADR-006: Spec-driven development with AI implementation
 - Dual-provider support (Anthropic + OpenAI) for flexibility
 - Environment variable configuration (QF_LLM_PROVIDER, QF_DEFAULT_MODEL)
@@ -314,6 +334,7 @@ poetry run pytest tests/test_core_integration.py -v
 **Goal:** Complete reusable quality bar validators and lifecycle transitions.
 
 **Deliverables:**
+
 - [x] All 8 quality bars migrated to `spec/05-definitions/quality_gates/`
   - [x] `integrity.yaml` - No dead references, valid IDs, no accidental dead ends (152 lines)
   - [x] `reachability.yaml` - Critical beats reachable via viable paths (176 lines)
@@ -336,6 +357,7 @@ poetry run pytest tests/test_core_integration.py -v
 **Total Deliverables:** 8 quality gates (1,309 lines) + 4 lifecycles (905 lines) + 3 deprecation markers
 
 **Key Achievements:**
+
 - Complete quality bar validation framework with automated checks
 - Full lifecycle state machines for all protocol entities
 - Clear migration path documented for legacy code
@@ -344,6 +366,7 @@ poetry run pytest tests/test_core_integration.py -v
 **Note:** Additional loops (`full_production_run.yaml`, `gatecheck.yaml`) were not created as they are meta-loops for future enhancement, not required for core migration.
 
 **Validation:**
+
 ```bash
 # Validate all quality gates
 for gate in spec/05-definitions/quality_gates/*.yaml; do
@@ -357,6 +380,7 @@ done
 ```
 
 **Key Decisions:**
+
 - TBD
 
 ---
@@ -472,12 +496,14 @@ done
 **Decision:** Create 5 comprehensive meta-schemas instead of minimal 2 proposed in gist.
 
 **Rationale:**
+
 - Gist proposed only `role_profile` and `loop_pattern` with minimal fields
 - Layers 0-4 contain far more semantics: dormancy, RACI, Hot/Cold, quality bars, protocol intents, lifecycles, traceability
 - Need separate schemas for reusable components: transitions, quality gates
 - Need schema for shared state to guide runtime state management
 
 **Consequences:**
+
 - More upfront schema design work
 - Better validation and error detection
 - Clearer separation of concerns
@@ -492,6 +518,7 @@ done
 **Context:** Need to organize Layer 5 definitions logically.
 
 **Decision:** Use 5 subdirectories in `spec/05-definitions/`:
+
 1. `roles/` — Role profiles (agent nodes)
 2. `loops/` — Loop patterns (graph topologies)
 3. `templates/` — Jinja2 prompt templates
@@ -499,12 +526,14 @@ done
 5. `quality_gates/` — Reusable quality bar validators
 
 **Rationale:**
+
 - Clear separation by artifact type
 - Templates separate from profiles (reusability)
 - Transitions and quality_gates reusable across roles/loops
 - Maps to schema types
 
 **Consequences:**
+
 - Need to manage file references (role → template, loop → transition)
 - Clear where to find each type of definition
 - Easier to navigate and maintain
@@ -520,12 +549,14 @@ done
 **Decision:** Mark as read-only reference, do not modify or refactor.
 
 **Rationale:**
+
 - Clean break is faster and cleaner than incremental migration
 - Old code has accumulated technical debt
 - New architecture is fundamentally different (imperative vs declarative)
 - Keeping old code allows reference during migration
 
 **Consequences:**
+
 - Cannot fix bugs in old code
 - Must communicate deprecation clearly
 - Eventually delete old code after migration complete
@@ -539,17 +570,20 @@ done
 **Context:** Some roles (Illustrator, Audio Producer, Export Service) are primarily tool orchestration rather than LLM reasoning. Book Binder does both planning (decide structure) AND execution (generate files).
 
 **Decision:** Implement three-tier role type model:
+
 1. **reasoning_agent** (default): Full LLM with complex reasoning
 2. **production_executor**: Thin LLM wrapper + heavy tool orchestration
 3. **service**: Pure tool execution, no LLM
 
 **Rationale:**
+
 - Illustrator and Audio Producer are 95% Stable Diffusion/audio API calls, 5% LLM validation
 - Book Binder planning (select sections, resolve anchors) is separate from execution (Pandoc)
 - Export Service needs zero LLM reasoning - pure file generation
 - Hybrid approach handles edge cases (retry logic, quality thresholds) while optimizing for tool-heavy workflows
 
 **Implementation:**
+
 - Schema changes (all backward-compatible):
   - Added optional `identity.role_type` field
   - Made `llm_config` optional (not required for service roles)
@@ -561,6 +595,7 @@ done
   - Book Binder → Book Binder (reasoning_agent, planning) + Export Service (service, execution)
 
 **Consequences:**
+
 - Optimizes cost and latency for production roles
 - Maintains architectural consistency (all roles are "nodes" in graph)
 - Clean separation: planning (LLM reasoning) vs execution (tool orchestration)
@@ -575,11 +610,13 @@ done
 **Context:** The runtime needs to interface with humans (authors, project managers, developers). How should the CLI and runtime communicate with humans?
 
 **Decision:** Design the interface with these principles:
+
 1. **Humans are the customers** - They drive the project
 2. **Showrunner is the product owner** - It orchestrates the studio on behalf of humans
 3. **Humans don't speak jargon** - Use natural language, not technical terms
 
 **Rationale:**
+
 - Authors shouldn't need to know "Hot SoT", "TU lifecycle", "gatecheck states"
 - The runtime translates between human intent and studio protocol
 - Showrunner acts as intermediary: understands both human goals and studio operations
@@ -599,6 +636,7 @@ qf invoke gatekeeper --bars Integrity,Reachability --gatecheck
 ```
 
 **CLI Architecture:**
+
 ```
 Human Request (natural language)
     ↓
@@ -616,6 +654,7 @@ CLI Output (natural language, not jargon)
 ```
 
 **Example Interaction:**
+
 ```
 $ qf write "The captain confronts the pilot about the missing fuel"
 
@@ -638,6 +677,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 ```
 
 **Consequences:**
+
 - More accessible to non-technical users
 - Showrunner becomes critical "translation layer"
 - CLI needs intent recognition (LLM or pattern matching)
@@ -655,6 +695,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Decision:** Create comprehensive specifications in `spec/06-runtime/` before implementation, then use AI coding agents (GitHub Copilot, Claude Haiku, etc.) to generate implementation from specs.
 
 **Rationale:**
+
 - Validates the Cartridge Architecture: "The Spec is the Cartridge, Runtime is the Console"
 - Specifications force clarity about component boundaries and contracts
 - AI agents work better with detailed specifications than vague requirements
@@ -665,6 +706,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Approach:**
 
 **Three-Tier Architecture:**
+
 1. **Strict Core Mechanisms** ⚙️
    - Components: Graph Factory, Node Factory, State Manager, Edge Evaluator, Protocol Router
    - Specification style: Precise algorithms, strict contracts, detailed error handling
@@ -681,6 +723,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
    - Reason: UX is subjective; allow creativity and iteration based on feedback
 
 **Deliverables Created:**
+
 - `spec/06-runtime/ARCHITECTURE.md` - Foundational architecture specification
 - `spec/06-runtime/components/` - Component specifications
   - `graph_factory.md` - Loop → StateGraph transformation (STRICT)
@@ -693,6 +736,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
   - `tool_registry.yaml` - Tool provider plugin contract
 
 **Implementation Guidance:**
+
 1. Start with strict components (in order): Schema Registry → State Manager → Node Factory → Graph Factory → Edge Evaluator → Protocol Router
 2. Use plugin interfaces from day one (easier to start with plugins than refactor later)
 3. Defer flexible components (build CLI after core works)
@@ -700,6 +744,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 5. Reference schemas constantly (schema compliance is non-negotiable)
 
 **Consequences:**
+
 - More upfront design time, but faster and more correct implementation
 - Specs become primary documentation (code is derivative)
 - Easier onboarding (new developers read specs, not code)
@@ -721,6 +766,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Likelihood:** Medium
 
 **Mitigation:**
+
 - Build `qf eval` command to run test cases against prompts
 - Use few-shot examples in prompt templates
 - Structured output with schema validation
@@ -739,6 +785,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Likelihood:** High
 
 **Mitigation:**
+
 - `interface.inputs[].filter` allows JSONPath filtering in role profiles
 - NodeFactory only injects declared inputs
 - State pruning strategies (time-based, relevance-based)
@@ -757,6 +804,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Likelihood:** Medium
 
 **Mitigation:**
+
 - `execution.max_iterations` in loop patterns (default 5)
 - LangGraph recursion limits
 - Timeout configuration
@@ -775,6 +823,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Likelihood:** Medium (schemas will evolve)
 
 **Mitigation:**
+
 - Semantic versioning for schemas
 - Validation at load time catches incompatibilities
 - Migration scripts for schema changes
@@ -793,6 +842,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **Likelihood:** Medium
 
 **Mitigation:**
+
 - Keep runtime generic and definition-driven
 - Push custom logic into tools, not runtime
 - Comprehensive tests for runtime components
@@ -809,6 +859,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 **All 6 phases finished!** The QuestFoundry LangGraph migration ("The Cartridge Pivot") is complete.
 
 **What's Been Achieved:**
+
 - ✅ 5 meta-schemas defining the architecture
 - ✅ 16 role profiles with full behavior specifications
 - ✅ 10 loop patterns as declarative state machines
@@ -820,6 +871,7 @@ Showrunner: Working with Style Lead on sharper dialogue...
 - ✅ Deprecation markers for legacy code
 
 **Total Migration Output:**
+
 - **Specifications:** ~2,500 lines of YAML definitions
 - **Quality Gates:** 1,309 lines across 8 validators
 - **Lifecycles:** 905 lines across 4 state machines
@@ -855,6 +907,7 @@ These are beyond the core migration scope:
 ## References
 
 ### Specification
+
 - **Layer 0:** `spec/00-north-star/` — Vision, roles, loops, quality bars
 - **Layer 1:** `spec/01-roles/` — Role charters and briefs
 - **Layer 2:** `spec/02-dictionary/` — Common language and artifact types
@@ -864,15 +917,17 @@ These are beyond the core migration scope:
 - **Layer 5 (NEW):** `spec/05-definitions/` — Executable definitions
 
 ### Implementation
+
 - **Runtime (NEW):** `lib/runtime/` — LangGraph-based execution engine
 - **Runtime (OLD):** `lib/python/` — Imperative Python runtime (DEPRECATED)
 - **Compiler (OLD):** `lib/compiler/` — Spec compiler (DEPRECATED)
 
 ### Documentation
+
 - **Cartridge Architecture:** `spec/05-definitions/README.md`
 - **Meta-Schemas:** `spec/03-schemas/README.md` (definitions/ section)
 - **Migration Plan:** `MIGRATION.md` (this file)
-- **Original Gist:** https://gist.github.com/pvliesdonk/8a2430c470bba3ebeccc719e9b48629e
+- **Original Gist:** <https://gist.github.com/pvliesdonk/8a2430c470bba3ebeccc719e9b48629e>
 
 ---
 

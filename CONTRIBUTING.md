@@ -106,6 +106,14 @@ This enables automatic quality checks on every commit:
 - Type checking (mypy)
 - Commit message validation (Commitizen)
 
+To run the full suite before submitting changes:
+
+```bash
+pre-commit run --all-files
+```
+
+If you installed with `--user`, ensure `~/.local/bin` is on `PATH`.
+
 ### 3. Bundle Resources
 
 Bundle schemas and prompts from spec/ into the library:

@@ -18,6 +18,7 @@ This imperative Python runtime has been replaced by the new declarative architec
 ## Migration
 
 All functionality has been migrated to:
+
 - Runtime implementation: `lib/runtime/`
 - Role definitions: `spec/05-definitions/roles/`
 - Loop definitions: `spec/05-definitions/loops/`

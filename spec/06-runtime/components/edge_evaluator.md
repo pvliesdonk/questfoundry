@@ -26,12 +26,14 @@ Evaluate conditional edges based on state to determine next node in loop executi
 ## Input/Output Contract
 
 ### Input
+
 ```python
 condition: Condition            # Condition object from edge
 state: StudioState              # Current loop state
 ```
 
 ### Output
+
 ```python
 bool                            # True if condition met, False otherwise
 ```
@@ -154,6 +156,7 @@ def evaluate_python_expression(
 ```
 
 **Common Expression Patterns**:
+
 ```python
 # Lifecycle checks
 "state['tu_lifecycle'] == 'cold-merged'"
@@ -173,6 +176,7 @@ def evaluate_python_expression(
 ```
 
 **SECURITY**: Never use plain `eval()` or `exec()`. Use:
+
 - `asteval` library (recommended)
 - `RestrictedPython` library
 - Custom AST validator + safe_eval
@@ -218,6 +222,7 @@ def evaluate_json_logic(
 ```
 
 **Common JSON Logic Patterns**:
+
 ```json
 {
   "==": [{"var": "tu_lifecycle"}, "cold-merged"]
@@ -349,6 +354,7 @@ def create_routing_function(
 ## Error Handling
 
 ### EvaluationError
+
 ```python
 try:
     result = evaluate_condition(condition, state)
@@ -363,6 +369,7 @@ except Exception as e:
 ```
 
 ### SecurityError
+
 ```python
 # If unsafe expression detected
 raise SecurityError(
@@ -469,8 +476,8 @@ assert evaluator.evaluate_condition(condition_3, state) == False
 - **Loop Pattern Schema**: `spec/04-schemas/loop_pattern.schema.json`
 - **Edge Definitions**: Loop topology.edges
 - **Quality Bars**: spec/02-concepts/quality_bars.md
-- **asteval**: https://newville.github.io/asteval/
-- **json-logic-py**: https://github.com/nadirizr/json-logic-py
+- **asteval**: <https://newville.github.io/asteval/>
+- **json-logic-py**: <https://github.com/nadirizr/json-logic-py>
 
 ---
 

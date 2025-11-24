@@ -27,12 +27,14 @@ Transform role profile YAML definitions into LangGraph-compatible Runnable nodes
 ## Input/Output Contract
 
 ### Input
+
 ```python
 role_id: str                    # e.g., "plotwright"
 state: StudioState              # Current loop state
 ```
 
 ### Output
+
 ```python
 Runnable                        # LangGraph-compatible node function
 ```
@@ -62,6 +64,7 @@ def load_role(role_id: str) -> RoleProfile:
 ```
 
 **Key Fields to Extract**:
+
 - `role.id`
 - `role.identity.name`
 - `role.identity.abbreviation`
@@ -138,6 +141,7 @@ def render_prompt(role: RoleProfile, state: StudioState) -> str:
 ```
 
 **Template Context Variables** (available in all prompts):
+
 - `tu_id`: Current Trace Unit ID
 - `tu_lifecycle`: Current lifecycle stage (hot-proposed, stabilizing, etc.)
 - `loop_context`: Loop-specific context dict
@@ -233,6 +237,7 @@ def bind_tools(role: RoleProfile, llm: BaseChatModel) -> Runnable:
 ```
 
 **Tool Types** (examples from Layer 5 definitions):
+
 - `stable_diffusion`: Image generation (Illustrator)
 - `pandoc`: Document conversion (Book Binder)
 - `audio_synthesis`: Voice/music generation (Audio Producer)
@@ -343,6 +348,7 @@ def create_role_node(role_id: str) -> Runnable:
 ### Type 1: reasoning_agent
 
 **Characteristics**:
+
 - Full LLM with complex reasoning
 - High temperature (0.7-0.9) for creativity
 - Large context windows
@@ -351,6 +357,7 @@ def create_role_node(role_id: str) -> Runnable:
 **Examples**: Plotwright, SceneSmith, StyleLead, LoreWeaver
 
 **Implementation**:
+
 ```python
 llm = ChatAnthropic(
     model="claude-3-5-sonnet-20241022",
@@ -362,6 +369,7 @@ llm = ChatAnthropic(
 ### Type 2: production_executor
 
 **Characteristics**:
+
 - Thin LLM wrapper for orchestration
 - Low temperature (0.1-0.3) for consistency
 - Primary work done by tools
@@ -370,6 +378,7 @@ llm = ChatAnthropic(
 **Examples**: Illustrator, Audio Producer, Book Binder
 
 **Implementation**:
+
 ```python
 llm = ChatAnthropic(
     model="claude-3-5-haiku-20241022",
@@ -380,6 +389,7 @@ llm_with_tools = llm.bind_tools([stable_diffusion_tool])
 ```
 
 **Tool-Heavy Execution**:
+
 ```python
 def illustrator_node(state: StudioState) -> StudioState:
     # LLM generates image prompt
@@ -403,6 +413,7 @@ def illustrator_node(state: StudioState) -> StudioState:
 ### Type 3: service
 
 **Characteristics**:
+
 - No LLM needed
 - Pure tool execution
 - Deterministic behavior
@@ -411,6 +422,7 @@ def illustrator_node(state: StudioState) -> StudioState:
 **Examples**: Export Service (Pandoc only)
 
 **Implementation**:
+
 ```python
 def export_service_node(state: StudioState) -> StudioState:
     # No LLM - direct tool invocation
@@ -439,16 +451,19 @@ def export_service_node(state: StudioState) -> StudioState:
 The **Player-Narrator** role has two modes (see narration_dry_run.yaml):
 
 ### Workshop Mode (default)
+
 - Collaborative, interactive
 - Human can interrupt and guide
 - Low stakes, exploratory
 
 ### Production Mode
+
 - Performance-oriented
 - Minimal interruption
 - High polish, final delivery
 
 **Implementation**:
+
 ```python
 def player_narrator_node(state: StudioState) -> StudioState:
     mode = state["loop_context"].get("narration_mode", "workshop")
@@ -471,6 +486,7 @@ def player_narrator_node(state: StudioState) -> StudioState:
 ## Error Handling
 
 ### FileNotFoundError
+
 ```python
 raise FileNotFoundError(
     f"Role definition not found: spec/05-definitions/roles/{role_id}.yaml"
@@ -478,6 +494,7 @@ raise FileNotFoundError(
 ```
 
 ### ValidationError
+
 ```python
 raise ValidationError(
     f"Role {role_id} failed schema validation:\n{error_details}"
@@ -485,6 +502,7 @@ raise ValidationError(
 ```
 
 ### TemplateError
+
 ```python
 raise TemplateError(
     f"Failed to render prompt for role {role_id}: {error}"
@@ -492,6 +510,7 @@ raise TemplateError(
 ```
 
 ### ToolError
+
 ```python
 # Don't crash the loop - capture in state
 return {**state, "error": f"Tool {tool_id} failed: {error}"}
@@ -586,7 +605,7 @@ assert result_state["current_node"] == "plotwright"
 - **Graph Factory Spec**: `components/graph_factory.md`
 - **Tool Registry Interface**: `interfaces/tool_registry.yaml`
 - **LLM Adapter Interface**: `interfaces/llm_adapter.yaml`
-- **LangChain Runnable**: https://python.langchain.com/docs/expression_language/
+- **LangChain Runnable**: <https://python.langchain.com/docs/expression_language/>
 
 ---
 

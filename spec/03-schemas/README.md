@@ -187,6 +187,7 @@ spec/03-schemas/
 These meta-schemas enable a declarative, data-driven execution model where the spec itself becomes executable code (the "cartridge") interpreted by a generic runtime (the "console"). See `spec/05-definitions/README.md` for the complete Cartridge Architecture explanation.
 
 **Relationship to Artifact Schemas:**
+
 - **Artifact schemas (below):** Define the structure of work products (hooks, TUs, canon packs, etc.)
 - **Meta-schemas (above):** Define the structure of execution definitions (roles, loops, gates, etc.)
 - Both use JSON Schema Draft 2020-12 for validation

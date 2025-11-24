@@ -97,6 +97,7 @@ class StudioState(TypedDict):
 ## Input/Output Contract
 
 ### Initialize State
+
 ```python
 Input:
     loop_id: str
@@ -108,6 +109,7 @@ Output:
 ```
 
 ### Update State
+
 ```python
 Input:
     state: StudioState
@@ -118,6 +120,7 @@ Output:
 ```
 
 ### Transition TU Lifecycle
+
 ```python
 Input:
     state: StudioState
@@ -186,6 +189,7 @@ def initialize_state(
 ```
 
 **TU ID Generation**:
+
 ```python
 def generate_tu_id() -> str:
     """
@@ -205,6 +209,7 @@ def generate_tu_id() -> str:
 ```
 
 **Quality Bars Initialization** (8 dimensions):
+
 1. **Integrity**: Story coherence and logic
 2. **Reachability**: All outcomes reachable from decisions
 3. **Nonlinearity**: Meaningful choice and consequence
@@ -276,6 +281,7 @@ def transition_tu(
 ```
 
 **Lifecycle State Machine**:
+
 ```
 ┌─────────────┐
 │hot-proposed │  Initial draft
@@ -330,6 +336,7 @@ def add_artifact(
 ```
 
 **Hot vs Cold State Keys**:
+
 - **Hot** (discovery space): `artifacts.hot.scenes.TU-2025-042`
 - **Cold** (canon): `artifacts.cold.scenes.cargo_bay_confrontation`
 
@@ -373,6 +380,7 @@ def update_quality_bars(
 ```
 
 **Bar Status Thresholds**:
+
 - `all_green`: All bars must be green
 - `mostly_green`: ≥ 75% green, rest yellow
 - `no_red`: No red bars allowed
@@ -479,6 +487,7 @@ def persist_state(state: StudioState) -> None:
 ## Validation
 
 ### Schema Validation
+
 ```python
 def validate_state(state: dict) -> None:
     """
@@ -495,6 +504,7 @@ def validate_state(state: dict) -> None:
 ```
 
 ### Transition Validation
+
 ```python
 def validate_transition(
     current_lifecycle: str,
@@ -514,6 +524,7 @@ def validate_transition(
 ## Error Handling
 
 ### ValidationError
+
 ```python
 raise ValidationError(
     f"State validation failed for TU {state['tu_id']}:\n{errors}"
@@ -521,6 +532,7 @@ raise ValidationError(
 ```
 
 ### InvalidTransitionError
+
 ```python
 raise InvalidTransitionError(
     f"Cannot transition from {current} to {new}: invalid transition"
@@ -528,6 +540,7 @@ raise InvalidTransitionError(
 ```
 
 ### StorageError
+
 ```python
 # Don't crash - log and continue
 logger.error(f"Failed to persist state for TU {tu_id}: {error}")

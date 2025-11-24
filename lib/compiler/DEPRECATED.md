@@ -16,6 +16,7 @@ This spec compiler has been replaced by the new runtime architecture:
 ## Migration
 
 The compiler functionality has been replaced by:
+
 - **Schema Registry:** `lib/runtime/src/questfoundry/runtime/core/schema_registry.py`
 - **Node Factory:** `lib/runtime/src/questfoundry/runtime/core/node_factory.py`
 - **Graph Factory:** `lib/runtime/src/questfoundry/runtime/core/graph_factory.py`

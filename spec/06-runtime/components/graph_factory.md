@@ -28,12 +28,14 @@ Transform loop pattern YAML definitions into executable LangGraph StateGraphs.
 ## Input/Output Contract
 
 ### Input
+
 ```python
 loop_id: str                    # e.g., "story_spark"
 context: dict[str, Any]         # Initial context for state
 ```
 
 ### Output
+
 ```python
 CompiledGraph                   # LangGraph CompiledGraph ready to invoke()
 ```
@@ -63,6 +65,7 @@ def load_loop(loop_id: str) -> LoopPattern:
 ```
 
 **Key Fields to Extract**:
+
 - `loop.id`
 - `loop.metadata.name`
 - `loop.topology.nodes` (list of node_ids)
@@ -87,6 +90,7 @@ def create_state_graph() -> StateGraph:
 ```
 
 **StudioState Structure** (see state_manager.md for full spec):
+
 ```python
 class StudioState(TypedDict):
     tu_id: str                              # Trace Unit ID
@@ -129,6 +133,7 @@ def add_nodes(graph: StateGraph, loop: LoopPattern, node_factory: NodeFactory) -
 Loop edges come in two types:
 
 #### A. Direct Edges
+
 ```python
 def add_direct_edge(graph: StateGraph, edge: Edge) -> None:
     """
@@ -147,6 +152,7 @@ def add_direct_edge(graph: StateGraph, edge: Edge) -> None:
 ```
 
 #### B. Conditional Edges
+
 ```python
 def add_conditional_edge(graph: StateGraph, edge: Edge, edge_evaluator: EdgeEvaluator) -> None:
     """
@@ -189,10 +195,12 @@ def add_conditional_edge(graph: StateGraph, edge: Edge, edge_evaluator: EdgeEval
 ```
 
 **Edge Types from Schema**:
+
 - `direct`: Unconditional transition
 - `conditional`: Evaluated at runtime
 
 **Condition Evaluators** (see edge_evaluator.md):
+
 - `python_expression`: Evaluate Python expression against state
 - `json_logic`: Evaluate JSON Logic rules
 - `bar_threshold`: Check quality bars against threshold
@@ -259,6 +267,7 @@ def add_exit_conditions(graph: StateGraph, loop: LoopPattern, edge_evaluator: Ed
 ```
 
 **Exit Condition Names** (from schema):
+
 - `success`: Normal completion
 - `failure`: Error occurred
 - `deferred`: Postponed for later
@@ -368,6 +377,7 @@ def create_loop_graph(loop_id: str, context: dict[str, Any]) -> CompiledGraph:
 ## Error Handling
 
 ### FileNotFoundError
+
 ```python
 raise FileNotFoundError(
     f"Loop definition not found: spec/05-definitions/loops/{loop_id}.yaml"
@@ -375,6 +385,7 @@ raise FileNotFoundError(
 ```
 
 ### ValidationError
+
 ```python
 raise ValidationError(
     f"Loop {loop_id} failed schema validation:\n{error_details}"
@@ -382,6 +393,7 @@ raise ValidationError(
 ```
 
 ### TopologyError
+
 ```python
 raise TopologyError(
     f"Invalid topology in loop {loop_id}: {specific_issue}"
@@ -468,7 +480,7 @@ else:
 - **Node Factory Spec**: `components/node_factory.md`
 - **Edge Evaluator Spec**: `components/edge_evaluator.md`
 - **State Manager Spec**: `components/state_manager.md`
-- **LangGraph Docs**: https://langchain-ai.github.io/langgraph/
+- **LangGraph Docs**: <https://langchain-ai.github.io/langgraph/>
 
 ---
 
