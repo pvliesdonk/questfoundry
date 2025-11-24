@@ -1,9 +1,0 @@
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://questfoundry.liesdonk.nl/schemas/topology_notes.schema.json",
-  "title": "topology notes",
-  "description": "Schema for topology notes (stub - to be fully defined)",
-  "type": "object",
-  "properties": {},
-  "required": []
-}
