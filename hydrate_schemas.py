@@ -118,7 +118,11 @@ class SchemaHydrator:
                 field_type = "string"  # default
                 required = "required" in field_info.lower()
 
-                if "string" in field_info.lower():
+                if "integer" in field_info.lower():
+                    field_type = "integer"
+                elif "number" in field_info.lower():
+                    field_type = "number"
+                elif "string" in field_info.lower():
                     field_type = "string"
                 elif "array" in field_info.lower():
                     field_type = "array"
@@ -126,8 +130,6 @@ class SchemaHydrator:
                     field_type = "object"
                 elif "boolean" in field_info.lower():
                     field_type = "boolean"
-                elif "number" in field_info.lower() or "integer" in field_info.lower():
-                    field_type = "number"
 
                 current_field = {
                     "name": field_name,
@@ -175,18 +177,29 @@ class SchemaHydrator:
                                 enum_val = constraint_line.lstrip('- ').strip()
                                 if 'enum' not in current_field["constraints"]:
                                     current_field["constraints"]["enum"] = []
-                                # Extract just the value part (before —)
+
+                                # Extract just the value part
+                                extracted = False
                                 if '`' in enum_val:
+                                    # Try to extract from backticks
                                     matches = re.findall(r'`([^`]+)`', enum_val)
                                     if matches:
                                         enum_val = matches[0]
                                         # Remove surrounding quotes if present
                                         enum_val = enum_val.strip('"').strip("'")
-                                    else:
-                                        continue  # Skip if no backticks found
-                                elif '—' in enum_val:
+                                        extracted = True
+
+                                if not extracted and '—' in enum_val:
+                                    # Fallback: extract before em-dash
                                     enum_val = enum_val.split('—')[0].strip().strip('"').strip("'")
-                                current_field["constraints"]["enum"].append(enum_val)
+                                    extracted = True
+
+                                if not extracted:
+                                    # Final fallback: use raw value after stripping list marker
+                                    enum_val = enum_val.strip('"').strip("'")
+
+                                if enum_val:  # Only add non-empty values
+                                    current_field["constraints"]["enum"].append(enum_val)
 
                             k += 1
 
@@ -278,11 +291,12 @@ class SchemaHydrator:
                 required.append(field["name"])
 
         # Build complete schema
+        desc_suffix = f" {description}" if description and description.strip() else ""
         schema = {
             "$schema": SCHEMA_DRAFT_URL,
             "$id": f"{SCHEMA_BASE_URL}/{schema_name}.schema.json",
             "title": title or original_schema.get("title", schema_name.replace("_", " ").title()),
-            "description": f"Generated from 02-dictionary/artifacts/{schema_name}.md. {description}" if description else original_schema.get("description", ""),
+            "description": f"Generated from 02-dictionary/artifacts/{schema_name}.md.{desc_suffix}" if desc_suffix else original_schema.get("description", ""),
             "type": "object",
             "properties": properties,
             "required": required,  # Keep natural field order for better readability
