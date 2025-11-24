@@ -18,7 +18,7 @@ model_tiers:
     anthropic: claude-sonnet-4-5-20250929  # Best coding model, 77.2% SWE-bench
     openai: gpt-5.1-2025-11-13  # GPT-5.1 with adaptive reasoning
     google: gemini-3-pro  # 1M context, 1501 Elo on LMArena
-    ollama: qwen2.5:latest  # 4.7GB - Single model for all tiers (GPU efficiency)
+    ollama: qwen3:8b-q4_K_M  # 4.68GB, 128K context, matches Qwen2.5-14B performance
     litellm: gpt-5.1-2025-11-13
 
   # Structured Thinking: Complex reasoning, planning, topology
@@ -27,7 +27,7 @@ model_tiers:
     anthropic: claude-opus-4-1  # Agentic tasks, reasoning (Aug 2025)
     openai: gpt-5.1  # GPT-5.1 Thinking with extended reasoning
     google: gemini-3-pro  # PhD-level reasoning, top Humanity's Last Exam score
-    ollama: qwen2.5:latest  # Same model for GPU efficiency
+    ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-5.1
 
   # Validation: Quality checks, consistency verification
@@ -36,7 +36,7 @@ model_tiers:
     anthropic: claude-haiku-4-5  # Fast, efficient validation
     openai: gpt-4o-mini
     google: gemini-2.5-flash  # 1M context, fast
-    ollama: qwen2.5:latest  # Same model for GPU efficiency
+    ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-4o-mini
 
   # Customer Facing: Natural, empathetic communication
@@ -45,7 +45,7 @@ model_tiers:
     anthropic: claude-sonnet-4-5-20250929  # Warmer, more conversational
     openai: gpt-5.1-2025-11-13  # Adaptive reasoning, warmer tone
     google: gemini-3-pro  # Natural communication
-    ollama: qwen2.5:latest  # Same model for GPU efficiency
+    ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-5.1-2025-11-13
 
   # Quick Feedback: Fast iteration, suggestions
@@ -54,7 +54,7 @@ model_tiers:
     anthropic: claude-haiku-4-5
     openai: gpt-4o-mini
     google: gemini-2.5-flash
-    ollama: qwen2.5:latest  # Same model for GPU efficiency
+    ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-4o-mini
 
   # Long Context: Extended context windows for large manuscripts
@@ -63,7 +63,7 @@ model_tiers:
     anthropic: claude-sonnet-4-5-20250929  # 200k tokens
     openai: gpt-5.1-2025-11-13  # 128k tokens
     google: gemini-3-pro  # 1M tokens (best for long context)
-    ollama: qwen2.5:latest  # Same model for GPU efficiency
+    ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-5.1-2025-11-13
 
 # Fallback order when tier is not specified
