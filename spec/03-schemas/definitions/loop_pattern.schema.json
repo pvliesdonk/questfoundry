@@ -54,6 +54,29 @@
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+$",
           "description": "Semantic version of this loop pattern"
+        },
+        "created": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this loop pattern was created"
+        },
+        "updated": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this loop pattern was last updated"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author of this loop pattern"
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Tags for categorization and search"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about this loop pattern"
         }
       }
     },
@@ -723,36 +746,6 @@
               "type": "array",
               "items": {"type": "string"},
               "description": "Metrics to collect (e.g., 'node_duration', 'artifact_validation_failures')"
-            }
-          }
-        }
-      }
-    },
-
-    "metadata": {
-      "type": "object",
-      "description": "Additional metadata for documentation and tooling",
-      "properties": {
-        "version": {
-          "type": "string",
-          "pattern": "^\\d+\\.\\d+\\.\\d+$"
-        },
-        "author": {"type": "string"},
-        "created": {"type": "string", "format": "date"},
-        "updated": {"type": "string", "format": "date"},
-        "tags": {
-          "type": "array",
-          "items": {"type": "string"}
-        },
-        "notes": {"type": "string"},
-        "changelog": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "version": {"type": "string"},
-              "date": {"type": "string", "format": "date"},
-              "changes": {"type": "string"}
             }
           }
         }
