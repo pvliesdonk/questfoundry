@@ -16,25 +16,27 @@ model_tiers:
   # Used by: Scene Smith, Audio Director, Art Director, Translator
   creative-writing:
     anthropic: claude-sonnet-4-5-20250929  # Best coding model, 77.2% SWE-bench
-    openai: gpt-5.1-2025-11-13  # GPT-5.1 with adaptive reasoning
+    openai: gpt-4o  # Fast, high-quality prose generation
     google: gemini-3-pro  # 1M context, 1501 Elo on LMArena
     ollama: qwen3:8b-q4_K_M  # 4.68GB, 128K context, matches Qwen2.5-14B performance
-    litellm: gpt-5.1-2025-11-13
+    litellm: gpt-4o
 
   # Structured Thinking: Complex reasoning, planning, topology
   # Used by: Plotwright, Lore Weaver, Researcher
+  # IMPORTANT: Use gpt-4o NOT reasoning models (o1/o3/gpt-5-thinking) for structured output
+  # Reasoning models generate 6K+ reasoning tokens that blow past JSON limits
   structured-thinking:
     anthropic: claude-opus-4-1  # Agentic tasks, reasoning (Aug 2025)
-    openai: gpt-5.1  # GPT-5.1 Thinking with extended reasoning
+    openai: gpt-4o  # Best for structured output - avoid reasoning models here
     google: gemini-3-pro  # PhD-level reasoning, top Humanity's Last Exam score
     ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
-    litellm: gpt-5.1
+    litellm: gpt-4o
 
   # Validation: Quality checks, consistency verification
   # Used by: Gatekeeper, Style Lead (lightweight checks)
   validation:
     anthropic: claude-haiku-4-5  # Fast, efficient validation
-    openai: gpt-4o-mini
+    openai: gpt-4o-mini  # Fast, cheap validation
     google: gemini-2.5-flash  # 1M context, fast
     ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-4o-mini
@@ -43,16 +45,16 @@ model_tiers:
   # Used by: Showrunner (interpreting customer requests), Player-Narrator
   customer-facing:
     anthropic: claude-sonnet-4-5-20250929  # Warmer, more conversational
-    openai: gpt-5.1-2025-11-13  # Adaptive reasoning, warmer tone
+    openai: gpt-4o  # Natural, empathetic communication
     google: gemini-3-pro  # Natural communication
     ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
-    litellm: gpt-5.1-2025-11-13
+    litellm: gpt-4o
 
   # Quick Feedback: Fast iteration, suggestions
   # Used by: All roles for rapid prototyping/testing
   quick-feedback:
     anthropic: claude-haiku-4-5
-    openai: gpt-4o-mini
+    openai: gpt-4o-mini  # Fast, cheap iterations
     google: gemini-2.5-flash
     ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
     litellm: gpt-4o-mini
@@ -61,10 +63,10 @@ model_tiers:
   # Used by: Book Binder, Codex Curator
   long-context:
     anthropic: claude-sonnet-4-5-20250929  # 200k tokens
-    openai: gpt-5.1-2025-11-13  # 128k tokens
+    openai: gpt-4o  # 128k tokens
     google: gemini-3-pro  # 1M tokens (best for long context)
     ollama: qwen3:8b-q4_K_M  # Same model for GPU efficiency
-    litellm: gpt-5.1-2025-11-13
+    litellm: gpt-4o
 
 # Fallback order when tier is not specified
 default_tier: creative-writing
