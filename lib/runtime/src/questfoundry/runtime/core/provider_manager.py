@@ -441,20 +441,36 @@ class ProviderManager:
         # Note: response_format requires the prompt to mention JSON
         model_kwargs = {"response_format": {"type": "json_object"}}
 
-        # For reasoning models (o1, o3, o4-mini), add reasoning_effort to control token usage
-        # reasoning_effort: "minimal" | "low" | "medium" | "high"
-        # Lower effort = fewer reasoning tokens = faster + cheaper
-        if any(reasoning_prefix in model.lower() for reasoning_prefix in ["o1", "o3", "o4-mini"]):
-            model_kwargs["reasoning_effort"] = "low"  # Balance reasoning quality with token usage
+        # For reasoning models (o1, o3, o4-mini), use different parameters
+        is_reasoning_model = any(prefix in model.lower() for prefix in ["o1", "o3", "o4-mini"])
 
-        return ChatOpenAI(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            openai_api_key=api_key,
-            model_kwargs=model_kwargs,
-            **kwargs,
-        )
+        if is_reasoning_model:
+            # reasoning_effort: "minimal" (10%) | "low" (20%) | "medium" (50%) | "high" (80%)
+            # Controls what % of max_completion_tokens goes to internal reasoning
+            # Higher = better reasoning but more tokens consumed
+            model_kwargs["reasoning_effort"] = "medium"  # Good balance for topology/planning
+
+            # o1/o3 models require max_completion_tokens NOT max_tokens
+            # Set higher to allow reasoning + JSON output (reasoning tokens + visible tokens)
+            # Default: 16000 (enough for extensive reasoning + structured output)
+            return ChatOpenAI(
+                model=model,
+                temperature=temperature,
+                max_completion_tokens=max_tokens * 2,  # Double for reasoning + output
+                openai_api_key=api_key,
+                model_kwargs=model_kwargs,
+                **kwargs,
+            )
+        else:
+            # Regular models (gpt-4o, gpt-4o-mini) use max_tokens
+            return ChatOpenAI(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                openai_api_key=api_key,
+                model_kwargs=model_kwargs,
+                **kwargs,
+            )
 
     def _create_google_client(self, model: str, temperature: float, max_tokens: int, **kwargs):
         """Create Google AI Studio client with JSON mode enabled."""
