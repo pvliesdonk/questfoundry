@@ -15,7 +15,7 @@
 
     "metadata": {
       "type": "object",
-      "required": ["name", "type", "loop_guide_ref"],
+      "required": ["name", "type"],
       "description": "Loop metadata from Layer 0 and Layer 2 dictionaries",
       "properties": {
         "name": {
@@ -26,9 +26,9 @@
           "enum": ["Discovery", "Refinement", "Assets", "Localization", "Export", "Full Cycle", "Reflection"],
           "description": "Loop category from Layer 0 (README.md §2: The 12 Production Loops)"
         },
-        "loop_guide_ref": {
+        "layer0_loop_ref": {
           "type": "string",
-          "pattern": "^spec/00-north-star/LOOPS/.+\\.md$",
+          "pattern": "^.*\\.md$",
           "description": "Reference to Layer 0 loop guide with detailed workflow"
         },
         "playbook_ref": {
@@ -41,10 +41,13 @@
           "pattern": "^spec/04-protocol/FLOWS/.+\\.md$",
           "description": "Reference to Layer 4 protocol flow documentation"
         },
-        "timebox": {
+        "timebox_minutes": {
+          "type": "number",
+          "description": "Expected duration in minutes from Layer 0 loop guide"
+        },
+        "schema_ref": {
           "type": "string",
-          "pattern": "^\\d+ (min|minute|minutes|hour|hours|day|days)$",
-          "description": "Expected duration from Layer 0 loop guide (e.g., '60 min', '2 hours', '1 day')"
+          "description": "Reference to the JSON schema for validation"
         },
         "description": {
           "type": "string",
