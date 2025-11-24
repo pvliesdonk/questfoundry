@@ -407,8 +407,51 @@ interface:
           briefs_written:
             type: array
             items:
-              type: string
-            description: Section IDs with briefs completed
+              type: object
+              required:
+                - section_id
+                - goal
+                - beats
+                - choice_intents
+              properties:
+                section_id:
+                  type: string
+                goal:
+                  type: string
+                  description: What this section accomplishes
+                stakes:
+                  type: string
+                  description: Why this matters to the player
+                beats:
+                  type: array
+                  items:
+                    type: string
+                  description: Key narrative moments in order
+                choice_intents:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - choice_label
+                      - intent
+                    properties:
+                      choice_label:
+                        type: string
+                        description: Contrastive label (verb + object)
+                      intent:
+                        type: string
+                        description: What the player is trying to accomplish
+                expected_outcomes:
+                  type: array
+                  items:
+                    type: string
+                  description: Player-safe outcomes
+                open_questions:
+                  type: array
+                  items:
+                    type: string
+                  description: Gaps for Lore/Curator/Style
+            description: Full section briefs for Scene Smith
           hooks_proposed:
             type: integer
           pre_gate_self_check:

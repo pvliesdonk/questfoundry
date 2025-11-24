@@ -249,6 +249,11 @@ class NodeFactory:
                 hot_sot = state.get("hot_sot", {})
                 cold_sot = state.get("cold_sot", {})
 
+                # Debug: Log hot_sot contents when rendering prompt
+                logger.info(f"[HOT_SOT] Rendering prompt for {role.id}")
+                logger.info(f"[HOT_SOT]   section_briefs: {hot_sot.get('section_briefs', [])!r}")
+                logger.info(f"[HOT_SOT]   hot_sot keys: {list(hot_sot.keys())}")
+
                 context = {
                     "role": role,  # Full role object for thin templates (identity + prompt_content)
                     "tu_id": state.get("tu_id", ""),
@@ -381,7 +386,7 @@ class NodeFactory:
 
             if value is not None:
                 hot_sot_updates[hot_key] = value
-                logger.debug(f"Mapped {role.id} output to hot_sot.{hot_key}")
+                logger.info(f"[HOT_SOT] {role.id} → hot_sot.{hot_key} = {value!r}")
 
         # 4. Store full LLM output for debugging (in artifacts, not hot_sot)
         # This preserves raw output without polluting the hot_sot structure
