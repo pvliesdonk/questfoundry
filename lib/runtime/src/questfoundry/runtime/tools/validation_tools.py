@@ -80,21 +80,101 @@ class EvaluateQualityBar(BaseTool):
     ) -> dict[str, Any]:  # type: ignore[override]
         gate = _load_quality_gate(gate_id)
         checks = gate.get("validation_checks", [])
+        artifacts = artifacts or {}
 
-        # Placeholder evaluation: mark checks as skipped but return pass=True to avoid blocking flows
         results = []
+        failures = 0
+
         for check in checks:
-            results.append(
-                {
-                    "check_id": check.get("check_id"),
-                    "status": "skipped",
-                    "reason": "Check evaluation not implemented",
-                }
-            )
+            check_id = check.get("check_id")
+            check_type = check.get("check_type")
+            status = "skipped"
+            reason = ""
+
+            try:
+                if check_type == "schema_validation":
+                    status, reason = self._run_schema_validation(check, artifacts)
+                elif check_type == "reference_resolution":
+                    status = "skipped"
+                    reason = "reference_resolution not implemented"
+                elif check_type == "graph_analysis":
+                    status = "skipped"
+                    reason = "graph_analysis not implemented"
+                else:
+                    status = "skipped"
+                    reason = f"Unknown check_type {check_type}"
+            except Exception as exc:  # pragma: no cover - defensive
+                status = "fail"
+                reason = f"exception: {exc}"
+
+            if status == "fail":
+                failures += 1
+
+            results.append({"check_id": check_id, "status": status, "reason": reason})
+
+        overall = "pass" if failures == 0 else "fail"
 
         return {
             "gate": gate_id,
-            "overall_status": "pass",
+            "overall_status": overall,
             "checks": results,
-            "notes": "Validation logic not yet implemented; treating gate as pass",
         }
+
+    def _run_schema_validation(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+        validator = check.get("validator", {})
+        method = validator.get("method")
+        target = validator.get("target", "")
+        if method == "regex_pattern":
+            pattern = validator.get("expression", "")
+            values = self._extract_values(artifacts, target)
+            import re
+
+            compiled = re.compile(pattern)
+            invalid = [v for v in values if not isinstance(v, str) or not compiled.match(v)]
+            if invalid:
+                return "fail", f"regex mismatch for {len(invalid)} items"
+            return "pass", ""
+        if method == "schema_validation":
+            schema_ref = validator.get("schema_ref") or validator.get("schema")
+            if not schema_ref:
+                return "skipped", "no schema_ref provided"
+            try:
+                schema = _load_schema(schema_ref)
+            except StateError:
+                return "skipped", f"schema {schema_ref} missing"
+            values = self._extract_values(artifacts, target)
+            errors = []
+            for v in values:
+                try:
+                    jsonschema.validate(v, schema)
+                except jsonschema.ValidationError as exc:
+                    errors.append(exc.message)
+            if errors:
+                return "fail", f"{len(errors)} validation errors"
+            return "pass", ""
+
+        return "skipped", f"unsupported schema_validation method {method}"
+
+    def _extract_values(self, data: dict[str, Any], path: str) -> list[Any]:
+        if not path:
+            return [data]
+        parts = path.split(".")
+        values = [data]
+        for part in parts:
+            next_values: list[Any] = []
+            for val in values:
+                if part == "*":
+                    if isinstance(val, list):
+                        next_values.extend(val)
+                    elif isinstance(val, dict):
+                        next_values.extend(val.values())
+                elif isinstance(val, dict) and part in val:
+                    next_values.append(val[part])
+            values = next_values
+        flat: list[Any] = []
+        for v in values:
+            if isinstance(v, list):
+                flat.extend(v)
+            else:
+                flat.append(v)
+        return flat

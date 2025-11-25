@@ -8,6 +8,17 @@ Implements plugin provider pattern for tool access.
 import logging
 from typing import Any
 
+from questfoundry.runtime.tools import (
+    EvaluateQualityBar,
+    ReadColdSOT,
+    ReadHotSOT,
+    SendProtocolEnvelope,
+    SendProtocolMessage,
+    ValidateArtifact,
+    WriteColdSOT,
+    WriteHotSOT,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +34,17 @@ class Tool:
     def invoke(self, **kwargs: Any) -> Any:
         """Invoke the tool (override in subclasses)."""
         raise NotImplementedError(f"Tool {self.tool_id} not implemented")
+
+
+class LangChainToolAdapter(Tool):
+    """Adapter to wrap LangChain BaseTool instances in the registry API."""
+
+    def __init__(self, tool_id: str, base_tool: Any):
+        super().__init__(tool_id, getattr(base_tool, "name", tool_id), getattr(base_tool, "description", ""))
+        self._base_tool = base_tool
+
+    def invoke(self, **kwargs: Any) -> Any:
+        return self._base_tool.run(**kwargs)
 
 
 class MockTool(Tool):
@@ -77,6 +99,24 @@ class ToolRegistry:
         # Lore index lookup
         self._tools["lore_index"] = MockTool(
             "lore_index", "Lore Index", "Look up entries in the lore/codex index"
+        )
+
+        # Internal state/protocol/validation tools
+        self._tools["read_hot_sot"] = LangChainToolAdapter("read_hot_sot", ReadHotSOT())
+        self._tools["write_hot_sot"] = LangChainToolAdapter("write_hot_sot", WriteHotSOT())
+        self._tools["read_cold_sot"] = LangChainToolAdapter("read_cold_sot", ReadColdSOT())
+        self._tools["write_cold_sot"] = LangChainToolAdapter("write_cold_sot", WriteColdSOT())
+        self._tools["send_protocol_message"] = LangChainToolAdapter(
+            "send_protocol_message", SendProtocolMessage()
+        )
+        self._tools["send_protocol_envelope"] = LangChainToolAdapter(
+            "send_protocol_envelope", SendProtocolEnvelope()
+        )
+        self._tools["validate_artifact"] = LangChainToolAdapter(
+            "validate_artifact", ValidateArtifact()
+        )
+        self._tools["evaluate_quality_bar"] = LangChainToolAdapter(
+            "evaluate_quality_bar", EvaluateQualityBar()
         )
 
         logger.info(f"Registered {len(self._tools)} stub tools")
