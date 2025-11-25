@@ -71,8 +71,7 @@ guardrails.
 
 ### Researcher
 
-**Scope**: Verify facts; attach citations; assign `uncorroborated:<low|med|high>` when evidence is
-thin.  
+**Scope**: Verify facts; attach citations; assign research posture (`uncorroborated_low | uncorroborated_medium | uncorroborated_high`) when evidence is thin.  
 **Delivers**: Research memos, risk posture; aids Lore/Curator/Plot.  
 **Dormancy rule**: If dormant, surfaces stay neutral; mark uncertainty in Hot.
 

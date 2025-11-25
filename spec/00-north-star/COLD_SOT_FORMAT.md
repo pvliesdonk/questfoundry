@@ -46,9 +46,9 @@ player-facing content and export operations.
 │   ├── style.json             # Style manifest (optional)
 │   └── build.lock.json        # Tool versions (optional)
 ├── assets/
-│   ├── cover.png              # Deterministically named
-│   ├── anchor001__plate__v1.png
-│   ├── anchor002__plate__v1.png
+│   ├── illustrator_cover_final.png    # Deterministically named
+│   ├── illustrator_anchor001_v1.png
+│   ├── illustrator_anchor002_v1.png
 │   └── ...
 ├── sections/
 │   ├── 001.md                 # Canonical markdown per section
@@ -61,13 +61,14 @@ player-facing content and export operations.
 
 ### File Naming Conventions
 
-**Assets:** `<anchor>__<type>__v<version>.<ext>`
+**Assets:** `{role}_{section_id}_{variant}.{ext}`
 
-- Example: `anchor001__plate__v1.png`
-- `<anchor>` = section anchor (e.g., `anchor001`)
-- `<type>` = `plate` (illustration), `cover`, `icon`, etc.
-- `<version>` = semantic version (integer)
-- `<ext>` = file extension (`.png`, `.jpg`, `.svg`)
+- Example: `illustrator_anchor001_v1.png`, `illustrator_cover_final.png`
+- `{role}` = producing role (e.g., `illustrator`)
+- `{section_id}` = section anchor (e.g., `anchor001`) or logical name (e.g., `cover`)
+- `{variant}` = version or variant identifier (e.g., `v1`, `draft`, `final`)
+- `{ext}` = file extension (`.png`, `.jpg`, `.svg`)
+- **Rationale:** Preserves SHA-256 hash determinism by matching Layer 2 workflow naming without requiring renaming on Cold merge
 
 **Sections:** `<number>.md`
 
@@ -185,7 +186,7 @@ player-facing content and export operations.
     {
       "anchor": "anchor001",
       "type": "plate",
-      "filename": "anchor001__plate__v1.png",
+      "filename": "illustrator_anchor001_v1.png",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 245678,
       "width_px": 1024,
@@ -203,7 +204,7 @@ player-facing content and export operations.
     {
       "anchor": "cover",
       "type": "cover",
-      "filename": "cover.png",
+      "filename": "illustrator_cover_final.png",
       "sha256": "d2d2d2...",
       "size_bytes": 512000,
       "width_px": 1200,
@@ -494,9 +495,9 @@ cold/
 └── build.lock.json       # Tool versions
 
 assets/
-├── cover.png
-├── anchor001__plate__v1.png
-├── anchor002__plate__v2.png  # Version bumped after re-approval
+├── illustrator_cover_final.png
+├── illustrator_anchor001_v1.png
+├── illustrator_anchor002_v2.png  # Version bumped after re-approval
 └── ... (50 total)
 
 sections/

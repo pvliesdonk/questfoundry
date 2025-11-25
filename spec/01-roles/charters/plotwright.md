@@ -64,7 +64,7 @@ then hand clear briefs to prose and canon neighbors.
 
 **Produces (outputs):**
 
-- **Topology Notes** — hub/loop/gateway map (human-readable), keystones, safe returns.
+- **Topology Notes (containing structural deltas)** — hub/loop/gateway map (human-readable), keystones, safe returns, and explicit change records per TU.
 - **Section Briefs** — per-section: goal • beats • choice intents (contrastive) • expected outcomes
   (player-safe) • open questions.
 - **Gateway Map** — diegetic checks (token/reputation/knowledge/tool) + fairness notes (how to

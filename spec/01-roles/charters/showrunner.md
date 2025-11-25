@@ -68,6 +68,7 @@ make the next step obvious.
 **Produces (outputs):**
 
 - **TU Briefs** (scope, loop, roles awake, deliverables, risks).
+- **Meeting Minutes** (structured record of Customer ↔ Showrunner sessions).
 - **Harvest Sheet** (hook triage summary from Hook Harvest loop).
 - **Post-Mortem Report** (retrospective analysis after milestones).
 - **Merge Notes** (what passed bars and landed in Cold).
@@ -134,8 +135,7 @@ make the next step obvious.
 
 **Plan-only merges:** Allowed for Art/Audio/Translation as **deferred:art/audio/translation**.
 
-**Risk posture when Researcher dormant:** Mark items `uncorroborated:<low|med|high>` in Hot; keep
-surfaces neutral.
+**Risk posture when Researcher dormant:** Mark items with research posture (`uncorroborated_low | uncorroborated_medium | uncorroborated_high`) in Hot; keep surfaces neutral.
 
 ---
 

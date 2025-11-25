@@ -63,10 +63,10 @@ summaries to neighbors who face the player.
 
 - **Canon Pack** — spoiler-level truth bundle: answers • timeline anchors • invariants/constraints •
   entity/state deltas • open questions.
-- **Downstream Notes** — concrete effects for Plotwright (gate reasons, loop differences), Scene
+- **Downstream Effects** — concrete effects for Plotwright (gate reasons, loop differences), Scene
   (beats to reflect), Style (register tensions).
-- **Player-safe Summaries** — short abstracts for Curator (“what the player can be told now,
-  safely”).
+- **Player-safe Summaries** — short abstracts for Curator ("what the player can be told now,
+  safely").
 - **Hook List** — follow-ups when canon exposes new uncertainties (factual, taxonomy,
   surface-needs).
 
@@ -89,7 +89,7 @@ summaries to neighbors who face the player.
 - Canon resolves the accepted hooks without breaking prior invariants.
 - Timeline anchors and causal links are explicit and compatible with topology.
 - Player-safe summaries exist for Curator; no spoilers embedded.
-- Research posture recorded (`uncorroborated:<risk>` if applicable).
+- Research posture recorded (`uncorroborated_low | uncorroborated_medium | uncorroborated_high` if applicable).
 - Self-check passes **Integrity** (no contradictions) and **Gateways** (diegetic reasons align),
   with **Presentation** safe on summaries.
 
@@ -127,8 +127,7 @@ summaries to neighbors who face the player.
 - Gatekeeper flags **continuity** or **causality** risks.
 - Researcher finds/requests canon-level reconciliation.
 
-**Risk posture when Researcher dormant:** mark claims `uncorroborated:<low|med|high>`; keep surfaces
-neutral; schedule a Researcher TU.
+**Risk posture when Researcher dormant:** mark claims with research posture (`uncorroborated_low | uncorroborated_medium | uncorroborated_high`); keep surfaces neutral; schedule a Researcher TU.
 
 ---
 
@@ -155,7 +154,7 @@ neutral; schedule a Researcher TU.
 
 - [ ] TU scoped; accepted hooks listed
 - [ ] Canon answers, timeline anchors, and invariants written
-- [ ] Downstream notes to Plotwright/Scene/Style issued
+- [ ] Downstream effects to Plotwright/Scene/Style issued
 - [ ] Player-safe summaries for Curator included
 - [ ] Research posture recorded; new hooks filed if needed
 - [ ] Self-check vs. **Integrity/Gateways/Presentation** (summaries)
