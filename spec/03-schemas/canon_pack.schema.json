@@ -219,14 +219,42 @@
       "maxLength": 800
     },
     "downstream_effects": {
-      "type": "array",
-      "description": "Actionable downstream steps for creative roles (Plotwright, Scene Smith, Style Lead, Codex Curator, etc.).",
-      "items": {
-        "type": "string",
-        "minLength": 10,
-        "maxLength": 400
+      "type": "object",
+      "description": "Actionable downstream steps for creative roles, structured by role.",
+      "properties": {
+        "plotwright_notes": {
+          "type": "array",
+          "description": "Gate reasons, loop differences, keystone resilience for Plotwright",
+          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+        },
+        "scene_smith_notes": {
+          "type": "array",
+          "description": "Phrasing cues, micro-context, beats to reflect for Scene Smith (constraints, not draft prose)",
+          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+        },
+        "style_lead_notes": {
+          "type": "array",
+          "description": "Pattern nudges, banned/preferred forms for Style Lead",
+          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+        },
+        "codex_curator_notes": {
+          "type": "array",
+          "description": "New/updated entries, crosslink hints for Codex Curator",
+          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+        },
+        "translator_notes": {
+          "type": "array",
+          "description": "Terminology risks, register map nudges for Translator",
+          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+        },
+        "gatekeeper_notes": {
+          "type": "array",
+          "description": "Presentation watchouts, anchor collisions for Gatekeeper",
+          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+        }
       },
-      "minItems": 4
+      "required": ["plotwright_notes", "scene_smith_notes", "style_lead_notes", "codex_curator_notes"],
+      "additionalProperties": false
     },
     "hooks_filed": {
       "type": "array",

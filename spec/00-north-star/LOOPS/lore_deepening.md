@@ -101,8 +101,11 @@ Showrunner opens/updates a **Trace Unit (TU)**: `tu-lore-deepening-<topic>` and 
 - **Canon Pack** (human text, spoiler-level), one entry per theme:
   - Title, Canon Answer, Timeline, Entities/Factions, Constraints, Sensitivity, Upstream hooks/TUs,
     Downstream impacts, Notes.
-- **Prose Notes** for Scene Smith (foreshadow/callbacks/description updates).
-- **Topology Notes** for Plotwright (gateway/loop implications).
+  - **Downstream Effects** includes structured notes by role:
+    - **scene_smith_notes**: Phrasing cues, micro-context, beats to reflect (constraints, not prose).
+    - **plotwright_notes**: Gateway/loop implications, gate reasons, keystone resilience.
+    - **style_lead_notes**: Pattern nudges, banned/preferred forms.
+    - **codex_curator_notes**, **translator_notes**, **gatekeeper_notes**.
 - **Factual Appendix** (citations or `uncorroborated:<risk>` list).
 - **Pre-gate note** (Gatekeeper): anticipated bar risks.
 
