@@ -4,121 +4,42 @@
 
 id: translation_pass
 
-identity:
-  name: Translation Pass
+metadata:
+  name: "Translation Pass"
+  type: "Localization"
   description: |
     Add or maintain a target-language slice. Create or update a player-safe translation of
     manuscript/codex surfaces while preserving PN boundaries, style intent, and navigation.
-  category: localization
-  phase: translation
-
-purpose: |
-  Create or update a player-safe translation of the manuscript/codex surfaces while preserving
-  PN boundaries, style intent, and navigation. This loop supports plan-only merges (glossary/style
-  kit) when the full slice isn't ready.
-
-outcome: |
-  A Language Pack (glossary, style notes, localized surfaces, open issues) ready for Gatekeeper
-  checks and merge to Cold. Exports can include complete or partial translations flagged accordingly.
-
-triggers:
-  - New target language requested
-  - Significant style/canon changes warrant a translation refresh
-  - Accessibility or market goals require multilingual exports
-
-context:
-  required_artifacts:
-    - artifact_type: cold_snapshot
-      description: Cold snapshot (manuscript/codex surfaces)
-    - artifact_type: style_addendum
-      description: PN Principles, Style guardrails
-  optional_artifacts:
-    - artifact_type: glossary_slice
-      description: Current glossary/terminology (if any)
-    - artifact_type: canon_pack
-      description: Cultural notes from Lore/Style
+    Supports plan-only merges (glossary/style kit) when the full slice isn't ready.
 
 topology:
+  entry_node: scope_coverage
+
   nodes:
     - id: scope_coverage
-      step: 1
-      name: Scope & Coverage Plan
-      active_role: translator
-      supporting_roles:
-        - showrunner
-      description: |
-        Decide slice (full book, acts, codex subset). Set coverage target and time box;
-        mark partial outputs as incomplete.
-      outputs:
-        - coverage_plan
+      role: "Translator"
+      description: "Decide slice (full book, acts, codex subset). Set coverage target and time box; mark partial outputs as incomplete."
+      next: glossary_first
 
     - id: glossary_first
-      step: 2
-      name: Glossary First
-      active_role: translator
-      supporting_roles:
-        - style_lead
-      description: |
-        Create/refresh glossary with Style Lead. Decide register (T/V distinction, dialect);
-        lock decisions here.
-      outputs:
-        - glossary_slice
+      role: "Translator"
+      description: "Create/refresh glossary with Style Lead. Decide register (T/V distinction, dialect); lock decisions here."
+      next: segment_localize
 
     - id: segment_localize
-      step: 3
-      name: Segment & Localize
-      active_role: translator
-      description: |
-        Translate player surfaces: no internal labels, no spoilers, preserve PN diegesis.
-        Keep hyperlinks and anchors intact; choice labels stay distinct and clear.
-      outputs:
-        - localized_surfaces
+      role: "Translator"
+      description: "Translate player surfaces: no internal labels, no spoilers, preserve PN diegesis. Keep hyperlinks and anchors intact; choice labels stay distinct and clear."
+      next: idiom_pass
 
-    - id: motif_idiom_pass
-      step: 4
-      name: Motif & Idiom Pass
-      active_role: style_lead
-      description: |
-        Validate motif resonance; solve idioms with functionally equivalent phrases.
-      outputs:
-        - idiom_strategy
-
-    - id: pn_phrasing_check
-      step: 5
-      name: PN Phrasing Check
-      active_role: player_narrator
-      description: |
-        Confirm gate enforcement phrasing is diegetic and natural in target language.
-      outputs:
-        - pn_phrasing_patterns
-
-    - id: link_audit
-      step: 6
-      name: Link Audit
-      active_role: codex_curator
-      description: |
-        Ensure cross-refs resolve to localized targets; add stubs if scoped.
-      outputs:
-        - crosslink_map
+    - id: idiom_pass
+      role: "Style Lead"
+      description: "Validate motif resonance; solve idioms with functionally equivalent phrases."
+      next: pre_gate
 
     - id: pre_gate
-      step: 7
-      name: Pre-Gate
-      active_role: gatekeeper
-      description: |
-        Presentation Safety (no leaks), Integrity (links), Style (tone/voice).
-      outputs:
-        - pre_gate_note
-
-    - id: package
-      step: 8
-      name: Package
-      active_role: translator
-      description: |
-        Assemble Language Pack; compute coverage and list open issues.
-      outputs:
-        - language_pack
-        - coverage_report
+      role: "Gatekeeper"
+      description: "Presentation Safety (no leaks), Integrity (links), Style (tone/voice)."
+      next: null
 
   edges:
     - from: scope_coverage
@@ -128,90 +49,37 @@ topology:
       to: segment_localize
       condition: glossary_locked
     - from: segment_localize
-      to: motif_idiom_pass
+      to: idiom_pass
       condition: segments_translated
-    - from: motif_idiom_pass
-      to: pn_phrasing_check
-      condition: idioms_resolved
-    - from: pn_phrasing_check
-      to: link_audit
-      condition: pn_approved
-    - from: link_audit
+    - from: idiom_pass
       to: pre_gate
-      condition: links_verified
-    - from: pre_gate
-      to: package
-      condition: pre_gate_complete
+      condition: idioms_resolved
 
-raci:
-  responsible:
-    - translator
-  accountable:
-    - showrunner
-  consulted:
-    - style_lead
-    - player_narrator
-    - codex_curator
-    - gatekeeper
-  informed:
-    - book_binder
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - cold_snapshot
+    - style_addendum
+  optional_artifacts:
+    - glossary_slice
+    - canon_pack
 
 handoffs:
-  - target_loop: binding_run
-    artifacts:
-      - language_pack
-    description: Language pack for inclusion in export views
+  - target: binding_run
+    condition: "language pack ready for export views"
+
+gates:
+  quality_bars:
+    - Presentation
+    - Integrity
+    - Style
 
 success_criteria:
   - Register and tone feel native; PN voice preserved
   - Links/cross-refs resolve; choice labels remain distinct
   - Glossary stable; idioms handled; motifs resonate
   - No spoilers or internal labels leaked; accessibility text localized
-
-failure_modes:
-  - name: literalism_breaks_tone
-    description: Direct translation loses voice
-    remedy: Recast with Style Lead; add glossary usage examples
-
-  - name: untranslatable_idiom
-    description: Idiom has no equivalent
-    remedy: Provide functional equivalent or upstream rewrite suggestion
-
-  - name: broken_anchors
-    description: Links don't resolve after translation
-    remedy: Sync IDs; re-run link audit
-
-  - name: pn_leaks_plumbing
-    description: Meta mechanics exposed in translation
-    remedy: Replace with diegetic phrasing; Gatekeeper blocks until fixed
-
-  - name: inconsistent_terms
-    description: Same source term translated differently
-    remedy: Lock glossary; batch-fix before merge
-
-quality_bars:
-  - Presentation
-  - Integrity
-  - Style
-
-merge_path:
-  direct_to_cold: true
-  requires_gatecheck: true
-  supports_deferred: true
-  deferred_label: "deferred:translation"
-  feeds_into:
-    - binding_run
-  notes: |
-    If glossary/kit only: may merge to Cold as deferred:translation with coverage 0%.
-    If localized surfaces present: Gatekeeper passes -> Showrunner merges with coverage %.
-    Binder may now include the slice (marked complete/incomplete).
-
-metadata:
-  version: "1.0.0"
-  created: "2025-11-25"
-  updated: "2025-11-25"
-  author: "QuestFoundry Compiler"
-  tags:
-    - localization
-    - translation
-    - multilingual

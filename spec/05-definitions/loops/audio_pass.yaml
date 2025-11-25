@@ -4,104 +4,42 @@
 
 id: audio_pass
 
-identity:
-  name: Audio Pass
+metadata:
+  name: "Audio Pass"
+  type: "Assets"
   description: |
     Plan and/or add sound. Decide what the audience should hear and why - ambience, foley,
     stingers, or voice - then optionally produce audio that fits style and narrative intent.
-  category: assets
-  phase: audio
-
-purpose: |
-  Decide what the audience should hear and why - ambience, foley, stingers, or voice - then
-  (optionally) produce audio that fits style and narrative intent without leaking spoilers.
-  This loop supports plan-only merges when the Audio Producer is dormant.
-
-outcome: |
-  An Audio Plan (cues, purpose, timing/placement, captions/text-equivalents, safety notes) and,
-  if active, audio assets with reproducibility notes. Ready for Gatekeeper checks and merge to Cold.
-
-triggers:
-  - A chapter/scene needs mood scaffolding or clarifying sound cues
-  - Style Lead requests motif reinforcement via sound
-  - Replacement/upgrade of existing sounds or VO
-  - Export targets include audio plan/assets
-
-context:
-  required_artifacts:
-    - artifact_type: cold_snapshot
-      description: Cold snapshot (canon, codex, style guardrails)
-    - artifact_type: section_draft
-      description: Target scenes/sections (Hot drafts acceptable for planning)
-  optional_artifacts:
-    - artifact_type: pn_phrasing_patterns
-      description: PN Principles (diegetic references)
-    - artifact_type: language_pack
-      description: Localization posture (Translator active or dormant)
+    Supports plan-only merges when the Audio Producer is dormant.
 
 topology:
+  entry_node: select_justify
+
   nodes:
     - id: select_justify
-      step: 1
-      name: Select & Justify
-      active_role: audio_director
-      description: |
-        For each proposed cue: Cue ID & Scene anchor, Purpose (clarify affordance, intensify
-        stakes, transition, recall motif), Type (ambience, foley, stinger, VO), Spoiler risk
-        and mitigation.
-      outputs:
-        - cue_selection
+      role: "Audio Director"
+      description: "For each proposed cue: Cue ID & Scene anchor, Purpose (clarify affordance, intensify stakes, transition, recall motif), Type (ambience, foley, stinger, VO), Spoiler risk and mitigation."
+      next: write_plan
 
     - id: write_plan
-      step: 2
-      name: Write the Audio Plan
-      active_role: audio_director
-      description: |
-        Description (player-safe), Placement, Intensity curve, Motif ties, Captions/text-equivalents,
-        Safety notes, Localization notes (if VO).
-      outputs:
-        - audio_plan
+      role: "Audio Director"
+      description: "Description (player-safe), Placement, Intensity curve, Motif ties, Captions/text-equivalents, Safety notes, Localization notes (if VO)."
+      next: style_alignment
 
     - id: style_alignment
-      step: 3
-      name: Style Alignment
-      active_role: style_lead
-      description: |
-        Tune language and motif ties; approve or request revisions.
-      outputs:
-        - style_notes
+      role: "Style Lead"
+      description: "Tune language and motif ties; approve or request revisions."
+      next: produce_assets
 
     - id: produce_assets
-      step: 4
-      name: Produce Assets
-      active_role: audio_producer
-      optional: true
-      description: |
-        Create cues; export masters; provide stems. Record reproducibility notes.
-        Provide text equivalents and any lyrics avoidance.
-      outputs:
-        - rendered_cue
-        - determinism_log
+      role: "Audio Producer"
+      description: "Create cues; export masters; provide stems. Record reproducibility notes (DAW/session, key plugins, versions, sample rate/bit depth). Provide text equivalents."
+      next: pre_gate
 
     - id: pre_gate
-      step: 5
-      name: Pre-Gate
-      active_role: gatekeeper
-      description: |
-        Style: cohesive with book register. Presentation Safety: spoiler-safe cue descriptions;
-        reasonable loudness; caption coverage. Determinism/Reproducibility: logs sufficient.
-      outputs:
-        - pre_gate_note
-
-    - id: package_handoff
-      step: 6
-      name: Package & Handoff
-      active_role: audio_director
-      description: |
-        Attach Audio Plan and (if produced) assets + logs to the TU.
-        Notify Binder about inclusion options for the next export.
-      outputs:
-        - audio_package
+      role: "Gatekeeper"
+      description: "Style: cohesive with book register. Presentation Safety: spoiler-safe cue descriptions; reasonable loudness; caption coverage. Reproducibility: logs sufficient when promised."
+      next: null
 
   edges:
     - from: select_justify
@@ -115,82 +53,34 @@ topology:
       condition: style_approved
     - from: produce_assets
       to: pre_gate
-      condition: assets_complete
-    - from: pre_gate
-      to: package_handoff
-      condition: pre_gate_complete
+      condition: assets_complete_or_skipped
 
-raci:
-  responsible:
-    - audio_director
-    - audio_producer
-  accountable:
-    - showrunner
-  consulted:
-    - style_lead
-    - player_narrator
-    - translator
-    - gatekeeper
-  informed:
-    - book_binder
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - cold_snapshot
+    - section_draft
+  optional_artifacts:
+    - pn_phrasing_patterns
+    - language_pack
 
 handoffs:
-  - target_loop: binding_run
-    artifacts:
-      - audio_plan
-      - rendered_cue
-    description: Audio plans and assets for inclusion in export views
+  - target: binding_run
+    condition: "audio plans and assets ready for export views"
+
+gates:
+  quality_bars:
+    - Style
+    - Presentation
+    - Determinism
+    - Accessibility
 
 success_criteria:
   - Each cue has a clear narrative purpose (clarity, mood, or signposting)
   - Descriptions and captions are player-safe and consistent with Style Lead
   - Assets (if included) have reproducibility notes; loudness is reasonable; text equivalents exist
   - Gatekeeper reports green on Style/Presentation (and Reproducibility if applicable)
-
-failure_modes:
-  - name: cue_telegraphs_twist
-    description: Audio cue reveals plot information
-    remedy: Move detail to canon notes; keep description atmospheric
-
-  - name: technique_on_surface
-    description: DAW/plugin talk in captions
-    remedy: Remove technical details; keep diegetic
-
-  - name: loudness_shocks
-    description: Dangerous audio levels
-    remedy: Tame transients; add fade/ramp; include safety note
-
-  - name: missing_repro_notes
-    description: Promised reproducibility but no log
-    remedy: Re-export with logs or mark non-deterministic
-
-  - name: untranslatable_vo
-    description: VO idioms that don't translate
-    remedy: Coordinate with Translator; adjust script; provide alt phrasing
-
-quality_bars:
-  - Style
-  - Presentation
-  - Determinism
-  - Accessibility
-
-merge_path:
-  direct_to_cold: true
-  requires_gatecheck: true
-  supports_deferred: true
-  deferred_label: "deferred:audio"
-  feeds_into:
-    - binding_run
-  notes: |
-    Plan-only may merge to Cold as deferred:audio if Style and Presentation Safety pass.
-    With assets: Merge only if Style + Presentation pass and Reproducibility info is adequate.
-
-metadata:
-  version: "1.0.0"
-  created: "2025-11-25"
-  updated: "2025-11-25"
-  author: "QuestFoundry Compiler"
-  tags:
-    - assets
-    - audio
-    - sound

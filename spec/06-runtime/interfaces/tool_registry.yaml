@@ -168,8 +168,10 @@ standard_tools:
 
   pandoc:
     name: "Pandoc Document Converter"
-    description: "Convert documents between formats (markdown, epub, pdf, etc.)"
+    description: "Converts markdown structures into EPUB/PDF/HTML formats."
     category: "document_conversion"
+    implementation: "questfoundry.runtime.tools.PandocAdapter"
+    capability_tags: ["export", "conversion", "bind"]
     input_schema:
       type: "object"
       required: ["input", "from", "to"]
@@ -257,8 +259,10 @@ standard_tools:
 
   lore_index:
     name: "Lore Index Lookup"
-    description: "Search and retrieve lore entries from the codex"
+    description: "Semantic search over the project's Terminology and Canon database."
     category: "data"
+    implementation: "questfoundry.runtime.tools.LoreIndex"
+    capability_tags: ["search", "canon", "cross-reference"]
     input_schema:
       type: "object"
       required: ["query"]
@@ -286,6 +290,61 @@ standard_tools:
               content: { type: "string" }
               source: { type: "string" }
               relevance_score: { type: "float" }
+
+  citation_manager:
+    name: "Citation Manager"
+    description: "Records and verifies external sources for factual claims."
+    category: "data"
+    implementation: "questfoundry.runtime.tools.CitationManager"
+    capability_tags: ["research", "verify", "citations"]
+    input_schema:
+      type: "object"
+      required: ["action"]
+      properties:
+        action:
+          type: "string"
+          enum: ["add", "verify", "lookup", "list"]
+          description: "Citation operation type"
+        claim:
+          type: "string"
+          description: "The factual claim to cite or verify"
+        source_url:
+          type: "string"
+          description: "URL of the source (for add action)"
+        source_title:
+          type: "string"
+          description: "Title of the source document"
+        author:
+          type: "string"
+          description: "Author of the source"
+        date:
+          type: "string"
+          description: "Publication date (ISO 8601)"
+        quote:
+          type: "string"
+          description: "Relevant quote from source"
+        uncertainty_level:
+          type: "string"
+          enum: ["low", "medium", "high"]
+          description: "Confidence level in the citation"
+    output_schema:
+      type: "object"
+      properties:
+        citation_id:
+          type: "string"
+          description: "Unique identifier for the citation"
+        verified:
+          type: "boolean"
+          description: "Whether the source could be verified"
+        citations:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id: { type: "string" }
+              claim: { type: "string" }
+              source: { type: "string" }
+              uncertainty: { type: "string" }
 
 # Configuration schema
 configuration:

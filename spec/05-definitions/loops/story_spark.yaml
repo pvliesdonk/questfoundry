@@ -4,122 +4,41 @@
 
 id: story_spark
 
-identity:
-  name: Story Spark
+metadata:
+  name: "Story Spark"
+  type: "Discovery"
   description: |
     Reshape or add plot topology - parts/chapters, hubs, loops, gateways, and codeword economy.
     Ripple changes through prose, hooks, and QA without leaking spoilers to player surfaces.
-  category: discovery
-  phase: ideation
-
-purpose: |
-  Introduce or reshape narrative structure - hubs, loops, gateways - then ripple changes through
-  prose, hooks, and QA without leaking spoilers to player surfaces.
-
-outcome: |
-  A stabilized topology update (in Hot) with section briefs and scene drafts, harvested hooks,
-  and a Gatekeeper preview - ready to feed Lore Deepening and Codex Expansion, then merge to
-  Cold after gatecheck.
-
-triggers:
-  - New chapter/act, subplot, or restructure request
-  - Fixes for reachability/nonlinearity issues
-  - Hook-led expansion (e.g., faction pressure suggests a new hub)
-
-context:
-  required_artifacts:
-    - artifact_type: cold_snapshot
-      description: Current Cold snapshot (canon, codex, style guardrails)
-    - artifact_type: topology_notes
-      description: Prior topology notes (Hot/Cold)
-  optional_artifacts:
-    - artifact_type: hook_card
-      description: Open hooks relevant to structure
-    - artifact_type: gatecheck_report
-      description: Known QA findings (Integrity/Reachability/Nonlinearity)
 
 topology:
+  entry_node: topology_draft
+
   nodes:
     - id: topology_draft
-      step: 1
-      name: Topology Draft
-      active_role: plotwright
-      description: |
-        Map parts/chapters and designate hubs (fan-out), loops (return-with-difference),
-        and gateways (state-gated). For each gateway, write a diegetic condition PN can enforce.
-      outputs:
-        - topology_notes
-        - gateway_map
+      role: "Plotwright"
+      description: "Map parts/chapters and designate hubs (fan-out), loops (return-with-difference), and gateways (state-gated). For each gateway, write a diegetic condition PN can enforce."
+      next: section_briefs
 
     - id: section_briefs
-      step: 2
-      name: Section Briefs
-      active_role: plotwright
-      description: |
-        For each affected/new section: intent, stakes, choices, expected state effect
-        (human phrasing), references.
-      outputs:
-        - section_brief
+      role: "Plotwright"
+      description: "For each affected/new section: intent, stakes, choices, expected state effect (human phrasing), references."
+      next: prose_pass
 
     - id: prose_pass
-      step: 3
-      name: Prose Pass
-      active_role: scene_smith
-      description: |
-        Draft/adjust section text in style; make choices clear and distinct.
-        Note intended state effects in comments (still human-level).
-      outputs:
-        - section_draft
+      role: "Scene Smith"
+      description: "Draft/adjust section text in style; make choices clear and distinct. Note intended state effects in comments (still human-level)."
+      next: hook_generation
 
     - id: hook_generation
-      step: 4
-      name: Hook Generation
-      active_role: plotwright
-      supporting_roles:
-        - scene_smith
-        - researcher
-      description: |
-        Create narrative/scene/factual hook cards with rationales and uncertainty levels.
-      outputs:
-        - hook_card
-
-    - id: style_check
-      step: 5
-      name: Style Check
-      active_role: style_lead
-      description: |
-        Sample sections; flag tone drift; propose motif anchors; suggest PN-surface phrasing patterns.
-      outputs:
-        - style_addendum
-        - edit_notes
-
-    - id: feasibility_check
-      step: 6
-      name: Feasibility Check
-      active_role: lore_weaver
-      description: |
-        Flag canon collisions; suggest where Lore Deepening is needed.
-      outputs:
-        - canon_notes
+      role: "Plotwright"
+      description: "Create narrative/scene/factual hook cards with rationales and uncertainty levels."
+      next: preview_gate
 
     - id: preview_gate
-      step: 7
-      name: Preview Gate
-      active_role: gatekeeper
-      description: |
-        Run a quick pre-gate: Integrity (no accidental dead ends), Reachability (keystones
-        reachable), Nonlinearity (hubs/loops exist & matter).
-      outputs:
-        - pre_gate_note
-
-    - id: triage_handoff
-      step: 8
-      name: Triage Hand-off
-      active_role: showrunner
-      description: |
-        Pass the hook set to Hook Harvest loop; schedule Lore Deepening follow-up.
-      outputs:
-        - tu_brief
+      role: "Gatekeeper"
+      description: "Run a quick pre-gate: Integrity (no accidental dead ends), Reachability (keystones reachable), Nonlinearity (hubs/loops exist & matter)."
+      next: null
 
   edges:
     - from: topology_draft
@@ -132,54 +51,40 @@ topology:
       to: hook_generation
       condition: drafts_complete
     - from: hook_generation
-      to: style_check
-      condition: hooks_generated
-    - from: style_check
-      to: feasibility_check
-      condition: style_reviewed
-    - from: feasibility_check
       to: preview_gate
-      condition: canon_checked
-    - from: preview_gate
-      to: triage_handoff
-      condition: pre_gate_complete
+      condition: hooks_generated
 
-raci:
-  responsible:
-    - plotwright
-    - scene_smith
-  accountable:
-    - showrunner
-  consulted:
-    - lore_weaver
-    - style_lead
-    - gatekeeper
-    - researcher
-  informed:
-    - codex_curator
-    - player_narrator
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: false
+
+context:
+  required_artifacts:
+    - cold_snapshot
+    - topology_notes
+  optional_artifacts:
+    - hook_card
+    - gatecheck_report
 
 handoffs:
-  - target_loop: hook_harvest
-    artifacts:
-      - hook_card
-      - topology_notes
-    description: Pass hook list and topology delta for triage
+  - target: hook_harvest
+    condition: "hook list and topology delta ready for triage"
+  - target: lore_deepening
+    condition: "accepted hooks require canon backfill"
+  - target: codex_expansion
+    condition: "taxonomy/clarity needs identified"
+  - target: style_tune_up
+    condition: "drift notes exceed minor edits"
 
-  - target_loop: lore_deepening
-    artifacts:
-      - hook_card
-    description: Accepted hooks that require canon backfill
-
-  - target_loop: codex_expansion
-    artifacts:
-      - hook_card
-    description: Taxonomy/clarity needs list
-
-  - target_loop: style_tune_up
-    artifacts:
-      - edit_notes
-    description: Drift notes that exceed minor edits
+gates:
+  quality_bars:
+    - Integrity
+    - Reachability
+    - Nonlinearity
+    - Gateways
+    - Style
+    - Presentation
 
 success_criteria:
   - Topology adds or repairs meaningful nonlinearity (not decorative)
@@ -188,52 +93,3 @@ success_criteria:
   - Drafted sections are in-voice and choice-clear
   - Hooks are small, rationalized, and triaged-ready
   - Pre-gate shows no accidental dead ends; keystones remain reachable
-
-failure_modes:
-  - name: cosmetic_hub_loop
-    description: Hub/loop without outcome differences
-    remedy: Add outcome differences; re-justify or remove
-
-  - name: ambiguous_gateway
-    description: Gateway condition unclear or meta
-    remedy: Rewrite condition in-world; ensure at least one path to meet it
-
-  - name: overcoupled_restructure
-    description: Too many changes intertwined
-    remedy: Split into smaller TUs; stage changes
-
-  - name: style_wobble
-    description: Tone/voice inconsistency
-    remedy: Run Style Tune-up before escalating
-
-  - name: research_dormant
-    description: Factual claims without verification
-    remedy: Mark relevant hooks uncorroborated with risk level; log revisit
-
-quality_bars:
-  - Integrity
-  - Reachability
-  - Nonlinearity
-  - Gateways
-  - Style
-  - Presentation
-
-merge_path:
-  direct_to_cold: false
-  feeds_into:
-    - hook_harvest
-    - lore_deepening
-    - codex_expansion
-  notes: |
-    Story Spark itself does NOT merge to Cold. It prepares inputs for:
-    Hook Harvest -> Lore Deepening -> Codex Expansion -> Gatecheck -> Merge to Cold
-
-metadata:
-  version: "1.0.0"
-  created: "2025-11-25"
-  updated: "2025-11-25"
-  author: "QuestFoundry Compiler"
-  tags:
-    - discovery
-    - topology
-    - structure

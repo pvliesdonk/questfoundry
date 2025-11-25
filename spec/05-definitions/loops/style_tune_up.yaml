@@ -4,201 +4,82 @@
 
 id: style_tune_up
 
-identity:
-  name: Style Tune-up
+metadata:
+  name: "Style Tune-up"
+  type: "Refinement"
   description: |
     Detect and correct style drift across prose, captions, and PN surfaces without re-architecting
-    the story. Tighten voice, register, motifs, and visual guardrails.
-  category: refinement
-  phase: polish
+    the story. Tighten voice, register, motifs, and visual guardrails so the book reads like one
+    mind made it.
 
-purpose: |
-  Detect and correct style drift across prose, captions, and PN surfaces without re-architecting
-  the story. Tighten voice, register, motifs, and visual guardrails so the book reads like one
-  mind made it.
+topology:
+  entry_node: diagnose
 
-outcome: |
-  A consolidated style addendum with specific edit notes to owners, plus a green Presentation/Style
-  pre-gate - ready for merge after downstream fixes.
+  nodes:
+    - id: diagnose
+      role: "Style Lead"
+      description: "Sample sections (early/middle/late), PN lines, and recent captions. Tag issues: voice-shift, register-mismatch, motif-missing, over-exposition, jargon-spike."
+      next: exemplars
 
-triggers:
-  - Readers/PN report tonal wobble or inconsistent diction
-  - New chapter/act introduces a variant tone that needs harmonizing
-  - Art/Audio plans landed and nudge aesthetics
-  - Localization uncovered phrasing that fights register
+    - id: exemplars
+      role: "Style Lead"
+      description: "Provide short before/after exemplars for each issue (human prose). Reaffirm motif kit (e.g., 'shadow-side neon', 'low-G dust', 'relay hum')."
+      next: addendum
+
+    - id: addendum
+      role: "Style Lead"
+      description: "Add rules or clarifications: sentence rhythm under pressure, idiom boundaries, POV distance, caption tone. Include localization notes."
+      next: distribute
+
+    - id: distribute
+      role: "Style Lead"
+      description: "Create annotated edit notes: file/section -> issue -> fix suggestion. PN phrase bank updates if needed."
+      next: pre_gate
+
+    - id: pre_gate
+      role: "Gatekeeper"
+      description: "Style & Presentation Safety check; ensure no spoilers snuck into captions/PN."
+      next: null
+
+  edges:
+    - from: diagnose
+      to: exemplars
+      condition: issues_identified
+    - from: exemplars
+      to: addendum
+      condition: exemplars_created
+    - from: addendum
+      to: distribute
+      condition: addendum_complete
+    - from: distribute
+      to: pre_gate
+      condition: notes_distributed
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
 
 context:
   required_artifacts:
-    - artifact_type: cold_snapshot
-      description: Current Cold style guide (+ motifs & exemplars)
-    - artifact_type: section_draft
-      description: Recent prose drafts (Hot), captions, PN lines
+    - cold_snapshot
+    - section_draft
   optional_artifacts:
-    - artifact_type: canon_pack
-      description: Canon changes that might affect tone
-    - artifact_type: pn_playtest_notes
-      description: PN and Binder UX notes
-    - artifact_type: language_pack
-      description: Localization notes (if any)
-
-topology:
-  nodes:
-    - id: drift_diagnosis
-      step: 1
-      name: Drift Diagnosis
-      active_role: style_lead
-      description: |
-        Sample sections (early/middle/late), PN lines, and recent captions.
-        Tag issues: voice-shift, register-mismatch, motif-missing, over-exposition, jargon-spike.
-      outputs:
-        - style_diagnosis
-
-    - id: exemplar_pass
-      step: 2
-      name: Exemplar Pass
-      active_role: style_lead
-      description: |
-        Provide short before/after exemplars for each issue (human prose).
-        Reaffirm motif kit.
-      outputs:
-        - exemplars
-
-    - id: style_addendum
-      step: 3
-      name: Style Addendum
-      active_role: style_lead
-      description: |
-        Add rules or clarifications: sentence rhythm under pressure, idiom boundaries,
-        POV distance, caption tone. Localization notes: avoid puns / provide alternatives.
-      outputs:
-        - style_addendum
-
-    - id: edit_notes
-      step: 4
-      name: Edit Notes to Owners
-      active_role: style_lead
-      description: |
-        Annotated list: file/section -> issue -> fix suggestion (1-2 lines).
-        PN phrase bank updates if needed.
-      outputs:
-        - edit_notes
-        - pn_phrasing_patterns
-
-    - id: owner_revisions
-      step: 5
-      name: Owner Revisions
-      active_role: scene_smith
-      supporting_roles:
-        - player_narrator
-        - art_director
-        - audio_director
-      description: |
-        Make minimal changes to hit style; escalate if structure might change.
-      outputs:
-        - section_draft
-
-    - id: pre_gate
-      step: 6
-      name: Pre-Gate
-      active_role: gatekeeper
-      description: |
-        Style & Presentation Safety check; ensure no spoilers snuck into captions/PN.
-      outputs:
-        - pre_gate_note
-
-    - id: package
-      step: 7
-      name: Package
-      active_role: style_lead
-      description: |
-        Bundle style addendum + edit notes + pre-gate note into the TU.
-      outputs:
-        - style_package
-
-  edges:
-    - from: drift_diagnosis
-      to: exemplar_pass
-      condition: issues_identified
-    - from: exemplar_pass
-      to: style_addendum
-      condition: exemplars_created
-    - from: style_addendum
-      to: edit_notes
-      condition: addendum_complete
-    - from: edit_notes
-      to: owner_revisions
-      condition: notes_distributed
-    - from: owner_revisions
-      to: pre_gate
-      condition: revisions_complete
-    - from: pre_gate
-      to: package
-      condition: pre_gate_complete
-
-raci:
-  responsible:
-    - style_lead
-  accountable:
-    - showrunner
-  consulted:
-    - scene_smith
-    - player_narrator
-    - art_director
-    - audio_director
-    - translator
-    - gatekeeper
-  informed:
-    - plotwright
-    - codex_curator
+    - canon_pack
+    - pn_playtest_notes
+    - language_pack
 
 handoffs:
-  - target_loop: binding_run
-    artifacts:
-      - style_addendum
-    description: Updated style guidance for export assembly
+  - target: binding_run
+    condition: "updated style guidance ready for export assembly"
+
+gates:
+  quality_bars:
+    - Style
+    - Presentation
 
 success_criteria:
   - Prose and PN read in a consistent register; motifs reappear intentionally
   - Captions and cue sheets align with voice; no technique-talk on surfaces
   - Localization pitfalls are noted with alternatives
   - Gatekeeper reports Style/Presentation green
-
-failure_modes:
-  - name: overcorrection_flattens
-    description: Character voice flattened by style enforcement
-    remedy: Keep character idiolect; harmonize narration only
-
-  - name: style_implies_structure
-    description: Style change implies story change
-    remedy: Route to Story Spark; don't smuggle structure via style
-
-  - name: caption_spoilers
-    description: Spoiler detail in captions
-    remedy: Move detail to canon notes; rewrite caption atmospheric
-
-  - name: untranslatable_idioms
-    description: Idioms that don't translate
-    remedy: Provide neutral phrasing or region-appropriate equivalents
-
-quality_bars:
-  - Style
-  - Presentation
-
-merge_path:
-  direct_to_cold: true
-  requires_gatecheck: true
-  feeds_into:
-    - binding_run
-  notes: |
-    After owners apply edits and Gatekeeper passes Style + Presentation, Showrunner merges
-    the Style Addendum (and updated surfaces) to Cold.
-
-metadata:
-  version: "1.0.0"
-  created: "2025-11-25"
-  updated: "2025-11-25"
-  author: "QuestFoundry Compiler"
-  tags:
-    - refinement
-    - style
-    - voice

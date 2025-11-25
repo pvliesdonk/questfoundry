@@ -4,105 +4,42 @@
 
 id: art_touch_up
 
-identity:
-  name: Art Touch-up
+metadata:
+  name: "Art Touch-up"
+  type: "Assets"
   description: |
     Plan and/or add illustrations. Decide what to illustrate and why, then optionally produce
-    illustrations that match style and narrative intent - without leaking spoilers.
-  category: assets
-  phase: visual
-
-purpose: |
-  Decide what to illustrate and why, then (optionally) produce illustrations that match style
-  and narrative intent - without leaking spoilers. This loop supports plan-only merges when
-  the Illustrator is dormant.
-
-outcome: |
-  An Art Plan (subjects, purpose, composition intent, captions, constraints) and, if active,
-  art renders with determinism notes. Ready for Gatekeeper checks and merge to Cold.
-
-triggers:
-  - New chapter/act needs anchoring visuals
-  - Scene gained iconic imagery (after Story Spark / Scene Smith pass)
-  - Style Lead requests motif reinforcement
-  - Replacement or upgrade of an existing illustration
-  - Export goal includes art plan/renders
-
-context:
-  required_artifacts:
-    - artifact_type: cold_snapshot
-      description: Current Cold snapshot (canon, codex, style guardrails)
-    - artifact_type: section_draft
-      description: Target sections/scenes (Hot drafts acceptable for planning)
-  optional_artifacts:
-    - artifact_type: canon_pack
-      description: Lore Deepening notes (spoiler flags)
-    - artifact_type: codex_entry
-      description: Codex entries (player-safe wording)
+    illustrations that match style and narrative intent - without leaking spoilers. Supports
+    plan-only merges when the Illustrator is dormant.
 
 topology:
+  entry_node: select_justify
+
   nodes:
     - id: select_justify
-      step: 1
-      name: Select & Justify
-      active_role: art_director
-      description: |
-        For each proposed image: Subject, Scene anchor, Purpose (clarify, foreshadow, mood),
-        Spoiler risk. If risk > low, consider alternate subject or move to plan-only.
-      outputs:
-        - image_selection
+      role: "Art Director"
+      description: "For each proposed image: Subject, Scene anchor, Purpose (clarify, foreshadow, mood), Spoiler risk. If risk > low, consider alternate subject or move to plan-only."
+      next: write_plan
 
     - id: write_plan
-      step: 2
-      name: Write the Art Plan
-      active_role: art_director
-      description: |
-        Composition intent, Caption (player-safe), Constraints (aspect, palette/motif hooks),
-        Accessibility notes (alt text guidance).
-      outputs:
-        - art_plan
+      role: "Art Director"
+      description: "Composition intent, Caption (player-safe), Constraints (aspect, palette/motif hooks), Accessibility notes (alt text guidance)."
+      next: style_alignment
 
     - id: style_alignment
-      step: 3
-      name: Style Alignment
-      active_role: style_lead
-      description: |
-        Tune plan to guardrails; add motif tie-ins; veto style drift.
-      outputs:
-        - style_notes
+      role: "Style Lead"
+      description: "Tune plan to guardrails; add motif tie-ins; veto style drift."
+      next: render
 
     - id: render
-      step: 4
-      name: Render
-      active_role: illustrator
-      optional: true
-      description: |
-        Produce candidate renders; refine to intent. Record determinism log.
-        Provide alt text (succinct, descriptive, spoiler-safe).
-      outputs:
-        - render
-        - alt_text
-        - determinism_log
+      role: "Illustrator"
+      description: "Produce candidate renders; refine to intent. Record determinism log (seed, prompt/version, model/build, aspect, steps/CFG, post-process chain). Provide alt text."
+      next: pre_gate
 
     - id: pre_gate
-      step: 5
-      name: Pre-Gate
-      active_role: gatekeeper
-      description: |
-        Style: guardrails & tone. Presentation Safety: no spoilers; captions and alt text safe.
-        Determinism: logs complete when promised.
-      outputs:
-        - pre_gate_note
-
-    - id: package_handoff
-      step: 6
-      name: Package & Handoff
-      active_role: art_director
-      description: |
-        Attach Art Plan and (if produced) renders + logs to the TU.
-        Notify Binder about inclusion options for the next export.
-      outputs:
-        - art_package
+      role: "Gatekeeper"
+      description: "Style: guardrails & tone. Presentation Safety: no spoilers; captions and alt text safe. Determinism: logs complete when promised."
+      next: null
 
   edges:
     - from: select_justify
@@ -116,82 +53,34 @@ topology:
       condition: style_approved
     - from: render
       to: pre_gate
-      condition: renders_complete
-    - from: pre_gate
-      to: package_handoff
-      condition: pre_gate_complete
+      condition: renders_complete_or_skipped
 
-raci:
-  responsible:
-    - art_director
-    - illustrator
-  accountable:
-    - showrunner
-  consulted:
-    - style_lead
-    - gatekeeper
-  informed:
-    - codex_curator
-    - player_narrator
-    - book_binder
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - cold_snapshot
+    - section_draft
+  optional_artifacts:
+    - canon_pack
+    - codex_entry
 
 handoffs:
-  - target_loop: binding_run
-    artifacts:
-      - art_plan
-      - render
-    description: Art plans and renders for inclusion in export views
+  - target: binding_run
+    condition: "art plans and renders ready for export views"
+
+gates:
+  quality_bars:
+    - Style
+    - Presentation
+    - Determinism
+    - Accessibility
 
 success_criteria:
   - Each image has a clear narrative purpose (clarity, recall anchor, mood, or signposting)
   - Captions are spoiler-safe, readable, and consistent with Style Lead
   - If renders included, determinism logs are sufficient and alt text is present
   - Gatekeeper reports green on Style/Presentation (and Determinism if applicable)
-
-failure_modes:
-  - name: caption_spoils_twist
-    description: Caption reveals plot information
-    remedy: Move reveal to canon notes; rewrite caption atmospheric
-
-  - name: style_drift
-    description: Visual style doesn't match book register
-    remedy: Adjust plan with Style Lead; iterate render
-
-  - name: no_determinism_log
-    description: Promised reproducibility but no log
-    remedy: Re-render with logging or declare non-deterministic explicitly
-
-  - name: over_detailed_caption
-    description: Caption contains internal labels or gate logic
-    remedy: Trim to mood/purpose; avoid internal labels
-
-  - name: inaccessible_surface
-    description: Missing alt text or accessibility issues
-    remedy: Add/repair alt text; ensure contrast and motion-safety notes
-
-quality_bars:
-  - Style
-  - Presentation
-  - Determinism
-  - Accessibility
-
-merge_path:
-  direct_to_cold: true
-  requires_gatecheck: true
-  supports_deferred: true
-  deferred_label: "deferred:art"
-  feeds_into:
-    - binding_run
-  notes: |
-    Plan-only may merge to Cold as deferred:art if Style/Presentation pass and captions are safe.
-    With renders: Merge only if Style + Presentation pass; Determinism pass when promised.
-
-metadata:
-  version: "1.0.0"
-  created: "2025-11-25"
-  updated: "2025-11-25"
-  author: "QuestFoundry Compiler"
-  tags:
-    - assets
-    - visual
-    - illustration

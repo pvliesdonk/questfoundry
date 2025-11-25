@@ -4,112 +4,41 @@
 
 id: codex_expansion
 
-identity:
-  name: Codex Expansion
+metadata:
+  name: "Codex Expansion"
+  type: "Refinement"
   description: |
     Turn canon (often spoiler-heavy) into player-safe codex pages with clear cross-references.
     Improve comprehension without leaking twists or internal plumbing.
-  category: refinement
-  phase: publishing
-
-purpose: |
-  Turn canon (often spoiler-heavy) into player-safe codex pages with clear cross-references.
-  Improve comprehension without leaking twists or internal plumbing.
-
-outcome: |
-  Codex entries and crosslink maps (in Hot) derived from canon and ready to merge to Cold
-  after gatecheck. Taxonomy/clarity hooks may also be addressed here.
-
-triggers:
-  - After Lore Deepening produces new/updated canon
-  - When Story Spark/Scene Smith introduce terms repeatedly
-  - On player-comprehension concerns (PN/Binder feedback)
-  - To resolve taxonomy/clarity hooks (coverage gaps, red-links)
-
-context:
-  required_artifacts:
-    - artifact_type: canon_pack
-      description: Canon entries from Lore Deepening (spoiler-level answers)
-    - artifact_type: player_safe_summary
-      description: Player-safe summaries from Lore Weaver
-  optional_artifacts:
-    - artifact_type: style_addendum
-      description: Style guardrails (tone, register, motif vocabulary)
-    - artifact_type: codex_entry
-      description: Existing codex pages (Cold) for alignment
-    - artifact_type: hook_card
-      description: Accepted taxonomy/clarity hooks
 
 topology:
+  entry_node: select_topics
+
   nodes:
     - id: select_topics
-      step: 1
-      name: Select Topics
-      active_role: codex_curator
-      description: |
-        From canon deltas, term frequency in manuscript, and taxonomy hooks.
-        Prioritize player-value: comprehension bottlenecks first.
-      outputs:
-        - topic_list
+      role: "Codex Curator"
+      description: "From canon deltas, term frequency in manuscript, and taxonomy hooks. Prioritize player-value: comprehension bottlenecks first."
+      next: draft_entries
 
     - id: draft_entries
-      step: 2
-      name: Draft Entries
-      active_role: codex_curator
-      description: |
-        Write overview and context in Style Lead's register.
-        Add See also list that improves navigation (avoid self-loops).
-      outputs:
-        - codex_entry
+      role: "Codex Curator"
+      description: "Write overview and context in Style Lead's register. Add See also list that improves navigation (avoid self-loops)."
+      next: spoiler_sweep
 
     - id: spoiler_sweep
-      step: 3
-      name: Spoiler Sweep
-      active_role: lore_weaver
-      description: |
-        Compare against the spoiler-level canon; mask revelations.
-        If masking makes an entry misleading, add neutral phrasing workaround or defer.
-      outputs:
-        - spoiler_hygiene_note
-
-    - id: style_pass
-      step: 4
-      name: Style Pass
-      active_role: style_lead
-      description: |
-        Ensure clarity, consistent terminology, motif harmonization, and reading level.
-      outputs:
-        - edit_notes
+      role: "Lore Weaver"
+      description: "Compare against the spoiler-level canon; mask revelations. If masking makes an entry misleading, add neutral phrasing workaround or defer."
+      next: link_audit
 
     - id: link_audit
-      step: 5
-      name: Link Audit
-      active_role: codex_curator
-      description: |
-        Check that every cross-reference resolves (or create the stub if approved).
-        Add disambiguation if a term is overloaded.
-      outputs:
-        - crosslink_map
+      role: "Codex Curator"
+      description: "Check that every cross-reference resolves (or create the stub if approved). Add disambiguation if a term is overloaded."
+      next: pre_check
 
     - id: pre_check
-      step: 6
-      name: Gatekeeper Pre-Check
-      active_role: gatekeeper
-      description: |
-        Presentation Safety, Integrity (links resolve), and Style. Flag any gateway logic leaks.
-      outputs:
-        - pre_gate_note
-
-    - id: package_handoff
-      step: 7
-      name: Package & Handoff
-      active_role: codex_curator
-      description: |
-        Produce a Codex Pack (entries + crosslink map) and attach to TU.
-        Notify Binder and PN that new player-safe surfaces will land after merge.
-      outputs:
-        - codex_pack
-        - coverage_report
+      role: "Gatekeeper"
+      description: "Presentation Safety, Integrity (links resolve), and Style. Flag any gateway logic leaks."
+      next: null
 
   edges:
     - from: select_topics
@@ -119,36 +48,35 @@ topology:
       to: spoiler_sweep
       condition: entries_drafted
     - from: spoiler_sweep
-      to: style_pass
-      condition: spoilers_masked
-    - from: style_pass
       to: link_audit
-      condition: style_approved
+      condition: spoilers_masked
     - from: link_audit
       to: pre_check
       condition: links_verified
-    - from: pre_check
-      to: package_handoff
-      condition: pre_gate_complete
 
-raci:
-  responsible:
-    - codex_curator
-  accountable:
-    - showrunner
-  consulted:
-    - lore_weaver
-    - style_lead
-    - gatekeeper
-  informed:
-    - book_binder
-    - player_narrator
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - canon_pack
+    - player_safe_summary
+  optional_artifacts:
+    - style_addendum
+    - codex_entry
+    - hook_card
 
 handoffs:
-  - target_loop: binding_run
-    artifacts:
-      - codex_pack
-    description: Codex entries for inclusion in export views
+  - target: binding_run
+    condition: "codex entries ready for export views"
+
+gates:
+  quality_bars:
+    - Integrity
+    - Presentation
+    - Style
 
 success_criteria:
   - High-frequency manuscript terms have matching codex entries
@@ -156,45 +84,3 @@ success_criteria:
   - All See also links resolve; no dead ends
   - Reading level and tone align with Style Lead; localization notes present where needed
   - Traceability present (TU-ID lineages)
-
-failure_modes:
-  - name: accidental_spoilers
-    description: Spoiler detail in codex entry
-    remedy: Move detail back to canon notes; rewrite with neutral phrasing
-
-  - name: over_technical_voice
-    description: Entries too complex for player comprehension
-    remedy: Style Lead simplifies; add examples
-
-  - name: link_rot
-    description: Cross-references don't resolve
-    remedy: Add stubs (with plan) or reduce See also fan-out
-
-  - name: taxonomy_as_canon
-    description: Curator invents backstory instead of referencing Lore
-    remedy: Escalate to Lore Weaver; Curator does not invent backstory
-
-quality_bars:
-  - Integrity
-  - Presentation
-  - Style
-
-merge_path:
-  direct_to_cold: true
-  requires_gatecheck: true
-  feeds_into:
-    - binding_run
-  notes: |
-    Gatekeeper runs full Presentation Safety + Integrity + Style checks.
-    Showrunner merges Pack to Cold on pass.
-    Binder/PN can now consume the Cold codex pages for exports/play.
-
-metadata:
-  version: "1.0.0"
-  created: "2025-11-25"
-  updated: "2025-11-25"
-  author: "QuestFoundry Compiler"
-  tags:
-    - refinement
-    - codex
-    - player-safe
