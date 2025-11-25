@@ -10,6 +10,9 @@ from questfoundry.runtime.tools.protocol_tools import (
     SendProtocolEnvelope,
     SendProtocolMessage,
 )
+from questfoundry.runtime.tools.research_tools import WebSearch, LoreIndex
+from questfoundry.runtime.tools.creative_tools import StableDiffusion
+from questfoundry.runtime.tools.export_tools import PandocConvert, PdfExport
 from questfoundry.runtime.tools.validation_tools import (
     EvaluateQualityBar,
     ValidateArtifact,
@@ -24,4 +27,9 @@ __all__ = [
     "SendProtocolEnvelope",
     "ValidateArtifact",
     "EvaluateQualityBar",
+    "WebSearch",
+    "LoreIndex",
+    "StableDiffusion",
+    "PandocConvert",
+    "PdfExport",
 ]

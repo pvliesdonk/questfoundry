@@ -26,6 +26,8 @@ dependencies = [
     "jsonschema>=4.20",
     "asteval>=0.9",
     "json-logic-qubit>=0.9",
+    "httpx>=0.26",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +36,12 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1",
     "mypy>=1.0",
+]
+
+external = [
+    "scikit-learn>=1.4",
+    "google-generativeai>=0.5",
+    "weasyprint>=62.0",
 ]
 
 [project.scripts]

@@ -10,11 +10,16 @@ from typing import Any
 
 from questfoundry.runtime.tools import (
     EvaluateQualityBar,
+    LoreIndex,
+    PandocConvert,
+    PdfExport,
     ReadColdSOT,
     ReadHotSOT,
     SendProtocolEnvelope,
     SendProtocolMessage,
+    StableDiffusion,
     ValidateArtifact,
+    WebSearch,
     WriteColdSOT,
     WriteHotSOT,
 )
@@ -78,28 +83,26 @@ class ToolRegistry:
 
     def _register_stub_tools(self) -> None:
         """Register stub implementations for common tools."""
-        # Image generation
-        self._tools["stable_diffusion"] = MockTool(
-            "stable_diffusion", "Stable Diffusion", "Generate images using Stable Diffusion"
+        # Image generation (provider-aware)
+        self._tools["stable_diffusion"] = LangChainToolAdapter(
+            "stable_diffusion", StableDiffusion()
         )
 
-        # Audio synthesis
+        # Audio synthesis (kept mock until a backend is configured)
         self._tools["audio_synthesis"] = MockTool(
             "audio_synthesis", "Audio Synthesis", "Generate audio/music using synthesis"
         )
 
-        # Document conversion
-        self._tools["pandoc"] = MockTool("pandoc", "Pandoc", "Convert documents between formats")
+        # Document conversion / export
+        self._tools["pandoc"] = LangChainToolAdapter("pandoc", PandocConvert())
+        self._tools["pdf_export"] = LangChainToolAdapter("pdf_export", PdfExport())
+        self._tools["epub_export"] = LangChainToolAdapter("epub_export", PdfExport(output_format="epub"))
 
         # Web search
-        self._tools["web_search"] = MockTool(
-            "web_search", "Web Search", "Search the web for information"
-        )
+        self._tools["web_search"] = LangChainToolAdapter("web_search", WebSearch())
 
         # Lore index lookup
-        self._tools["lore_index"] = MockTool(
-            "lore_index", "Lore Index", "Look up entries in the lore/codex index"
-        )
+        self._tools["lore_index"] = LangChainToolAdapter("lore_index", LoreIndex())
 
         # Internal state/protocol/validation tools
         self._tools["read_hot_sot"] = LangChainToolAdapter("read_hot_sot", ReadHotSOT())
