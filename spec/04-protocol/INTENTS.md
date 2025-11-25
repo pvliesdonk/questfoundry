@@ -348,11 +348,16 @@ Envelope Requirements:
 
 - `context.hot_cold = "hot"`
 - `context.loop` SHOULD be present
-- `payload.type = "none"`
-- `payload.data` SHOULD include:
-  - `question` (string, required)
-  - `context` (object, optional)
-  - `suggestions` (array[string], optional)
+- `payload.type = "human_interaction"`
+- `payload.data` validated against `human_interaction.schema.json`
+
+Payload Schema: `human_interaction.schema.json`
+
+Payload Requirements:
+
+- `question` (string, required) — The question being asked
+- `context` (object, optional) — Flexible context with additionalProperties allowed
+- `suggested_answers` (array[string], optional) — Suggested answer choices
 
 Example Envelope: `04-protocol/EXAMPLES/human.question.json`
 
@@ -722,9 +727,9 @@ gatecheck).
 
 ### 10.2 `gate.decision` — Gatecheck Decision
 
-**Purpose:** Final gatecheck decision: pass, conditional pass, or block.
+**Purpose:** Final gatecheck decision: pass, conditional pass, or block. Centralized feedback flow.
 
-**Direction:** GK → SR (and potentially owner roles)
+**Direction:** GK → **Showrunner** (exclusively)
 
 **Required Envelope Fields:**
 
@@ -767,6 +772,50 @@ the outcome:
 
 - `04-protocol/LIFECYCLES/gate.md` §4.3-4.5 (Decision transitions)
 - `04-protocol/LIFECYCLES/gate.md` §10.2-10.4 (Examples)
+
+---
+
+### 10.3 `gate.feedback` — Informal Gate Feedback
+
+**Purpose:** Informal feedback loops for Yellow/Conditional Pass scenarios that do not change TU state. Allows iterative refinement without formal rework cycles.
+
+**Direction:** GK → Owner
+
+**Required Envelope Fields:**
+
+- `context.hot_cold` — MUST be `"hot"`
+- `context.tu` — MUST reference the TU receiving feedback
+- `context.loop` — SHOULD reference the active loop
+
+**Payload Schema:** `gatecheck_report.schema.json`
+
+**Payload Requirements:**
+
+- `bars` — Specific bars with yellow status and remediation suggestions
+- `feedback_notes` — Informal notes for owner (suggestions, not requirements)
+- `urgency` — OPTIONAL: `"low"`, `"medium"`, `"high"` (default: `"low"`)
+
+**Use Cases:**
+
+- Yellow bar remediation suggestions (conditional pass with refinement suggestions)
+- Style/presentation polish recommendations
+- Non-blocking improvements
+
+**Expected Replies:**
+
+- `ack` — Feedback acknowledged
+- (No formal TU state change; owner may address feedback in current TU or defer)
+
+**Error Conditions:**
+
+- `not_authorized` — sender is not GK
+- `business_rule_violation` — feedback used for red bars (should use `gate.decision` with `block` instead)
+
+**Note:** This intent enables lightweight iteration without triggering formal TU rework. It does NOT change TU state (unlike `gate.decision` with `block`).
+
+**References:**
+
+- `04-protocol/LIFECYCLES/gate.md` §4.4 (Conditional Pass handling)
 
 ---
 
