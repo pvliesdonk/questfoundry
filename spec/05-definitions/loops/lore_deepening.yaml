@@ -1,0 +1,232 @@
+# Loop Pattern: Lore Deepening
+# Compiled from: spec/00-north-star/LOOPS/lore_deepening.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: lore_deepening
+
+identity:
+  name: Lore Deepening
+  description: |
+    Transform accepted hooks into coherent, contradiction-aware canon - backstories, timelines,
+    metaphysics, causal links. Keep spoilers in canon notes; publish player-safe surfaces later
+    via Codex Expansion.
+  category: discovery
+  phase: canonization
+
+purpose: |
+  Transform accepted hooks into coherent, contradiction-aware canon (backstories, timelines,
+  metaphysics, causal links). Keep spoilers in canon notes; publish player-safe surfaces later
+  via Codex Expansion.
+
+outcome: |
+  Canonical entries ready to merge to Cold (after gatecheck), with clear lineage to hooks/TUs,
+  plus notes for Plotwright/Scene Smith when structure or prose should react.
+
+triggers:
+  - After Hook Harvest marks hooks as accepted
+  - When Plotwright/Scene Smith need causal backfill to proceed
+  - When contradictions surface and must be adjudicated
+
+context:
+  required_artifacts:
+    - artifact_type: hook_card
+      description: Accepted hooks clustered by theme
+    - artifact_type: cold_snapshot
+      description: Current Cold canon/codex
+  optional_artifacts:
+    - artifact_type: style_addendum
+      description: Relevant style guardrails
+    - artifact_type: topology_notes
+      description: Topology deltas from Story Spark
+    - artifact_type: research_memo
+      description: Research memos or uncorroborated flags
+
+topology:
+  nodes:
+    - id: frame_question
+      step: 1
+      name: Frame the Canon Question
+      active_role: lore_weaver
+      description: |
+        For each theme/cluster, write a 1-3 line canon question.
+      outputs:
+        - canon_question
+
+    - id: draft_answer
+      step: 2
+      name: Draft Canon Answer
+      active_role: lore_weaver
+      description: |
+        Provide a precise, spoiler-level answer: backstory, causal chain, timeline anchor(s),
+        implicated entities/factions, constraints. Tag sensitivity.
+      outputs:
+        - canon_pack
+
+    - id: check_contradictions
+      step: 3
+      name: Check Contradictions & Coupling
+      active_role: lore_weaver
+      description: |
+        Compare against Cold. Identify clashes; propose reconciliations or mark deliberate
+        mystery (include bounds and revisit window).
+      outputs:
+        - canon_pack
+
+    - id: factual_pass
+      step: 4
+      name: Factual Pass
+      active_role: researcher
+      optional: true
+      description: |
+        Validate real-world claims; attach citations. If dormant, keep uncorroborated
+        risk labels and note wording guidance.
+      outputs:
+        - research_memo
+
+    - id: topology_prose_notes
+      step: 5
+      name: Topology & Prose Notes
+      active_role: lore_weaver
+      description: |
+        List consequences for gateways, loops, hubs. Suggest hooks for Story Spark.
+        Provide Scene Smith with callout notes.
+      outputs:
+        - downstream_effects
+
+    - id: style_sweep
+      step: 6
+      name: Style Sweep
+      active_role: style_lead
+      description: |
+        Annotate motif ties and tone consistency; no rewrite, only guidance.
+      outputs:
+        - style_notes
+
+    - id: package_canon
+      step: 7
+      name: Package Canon Entry
+      active_role: lore_weaver
+      description: |
+        Each entry includes: Title, Canon Answer, Timeline anchors, Entities affected,
+        Constraints, Sensitivity tag, Upstream hooks/TUs, Downstream impacts, Notes.
+      outputs:
+        - canon_pack
+
+    - id: pre_gate
+      step: 8
+      name: Pre-Gate Review
+      active_role: gatekeeper
+      description: |
+        Early read for risks: Integrity, Reachability, Gateways, Presentation.
+      outputs:
+        - pre_gate_note
+
+    - id: handoff
+      step: 9
+      name: Handoff
+      active_role: lore_weaver
+      description: |
+        Send player-safe summaries to Codex Expansion; send topology/prose notes to
+        Story Spark / Scene Smith as needed.
+      outputs:
+        - player_safe_summary
+
+  edges:
+    - from: frame_question
+      to: draft_answer
+      condition: questions_framed
+    - from: draft_answer
+      to: check_contradictions
+      condition: answers_drafted
+    - from: check_contradictions
+      to: factual_pass
+      condition: contradictions_resolved
+    - from: factual_pass
+      to: topology_prose_notes
+      condition: facts_checked
+    - from: topology_prose_notes
+      to: style_sweep
+      condition: impacts_noted
+    - from: style_sweep
+      to: package_canon
+      condition: style_reviewed
+    - from: package_canon
+      to: pre_gate
+      condition: entries_packaged
+    - from: pre_gate
+      to: handoff
+      condition: pre_gate_complete
+
+raci:
+  responsible:
+    - lore_weaver
+  accountable:
+    - showrunner
+  consulted:
+    - researcher
+    - plotwright
+    - scene_smith
+    - style_lead
+    - gatekeeper
+  informed:
+    - codex_curator
+
+handoffs:
+  - target_loop: codex_expansion
+    artifacts:
+      - player_safe_summary
+    description: Player-safe summaries for codex entries
+
+  - target_loop: story_spark
+    artifacts:
+      - downstream_effects
+    description: Topology/prose notes if structure needs adjustment
+
+success_criteria:
+  - Each accepted hook is either canonized, deferred with reason, or rejected with rationale
+  - Canon resolves prior contradictions or marks deliberate mystery with bounds
+  - Topology/prose impacts are enumerated and handed off
+  - Spoilers are separated from player-safe summaries
+  - Factual claims carry citations or explicit risk flags
+
+failure_modes:
+  - name: canon_sprawl
+    description: Too many moving parts in one entry
+    remedy: Split into smaller themed entries; stage merges
+
+  - name: hidden_spoiler_leak
+    description: Spoiler detail accidentally in codex summary
+    remedy: Move detail back to canon notes; codex receives a summary
+
+  - name: topology_unacknowledged
+    description: Canon changes topology without flagging
+    remedy: Route a Story Spark mini to adjust gateways/loops
+
+  - name: research_dormant_high_risk
+    description: High-risk claims without verification
+    remedy: Keep neutral PN/Binder wording; schedule a research revisit TU
+
+quality_bars:
+  - Integrity
+  - Reachability
+  - Gateways
+  - Presentation
+
+merge_path:
+  direct_to_cold: true
+  requires_gatecheck: true
+  feeds_into:
+    - codex_expansion
+  notes: |
+    Canon entries proceed to Gatecheck. If pass, Showrunner merges to Cold.
+    Player-safe surfaces do NOT merge here; they're produced in Codex Expansion.
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - discovery
+    - canon
+    - lore

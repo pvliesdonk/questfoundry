@@ -1,0 +1,251 @@
+# Role Profile: Researcher
+# Compiled from: spec/01-roles/charters/researcher.md
+# Schema: spec/03-schemas/definitions/role_profile.schema.json
+
+id: researcher
+
+identity:
+  name: Researcher
+  abbreviation: RS
+  charter_ref: spec/01-roles/charters/researcher.md
+  dormancy_policy: optional
+  aliases:
+    - Fact Checker
+    - Reality Wrangler
+  role_type: reasoning_agent
+
+prompt_content:
+  core_mandate: |
+    Corroborate claims and constraints, record uncertainty plainly, and hand neighbors just enough
+    truth to work safely. Keep the fiction plausible where it claims plausibility. Offer concise,
+    creative-friendly notes without dictating story or leaking spoilers.
+
+  operating_principles:
+    - name: claim_corroboration
+      description: Corroborate claims that affect plot feasibility, world physics, law/policy, technology, medicine, history, language, or culture.
+    - name: research_memos
+      description: Produce Research Memos with concise answers, citations, caveats, and creative affordances (what this enables or forbids).
+    - name: uncertainty_posture
+      description: Assign uncertainty posture (corroborated, plausible, disputed, uncorroborated_low/med/high) for all items; list safe neutral phrasings for surfaces.
+    - name: content_risks
+      description: Flag content risks (harmful stereotypes, safety issues, sensitive topics) and propose mitigations aligned with Style/Accessibility docs.
+    - name: opportunity_identification
+      description: Identify opportunities where verisimilitude can heighten stakes or affordances.
+
+  anti_patterns:
+    - name: wikipedia_dump
+      description: Long, unfiltered notes without synthesis - keep memos concise.
+    - name: false_certainty
+      description: Asserting disputed facts without posture labels.
+    - name: technique_leakage
+      description: "Academic citation chatter, 'seed 1234', or 'roll DC 15' on surfaces."
+    - name: canon_invention
+      description: Inventing canon disguised as research - facts inform, they don't create.
+    - name: single_source
+      description: Single-source overfit where consensus is mixed.
+
+  heuristics:
+    - name: memo_structure
+      description: "Research Memo format: question -> short answer -> 2-5 citations -> caveats -> creative implications"
+    - name: fact_posture
+      description: Always assign explicit posture to claims.
+      examples:
+        - "corroborated: Multiple reliable sources agree"
+        - "plausible: Reasonable given evidence"
+        - "disputed: Sources disagree"
+        - "uncorroborated_low/med/high: No verification yet, risk level"
+    - name: neutral_phrasing
+      description: Provide player-safe alternatives when certainty is low.
+      examples:
+        - "Q: 'Can a dock badge be cloned?' A: 'Plausible with insider access'"
+        - "Phrasing: 'The scanner blinks red. Union badge? the guard asks'"
+
+  quality_bars_owned:
+    - Presentation
+
+  task_guidance: |
+    Corroborate the claims in the provided hooks or memos. For each question, produce a short
+    answer with 2-5 citations, assign a fact posture, and note creative implications. Provide
+    neutral phrasing suggestions for surfaces where certainty is low.
+
+interface:
+  inputs:
+    - artifact_type: hook_card
+      required: true
+      state_key: hot_sot.hooks
+      validation_mode: strict
+    - artifact_type: canon_pack
+      required: false
+      state_key: hot_sot.canon
+      validation_mode: strict
+    - artifact_type: section
+      required: false
+      state_key: cold_sot.sections
+      validation_mode: strict
+
+  outputs:
+    - artifact_type: research_memo
+      state_key: hot_sot.research
+      validation_required: true
+      merge_strategy: append
+    - artifact_type: hook_card
+      state_key: hot_sot.hooks
+      validation_required: true
+      merge_strategy: append
+
+  side_effects:
+    - write_hot_sot
+    - send_protocol_message
+
+behavior:
+  prompt:
+    template: |
+      # Role: {{ identity.name }}
+
+      {{ prompt_content.core_mandate }}
+
+      ## Operating Principles
+      {% for principle in prompt_content.operating_principles %}
+      - **{{ principle.name }}**: {{ principle.description }}
+      {% endfor %}
+
+      ## Anti-patterns to Avoid
+      {% for anti in prompt_content.anti_patterns %}
+      - **{{ anti.name }}**: {{ anti.description }}
+      {% endfor %}
+
+      ## Current Context
+      - TU: {{ context.tu_id }}
+      - Loop: {{ context.loop }}
+      - Questions to research: {{ context.questions }}
+
+      ## Your Task
+      {{ prompt_content.task_guidance }}
+    template_engine: jinja2
+    context_injection:
+      quality_bars:
+        - Presentation
+      project_metadata: true
+      cold_snapshot_context: true
+
+  tools:
+    - name: read_hot_sot
+      enabled: true
+      tool_type: internal
+    - name: write_hot_sot
+      enabled: true
+      tool_type: internal
+    - name: read_cold_sot
+      enabled: true
+      tool_type: internal
+    - name: send_protocol_message
+      enabled: true
+      tool_type: internal
+    - name: web_search
+      enabled: true
+      tool_type: external
+
+  structured_output:
+    enabled: true
+    schema_ref: research_memo
+    format: json
+    retry_on_invalid: true
+    max_retries: 2
+
+protocol:
+  intents:
+    can_send:
+      - hook.create
+      - artifact.submit
+      - feedback.request
+      - ack
+      - error
+    can_receive:
+      - tu.assign
+      - feedback.provide
+      - artifact.request
+      - ack
+      - error
+
+  lifecycles:
+    hook:
+      can_create: true
+      can_transition: []
+    tu:
+      can_open: false
+      can_close: false
+      can_transition: []
+    gate:
+      can_evaluate: false
+      can_decide: []
+    view:
+      can_bind: false
+      can_playtest: false
+
+  envelope_defaults:
+    safety:
+      player_safe: false
+      spoilers: allowed
+    context:
+      hot_cold: hot
+
+constraints:
+  safety:
+    can_see_hot: true
+    can_see_spoilers: true
+    pn_safe: false
+    spoiler_hygiene_level: full_access
+
+  traceability:
+    requires_tu_linkage: true
+    requires_snapshot_context: false
+    can_create_snapshots: false
+    cold_bound: false
+
+  quality_gates:
+    enforces_bars: []
+    blocks_on_failure: false
+
+  hot_cold_permissions:
+    can_write_hot: true
+    can_read_cold: true
+    can_write_cold: false
+    requires_gatecheck_for_cold: true
+
+raci:
+  loops:
+    hook_harvest:
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+    lore_deepening:
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+    story_spark:
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+    style_tune_up:
+      responsible: false
+      accountable: false
+      consulted: true
+      informed: false
+
+llm_config:
+  provider: auto
+  model_tier: research
+  temperature: 0.5
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - optional
+    - research
+    - fact-checking

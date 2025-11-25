@@ -1,0 +1,307 @@
+# Loop Pattern: Full Production Run
+# Compiled from: spec/00-north-star/LOOPS/full_production_run.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: full_production_run
+
+identity:
+  name: Full Production Run
+  description: |
+    End-to-end loop that takes a project brief from Hot ideation to an exported view on Cold.
+    Exercises all core roles, but permits dormant roles (art/audio/translation/research) per
+    the Showrunner's plan.
+  category: full_cycle
+  phase: production
+
+purpose: |
+  Take a project brief from Hot ideation to an exported view on Cold. Exercise all core roles,
+  but permit dormant roles (art/audio/translation/research) per the Showrunner's plan.
+
+outcome: |
+  A spoiler-safe, hyperlinked manuscript view (plus optional plans/assets), stamped with a
+  Cold snapshot ID.
+
+triggers:
+  - New chapter/act/booklet production request
+  - Major restructure requiring full cycle
+  - Initial project setup
+
+context:
+  required_artifacts:
+    - artifact_type: project_brief
+      description: Brief, Style Lead's current guardrails, existing Cold canon/codex
+  optional_artifacts:
+    - artifact_type: cold_snapshot
+      description: Existing Cold snapshot to build upon
+
+topology:
+  nodes:
+    - id: kickoff
+      step: 1
+      name: Kickoff
+      active_role: showrunner
+      description: |
+        Define target (chapter/act/booklet), constraints (tone, content limits), and which
+        roles are active vs dormant. Open a Trace Unit for the production slice.
+      outputs:
+        - tu_brief
+        - run_plan
+        - risk_register
+
+    - id: story_spark_phase
+      step: 2
+      name: Story Spark
+      active_role: plotwright
+      supporting_roles:
+        - scene_smith
+        - style_lead
+      description: |
+        Plotwright drafts/updates topology. Scene Smith drafts key sections.
+        Style Lead reviews tone/register/motifs.
+      outputs:
+        - topology_notes
+        - section_draft
+        - hook_card
+
+    - id: hook_harvest_phase
+      step: 3
+      name: Hook Harvest
+      active_role: showrunner
+      description: |
+        Cluster and triage hooks. Collect citations if Researcher active;
+        else mark uncorroborated with risk.
+      outputs:
+        - harvest_sheet
+
+    - id: lore_deepening_phase
+      step: 4
+      name: Lore Deepening
+      active_role: lore_weaver
+      description: |
+        Convert accepted hooks into canon. Resolve collisions or mark deliberate mystery.
+        Coordinate with Plotwright if topology must adjust.
+      outputs:
+        - canon_pack
+
+    - id: codex_expansion_phase
+      step: 5
+      name: Codex Expansion
+      active_role: codex_curator
+      description: |
+        Publish player-safe entries that summarize new canon. Add cross-refs and See also trails.
+      outputs:
+        - codex_pack
+        - coverage_report
+
+    - id: style_tune_up_phase
+      step: 6
+      name: Style Tune-up
+      active_role: style_lead
+      description: |
+        Correct tone/voice drift; refine recurring motifs. Align captions/PN surfaces to
+        current register.
+      outputs:
+        - style_addendum
+
+    - id: art_touch_up_phase
+      step: 7
+      name: Art Touch-up (Optional)
+      active_role: art_director
+      supporting_roles:
+        - illustrator
+      optional: true
+      description: |
+        Art Director selects scenes, writes purpose & constraints, spoiler-safe captions.
+        Illustrator produces assets (if active) and logs determinism parameters.
+      outputs:
+        - art_plan
+        - render
+
+    - id: audio_pass_phase
+      step: 8
+      name: Audio Pass (Optional)
+      active_role: audio_director
+      supporting_roles:
+        - audio_producer
+      optional: true
+      description: |
+        Audio Director plans ambience/foley/VO cues. Audio Producer creates assets (if active)
+        with text equivalents.
+      outputs:
+        - audio_plan
+        - rendered_cue
+
+    - id: stabilization
+      step: 9
+      name: Stabilization & Gatecheck
+      active_role: gatekeeper
+      supporting_roles:
+        - showrunner
+      description: |
+        Cross-role review; resolve contradictions and UX snags. Gatekeeper runs Quality Bars.
+        Produce gatecheck note (pass/fail + remediation).
+      outputs:
+        - gatecheck_report
+
+    - id: merge_to_cold
+      step: 10
+      name: Merge Hot to Cold
+      active_role: showrunner
+      description: |
+        On pass, merge canon, style addenda, codex entries, and any approved plans/assets to Cold.
+        Stamp Cold snapshot ID; update TUs with snapshot and gatecheck ID.
+      outputs:
+        - cold_snapshot
+
+    - id: binding_run_phase
+      step: 11
+      name: Binding Run
+      active_role: book_binder
+      description: |
+        Assemble export view from the Cold snapshot. Ensure accessibility and spoiler hygiene.
+        Record snapshot ID and export options in front matter.
+      outputs:
+        - export_view
+        - view_log
+
+    - id: narration_dry_run_phase
+      step: 12
+      name: Narration Dry-Run
+      active_role: player_narrator
+      description: |
+        PN playtests the same Cold snapshot. Enforce gates diegetically. Log UX issues/ambiguous
+        affordances as notes back to Showrunner.
+      outputs:
+        - pn_playtest_notes
+
+    - id: exit_follow_ups
+      step: 13
+      name: Exit & Follow-ups
+      active_role: showrunner
+      description: |
+        Close or roll forward. If issues remain, schedule targeted loops. If assets were deferred,
+        keep deferred markers in Cold and plan next activation window.
+      outputs:
+        - follow_up_plan
+
+  edges:
+    - from: kickoff
+      to: story_spark_phase
+      condition: kickoff_complete
+    - from: story_spark_phase
+      to: hook_harvest_phase
+      condition: spark_complete
+    - from: hook_harvest_phase
+      to: lore_deepening_phase
+      condition: harvest_complete
+    - from: lore_deepening_phase
+      to: codex_expansion_phase
+      condition: deepening_complete
+    - from: codex_expansion_phase
+      to: style_tune_up_phase
+      condition: codex_complete
+    - from: style_tune_up_phase
+      to: art_touch_up_phase
+      condition: style_complete
+    - from: art_touch_up_phase
+      to: audio_pass_phase
+      condition: art_complete_or_skipped
+    - from: audio_pass_phase
+      to: stabilization
+      condition: audio_complete_or_skipped
+    - from: stabilization
+      to: merge_to_cold
+      condition: gatecheck_passed
+    - from: merge_to_cold
+      to: binding_run_phase
+      condition: merge_complete
+    - from: binding_run_phase
+      to: narration_dry_run_phase
+      condition: binding_complete
+    - from: narration_dry_run_phase
+      to: exit_follow_ups
+      condition: dry_run_complete
+
+raci:
+  responsible:
+    - showrunner
+    - plotwright
+    - scene_smith
+    - lore_weaver
+    - codex_curator
+    - style_lead
+    - gatekeeper
+    - book_binder
+    - player_narrator
+  accountable:
+    - showrunner
+  consulted:
+    - art_director
+    - audio_director
+    - illustrator
+    - audio_producer
+    - translator
+    - researcher
+  informed:
+    - all
+
+handoffs:
+  - target_loop: post_mortem
+    artifacts:
+      - tu_brief
+      - gatecheck_report
+      - pn_playtest_notes
+    description: Completed TU data for retrospective analysis
+
+success_criteria:
+  - Exported view exists, stamped with Cold snapshot
+  - Gatecheck passed; traceability intact
+  - Open follow-ups scheduled (if any)
+
+failure_modes:
+  - name: research_dormant_drift
+    description: Factual items without verification
+    remedy: Mark items uncorroborated with risk; schedule revisit
+
+  - name: codex_spoils_twists
+    description: Player-safe codex contains spoilers
+    remedy: Move detail to canon notes; keep player-safe summaries only
+
+  - name: topology_regressions
+    description: Structure changes break integrity
+    remedy: Gatekeeper blocks on Integrity/Reachability; split changes into smaller TUs
+
+  - name: style_wobble
+    description: Tone/voice inconsistency
+    remedy: Run Style Tune-up before merge
+
+  - name: determinism_missing
+    description: Promised determinism but no logs
+    remedy: Keep assets in Hot or merge as plan-only with deferred label
+
+quality_bars:
+  - Integrity
+  - Reachability
+  - Nonlinearity
+  - Gateways
+  - Style
+  - Determinism
+  - Presentation
+
+merge_path:
+  direct_to_cold: true
+  requires_gatecheck: true
+  produces_export: true
+  notes: |
+    Full Production Run exercises the complete pipeline from ideation to export.
+    Gatecheck is required before Cold merge. Export view is the final deliverable.
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - full-cycle
+    - production
+    - end-to-end

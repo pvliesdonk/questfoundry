@@ -1,0 +1,203 @@
+# Loop Pattern: Narration Dry-Run
+# Compiled from: spec/00-north-star/LOOPS/narration_dry_run.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: narration_dry_run
+
+identity:
+  name: Narration Dry-Run
+  description: |
+    PN playtest of the current view. Play through the Cold snapshot exactly as a player would
+    experience it - in-world, spoiler-safe - to surface UX issues in comprehension, choice
+    clarity, pacing, and diegetic gate enforcement.
+  category: export
+  phase: testing
+
+purpose: |
+  Have the Player-Narrator (PN) play through the current Cold snapshot exactly as a player
+  would experience it - in-world, spoiler-safe - to surface UX issues in comprehension, choice
+  clarity, pacing, and diegetic gate enforcement.
+
+outcome: |
+  A set of PN playtest notes and handoff tickets (Trace Units or edit notes) that improve
+  player-facing surfaces without rewriting canon or topology during the dry-run itself.
+
+triggers:
+  - After a Binding Run exports a view on Cold (chapter/act/book)
+  - Before user playtests, recordings, or live demos
+  - When PN phrasing patterns or recaps were recently updated
+
+context:
+  required_artifacts:
+    - artifact_type: export_view
+      description: Exported bundle from the Binding Run
+    - artifact_type: style_addendum
+      description: PN Principles and Style guardrails
+  optional_artifacts:
+    - artifact_type: language_pack
+      description: Language Pack if testing a non-source language
+
+topology:
+  nodes:
+    - id: route_plan
+      step: 1
+      name: Route Plan
+      active_role: showrunner
+      supporting_roles:
+        - player_narrator
+      description: |
+        Choose representative paths: a hub route, a loop return, a gated branch, and at least
+        one terminal. If time-boxed, pick high-traffic sections and one weird edge case.
+      outputs:
+        - route_plan
+
+    - id: live_read
+      step: 2
+      name: Live Read
+      active_role: player_narrator
+      description: |
+        Narrate in-voice; present choices clearly; perform recaps when natural.
+        Enforce gateways without exposing internals. Do NOT improvise new content.
+      outputs:
+        - performance_notes
+
+    - id: issue_logging
+      step: 3
+      name: Issue Logging
+      active_role: player_narrator
+      description: |
+        Tag each note with an issue type and a target. Use short, actionable phrasing.
+        Issue types: choice-ambiguity, gate-friction, recap-needed, codex-invite, leak-risk,
+        nav-bug, tone-wobble, accessibility.
+      outputs:
+        - pn_playtest_notes
+
+    - id: spot_checks
+      step: 4
+      name: Spot Checks
+      active_role: gatekeeper
+      supporting_roles:
+        - book_binder
+        - codex_curator
+        - style_lead
+      description: |
+        Gatekeeper classifies severity and bar mapping. Binder verifies navigation/format issues.
+        Curator checks codex links and coverage. Style Lead proposes phrasing patterns.
+      outputs:
+        - classified_issues
+
+    - id: package_handoff
+      step: 5
+      name: Package & Handoff
+      active_role: showrunner
+      description: |
+        Convert notes into TUs or edit tasks routed to the right loop: Style Tune-up,
+        Codex Expansion, Binding fixes, Story Spark (if topology flaw).
+      outputs:
+        - summary_sheet
+        - follow_up_tus
+
+  edges:
+    - from: route_plan
+      to: live_read
+      condition: routes_planned
+    - from: live_read
+      to: issue_logging
+      condition: read_complete
+    - from: issue_logging
+      to: spot_checks
+      condition: issues_logged
+    - from: spot_checks
+      to: package_handoff
+      condition: issues_classified
+
+raci:
+  responsible:
+    - player_narrator
+  accountable:
+    - showrunner
+  consulted:
+    - gatekeeper
+    - book_binder
+    - codex_curator
+    - style_lead
+  informed:
+    - plotwright
+    - translator
+
+handoffs:
+  - target_loop: style_tune_up
+    artifacts:
+      - pn_playtest_notes
+    description: Tone/phrasing system issues
+
+  - target_loop: codex_expansion
+    artifacts:
+      - pn_playtest_notes
+    description: Coverage gaps and codex invites
+
+  - target_loop: binding_run
+    artifacts:
+      - pn_playtest_notes
+    description: Navigation/format issues
+
+  - target_loop: story_spark
+    artifacts:
+      - pn_playtest_notes
+    description: Topology flaws (rare)
+
+success_criteria:
+  - Gates enforced diegetically without confusion or leaks
+  - Choices read as distinct and fair; recaps land where helpful
+  - Codex invites clarify, not spoil
+  - Navigation is smooth across all export formats
+  - A small, prioritized list of actionable follow-ups exists
+
+failure_modes:
+  - name: pn_improvises_fixes
+    description: PN rewrites content live instead of logging
+    remedy: Log issues; route to Style Tune-up or Binder; don't unilaterally rewrite
+
+  - name: recurring_ambiguity
+    description: Multiple choice ambiguity issues
+    remedy: Add micro-context in surface text; run a focused Style Tune-up
+
+  - name: gate_phrasing_leaks
+    description: Gate enforcement exposes internals
+    remedy: Replace with diegetic token/reputation/knowledge checks
+
+  - name: codex_rabbit_holing
+    description: Too many codex invites disrupt flow
+    remedy: Cap invites; keep the main path legible
+
+  - name: format_nav_bugs
+    description: Navigation issues in specific formats
+    remedy: Binder repairs anchors and re-exports all formats
+
+quality_bars:
+  - Presentation
+  - Integrity
+  - Style
+  - Accessibility
+
+merge_path:
+  direct_to_cold: false
+  produces_feedback: true
+  feeds_into:
+    - style_tune_up
+    - codex_expansion
+    - binding_run
+    - story_spark
+  notes: |
+    Narration Dry-Run does NOT alter Cold during the dry-run.
+    Changes happen in follow-up loops based on the playtest notes.
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - export
+    - testing
+    - playtest

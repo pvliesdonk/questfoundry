@@ -1,0 +1,232 @@
+# Loop Pattern: Binding Run
+# Compiled from: spec/00-north-star/LOOPS/binding_run.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: binding_run
+
+identity:
+  name: Binding Run
+  description: |
+    Assemble an export view on Cold. Package manuscript, codex, and checklists - optionally
+    including art/audio plans or assets and translation slices - without leaking spoilers.
+  category: export
+  phase: assembly
+
+purpose: |
+  Assemble a player-safe export view of the book from a specific Cold snapshot. Package
+  manuscript, codex, and checklists - optionally including art/audio plans or assets and
+  translation slices - without leaking spoilers or internal plumbing.
+
+outcome: |
+  A stamped export bundle (Markdown/HTML/EPUB/PDF) with front-matter metadata (snapshot ID,
+  options used) and a View Log. No new canon is created; this loop does NOT write to Cold.
+
+triggers:
+  - Milestone release (chapter/act/book)
+  - Playtest build needed for PN Narration Dry-Run
+  - External review or print/export request
+
+context:
+  required_artifacts:
+    - artifact_type: cold_snapshot
+      description: Cold snapshot (manuscript, codex, style addenda, optional plans/assets, translations)
+    - artifact_type: gatecheck_report
+      description: Gatekeeper's latest pass notes (for presentation safety)
+  optional_artifacts:
+    - artifact_type: art_plan
+      description: Art plans for inclusion
+    - artifact_type: render
+      description: Art renders for inclusion
+    - artifact_type: audio_plan
+      description: Audio plans for inclusion
+    - artifact_type: rendered_cue
+      description: Audio assets for inclusion
+    - artifact_type: language_pack
+      description: Translation slices for inclusion
+
+topology:
+  nodes:
+    - id: pick_snapshot
+      step: 1
+      name: Pick Snapshot & Options
+      active_role: showrunner
+      description: |
+        Freeze a Cold snapshot. Choose inclusions: art plan/renders, audio plan/assets,
+        translations, print layout, PN script.
+      outputs:
+        - export_options
+
+    - id: assemble_manuscript
+      step: 2
+      name: Assemble Manuscript
+      active_role: book_binder
+      description: |
+        Compile hyperlinked sections; ensure terminals clearly marked.
+        Generate codeword/gateway checklists in player-safe wording.
+      outputs:
+        - manuscript_bundle
+
+    - id: attach_codex
+      step: 3
+      name: Attach Codex
+      active_role: book_binder
+      description: |
+        Include player-safe entries; build See also crosslinks; add glossary if present.
+        Ensure all manuscript terms with codex references resolve.
+      outputs:
+        - codex_bundle
+
+    - id: include_optional
+      step: 4
+      name: Include Optional Surfaces
+      active_role: book_binder
+      description: |
+        Art: plan captions and/or renders with alt text. Audio: plan cue descriptions and/or
+        assets with text equivalents. Translations: add language slices with coverage flags.
+      outputs:
+        - optional_surfaces
+
+    - id: accessibility_pass
+      step: 5
+      name: Accessibility & Navigation Pass
+      active_role: book_binder
+      description: |
+        Alt text, descriptive link text, proper headings; high-contrast print layout if enabled.
+        No motion/flash surprises; audio warnings where needed.
+      outputs:
+        - accessibility_report
+
+    - id: stamp_metadata
+      step: 6
+      name: Stamp Metadata
+      active_role: book_binder
+      description: |
+        Front matter fields: title, credits, Cold snapshot ID, options used, coverage %,
+        Gatekeeper report ID. Generate View Log page.
+      outputs:
+        - front_matter
+        - view_log
+
+    - id: export_formats
+      step: 7
+      name: Export Formats
+      active_role: book_binder
+      description: |
+        Emit Markdown (source), HTML, EPUB, PDF (single-column, print-friendly).
+        Verify links/anchors across all formats.
+      outputs:
+        - export_view
+
+    - id: spot_check
+      step: 8
+      name: Gatekeeper Spot-Check
+      active_role: gatekeeper
+      description: |
+        Presentation Safety, Integrity (links), Style; note any fixes before distribution.
+      outputs:
+        - spot_check_note
+
+    - id: handoff
+      step: 9
+      name: Handoff
+      active_role: book_binder
+      description: |
+        Provide bundle to PN for Narration Dry-Run; archive the export with its metadata.
+      outputs:
+        - export_bundle
+
+  edges:
+    - from: pick_snapshot
+      to: assemble_manuscript
+      condition: snapshot_selected
+    - from: assemble_manuscript
+      to: attach_codex
+      condition: manuscript_assembled
+    - from: attach_codex
+      to: include_optional
+      condition: codex_attached
+    - from: include_optional
+      to: accessibility_pass
+      condition: optionals_included
+    - from: accessibility_pass
+      to: stamp_metadata
+      condition: accessibility_verified
+    - from: stamp_metadata
+      to: export_formats
+      condition: metadata_stamped
+    - from: export_formats
+      to: spot_check
+      condition: formats_exported
+    - from: spot_check
+      to: handoff
+      condition: spot_check_complete
+
+raci:
+  responsible:
+    - book_binder
+  accountable:
+    - showrunner
+  consulted:
+    - gatekeeper
+    - style_lead
+    - translator
+  informed:
+    - player_narrator
+
+handoffs:
+  - target_loop: narration_dry_run
+    artifacts:
+      - export_view
+    description: Export bundle for PN playtest
+
+success_criteria:
+  - Bundle is player-safe, navigable, and accessible
+  - Snapshot & options are clear and consistent across formats
+  - PN can run a Narration Dry-Run without encountering leaks
+  - Known limitations are disclosed in the View Log
+
+failure_modes:
+  - name: built_from_hot
+    description: Bundle assembled from Hot instead of Cold
+    remedy: Rebuild from Cold snapshot; restamp metadata
+
+  - name: spoiler_in_captions
+    description: Spoiler detail in captions or codex
+    remedy: Move detail to canon notes; rewrite surface text
+
+  - name: broken_anchors
+    description: Links don't work in some formats
+    remedy: Fix IDs; re-export all formats
+
+  - name: accessibility_gaps
+    description: Missing alt text or accessibility issues
+    remedy: Add alt text; fix contrast; add audio text equivalents
+
+  - name: mismatched_options
+    description: Options table doesn't match actual inclusions
+    remedy: Ensure options table matches actual inclusions; update View Log
+
+quality_bars:
+  - Integrity
+  - Presentation
+  - Style
+  - Accessibility
+
+merge_path:
+  direct_to_cold: false
+  produces_export: true
+  feeds_into:
+    - narration_dry_run
+  notes: |
+    Binding Run does NOT write to Cold. It produces export views from Cold snapshots.
+    The bundle is handed off to PN for Narration Dry-Run testing.
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - export
+    - packaging
+    - assembly

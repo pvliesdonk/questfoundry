@@ -1,0 +1,209 @@
+# Loop Pattern: Post-Mortem
+# Compiled from: spec/00-north-star/LOOPS/post_mortem.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: post_mortem
+
+identity:
+  name: Post-Mortem
+  description: |
+    Retrospective analysis and process improvement. Conduct a structured retrospective after
+    completing a major milestone, release, or significant TU cluster to extract actionable
+    lessons and update best practices.
+  category: reflection
+  phase: retrospective
+
+purpose: |
+  Conduct a structured retrospective after completing a major milestone, release, or significant
+  TU cluster. Extract actionable lessons, identify process improvements, track quality bar trends,
+  and update best practices to reduce recurring issues and strengthen the workflow.
+
+outcome: |
+  A Post-Mortem Report documenting successes, failures, surprising discoveries, and concrete
+  action items with owners and deadlines. Best practices updated; process guidance improved;
+  action items tracked in subsequent work.
+
+triggers:
+  - After major milestone completion (chapter release, act completion, full book export)
+  - After a significant TU cluster or multi-loop pass completes (5+ related TUs)
+  - When recurring quality bar issues suggest systemic process review needed
+  - Periodic retrospectives (quarterly, per-release cycle)
+  - After protocol violations or critical incidents (immediate post-mortem)
+
+context:
+  required_artifacts:
+    - artifact_type: tu_brief
+      description: Completed TUs from the milestone/period under review
+    - artifact_type: gatecheck_report
+      description: Bar status trends, recurring failures, pass/block rates
+  optional_artifacts:
+    - artifact_type: pn_playtest_notes
+      description: PN Playtest Notes from Narration Dry-Run sessions
+    - artifact_type: harvest_sheet
+      description: Hook Harvest Sheets (triage patterns)
+    - artifact_type: view_log
+      description: Binding Run Logs (export issues)
+
+topology:
+  nodes:
+    - id: gather_data
+      step: 1
+      name: Gather Data
+      active_role: showrunner
+      description: |
+        Collect metrics from completed TUs: gate pass rates, most common bar failures,
+        rework cycles, time to merge, hook acceptance patterns.
+      outputs:
+        - metrics_summary
+
+    - id: frame_retrospective
+      step: 2
+      name: Frame the Retrospective
+      active_role: showrunner
+      description: |
+        Set scope: milestone, date range, or incident. Emphasize blameless culture.
+        Timebox session (60-90 minutes for major milestones).
+      outputs:
+        - retrospective_frame
+
+    - id: retrospective_session
+      step: 3
+      name: Retrospective Session
+      active_role: showrunner
+      supporting_roles:
+        - all
+      description: |
+        Discuss four categories: What went well, What went poorly, Surprising discoveries,
+        Improvements to try.
+      outputs:
+        - session_notes
+
+    - id: identify_actions
+      step: 4
+      name: Identify Action Items
+      active_role: showrunner
+      supporting_roles:
+        - all
+      description: |
+        For each improvement area, create an action item: Description, Owner, Target date,
+        Success Criteria, Priority.
+      outputs:
+        - action_items
+
+    - id: update_best_practices
+      step: 5
+      name: Update Best Practices
+      active_role: showrunner
+      description: |
+        Document new patterns or guidance in relevant layers. Add to role prompts,
+        loop guides, and shared resources.
+      outputs:
+        - best_practice_updates
+
+    - id: package_report
+      step: 6
+      name: Package Post-Mortem Report
+      active_role: showrunner
+      description: |
+        Create structured report and archive in docs/post_mortems/.
+      outputs:
+        - post_mortem_report
+
+    - id: action_tracking
+      step: 7
+      name: Action Item Tracking
+      active_role: showrunner
+      description: |
+        Add action items to next relevant TUs. Review action item completion in next Post-Mortem.
+      outputs:
+        - follow_up_tus
+
+  edges:
+    - from: gather_data
+      to: frame_retrospective
+      condition: data_gathered
+    - from: frame_retrospective
+      to: retrospective_session
+      condition: frame_set
+    - from: retrospective_session
+      to: identify_actions
+      condition: session_complete
+    - from: identify_actions
+      to: update_best_practices
+      condition: actions_identified
+    - from: update_best_practices
+      to: package_report
+      condition: practices_updated
+    - from: package_report
+      to: action_tracking
+      condition: report_complete
+
+raci:
+  responsible:
+    - showrunner
+  accountable:
+    - showrunner
+  consulted:
+    - all
+  informed:
+    - all
+
+handoffs:
+  - target_loop: next_production_cycle
+    artifacts:
+      - action_items
+      - best_practice_updates
+    description: Action items and updated guidance for subsequent work
+
+success_criteria:
+  - All participating roles contribute to retrospective
+  - Action items are specific, owned, dated, and have success criteria
+  - At least one best practice or process improvement documented
+  - Report archived and accessible for future reference
+  - Action items tracked and reviewed in subsequent Post-Mortem
+  - Blameless culture maintained (focus on systems, not individuals)
+
+failure_modes:
+  - name: blame_culture
+    description: Retrospective focuses on individuals rather than systems
+    remedy: Redirect to systems and process; frame issues as learning opportunities
+
+  - name: vague_actions
+    description: Action items lack specificity
+    remedy: Require each action to have clear description, owner, target, criteria, priority
+
+  - name: no_follow_through
+    description: Action items not completed
+    remedy: Assign tracking to Showrunner; create TU for high-priority actions; review next Post-Mortem
+
+  - name: missing_participation
+    description: Key roles don't contribute
+    remedy: Schedule when all available; allow asynchronous input
+
+  - name: superficial_analysis
+    description: Root causes not identified
+    remedy: Use "5 Whys" technique; ask "What process change would prevent this?"
+
+  - name: too_many_actions
+    description: Action item overload
+    remedy: Prioritize; limit to 3-5 high-priority actions per Post-Mortem
+
+quality_bars: []
+
+merge_path:
+  direct_to_cold: false
+  produces_documentation: true
+  feeds_into: []
+  notes: |
+    Post-Mortem produces documentation and action items but does not directly merge
+    content to Cold. Action items feed into subsequent work cycles.
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - reflection
+    - retrospective
+    - process-improvement

@@ -1,0 +1,196 @@
+# Loop Pattern: Hook Harvest
+# Compiled from: spec/00-north-star/LOOPS/hook_harvest.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: hook_harvest
+
+identity:
+  name: Hook Harvest
+  description: |
+    Collect, cluster, and triage hooks - sweeping up newly proposed hooks (narrative, scene,
+    factual, taxonomy), removing duplicates, and deciding what advances now, later, or never.
+  category: discovery
+  phase: triage
+
+purpose: |
+  Sweep up newly proposed hooks, remove duplicates, cluster related ideas, and triage what
+  should advance now, later, or never.
+
+outcome: |
+  A prioritized, tagged hook set ready for Lore Deepening (canonization) and follow-on loops,
+  with risks and dependencies made explicit.
+
+triggers:
+  - After Story Spark or any burst of drafting that produced hooks
+  - Before a stabilization window or merge train
+  - On demand when the backlog looks fuzzy or drifted
+
+context:
+  required_artifacts:
+    - artifact_type: hook_card
+      description: Hook cards in Hot SoT
+  optional_artifacts:
+    - artifact_type: topology_notes
+      description: Recent topology notes
+    - artifact_type: section_draft
+      description: Section drafts
+    - artifact_type: style_addendum
+      description: Style addenda
+    - artifact_type: gatecheck_report
+      description: Open QA notes from Gatekeeper
+
+topology:
+  nodes:
+    - id: collect
+      step: 1
+      name: Collect
+      active_role: showrunner
+      description: |
+        Sweep all new proposed hooks. Reject obvious dupes; link provenance rather than deleting.
+      outputs:
+        - hook_card
+
+    - id: cluster
+      step: 2
+      name: Cluster
+      active_role: showrunner
+      description: |
+        Group by theme (e.g., "Wormhole economy", "Kestrel arc"), then by type
+        (narrative, scene, factual, taxonomy).
+      outputs:
+        - hook_card
+
+    - id: annotate
+      step: 3
+      name: Annotate
+      active_role: showrunner
+      supporting_roles:
+        - lore_weaver
+        - plotwright
+        - scene_smith
+        - codex_curator
+        - researcher
+        - style_lead
+        - gatekeeper
+      description: |
+        For each hook, add or confirm: triage tag, uncertainty (for factual), dependencies.
+      outputs:
+        - hook_card
+
+    - id: decide
+      step: 4
+      name: Decide
+      active_role: showrunner
+      description: |
+        Mark each as accepted, deferred, or rejected (with 1-line reason).
+        For accepted hooks, assign next loop.
+      outputs:
+        - hook_card
+
+    - id: package
+      step: 5
+      name: Package
+      active_role: showrunner
+      description: |
+        Produce a Harvest Sheet summarizing decisions for hand-off.
+      outputs:
+        - harvest_sheet
+
+  edges:
+    - from: collect
+      to: cluster
+      condition: hooks_collected
+    - from: cluster
+      to: annotate
+      condition: hooks_clustered
+    - from: annotate
+      to: decide
+      condition: hooks_annotated
+    - from: decide
+      to: package
+      condition: decisions_made
+
+raci:
+  responsible:
+    - showrunner
+  accountable:
+    - showrunner
+  consulted:
+    - lore_weaver
+    - plotwright
+    - scene_smith
+    - codex_curator
+    - researcher
+    - style_lead
+    - gatekeeper
+  informed:
+    - all
+
+handoffs:
+  - target_loop: lore_deepening
+    artifacts:
+      - hook_card
+    description: Accepted list (narrative/scene/factual hooks requiring canon), clustered by theme
+
+  - target_loop: story_spark
+    artifacts:
+      - hook_card
+    description: Hooks that re-shape topology
+
+  - target_loop: codex_expansion
+    artifacts:
+      - hook_card
+    description: Taxonomy/clarity hooks accepted (player-safe coverage)
+
+  - target_loop: style_tune_up
+    artifacts:
+      - hook_card
+    description: Hooks whose primary effect is tone/voice/aesthetics
+
+success_criteria:
+  - Hooks are deduped, clustered, and tagged; uncertainty visible
+  - Clear next loop and owner for each accepted hook
+  - Showrunner has a short activation list (which dormant roles to wake)
+  - Gatekeeper has a risk snapshot aligned to Quality Bars
+
+failure_modes:
+  - name: foggy_clusters
+    description: Clusters unclear or overlapping
+    remedy: Recut by player value instead of source role
+
+  - name: endless_acceptance
+    description: Too many hooks accepted without capacity
+    remedy: Enforce capacity; defer with explicit wake conditions
+
+  - name: taxonomy_as_lore
+    description: Taxonomy hooks becoming secret lore
+    remedy: Hand to Lore Weaver or mark deferred; Curator does not canonize
+
+  - name: research_dormant_factual_heavy
+    description: Many factual hooks without Researcher active
+    remedy: Accept with uncorroborated risk only if Showrunner signs the risk; otherwise defer
+
+quality_bars:
+  - Integrity
+  - Presentation
+
+merge_path:
+  direct_to_cold: false
+  feeds_into:
+    - lore_deepening
+    - story_spark
+    - codex_expansion
+    - style_tune_up
+  notes: |
+    Hook Harvest routes accepted hooks to the appropriate follow-on loops.
+    It does not directly produce Cold-mergeable content.
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-25"
+  updated: "2025-11-25"
+  author: "QuestFoundry Compiler"
+  tags:
+    - discovery
+    - triage
+    - hooks
