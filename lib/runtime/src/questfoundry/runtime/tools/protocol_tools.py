@@ -40,8 +40,6 @@ class SendProtocolMessage(_BaseProtocolTool):
     ) -> dict[str, Any]:  # type: ignore[override]
         if not state:
             raise StateError("State payload is required")
-        if role_id != state.get("current_node", role_id):
-            logger.debug("role_id %s does not match current_node %s", role_id, state.get("current_node"))
         message = self._protocol.send_message(state, sender=role_id, recipient=recipient, intent=intent, payload=payload)
         return {"messages": [message]}
 

@@ -15,10 +15,16 @@ def base_state() -> dict:
 def test_send_protocol_message_adds_message(base_state):
     tool = SendProtocolMessage()
 
-    update = tool._run(recipient="gatekeeper", intent="review.request", payload={"note": "please check"}, role_id="plotwright", state=base_state)
+    update = tool._run(
+        recipient="gatekeeper",
+        intent="review.request",
+        payload={"type": "none", "data": {"note": "please check"}},
+        role_id="plotwright",
+        state=base_state,
+    )
 
     assert "messages" in update
-    assert update["messages"][0]["receiver"] == "gatekeeper"
+    assert update["messages"][0]["receiver"] == {"role": "GK"}
     assert update["messages"][0]["intent"] == "review.request"
 
 
@@ -33,10 +39,14 @@ def test_send_protocol_envelope_success(base_state):
     tool = SendProtocolEnvelope()
 
     update = tool._run(
-        envelope={"receiver": "gatekeeper", "intent": "review.request", "payload": {"msg": "hi"}},
+        envelope={
+            "receiver": "gatekeeper",
+            "intent": "review.request",
+            "payload": {"type": "none", "data": {"msg": "hi"}},
+        },
         role_id="plotwright",
         state=base_state,
     )
 
-    assert update["messages"][0]["envelope"]["sender"] == "plotwright"
+    assert update["messages"][0]["envelope"]["sender"] == {"role": "PW"}
     assert update["messages"][0]["envelope"]["intent"] == "review.request"

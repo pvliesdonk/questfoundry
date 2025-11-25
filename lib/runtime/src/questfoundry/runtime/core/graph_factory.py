@@ -269,108 +269,27 @@ class GraphFactory:
             logger.warning(f"Loop {loop.id} has no edges")
             return
 
-        # Find terminal nodes (nodes that have no outgoing edges to other nodes)
-        # These are nodes where the graph flow naturally ends
-        all_node_ids = set(loop.get_node_ids())
-        nodes_with_outgoing_edges = {edge.source for edge in loop.edges}
-        terminal_nodes = all_node_ids - nodes_with_outgoing_edges
-
-        if not terminal_nodes:
-            # If no clear terminal nodes, use the target of the last edge
-            terminal_nodes = {loop.edges[-1].target}
-
-        logger.info(f"Configuring exit conditions for terminal nodes: {terminal_nodes}")
-
-        # Add exit condition routing from each terminal node
-        for exit_node in terminal_nodes:
+        # Add exit condition routing from every node; EdgeEvaluator decides
+        for node_id in loop.get_node_ids():
             try:
-                # Create routing function that evaluates all YAML exit conditions
-                def create_exit_routing(node_id: str):
-                    # Use closure to track iteration count (stateful but doesn't mutate state)
-                    iteration_counter = {"count": 0}
-
-                    def exit_routing(state: StudioState) -> str:
-                        """Evaluate YAML exit conditions and route to END or continue."""
-                        # Increment iteration count in closure (safe, doesn't mutate state)
-                        iteration_counter["count"] += 1
-                        current_iteration = iteration_counter["count"]
-
-                        logger.debug(f"Exit routing check at iteration {current_iteration}")
-
-                        # Check each exit condition using direct evaluation
+                def make_routing(nid: str):
+                    def routing(state: StudioState) -> str:
                         for exit_cond in loop.exit_conditions:
-                            condition_str = exit_cond.condition
+                            condition = exit_cond.condition
+                            if self.edge_evaluator.evaluate_condition(condition, state):
+                                logger.info(f"Exit condition '{exit_cond.name}' met at node {nid}")
+                                return END
+                        return nid
+                    return routing
 
-                            # Map YAML field references to actual values for evaluation
-                            # This allows YAML to use friendly names
-                            try:
-                                # Replace YAML field names with actual state access
-                                # state.meta.current_tu.status → tu_lifecycle
-                                # state.execution.iteration_count → current_iteration
-
-                                # Simple condition evaluation without asteval
-                                # Parse the condition string and evaluate directly
-                                if "state.meta.current_tu.status" in condition_str:
-                                    # Example: state.meta.current_tu.status == 'completed'
-                                    target_lifecycle = (
-                                        condition_str.split("==")[1].strip().strip("'\"")
-                                    )
-                                    if state.get("tu_lifecycle") == target_lifecycle:
-                                        logger.info(
-                                            f"Exit condition met: {exit_cond.name} "
-                                            f"(tu_lifecycle == {target_lifecycle})"
-                                        )
-                                        return END
-
-                                elif "state.execution.iteration_count" in condition_str:
-                                    # Example: state.execution.iteration_count >= 2
-                                    if ">=" in condition_str:
-                                        threshold = int(condition_str.split(">=")[1].strip())
-                                        if current_iteration >= threshold:
-                                            logger.info(
-                                                f"Exit condition met: {exit_cond.name} "
-                                                f"(iteration {current_iteration} >= {threshold})"
-                                            )
-                                            return END
-                                    elif ">" in condition_str:
-                                        threshold = int(condition_str.split(">")[1].strip())
-                                        if current_iteration > threshold:
-                                            logger.info(
-                                                f"Exit condition met: {exit_cond.name} "
-                                                f"(iteration {current_iteration} > {threshold})"
-                                            )
-                                            return END
-
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to evaluate exit condition '{exit_cond.name}': {e}"
-                                )
-
-                        # Also check for errors - always exit on error
-                        if state.get("error"):
-                            logger.info("Exiting due to error in state")
-                            return END
-
-                        # No exit conditions met - continue to END (terminal node behavior)
-                        logger.debug(
-                            f"No exit conditions met (iteration {current_iteration}), "
-                            "ending execution"
-                        )
-                        return END  # Terminal nodes always go to END
-
-                    return exit_routing
-
-                # Create the routing function for this exit node
-                routing_fn = create_exit_routing(exit_node)
-
-                # Add conditional edge
-                # Note: We only map to END because exit nodes shouldn't loop back
-                graph.add_conditional_edges(source=exit_node, path=routing_fn, path_map={END: END})
-
-                logger.debug(f"Added exit condition routing from: {exit_node}")
-
+                routing_fn = make_routing(node_id)
+                graph.add_conditional_edges(
+                    source=node_id,
+                    path=routing_fn,
+                    path_map={node_id: node_id, END: END},
+                )
             except Exception as e:
-                logger.error(f"Failed to add exit condition from {exit_node}: {e}")
+                logger.error(f"Failed to add exit condition routing from {node_id}: {e}")
                 raise
 
     def compile_graph(self, graph: StateGraph) -> Any:

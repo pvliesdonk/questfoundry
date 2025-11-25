@@ -15,6 +15,77 @@ from questfoundry.runtime.protocol.types import Envelope
 
 logger = logging.getLogger(__name__)
 
+ROLE_ABBREVIATIONS = {
+    "showrunner": "SR",
+    "gatekeeper": "GK",
+    "plotwright": "PW",
+    "scene_smith": "SS",
+    "style_lead": "ST",
+    "lore_weaver": "LW",
+    "codex_curator": "CC",
+    "art_director": "AD",
+    "illustrator": "IL",
+    "audio_director": "AuD",
+    "audio_producer": "AuP",
+    "translator": "TR",
+    "book_binder": "BB",
+    "player_narrator": "PN",
+    "researcher": "RS",
+}
+
+LOOP_DISPLAY = {
+    "story_spark": "Story Spark",
+    "hook_harvest": "Hook Harvest",
+    "lore_deepening": "Lore Deepening",
+    "codex_expansion": "Codex Expansion",
+    "style_tune_up": "Style Tune-up",
+    "art_touch_up": "Art Touch-up",
+    "audio_pass": "Audio Pass",
+    "translation_pass": "Translation Pass",
+    "binding_run": "Binding Run",
+    "narration_dry_run": "Narration Dry-Run",
+    "gatecheck": "Gatecheck",
+    "post_mortem": "Post-Mortem",
+    "archive_snapshot": "Archive Snapshot",
+}
+
+
+def _to_abbrev(role_id: str) -> str:
+    return ROLE_ABBREVIATIONS.get(role_id, role_id.upper() if len(role_id) <= 4 else "*")
+
+
+def _wrap_sender(role_id: str | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(role_id, dict):
+        if "role" in role_id:
+            return {"role": _to_abbrev(str(role_id["role"]))}
+        return role_id
+    return {"role": _to_abbrev(role_id)}
+
+
+def _wrap_receiver(val: str | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(val, dict):
+        if "role" in val:
+            return {"role": _to_abbrev(str(val["role"]))}
+        return val
+    return {"role": _to_abbrev(val)}
+
+
+def _wrap_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if "type" not in payload:
+        return {"type": "none", "data": payload}
+    return payload
+
+
+def _normalize_tu(tu_id: str | None, fallback_role: str) -> str:
+    import re
+
+    pattern = re.compile(r"^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$")
+    if tu_id and pattern.match(tu_id):
+        return tu_id
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    role = _to_abbrev(fallback_role)
+    return f"TU-{today}-{role}01"
+
 
 class Protocol:
     """Minimal TU protocol handler for message/envelope dispatch."""
@@ -33,23 +104,24 @@ class Protocol:
     ) -> Message:
         message_id = self._generate_message_id()
         timestamp = datetime.now(timezone.utc).isoformat()
+        recv_val = _wrap_receiver(recipient)
         envelope: Envelope = {
             "protocol": {"name": "qf-protocol", "version": "1.0.0"},
             "id": message_id,
             "time": timestamp,
-            "sender": sender,
-            "receiver": recipient,
+            "sender": _wrap_sender(sender),
+            "receiver": recv_val,
             "intent": intent,
-            "payload": payload,
-            "tu_id": state["tu_id"],
+            "payload": _wrap_payload(payload),
+            "tu_id": _normalize_tu(state.get("tu_id"), sender),
             "snapshot_ref": state.get("snapshot_ref"),
             "loop_id": state.get("loop_id"),
             "message_id": message_id,
             "transport": "inproc",
             "context": {
                 "hot_cold": "hot",
-                "tu": state.get("tu_id"),
-                "loop": state.get("loop_id"),
+                "tu": _normalize_tu(state.get("tu_id"), sender),
+                "loop": LOOP_DISPLAY.get(state.get("loop_id"), state.get("loop_id")),
             },
             "safety": {"player_safe": True, "spoilers": "allowed"},
         }
@@ -62,14 +134,22 @@ class Protocol:
         envelope.setdefault("protocol", {"name": "qf-protocol", "version": "1.0.0"})
         envelope.setdefault("id", message_id)
         envelope.setdefault("time", timestamp)
-        envelope.setdefault("tu_id", state["tu_id"])
+        sender_val = envelope.get("sender") or state.get("current_node")
+        envelope["sender"] = _wrap_sender(sender_val)
+        recv_val = envelope.get("receiver", "broadcast")
+        envelope["receiver"] = _wrap_receiver(recv_val)
+        envelope.setdefault("tu_id", _normalize_tu(state.get("tu_id"), sender_val if isinstance(sender_val, str) else sender_val.get("role", "*")))
         envelope.setdefault("snapshot_ref", state.get("snapshot_ref"))
         envelope.setdefault("loop_id", state.get("loop_id"))
         envelope.setdefault("transport", "inproc")
         envelope.setdefault("message_id", message_id)
         envelope.setdefault(
             "context",
-            {"hot_cold": "hot", "tu": state.get("tu_id"), "loop": state.get("loop_id")},
+            {
+                "hot_cold": "hot",
+                "tu": _normalize_tu(state.get("tu_id"), sender_val if isinstance(sender_val, str) else sender_val.get("role", "*")),
+                "loop": LOOP_DISPLAY.get(state.get("loop_id"), state.get("loop_id")),
+            },
         )
         envelope.setdefault("safety", {"player_safe": True, "spoilers": "allowed"})
         self._validate_envelope(envelope)
@@ -110,4 +190,4 @@ class Protocol:
         try:
             jsonschema.validate(envelope, self._envelope_schema)
         except jsonschema.ValidationError as exc:
-            logger.debug("Envelope validation skipped: %s", exc)
+            raise StateError(f"Envelope validation failed: {exc.message}")
