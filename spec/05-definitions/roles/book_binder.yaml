@@ -12,7 +12,7 @@ identity:
   aliases:
     - Publisher
     - Packager
-  role_type: executor_agent
+  role_type: production_executor
 
 prompt_content:
   core_mandate: |
@@ -110,7 +110,7 @@ interface:
 
   side_effects:
     - write_hot_sot
-    - write_exports
+    - write_cold_sot
     - send_protocol_message
 
 behavior:

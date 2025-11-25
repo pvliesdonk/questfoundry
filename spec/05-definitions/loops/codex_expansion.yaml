@@ -15,44 +15,54 @@ topology:
   entry_node: select_topics
 
   nodes:
-    - id: select_topics
-      role: "Codex Curator"
+    - role_id: codex_curator
+      node_id: select_topics
       description: "From canon deltas, term frequency in manuscript, and taxonomy hooks. Prioritize player-value: comprehension bottlenecks first."
-      next: draft_entries
 
-    - id: draft_entries
-      role: "Codex Curator"
+    - role_id: codex_curator
+      node_id: draft_entries
       description: "Write overview and context in Style Lead's register. Add See also list that improves navigation (avoid self-loops)."
-      next: spoiler_sweep
 
-    - id: spoiler_sweep
-      role: "Lore Weaver"
+    - role_id: lore_weaver
+      node_id: spoiler_sweep
       description: "Compare against the spoiler-level canon; mask revelations. If masking makes an entry misleading, add neutral phrasing workaround or defer."
-      next: link_audit
 
-    - id: link_audit
-      role: "Codex Curator"
+    - role_id: codex_curator
+      node_id: link_audit
       description: "Check that every cross-reference resolves (or create the stub if approved). Add disambiguation if a term is overloaded."
-      next: pre_check
 
-    - id: pre_check
-      role: "Gatekeeper"
+    - role_id: gatekeeper
+      node_id: pre_check
       description: "Presentation Safety, Integrity (links resolve), and Style. Flag any gateway logic leaks."
-      next: null
 
   edges:
-    - from: select_topics
-      to: draft_entries
-      condition: topics_selected
-    - from: draft_entries
-      to: spoiler_sweep
-      condition: entries_drafted
-    - from: spoiler_sweep
-      to: link_audit
-      condition: spoilers_masked
-    - from: link_audit
-      to: pre_check
-      condition: links_verified
+    - source: select_topics
+      target: draft_entries
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.topics_selected == true"
+    - source: draft_entries
+      target: spoiler_sweep
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.entries_drafted == true"
+    - source: spoiler_sweep
+      target: link_audit
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.spoilers_masked == true"
+    - source: link_audit
+      target: pre_check
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.links_verified == true"
+    - source: pre_check
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -61,12 +71,10 @@ traceability:
 
 context:
   required_artifacts:
-    - canon_pack
-    - player_safe_summary
-  optional_artifacts:
-    - style_addendum
-    - codex_entry
-    - hook_card
+    - artifact_type: canon_pack
+      state_key: hot_sot.canon
+    - artifact_type: player_safe_summary
+      state_key: hot_sot.summaries
 
 handoffs:
   - target: binding_run
@@ -93,8 +101,19 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - High-frequency manuscript terms have matching codex entries
-  - No spoilers; PN can reference entries safely
-  - All See also links resolve; no dead ends
-  - Reading level and tone align with Style Lead; localization notes present where needed
-  - Traceability present (TU-ID lineages)
+  custom_checks:
+    - name: term_coverage
+      expression: "state.terms_covered == true"
+      error_message: "High-frequency manuscript terms have matching codex entries"
+    - name: no_spoilers
+      expression: "state.no_spoilers == true"
+      error_message: "No spoilers; PN can reference entries safely"
+    - name: links_resolve
+      expression: "state.links_resolve == true"
+      error_message: "All See also links resolve; no dead ends"
+    - name: style_aligned
+      expression: "state.style_aligned == true"
+      error_message: "Reading level and tone align with Style Lead; localization notes present where needed"
+    - name: traceability_present
+      expression: "state.traceability_present == true"
+      error_message: "Traceability present (TU-ID lineages)"

@@ -16,36 +16,44 @@ topology:
   entry_node: route_plan
 
   nodes:
-    - id: route_plan
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: route_plan
       description: "Choose representative paths: a hub route, a loop return, a gated branch, and at least one terminal. If time-boxed, pick high-traffic sections and one edge case."
-      next: live_read
 
-    - id: live_read
-      role: "Player-Narrator"
+    - role_id: player_narrator
+      node_id: live_read
       description: "Narrate in-voice; present choices clearly; perform recaps when natural. Enforce gateways without exposing internals. Do NOT improvise new content."
-      next: issue_logging
 
-    - id: issue_logging
-      role: "Player-Narrator"
+    - role_id: player_narrator
+      node_id: issue_logging
       description: "Tag each note with an issue type (choice-ambiguity, gate-friction, recap-needed, codex-invite, leak-risk, nav-bug, tone-wobble, accessibility) and a target."
-      next: spot_checks
 
-    - id: spot_checks
-      role: "Gatekeeper"
+    - role_id: gatekeeper
+      node_id: spot_checks
       description: "Classify severity and bar mapping. Binder verifies navigation/format issues. Curator checks codex links. Style Lead proposes phrasing patterns."
-      next: null
 
   edges:
-    - from: route_plan
-      to: live_read
-      condition: routes_planned
-    - from: live_read
-      to: issue_logging
-      condition: read_complete
-    - from: issue_logging
-      to: spot_checks
-      condition: issues_logged
+    - source: route_plan
+      target: live_read
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.routes_planned == true"
+    - source: live_read
+      target: issue_logging
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.read_complete == true"
+    - source: issue_logging
+      target: spot_checks
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.issues_logged == true"
+    - source: spot_checks
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -54,10 +62,10 @@ traceability:
 
 context:
   required_artifacts:
-    - export_view
-    - style_addendum
-  optional_artifacts:
-    - language_pack
+    - artifact_type: export_view
+      state_key: exports.current_view
+    - artifact_type: style_addendum
+      state_key: hot_sot.style
 
 handoffs:
   - target: style_tune_up
@@ -91,8 +99,19 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Gates enforced diegetically without confusion or leaks
-  - Choices read as distinct and fair; recaps land where helpful
-  - Codex invites clarify, not spoil
-  - Navigation is smooth across all export formats
-  - A small, prioritized list of actionable follow-ups exists
+  custom_checks:
+    - name: gates_diegetic
+      expression: "state.gates_enforced_diegetically == true"
+      error_message: "Gates enforced diegetically without confusion or leaks"
+    - name: choices_distinct
+      expression: "state.choices_distinct == true"
+      error_message: "Choices read as distinct and fair; recaps land where helpful"
+    - name: codex_invites_safe
+      expression: "state.codex_invites_safe == true"
+      error_message: "Codex invites clarify, not spoil"
+    - name: navigation_smooth
+      expression: "state.navigation_smooth == true"
+      error_message: "Navigation is smooth across all export formats"
+    - name: followups_exist
+      expression: "state.followups_exist == true"
+      error_message: "A small, prioritized list of actionable follow-ups exists"

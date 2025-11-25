@@ -6,13 +6,13 @@ id: audio_producer
 
 identity:
   name: Audio Producer
-  abbreviation: AuP
+  abbreviation: AUPR
   charter_ref: spec/01-roles/charters/audio_producer.md
   dormancy_policy: optional
   aliases:
     - Sound Engineer
     - Audio Implementer
-  role_type: executor_agent
+  role_type: production_executor
 
 prompt_content:
   core_mandate: |
@@ -101,7 +101,6 @@ interface:
   side_effects:
     - write_hot_sot
     - send_protocol_message
-    - generate_audio
 
 behavior:
   prompt:
@@ -145,7 +144,7 @@ behavior:
       tool_type: internal
     - name: generate_audio
       enabled: true
-      tool_type: external
+      tool_type: external_api
     - name: send_protocol_message
       enabled: true
       tool_type: internal
@@ -200,7 +199,7 @@ constraints:
     can_see_hot: true
     can_see_spoilers: true
     pn_safe: true
-    spoiler_hygiene_level: player_safe_output
+    spoiler_hygiene_level: player_safe_only
 
   traceability:
     requires_tu_linkage: true
@@ -228,7 +227,7 @@ raci:
 
 llm_config:
   provider: auto
-  model_tier: creative
+  model_tier: creative-writing
   temperature: 0.6
 
 metadata:

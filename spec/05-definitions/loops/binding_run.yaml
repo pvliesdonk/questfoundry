@@ -16,28 +16,34 @@ topology:
   entry_node: assemble
 
   nodes:
-    - id: assemble
-      role: "Book Binder"
+    - role_id: book_binder
+      node_id: assemble
       description: "Compile hyperlinked sections from Cold snapshot; ensure terminals clearly marked. Generate codeword/gateway checklists in player-safe wording. Attach codex with See also crosslinks."
-      next: validate_accessibility
 
-    - id: validate_accessibility
-      role: "Book Binder"
+    - role_id: book_binder
+      node_id: validate_accessibility
       description: "Alt text, descriptive link text, proper headings; high-contrast print layout if enabled. No motion/flash surprises; audio warnings where needed. Verify all links resolve."
-      next: render
 
-    - id: render
-      role: "Book Binder"
+    - role_id: book_binder
+      node_id: render
       description: "Emit Markdown (source), HTML, EPUB, PDF (single-column, print-friendly). Stamp front matter with title, credits, Cold snapshot ID, options used, coverage %. Generate View Log page."
-      next: null
 
   edges:
-    - from: assemble
-      to: validate_accessibility
-      condition: bundle_assembled
-    - from: validate_accessibility
-      to: render
-      condition: accessibility_verified
+    - source: assemble
+      target: validate_accessibility
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.bundle_assembled == true"
+    - source: validate_accessibility
+      target: render
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.accessibility_verified == true"
+    - source: render
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -46,14 +52,10 @@ traceability:
 
 context:
   required_artifacts:
-    - cold_snapshot
-    - gatecheck_report
-  optional_artifacts:
-    - art_plan
-    - render
-    - audio_plan
-    - rendered_cue
-    - language_pack
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: gatecheck_report
+      state_key: gates.gatecheck_report
 
 handoffs:
   - target: narration_dry_run
@@ -81,7 +83,16 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Bundle is player-safe, navigable, and accessible
-  - Snapshot & options are clear and consistent across formats
-  - PN can run a Narration Dry-Run without encountering leaks
-  - Known limitations are disclosed in the View Log
+  custom_checks:
+    - name: player_safe_bundle
+      expression: "state.bundle_player_safe == true"
+      error_message: "Bundle is player-safe, navigable, and accessible"
+    - name: consistent_formats
+      expression: "state.formats_consistent == true"
+      error_message: "Snapshot & options are clear and consistent across formats"
+    - name: no_leaks
+      expression: "state.no_leaks == true"
+      error_message: "PN can run a Narration Dry-Run without encountering leaks"
+    - name: limitations_disclosed
+      expression: "state.limitations_disclosed == true"
+      error_message: "Known limitations are disclosed in the View Log"

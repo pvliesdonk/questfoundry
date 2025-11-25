@@ -16,44 +16,54 @@ topology:
   entry_node: diagnose
 
   nodes:
-    - id: diagnose
-      role: "Style Lead"
+    - role_id: style_lead
+      node_id: diagnose
       description: "Sample sections (early/middle/late), PN lines, and recent captions. Tag issues: voice-shift, register-mismatch, motif-missing, over-exposition, jargon-spike."
-      next: exemplars
 
-    - id: exemplars
-      role: "Style Lead"
+    - role_id: style_lead
+      node_id: exemplars
       description: "Provide short before/after exemplars for each issue (human prose). Reaffirm motif kit (e.g., 'shadow-side neon', 'low-G dust', 'relay hum')."
-      next: addendum
 
-    - id: addendum
-      role: "Style Lead"
+    - role_id: style_lead
+      node_id: addendum
       description: "Add rules or clarifications: sentence rhythm under pressure, idiom boundaries, POV distance, caption tone. Include localization notes."
-      next: distribute
 
-    - id: distribute
-      role: "Style Lead"
+    - role_id: style_lead
+      node_id: distribute
       description: "Create annotated edit notes: file/section -> issue -> fix suggestion. PN phrase bank updates if needed."
-      next: pre_gate
 
-    - id: pre_gate
-      role: "Gatekeeper"
+    - role_id: gatekeeper
+      node_id: pre_gate
       description: "Style & Presentation Safety check; ensure no spoilers snuck into captions/PN."
-      next: null
 
   edges:
-    - from: diagnose
-      to: exemplars
-      condition: issues_identified
-    - from: exemplars
-      to: addendum
-      condition: exemplars_created
-    - from: addendum
-      to: distribute
-      condition: addendum_complete
-    - from: distribute
-      to: pre_gate
-      condition: notes_distributed
+    - source: diagnose
+      target: exemplars
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.issues_identified == true"
+    - source: exemplars
+      target: addendum
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.exemplars_created == true"
+    - source: addendum
+      target: distribute
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.addendum_complete == true"
+    - source: distribute
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.notes_distributed == true"
+    - source: pre_gate
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -62,12 +72,10 @@ traceability:
 
 context:
   required_artifacts:
-    - cold_snapshot
-    - section_draft
-  optional_artifacts:
-    - canon_pack
-    - pn_playtest_notes
-    - language_pack
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: section_draft
+      state_key: hot_sot.drafts
 
 handoffs:
   - target: binding_run
@@ -93,7 +101,16 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Prose and PN read in a consistent register; motifs reappear intentionally
-  - Captions and cue sheets align with voice; no technique-talk on surfaces
-  - Localization pitfalls are noted with alternatives
-  - Gatekeeper reports Style/Presentation green
+  custom_checks:
+    - name: consistent_register
+      expression: "state.register_consistent == true"
+      error_message: "Prose and PN read in a consistent register; motifs reappear intentionally"
+    - name: captions_aligned
+      expression: "state.captions_aligned == true"
+      error_message: "Captions and cue sheets align with voice; no technique-talk on surfaces"
+    - name: localization_noted
+      expression: "state.localization_noted == true"
+      error_message: "Localization pitfalls are noted with alternatives"
+    - name: gate_passed
+      expression: "state.gate_passed == true"
+      error_message: "Gatekeeper reports Style/Presentation green"

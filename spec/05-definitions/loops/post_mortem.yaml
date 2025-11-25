@@ -16,44 +16,54 @@ topology:
   entry_node: gather_data
 
   nodes:
-    - id: gather_data
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: gather_data
       description: "Collect metrics from completed TUs: gate pass rates, most common bar failures, rework cycles, time to merge, hook acceptance patterns."
-      next: frame_retrospective
 
-    - id: frame_retrospective
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: frame_retrospective
       description: "Set scope: milestone, date range, or incident. Emphasize blameless culture. Timebox session (60-90 minutes for major milestones)."
-      next: session
 
-    - id: session
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: session
       description: "Discuss four categories: What went well, What went poorly, Surprising discoveries, Improvements to try. All participating roles contribute."
-      next: identify_actions
 
-    - id: identify_actions
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: identify_actions
       description: "For each improvement area, create an action item: Description, Owner, Target date, Success Criteria, Priority."
-      next: update_practices
 
-    - id: update_practices
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: update_practices
       description: "Document new patterns or guidance in relevant layers. Add to role prompts, loop guides, and shared resources. Archive Post-Mortem Report."
-      next: null
 
   edges:
-    - from: gather_data
-      to: frame_retrospective
-      condition: data_gathered
-    - from: frame_retrospective
-      to: session
-      condition: frame_set
-    - from: session
-      to: identify_actions
-      condition: session_complete
-    - from: identify_actions
-      to: update_practices
-      condition: actions_identified
+    - source: gather_data
+      target: frame_retrospective
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.data_gathered == true"
+    - source: frame_retrospective
+      target: session
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.frame_set == true"
+    - source: session
+      target: identify_actions
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.session_complete == true"
+    - source: identify_actions
+      target: update_practices
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.actions_identified == true"
+    - source: update_practices
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -62,12 +72,10 @@ traceability:
 
 context:
   required_artifacts:
-    - tu_brief
-    - gatecheck_report
-  optional_artifacts:
-    - pn_playtest_notes
-    - harvest_sheet
-    - view_log
+    - artifact_type: tu_brief
+      state_key: hot_sot.tu_brief
+    - artifact_type: gatecheck_report
+      state_key: gates.gatecheck_report
 
 handoffs:
   - target: next_production_cycle
@@ -91,9 +99,22 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - All participating roles contribute to retrospective
-  - Action items are specific, owned, dated, and have success criteria
-  - At least one best practice or process improvement documented
-  - Report archived and accessible for future reference
-  - Action items tracked and reviewed in subsequent Post-Mortem
-  - Blameless culture maintained (focus on systems, not individuals)
+  custom_checks:
+    - name: all_roles_contribute
+      expression: "state.all_roles_contributed == true"
+      error_message: "All participating roles contribute to retrospective"
+    - name: action_items_complete
+      expression: "state.action_items_complete == true"
+      error_message: "Action items are specific, owned, dated, and have success criteria"
+    - name: best_practice_documented
+      expression: "state.best_practice_documented == true"
+      error_message: "At least one best practice or process improvement documented"
+    - name: report_archived
+      expression: "state.report_archived == true"
+      error_message: "Report archived and accessible for future reference"
+    - name: action_items_tracked
+      expression: "state.action_items_tracked == true"
+      error_message: "Action items tracked and reviewed in subsequent Post-Mortem"
+    - name: blameless_culture
+      expression: "state.blameless_culture_maintained == true"
+      error_message: "Blameless culture maintained (focus on systems, not individuals)"

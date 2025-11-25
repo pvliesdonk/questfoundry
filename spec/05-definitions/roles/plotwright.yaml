@@ -251,7 +251,7 @@ raci:
 
 llm_config:
   provider: auto
-  model_tier: creative
+  model_tier: creative-writing
   temperature: 0.8
 
 metadata:

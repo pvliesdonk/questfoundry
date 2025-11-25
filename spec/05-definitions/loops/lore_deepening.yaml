@@ -16,28 +16,34 @@ topology:
   entry_node: draft_canon
 
   nodes:
-    - id: draft_canon
-      role: "Lore Weaver"
+    - role_id: lore_weaver
+      node_id: draft_canon
       description: "Frame the canon question for each theme/cluster. Provide precise, spoiler-level answers: backstory, causal chain, timeline anchors, implicated entities, constraints. Tag sensitivity."
-      next: verify
 
-    - id: verify
-      role: "Researcher"
+    - role_id: researcher
+      node_id: verify
       description: "Validate real-world claims; attach citations. If Researcher dormant, keep uncorroborated risk labels and note wording guidance for PN/Binder."
-      next: summarize
 
-    - id: summarize
-      role: "Lore Weaver"
+    - role_id: lore_weaver
+      node_id: summarize
       description: "Package canon entry with: Title, Canon Answer, Timeline anchors, Entities affected, Constraints, Sensitivity tag, Upstream hooks/TUs, Downstream impacts. Add notes for Plotwright/Scene Smith."
-      next: null
 
   edges:
-    - from: draft_canon
-      to: verify
-      condition: canon_drafted
-    - from: verify
-      to: summarize
-      condition: facts_checked_or_flagged
+    - source: draft_canon
+      target: verify
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.canon_drafted == true"
+    - source: verify
+      target: summarize
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.facts_checked_or_flagged == true"
+    - source: summarize
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -46,12 +52,10 @@ traceability:
 
 context:
   required_artifacts:
-    - hook_card
-    - cold_snapshot
-  optional_artifacts:
-    - style_addendum
-    - topology_notes
-    - research_memo
+    - artifact_type: hook_card
+      state_key: hot_sot.hooks
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
 
 handoffs:
   - target: codex_expansion
@@ -81,8 +85,19 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Each accepted hook is either canonized, deferred with reason, or rejected with rationale
-  - Canon resolves prior contradictions or marks deliberate mystery with bounds
-  - Topology/prose impacts are enumerated and handed off
-  - Spoilers are separated from player-safe summaries
-  - Factual claims carry citations or explicit risk flags
+  custom_checks:
+    - name: hooks_processed
+      expression: "state.hooks_canonized_or_handled == true"
+      error_message: "Each accepted hook is either canonized, deferred with reason, or rejected with rationale"
+    - name: contradictions_resolved
+      expression: "state.contradictions_resolved == true"
+      error_message: "Canon resolves prior contradictions or marks deliberate mystery with bounds"
+    - name: impacts_enumerated
+      expression: "state.impacts_enumerated == true"
+      error_message: "Topology/prose impacts are enumerated and handed off"
+    - name: spoilers_separated
+      expression: "state.spoilers_separated == true"
+      error_message: "Spoilers are separated from player-safe summaries"
+    - name: citations_present
+      expression: "state.citations_or_flags_present == true"
+      error_message: "Factual claims carry citations or explicit risk flags"

@@ -16,44 +16,54 @@ topology:
   entry_node: select_justify
 
   nodes:
-    - id: select_justify
-      role: "Audio Director"
+    - role_id: audio_director
+      node_id: select_justify
       description: "For each proposed cue: Cue ID & Scene anchor, Purpose (clarify affordance, intensify stakes, transition, recall motif), Type (ambience, foley, stinger, VO), Spoiler risk and mitigation."
-      next: write_plan
 
-    - id: write_plan
-      role: "Audio Director"
+    - role_id: audio_director
+      node_id: write_plan
       description: "Description (player-safe), Placement, Intensity curve, Motif ties, Captions/text-equivalents, Safety notes, Localization notes (if VO)."
-      next: style_alignment
 
-    - id: style_alignment
-      role: "Style Lead"
+    - role_id: style_lead
+      node_id: style_alignment
       description: "Tune language and motif ties; approve or request revisions."
-      next: produce_assets
 
-    - id: produce_assets
-      role: "Audio Producer"
+    - role_id: audio_producer
+      node_id: produce_assets
       description: "Create cues; export masters; provide stems. Record reproducibility notes (DAW/session, key plugins, versions, sample rate/bit depth). Provide text equivalents."
-      next: pre_gate
 
-    - id: pre_gate
-      role: "Gatekeeper"
+    - role_id: gatekeeper
+      node_id: pre_gate
       description: "Style: cohesive with book register. Presentation Safety: spoiler-safe cue descriptions; reasonable loudness; caption coverage. Reproducibility: logs sufficient when promised."
-      next: null
 
   edges:
-    - from: select_justify
-      to: write_plan
-      condition: cues_justified
-    - from: write_plan
-      to: style_alignment
-      condition: plan_written
-    - from: style_alignment
-      to: produce_assets
-      condition: style_approved
-    - from: produce_assets
-      to: pre_gate
-      condition: assets_complete_or_skipped
+    - source: select_justify
+      target: write_plan
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.cues_justified == true"
+    - source: write_plan
+      target: style_alignment
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.plan_written == true"
+    - source: style_alignment
+      target: produce_assets
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.style_approved == true"
+    - source: produce_assets
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.assets_complete_or_skipped == true"
+    - source: pre_gate
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -62,11 +72,10 @@ traceability:
 
 context:
   required_artifacts:
-    - cold_snapshot
-    - section_draft
-  optional_artifacts:
-    - pn_phrasing_patterns
-    - language_pack
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: section_draft
+      state_key: hot_sot.drafts
 
 handoffs:
   - target: binding_run
@@ -94,7 +103,16 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Each cue has a clear narrative purpose (clarity, mood, or signposting)
-  - Descriptions and captions are player-safe and consistent with Style Lead
-  - Assets (if included) have reproducibility notes; loudness is reasonable; text equivalents exist
-  - Gatekeeper reports green on Style/Presentation (and Reproducibility if applicable)
+  custom_checks:
+    - name: narrative_purpose
+      expression: "state.cues_have_purpose == true"
+      error_message: "Each cue has a clear narrative purpose (clarity, mood, or signposting)"
+    - name: player_safe_descriptions
+      expression: "state.descriptions_safe == true"
+      error_message: "Descriptions and captions are player-safe and consistent with Style Lead"
+    - name: reproducibility_notes
+      expression: "state.reproducibility_logged == true"
+      error_message: "Assets (if included) have reproducibility notes; loudness is reasonable; text equivalents exist"
+    - name: gate_passed
+      expression: "state.gate_passed == true"
+      error_message: "Gatekeeper reports green on Style/Presentation (and Reproducibility if applicable)"

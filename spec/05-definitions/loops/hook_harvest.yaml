@@ -15,44 +15,54 @@ topology:
   entry_node: collect
 
   nodes:
-    - id: collect
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: collect
       description: "Sweep all new proposed hooks. Reject obvious dupes; link provenance rather than deleting."
-      next: cluster
 
-    - id: cluster
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: cluster
       description: "Group by theme (e.g., 'Wormhole economy', 'Kestrel arc'), then by type (narrative, scene, factual, taxonomy)."
-      next: annotate
 
-    - id: annotate
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: annotate
       description: "For each hook, add or confirm: triage tag (quick-win, needs-research, structure-impact, style-impact, deferred, reject), uncertainty (for factual), dependencies."
-      next: triage
 
-    - id: triage
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: triage
       description: "Mark each as accepted, deferred, or rejected (with 1-line reason). For accepted hooks, assign next loop (lore_deepening, story_spark, style_tune_up, codex_expansion)."
-      next: package
 
-    - id: package
-      role: "Showrunner"
+    - role_id: showrunner
+      node_id: package
       description: "Produce a Harvest Sheet summarizing decisions for hand-off to downstream loops."
-      next: null
 
   edges:
-    - from: collect
-      to: cluster
-      condition: hooks_collected
-    - from: cluster
-      to: annotate
-      condition: hooks_clustered
-    - from: annotate
-      to: triage
-      condition: hooks_annotated
-    - from: triage
-      to: package
-      condition: decisions_made
+    - source: collect
+      target: cluster
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_collected == true"
+    - source: cluster
+      target: annotate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_clustered == true"
+    - source: annotate
+      target: triage
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_annotated == true"
+    - source: triage
+      target: package
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.decisions_made == true"
+    - source: package
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -61,12 +71,8 @@ traceability:
 
 context:
   required_artifacts:
-    - hook_card
-  optional_artifacts:
-    - topology_notes
-    - section_draft
-    - style_addendum
-    - gatecheck_report
+    - artifact_type: hook_card
+      state_key: hot_sot.hooks
 
 handoffs:
   - target: lore_deepening
@@ -98,7 +104,16 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Hooks are deduped, clustered, and tagged; uncertainty visible
-  - Clear next loop and owner for each accepted hook
-  - Showrunner has a short activation list (which dormant roles to wake)
-  - Gatekeeper has a risk snapshot aligned to Quality Bars
+  custom_checks:
+    - name: hooks_processed
+      expression: "state.hooks_deduped_and_tagged == true"
+      error_message: "Hooks are deduped, clustered, and tagged; uncertainty visible"
+    - name: routing_clear
+      expression: "state.routing_clear == true"
+      error_message: "Clear next loop and owner for each accepted hook"
+    - name: activation_list
+      expression: "state.activation_list_ready == true"
+      error_message: "Showrunner has a short activation list (which dormant roles to wake)"
+    - name: risk_snapshot
+      expression: "state.risk_snapshot_aligned == true"
+      error_message: "Gatekeeper has a risk snapshot aligned to Quality Bars"

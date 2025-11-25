@@ -13,7 +13,7 @@ identity:
     - Narrator
     - Game Master
     - GM
-  role_type: executor_agent
+  role_type: production_executor
 
 prompt_content:
   core_mandate: |
@@ -236,7 +236,7 @@ raci:
 
 llm_config:
   provider: auto
-  model_tier: creative
+  model_tier: creative-writing
   temperature: 0.8
 
 metadata:

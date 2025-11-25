@@ -15,44 +15,54 @@ topology:
   entry_node: topology_draft
 
   nodes:
-    - id: topology_draft
-      role: "Plotwright"
+    - role_id: plotwright
+      node_id: topology_draft
       description: "Map parts/chapters and designate hubs (fan-out), loops (return-with-difference), and gateways (state-gated). For each gateway, write a diegetic condition PN can enforce."
-      next: section_briefs
 
-    - id: section_briefs
-      role: "Plotwright"
+    - role_id: plotwright
+      node_id: section_briefs
       description: "For each affected/new section: intent, stakes, choices, expected state effect (human phrasing), references."
-      next: prose_pass
 
-    - id: prose_pass
-      role: "Scene Smith"
+    - role_id: scene_smith
+      node_id: prose_pass
       description: "Draft/adjust section text in style; make choices clear and distinct. Note intended state effects in comments (still human-level)."
-      next: hook_generation
 
-    - id: hook_generation
-      role: "Plotwright"
+    - role_id: plotwright
+      node_id: hook_generation
       description: "Create narrative/scene/factual hook cards with rationales and uncertainty levels."
-      next: preview_gate
 
-    - id: preview_gate
-      role: "Gatekeeper"
+    - role_id: gatekeeper
+      node_id: preview_gate
       description: "Run a quick pre-gate: Integrity (no accidental dead ends), Reachability (keystones reachable), Nonlinearity (hubs/loops exist & matter)."
-      next: null
 
   edges:
-    - from: topology_draft
-      to: section_briefs
-      condition: topology_complete
-    - from: section_briefs
-      to: prose_pass
-      condition: briefs_approved
-    - from: prose_pass
-      to: hook_generation
-      condition: drafts_complete
-    - from: hook_generation
-      to: preview_gate
-      condition: hooks_generated
+    - source: topology_draft
+      target: section_briefs
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.topology_complete == true"
+    - source: section_briefs
+      target: prose_pass
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.briefs_approved == true"
+    - source: prose_pass
+      target: hook_generation
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.drafts_complete == true"
+    - source: hook_generation
+      target: preview_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_generated == true"
+    - source: preview_gate
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -61,11 +71,10 @@ traceability:
 
 context:
   required_artifacts:
-    - cold_snapshot
-    - topology_notes
-  optional_artifacts:
-    - hook_card
-    - gatecheck_report
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: topology_notes
+      state_key: hot_sot.topology_notes
 
 handoffs:
   - target: hook_harvest
@@ -101,9 +110,22 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Topology adds or repairs meaningful nonlinearity (not decorative)
-  - Gateways have clear diegetic conditions PN can enforce without leaks
-  - At least one loop returns with difference (via codeword/state)
-  - Drafted sections are in-voice and choice-clear
-  - Hooks are small, rationalized, and triaged-ready
-  - Pre-gate shows no accidental dead ends; keystones remain reachable
+  custom_checks:
+    - name: meaningful_nonlinearity
+      expression: "state.topology_has_nonlinearity == true"
+      error_message: "Topology adds or repairs meaningful nonlinearity (not decorative)"
+    - name: diegetic_gateways
+      expression: "state.gateways_are_diegetic == true"
+      error_message: "Gateways have clear diegetic conditions PN can enforce without leaks"
+    - name: loop_returns_with_difference
+      expression: "state.loops_have_difference == true"
+      error_message: "At least one loop returns with difference (via codeword/state)"
+    - name: sections_in_voice
+      expression: "state.sections_in_voice == true"
+      error_message: "Drafted sections are in-voice and choice-clear"
+    - name: hooks_triaged_ready
+      expression: "state.hooks_ready == true"
+      error_message: "Hooks are small, rationalized, and triaged-ready"
+    - name: no_dead_ends
+      expression: "state.no_dead_ends == true"
+      error_message: "Pre-gate shows no accidental dead ends; keystones remain reachable"

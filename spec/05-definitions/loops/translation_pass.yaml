@@ -16,44 +16,54 @@ topology:
   entry_node: scope_coverage
 
   nodes:
-    - id: scope_coverage
-      role: "Translator"
+    - role_id: translator
+      node_id: scope_coverage
       description: "Decide slice (full book, acts, codex subset). Set coverage target and time box; mark partial outputs as incomplete."
-      next: glossary_first
 
-    - id: glossary_first
-      role: "Translator"
+    - role_id: translator
+      node_id: glossary_first
       description: "Create/refresh glossary with Style Lead. Decide register (T/V distinction, dialect); lock decisions here."
-      next: segment_localize
 
-    - id: segment_localize
-      role: "Translator"
+    - role_id: translator
+      node_id: segment_localize
       description: "Translate player surfaces: no internal labels, no spoilers, preserve PN diegesis. Keep hyperlinks and anchors intact; choice labels stay distinct and clear."
-      next: idiom_pass
 
-    - id: idiom_pass
-      role: "Style Lead"
+    - role_id: style_lead
+      node_id: idiom_pass
       description: "Validate motif resonance; solve idioms with functionally equivalent phrases."
-      next: pre_gate
 
-    - id: pre_gate
-      role: "Gatekeeper"
+    - role_id: gatekeeper
+      node_id: pre_gate
       description: "Presentation Safety (no leaks), Integrity (links), Style (tone/voice)."
-      next: null
 
   edges:
-    - from: scope_coverage
-      to: glossary_first
-      condition: scope_defined
-    - from: glossary_first
-      to: segment_localize
-      condition: glossary_locked
-    - from: segment_localize
-      to: idiom_pass
-      condition: segments_translated
-    - from: idiom_pass
-      to: pre_gate
-      condition: idioms_resolved
+    - source: scope_coverage
+      target: glossary_first
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.scope_defined == true"
+    - source: glossary_first
+      target: segment_localize
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.glossary_locked == true"
+    - source: segment_localize
+      target: idiom_pass
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.segments_translated == true"
+    - source: idiom_pass
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.idioms_resolved == true"
+    - source: pre_gate
+      target: END
+      type: direct
 
 traceability:
   tu_lifecycle:
@@ -62,11 +72,10 @@ traceability:
 
 context:
   required_artifacts:
-    - cold_snapshot
-    - style_addendum
-  optional_artifacts:
-    - glossary_slice
-    - canon_pack
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: style_addendum
+      state_key: hot_sot.style
 
 handoffs:
   - target: binding_run
@@ -93,7 +102,16 @@ protocol_flow:
       description: "Standard quality gate check"
 
 success_criteria:
-  - Register and tone feel native; PN voice preserved
-  - Links/cross-refs resolve; choice labels remain distinct
-  - Glossary stable; idioms handled; motifs resonate
-  - No spoilers or internal labels leaked; accessibility text localized
+  custom_checks:
+    - name: native_register
+      expression: "state.register_native == true"
+      error_message: "Register and tone feel native; PN voice preserved"
+    - name: links_resolve
+      expression: "state.links_resolve == true"
+      error_message: "Links/cross-refs resolve; choice labels remain distinct"
+    - name: glossary_stable
+      expression: "state.glossary_stable == true"
+      error_message: "Glossary stable; idioms handled; motifs resonate"
+    - name: no_leaks
+      expression: "state.no_leaks == true"
+      error_message: "No spoilers or internal labels leaked; accessibility text localized"

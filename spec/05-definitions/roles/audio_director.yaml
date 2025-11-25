@@ -6,7 +6,7 @@ id: audio_director
 
 identity:
   name: Audio Director
-  abbreviation: AuD
+  abbreviation: AUDR
   charter_ref: spec/01-roles/charters/audio_director.md
   dormancy_policy: optional
   aliases:
@@ -199,7 +199,7 @@ constraints:
     can_see_hot: true
     can_see_spoilers: true
     pn_safe: true
-    spoiler_hygiene_level: player_safe_output
+    spoiler_hygiene_level: player_safe_only
 
   traceability:
     requires_tu_linkage: true
@@ -227,7 +227,7 @@ raci:
 
 llm_config:
   provider: auto
-  model_tier: creative
+  model_tier: creative-writing
   temperature: 0.75
 
 metadata:
