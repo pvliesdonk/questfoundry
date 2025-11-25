@@ -153,6 +153,52 @@ class EvaluateQualityBar(BaseTool):
 
         return "skipped", f"unsupported schema_validation method {method}"
 
+    def _run_reference_resolution(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+        target_path = check.get("validator", {}).get("target", "")
+        values = self._extract_values(artifacts, target_path)
+        ids = {v.get("id") for v in values if isinstance(v, dict) and "id" in v}
+        referenced: list[str] = []
+        for v in values:
+            if isinstance(v, dict):
+                for key, val in v.items():
+                    if key.endswith("_ids") and isinstance(val, list):
+                        referenced.extend([x for x in val if isinstance(x, str)])
+        missing = [ref for ref in referenced if ref not in ids]
+        if missing:
+            return "fail", f"missing references: {missing}"
+        return "pass", ""
+
+    def _run_graph_analysis(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+        target_path = check.get("validator", {}).get("target", "")
+        values = self._extract_values(artifacts, target_path)
+        if not values:
+            return "skipped", "no target data for graph_analysis"
+        missing = []
+        for v in values:
+            if isinstance(v, dict):
+                if not v.get("choices") and not v.get("is_terminal"):
+                    missing.append(v.get("id", "unknown"))
+        if missing:
+            return "fail", f"graph nodes missing choices/terminal marker: {missing}"
+        return "pass", ""
+
+    def _run_custom(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+        validator = check.get("validator", {})
+        expr = validator.get("expression")
+        if not expr:
+            return "skipped", "no expression provided"
+        target_path = validator.get("target", "")
+        values = self._extract_values(artifacts, target_path)
+        safe_globals = {"len": len, "all": all, "any": any}
+        safe_locals = {"values": values}
+        try:
+            result = eval(expr, safe_globals, safe_locals)  # noqa: S307 limited scope
+            if result:
+                return "pass", ""
+            return "fail", "custom expression evaluated to False"
+        except Exception as exc:
+            return "fail", f"custom expression error: {exc}"
+
     def _extract_values(self, data: dict[str, Any], path: str) -> list[Any]:
         if not path:
             return [data]
