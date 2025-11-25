@@ -9,15 +9,8 @@ import json
 import logging
 import os
 from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
-
-try:
-    from importlib.resources import files
-except ImportError:
-    # Fallback for Python < 3.9
-    from importlib_resources import files
 
 from jinja2 import Template, TemplateError
 
@@ -25,6 +18,7 @@ from questfoundry.runtime.core.provider_manager import ProviderManager
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.models.role import RoleProfile
 from questfoundry.runtime.models.state import StudioState
+from questfoundry.runtime.plugins.tools.registry import get_tool_registry, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +44,7 @@ class NodeFactory:
         self._role_cache: dict[str, RoleProfile] = {}
         self.state_manager = state_manager  # For message tracing
         self.preferred_provider = preferred_provider  # Store for use in select_llm
+        self.tool_registry = get_tool_registry()
 
     def load_role(self, role_id: str) -> RoleProfile:
         """
@@ -93,209 +88,57 @@ class NodeFactory:
         return role.should_execute(state)
 
     def render_prompt(self, role: RoleProfile, state: StudioState) -> str:
-        """
-        Render prompt template with state context using Jinja2.
-
-        Steps:
-        1. Load template (file:// or inline)
-        2. Render with state context
-        3. Return rendered prompt
-
-        Args:
-            role: RoleProfile with prompt template
-            state: Current state for context
-
-        Returns:
-            Rendered prompt string
-
-        Raises:
-            FileNotFoundError: If template file doesn't exist
-            TemplateError: If template rendering fails
-        """
+        """Render prompt from inline template or prompt_content; no external templates."""
         prompt_config = role.prompt
         template_str = prompt_config.get("template", "")
         template_engine = prompt_config.get("template_engine", "jinja2")
+        prompt_content = role.raw.get("prompt_content", {})
 
-        # Check if role uses new thin template architecture
-        # Roles with prompt_content in YAML use thin runtime templates
-        has_prompt_content = bool(role.raw.get("prompt_content"))
+        # Build default prompt when no template is provided
+        if not template_str:
+            core = prompt_content.get("core_mandate", "")
+            principles = prompt_content.get("operating_principles", [])
+            task_guidance = prompt_content.get("task_guidance", "")
+            lines = [f"# Role: {role.name}"]
+            if core:
+                lines.append(core.strip())
+            if principles:
+                lines.append("## Operating Principles")
+                for p in principles:
+                    name = p.get("name", "")
+                    desc = p.get("description", "")
+                    lines.append(f"- {name}: {desc}")
+            if task_guidance:
+                lines.append("## Your Task")
+                lines.append(task_guidance.strip())
+            return "\n".join(lines).strip()
 
-        if has_prompt_content:
-            # New architecture: Use thin template from runtime/templates/
-            runtime_template_path = (
-                Path(__file__).parent.parent / "templates" / f"{role.id}.j2"
-            )
-
-            if runtime_template_path.exists():
-                try:
-                    template_str = runtime_template_path.read_text(encoding="utf-8")
-                    logger.debug(f"Using thin template for {role.id} with prompt_content from YAML")
-                except Exception as e:
-                    logger.warning(f"Failed to load thin template for {role.id}: {e}")
-                    # Fall through to old template logic
-                    has_prompt_content = False
-            else:
-                logger.warning(f"Role {role.id} has prompt_content but no thin template at {runtime_template_path}")
-                has_prompt_content = False
-
-        if not template_str and not has_prompt_content:
-            logger.warning(f"No prompt template for role {role.id}")
-            return f"Execute role: {role.name}"
-
-        # Load template (old architecture fallback)
-        if template_str.startswith("file://"):
-            # File-based template
-            template_path = template_str[7:]  # Remove "file://"
-            template_str = None
-
-            # Strategy 1: Try monorepo spec directory (development)
-            if not Path(template_path).is_absolute():
-                # Navigate up from lib/runtime/src/questfoundry/runtime/core/node_factory.py
-                # to find spec/ directory at monorepo root
-                # node_factory.py → core/ → runtime/ → questfoundry/ → src/ → runtime/ → lib/ → monorepo root
-                monorepo_spec = (
-                    Path(__file__).parent.parent.parent.parent.parent.parent.parent
-                    / "spec"
-                    / "05-definitions"
-                    / template_path
-                )
-                if monorepo_spec.exists():
-                    try:
-                        template_str = monorepo_spec.read_text(encoding="utf-8")
-                        logger.debug(f"Loaded template from monorepo: {monorepo_spec}")
-                    except Exception as e:
-                        logger.warning(f"Failed to read template from monorepo: {e}")
-
-            # Strategy 2: Try downloaded spec (cached from GitHub releases)
-            if template_str is None:
-                try:
-                    from questfoundry.runtime.core.spec_fetcher import get_cached_spec_path
-
-                    cached_spec = get_cached_spec_path()
-                    if cached_spec:
-                        # Remove leading ../ from template path
-                        clean_path = template_path.lstrip("../")
-                        downloaded_template = cached_spec / "05-definitions" / clean_path
-                        if downloaded_template.exists():
-                            template_str = downloaded_template.read_text(encoding="utf-8")
-                            logger.debug(f"Loaded template from downloaded spec: {clean_path}")
-                except Exception as e:
-                    logger.debug(f"Failed to load from downloaded spec: {e}")
-
-            # Strategy 3: Try bundled resources (production)
-            if template_str is None:
-                try:
-                    # Templates are bundled in resources/definitions/templates/
-                    resource_path = template_path.lstrip("../")  # Remove leading ../
-                    if resource_path.startswith("templates/"):
-                        resource_path = resource_path[10:]  # Remove 'templates/' prefix
-
-                    resource = files(
-                        "questfoundry.runtime.resources.definitions.templates"
-                    ).joinpath(resource_path)
-                    template_str = resource.read_text(encoding="utf-8")
-                    logger.debug(f"Loaded template from bundled resources: {resource_path}")
-                except Exception as e:
-                    logger.debug(f"Failed to load from bundled resources: {e}")
-
-            # Strategy 4: Fallback - use system prompt only
-            if template_str is None:
-                logger.warning(
-                    f"Template not found via any method, using fallback for role {role.id}"
-                )
-                # Return system prompt from role config if available
-                system_prompt = role.model_config.get("system_prompt_prefix", "")
-                if system_prompt:
-                    return system_prompt
-                return f"Execute role: {role.name}"
-
-        # Render template
-        if template_engine == "jinja2":
-            try:
-                template = Template(template_str)
-
-                # Prepare context
-                # Build tu_scope object from state
-                tu_scope = {
-                    "id": state.get("tu_id", ""),
-                    "slice": state.get("loop_context", {}).get("slice", "full_work"),
-                    "loop": state.get("loop_id", ""),
-                    "deliverables": state.get("loop_context", {}).get("deliverables", []),
-                    "timebox_minutes": state.get("loop_context", {}).get("timebox_minutes"),
-                    "mode": state.get("loop_context", {}).get("mode", "workshop"),
-                }
-
-                # Build snapshot objects from state
-                from datetime import datetime
-
-                current_time = datetime.utcnow().isoformat() + "Z"
-
-                current_snapshot = {
-                    "id": state.get("snapshot_ref")
-                    or f"SNAP-{state.get('tu_id', 'unknown')}-current",
-                    "timestamp": state.get("updated_at", current_time),
-                    "tu_id": state.get("tu_id", ""),
-                    "lifecycle": state.get("tu_lifecycle", ""),
-                }
-
-                last_snapshot = {
-                    "id": state.get("snapshot_ref") or f"SNAP-{state.get('tu_id', 'unknown')}-last",
-                    "timestamp": state.get("created_at", current_time),
-                    "tu_id": state.get("tu_id", ""),
-                    "lifecycle": state.get("tu_lifecycle", ""),
-                }
-
-                # Extract hot_sot data for template variables
-                hot_sot = state.get("hot_sot", {})
-                cold_sot = state.get("cold_sot", {})
-
-                context = {
-                    "role": role,  # Full role object for thin templates (identity + prompt_content)
-                    "tu_id": state.get("tu_id", ""),
-                    "tu_lifecycle": state.get("tu_lifecycle", ""),
-                    "current_node": state.get("current_node", ""),
-                    "loop_context": state.get("loop_context", {}),
-                    "artifacts": state.get("artifacts", {}),  # Legacy, for debug
-                    "hot_sot": hot_sot,  # Full hot SoT
-                    "cold_sot": cold_sot,  # Full cold SoT
-                    "quality_bars": state.get("quality_bars", {}),
-                    "messages": state.get("messages", []),
-                    "snapshot_ref": state.get("snapshot_ref"),
-                    "error": state.get("error"),
-                    "role_id": role.id,
-                    "role_name": role.name,
-                    # Template-expected variables from hot_sot
-                    "section_briefs": hot_sot.get("section_briefs", []),
-                    "style_addendum": hot_sot.get("style_notes"),
-                    "lore_summaries": hot_sot.get("lore_notes"),
-                    "codex_entries": cold_sot.get("codex", {}),
-                    # Legacy variables
-                    "tu_scope": tu_scope,
-                    "current_snapshot": current_snapshot,
-                    "last_snapshot": last_snapshot,
-                    "current_tu": {  # For showrunner template
-                        "id": state.get("tu_id", ""),
-                        "slice": tu_scope["slice"],
-                        "loop": tu_scope["loop"],
-                        "status": state.get("tu_lifecycle", ""),
-                        "deliverables": tu_scope["deliverables"],
-                        "roles_awake": [],  # TODO: track active roles
-                        "timebox_minutes": tu_scope.get("timebox_minutes"),
-                        "risks": [],  # TODO: track risks
-                    },
-                    "customer_directive": state.get("loop_context", {}).get("customer_request", ""),
-                }
-
-                rendered = template.render(**context)
-                return rendered
-
-            except TemplateError as e:
-                logger.error(f"Template rendering error in role {role.id}: {e}")
-                raise
-
-        else:
+        if template_engine != "jinja2":
             logger.warning(f"Unknown template engine: {template_engine}")
             return template_str
+
+        try:
+            template = Template(template_str)
+            hot_sot = state.get("hot_sot", {})
+            cold_sot = state.get("cold_sot", {})
+            tu_scope = {
+                "id": state.get("tu_id", ""),
+                "loop": state.get("loop_id", ""),
+                "context": state.get("loop_context", {}),
+            }
+            context = {
+                "role": role.raw,
+                "prompt_content": prompt_content,
+                "state": state,
+                "hot_sot": hot_sot,
+                "cold_sot": cold_sot,
+                "tu_scope": tu_scope,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            return template.render(**context)
+        except TemplateError as e:
+            logger.error(f"Template rendering error in role {role.id}: {e}")
+            raise
 
     def extract_artifacts(self, role: RoleProfile, llm_output: str, tu_id: str) -> dict[str, Any]:
         """
@@ -501,6 +344,14 @@ class NodeFactory:
         """
         # Load role once
         role = self.load_role(role_id)
+        role_tools: list[Tool] = []
+        for tool_def in role.tools:
+            tool_name = tool_def.get("name") if isinstance(tool_def, dict) else str(tool_def)
+            tool = self.tool_registry.get_tool(tool_name)
+            if tool:
+                role_tools.append(tool)
+            else:
+                logger.warning(f"Tool not found for role {role.id}: {tool_name}")
 
         def role_node(state: StudioState) -> dict[str, Any]:
             """Execute role and update state.
@@ -612,9 +463,12 @@ class NodeFactory:
                         # Re-raise so the caller can decide whether to abort or retry
                         raise
                 else:
-                    # Service type - tool-only execution (not yet implemented)
-                    result = f"[{role.name}] Service execution (tools not yet implemented)"
-                    logger.warning(f"Service-type role {role.id} executed without tools")
+                    # Service type - attempt to run declared tools (metadata only for now)
+                    result = {
+                        "tools_declared": [t.tool_id for t in role_tools],
+                        "note": "Service role executed without LLM; tool invocations are not yet orchestrated.",
+                    }
+                    logger.info(f"Service-type role {role.id} returning tool metadata")
 
                 # 4. Extract artifacts from LLM output
                 extracted_artifacts = self.extract_artifacts(role, result, state["tu_id"])
