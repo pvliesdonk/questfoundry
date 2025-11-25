@@ -1,7 +1,8 @@
 # Codex Pack — Encyclopedia Update Bundle (Layer 2)
 
-> **Use:** A set of related codex entries plus crosslink map and coverage notes. Delivered as a
-> cohesive update to the in-game encyclopedia.
+> **Use:** Batched deliverable for Codex Expansion loop. Groups related encyclopedia entries with
+> coverage metrics, taxonomy updates, and crosslink map. Mirrors `canon_pack` and `language_pack`
+> structure for atomic merge/revert.
 >
 > **Producer:** Codex Curator
 > **Consumer:** Book Binder (export), Player-Narrator (performance), Gatekeeper (presentation validation)
@@ -11,6 +12,7 @@
 ## Normative references
 
 - Bars & hygiene: `../../00-north-star/QUALITY_BARS.md` (§Presentation) · `../../00-north-star/SPOILER_HYGIENE.md`
+- Loop: `../../00-north-star/LOOPS/codex_expansion.md`
 - Role charter: `../../01-roles/charters/codex_curator.md`
 - Individual entries: `./codex_entry.md`
 
@@ -18,13 +20,13 @@
 
 ## Purpose
 
-Codex packs group related encyclopedia entries that logically belong together:
+Codex packs provide **batched, atomic deliverables** for Codex Expansion:
 - **Thematic clusters** (e.g., "Maritime Guild Organizations")
-- **Character sets** (e.g., "Foreman and Crew NPCs")
-- **Location groups** (e.g., "Lighthouse Complex")
+- **Slice completeness** (e.g., "Act I Terms - 100% coverage")
+- **Atomic merging** (entire pack approved/rejected as unit)
 
-Packs include **crosslink map** (how entries reference each other) and **coverage notes** (what's
-included vs deferred).
+Aligns Codex Curator with Lore Weaver (`canon_pack`) and Translator (`language_pack`) patterns,
+enabling batch review and single-unit revert if needed.
 
 ---
 
@@ -44,42 +46,78 @@ Status: draft | review | approved | cold
 
 ---
 
-## 1) Entry List
+## 1) Coverage Report
+
+**Purpose:** Assert completeness for Gatekeeper review. Shows what this pack achieves for its slice.
+
+**Terms Identified:** <N> terms found in manuscript slice
+**Terms Defined:** <N> terms included in this pack
+**Coverage:** <N>% (<defined>/<identified>)
+**Completeness:** <complete | partial | initial>
+
+### Included
+
+Terms/concepts covered in this pack:
+- <term> — <brief note on scope or special handling>
+
+### Deferred (with reason)
+
+Terms intentionally skipped:
+- **<term>** — <reason: spoiler | not yet relevant | planned for Act II pack>
+
+### Gaps (need Lore input)
+
+Terms that need canon before defining:
+- **<term>** — <what's missing from canon; hook filed: HK-YYYYMMDD-NN>
+
+---
+
+## 2) Global Updates
+
+**Purpose:** Batch-level changes affecting the entire codex (not individual entries).
+
+### Taxonomy Changes
+
+New categories or reorganizations:
+- <change description> (e.g., "Added 'Factions' category for political groups")
+
+### Navigation/Grouping
+
+Changes to codex structure or TOC:
+- <change description> (e.g., "Moved maritime terms under 'Waterfront' parent group")
+
+### Disambiguation
+
+New disambiguation pages or redirects:
+- <term> → <disambiguates between: option A | option B>
+
+---
+
+## 3) Entries
 
 List of all codex entries in this pack:
 
 **Format per entry:**
 - **ID:** codex_<term_id>
 - **Title:** <entry title>
-- **Category:** <character | location | organization | concept | item>
+- **Category:** <character | location | organization | concept | item | procedure>
 - **Status:** draft | approved
 - **File:** <path to entry markdown>
 
 ---
 
-## 2) Crosslink Map
+## 4) Crosslink Map
 
 How entries in this pack reference each other and external entries:
 
-**Format:**
+**Internal (within pack):**
 - **From → To:** <entry ID> → <target ID>
 - **Link type:** see-also | prerequisite | parent-child
 - **Bidirectional:** yes | no
 
----
-
-## 3) Coverage Notes
-
-What's included in this pack and what's intentionally deferred:
-
-**Included:**
-- <list of concepts covered>
-
-**Deferred (with reason):**
-- <concept> — <reason: spoiler | not yet relevant | planned for later pack>
-
-**Gaps (need Lore input):**
-- <concept> — <what's missing from canon>
+**External (to other packs):**
+- **From → To:** <entry ID> → <target ID in other pack>
+- **Pack:** <target pack name>
 
 ---
 
@@ -87,7 +125,7 @@ What's included in this pack and what's intentionally deferred:
 
 ```markdown
 Codex Pack — Maritime Organizations
-Theme: Adventure Bay waterfront governance and guilds
+Theme: Adventure Bay waterfront governance and guilds (Act I slice)
 Author: Codex Curator
 TU: TU-2025-11-24-CC01
 Edited: 2025-11-24
@@ -96,7 +134,44 @@ Status: approved
 
 ---
 
-## Entry List
+## 1) Coverage Report
+
+**Terms Identified:** 7 maritime terms found in Act I manuscript
+**Terms Defined:** 4 terms included in this pack
+**Coverage:** 57% (4/7)
+**Completeness:** partial (Act I initial pass)
+
+### Included
+- Maritime Guild — player-safe structure and purpose
+- Lighthouse Keeper — role and responsibilities (spoiler-masked backstory)
+- Dock Foreman — personality and function (spoiler-masked guilt)
+- Guild Emblem — appearance and significance
+
+### Deferred (with reason)
+- **Harbor Master** — Not yet introduced in manuscript (planned for Act II pack)
+- **Guild Initiation Ritual** — Spoiler for current act (will reveal in Act III pack)
+
+### Gaps (need Lore input)
+- **Guild founding date** — Lore needs to establish canonical timeline (hook filed: HK-20251124-07)
+
+---
+
+## 2) Global Updates
+
+### Taxonomy Changes
+- Added "Organizations" category (previously all terms were under "Locations")
+- Separated "Character" from "NPC" (Lighthouse Keeper, Foreman are named NPCs)
+
+### Navigation/Grouping
+- Created "Maritime" parent group; moved dock-related terms under it
+- All entries now have "See also: Maritime Guild" for thematic coherence
+
+### Disambiguation
+- None (no ambiguous terms in this pack)
+
+---
+
+## 3) Entries
 
 1. **codex_maritime_guild**
    - Title: "Maritime Guild"
@@ -124,36 +199,17 @@ Status: approved
 
 ---
 
-## Crosslink Map
+## 4) Crosslink Map
 
-### Internal (within pack)
+**Internal (within pack):**
 - codex_maritime_guild → codex_guild_emblem (see-also) — bidirectional: yes
 - codex_maritime_guild → codex_lighthouse_keeper (see-also) — bidirectional: yes
 - codex_foreman → codex_maritime_guild (parent-child) — bidirectional: no
 - codex_guild_emblem → codex_maritime_guild (prerequisite) — bidirectional: no
 
-### External (to other packs)
-- codex_lighthouse_keeper → codex_lighthouse_complex (see-also, from "Locations" pack)
-- codex_foreman → codex_dock_area (see-also, from "Locations" pack)
-
----
-
-## Coverage Notes
-
-### Included
-- Maritime Guild structure and purpose (player-safe level)
-- Lighthouse Keeper role and responsibilities
-- Dock Foreman personality and function
-- Guild Emblem appearance and significance
-
-### Deferred
-- **Harbor Master** — Not yet introduced in manuscript (planned for Act II)
-- **Guild Initiation Ritual** — Spoiler for current act (will reveal in Act III)
-- **Historical Guild Conflict** — Complex backstory; deferred until player requests lore depth
-
-### Gaps (Need Lore Input)
-- **Guild founding date** — Lore needs to establish canonical timeline
-- **Emblem variations** — Are there different emblems for ranks? (filed hook HK-20251124-07)
+**External (to other packs):**
+- codex_lighthouse_keeper → codex_lighthouse_complex (see-also) — Pack: "Locations Act I"
+- codex_foreman → codex_dock_area (see-also) — Pack: "Locations Act I"
 
 ```
 
