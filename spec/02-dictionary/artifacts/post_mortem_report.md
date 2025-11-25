@@ -20,6 +20,7 @@
 ## Purpose
 
 Post-Mortem Reports document **retrospective analysis** after major milestones to:
+
 - **Extract actionable lessons** from successes and failures
 - **Identify process improvements** to reduce recurring issues
 - **Track quality bar trends** over time
@@ -48,6 +49,7 @@ Participants: <roles who contributed>
 Quantitative data from completed TUs:
 
 **Gate Pass Rates:**
+
 - Pass: <N>% (<count> TUs)
 - Conditional Pass: <N>% (<count> TUs)
 - Block: <N>% (<count> TUs)
@@ -65,20 +67,24 @@ Quantitative data from completed TUs:
 | Player Safety   | <count>      | <count>   | <N>%       |
 
 **Rework Cycles:**
+
 - Average cycles per artifact type: <table or list>
 - Highest rework: <artifact type> (<N> cycles average)
 
 **Cycle Time:**
+
 - Average TU open → merge: <N> days
 - Target: <N> days
 - Variance: <+/- N> days
 
 **Hook Triage Patterns:**
+
 - Acceptance rate: <N>%
 - Deferral rate: <N>%
 - Rejection rate: <N>%
 
 **Dormant Role Activations:**
+
 - <Role>: <N> times
 - <Role>: <N> times
 
@@ -89,6 +95,7 @@ Quantitative data from completed TUs:
 Successes, wins, and effective practices (3-5 items):
 
 **Format per item:**
+
 - **<Practice or achievement>**
   - _Impact:_ <what improved or succeeded>
   - _Evidence:_ <metrics, anecdotes, or observations>
@@ -101,6 +108,7 @@ Successes, wins, and effective practices (3-5 items):
 Pain points, blockers, and inefficiencies (3-5 items):
 
 **Format per item:**
+
 - **<Problem or pain point>**
   - _Impact:_ <what failed or suffered>
   - _Evidence:_ <metrics, anecdotes, or observations>
@@ -114,6 +122,7 @@ Pain points, blockers, and inefficiencies (3-5 items):
 Unexpected insights, emergent patterns (2-3 items):
 
 **Format per item:**
+
 - **<Discovery or insight>**
   - _Context:_ <what led to discovery>
   - _Implication:_ <what this means for future work>
@@ -132,6 +141,7 @@ Concrete next steps with owners and deadlines:
 | <specific action>               | <role>     | YYYY-MM-DD  | <observable change>              | Low      | completed   |
 
 **Action Item Categories:**
+
 - **Process:** Changes to loops, workflows, or handoffs
 - **Documentation:** Updates to guidance, examples, or templates
 - **Tooling:** Changes to schemas, validation, or automation
@@ -144,6 +154,7 @@ Concrete next steps with owners and deadlines:
 Documentation/guidance updated as result of this retrospective:
 
 **Format per update:**
+
 - **<Layer/file updated>**
   - _Change:_ <what was added, removed, or clarified>
   - _Rationale:_ <why this improves the process>
@@ -154,6 +165,7 @@ Documentation/guidance updated as result of this retrospective:
 ## 7) Next Review
 
 **Next Scheduled Post-Mortem:**
+
 - **Date:** <YYYY-MM-DD or milestone>
 - **Scope:** <next milestone or period>
 - **Action Item Review:** Check status of action items from this report
@@ -308,6 +320,7 @@ Participants: Showrunner, Gatekeeper, Lore Weaver, Scene Smith, Plotwright, Styl
 ## Hot vs Cold
 
 **Hot only** — Post-Mortem Reports are working documents:
+
 - Archived in `docs/post_mortems/` for historical reference
 - Used to track process improvements over time
 - Not exported to players

@@ -44,6 +44,7 @@ Status: ✅ All resolved | ⚠️ Warnings | ❌ Errors
 List of all manuscript section anchors with metadata:
 
 **Format:**
+
 - **Anchor:** anchor<NNN>
 - **Title:** <section title>
 - **File:** <relative path>
@@ -58,6 +59,7 @@ List of all manuscript section anchors with metadata:
 All choice-to-section links:
 
 **Format:**
+
 - **From:** anchor<NNN>
 - **Choice text:** "<truncated choice text>"
 - **Target:** anchor<MMM>
@@ -70,6 +72,7 @@ All choice-to-section links:
 All codex-to-codex and manuscript-to-codex links:
 
 **Format:**
+
 - **From:** <source anchor or entry ID>
 - **Link text:** "<term>"
 - **Target:** codex_<term_id>
@@ -82,6 +85,7 @@ All codex-to-codex and manuscript-to-codex links:
 Summary of issues requiring attention:
 
 **Format:**
+
 - **Type:** broken_link | orphaned_anchor | duplicate_anchor | terminal_unmarked
 - **Location:** <anchor or file>
 - **Description:** <brief explanation>
@@ -195,6 +199,7 @@ Status: ❌ Errors found
 ## Hot vs Cold
 
 **Generated during export** — Anchor map is a build artifact:
+
 - Created by Book Binder during view assembly
 - Included in `view_log.md` or standalone for QA
 - **Player-safe** (no spoilers; structural only)

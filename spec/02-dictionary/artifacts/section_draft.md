@@ -21,12 +21,14 @@
 
 Section drafts are the **working prose artifacts** produced during Story Spark and Style Tune-up
 loops. They contain:
+
 - **Prose** — narrative beats structured as array of paragraphs
 - **Choices** — player-facing options with targets (embedded, not separate)
 - **Lead Image** — sensory anchor string for illustrator handoff
 - **Gates** — diegetic conditions decoupled from choice presentation
 
 This structure enables:
+
 - **Prose iteration** without touching topology
 - **Choice clarity** validation (contrastive, legible)
 - **Gate logic separation** (PN can phrase in-world)
@@ -57,6 +59,7 @@ Brief: <link to plotwright's section brief>
 **Format:** Single sentence describing atmosphere, composition, or key visual element.
 
 **Example:**
+
 ```markdown
 Foreman stands at dock edge, back to player, sunset casting long shadow across weathered planks;
 Maritime Guild emblem visible on jacket.
@@ -71,6 +74,7 @@ Maritime Guild emblem visible on jacket.
 **Format:** Array of prose blocks (paragraphs). Each block = one beat or micro-scene.
 
 **Example:**
+
 ```markdown
 ## 2) Prose
 
@@ -84,6 +88,7 @@ You consider your answer. The wrong words here could close doors you'll need lat
 ```
 
 **Style notes:**
+
 - Present tense (player immersion)
 - Second person ("you") per PN Principles
 - Sensory details for atmosphere
@@ -96,11 +101,13 @@ You consider your answer. The wrong words here could close doors you'll need lat
 **Purpose:** Player-facing options embedded in the section. Each choice has label + target.
 
 **Format:** Array of choice objects with:
+
 - `label` — player-facing text (contrastive, diegetic)
 - `target` — destination section anchor
 - `gates` — optional array of gate IDs that affect availability (not display logic)
 
 **Example:**
+
 ```markdown
 ## 3) Choices
 
@@ -122,6 +129,7 @@ You consider your answer. The wrong words here could close doors you'll need lat
 ```
 
 **Validation requirements:**
+
 - Labels are **contrastive** (differ in intent/tone, not just wording)
 - Labels are **diegetic** (in-world, no meta language)
 - Targets are valid section anchors
@@ -135,11 +143,13 @@ You consider your answer. The wrong words here could close doors you'll need lat
 these diegetically on player surfaces.
 
 **Format:** Array of gate objects with:
+
 - `id` — unique gate identifier (used in choices)
 - `condition` — diegetic check (what the world tests)
 - `qualification_path` — how player can qualify
 
 **Example:**
+
 ```markdown
 ## 4) Gates
 
@@ -165,6 +175,7 @@ these diegetically on player surfaces.
 ```
 
 **Anti-pattern prevention:**
+
 - No "meta gates" (e.g., "Locked: missing CODEWORD")
 - Gates check diegetic conditions only
 - Qualification paths are explicit and reachable
@@ -178,6 +189,7 @@ these diegetically on player surfaces.
 **Format:** Free-form notes for Gatekeeper, Binder, Illustrator, PN.
 
 **Example:**
+
 ```markdown
 ## 5) Notes
 
@@ -282,12 +294,14 @@ You consider your answer. The wrong words here could close doors you'll need lat
 ## Hot vs Cold
 
 ### Hot (Draft)
+
 - Work-in-progress prose
 - May contain TODOs and style notes
 - Gates may reference unimplemented conditions
 - Choices may not be fully contrastive
 
 ### Cold (Approved)
+
 - Gatekeeper-validated prose (Style, Presentation bars)
 - All gates validated (reachable, fair)
 - Choices are contrastive and legible

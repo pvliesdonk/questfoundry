@@ -21,6 +21,7 @@
 ## Purpose
 
 Spoiler hygiene notes document the **spoiler masking process** during Codex Expansion:
+
 - **Masked details** (what canon truth was hidden from player-safe entries)
 - **Safe phrasing used** (how codex entry presents information neutrally)
 - **Deferred entries** (entries skipped entirely due to spoil risk)
@@ -53,6 +54,7 @@ Deferred Entries: <count>
 Spoiler-level canon details that were **hidden** when creating player-safe codex entries:
 
 **Format per masked detail:**
+
 - **Entry:** <codex entry title or ID>
 - **Canon truth (spoiler):** <what the spoiler-level canon says>
 - **Safe phrasing (codex):** <what the player-safe entry says instead>
@@ -61,6 +63,7 @@ Spoiler-level canon details that were **hidden** when creating player-safe codex
 - **Risk if leaked:** <low | medium | high | catastrophic>
 
 **Masking techniques:**
+
 - **Neutral phrasing** — Replace judgmental/causal language with observation
 - **Vague timeframe** — "Years ago" instead of "Y-18 Dock 7 Fire"
 - **Omit causality** — Describe outcome without revealing cause
@@ -74,6 +77,7 @@ Spoiler-level canon details that were **hidden** when creating player-safe codex
 Entire codex entries **skipped** because defining them would spoil:
 
 **Format per deferred entry:**
+
 - **Term:** <term that needs entry>
 - **Why deferred:** <spoils twist | reveals hidden allegiance | exposes gate logic | timeline reveal>
 - **Canon context:** <spoiler-level summary of why term is risky>
@@ -88,6 +92,7 @@ Entire codex entries **skipped** because defining them would spoil:
 Entries flagged for **extra scrutiny** due to spoiler proximity:
 
 **Format per validation point:**
+
 - **Entry:** <codex entry title or ID>
 - **Concern:** <why this entry is high-risk for spoiler leaks>
 - **Specific phrases to verify:** <list of phrases Gatekeeper should check>
@@ -196,6 +201,7 @@ Deferred Entries: 1
 ## Hot vs Cold
 
 **Hot only** — Spoiler hygiene notes are working documents:
+
 - Contain spoiler-level canon details
 - Reference canon_pack (also Hot)
 - Not exported to players

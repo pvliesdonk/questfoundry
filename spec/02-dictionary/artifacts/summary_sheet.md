@@ -21,6 +21,7 @@
 ## Purpose
 
 Summary sheets provide **high-level overview** of Narration Dry-Run findings:
+
 - **Issue counts by type** (choice-ambiguity, gate-friction, nav-bug, etc.)
 - **Severity breakdown** (blocker, major, minor, polish)
 - **Recommended follow-up loops** (which loops should address which issues)
@@ -67,6 +68,7 @@ Breakdown of issues by category:
 | **TOTAL**            | N     | 100%       | B / M / m / p                                   |
 
 **Severity definitions:**
+
 - **Blocker (B):** Breaks player experience; must fix before merge
 - **Major (M):** Significant UX degradation; should fix before merge
 - **Minor (m):** Noticeable but not blocking; can defer to polish pass
@@ -79,6 +81,7 @@ Breakdown of issues by category:
 Which loops should address which issue types:
 
 **Format per loop:**
+
 - **Loop:** <loop name>
 - **Issue types:** <list of issue types this loop should address>
 - **Priority:** <high | medium | low>
@@ -86,6 +89,7 @@ Which loops should address which issue types:
 - **Notes:** <any coordination needs or dependencies>
 
 **Common mappings:**
+
 - **Style Tune-up:** tone-wobble, choice-ambiguity (phrasing), recap-needed
 - **Codex Expansion:** codex-invite (coverage gaps)
 - **Binding Run:** nav-bug, accessibility (format/export issues)
@@ -100,6 +104,7 @@ Which loops should address which issue types:
 If multilingual dry-run was performed:
 
 **Format per language:**
+
 - **Language:** <language code and name>
 - **Coverage:** <N>% of view translated
 - **Issues found:** <count>
@@ -114,6 +119,7 @@ If multilingual dry-run was performed:
 Issues that **must** be fixed before merge:
 
 **Format per blocker:**
+
 - **Issue ID:** <reference to pn_playtest_notes item>
 - **Type:** <issue type>
 - **Location:** <section anchor or path>
@@ -130,6 +136,7 @@ PN's recommendation on merge readiness:
 **Assessment:** <ready | needs revision | block>
 
 **Rationale:**
+
 - <Explanation based on issue counts, severity, and blocker status>
 
 **Estimated rework:** <hours or days if revision needed>
@@ -260,6 +267,7 @@ Overall Assessment: needs revision
 ## Hot vs Cold
 
 **Hot only** — Summary sheets are working documents:
+
 - Aggregate playtest findings for Showrunner planning
 - Track issue trends across dry-run sessions
 - Not exported to players

@@ -35,6 +35,7 @@ Brief: <section-brief-id>
 ### Body (Prose)
 
 Narrative paragraphs with:
+
 - **Opening beat** — establishes context/continuity
 - **Development** — story progression, sensory detail, diegetic cues
 - **Choice block** — 2+ contrastive options with clear intent
@@ -42,11 +43,13 @@ Narrative paragraphs with:
 ### Choices
 
 Each choice must:
+
 - Telegraph intent (concrete verb + object)
 - Link to target section via anchor
 - Maintain player-safe language (no internals, no codewords)
 
 Format:
+
 ```
 → [Choice text that shows intent] (#anchor-target)
 → [Alternative choice showing different path] (#anchor-alt)

@@ -20,6 +20,7 @@
 
 When QuestFoundry promises deterministic assets (e.g., "illustrations provided"), the determinism
 log ensures we can:
+
 1. Reproduce the exact asset if needed
 2. Generate variants (crops, color adjustments) from same source
 3. Document provenance for archival/legal purposes
@@ -179,6 +180,7 @@ Version: v1
 ## Hot vs Cold
 
 **Hot only** — Determinism logs never reach Cold or exports:
+
 - Stored in `hot/determinism_logs/`
 - Referenced during asset updates
 - Archived for legal/provenance purposes
@@ -190,6 +192,7 @@ Version: v1
 ### When required
 
 Determinism logs are **required** when:
+
 - Asset is promised in export (Determinism bar applies)
 - Asset may need variants (crops, palette shifts, duration edits)
 - Asset is AI-generated (for reproducibility and licensing clarity)
@@ -197,6 +200,7 @@ Determinism logs are **required** when:
 ### When optional
 
 Logs are **optional** for:
+
 - Purchased stock assets (license file sufficient)
 - One-time commissioned work with no variant plans
 - Placeholder assets marked as "temporary"

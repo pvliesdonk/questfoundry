@@ -112,6 +112,7 @@ Edited: 2025-11-24
 ## Hot vs Cold
 
 **Hot only** — Gateway maps are planning documents:
+
 - Used by Scene Smith for diegetic phrasing
 - Validated by Gatekeeper for reachability
 - Referenced by PN for in-world enforcement

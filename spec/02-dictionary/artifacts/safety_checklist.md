@@ -19,6 +19,7 @@
 ## Purpose
 
 Audio safety checklist documents potential concerns for each audio cue:
+
 - **Intensity:** Loudness, dynamic range, sudden changes
 - **Onset:** Abruptness, startle risk
 - **Duration:** Length, potential fatigue
@@ -86,6 +87,7 @@ Created: <YYYY-MM-DD>
 **Safety:** ✅ Safe for general use | ⚠️ Use with caution | ⛔ Requires warning
 
 **Recommended actions:**
+
 - [ ] Include content warning (if caution/warning)
 - [ ] Provide volume control option
 - [ ] Offer audio-off alternative
@@ -218,11 +220,13 @@ Created: 2025-11-24
 ## Hot vs Cold
 
 **Included in Cold** (when applicable):
+
 - Safety rating and recommended actions
 - Text equivalents/captions
 - Content warnings
 
 **Hot only**:
+
 - Detailed technical parameters
 - Production notes
 

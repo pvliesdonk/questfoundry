@@ -22,6 +22,7 @@ Meeting minutes formalize the **Customer Interface** loop output. They transform
 conversations ("I want more mystery at the lighthouse") into actionable studio work.
 
 Key functions:
+
 - **Capture intent** — preserve Customer's vision and priorities
 - **Extract directives** — translate requests into TU candidates
 - **Record clarifications** — document what was asked, what was answered
@@ -48,11 +49,13 @@ Context: <project phase, milestone, or trigger>
 **Purpose:** Capture the essence of the conversation in free-form prose.
 
 **Format:**
+
 - 1-3 paragraphs summarizing the discussion
 - Customer's tone and priorities ("excited about X, concerned about Y")
 - Key themes or recurring topics
 
 **Example:**
+
 ```markdown
 Customer expressed strong interest in deepening the lighthouse mystery. They feel the foreman's
 backstory is "flat" and want more emotional weight. Also raised concerns about pacing—Act I feels
@@ -69,6 +72,7 @@ the Maritime Guild concept; wants to expand it into Act II.
 **Format:** List of questions with Customer's responses.
 
 **Example:**
+
 ```markdown
 - **Q:** Should the foreman's backstory be revealed in Act I or Act II?
   - **A:** Act I, but subtly—player should suspect, not know.
@@ -89,6 +93,7 @@ the Maritime Guild concept; wants to expand it into Act II.
 **Format:** List of directives with owner, urgency, and scope.
 
 **Example:**
+
 ```markdown
 1. **Deepen foreman backstory (Act I)**
    - Owner: Lore Weaver (canon), Scene Smith (prose)
@@ -118,6 +123,7 @@ the Maritime Guild concept; wants to expand it into Act II.
 **Format:** Checklist of immediate actions.
 
 **Example:**
+
 ```markdown
 - [ ] File 3 hooks from directives (foreman backstory, breathing room hub, Guild lore)
 - [ ] Schedule Hook Harvest TU for this week
@@ -135,6 +141,7 @@ the Maritime Guild concept; wants to expand it into Act II.
 **Format:** List of open items with owners and target resolution date.
 
 **Example:**
+
 ```markdown
 - **Tone for Maritime Guild lore** — Customer wants "grounded," but does that mean historical
   realism or diegetic plausibility? (Owner: Showrunner, next session)
@@ -225,6 +232,7 @@ Tone: Excited but slightly anxious about timeline. Willing to delay Act I lock i
 ## Hot vs Cold
 
 **Hot only** — Meeting minutes are internal planning documents:
+
 - Not exported to players
 - Contain Customer-specific details
 - May reference spoilers or unfinished work

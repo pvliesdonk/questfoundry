@@ -19,6 +19,7 @@
 ## Purpose
 
 The glossary is a **lightweight term list** for operational use:
+
 - **Translators** need quick reference for consistent term choices
 - **Player-Narrator** needs pronunciation and emphasis guidance
 - **Style Lead** uses for voice consistency checks
@@ -163,11 +164,13 @@ Languages: Dutch (primary), English (reference)
 ## Hot vs Cold
 
 **Included in Cold** (when applicable):
+
 - Glossary exported with language packs
 - Updated as new terms introduced
 - Player-safe only
 
 **Hot supplements:**
+
 - Internal code names or development labels
 - Spoiler terms (not yet revealed to player)
 

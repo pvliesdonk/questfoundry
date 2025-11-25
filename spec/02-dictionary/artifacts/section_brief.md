@@ -49,12 +49,14 @@ alternative route."
 > 2-4 story moments that must appear in the prose (sequence matters).
 
 **Format:**
+
 1. [Opening beat - continuity/context]
 2. [Development beat - tension/discovery]
 3. [Optional: complication beat]
 4. [Setup for choice block]
 
 **Example:**
+
 1. Chase and crew arrive at lighthouse door
 2. Door is locked; key symbol visible but unfamiliar
 3. Skye spots alternate path around the rocks (risky)
@@ -67,12 +69,14 @@ alternative route."
 > Describe what each choice represents, with expected targets and differentiating outcomes.
 
 **Format per choice:**
+
 - **Intent:** <clear verb + object>
 - **Target:** anchor<NNN>
 - **Outcome difference:** <how this path differs from siblings>
 - **Gate (if any):** <diegetic condition; empty if ungated>
 
 **Example:**
+
 - **Intent:** Search for the key
   - **Target:** anchor005
   - **Outcome:** Slower but safer; leads to foreman encounter
@@ -100,6 +104,7 @@ Foreman may have information."
 > What needs clarification from Lore, Style, or Curator before Scene drafts?
 
 **Example:**
+
 - [ ] Lore: What's the key symbol meaning? (Canonical or local legend?)
 - [ ] Curator: Should "lighthouse keeper" get a codex anchor?
 - [ ] Style: Tone for risk descriptions (playful vs cautionary)?
@@ -109,12 +114,14 @@ Foreman may have information."
 ## 6) Constraints & Notes
 
 Optional section for:
+
 - **Continuity:** References to prior sections/choices
 - **Accessibility:** Specific needs (alt text opportunities, content warnings)
 - **Art/Audio cues:** Moments that benefit from illustration/sound
 - **Micro-context:** When convergence requires immediate reflection
 
 **Example:**
+
 - If arriving from anchor003 (rushed path), open with breathlessness/urgency
 - Art opportunity: lighthouse door close-up with key symbol
 - Audio cue: waves crashing (intensity based on weather state)
@@ -126,6 +133,7 @@ Optional section for:
 ### Hot only
 
 Section briefs remain in **Hot** as working documents:
+
 - Guide for Scene Smith during drafting
 - Reference for Style/Lore when reviewing sections
 - Not exported to players or Cold

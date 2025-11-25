@@ -21,6 +21,7 @@
 ## Purpose
 
 Codex packs provide **batched, atomic deliverables** for Codex Expansion:
+
 - **Thematic clusters** (e.g., "Maritime Guild Organizations")
 - **Slice completeness** (e.g., "Act I Terms - 100% coverage")
 - **Atomic merging** (entire pack approved/rejected as unit)
@@ -58,16 +59,19 @@ Status: draft | review | approved | cold
 ### Included
 
 Terms/concepts covered in this pack:
+
 - <term> — <brief note on scope or special handling>
 
 ### Deferred (with reason)
 
 Terms intentionally skipped:
+
 - **<term>** — <reason: spoiler | not yet relevant | planned for Act II pack>
 
 ### Gaps (need Lore input)
 
 Terms that need canon before defining:
+
 - **<term>** — <what's missing from canon; hook filed: HK-YYYYMMDD-NN>
 
 ---
@@ -79,16 +83,19 @@ Terms that need canon before defining:
 ### Taxonomy Changes
 
 New categories or reorganizations:
+
 - <change description> (e.g., "Added 'Factions' category for political groups")
 
 ### Navigation/Grouping
 
 Changes to codex structure or TOC:
+
 - <change description> (e.g., "Moved maritime terms under 'Waterfront' parent group")
 
 ### Disambiguation
 
 New disambiguation pages or redirects:
+
 - <term> → <disambiguates between: option A | option B>
 
 ---
@@ -98,6 +105,7 @@ New disambiguation pages or redirects:
 List of all codex entries in this pack:
 
 **Format per entry:**
+
 - **ID:** codex_<term_id>
 - **Title:** <entry title>
 - **Category:** <character | location | organization | concept | item | procedure>
@@ -111,11 +119,13 @@ List of all codex entries in this pack:
 How entries in this pack reference each other and external entries:
 
 **Internal (within pack):**
+
 - **From → To:** <entry ID> → <target ID>
 - **Link type:** see-also | prerequisite | parent-child
 - **Bidirectional:** yes | no
 
 **External (to other packs):**
+
 - **From → To:** <entry ID> → <target ID in other pack>
 - **Pack:** <target pack name>
 
@@ -218,11 +228,13 @@ Status: approved
 ## Hot vs Cold
 
 ### Hot (Draft)
+
 - Work-in-progress entries
 - May contain TODOs and gaps
 - Crosslinks may be incomplete
 
 ### Cold (Approved)
+
 - Gatekeeper-validated entries
 - All crosslinks resolved
 - Coverage complete (or gaps documented)

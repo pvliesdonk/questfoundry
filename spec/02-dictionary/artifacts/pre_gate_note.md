@@ -19,6 +19,7 @@
 ## Purpose
 
 Pre-gate notes are **lightweight, fast feedback** given during TU development:
+
 - **Catch obvious failures early** (before full drafting)
 - **Suggest quick wins** (simple fixes that improve bar compliance)
 - **Avoid wasted effort** (don't write prose for a structurally broken topology)
@@ -45,6 +46,7 @@ Status: ✅ Looks good | ⚠️ Minor concerns | 🚧 Needs work
 ## Quick Assessment
 
 Brief summary of overall impression:
+
 - What's working well
 - What needs attention
 - Priority fixes
@@ -56,6 +58,7 @@ Brief summary of overall impression:
 If specific bars need attention, note them:
 
 ### [Bar Name]
+
 - **Concern:** <brief description>
 - **Quick win:** <simplest fix>
 - **Can defer?** yes | no
@@ -152,6 +155,7 @@ starts writing.
 ## Tone & Style
 
 Pre-gate notes should be:
+
 - **Friendly:** "Looks great!" not "You passed"
 - **Actionable:** Specific fixes, not vague concerns
 - **Prioritized:** Critical vs polish
@@ -162,6 +166,7 @@ Pre-gate notes should be:
 ## Hot vs Cold
 
 **Hot only** — Pre-gate notes are working documents:
+
 - Informal feedback during development
 - Not retained after TU closes (lessons go to post-mortem if needed)
 - Not exported
@@ -182,12 +187,14 @@ Pre-gate notes should be:
 ## When to Request Pre-Gate
 
 Good times to request pre-gate:
+
 - After topology/briefs drafted, before prose starts
 - When unsure if structure meets bars
 - After major restructure (sanity check)
 - When introducing new gateway pattern
 
 **Don't request pre-gate for:**
+
 - Prose polish (just draft it and get full gatecheck)
 - Minor tweaks (trust your judgment)
 - When you're confident it's ready (go straight to gatecheck)

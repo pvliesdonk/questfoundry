@@ -36,6 +36,7 @@ Version: <semantic version for major restructures>
 **Definition:** Sections with meaningful fan-out (3+ distinct routes)
 
 **Format per hub:**
+
 - **Anchor:** anchor<NNN>
 - **Name:** <descriptive name>
 - **Fan-out count:** <N exits>
@@ -49,6 +50,7 @@ Version: <semantic version for major restructures>
 **Definition:** Designs that return player to prior location WITH DIFFERENCE
 
 **Format per loop:**
+
 - **Name:** <descriptive name>
 - **Entry:** anchor<NNN>
 - **Return:** anchor<MMM>
@@ -62,6 +64,7 @@ Version: <semantic version for major restructures>
 **Definition:** Conditional access points (diegetic checks)
 
 **Format per gateway:**
+
 - **Name:** <descriptive name>
 - **Location:** anchor<NNN> → anchor<MMM>
 - **Check:** <diegetic condition>
@@ -75,6 +78,7 @@ Version: <semantic version for major restructures>
 **Definition:** Critical sections required for story progression
 
 **Format per keystone:**
+
 - **Anchor:** anchor<NNN>
 - **Why critical:** <narrative necessity>
 - **Redundancy:** <alternative routes if this fails/skipped>
@@ -87,6 +91,7 @@ Version: <semantic version for major restructures>
 **Definition:** Paths that allow player to backtrack without dead ends
 
 **Format:**
+
 - List of sections that allow return to previous hubs
 - Note any one-way transitions (with justification)
 - Identify potential soft-locks and mitigation
@@ -98,18 +103,22 @@ Version: <semantic version for major restructures>
 **Purpose:** Machine-readable record of graph changes applied in this update.
 
 **Nodes Added:**
+
 - `<anchor_id>` (`<type: hub|section|keystone>`) — `<brief description>`
 - Example: `anchor012` (`keystone`) — Lighthouse inner chamber discovery
 
 **Nodes Removed:**
+
 - `<anchor_id>` (Reason: `<merged|cut|replaced>`)
 - Example: `anchor007_old` (Reason: merged into anchor007)
 
 **Edges Changed:**
+
 - `<from_anchor>` → `<to_anchor>` (`<type: added|removed|modified>`)
 - Example: `anchor005` → `anchor012` (`added`) — New rock climb path
 
 **Notes:**
+
 - Summarize impact on topology (e.g., "Added redundancy for keystone access")
 - Reference related briefs or TUs for context
 
@@ -240,6 +249,7 @@ Version: 1.2.0
 ## Hot vs Cold
 
 **Hot only** — Topology notes are living planning documents:
+
 - Iteratively updated as structure evolves
 - Consulted by Scene, Lore, Gatekeeper
 - Not exported to players

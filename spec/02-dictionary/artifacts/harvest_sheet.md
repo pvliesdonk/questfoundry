@@ -21,6 +21,7 @@
 
 Harvest sheets document the **outcomes of Hook Harvest sessions**, clustering hooks by decision and
 assigning next loops. They provide:
+
 - **Triage outcomes** (accepted/deferred/rejected) with rationale
 - **Next loop assignments** for accepted hooks
 - **Risk notes** (dormant roles, style pressure, topology churn)
@@ -51,6 +52,7 @@ Hooks advancing to next loops:
 ### Cluster: <theme name>
 
 **Hooks:**
+
 - **<hook-id>** — <one-line description>
   - **Next loop:** <lore_deepening | story_spark | codex_expansion | style_tune_up | research_pass>
   - **Owner:** <role>
@@ -66,6 +68,7 @@ Hooks advancing to next loops:
 Hooks postponed with wake conditions:
 
 **Format per hook:**
+
 - **<hook-id>** — <one-line description>
   - **Reason:** <not needed for current slice | requires dormant role | depends on topology decision>
   - **Wake condition:** <when to revisit: milestone | external verification | role activation>
@@ -78,6 +81,7 @@ Hooks postponed with wake conditions:
 Hooks closed with rationale:
 
 **Format per hook:**
+
 - **<hook-id>** — <one-line description>
   - **Reason:** <duplicate of <hook-id> | violates PN boundaries | creates unwinnable state | out of scope>
   - **Surviving duplicate:** <hook-id if applicable>
@@ -90,12 +94,14 @@ Hooks closed with rationale:
 Potential blockers or concerns:
 
 **Common risk categories:**
+
 - **Dormant Researcher risk:** Factual hooks accepted with `uncorroborated:<risk>` — Showrunner signed off
 - **Style pressure:** High volume of style-impact hooks; may need dedicated Style Tune-up
 - **Topology churn:** Multiple structure-impact hooks; coordinate with Plotwright
 - **Capacity:** Hook acceptance rate vs available cycles
 
 **Format:**
+
 - **Risk:** <description>
 - **Mitigation:** <action taken or planned>
 - **Owner:** <role responsible>
@@ -107,6 +113,7 @@ Potential blockers or concerns:
 Dormant roles Showrunner should wake for next loops:
 
 **Format:**
+
 - **<Role>** — <reason to activate> — <for which hooks/loops>
 
 ---
@@ -215,6 +222,7 @@ Hooks Triaged: 18
 ## Hot vs Cold
 
 **Hot only** — Harvest sheets are working documents:
+
 - Inform next loops and role activations
 - Track triage patterns over time
 - Not exported to players

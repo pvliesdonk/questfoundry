@@ -19,6 +19,7 @@
 ## Purpose
 
 Phrasing patterns provide **diegetic, player-safe templates** for recurring situations:
+
 - Gateway checks ("You need X to proceed")
 - Refusals ("That path is blocked")
 - State reflections ("You're carrying Y")
@@ -49,6 +50,7 @@ Edited: <YYYY-MM-DD>
 **Pattern name:** <descriptive label>
 **Condition:** <what the world checks>
 **Phrasing:**
+
 - Qualified: "<in-world phrasing when player qualifies>"
 - Unqualified: "<in-world phrasing when player doesn't qualify>"
 - Hint (optional): "<how player learns about requirement>"
@@ -170,6 +172,7 @@ Edited: 2025-11-24
 ## Hot vs Cold
 
 **Hot only** — Phrasing patterns are working documents:
+
 - Referenced during section drafting
 - Consulted by PN during performance
 - Updated as voice evolves
