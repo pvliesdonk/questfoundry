@@ -106,7 +106,7 @@ Showrunner opens/updates a **Trace Unit (TU)**: `tu-lore-deepening-<topic>` and 
     - **plotwright_notes**: Gateway/loop implications, gate reasons, keystone resilience.
     - **style_lead_notes**: Pattern nudges, banned/preferred forms.
     - **codex_curator_notes**, **translator_notes**, **gatekeeper_notes**.
-- **Factual Appendix** (citations or `uncorroborated:<risk>` list).
+  - **Research posture**: Links to **Research Memo** for detailed citations/uncertainty tracking.
 - **Pre-gate note** (Gatekeeper): anticipated bar risks.
 
 ---
