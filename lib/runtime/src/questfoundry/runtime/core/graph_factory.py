@@ -90,12 +90,14 @@ class GraphFactory:
                 raise ValueError(f"Edge source '{edge.source}' not in topology nodes: {node_ids}")
 
             # Check 3: All edge targets in nodes or END
-            if edge.target not in node_ids and edge.target != END:
+            # Note: YAML files use 'END' while LangGraph uses '__end__'
+            if edge.target not in node_ids and edge.target != 'END' and edge.target != END:
                 raise ValueError(f"Edge target '{edge.target}' not in topology nodes: {node_ids}")
 
-        # Check 5: At least one exit condition
-        if not loop.exit_conditions:
-            raise ValueError("Loop must have at least one exit condition")
+        # Check 5: At least one way to exit (either exit conditions or edges to END)
+        has_end_edge = any(edge.target == 'END' or edge.target == END for edge in loop.edges)
+        if not loop.exit_conditions and not has_end_edge:
+            raise ValueError("Loop must have at least one exit condition or an edge to END")
 
         logger.info(f"Topology validation passed for loop: {loop.id}")
 
@@ -184,7 +186,9 @@ class GraphFactory:
             graph: StateGraph
             edge: Edge definition with source and target
         """
-        graph.add_edge(edge.source, edge.target)
+        # Convert 'END' from YAML to LangGraph's END constant
+        target = END if edge.target == 'END' else edge.target
+        graph.add_edge(edge.source, target)
         logger.debug(f"Added direct edge: {edge.source} → {edge.target}")
 
     def add_conditional_edge(self, graph: StateGraph, edge: Any) -> None:
@@ -198,12 +202,15 @@ class GraphFactory:
         # Create routing function
         routing_fn = self.edge_evaluator.create_routing_function(edge.raw)
 
+        # Convert 'END' from YAML to LangGraph's END constant
+        target = END if edge.target == 'END' else edge.target
+
         # Add conditional edge with correct API
         # LangGraph expects 'path' parameter, not 'condition'
         graph.add_conditional_edges(
             source=edge.source,
             path=routing_fn,
-            path_map={edge.target: edge.target, edge.source: edge.source, END: END},
+            path_map={edge.target: target, edge.source: edge.source, END: END},
         )
 
         logger.debug(f"Added conditional edge: {edge.source} → {edge.target}")

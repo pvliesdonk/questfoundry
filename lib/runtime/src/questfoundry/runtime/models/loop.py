@@ -62,9 +62,27 @@ class LoopPattern:
         self.required_roles = roles.get("required", [])
         self.optional_roles = roles.get("optional", [])
 
+    def _get_node_id(self, node: dict[str, Any] | str) -> str:
+        """
+        Get the identifier for a node.
+
+        Per schema: node_id takes precedence, falls back to role_id.
+        String nodes are returned as-is.
+
+        Args:
+            node: Node definition (dict) or node ID (str)
+
+        Returns:
+            Node identifier
+        """
+        if isinstance(node, str):
+            return node
+        # Per schema: node_id is optional, defaults to role_id
+        return node.get("node_id", node.get("role_id", ""))
+
     def get_node_ids(self) -> list[str]:
         """Get all node IDs in the topology."""
-        return [node if isinstance(node, str) else node.get("id", "") for node in self.nodes]
+        return [self._get_node_id(node) for node in self.nodes]
 
     def get_entry_node_id(self) -> str:
         """Get the entry node ID."""
@@ -88,7 +106,7 @@ class LoopPattern:
             ValueError: If node_id doesn't exist in topology
         """
         for node in self.nodes:
-            if isinstance(node, dict) and node.get("id") == node_id:
+            if isinstance(node, dict) and self._get_node_id(node) == node_id:
                 role_id = node.get("role_id")
                 if not role_id:
                     raise ValueError(f"Node {node_id} missing role_id field")
@@ -112,7 +130,7 @@ class LoopPattern:
             ]
         """
         for node in self.nodes:
-            if isinstance(node, dict) and node.get("id") == node_id:
+            if isinstance(node, dict) and self._get_node_id(node) == node_id:
                 return node.get("sub_nodes")
         return None
 
@@ -127,6 +145,6 @@ class LoopPattern:
             True if node has parallel_execution flag set to True
         """
         for node in self.nodes:
-            if isinstance(node, dict) and node.get("id") == node_id:
+            if isinstance(node, dict) and self._get_node_id(node) == node_id:
                 return node.get("parallel_execution", False)
         return False
