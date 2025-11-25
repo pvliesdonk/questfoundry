@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/human_interaction.schema.json",
+  "title": "Human Interaction",
+  "description": "Payload for human.question intent - allows roles to request human clarification or input.",
+  "type": "object",
+  "required": ["question"],
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "The question being asked to the human",
+      "minLength": 10,
+      "maxLength": 1000
+    },
+    "context": {
+      "type": "object",
+      "description": "Optional context object with flexible structure",
+      "properties": {
+        "tu_id": {
+          "type": "string",
+          "description": "Current trace unit identifier (optional)",
+          "pattern": "^TU-[0-9]{4}-[0-9]{2}-[0-9]{2}-[A-Z]{2}[0-9]{2}$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Role asking the question (optional)",
+          "enum": [
+            "Showrunner",
+            "Gatekeeper",
+            "Plotwright",
+            "Scene Smith",
+            "Style Lead",
+            "Lore Weaver",
+            "Codex Curator",
+            "Researcher",
+            "Art Director",
+            "Illustrator",
+            "Audio Director",
+            "Audio Producer",
+            "Translator",
+            "Book Binder",
+            "Player-Narrator"
+          ]
+        },
+        "artifact_reference": {
+          "type": "string",
+          "description": "Reference to related artifact (optional)",
+          "maxLength": 300
+        },
+        "urgency": {
+          "type": "string",
+          "description": "Urgency level (optional)",
+          "enum": ["low", "medium", "high", "blocking"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "suggested_answers": {
+      "type": "array",
+      "description": "Optional array of suggested answer choices",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": true
+}

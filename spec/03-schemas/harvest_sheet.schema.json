@@ -94,14 +94,14 @@
                   "type": "string",
                   "enum": [
                     "N/A",
-                    "uncorroborated:low",
-                    "uncorroborated:medium",
-                    "uncorroborated:high",
+                    "uncorroborated_low",
+                    "uncorroborated_medium",
+                    "uncorroborated_high",
                     "corroborated",
                     "plausible",
                     "disputed"
                   ],
-                  "description": "Uncertainty level for factual hooks"
+                  "description": "Uncertainty level for factual hooks (research posture)"
                 }
               },
               "required": [
