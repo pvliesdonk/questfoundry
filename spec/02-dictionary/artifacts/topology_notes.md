@@ -93,6 +93,28 @@ Version: <semantic version for major restructures>
 
 ---
 
+## 6) Structural Deltas (This TU)
+
+**Purpose:** Machine-readable record of graph changes applied in this update.
+
+**Nodes Added:**
+- `<anchor_id>` (`<type: hub|section|keystone>`) — `<brief description>`
+- Example: `anchor012` (`keystone`) — Lighthouse inner chamber discovery
+
+**Nodes Removed:**
+- `<anchor_id>` (Reason: `<merged|cut|replaced>`)
+- Example: `anchor007_old` (Reason: merged into anchor007)
+
+**Edges Changed:**
+- `<from_anchor>` → `<to_anchor>` (`<type: added|removed|modified>`)
+- Example: `anchor005` → `anchor012` (`added`) — New rock climb path
+
+**Notes:**
+- Summarize impact on topology (e.g., "Added redundancy for keystone access")
+- Reference related briefs or TUs for context
+
+---
+
 ## Example
 
 ```markdown
@@ -180,6 +202,27 @@ Version: 1.2.0
 - One-way transition: anchor007 → anchor012 (rock climb is one-direction)
   - Justified: Maintenance shaft exit only; player warned by PN before climb
 - No dead ends identified; all terminals clearly marked
+
+---
+
+## Structural Deltas (This TU)
+
+**Nodes Added:**
+- `anchor012` (`keystone`) — Lighthouse inner chamber (oil leak discovery)
+- `anchor015` (`hub`) — Foreman location after lighthouse entry
+
+**Nodes Removed:**
+- None (initial topology creation)
+
+**Edges Changed:**
+- `anchor007` → `anchor012` (`added`) — Rock climb path to inner chamber
+- `anchor009` → `anchor012` (`added`) — Front door path to inner chamber
+- `anchor006` → `anchor015` (`added`) — Return to foreman after task complete
+
+**Notes:**
+- Added redundancy for anchor012 keystone (2 paths)
+- Created loop-with-difference for foreman encounter (anchor006 → anchor015)
+- All additions maintain reachability and nonlinearity requirements
 
 ---
 
