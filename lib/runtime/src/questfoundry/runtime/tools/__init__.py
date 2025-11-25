@@ -6,10 +6,16 @@ from questfoundry.runtime.tools.state_tools import (
     WriteColdSOT,
     WriteHotSOT,
 )
+from questfoundry.runtime.tools.protocol_tools import (
+    SendProtocolEnvelope,
+    SendProtocolMessage,
+)
 
 __all__ = [
     "ReadHotSOT",
     "WriteHotSOT",
     "ReadColdSOT",
     "WriteColdSOT",
+    "SendProtocolMessage",
+    "SendProtocolEnvelope",
 ]
