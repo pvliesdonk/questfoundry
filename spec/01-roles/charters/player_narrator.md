@@ -64,6 +64,7 @@ immersed, not managed.
 
 - **PN Playtest Notes** (dry-run): concise, tagged items — `choice-ambiguity`, `gate-friction`,
   `nav-bug`, `tone-wobble`, `translation-glitch`, `accessibility`.
+- **Summary Sheet** (dry-run): aggregated issue counts by type/severity, recommended follow-up loops.
 - **Session Recap Lines** (optional, player-safe): short in-voice summaries suitable for inclusion
   at section starts if adopted by owners.
 

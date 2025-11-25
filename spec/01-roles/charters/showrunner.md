@@ -68,6 +68,8 @@ make the next step obvious.
 **Produces (outputs):**
 
 - **TU Briefs** (scope, loop, roles awake, deliverables, risks).
+- **Harvest Sheet** (hook triage summary from Hook Harvest loop).
+- **Post-Mortem Report** (retrospective analysis after milestones).
 - **Merge Notes** (what passed bars and landed in Cold).
 - **Snapshot Decisions** (timestamped labels).
 - **View Options** for Binder (languages/coverage, art/audio plan-or-assets).

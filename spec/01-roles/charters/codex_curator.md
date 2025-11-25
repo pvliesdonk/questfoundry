@@ -69,7 +69,9 @@ confidence—clearly, concisely, and without spoilers.
 
 **Produces (outputs):**
 
-- **Codex Pack** — a set of entries + updated crosslink map + coverage notes.
+- **Codex Pack** — a set of entries + updated crosslink map.
+- **Coverage Report** — term coverage tracking (new entries, red-links, deferred terms).
+- **Spoiler Hygiene Note** — masked details log for Gatekeeper validation.
 - **Glossary slice** — concise term list for translators and PN phrasing alignment.
 - **See-also graph** — human-readable list or diagram of high-value jumps.
 - **Hook List** — requests to Lore (missing summaries), Style (register issues), Plotwright (needs
