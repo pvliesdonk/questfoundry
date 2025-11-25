@@ -79,6 +79,20 @@ gates:
     - Determinism
     - Accessibility
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/audio_pass.md"
+  message_sequences:
+    - step: 1
+      sender: "AuD"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Audio Pass loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Each cue has a clear narrative purpose (clarity, mood, or signposting)
   - Descriptions and captions are player-safe and consistent with Style Lead

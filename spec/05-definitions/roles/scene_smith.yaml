@@ -37,7 +37,7 @@ prompt_content:
     - name: synonym_choices
       description: Near-synonym choices ("Go / Proceed") that hide intent - choices must be contrastive.
     - name: meta_gates
-      description: Meta gates ("Option locked: missing CODEWORD") - always use diegetic phrasing.
+      description: 'Meta gates ("Option locked: missing CODEWORD") - always use diegetic phrasing.'
     - name: lore_dumps
       description: Spilling canon onto surfaces - keep deep truth in Hot.
     - name: wall_of_text

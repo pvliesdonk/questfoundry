@@ -83,6 +83,20 @@ gates:
     - Integrity
     - Presentation
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/hook_harvest.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Hook Harvest loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Hooks are deduped, clustered, and tagged; uncertainty visible
   - Clear next loop and owner for each accepted hook

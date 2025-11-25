@@ -78,6 +78,20 @@ gates:
     - Style
     - Presentation
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/style_tune_up.md"
+  message_sequences:
+    - step: 1
+      sender: "ST"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Style Tune-up loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Prose and PN read in a consistent register; motifs reappear intentionally
   - Captions and cue sheets align with voice; no technique-talk on surfaces

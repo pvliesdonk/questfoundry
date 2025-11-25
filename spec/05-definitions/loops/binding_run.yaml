@@ -66,6 +66,20 @@ gates:
     - Style
     - Accessibility
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/binding_run.md"
+  message_sequences:
+    - step: 1
+      sender: "BB"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Binding Run loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Bundle is player-safe, navigable, and accessible
   - Snapshot & options are clear and consistent across formats

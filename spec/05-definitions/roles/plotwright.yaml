@@ -39,7 +39,7 @@ prompt_content:
     - name: secret_maze
       description: Loops with no new affordance on return - returns must offer difference.
     - name: meta_gates
-      description: "Option locked: missing CODEWORD" on surfaces - gates must be diegetic.
+      description: '"Option locked: missing CODEWORD" on surfaces - gates must be diegetic.'
     - name: canon_stuffing
       description: Solving structure by revealing spoilers in briefs - keep briefs player-safe.
     - name: keystone_bottleneck

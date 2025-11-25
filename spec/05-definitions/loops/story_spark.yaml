@@ -86,6 +86,20 @@ gates:
     - Style
     - Presentation
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/story_spark.md"
+  message_sequences:
+    - step: 1
+      sender: "PW"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Story Spark loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Topology adds or repairs meaningful nonlinearity (not decorative)
   - Gateways have clear diegetic conditions PN can enforce without leaks

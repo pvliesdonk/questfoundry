@@ -120,6 +120,20 @@ gates:
     - Determinism
     - Presentation
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/full_production_run.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Full Production Run loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Exported view exists, stamped with Cold snapshot
   - Gatecheck passed; traceability intact

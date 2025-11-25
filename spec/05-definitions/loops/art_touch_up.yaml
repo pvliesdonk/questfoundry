@@ -79,6 +79,20 @@ gates:
     - Determinism
     - Accessibility
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/art_touch_up.md"
+  message_sequences:
+    - step: 1
+      sender: "AD"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Art Touch-up loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Each image has a clear narrative purpose (clarity, recall anchor, mood, or signposting)
   - Captions are spoiler-safe, readable, and consistent with Style Lead

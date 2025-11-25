@@ -76,6 +76,20 @@ handoffs:
 gates:
   quality_bars: []
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/post_mortem.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Post-Mortem loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - All participating roles contribute to retrospective
   - Action items are specific, owned, dated, and have success criteria

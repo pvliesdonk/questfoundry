@@ -66,6 +66,20 @@ gates:
     - Gateways
     - Presentation
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/lore_deepening.md"
+  message_sequences:
+    - step: 1
+      sender: "LW"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Lore Deepening loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Each accepted hook is either canonized, deferred with reason, or rejected with rationale
   - Canon resolves prior contradictions or marks deliberate mystery with bounds

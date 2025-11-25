@@ -78,6 +78,20 @@ gates:
     - Presentation
     - Style
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/codex_expansion.md"
+  message_sequences:
+    - step: 1
+      sender: "CC"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Codex Expansion loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - High-frequency manuscript terms have matching codex entries
   - No spoilers; PN can reference entries safely

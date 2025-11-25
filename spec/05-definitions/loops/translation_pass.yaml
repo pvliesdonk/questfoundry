@@ -78,6 +78,20 @@ gates:
     - Integrity
     - Style
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/translation_pass.md"
+  message_sequences:
+    - step: 1
+      sender: "TR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Translation Pass loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Register and tone feel native; PN voice preserved
   - Links/cross-refs resolve; choice labels remain distinct

@@ -76,6 +76,20 @@ gates:
     - Style
     - Accessibility
 
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/narration_dry_run.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Narration Dry-Run loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
 success_criteria:
   - Gates enforced diegetically without confusion or leaks
   - Choices read as distinct and fair; recaps land where helpful
