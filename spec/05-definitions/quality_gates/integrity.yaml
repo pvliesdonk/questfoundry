@@ -66,6 +66,26 @@ validation_checks:
     severity: warning
     failure_message: "Found {{count}} potential state contradictions: {{issues}}"
 
+  - check_id: valid_canon_references
+    check_type: reference_resolution
+    validator:
+      method: graph_traversal
+      target: "hot_sot.canon_packs"
+      expression: "all(hook_id in hot_sot.hooks for canon_pack in canon_packs for hook_id in canon_pack.hooks_answered)"
+      parameters:
+        check_bidirectional: false
+        validate_hook_existence: true
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "Found {{count}} invalid hook references in canon packs: {{refs}}"
+    examples:
+      - scenario: "Canon pack references HK-20250120-003 in hooks_answered but hook doesn't exist"
+        passes: false
+        explanation: "hooks_answered must reference existing hooks"
+      - scenario: "All hooks_answered IDs exist in hot_sot.hooks"
+        passes: true
+        explanation: "Canon pack references are valid"
+
 status_thresholds:
   green:
     critical_failures: 0
@@ -100,12 +120,19 @@ remediation:
       examples:
         - "Setting 'met_captain' but later assuming they're strangers"
 
+    - issue: "Canon pack references non-existent hook"
+      fix: "Ensure hooks_answered only references existing hook IDs or create missing hooks"
+      check_ids: ["valid_canon_references"]
+      examples:
+        - "Canon pack lists HK-20250120-003 in hooks_answered but hook doesn't exist → create hook or remove reference"
+
   smallest_viable_fix_template: "For {{check_id}}: {{fix_action}} in {{artifact_id}}"
 
   owner_assignment:
     PW: ["no_dangling_refs", "no_unintentional_dead_ends", "state_consistency"]
     SS: ["no_dangling_refs", "no_unintentional_dead_ends"]
     GK: ["valid_id_format"]
+    LW: ["valid_canon_references"]
 
 blocking_policy:
   blocks_on_red: true

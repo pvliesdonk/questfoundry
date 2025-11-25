@@ -30,7 +30,7 @@ transitions:
   # pre-gate → gatecheck (Pre-gate passed, ready for full check)
   - from_state: pre-gate
     to_state: gatecheck
-    intent: "gate.submit"
+    intent: "gate.report.submit"
     authorization:
       allowed_senders: ["GK"]
     preconditions:
@@ -185,6 +185,18 @@ transitions:
           payload_template:
             tu_id: "{{tu.id}}"
             notes: "{{gatecheck_report.remediation_notes}}"
+
+  # gatecheck → gatecheck (Feedback / Yellow Bar negotiation)
+  - from_state: gatecheck
+    to_state: gatecheck
+    intent: "gate.feedback"
+    authorization:
+      allowed_senders: ["GK"]
+    effects:
+      protocol_messages:
+        - sender: "GK"
+          receiver: "{{tu.owner_a}}"
+          intent: "gate.feedback"
 
 error_handling:
   on_precondition_failure: "block"

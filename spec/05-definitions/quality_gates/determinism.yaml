@@ -26,7 +26,8 @@ validation_checks:
     validator:
       method: jsonpath_query
       target: "artifacts"
-      expression: "$..[?(@.execution_status == 'plan_only')].deferred_marker"
+      # Updated to match Layer 2 standardized status field (e.g., art_plan.md uses status: "deferred")
+      expression: "$..[?(@.status == 'deferred')]"
       parameters:
         require_deferred_marker: true
         require_constraints: true
