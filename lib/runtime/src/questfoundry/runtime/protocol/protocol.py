@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import jsonschema
@@ -32,7 +32,7 @@ class Protocol:
         payload: dict[str, Any],
     ) -> Message:
         message_id = self._generate_message_id()
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat()
         envelope: Envelope = {
             "protocol": {"name": "qf-protocol", "version": "1.0.0"},
             "id": message_id,
@@ -58,7 +58,7 @@ class Protocol:
     def send_envelope(self, state: StudioState, envelope: Envelope) -> Message:
         envelope = {**envelope}
         message_id = self._generate_message_id()
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat()
         envelope.setdefault("protocol", {"name": "qf-protocol", "version": "1.0.0"})
         envelope.setdefault("id", message_id)
         envelope.setdefault("time", timestamp)
@@ -78,19 +78,20 @@ class Protocol:
     def _dispatch(self, state: StudioState, envelope: Envelope) -> Message:
         sender = envelope.get("sender") or "system"
         receiver = envelope.get("receiver", "broadcast")
+        timestamp = datetime.now(timezone.utc).isoformat()
         message: Message = {
             "sender": sender,
             "receiver": receiver if not isinstance(receiver, list) else "broadcast",
             "intent": envelope.get("intent", ""),
             "payload": envelope.get("payload", {}),
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": timestamp,
             "envelope": {k: v for k, v in envelope.items() if k not in {"payload"}},
         }
         return self._state_manager.add_message(state, message)["messages"][-1]
 
     @staticmethod
     def _generate_message_id() -> str:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return f"MSG-{now.strftime('%Y%m%dT%H%M%S%fZ')}"
 
     def _load_envelope_schema(self) -> dict[str, Any] | None:

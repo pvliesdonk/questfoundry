@@ -20,7 +20,7 @@ import json
 import os
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -79,7 +79,7 @@ class ColdStore:
         conn = self._get_connection(project_id, create_if_missing=True)
         try:
             data = json.dumps(cold_sot or {})
-            now = datetime.utcnow().isoformat() + "Z"
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute(
                 """
                 INSERT INTO cold_state (project_id, data, updated_at)
@@ -105,7 +105,7 @@ class ColdStore:
         conn = self._get_connection(project_id, create_if_missing=True)
         try:
             data = json.dumps(snapshot or {})
-            now = datetime.utcnow().isoformat() + "Z"
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute(
                 """
                 INSERT INTO snapshots (project_id, tu_id, created_at, data)

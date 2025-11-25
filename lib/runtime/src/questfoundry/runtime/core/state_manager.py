@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -114,7 +114,7 @@ class StateManager:
             or "default"
         )
 
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat()
 
         # Initialize quality bars (8 dimensions)
         quality_bars: dict[str, BarStatus] = {}
@@ -221,7 +221,7 @@ class StateManager:
                 new_state[key] = value
 
         # Update timestamp
-        new_state["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        new_state["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         return new_state
 
@@ -293,7 +293,7 @@ class StateManager:
             "receiver": "broadcast",
             "intent": "lifecycle_transition",
             "payload": {"from": current, "to": new_lifecycle},
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
@@ -398,7 +398,7 @@ class StateManager:
                 "bars_checked": list(bar_results.keys()),
                 "statuses": {k: v.get("status") for k, v in bar_results.items()},
             },
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
@@ -458,7 +458,7 @@ class StateManager:
         snapshot = {
             "snapshot_id": snapshot_id,
             "tu_id": state["tu_id"],
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "state": copy.deepcopy(state),
         }
 
