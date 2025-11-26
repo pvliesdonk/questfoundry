@@ -110,18 +110,67 @@ class TraceHandler:
             return
 
         elif intent == "role_completed":
-            # Show completion with extracted insight
+            # Show completion with FULL details when verbose
             role_name = payload.get("role_name", sender)
             insight = payload.get("insight", "")
+            prompt = payload.get("prompt", "")
 
-            if insight:
-                self.console.print(
-                    f"[green]✓ {role_name}[/green] [dim]({time_str})[/dim]\n  [dim]{insight}[/dim]"
-                )
+            if self.verbose:
+                # Show full prompt and response
+                self.console.print(f"\n[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]")
+
+                if prompt:
+                    # Show the prompt that was sent
+                    self.console.print(Panel(
+                        prompt[:2000] + ("..." if len(prompt) > 2000 else ""),
+                        title=f"[bold blue]PROMPT → {role_name}[/bold blue]",
+                        border_style="blue",
+                        padding=(0, 1)
+                    ))
+
+                if insight:
+                    # Show the LLM response
+                    self.console.print(Panel(
+                        insight[:3000] + ("..." if len(insight) > 3000 else ""),
+                        title=f"[bold green]RESPONSE ← {role_name}[/bold green]",
+                        border_style="green",
+                        padding=(0, 1)
+                    ))
             else:
-                self.console.print(
-                    f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
-                )
+                # Brief summary only
+                if insight:
+                    summary = insight[:100] + "..." if len(insight) > 100 else insight
+                    self.console.print(
+                        f"[green]✓ {role_name}[/green] [dim]({time_str})[/dim]\n  [dim]{summary}[/dim]"
+                    )
+                else:
+                    self.console.print(
+                        f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
+                    )
+            return
+
+        elif intent == "tool_call":
+            # Show tool invocation
+            tool_name = payload.get("tool_name", "unknown")
+            tool_input = payload.get("input", {})
+            self.console.print(f"[yellow]🔧 {sender}[/yellow] → [bold]{tool_name}[/bold]")
+            if self.verbose and tool_input:
+                input_str = json.dumps(tool_input, indent=2)
+                self.console.print(f"[dim]{input_str}[/dim]")
+            return
+
+        elif intent == "tool_result":
+            # Show tool result
+            tool_name = payload.get("tool_name", "unknown")
+            result = payload.get("result", "")
+            success = payload.get("success", True)
+            status = "[green]✓[/green]" if success else "[red]✗[/red]"
+            self.console.print(f"  {status} [bold]{tool_name}[/bold] returned")
+            if self.verbose and result:
+                result_str = str(result)[:500]
+                if len(str(result)) > 500:
+                    result_str += "..."
+                self.console.print(f"  [dim]{result_str}[/dim]")
             return
 
         # Standard message formatting for other intents

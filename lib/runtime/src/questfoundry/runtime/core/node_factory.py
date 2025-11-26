@@ -366,6 +366,145 @@ class NodeFactory:
             "strict_provider_selection": strict_provider_selection,
         }
 
+    def _trace_tool_event(self, role_id: str, intent: str, payload: dict, tu_id: str) -> None:
+        """Trace a tool-related event if trace handler is available."""
+        if not (self.state_manager and hasattr(self.state_manager, "_trace_handler")):
+            return
+        if not self.state_manager._trace_handler:
+            return
+
+        message = {
+            "sender": role_id,
+            "receiver": "system",
+            "intent": intent,
+            "payload": payload,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "envelope": {"tu_id": tu_id},
+        }
+        try:
+            self.state_manager._trace_handler.trace_message(message)
+        except Exception as e:
+            logger.warning(f"Trace handler error: {e}")
+
+    def _execute_tool_loop(
+        self,
+        llm: Any,
+        response: Any,
+        role: RoleProfile,
+        role_tools: list,
+        state: StudioState,
+        original_prompt: str,
+        max_iterations: int = 5,
+    ) -> str:
+        """
+        Execute tool calls in a loop until the LLM produces a final response.
+
+        This implements a simple ReAct-style agent loop:
+        1. Check if LLM response contains tool calls
+        2. If yes: execute tools, trace results, feed back to LLM
+        3. If no: return the final text response
+        4. Repeat until no more tool calls or max iterations reached
+
+        Args:
+            llm: The LLM instance (potentially with tools bound)
+            response: Initial LLM response
+            role: The role profile
+            role_tools: List of tools available to the role
+            state: Current state for tool execution context
+            original_prompt: The original prompt for context
+            max_iterations: Max tool call iterations (safety limit)
+
+        Returns:
+            Final text response from the LLM
+        """
+        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+
+        # Build tool lookup for execution
+        tool_map = {}
+        for tool in role_tools:
+            if hasattr(tool, '_base_tool'):
+                base_tool = tool._base_tool
+                tool_map[tool.name] = base_tool
+                # Also map by tool's own name in case it differs
+                if hasattr(base_tool, 'name'):
+                    tool_map[base_tool.name] = base_tool
+            elif hasattr(tool, 'name'):
+                tool_map[tool.name] = tool
+
+        tu_id = state.get("tu_id", "unknown")
+        messages = [HumanMessage(content=original_prompt)]
+        iteration = 0
+
+        while iteration < max_iterations:
+            # Check if response has tool calls
+            tool_calls = getattr(response, 'tool_calls', None)
+
+            if not tool_calls:
+                # No tool calls - return final content
+                content = response.content if hasattr(response, "content") else str(response)
+                return content
+
+            # Process tool calls
+            messages.append(response)  # Add AI message with tool calls
+
+            for tool_call in tool_calls:
+                tool_name = tool_call.get("name", "unknown")
+                tool_args = tool_call.get("args", {})
+                tool_id = tool_call.get("id", f"call_{iteration}")
+
+                # Trace tool call
+                self._trace_tool_event(
+                    role.id,
+                    "tool_call",
+                    {"tool_name": tool_name, "input": tool_args},
+                    tu_id,
+                )
+
+                # Execute tool
+                result = None
+                success = True
+                try:
+                    if tool_name in tool_map:
+                        tool_instance = tool_map[tool_name]
+                        # Inject state and role_id for tools that need it
+                        if "state" in tool_args or hasattr(tool_instance, '_run'):
+                            # Try to inject state if tool accepts it
+                            try:
+                                result = tool_instance.invoke({**tool_args, "state": state, "role_id": role.id})
+                            except TypeError:
+                                # Tool doesn't accept state, call without it
+                                result = tool_instance.invoke(tool_args)
+                        else:
+                            result = tool_instance.invoke(tool_args)
+                    else:
+                        result = f"Tool '{tool_name}' not found in available tools: {list(tool_map.keys())}"
+                        success = False
+                except Exception as e:
+                    result = f"Tool execution error: {str(e)}"
+                    success = False
+                    logger.error(f"Tool {tool_name} failed: {e}")
+
+                # Trace tool result
+                self._trace_tool_event(
+                    role.id,
+                    "tool_result",
+                    {"tool_name": tool_name, "result": str(result)[:1000], "success": success},
+                    tu_id,
+                )
+
+                # Add tool result to messages
+                messages.append(ToolMessage(content=str(result), tool_call_id=tool_id))
+
+            # Continue the conversation with tool results
+            logger.info(f"Role {role.id} iteration {iteration + 1}: processed {len(tool_calls)} tool calls")
+            response = llm.invoke(messages)
+            iteration += 1
+
+        # Max iterations reached - return whatever we have
+        logger.warning(f"Role {role.id} reached max tool iterations ({max_iterations})")
+        content = response.content if hasattr(response, "content") else str(response)
+        return content
+
     def create_role_node(self, role_id: str) -> Callable[[StudioState], dict[str, Any]]:
         """
         Create complete Runnable node for StateGraph.
@@ -448,6 +587,18 @@ class NodeFactory:
                             max_tokens=llm_config["max_tokens"],
                         )
 
+                        # Bind tools to LLM if role has tools
+                        if role_tools:
+                            # Convert our tools to LangChain format
+                            lc_tools = [t.to_langchain_tool() for t in role_tools if hasattr(t, 'to_langchain_tool')]
+                            if not lc_tools:
+                                # Fallback: tools might already be LangChain tools
+                                lc_tools = [t._base_tool if hasattr(t, '_base_tool') else t for t in role_tools]
+
+                            if lc_tools and hasattr(llm, 'bind_tools'):
+                                llm = llm.bind_tools(lc_tools)
+                                logger.info(f"Bound {len(lc_tools)} tools to LLM for role {role.id}")
+
                         # Add JSON format instructions for all providers
                         # Critical: All roles MUST output valid JSON
                         json_prompt = (
@@ -461,7 +612,11 @@ class NodeFactory:
                         # Invoke LLM with JSON-instructed prompt
                         logger.info(f"Invoking {provider} LLM for role {role.id}")
                         response = llm.invoke(json_prompt)
-                        result = response.content if hasattr(response, "content") else str(response)
+
+                        # Handle tool calls if present
+                        result = self._execute_tool_loop(
+                            llm, response, role, role_tools, state, json_prompt
+                        )
 
                         # Send role_completed with extracted insight and prompt context
                         if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
