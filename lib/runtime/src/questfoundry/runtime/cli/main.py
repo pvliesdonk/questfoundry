@@ -7,6 +7,7 @@ The Showrunner role coordinates; routing is envelope-based.
 
 import signal
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -21,11 +22,23 @@ from questfoundry.runtime.logging_config import get_logger, setup_logging
 setup_logging(level="INFO", show_time=False, show_path=False)
 logger = get_logger(__name__)
 
+# Track active trace handlers for cleanup on interrupt
+_active_trace_handlers = []
+
 
 def cleanup_and_exit(signum=None, frame=None):
     """Gracefully shut down on interrupt (Ctrl-C)."""
     console = Console()
-    console.print("\n[yellow]⚠️  Interrupted by user.[/yellow]")
+    console.print("\n[yellow]⚠️  Interrupted by user. Cleaning up...[/yellow]")
+
+    # Close any active trace handlers
+    for handler in _active_trace_handlers:
+        try:
+            handler.close()
+        except Exception as e:
+            logger.warning(f"Error closing trace handler: {e}")
+
+    console.print("[green]✓ Cleanup complete[/green]")
     sys.exit(130)  # Standard exit code for SIGINT
 
 
@@ -54,6 +67,12 @@ console = Console()
 def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
+    trace: bool = typer.Option(
+        False, "--trace", "-t", help="Enable trace mode to capture agent communication"
+    ),
+    trace_file: str | None = typer.Option(
+        None, "--trace-file", help="Write trace to file (enables --trace automatically)"
+    ),
     recursion_limit: int = typer.Option(50, "--recursion-limit", "-r", help="Max graph iterations"),
     provider: str | None = typer.Option(
         None,
@@ -83,19 +102,49 @@ def ask(
     Examples:
         qf ask "Create a mystery story about a haunted lighthouse"
         qf ask "Review the draft and suggest improvements" -v
-        qf ask "This character feels flat, give them more depth"
+        qf ask "Create a story" --trace
+        qf ask "Create a story" --trace --trace-file messages.log
         qf ask "Create a story" --provider anthropic:claude-3-haiku-20240307
     """
     try:
+        # Enable trace if trace_file is specified
+        if trace_file:
+            trace = True
+
+        # Create trace handler if --trace enabled
+        trace_handler = None
+        if trace:
+            from questfoundry.runtime.core.trace_handler import TraceHandler
+
+            output_file = Path(trace_file) if trace_file else None
+            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=True)
+
+            # Register for cleanup on interrupt
+            _active_trace_handlers.append(trace_handler)
+
+            console.print(
+                Panel(
+                    "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
+                    "Agent-to-agent communication will be captured and displayed.\n"
+                    "LLM prompts, outputs, and tool calls will be shown.\n"
+                    f"{'Output: Console and file' if output_file else 'Output: Console only'}",
+                    style="cyan",
+                    border_style="cyan",
+                    title="Trace Mode",
+                )
+            )
+            console.print()
+
         # Display customer message
         console.print(
             Panel(f"[bold]Your Request:[/bold]\n{message}", style="blue", border_style="blue")
         )
 
-        # Create ControlPlane with mesh routing
+        # Create ControlPlane with mesh routing and trace handler
         state_manager = StateManager(
             project_id=project,
             project_root=project_dir,
+            trace_handler=trace_handler,
         )
         control_plane = ControlPlane(
             state_manager=state_manager,
@@ -109,6 +158,11 @@ def ask(
             human_input=message,
             recursion_limit=recursion_limit,
         )
+
+        # Close trace handler if created
+        if trace_handler:
+            trace_handler.close()
+            _active_trace_handlers.remove(trace_handler)
 
         # Display result
         messages = final_state.get("messages", [])

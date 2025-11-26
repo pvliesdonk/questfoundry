@@ -255,21 +255,45 @@ class ControlPlane:
         # Get the standard showrunner node
         return self.node_factory.create_role_node("showrunner")
 
+    def _get_trace_handler(self) -> Any:
+        """Get trace handler from state manager if available."""
+        return getattr(self.state_manager, "_trace_handler", None)
+
+    def _trace_message(self, message: Message) -> None:
+        """Trace a message if trace handler is available."""
+        trace_handler = self._get_trace_handler()
+        if trace_handler:
+            trace_handler.trace_message(message)
+
     def _wrap_node_with_envelope(self, role_id: str) -> Any:
         """
-        Wrap a role node to ensure it emits proper envelope messages.
+        Wrap a role node to ensure it emits proper envelope messages and traces them.
 
         The wrapped node:
-        1. Executes the role logic
-        2. Ensures output messages have proper envelope structure
+        1. Traces role_started
+        2. Executes the role logic
+        3. Ensures output messages have proper envelope structure
+        4. Traces all output messages
+        5. Traces role_completed
         """
         base_node = self.node_factory.create_role_node(role_id)
 
         def wrapped_node(state: StudioState) -> dict[str, Any]:
+            # Trace role started
+            start_message: Message = {
+                "sender": role_id,
+                "receiver": "trace",
+                "intent": "role_started",
+                "payload": {"role_name": role_id},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "envelope": {"tu_id": state.get("tu_id", "")},
+            }
+            self._trace_message(start_message)
+
             # Execute base node
             result = base_node(state)
 
-            # Ensure messages have proper envelope structure
+            # Ensure messages have proper envelope structure and trace them
             messages = result.get("messages", [])
             for msg in messages:
                 if "envelope" not in msg:
@@ -280,6 +304,23 @@ class ControlPlane:
                 # If no receiver specified, default to showrunner
                 if not msg.get("receiver"):
                     msg["receiver"] = SHOWRUNNER
+
+                # Trace the message
+                self._trace_message(msg)
+
+            # Trace role completed
+            completed_message: Message = {
+                "sender": role_id,
+                "receiver": "trace",
+                "intent": "role_completed",
+                "payload": {
+                    "role_name": role_id,
+                    "insight": f"Generated {len(messages)} message(s)",
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "envelope": {"tu_id": state.get("tu_id", "")},
+            }
+            self._trace_message(completed_message)
 
             return result
 
@@ -372,6 +413,9 @@ class ControlPlane:
             },
         }
         initial_state["messages"] = [human_message]
+
+        # Trace the human input
+        self._trace_message(human_message)
 
         # Create and run graph
         graph = self.create_studio_graph()
