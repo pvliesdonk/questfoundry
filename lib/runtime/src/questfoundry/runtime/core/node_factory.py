@@ -151,9 +151,27 @@ class NodeFactory:
                 "quality_bars": quality_bars,
                 "project_metadata": project_metadata,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
+                "available_tools": role.tools,
             }
 
-            return template.render(**context)
+            rendered = template.render(**context)
+
+            # Ensure the agent sees its available tools even if the template omits them
+            if role.tools:
+                tool_lines = ["## Tools You Can Use"]
+                for tool_def in role.tools:
+                    if isinstance(tool_def, dict):
+                        name = tool_def.get("name", "")
+                        desc = tool_def.get("description", "")
+                    else:
+                        name = str(tool_def)
+                        desc = ""
+                    line = f"- {name}" if not desc else f"- {name}: {desc}"
+                    tool_lines.append(line.rstrip())
+
+                rendered = rendered.rstrip() + "\n\n" + "\n".join(tool_lines) + "\n"
+
+            return rendered
         except TemplateError as e:
             logger.error(f"Template rendering error in role {role.id}: {e}")
             raise

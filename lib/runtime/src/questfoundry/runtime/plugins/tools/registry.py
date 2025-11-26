@@ -45,10 +45,15 @@ class LangChainToolAdapter(Tool):
     """Adapter to wrap LangChain BaseTool instances in the registry API."""
 
     def __init__(self, tool_id: str, base_tool: Any):
-        super().__init__(tool_id, getattr(base_tool, "name", tool_id), getattr(base_tool, "description", ""))
+        super().__init__(
+            tool_id, getattr(base_tool, "name", tool_id), getattr(base_tool, "description", "")
+        )
         self._base_tool = base_tool
 
     def invoke(self, **kwargs: Any) -> Any:
+        logger.info(
+            f"[TOOL] {self.tool_id} invoked", extra={"tool_id": self.tool_id, "args": kwargs}
+        )
         return self._base_tool.run(**kwargs)
 
 
@@ -61,6 +66,9 @@ class MockTool(Tool):
 
     def invoke(self, **kwargs: Any) -> Any:
         """Return mock response."""
+        logger.info(
+            f"[TOOL] {self.tool_id} invoked (mock)", extra={"tool_id": self.tool_id, "args": kwargs}
+        )
         return {
             "status": "success",
             "tool": self.tool_id,
@@ -96,7 +104,9 @@ class ToolRegistry:
         # Document conversion / export
         self._tools["pandoc"] = LangChainToolAdapter("pandoc", PandocConvert())
         self._tools["pdf_export"] = LangChainToolAdapter("pdf_export", PdfExport())
-        self._tools["epub_export"] = LangChainToolAdapter("epub_export", PdfExport(output_format="epub"))
+        self._tools["epub_export"] = LangChainToolAdapter(
+            "epub_export", PdfExport(output_format="epub")
+        )
 
         # Web search
         self._tools["web_search"] = LangChainToolAdapter("web_search", WebSearch())
