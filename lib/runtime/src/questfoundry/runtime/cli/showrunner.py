@@ -298,6 +298,29 @@ class ShowrunnerInterface:
         # Initialize state
         state = self.state_manager.initialize_state(loop_id, context)
 
+        # Emit protocol-style assignment messages to awake roles (trace visibility)
+        try:
+            trace = getattr(self.state_manager, "_trace_handler", None)
+            if trace:
+                loop_def = self.graph_factory.load_loop(loop_id)
+                for role_name in loop_def.required_roles or []:
+                    trace.trace_message(
+                        {
+                            "sender": "showrunner",
+                            "receiver": role_name,
+                            "intent": "tu.assign",
+                            "payload": {
+                                "tu_id": state.get("tu_id"),
+                                "loop": loop_id,
+                                "context": context,
+                            },
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                            "envelope": {"tu_id": state.get("tu_id")},
+                        }
+                    )
+        except Exception as exc:  # pragma: no cover - trace is best-effort
+            logger.warning(f"Could not emit assignment messages: {exc}")
+
         # Create and execute loop graph
         graph = self.graph_factory.create_loop_graph(loop_id)
 
@@ -310,10 +333,7 @@ class ShowrunnerInterface:
         try:
             # Check if gatekeeper approved (all bars green or yellow)
             quality_bars = final_state.get("quality_bars", {})
-            has_red_bars = any(
-                bar.get("status") == "red"
-                for bar in quality_bars.values()
-            )
+            has_red_bars = any(bar.get("status") == "red" for bar in quality_bars.values())
 
             if not has_red_bars and final_state.get("tu_lifecycle") == "hot-proposed":
                 # Move through lifecycle: hot-proposed → stabilizing → gatecheck → cold-merged
@@ -330,7 +350,9 @@ class ShowrunnerInterface:
                 logger.info(f"TU {final_state['tu_id']} merged to cold storage")
 
             elif has_red_bars:
-                logger.warning(f"Loop {loop_id} has red quality bars, TU remains in {final_state.get('tu_lifecycle')}")
+                logger.warning(
+                    f"Loop {loop_id} has red quality bars, TU remains in {final_state.get('tu_lifecycle')}"
+                )
 
         except Exception as e:
             # Log but don't fail - lifecycle transition is not critical for loop execution
