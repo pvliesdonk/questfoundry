@@ -183,10 +183,12 @@ class ToolRegistry:
             "trigger_gatecheck", TriggerGatecheck()
         )
 
-        # Media tools (image/audio generation)
+        # Media tools - aliases to actual implementations
+        # generate_image -> StableDiffusion (already implements multi-provider image gen)
         self._tools["generate_image"] = LangChainToolAdapter(
-            "generate_image", GenerateImage()
+            "generate_image", StableDiffusion()
         )
+        # generate_audio -> stub (no audio provider implemented yet)
         self._tools["generate_audio"] = LangChainToolAdapter(
             "generate_audio", GenerateAudio()
         )
