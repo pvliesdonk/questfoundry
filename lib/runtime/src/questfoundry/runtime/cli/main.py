@@ -170,7 +170,8 @@ def ask(
             # Create output file path if trace_file specified
             output_file = Path(trace_file) if trace_file else None
 
-            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=verbose)
+            # Always show full payloads when tracing to console; file already gets full detail
+            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=True)
 
             # Register for cleanup on interrupt
             _active_trace_handlers.append(trace_handler)
@@ -340,7 +341,7 @@ def loop(
             # Create output file path if trace_file specified
             output_file = Path(trace_file) if trace_file else None
 
-            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=verbose)
+            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=True)
 
             # Register for cleanup on interrupt
             _active_trace_handlers.append(trace_handler)
