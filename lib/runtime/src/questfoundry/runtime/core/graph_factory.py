@@ -91,11 +91,11 @@ class GraphFactory:
 
             # Check 3: All edge targets in nodes or END
             # Note: YAML files use 'END' while LangGraph uses '__end__'
-            if edge.target not in node_ids and edge.target != 'END' and edge.target != END:
+            if edge.target not in node_ids and edge.target != "END" and edge.target != END:
                 raise ValueError(f"Edge target '{edge.target}' not in topology nodes: {node_ids}")
 
         # Check 5: At least one way to exit (either exit conditions or edges to END)
-        has_end_edge = any(edge.target == 'END' or edge.target == END for edge in loop.edges)
+        has_end_edge = any(edge.target == "END" or edge.target == END for edge in loop.edges)
         if not loop.exit_conditions and not has_end_edge:
             raise ValueError("Loop must have at least one exit condition or an edge to END")
 
@@ -187,7 +187,7 @@ class GraphFactory:
             edge: Edge definition with source and target
         """
         # Convert 'END' from YAML to LangGraph's END constant
-        target = END if edge.target == 'END' else edge.target
+        target = END if edge.target == "END" else edge.target
         graph.add_edge(edge.source, target)
         logger.debug(f"Added direct edge: {edge.source} → {edge.target}")
 
@@ -199,18 +199,41 @@ class GraphFactory:
             graph: StateGraph
             edge: Edge definition with condition
         """
+        condition = edge.raw.get("condition", {}) if hasattr(edge, "raw") else {}
+        routes = condition.get("routes", {}) if isinstance(condition, dict) else {}
+        default_route = condition.get("default_route") if isinstance(condition, dict) else None
+
         # Create routing function
         routing_fn = self.edge_evaluator.create_routing_function(edge.raw)
 
         # Convert 'END' from YAML to LangGraph's END constant
-        target = END if edge.target == 'END' else edge.target
+        target = END if edge.target == "END" else edge.target
+
+        path_map: dict[Any, Any] = {
+            edge.target: target,
+            edge.source: edge.source,
+            END: END,
+            "__end__": END,
+        }
+
+        for mapped_target in routes.values():
+            if mapped_target is None:
+                continue
+            norm = END if mapped_target == "END" else mapped_target
+            path_map[mapped_target] = norm
+
+        if default_route:
+            norm = END if default_route == "END" else default_route
+            path_map[default_route] = norm
+
+        # Drop any routes that resolve to None to avoid LangGraph type errors
+        cleaned_path_map = {k: v for k, v in path_map.items() if v is not None}
 
         # Add conditional edge with correct API
-        # LangGraph expects 'path' parameter, not 'condition'
         graph.add_conditional_edges(
             source=edge.source,
             path=routing_fn,
-            path_map={edge.target: target, edge.source: edge.source, END: END},
+            path_map=cleaned_path_map,
         )
 
         logger.debug(f"Added conditional edge: {edge.source} → {edge.target}")
@@ -272,6 +295,7 @@ class GraphFactory:
         # Add exit condition routing from every node; EdgeEvaluator decides
         for node_id in loop.get_node_ids():
             try:
+
                 def make_routing(nid: str):
                     def routing(state: StudioState) -> str:
                         for exit_cond in loop.exit_conditions:
@@ -280,6 +304,7 @@ class GraphFactory:
                                 logger.info(f"Exit condition '{exit_cond.name}' met at node {nid}")
                                 return END
                         return nid
+
                     return routing
 
                 routing_fn = make_routing(node_id)

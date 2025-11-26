@@ -21,16 +21,11 @@ logger = logging.getLogger(__name__)
 class EdgeEvaluator:
     """Evaluate conditional edges based on state to determine next node."""
 
-    def evaluate_condition(self, condition: dict[str, Any], state: StudioState) -> bool:
-        """
-        Evaluate condition based on evaluator type.
+    def evaluate_condition(self, condition: dict[str, Any], state: StudioState) -> Any:
+        """Evaluate condition based on evaluator type.
 
-        Args:
-            condition: Condition object from edge
-            state: Current loop state
-
-        Returns:
-            True if condition met, False otherwise
+        Returns raw evaluation output so routing logic can branch on
+        booleans or explicit route values.
 
         Raises:
             ValueError: If evaluator type is unknown
@@ -41,19 +36,54 @@ class EdgeEvaluator:
             expr = condition.get("expression", "")
             return self.evaluate_python_expression(expr, state)
 
-        elif evaluator_type == "json_logic":
+        if evaluator_type == "json_logic":
             rules = condition.get("rules", {})
             return self.evaluate_json_logic(rules, state)
 
-        elif evaluator_type == "bar_threshold":
+        if evaluator_type == "bar_threshold":
             bars = condition.get("bars_checked", [])
             threshold = condition.get("threshold", "all_green")
             return self.evaluate_bar_threshold(bars, threshold, state)
 
-        else:
-            raise ValueError(f"Unknown evaluator: {evaluator_type}")
+        if evaluator_type == "state_key_match":
+            # If an expression is provided, evaluate it directly (common in spec files)
+            expr = condition.get("expression")
+            if expr:
+                return self.evaluate_python_expression(expr, state)
 
-    def evaluate_python_expression(self, expression: str, state: StudioState) -> bool:
+            state_key = condition.get("state_key")
+            expected = condition.get("expected_value", True)
+            actual = self._get_nested_value(state, state_key)
+            return actual == expected
+
+        if evaluator_type == "artifact_field_match":
+            expr = condition.get("expression")
+            if expr:
+                return self.evaluate_python_expression(expr, state, coerce_bool=False)
+
+            artifact_path = condition.get("artifact_path") or condition.get("state_key")
+            expected = condition.get("expected_value")
+            actual = self._get_nested_value(state.get("artifacts", {}), artifact_path)
+            if expected is None:
+                return actual
+            return actual == expected
+
+        if evaluator_type == "quality_bar_status":
+            bar = condition.get("bar") or condition.get("quality_bar")
+            expected_status = condition.get("status") or condition.get("expected_status")
+            if not bar:
+                logger.warning("quality_bar_status evaluator missing 'bar'")
+                return False
+            bar_status = state.get("quality_bars", {}).get(bar, {}).get("status")
+            if expected_status:
+                return bar_status == expected_status
+            return bar_status
+
+        raise ValueError(f"Unknown evaluator: {evaluator_type}")
+
+    def evaluate_python_expression(
+        self, expression: str, state: StudioState, coerce_bool: bool = True
+    ) -> Any:
         """
         Safely evaluate Python expression against state using asteval.
 
@@ -71,22 +101,27 @@ class EdgeEvaluator:
             Exception: If expression is unsafe or invalid
         """
         try:
-            # Create safe interpreter
+            # Create safe interpreter with minimal builtins
             aeval = Interpreter(
-                usersyms=None,  # No user symbols
-                builtins_={},  # No builtins by default
+                usersyms={},
+                builtins_={"True": True, "False": False, "None": None},
             )
+
+            # Wrap state to allow attribute-style access used in spec expressions
+            state_proxy = self._wrap_state(state)
 
             # Add safe context variables
             safe_context = {
-                "state": state,
-                "artifacts": state.get("artifacts", {}),
-                "quality_bars": state.get("quality_bars", {}),
-                "tu_lifecycle": state.get("tu_lifecycle"),
-                "error": state.get("error"),
-                "retry_count": state.get("retry_count", 0),
-                "messages": state.get("messages", []),
-                "loop_context": state.get("loop_context", {}),
+                "state": state_proxy,
+                "artifacts": state_proxy.get("artifacts", {}),
+                "quality_bars": state_proxy.get("quality_bars", {}),
+                "tu_lifecycle": state_proxy.get("tu_lifecycle"),
+                "error": state_proxy.get("error"),
+                "retry_count": state_proxy.get("retry_count", 0),
+                "messages": state_proxy.get("messages", []),
+                "loop_context": state_proxy.get("loop_context", {}),
+                "true": True,
+                "false": False,
             }
 
             # Add to interpreter
@@ -102,7 +137,7 @@ class EdgeEvaluator:
                 logger.warning(f"Error details: {aeval.error}")
                 return False
 
-            return bool(result)
+            return bool(result) if coerce_bool else result
 
         except Exception as e:
             logger.warning(f"Failed to evaluate expression: {expression}")
@@ -202,6 +237,30 @@ class EdgeEvaluator:
         )
         return result
 
+    @staticmethod
+    def _get_nested_value(data: Any, path: str | None) -> Any:
+        """Safely navigate dotted paths in nested dicts."""
+
+        if not path:
+            return None
+
+        current: Any = data
+        for part in path.split("."):
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return None
+        return current
+
+    def _wrap_state(self, data: Any) -> Any:
+        """Recursively wrap mappings to allow attribute-style access in expressions."""
+
+        if isinstance(data, dict):
+            return _AttrDict({k: self._wrap_state(v) for k, v in data.items()})
+        if isinstance(data, list):
+            return [self._wrap_state(v) for v in data]
+        return data
+
     def create_routing_function(
         self, edge: dict[str, Any], max_retries: int = 3
     ) -> Callable[[StudioState], str]:
@@ -220,32 +279,60 @@ class EdgeEvaluator:
             Routing function that takes state and returns next node ID
         """
 
+        routes = edge.get("condition", {}).get("routes", {}) if edge.get("condition") else {}
+        default_route = (
+            edge.get("condition", {}).get("default_route") if edge.get("condition") else None
+        )
+
+        def normalize_target(target_name: str | Any) -> str:
+            if target_name == END:
+                return END
+            if isinstance(target_name, str) and target_name.upper() == "END":
+                return END
+            return target_name
+
         def routing_function(state: StudioState) -> str:
             condition = edge.get("condition", {})
             source = edge.get("source")
             target = edge.get("target")
 
             try:
-                # Evaluate condition
-                condition_met = self.evaluate_condition(condition, state)
+                result = self.evaluate_condition(condition, state)
 
-                if condition_met:
-                    # Condition passed, go to target
+                if routes:
+                    route_key = result
+                    # Normalise booleans to strings to match YAML keys like "true"/"false"
+                    if isinstance(route_key, bool):
+                        route_key = str(route_key).lower()
+
+                    mapped_target = routes.get(route_key) or routes.get(str(route_key))
+                    if mapped_target:
+                        return normalize_target(mapped_target)
+                    if default_route:
+                        return normalize_target(default_route)
+
+                if bool(result):
                     return target
 
-                else:
-                    # Condition failed, check retry count
-                    retry_count = state.get("retry_count", 0)
-                    if retry_count < max_retries:
-                        # Loop back to source for rework
-                        return source
-                    else:
-                        # Max retries exceeded, exit
-                        return "__end__"
+                retry_count = state.get("retry_count", 0)
+                if retry_count < max_retries:
+                    return source
+
+                return "__end__"
 
             except Exception as e:
                 logger.error(f"Routing function error: {e}")
-                # On error, exit to prevent infinite loops
                 return "__end__"
 
         return routing_function
+
+
+class _AttrDict(dict):
+    """Dict that supports attribute-style access and recursive wrapping."""
+
+    def __getattr__(self, item: str) -> Any:  # pragma: no cover - simple passthrough
+        return self.get(item)
+
+    def __getitem__(self, key: Any) -> Any:  # pragma: no cover - simple passthrough
+        value = super().__getitem__(key)
+        return value

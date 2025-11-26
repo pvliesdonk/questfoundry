@@ -11,6 +11,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib import request
 
 import yaml
 
@@ -527,7 +528,22 @@ class ProviderManager:
         # Get Ollama base URL from OLLAMA_HOST environment variable
         base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
         logger.debug(f"[OLLAMA] Using base_url: {base_url}")
-        logger.debug(f"[OLLAMA] Creating ChatOllama with model={model}, temp={temperature}, max_tokens={max_tokens}")
+        logger.debug(
+            f"[OLLAMA] Creating ChatOllama with model={model}, temp={temperature}, max_tokens={max_tokens}"
+        )
+
+        # Fast preflight check to avoid long timeouts when daemon isn't running
+        try:
+            request.urlopen(f"{base_url}/api/tags", timeout=2).close()
+        except Exception as exc:  # pragma: no cover - network/daemon check
+            raise ProviderError(
+                "Ollama daemon not reachable",
+                provider_name="ollama",
+                suggestions=[
+                    "Start the server: ollama serve",
+                    f"Check OLLAMA_HOST (currently {base_url})",
+                ],
+            ) from exc
 
         # Force JSON output format for all Ollama models
         # This ensures structured responses are properly formatted

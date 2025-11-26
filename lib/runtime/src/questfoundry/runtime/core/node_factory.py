@@ -121,20 +121,38 @@ class NodeFactory:
             template = Template(template_str)
             hot_sot = state.get("hot_sot", {})
             cold_sot = state.get("cold_sot", {})
+
             tu_scope = {
                 "id": state.get("tu_id", ""),
                 "loop": state.get("loop_id", ""),
                 "context": state.get("loop_context", {}),
             }
+
+            context_info = {
+                "tu_id": state.get("tu_id", ""),
+                "loop": state.get("loop_id", ""),
+                "snapshot": state.get("snapshot_ref"),
+            }
+
+            # Inject optional helpers requested by the spec-level prompt config
+            prompt_injection = prompt_config.get("context_injection", {})
+            quality_bars = state.get("quality_bars", {}) if prompt_injection else {}
+            project_metadata = state.get("project_metadata", {}) if prompt_injection else {}
+
             context = {
                 "role": role.raw,
+                "identity": role.raw.get("identity", {}),
                 "prompt_content": prompt_content,
                 "state": state,
                 "hot_sot": hot_sot,
                 "cold_sot": cold_sot,
                 "tu_scope": tu_scope,
+                "context": context_info,
+                "quality_bars": quality_bars,
+                "project_metadata": project_metadata,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
+
             return template.render(**context)
         except TemplateError as e:
             logger.error(f"Template rendering error in role {role.id}: {e}")
@@ -457,9 +475,7 @@ class NodeFactory:
                         logger.error(f"LLM invocation failed for {role.id}: {e}")
                         # Mark provider as unavailable for subsequent selections in this run
                         if provider:
-                            self.provider_manager.mark_unavailable(
-                                provider, reason=str(e)
-                            )
+                            self.provider_manager.mark_unavailable(provider, reason=str(e))
                         # Re-raise so the caller can decide whether to abort or retry
                         raise
                 else:
