@@ -103,3 +103,74 @@ class PdfExport(BaseTool):
             "status": "mock",
             "message": "No PDF/EPUB backend available (pandoc/weasyprint)",
         }
+
+
+class ReadExports(BaseTool):
+    """
+    Read exported artifacts from the export directory.
+
+    The Book Binder and Player-Narrator use this to read previously
+    exported files for review or further processing.
+    """
+
+    name: str = "read_exports"
+    description: str = (
+        "Read exported artifacts from the export directory. "
+        "Input: export_id (optional: specific export to read), "
+        "format (optional: filter by format like 'pdf', 'epub', 'html')"
+    )
+
+    def _run(
+        self,
+        export_id: str | None = None,
+        format: str | None = None,
+    ) -> dict[str, Any]:
+        """Read exports from the export directory."""
+        # TODO: Implement actual export directory reading
+        # Should integrate with project storage/ColdStore
+        logger.info(f"[STUB] read_exports called: export_id={export_id}, format={format}")
+        raise NotImplementedError(
+            "read_exports is not yet implemented. "
+            "Requires integration with project storage to list/read exported files. "
+            "See spec/05-definitions/roles/book_binder.yaml for export patterns."
+        )
+
+
+class WriteExports(BaseTool):
+    """
+    Write artifacts to the export directory.
+
+    The Book Binder uses this to save finalized exports
+    (PDF, EPUB, HTML) to the project's export location.
+    """
+
+    name: str = "write_exports"
+    description: str = (
+        "Write an artifact to the export directory. "
+        "Input: content (the content to export), "
+        "filename (target filename), "
+        "format (export format: 'pdf', 'epub', 'html', 'txt')"
+    )
+
+    def _run(
+        self,
+        content: str,
+        filename: str,
+        format: str = "txt",
+    ) -> dict[str, Any]:
+        """Write content to export directory."""
+        valid_formats = ["pdf", "epub", "html", "txt", "md"]
+        if format not in valid_formats:
+            return {
+                "success": False,
+                "error": f"Invalid format: {format}. Valid formats: {valid_formats}",
+            }
+
+        # TODO: Implement actual export writing
+        # Should integrate with project storage and possibly convert formats
+        logger.info(f"[STUB] write_exports called: filename={filename}, format={format}")
+        raise NotImplementedError(
+            f"write_exports ({format}) is not yet implemented. "
+            "Requires integration with project storage for export persistence. "
+            "See spec/05-definitions/roles/book_binder.yaml for export patterns."
+        )

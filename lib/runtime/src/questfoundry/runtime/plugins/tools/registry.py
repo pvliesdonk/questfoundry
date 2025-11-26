@@ -9,24 +9,42 @@ import logging
 from typing import Any
 
 from questfoundry.runtime.tools import (
+    # Knowledge tools
     ConsultGlossary,
     ConsultPlaybook,
     ConsultProtocol,
     ConsultQualityGate,
     ConsultRoleCharter,
+    # Validation tools
     EvaluateQualityBar,
+    ValidateArtifact,
+    # Research tools
     LoreIndex,
+    WebSearch,
+    # Export tools
     PandocConvert,
     PdfExport,
+    ReadExports,
+    WriteExports,
+    # State tools
     ReadColdSOT,
     ReadHotSOT,
-    SendProtocolEnvelope,
-    SendProtocolMessage,
-    StableDiffusion,
-    ValidateArtifact,
-    WebSearch,
     WriteColdSOT,
     WriteHotSOT,
+    # Protocol tools
+    SendProtocolEnvelope,
+    SendProtocolMessage,
+    # Creative tools
+    StableDiffusion,
+    # Orchestration tools
+    CreateSnapshot,
+    SleepRole,
+    TriggerGatecheck,
+    UpdateTU,
+    WakeRole,
+    # Media tools
+    GenerateAudio,
+    GenerateImage,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,6 +170,33 @@ class ToolRegistry:
         )
         self._tools["consult_glossary"] = LangChainToolAdapter(
             "consult_glossary", ConsultGlossary()
+        )
+
+        # Orchestration tools (Showrunner coordination)
+        self._tools["create_snapshot"] = LangChainToolAdapter(
+            "create_snapshot", CreateSnapshot()
+        )
+        self._tools["update_tu"] = LangChainToolAdapter("update_tu", UpdateTU())
+        self._tools["wake_role"] = LangChainToolAdapter("wake_role", WakeRole())
+        self._tools["sleep_role"] = LangChainToolAdapter("sleep_role", SleepRole())
+        self._tools["trigger_gatecheck"] = LangChainToolAdapter(
+            "trigger_gatecheck", TriggerGatecheck()
+        )
+
+        # Media tools (image/audio generation)
+        self._tools["generate_image"] = LangChainToolAdapter(
+            "generate_image", GenerateImage()
+        )
+        self._tools["generate_audio"] = LangChainToolAdapter(
+            "generate_audio", GenerateAudio()
+        )
+
+        # Export tools (read/write exports)
+        self._tools["read_exports"] = LangChainToolAdapter(
+            "read_exports", ReadExports()
+        )
+        self._tools["write_exports"] = LangChainToolAdapter(
+            "write_exports", WriteExports()
         )
 
         logger.info(f"Registered {len(self._tools)} stub tools")
