@@ -105,6 +105,15 @@ class PdfExport(BaseTool):
         }
 
 
+def _get_exports_dir(project_id: str = "default") -> Path:
+    """Get the exports directory for a project."""
+    from questfoundry.runtime.core.cold_store import _default_project_root
+    base = _default_project_root()
+    exports_dir = base / project_id / "exports"
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    return exports_dir
+
+
 class ReadExports(BaseTool):
     """
     Read exported artifacts from the export directory.
@@ -124,16 +133,70 @@ class ReadExports(BaseTool):
         self,
         export_id: str | None = None,
         format: str | None = None,
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         """Read exports from the export directory."""
-        # TODO: Implement actual export directory reading
-        # Should integrate with project storage/ColdStore
-        logger.info(f"[STUB] read_exports called: export_id={export_id}, format={format}")
-        raise NotImplementedError(
-            "read_exports is not yet implemented. "
-            "Requires integration with project storage to list/read exported files. "
-            "See spec/05-definitions/roles/book_binder.yaml for export patterns."
-        )
+        import os
+        pid = project_id or os.getenv("QF_PROJECT_ID", "default")
+        exports_dir = _get_exports_dir(pid)
+
+        if export_id:
+            # Read specific export file
+            matching = list(exports_dir.glob(f"{export_id}*"))
+            if not matching:
+                return {
+                    "success": False,
+                    "error": f"Export not found: {export_id}",
+                    "exports_dir": str(exports_dir),
+                }
+
+            export_file = matching[0]
+            try:
+                # For text-based formats, read content
+                if export_file.suffix in {".txt", ".md", ".html"}:
+                    content = export_file.read_text(encoding="utf-8")
+                    return {
+                        "success": True,
+                        "export_id": export_id,
+                        "filename": export_file.name,
+                        "format": export_file.suffix.lstrip("."),
+                        "content": content,
+                        "size_bytes": export_file.stat().st_size,
+                    }
+                else:
+                    # Binary formats - return metadata only
+                    return {
+                        "success": True,
+                        "export_id": export_id,
+                        "filename": export_file.name,
+                        "format": export_file.suffix.lstrip("."),
+                        "path": str(export_file),
+                        "size_bytes": export_file.stat().st_size,
+                        "note": "Binary file - content not included",
+                    }
+            except Exception as exc:
+                return {"success": False, "error": str(exc)}
+
+        # List all exports (optionally filtered by format)
+        pattern = f"*.{format}" if format else "*"
+        exports = []
+        for f in exports_dir.glob(pattern):
+            if f.is_file():
+                exports.append({
+                    "filename": f.name,
+                    "format": f.suffix.lstrip("."),
+                    "size_bytes": f.stat().st_size,
+                    "modified": f.stat().st_mtime,
+                })
+
+        logger.info(f"Listed {len(exports)} exports from {exports_dir}")
+        return {
+            "success": True,
+            "project_id": pid,
+            "exports_dir": str(exports_dir),
+            "count": len(exports),
+            "exports": exports,
+        }
 
 
 class WriteExports(BaseTool):
@@ -157,8 +220,10 @@ class WriteExports(BaseTool):
         content: str,
         filename: str,
         format: str = "txt",
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         """Write content to export directory."""
+        import os
         valid_formats = ["pdf", "epub", "html", "txt", "md"]
         if format not in valid_formats:
             return {
@@ -166,11 +231,65 @@ class WriteExports(BaseTool):
                 "error": f"Invalid format: {format}. Valid formats: {valid_formats}",
             }
 
-        # TODO: Implement actual export writing
-        # Should integrate with project storage and possibly convert formats
-        logger.info(f"[STUB] write_exports called: filename={filename}, format={format}")
-        raise NotImplementedError(
-            f"write_exports ({format}) is not yet implemented. "
-            "Requires integration with project storage for export persistence. "
-            "See spec/05-definitions/roles/book_binder.yaml for export patterns."
-        )
+        pid = project_id or os.getenv("QF_PROJECT_ID", "default")
+        exports_dir = _get_exports_dir(pid)
+
+        # Ensure filename has correct extension
+        if not filename.endswith(f".{format}"):
+            filename = f"{filename}.{format}"
+
+        export_path = exports_dir / filename
+
+        try:
+            # For PDF/EPUB, content might be base64-encoded or we need conversion
+            if format in {"pdf", "epub"}:
+                # Try to decode as base64 if it looks like binary
+                import base64
+                try:
+                    binary_content = base64.b64decode(content)
+                    export_path.write_bytes(binary_content)
+                except Exception:
+                    # If not base64, write as text and let pandoc convert
+                    temp_md = exports_dir / f"{filename}.md"
+                    temp_md.write_text(content, encoding="utf-8")
+
+                    # Try pandoc conversion
+                    converter = PandocConvert()
+                    result = converter._run(
+                        input_path=str(temp_md),
+                        output_path=str(export_path),
+                        output_format=format,
+                    )
+                    temp_md.unlink(missing_ok=True)
+
+                    if result.get("status") != "success":
+                        # Fall back to just saving the content as-is
+                        export_path.write_text(content, encoding="utf-8")
+                        return {
+                            "success": True,
+                            "filename": filename,
+                            "path": str(export_path),
+                            "format": format,
+                            "note": f"Saved as text (conversion unavailable: {result.get('message')})",
+                        }
+            else:
+                # Text-based formats
+                export_path.write_text(content, encoding="utf-8")
+
+            logger.info(f"Wrote export: {export_path}")
+            return {
+                "success": True,
+                "filename": filename,
+                "path": str(export_path),
+                "format": format,
+                "size_bytes": export_path.stat().st_size,
+                "project_id": pid,
+            }
+
+        except Exception as exc:
+            logger.error(f"Failed to write export {filename}: {exc}")
+            return {
+                "success": False,
+                "filename": filename,
+                "error": str(exc),
+            }

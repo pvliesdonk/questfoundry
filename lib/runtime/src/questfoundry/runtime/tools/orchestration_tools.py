@@ -8,9 +8,16 @@ These tools allow the Showrunner to coordinate the studio:
 """
 
 import logging
+import os
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.tools import BaseTool
+from pydantic import PrivateAttr
+
+from questfoundry.runtime.core.cold_store import ColdStore
+from questfoundry.runtime.core.state_manager import StateManager
+from questfoundry.runtime.models.state import StudioState
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +37,57 @@ class CreateSnapshot(BaseTool):
         "Use before significant changes for traceability."
     )
 
-    def _run(self, label: str = "") -> dict[str, Any]:
+    model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
+    _state_manager: StateManager = PrivateAttr()
+    _cold_store: ColdStore = PrivateAttr()
+
+    def __init__(
+        self,
+        state_manager: StateManager | None = None,
+        cold_store: ColdStore | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._state_manager = state_manager or StateManager()
+        self._cold_store = cold_store or ColdStore()
+
+    def _run(
+        self,
+        label: str = "",
+        state: StudioState | None = None,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
         """Create a snapshot of current state."""
-        # TODO: Implement actual snapshot creation with ColdStore
-        # For now, return a stub that indicates the operation
-        logger.info(f"[STUB] create_snapshot called with label: {label}")
-        raise NotImplementedError(
-            "create_snapshot is not yet implemented. "
-            "Requires ColdStore integration for snapshot persistence. "
-            "See spec/04-protocol/LIFECYCLES/tu_lifecycle.md"
+        if state is None:
+            return {"success": False, "error": "State payload is required for create_snapshot"}
+
+        # Resolve project ID
+        pid = (
+            project_id
+            or state.get("loop_context", {}).get("project_id")
+            or os.getenv("QF_PROJECT_ID", "default")
         )
+        tu_id = state.get("tu_id", "unknown")
+
+        # Create snapshot via StateManager
+        snapshot = self._state_manager.snapshot_state(state)
+        if label:
+            snapshot["label"] = label
+
+        # Persist to cold store
+        self._cold_store.append_snapshot(pid, tu_id, snapshot)
+
+        snapshot_id = snapshot.get("snapshot_id", f"SNAP-{tu_id}")
+        logger.info(f"Created snapshot {snapshot_id} for project {pid}")
+
+        return {
+            "success": True,
+            "snapshot_id": snapshot_id,
+            "tu_id": tu_id,
+            "project_id": pid,
+            "label": label or None,
+            "created_at": snapshot.get("created_at"),
+        }
 
 
 class UpdateTU(BaseTool):
@@ -57,22 +105,67 @@ class UpdateTU(BaseTool):
         "Input: new_state (one of: stabilizing, gatecheck, cold-merged)"
     )
 
-    def _run(self, new_state: str) -> dict[str, Any]:
+    model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
+    _state_manager: StateManager = PrivateAttr()
+
+    def __init__(self, state_manager: StateManager | None = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._state_manager = state_manager or StateManager()
+
+    def _run(
+        self,
+        new_state: str,
+        state: StudioState | None = None,
+    ) -> dict[str, Any]:
         """Transition the TU to a new lifecycle state."""
-        valid_states = ["stabilizing", "gatecheck", "cold-merged"]
+        valid_states = ["hot-proposed", "stabilizing", "gatecheck", "cold-merged"]
         if new_state not in valid_states:
             return {
                 "success": False,
                 "error": f"Invalid state: {new_state}. Valid states: {valid_states}",
             }
 
-        # TODO: Implement actual TU state transition via StateManager
-        logger.info(f"[STUB] update_tu called with new_state: {new_state}")
-        raise NotImplementedError(
-            f"update_tu transition to '{new_state}' is not yet implemented. "
-            "Requires StateManager integration for lifecycle management. "
-            "See spec/04-protocol/LIFECYCLES/tu_lifecycle.md"
-        )
+        if state is None:
+            return {"success": False, "error": "State payload is required for update_tu"}
+
+        current_lifecycle = state.get("tu_lifecycle", "unknown")
+        tu_id = state.get("tu_id", "unknown")
+
+        try:
+            # Use StateManager to perform the transition (validates and persists)
+            new_state_obj = self._state_manager.transition_tu(state, new_state)
+            logger.info(f"TU {tu_id} transitioned: {current_lifecycle} → {new_state}")
+            return {
+                "success": True,
+                "tu_id": tu_id,
+                "previous_lifecycle": current_lifecycle,
+                "new_lifecycle": new_state,
+                "updated_state": new_state_obj,
+            }
+        except Exception as exc:
+            logger.error(f"Failed to transition TU {tu_id}: {exc}")
+            return {
+                "success": False,
+                "tu_id": tu_id,
+                "current_lifecycle": current_lifecycle,
+                "requested_lifecycle": new_state,
+                "error": str(exc),
+            }
+
+
+# Module-level dormancy registry reference (set by ControlPlane at runtime)
+_dormancy_registry: Any = None
+
+
+def set_dormancy_registry(registry: Any) -> None:
+    """Set the shared dormancy registry for orchestration tools."""
+    global _dormancy_registry
+    _dormancy_registry = registry
+
+
+def get_dormancy_registry() -> Any:
+    """Get the shared dormancy registry."""
+    return _dormancy_registry
 
 
 class WakeRole(BaseTool):
@@ -99,13 +192,27 @@ class WakeRole(BaseTool):
                 "message": f"Role '{role_id}' is always-on, no action needed",
             }
 
-        # TODO: Implement actual dormancy management via ControlPlane.dormancy
-        logger.info(f"[STUB] wake_role called for: {role_id}")
-        raise NotImplementedError(
-            f"wake_role for '{role_id}' is not yet implemented. "
-            "Requires ControlPlane.dormancy integration. "
-            "See spec/00-north-star/ROLE_INDEX.md for dormancy policies"
-        )
+        registry = get_dormancy_registry()
+        if registry is None:
+            # No registry available - likely running outside ControlPlane context
+            logger.warning(f"wake_role: No dormancy registry available for {role_id}")
+            return {
+                "success": True,
+                "message": f"Role '{role_id}' wake requested (no registry)",
+                "note": "Running without DormancyRegistry - assuming role is active",
+            }
+
+        was_dormant = registry.is_dormant(role_id)
+        registry.wake(role_id)
+        logger.info(f"Woke role '{role_id}' (was_dormant={was_dormant})")
+
+        return {
+            "success": True,
+            "role_id": role_id,
+            "was_dormant": was_dormant,
+            "is_dormant": False,
+            "message": f"Role '{role_id}' is now active",
+        }
 
 
 class TriggerGatecheck(BaseTool):
@@ -113,7 +220,8 @@ class TriggerGatecheck(BaseTool):
     Trigger a quality gate check on the current work.
 
     The Showrunner uses this to invoke the Gatekeeper for validation
-    before finalizing artifacts.
+    before finalizing artifacts. Returns a message envelope to be sent
+    to the Gatekeeper role.
     """
 
     name: str = "trigger_gatecheck"
@@ -123,7 +231,11 @@ class TriggerGatecheck(BaseTool):
         "Input: quality_bars (list of bars to check, or 'all' for full check)"
     )
 
-    def _run(self, quality_bars: str | list[str] = "all") -> dict[str, Any]:
+    def _run(
+        self,
+        quality_bars: str | list[str] = "all",
+        state: StudioState | None = None,
+    ) -> dict[str, Any]:
         """Trigger quality gate validation."""
         all_bars = [
             "Integrity",
@@ -151,13 +263,34 @@ class TriggerGatecheck(BaseTool):
                 "error": f"Invalid quality bars: {invalid}. Valid bars: {all_bars}",
             }
 
-        # TODO: Implement actual gatecheck by sending message to Gatekeeper
-        logger.info(f"[STUB] trigger_gatecheck called for bars: {bars_to_check}")
-        raise NotImplementedError(
-            f"trigger_gatecheck for bars {bars_to_check} is not yet implemented. "
-            "Requires message routing to Gatekeeper role. "
-            "See spec/05-definitions/quality_gates/"
-        )
+        tu_id = state.get("tu_id", "unknown") if state else "unknown"
+
+        # Create a gatecheck request message for the Gatekeeper
+        # The ControlPlane will route this based on the receiver field
+        gatecheck_message = {
+            "sender": "showrunner",
+            "receiver": "gatekeeper",
+            "intent": "gatecheck_request",
+            "payload": {
+                "bars_to_check": bars_to_check,
+                "tu_id": tu_id,
+                "request_type": "quality_validation",
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "envelope": {
+                "tu_id": tu_id,
+                "priority": "normal",
+            },
+        }
+
+        logger.info(f"Triggered gatecheck for bars: {bars_to_check}")
+
+        return {
+            "success": True,
+            "bars_requested": bars_to_check,
+            "message": gatecheck_message,
+            "note": "Message should be added to state.messages for routing to Gatekeeper",
+        }
 
 
 class SleepRole(BaseTool):
@@ -184,10 +317,24 @@ class SleepRole(BaseTool):
                 "error": f"Role '{role_id}' is always-on and cannot be put to sleep",
             }
 
-        # TODO: Implement actual dormancy management via ControlPlane.dormancy
-        logger.info(f"[STUB] sleep_role called for: {role_id}")
-        raise NotImplementedError(
-            f"sleep_role for '{role_id}' is not yet implemented. "
-            "Requires ControlPlane.dormancy integration. "
-            "See spec/00-north-star/ROLE_INDEX.md for dormancy policies"
-        )
+        registry = get_dormancy_registry()
+        if registry is None:
+            # No registry available - likely running outside ControlPlane context
+            logger.warning(f"sleep_role: No dormancy registry available for {role_id}")
+            return {
+                "success": True,
+                "message": f"Role '{role_id}' sleep requested (no registry)",
+                "note": "Running without DormancyRegistry - request noted but not enforced",
+            }
+
+        was_dormant = registry.is_dormant(role_id)
+        registry.sleep(role_id)
+        logger.info(f"Put role '{role_id}' to sleep (was_dormant={was_dormant})")
+
+        return {
+            "success": True,
+            "role_id": role_id,
+            "was_dormant": was_dormant,
+            "is_dormant": True,
+            "message": f"Role '{role_id}' is now dormant",
+        }

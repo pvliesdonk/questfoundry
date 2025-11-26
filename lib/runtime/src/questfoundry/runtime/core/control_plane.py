@@ -85,6 +85,10 @@ class ControlPlane:
         self.dormancy = DormancyRegistry()
         self._graph_cache: dict[str, Any] = {}
 
+        # Wire up orchestration tools to use our dormancy registry
+        from questfoundry.runtime.tools.orchestration_tools import set_dormancy_registry
+        set_dormancy_registry(self.dormancy)
+
         # Track message history for loop detection
         self._message_history: list[tuple[str, str, str]] = []  # (sender, receiver, intent)
         self._max_ping_pong = 3  # Max identical exchanges before intervention
