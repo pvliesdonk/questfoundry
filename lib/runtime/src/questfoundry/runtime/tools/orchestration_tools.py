@@ -9,11 +9,13 @@ These tools allow the Showrunner to coordinate the studio:
 
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Annotated
 
-from langchain_core.tools import BaseTool
-from pydantic import PrivateAttr
+from langchain_core.tools import BaseTool, InjectedToolArg
+from langchain_core.tools.base import _is_injected_arg_type
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model
+from pydantic.fields import PydanticUndefined
 
 from questfoundry.runtime.core.cold_store import ColdStore
 from questfoundry.runtime.core.state_manager import StateManager
@@ -22,7 +24,46 @@ from questfoundry.runtime.models.state import StudioState
 logger = logging.getLogger(__name__)
 
 
-class CreateSnapshot(BaseTool):
+class _StrictToolSchemaMixin:
+    """Preserve args_schema config and drop injected fields from tool schema."""
+
+    @property
+    def tool_call_schema(self):  # type: ignore[override]
+        args_schema = getattr(self, "args_schema", None)
+        if args_schema is None or not isinstance(args_schema, type):
+            return super().tool_call_schema  # pragma: no cover - fallback
+
+        if hasattr(args_schema, "model_fields"):
+            pruned_fields = {}
+            for name, field in args_schema.model_fields.items():
+                annotated_type = field.annotation
+                if field.metadata:
+                    annotated_type = Annotated[field.annotation, *field.metadata]
+                if _is_injected_arg_type(annotated_type):
+                    continue
+                pruned_fields[name] = field
+            if len(pruned_fields) == len(args_schema.model_fields):
+                return args_schema
+
+            field_defs: dict[str, tuple[Any, Field]] = {}
+            for name, field in pruned_fields.items():
+                default = field.default if field.default is not PydanticUndefined else ...
+                field_defs[name] = (
+                    field.annotation,
+                    Field(default=default, description=field.description),
+                )
+
+            return create_model(  # type: ignore[misc]
+                f"{args_schema.__name__}Public",
+                __config__=args_schema.model_config,
+                __module__=args_schema.__module__,
+                **field_defs,
+            )
+
+        return super().tool_call_schema
+
+
+class CreateSnapshot(_StrictToolSchemaMixin, BaseTool):
     """
     Create a snapshot of the current Hot SoT for traceability.
 
@@ -36,6 +77,17 @@ class CreateSnapshot(BaseTool):
         "Returns a snapshot_ref ID that can be used to restore state. "
         "Use before significant changes for traceability."
     )
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        label: str | None = Field(default=None, description="Optional snapshot label")
+        state: Annotated[StudioState, InjectedToolArg] = Field(
+            ..., description="Current studio state"
+        )
+        project_id: str | None = Field(default=None, description="Project id override")
+    args_schema = Args
 
     model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
     _state_manager: StateManager = PrivateAttr()
@@ -90,7 +142,7 @@ class CreateSnapshot(BaseTool):
         }
 
 
-class UpdateTU(BaseTool):
+class UpdateTU(_StrictToolSchemaMixin, BaseTool):
     """
     Update the current Trace Unit's lifecycle state.
 
@@ -104,6 +156,16 @@ class UpdateTU(BaseTool):
         "Valid transitions: hot-proposed → stabilizing → gatecheck → cold-merged. "
         "Input: new_state (one of: stabilizing, gatecheck, cold-merged)"
     )
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        new_state: str = Field(..., description="New TU lifecycle state")
+        state: Annotated[StudioState, InjectedToolArg] = Field(
+            ..., description="Current studio state"
+        )
+    args_schema = Args
 
     model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
     _state_manager: StateManager = PrivateAttr()
@@ -168,7 +230,7 @@ def get_dormancy_registry() -> Any:
     return _dormancy_registry
 
 
-class WakeRole(BaseTool):
+class WakeRole(_StrictToolSchemaMixin, BaseTool):
     """
     Wake a dormant role so it can participate in the current work.
 
@@ -182,6 +244,14 @@ class WakeRole(BaseTool):
         "Some roles (showrunner, gatekeeper) are always-on and cannot be dormant. "
         "Input: role_id (e.g., 'illustrator', 'translator')"
     )
+
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        role_id: str = Field(..., description="Role id to wake")
+    args_schema = Args
 
     def _run(self, role_id: str) -> dict[str, Any]:
         """Wake a dormant role."""
@@ -215,7 +285,7 @@ class WakeRole(BaseTool):
         }
 
 
-class TriggerGatecheck(BaseTool):
+class TriggerGatecheck(_StrictToolSchemaMixin, BaseTool):
     """
     Trigger a quality gate check on the current work.
 
@@ -230,6 +300,19 @@ class TriggerGatecheck(BaseTool):
         "The Gatekeeper will validate against the 8 quality bars. "
         "Input: quality_bars (list of bars to check, or 'all' for full check)"
     )
+
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        quality_bars: str | list[str] = Field(
+            default="all", description="Which quality bars to evaluate"
+        )
+        state: Annotated[StudioState | None, InjectedToolArg] = Field(
+            default=None, description="Current studio state"
+        )
+    args_schema = Args
 
     def _run(
         self,
@@ -276,7 +359,7 @@ class TriggerGatecheck(BaseTool):
                 "tu_id": tu_id,
                 "request_type": "quality_validation",
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "envelope": {
                 "tu_id": tu_id,
                 "priority": "normal",

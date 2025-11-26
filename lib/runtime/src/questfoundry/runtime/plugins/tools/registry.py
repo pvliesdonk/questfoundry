@@ -8,6 +8,8 @@ Implements plugin provider pattern for tool access.
 import logging
 from typing import Any
 
+from langchain_core.tools import BaseTool, StructuredTool
+
 from questfoundry.runtime.tools import (
     # Knowledge tools
     ConsultGlossary,
@@ -15,39 +17,44 @@ from questfoundry.runtime.tools import (
     ConsultProtocol,
     ConsultQualityGate,
     ConsultRoleCharter,
+    # Orchestration tools
+    CreateSnapshot,
     # Validation tools
     EvaluateQualityBar,
-    ValidateArtifact,
+    # Media tools
+    GenerateAudio,
     # Research tools
     LoreIndex,
-    WebSearch,
     # Export tools
     PandocConvert,
     PdfExport,
-    ReadExports,
-    WriteExports,
     # State tools
     ReadColdSOT,
+    ReadExports,
     ReadHotSOT,
-    WriteColdSOT,
-    WriteHotSOT,
     # Protocol tools
     SendProtocolEnvelope,
     SendProtocolMessage,
+    SleepRole,
     # Creative tools
     StableDiffusion,
-    # Orchestration tools
-    CreateSnapshot,
-    SleepRole,
     TriggerGatecheck,
     UpdateTU,
+    ValidateArtifact,
     WakeRole,
-    # Media tools
-    GenerateAudio,
-    GenerateImage,
+    WebSearch,
+    WriteColdSOT,
+    WriteExports,
+    WriteHotSOT,
 )
 
 logger = logging.getLogger(__name__)
+
+# Global strict mode for LangChain BaseTool to satisfy OpenAI function-calling
+try:
+    BaseTool.strict = True
+except Exception:
+    pass
 
 
 class Tool:
@@ -71,7 +78,16 @@ class LangChainToolAdapter(Tool):
         super().__init__(
             tool_id, getattr(base_tool, "name", tool_id), getattr(base_tool, "description", "")
         )
+        # Ensure compatibility with OpenAI function tools: require strict schema
+        try:
+            base_tool.strict = True  # Needed for OpenAI function tool parsing
+        except Exception:
+            pass
         self._base_tool = base_tool
+
+    def to_langchain_tool(self) -> Any:
+        """Expose the underlying BaseTool with strict schema intact."""
+        return self._base_tool
 
     def invoke(self, **kwargs: Any) -> Any:
         logger.info(

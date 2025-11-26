@@ -405,6 +405,12 @@ class ControlPlane:
             context=context or {},
         )
 
+        # Surface the human directive in hot_sot for easy tool access (spec: SR should
+        # route its interpretation of the customer ask).
+        initial_state.setdefault("hot_sot", {})["customer_directives"] = human_input
+        # Keep a direct copy for prompt rendering convenience
+        initial_state["human_directive"] = human_input
+
         # Add human input as first message
         human_message: Message = {
             "sender": "human",

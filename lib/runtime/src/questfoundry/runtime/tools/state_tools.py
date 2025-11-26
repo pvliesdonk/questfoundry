@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 """Internal state tools for hot/cold Sources of Truth.
 
 These are lightweight LangChain-compatible tools used by roles to read/write
@@ -7,23 +9,65 @@ state. They rely on StateManager/ColdStore for storage semantics but avoid
 additional permission checks (tool exposure already encodes access control).
 """
 
-import threading
 import logging
+import threading
 from copy import deepcopy
-from typing import Any
+from typing import Any, Annotated
 
-from langchain_core.tools import BaseTool
-from pydantic import PrivateAttr
+from langchain_core.tools import BaseTool, InjectedToolArg
+from langchain_core.tools.base import _is_injected_arg_type
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model
+from pydantic.fields import PydanticUndefined
 
 from questfoundry.runtime.core.cold_store import ColdStore
-from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
+from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.exceptions import StateError
 from questfoundry.runtime.models.state import StudioState
 
-
 _STATE_LOCK = threading.RLock()
 logger = logging.getLogger(__name__)
+
+
+class _StrictToolSchemaMixin:
+    """Preserve args_schema config and drop injected fields from tool schema."""
+
+    @property
+    def tool_call_schema(self):  # type: ignore[override]
+        args_schema = getattr(self, "args_schema", None)
+        if args_schema is None or not isinstance(args_schema, type):
+            return super().tool_call_schema  # pragma: no cover - fallback
+
+        # Remove injected fields (e.g., ToolRuntime) while retaining config like
+        # extra="forbid" and json_schema_extra.
+        if hasattr(args_schema, "model_fields"):
+            pruned_fields = {}
+            for name, field in args_schema.model_fields.items():
+                annotated_type = field.annotation
+                if field.metadata:
+                    annotated_type = Annotated[field.annotation, *field.metadata]
+                if _is_injected_arg_type(annotated_type):
+                    continue
+                pruned_fields[name] = field
+            if len(pruned_fields) == len(args_schema.model_fields):
+                return args_schema
+
+            field_defs: dict[str, tuple[Any, Field]] = {}
+            for name, field in pruned_fields.items():
+                default = field.default if field.default is not PydanticUndefined else ...
+                field_defs[name] = (
+                    field.annotation,
+                    Field(default=default, description=field.description),
+                )
+
+            return create_model(  # type: ignore[misc]
+                f"{args_schema.__name__}Public",
+                __config__=args_schema.model_config,
+                __module__=args_schema.__module__,
+                **field_defs,
+            )
+
+        return super().tool_call_schema
 
 
 def _get_nested(data: dict[str, Any], path: str | None) -> Any:
@@ -73,7 +117,7 @@ def _merge_values(existing: Any, incoming: Any) -> Any:
     return deepcopy(incoming)
 
 
-class _BaseStateTool(BaseTool):
+class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
     model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
     _state_manager: StateManager = PrivateAttr()
     _cold_store: ColdStore = PrivateAttr()
@@ -105,8 +149,26 @@ class _BaseStateTool(BaseTool):
 class ReadHotSOT(_BaseStateTool):
     name: str = "read_hot_sot"
     description: str = "Read from in-memory hot source of truth"
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        key: str | None = Field(default=None, description="Dot-path within hot_sot to read")
+        state: Annotated[StudioState | None, InjectedToolArg] = Field(
+            default=None, description="Current studio state"
+        )
+        role_id: Annotated[str | None, InjectedToolArg] = Field(
+            default=None, description="Caller role id"
+        )
+    args_schema = Args
 
-    def _run(self, key: str | None = None, state: StudioState | None = None, role_id: str | None = None) -> Any:  # type: ignore[override]
+    def _run(
+        self,
+        key: str | None = None,
+        state: StudioState | None = None,
+        role_id: str | None = None,
+    ) -> Any:  # type: ignore[override]
         if state is None:
             raise StateError("State payload is required for read_hot_sot")
         return _get_nested(state.get("hot_sot", {}), key)
@@ -115,6 +177,28 @@ class ReadHotSOT(_BaseStateTool):
 class WriteHotSOT(_BaseStateTool):
     name: str = "write_hot_sot"
     description: str = "Write to in-memory hot source of truth"
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        key: str | None = Field(default=None, description="Dot-path within hot_sot to write")
+        value: (
+            dict[str, Any]
+            | list[str | int | float | bool | dict[str, Any] | None]
+            | str
+            | int
+            | float
+            | bool
+            | None
+        ) = Field(default=None, description="Value to write")
+        state: Annotated[StudioState | None, InjectedToolArg] = Field(
+            default=None, description="Current studio state"
+        )
+        role_id: Annotated[str | None, InjectedToolArg] = Field(
+            default=None, description="Caller role id"
+        )
+    args_schema = Args
 
     def _run(
         self,
@@ -140,6 +224,20 @@ class WriteHotSOT(_BaseStateTool):
 class ReadColdSOT(_BaseStateTool):
     name: str = "read_cold_sot"
     description: str = "Read from persistent cold source of truth"
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        key: str | None = Field(default=None, description="Dot-path within cold_sot to read")
+        project_id: str | None = Field(default=None, description="Project id override")
+        state: Annotated[StudioState | None, InjectedToolArg] = Field(
+            default=None, description="Current studio state"
+        )
+        role_id: Annotated[str | None, InjectedToolArg] = Field(
+            default=None, description="Caller role id"
+        )
+    args_schema = Args
 
     def _run(
         self,
@@ -161,6 +259,29 @@ class ReadColdSOT(_BaseStateTool):
 class WriteColdSOT(_BaseStateTool):
     name: str = "write_cold_sot"
     description: str = "Persist to cold source of truth (SQLite/disk)"
+    class Args(BaseModel):
+        model_config = ConfigDict(
+            extra="forbid",
+            json_schema_extra={"additionalProperties": False},
+        )
+        key: str | None = Field(default=None, description="Dot-path within cold_sot to write")
+        value: (
+            dict[str, Any]
+            | list[str | int | float | bool | dict[str, Any] | None]
+            | str
+            | int
+            | float
+            | bool
+            | None
+        ) = Field(default=None, description="Value to write")
+        project_id: str | None = Field(default=None, description="Project id override")
+        state: Annotated[StudioState | None, InjectedToolArg] = Field(
+            default=None, description="Current studio state"
+        )
+        role_id: Annotated[str | None, InjectedToolArg] = Field(
+            default=None, description="Caller role id"
+        )
+    args_schema = Args
 
     def _run(
         self,

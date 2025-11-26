@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from jinja2 import Template, TemplateError
@@ -18,7 +18,7 @@ from questfoundry.runtime.core.provider_manager import ProviderManager
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.models.role import RoleProfile
 from questfoundry.runtime.models.state import StudioState
-from questfoundry.runtime.plugins.tools.registry import get_tool_registry, Tool
+from questfoundry.runtime.plugins.tools.registry import Tool, get_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,8 @@ class NodeFactory:
         Args:
             schema_registry: SchemaRegistry instance (creates new if not provided)
             state_manager: Optional StateManager for tracing messages
-            preferred_provider: Preferred provider (e.g., "ollama") or fallback chain (e.g., "ollama,openai")
+        preferred_provider: Preferred provider (e.g., "ollama") or fallback chain
+            (e.g., "ollama,openai")
         """
         self.schema_registry = schema_registry or SchemaRegistry()
         self.provider_manager = ProviderManager()
@@ -139,6 +140,10 @@ class NodeFactory:
             quality_bars = state.get("quality_bars", {}) if prompt_injection else {}
             project_metadata = state.get("project_metadata", {}) if prompt_injection else {}
 
+            customer_directive = state.get("human_directive") or hot_sot.get(
+                "customer_directives"
+            )
+
             context = {
                 "role": role.raw,
                 "identity": role.raw.get("identity", {}),
@@ -150,11 +155,21 @@ class NodeFactory:
                 "context": context_info,
                 "quality_bars": quality_bars,
                 "project_metadata": project_metadata,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "available_tools": role.tools,
+                "customer_directive": customer_directive,
             }
 
             rendered = template.render(**context)
+
+            # Ensure the human directive is visible even if the template omits it
+            if customer_directive:
+                rendered = (
+                    rendered.rstrip()
+                    + "\n\n## Customer Request\n"
+                    + str(customer_directive).strip()
+                    + "\n"
+                )
 
             # Ensure the agent sees its available tools even if the template omits them
             if role.tools:
@@ -179,6 +194,38 @@ class NodeFactory:
                     tool_lines.append(line.rstrip())
 
                 rendered = rendered.rstrip() + "\n\n" + "\n".join(tool_lines) + "\n"
+
+                # Runtime tool-use protocol (applies to all tool-capable roles)
+                has_protocol = any(
+                    (t.get("name") if isinstance(t, dict) else str(t)) == "send_protocol_message"
+                    for t in role.tools
+                )
+                guidance_lines = ["## Tool Use Protocol"]
+                guidance_lines.append(
+                    "- Prefer tool calls; keep prose minimal. A tool call MUST be present in your response."
+                )
+                guidance_lines.append(
+                    "- If your provider lacks native tool-calling, emit one JSON object {\"name\": \"tool_name\", \"arguments\": {...}} and nothing else."
+                )
+                if has_protocol:
+                    guidance_lines.append(
+                        "- To communicate/assign work, choose recipients and use send_protocol_message(receiver, intent, payload)."
+                    )
+                guidance_lines.append(
+                    "- If a tool fails or cannot be called, send_protocol_message to gatekeeper intent='tu.defer' with the error; do NOT narrate."
+                )
+                guidance_lines.append("- Stop after your tool call or defer message.")
+                rendered = rendered.rstrip() + "\n" + "\n".join(guidance_lines) + "\n"
+
+            # Showrunner-specific operational steps (runtime layer; no spec edit)
+            if role.id == "showrunner":
+                rendered = (
+                    rendered.rstrip()
+                    + "\n\nShowrunner Steps:\n"
+                    "1) read_hot_sot('customer_directives') to restate the ask.\n"
+                    "2) Decide which roles to engage; send_protocol_message to each with intent='tu.open' and payload {directive, proposed deliverables, timebox}. Do NOT wake media roles (illustrator/audio) unless the customer asked for visuals/audio.\n"
+                    "3) If any tool fails, send_protocol_message to gatekeeper intent='tu.defer' with the error.\n"
+                )
 
             return rendered
         except TemplateError as e:
@@ -386,6 +433,46 @@ class NodeFactory:
         except Exception as e:
             logger.warning(f"Trace handler error: {e}")
 
+    @staticmethod
+    def _merge_tool_result(
+        aggregated: dict[str, Any], result: Any
+    ) -> dict[str, Any]:
+        """
+        Merge a single tool result into the aggregated updates bucket.
+
+        Supports the common shapes returned by our tools:
+        - {"messages": [...]}
+        - {"hot_sot": {...}}
+        - {"cold_sot": {...}}
+        - {"artifacts": {...}}
+        """
+        if not isinstance(result, dict):
+            return aggregated
+
+        for key in ("hot_sot", "cold_sot", "artifacts"):
+            if key in result and isinstance(result[key], dict):
+                aggregated.setdefault(key, {}).update(result[key])
+
+        if isinstance(result.get("messages"), list):
+            aggregated.setdefault("messages", []).extend(result["messages"])
+
+        # Keep any additional scalar notes/errors for visibility
+        for key, value in result.items():
+            if key in {"hot_sot", "cold_sot", "artifacts", "messages"}:
+                continue
+            # First-writer wins to avoid clobbering earlier tool outputs
+            aggregated.setdefault(key, value)
+
+        return aggregated
+
+    @staticmethod
+    def _safe_json_load(data: str) -> dict[str, Any] | None:
+        """Best-effort JSON loader that tolerates invalid output."""
+        try:
+            return json.loads(data)
+        except Exception:
+            return None
+
     def _execute_tool_loop(
         self,
         llm: Any,
@@ -395,7 +482,7 @@ class NodeFactory:
         state: StudioState,
         original_prompt: str,
         max_iterations: int = 5,
-    ) -> str:
+    ) -> tuple[str, dict[str, Any], bool]:
         """
         Execute tool calls in a loop until the LLM produces a final response.
 
@@ -417,7 +504,7 @@ class NodeFactory:
         Returns:
             Final text response from the LLM
         """
-        from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+        from langchain_core.messages import HumanMessage, ToolMessage
 
         # Build tool lookup for execution
         tool_map = {}
@@ -432,8 +519,10 @@ class NodeFactory:
                 tool_map[tool.name] = tool
 
         tu_id = state.get("tu_id", "unknown")
+        aggregated_updates: dict[str, Any] = {}
         messages = [HumanMessage(content=original_prompt)]
         iteration = 0
+        any_tool_calls = False
 
         while iteration < max_iterations:
             # Check if response has tool calls
@@ -442,14 +531,22 @@ class NodeFactory:
             if not tool_calls:
                 # No tool calls - return final content
                 content = response.content if hasattr(response, "content") else str(response)
-                return content
+                if isinstance(content, list):
+                    content = "".join(str(part) for part in content)
+                return content, {k: v for k, v in aggregated_updates.items() if v}, any_tool_calls
 
             # Process tool calls
             messages.append(response)  # Add AI message with tool calls
 
             for tool_call in tool_calls:
+                any_tool_calls = True
                 tool_name = tool_call.get("name", "unknown")
                 tool_args = tool_call.get("args", {})
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except Exception:
+                        pass
                 tool_id = tool_call.get("id", f"call_{iteration}")
 
                 # Trace tool call
@@ -466,23 +563,67 @@ class NodeFactory:
                 try:
                     if tool_name in tool_map:
                         tool_instance = tool_map[tool_name]
-                        # Inject state and role_id for tools that need it
-                        if "state" in tool_args or hasattr(tool_instance, '_run'):
-                            # Try to inject state if tool accepts it
+
+                        payload = dict(tool_args)
+                        args_schema = getattr(tool_instance, "args_schema", None)
+                        model_fields = getattr(args_schema, "model_fields", {}) if args_schema else {}
+                        if "state" in model_fields:
+                            payload["state"] = state
+                        if "role_id" in model_fields:
+                            payload["role_id"] = role.id
+
+                        # Fallback injection for common stateful tools when schema hints fail
+                        needs_state = {
+                            "read_hot_sot",
+                            "write_hot_sot",
+                            "read_cold_sot",
+                            "write_cold_sot",
+                            "create_snapshot",
+                            "update_tu",
+                            "trigger_gatecheck",
+                            "send_protocol_message",
+                            "send_protocol_envelope",
+                        }
+                        tname = getattr(tool_instance, "name", tool_name)
+                        if tname in needs_state:
+                            payload["state"] = state
+                            payload["role_id"] = role.id
+                            if tname == "send_protocol_message":
+                                payload.setdefault("payload", {})
+
+                        # Fallback: inspect _run signature for injectable params even if
+                        # args_schema doesn't declare them (e.g., state tools).
+                        try:
+                            import inspect
+
+                            run_sig = inspect.signature(tool_instance._run)  # type: ignore[attr-defined]
+                            if "state" in run_sig.parameters and "state" not in payload:
+                                payload["state"] = state
+                            if "role_id" in run_sig.parameters and "role_id" not in payload:
+                                payload["role_id"] = role.id
+                        except Exception:
+                            pass
+
+                        try:
+                            result = tool_instance._run(**payload)  # type: ignore[attr-defined]
+                        except Exception:
                             try:
-                                result = tool_instance.invoke({**tool_args, "state": state, "role_id": role.id})
+                                result = tool_instance.invoke(payload)
                             except TypeError:
-                                # Tool doesn't accept state, call without it
+                                # Tool doesn't accept injected args, fallback to raw
                                 result = tool_instance.invoke(tool_args)
-                        else:
-                            result = tool_instance.invoke(tool_args)
                     else:
-                        result = f"Tool '{tool_name}' not found in available tools: {list(tool_map.keys())}"
+                        result = (
+                            f"Tool '{tool_name}' not found in available tools: "
+                            f"{list(tool_map.keys())}"
+                        )
                         success = False
                 except Exception as e:
                     result = f"Tool execution error: {str(e)}"
                     success = False
                     logger.error(f"Tool {tool_name} failed: {e}")
+
+                aggregated_updates = self._merge_tool_result(aggregated_updates, result)
 
                 # Trace tool result
                 self._trace_tool_event(
@@ -496,14 +637,19 @@ class NodeFactory:
                 messages.append(ToolMessage(content=str(result), tool_call_id=tool_id))
 
             # Continue the conversation with tool results
-            logger.info(f"Role {role.id} iteration {iteration + 1}: processed {len(tool_calls)} tool calls")
+            logger.info(
+                f"Role {role.id} iteration {iteration + 1}: "
+                f"processed {len(tool_calls)} tool calls"
+            )
             response = llm.invoke(messages)
             iteration += 1
 
         # Max iterations reached - return whatever we have
         logger.warning(f"Role {role.id} reached max tool iterations ({max_iterations})")
         content = response.content if hasattr(response, "content") else str(response)
-        return content
+        if isinstance(content, list):
+            content = "".join(str(part) for part in content)
+        return content, {k: v for k, v in aggregated_updates.items() if v}, any_tool_calls
 
     def create_role_node(self, role_id: str) -> Callable[[StudioState], dict[str, Any]]:
         """
@@ -590,32 +736,58 @@ class NodeFactory:
                         # Bind tools to LLM if role has tools
                         if role_tools:
                             # Convert our tools to LangChain format
-                            lc_tools = [t.to_langchain_tool() for t in role_tools if hasattr(t, 'to_langchain_tool')]
+                            lc_tools = [
+                                t.to_langchain_tool()
+                                for t in role_tools
+                                if hasattr(t, "to_langchain_tool")
+                            ]
                             if not lc_tools:
                                 # Fallback: tools might already be LangChain tools
-                                lc_tools = [t._base_tool if hasattr(t, '_base_tool') else t for t in role_tools]
+                                lc_tools = [
+                                    t._base_tool if hasattr(t, "_base_tool") else t
+                                    for t in role_tools
+                                ]
 
-                            if lc_tools and hasattr(llm, 'bind_tools'):
-                                llm = llm.bind_tools(lc_tools)
-                                logger.info(f"Bound {len(lc_tools)} tools to LLM for role {role.id}")
+                            if lc_tools and hasattr(llm, "bind_tools"):
+                                bind_kwargs: dict[str, Any] = {}
+                                if provider == "openai":
+                                    bind_kwargs = {"strict": True, "tool_choice": "required"}
 
-                        # Add JSON format instructions for all providers
-                        # Critical: All roles MUST output valid JSON
-                        json_prompt = (
-                            f"{prompt}\n\n"
-                            "IMPORTANT: Your response MUST be valid JSON only. "
-                            "Do not include any text before or after the JSON object. "
-                            "Do not use markdown code blocks. "
-                            "Output only the raw JSON object."
-                        )
+                                try:
+                                    llm = llm.bind_tools(lc_tools, **bind_kwargs)
+                                except TypeError:
+                                    # Fallback for providers (e.g., ollama) that don't accept kwargs
+                                    llm = llm.bind_tools(lc_tools)
 
-                        # Invoke LLM with JSON-instructed prompt
+                                logger.info(
+                                    f"Bound {len(lc_tools)} tools to LLM for role {role.id}"
+                                )
+
+                        # Prefer native tool-calling over legacy JSON envelopes.
+                        if role.id == "showrunner":
+                            llm_prompt = (
+                                f"{prompt}\n\n"
+                                "Use the bound tools. Start by reading `customer_directives` "
+                                "from hot_sot. Route your interpretation via protocol messages "
+                                "(send_protocol_message) to wake/assign roles. Provide a brief "
+                                "status summary; no code fences."
+                            )
+                        else:
+                            llm_prompt = (
+                                f"{prompt}\n\n"
+                                "IMPORTANT: Your response MUST be valid JSON only. "
+                                "Do not include any text before or after the JSON object. "
+                                "Do not use markdown code blocks. "
+                                "Output only the raw JSON object."
+                            )
+
+                        # Invoke LLM with provider-specific prompt
                         logger.info(f"Invoking {provider} LLM for role {role.id}")
-                        response = llm.invoke(json_prompt)
+                        response = llm.invoke(llm_prompt)
 
                         # Handle tool calls if present
-                        result = self._execute_tool_loop(
-                            llm, response, role, role_tools, state, json_prompt
+                        result, tool_updates, used_tools = self._execute_tool_loop(
+                            llm, response, role, role_tools, state, llm_prompt
                         )
 
                         # Send role_completed with extracted insight and prompt context
@@ -623,9 +795,10 @@ class NodeFactory:
                             if self.state_manager._trace_handler:
                                 try:
                                     # Include FULL result for trace (no truncation)
-                                    # Critical: Roles need to see complete messages to self-stabilize
-                                    # Also include the rendered prompt so we can debug
-                                    # cross-role communication and prompt construction.
+                                    # Critical: Roles need to see complete messages to
+                                    # self-stabilize. Also include the rendered prompt
+                                    # so we can debug cross-role communication and
+                                    # prompt construction.
                                     completed_message = {
                                         "sender": role.id,
                                         "receiver": "system",
@@ -633,7 +806,9 @@ class NodeFactory:
                                         "payload": {
                                             "role_name": role.name,
                                             "insight": result,  # Full result, not truncated
-                                            "length": len(result),
+                                            "length": (
+                                                len(result) if hasattr(result, "__len__") else 0
+                                            ),
                                             # NOTE: This is the rendered role prompt *before*
                                             # JSON-format instructions are appended.
                                             # TODO: Ideally we'd also capture a structured view
@@ -662,14 +837,69 @@ class NodeFactory:
                         raise
                 else:
                     # Service type - attempt to run declared tools (metadata only for now)
+                    tool_updates = {}
                     result = {
                         "tools_declared": [t.tool_id for t in role_tools],
-                        "note": "Service role executed without LLM; tool invocations are not yet orchestrated.",
+                        "note": (
+                            "Service role executed without LLM; "
+                            "tool invocations are not yet orchestrated."
+                        ),
                     }
                     logger.info(f"Service-type role {role.id} returning tool metadata")
 
                 # 4. Extract artifacts from LLM output
-                extracted_artifacts = self.extract_artifacts(role, result, state["tu_id"])
+                result_str = result if isinstance(result, str) else json.dumps(result)
+                extracted_artifacts = self.extract_artifacts(role, result_str, state["tu_id"])
+
+                # Merge tool-driven updates (messages / sot updates)
+                parsed_result = self._safe_json_load(result_str)
+                log_free_text = None if parsed_result is not None else result_str
+
+                merged_hot_sot: dict[str, Any] = {}
+                merged_cold_sot: dict[str, Any] = {}
+                merged_artifacts: dict[str, Any] = {}
+                ad_hoc_messages: list[dict[str, Any]] = []
+
+                # Best-effort ad-hoc tool execution when provider returns a JSON "name"/"arguments"
+                # instead of native tool_calls (common with providers lacking tool-calling support).
+                if (
+                    isinstance(parsed_result, dict)
+                    and "name" in parsed_result
+                    and "arguments" in parsed_result
+                ):
+                    tool_name = parsed_result.get("name")
+                    tool_args = parsed_result.get("arguments") or {}
+                    tool = None
+                    if "tool_map" in locals():
+                        tool = locals().get("tool_map", {}).get(tool_name)
+                    if tool:
+                        try:
+                            ad_hoc_result = tool.invoke(
+                                {**tool_args, "state": state, "role_id": role.id}
+                            )
+                            aggregated = self._merge_tool_result({}, ad_hoc_result)
+                            merged_hot_sot.update(aggregated.get("hot_sot", {}))
+                            merged_cold_sot.update(aggregated.get("cold_sot", {}))
+                            merged_artifacts.update(aggregated.get("artifacts", {}))
+                            if isinstance(aggregated.get("messages"), list):
+                                ad_hoc_messages.extend(aggregated["messages"])
+                        except Exception as exc:  # pragma: no cover - defensive
+                            logger.warning(f"Ad-hoc tool {tool_name} failed: {exc}")
+
+                # hot_sot / cold_sot / artifacts from extraction + tool outputs + parsed result
+                for source in (
+                    extracted_artifacts,
+                    tool_updates if "tool_updates" in locals() else {},
+                    parsed_result or {},
+                ):
+                    if not isinstance(source, dict):
+                        continue
+                    if isinstance(source.get("hot_sot"), dict):
+                        merged_hot_sot.update(source["hot_sot"])
+                    if isinstance(source.get("cold_sot"), dict):
+                        merged_cold_sot.update(source["cold_sot"])
+                    if isinstance(source.get("artifacts"), dict):
+                        merged_artifacts.update(source["artifacts"])
 
                 # 5. Create protocol message with proper envelope for mesh routing
                 # The receiver field drives Control Plane routing:
@@ -680,23 +910,83 @@ class NodeFactory:
                 #
                 # Default behavior: report back to showrunner (coordinator pattern)
                 # Roles can override this by including routing info in their output
-                message = {
-                    "sender": role.id,
-                    "receiver": "showrunner",  # Default: report to coordinator
-                    "intent": "artifact.submit",
-                    "payload": {"artifact_id": role.id, "artifact_type": "output"},
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "envelope": {
-                        "tu_id": state["tu_id"],
-                        "snapshot_ref": state.get("snapshot_ref"),
-                    },
-                }
+                messages_out: list[dict[str, Any]] = []
+
+                # Messages from tools
+                if isinstance(tool_updates, dict) and isinstance(
+                    tool_updates.get("messages"), list
+                ):
+                    messages_out.extend(tool_updates["messages"])
+
+                # Messages from ad-hoc tool execution fallback
+                if ad_hoc_messages:
+                    messages_out.extend(ad_hoc_messages)
+
+                # Messages embedded in the LLM JSON (common when provider lacks tool-calling)
+                if isinstance(parsed_result, dict) and isinstance(
+                    parsed_result.get("messages"), list
+                ):
+                    messages_out.extend(parsed_result["messages"])
+
+                # Route free text (non-JSON) to logging for visibility
+                if log_free_text:
+                    messages_out.append(
+                        {
+                            "sender": role.id,
+                            "receiver": "system",
+                            "intent": "log",
+                            "payload": {"text": log_free_text[:2000]},
+                        }
+                    )
+
+                # If no messages were produced, route a protocol update to avoid loops
+                if not messages_out:
+                    note_text = result if isinstance(result, str) else "no_routed_messages"
+                    messages_out.append(
+                        {
+                            "sender": role.id,
+                            "receiver": "showrunner",
+                            "intent": "tu.update",
+                            "payload": {"note": note_text},
+                        }
+                    )
+
+                def _normalize_receiver(msg: dict[str, Any]) -> None:
+                    recv = msg.get("receiver")
+                    if isinstance(recv, dict):
+                        msg["receiver"] = (
+                            recv.get("role")
+                            or recv.get("id")
+                            or recv.get("name")
+                            or "showrunner"
+                        )
+                for msg in messages_out:
+                    _normalize_receiver(msg)
+
+                # Normalize envelopes and defaults
+                for msg in messages_out:
+                    msg.setdefault("sender", role.id)
+                    msg.setdefault("receiver", "showrunner")
+                    if isinstance(msg.get("receiver"), dict):
+                        recv_dict = msg["receiver"] or {}
+                        msg["receiver"] = (
+                            recv_dict.get("role")
+                            or recv_dict.get("id")
+                            or recv_dict.get("name")
+                            or "showrunner"
+                        )
+                    envelope = msg.get("envelope", {}) or {}
+                    envelope.setdefault("tu_id", state.get("tu_id", ""))
+                    envelope.setdefault("snapshot_ref", state.get("snapshot_ref"))
+                    msg["envelope"] = envelope
+                    msg.setdefault("timestamp", datetime.utcnow().isoformat() + "Z")
 
                 # 6. Trace message if state_manager has trace handler
                 if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
                     if self.state_manager._trace_handler:
                         try:
-                            self.state_manager._trace_handler.trace_message(message)
+                            for msg in messages_out:
+                                self.state_manager._trace_handler.trace_message(msg)
                         except Exception as e:
                             logger.warning(f"Trace handler error: {e}")
 
@@ -704,15 +994,35 @@ class NodeFactory:
                 # Note: Reducers (Annotated types) handle merging artifacts and messages
                 # Don't manually merge - just return the new values
                 # Unpack extracted_artifacts to put hot_sot and artifacts at top level
-                return {
-                    **extracted_artifacts,  # Unpacks hot_sot and artifacts
-                    "messages": [message],
+                state_update: dict[str, Any] = {
+                    "messages": messages_out,
                 }
+
+                if merged_hot_sot:
+                    state_update["hot_sot"] = merged_hot_sot
+                if merged_cold_sot:
+                    state_update["cold_sot"] = merged_cold_sot
+                if merged_artifacts:
+                    state_update["artifacts"] = merged_artifacts
+
+                return state_update
 
             except Exception as e:
                 logger.error(f"Error executing role {role.id}: {e}")
-                # Return partial update with error info
-                return {"error": str(e), "retry_count": state.get("retry_count", 0) + 1}
+                # Return partial update with error info and terminate the graph to avoid ping-pong
+                error_message = {
+                    "sender": role.id,
+                    "receiver": "__terminate__",
+                    "intent": "error",
+                    "payload": {"error": str(e)},
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "envelope": {"tu_id": state.get("tu_id", "")},
+                }
+                return {
+                    "error": str(e),
+                    "retry_count": state.get("retry_count", 0) + 1,
+                    "messages": [error_message],
+                }
 
         return role_node
 
@@ -772,7 +1082,9 @@ class NodeFactory:
         def multi_role_node(state: StudioState) -> dict[str, Any]:
             """Execute multiple roles in parallel and merge results."""
             logger.info(
-                f"[bold cyan]Executing parallel node:[/bold cyan] {node_id} with {len(role_execution_pairs)} roles"
+                "[bold cyan]Executing parallel node:[/bold cyan] %s with %d roles",
+                node_id,
+                len(role_execution_pairs),
             )
 
             # Execute all roles in parallel using ThreadPoolExecutor

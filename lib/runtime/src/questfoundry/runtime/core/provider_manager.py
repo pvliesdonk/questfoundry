@@ -438,9 +438,11 @@ class ProviderManager:
                 ],
             )
 
-        # Force JSON output format for structured responses
-        # Note: response_format requires the prompt to mention JSON
-        model_kwargs = {"response_format": {"type": "json_object"}}
+        # Default: do not force response_format when tools are bound. JSON forcing can
+        # collide with OpenAI’s requirement that the prompt explicitly mention “json”.
+        # We keep the hook here for future structured output cases, but leave it empty
+        # by default.
+        model_kwargs: dict[str, Any] = {}
 
         # For reasoning models (o1, o3, o4-mini), use different parameters
         is_reasoning_model = any(prefix in model.lower() for prefix in ["o1", "o3", "o4-mini"])
