@@ -162,11 +162,20 @@ class NodeFactory:
                 for tool_def in role.tools:
                     if isinstance(tool_def, dict):
                         name = tool_def.get("name", "")
-                        desc = tool_def.get("description", "")
+                        desc = tool_def.get("description", "") or tool_def.get("purpose", "")
+                        usage = tool_def.get("usage", "")
                     else:
                         name = str(tool_def)
                         desc = ""
-                    line = f"- {name}" if not desc else f"- {name}: {desc}"
+                        usage = ""
+
+                    parts = [name]
+                    if desc:
+                        parts.append(desc)
+                    if usage:
+                        parts.append(f"Usage: {usage}")
+
+                    line = " - " + " — ".join(filter(None, parts))
                     tool_lines.append(line.rstrip())
 
                 rendered = rendered.rstrip() + "\n\n" + "\n".join(tool_lines) + "\n"
