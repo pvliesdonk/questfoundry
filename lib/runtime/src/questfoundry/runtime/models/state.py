@@ -29,15 +29,24 @@ class BarStatus(TypedDict):
     timestamp: str | None  # ISO format
 
 
-class Message(TypedDict):
-    """Protocol message between roles."""
+class Message(TypedDict, total=False):
+    """Protocol message between roles.
 
-    sender: str  # Role ID
-    receiver: str  # Role ID or "broadcast"
-    intent: str  # Protocol intent (e.g., "request_review")
+    The receiver field drives mesh routing:
+    - Role ID (e.g., "scene_smith"): Direct peer-to-peer routing
+    - Abbreviation (e.g., "SS", "GK"): Normalized to role ID
+    - "*": Broadcast to all active roles
+    - List of role IDs: Parallel fan-out
+    - "__terminate__": Signal to end graph execution
+    - "showrunner" / "SR": Report to coordinator
+    """
+
+    sender: str  # Role ID or "human"
+    receiver: str | list[str]  # Role ID, abbreviation, "*", list, or "__terminate__"
+    intent: str  # Protocol intent (e.g., "tu.assign", "gate.report.submit")
     payload: dict[str, Any]  # Message payload
     timestamp: str  # ISO format
-    envelope: dict[str, Any]  # Envelope requirements (TU ID, snapshot ref, etc.)
+    envelope: dict[str, Any]  # Envelope metadata (TU ID, snapshot ref, causality, etc.)
 
 
 class StudioState(TypedDict):

@@ -516,11 +516,19 @@ class NodeFactory:
                 # 4. Extract artifacts from LLM output
                 extracted_artifacts = self.extract_artifacts(role, result, state["tu_id"])
 
-                # 5. Create protocol message
+                # 5. Create protocol message with proper envelope for mesh routing
+                # The receiver field drives Control Plane routing:
+                # - Specific role ID for direct peer-to-peer
+                # - "showrunner" / "SR" to report back to coordinator
+                # - "*" for broadcast
+                # - "__terminate__" to end graph execution
+                #
+                # Default behavior: report back to showrunner (coordinator pattern)
+                # Roles can override this by including routing info in their output
                 message = {
                     "sender": role.id,
-                    "receiver": "broadcast",
-                    "intent": "artifact_created",
+                    "receiver": "showrunner",  # Default: report to coordinator
+                    "intent": "artifact.submit",
                     "payload": {"artifact_id": role.id, "artifact_type": "output"},
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "envelope": {

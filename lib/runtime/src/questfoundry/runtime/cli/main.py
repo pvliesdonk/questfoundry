@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from questfoundry.runtime.cli.showrunner import ShowrunnerInterface
+from questfoundry.runtime.core.control_plane import ControlPlane
 from questfoundry.runtime.core.graph_factory import GraphFactory
 from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.logging_config import get_logger, setup_logging
@@ -628,6 +629,96 @@ def download_spec(
 
 
 @app.command()
+def mesh(
+    message: str = typer.Argument(..., help="Your request in natural language"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
+    recursion_limit: int = typer.Option(50, "--recursion-limit", "-r", help="Max graph iterations"),
+    provider: str | None = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help="Preferred provider (e.g., 'anthropic:claude-3-haiku-20240307')",
+    ),
+):
+    """
+    Run the studio mesh with protocol-driven envelope routing.
+
+    This is the new mesh architecture where:
+    - Routing is determined by message envelope `receiver` field
+    - Showrunner is coordinator, not bottleneck
+    - Roles communicate peer-to-peer via protocol
+
+    Examples:
+        qf mesh "Create a mystery story about a haunted lighthouse"
+        qf mesh "Review the draft and suggest improvements" -v
+        qf mesh "Create a story" --provider anthropic:claude-3-haiku-20240307
+    """
+    try:
+        console.print(
+            Panel(
+                "[cyan bold]🔀 Mesh Mode: Protocol-Driven Routing[/cyan bold]\n\n"
+                "Using envelope-based routing where roles communicate directly.\n"
+                "The Showrunner coordinates but doesn't route all messages.",
+                style="cyan",
+                border_style="cyan",
+                title="Mesh Architecture",
+            )
+        )
+        console.print()
+
+        # Display customer message
+        console.print(
+            Panel(f"[bold]Your Request:[/bold]\n{message}", style="blue", border_style="blue")
+        )
+
+        # Create ControlPlane
+        state_manager = StateManager()
+        control_plane = ControlPlane(
+            state_manager=state_manager,
+            preferred_provider=provider,
+        )
+
+        logger.info(f"Starting mesh execution with recursion_limit={recursion_limit}")
+
+        # Run the mesh
+        final_state = control_plane.run(
+            human_input=message,
+            recursion_limit=recursion_limit,
+        )
+
+        # Display result
+        messages = final_state.get("messages", [])
+        artifacts = final_state.get("artifacts", {})
+        hot_sot = final_state.get("hot_sot", {})
+
+        console.print(
+            Panel(
+                f"[bold green]✓ Mesh execution complete[/bold green]\n\n"
+                f"[bold]TU ID:[/bold] {final_state.get('tu_id', 'unknown')}\n"
+                f"[bold]Messages:[/bold] {len(messages)}\n"
+                f"[bold]Artifacts:[/bold] {len(artifacts)}\n"
+                f"[bold]Hot SoT keys:[/bold] {len(hot_sot)}",
+                style="green",
+                border_style="green",
+                title="Execution Complete",
+            )
+        )
+
+        if verbose:
+            console.print("\n[bold]Message Flow:[/bold]")
+            for i, msg in enumerate(messages[-10:], 1):  # Last 10 messages
+                sender = msg.get("sender", "?")
+                receiver = msg.get("receiver", "?")
+                intent = msg.get("intent", "?")
+                console.print(f"  {i}. {sender} → {receiver}: {intent}")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        logger.error(f"Mesh execution failed: {e}", exc_info=True)
+        sys.exit(1)
+
+
+@app.command()
 def version():
     """Show version information."""
     import os
@@ -635,11 +726,12 @@ def version():
     from questfoundry.runtime.core.spec_fetcher import get_spec_source_preference
 
     console.print("[bold]QuestFoundry Runtime[/bold]")
-    console.print("Version: 0.1.0")
-    console.print("Status: Phase 6 - CLI/Runtime Architecture Fix")
+    console.print("Version: 0.2.0")
+    console.print("Status: Mesh Architecture - Protocol-Driven Routing")
     console.print("\nArchitecture:")
-    console.print("  • Primary: Natural language → Showrunner role")
-    console.print("  • Debug: Direct loop invocation (qf loop)")
+    console.print("  • Primary: qf mesh <message> - Mesh routing via envelope")
+    console.print("  • Legacy:  qf ask <message> - Static loop topology")
+    console.print("  • Debug:   qf loop <id> - Direct loop invocation")
 
     # Show spec source info
     spec_source = get_spec_source_preference()

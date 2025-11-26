@@ -9,6 +9,11 @@ import logging
 from typing import Any
 
 from questfoundry.runtime.tools import (
+    ConsultGlossary,
+    ConsultPlaybook,
+    ConsultProtocol,
+    ConsultQualityGate,
+    ConsultRoleCharter,
     EvaluateQualityBar,
     LoreIndex,
     PandocConvert,
@@ -130,6 +135,23 @@ class ToolRegistry:
         )
         self._tools["evaluate_quality_bar"] = LangChainToolAdapter(
             "evaluate_quality_bar", EvaluateQualityBar()
+        )
+
+        # Knowledge tools (consult the cartridge/spec)
+        self._tools["consult_playbook"] = LangChainToolAdapter(
+            "consult_playbook", ConsultPlaybook()
+        )
+        self._tools["consult_quality_gate"] = LangChainToolAdapter(
+            "consult_quality_gate", ConsultQualityGate()
+        )
+        self._tools["consult_protocol"] = LangChainToolAdapter(
+            "consult_protocol", ConsultProtocol()
+        )
+        self._tools["consult_role_charter"] = LangChainToolAdapter(
+            "consult_role_charter", ConsultRoleCharter()
+        )
+        self._tools["consult_glossary"] = LangChainToolAdapter(
+            "consult_glossary", ConsultGlossary()
         )
 
         logger.info(f"Registered {len(self._tools)} stub tools")

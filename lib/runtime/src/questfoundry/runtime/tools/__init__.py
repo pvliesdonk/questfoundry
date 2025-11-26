@@ -17,6 +17,13 @@ from questfoundry.runtime.tools.validation_tools import (
     EvaluateQualityBar,
     ValidateArtifact,
 )
+from questfoundry.runtime.tools.knowledge_tools import (
+    ConsultGlossary,
+    ConsultPlaybook,
+    ConsultProtocol,
+    ConsultQualityGate,
+    ConsultRoleCharter,
+)
 
 __all__ = [
     "ReadHotSOT",
@@ -32,4 +39,10 @@ __all__ = [
     "StableDiffusion",
     "PandocConvert",
     "PdfExport",
+    # Knowledge tools (consult the cartridge)
+    "ConsultPlaybook",
+    "ConsultQualityGate",
+    "ConsultProtocol",
+    "ConsultRoleCharter",
+    "ConsultGlossary",
 ]

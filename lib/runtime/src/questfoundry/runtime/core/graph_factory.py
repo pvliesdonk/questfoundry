@@ -1,11 +1,14 @@
 """
 Graph Factory - transforms loop patterns into executable LangGraph StateGraphs.
 
+DEPRECATED: This module uses static topology routing (hardcoded edges from loop YAML).
+Use ControlPlane instead for protocol-driven mesh routing.
+
 Based on spec: components/graph_factory.md
-STRICT component - Every detail in this spec MUST be implemented exactly.
 """
 
 import logging
+import warnings
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -21,7 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 class GraphFactory:
-    """Transform loop patterns into executable LangGraph StateGraphs."""
+    """
+    Transform loop patterns into executable LangGraph StateGraphs.
+
+    DEPRECATED: Use ControlPlane instead for protocol-driven mesh routing.
+
+    This class uses static topology routing where edges are defined in loop YAML files.
+    The new ControlPlane class implements dynamic routing based on message envelopes,
+    which is the intended architecture per the Studio Graph Architecture spec.
+    """
 
     def __init__(
         self,
