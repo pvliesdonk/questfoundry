@@ -15,6 +15,7 @@ from typing import Any
 from jinja2 import Template, TemplateError
 
 from questfoundry.runtime.core.provider_manager import ProviderManager
+from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.models.role import RoleProfile
 from questfoundry.runtime.models.state import StudioState
@@ -31,17 +32,20 @@ class NodeFactory:
         schema_registry: SchemaRegistry | None = None,
         state_manager: Any | None = None,
         preferred_provider: str | None = None,
+        context_assembler: RuntimeContextAssembler | None = None,
     ):
         """Initialize node factory.
 
         Args:
             schema_registry: SchemaRegistry instance (creates new if not provided)
             state_manager: Optional StateManager for tracing messages
-        preferred_provider: Preferred provider (e.g., "ollama") or fallback chain
-            (e.g., "ollama,openai")
+            preferred_provider: Preferred provider (e.g., "ollama") or fallback chain
+                (e.g., "ollama,openai")
+            context_assembler: RuntimeContextAssembler instance (creates new if not provided)
         """
         self.schema_registry = schema_registry or SchemaRegistry()
         self.provider_manager = ProviderManager()
+        self.context_assembler = context_assembler or RuntimeContextAssembler()
         self._role_cache: dict[str, RoleProfile] = {}
         self.state_manager = state_manager  # For message tracing
         self.preferred_provider = preferred_provider  # Store for use in select_llm
@@ -88,149 +92,68 @@ class NodeFactory:
         """
         return role.should_execute(state)
 
-    def render_prompt(self, role: RoleProfile, state: StudioState) -> str:
-        """Render prompt from inline template or prompt_content; no external templates."""
-        prompt_config = role.prompt
-        template_str = prompt_config.get("template", "")
-        template_engine = prompt_config.get("template_engine", "jinja2")
-        prompt_content = role.raw.get("prompt_content", {})
+    def assemble_role_context(
+        self, role_id: str, state: StudioState
+    ) -> dict[str, Any]:
+        """
+        Assemble complete role context using RuntimeContextAssembler.
 
-        # Build default prompt when no template is provided
-        if not template_str:
-            core = prompt_content.get("core_mandate", "")
-            principles = prompt_content.get("operating_principles", [])
-            task_guidance = prompt_content.get("task_guidance", "")
-            lines = [f"# Role: {role.name}"]
-            if core:
-                lines.append(core.strip())
-            if principles:
-                lines.append("## Operating Principles")
-                for p in principles:
-                    name = p.get("name", "")
-                    desc = p.get("description", "")
-                    lines.append(f"- {name}: {desc}")
-            if task_guidance:
-                lines.append("## Your Task")
-                lines.append(task_guidance.strip())
-            return "\n".join(lines).strip()
+        This replaces the old template-based approach with dynamic context assembly.
+        Uses the 5-layer prompt architecture:
+        1. IDENTITY - Role charter and operating principles
+        2. PROTOCOL - Communication permissions and intents
+        3. STATE - Current execution context
+        4. MISSION - Loop, node, and task guidance
+        5. INTERFACE - Tools and structured output requirements
 
-        if template_engine != "jinja2":
-            logger.warning(f"Unknown template engine: {template_engine}")
-            return template_str
+        Args:
+            role_id: Role identifier (e.g., "plotwright")
+            state: Current studio state
+
+        Returns:
+            Dictionary with:
+            - prompt: Complete assembled prompt
+            - tools: Tool configurations for LLM binding
+            - role_def: Role definition for reference
+        """
+        loop_id = state.get("loop_id")
+        node_id = state.get("node_id")
 
         try:
-            template = Template(template_str)
-            hot_sot = state.get("hot_sot", {})
-            cold_sot = state.get("cold_sot", {})
-
-            tu_scope = {
-                "id": state.get("tu_id", ""),
-                "loop": state.get("loop_id", ""),
-                "context": state.get("loop_context", {}),
-            }
-
-            context_info = {
-                "tu_id": state.get("tu_id", ""),
-                "loop": state.get("loop_id", ""),
-                "snapshot": state.get("snapshot_ref"),
-            }
-
-            # Inject optional helpers requested by the spec-level prompt config
-            prompt_injection = prompt_config.get("context_injection", {})
-            quality_bars = state.get("quality_bars", {}) if prompt_injection else {}
-            project_metadata = state.get("project_metadata", {}) if prompt_injection else {}
-
-            customer_directive = state.get("human_directive") or hot_sot.get(
-                "customer_directives"
+            context = self.context_assembler.assemble_context(
+                role_id=role_id,
+                loop_id=loop_id,
+                node_id=node_id,
+                state=state,
             )
 
-            context = {
-                "role": role.raw,
-                "identity": role.raw.get("identity", {}),
-                "prompt_content": prompt_content,
-                "state": state,
-                "hot_sot": hot_sot,
-                "cold_sot": cold_sot,
-                "tu_scope": tu_scope,
-                "context": context_info,
-                "quality_bars": quality_bars,
-                "project_metadata": project_metadata,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "available_tools": role.tools,
-                "customer_directive": customer_directive,
-            }
+            logger.info(
+                f"Assembled context for {role_id}: "
+                f"prompt_size={len(context['prompt'])}, "
+                f"tools={len(context['tools'])}"
+            )
 
-            rendered = template.render(**context)
-
-            # Ensure the human directive is visible even if the template omits it
-            if customer_directive:
-                rendered = (
-                    rendered.rstrip()
-                    + "\n\n## Customer Request\n"
-                    + str(customer_directive).strip()
-                    + "\n"
-                )
-
-            # Ensure the agent sees its available tools even if the template omits them
-            if role.tools:
-                tool_lines = ["## Tools You Can Use"]
-                for tool_def in role.tools:
-                    if isinstance(tool_def, dict):
-                        name = tool_def.get("name", "")
-                        desc = tool_def.get("description", "") or tool_def.get("purpose", "")
-                        usage = tool_def.get("usage", "")
-                    else:
-                        name = str(tool_def)
-                        desc = ""
-                        usage = ""
-
-                    parts = [name]
-                    if desc:
-                        parts.append(desc)
-                    if usage:
-                        parts.append(f"Usage: {usage}")
-
-                    line = " - " + " — ".join(filter(None, parts))
-                    tool_lines.append(line.rstrip())
-
-                rendered = rendered.rstrip() + "\n\n" + "\n".join(tool_lines) + "\n"
-
-                # Runtime tool-use protocol (applies to all tool-capable roles)
-                has_protocol = any(
-                    (t.get("name") if isinstance(t, dict) else str(t)) == "send_protocol_message"
-                    for t in role.tools
-                )
-                guidance_lines = ["## Tool Use Protocol"]
-                guidance_lines.append(
-                    "- Prefer tool calls; keep prose minimal. A tool call MUST be present in your response."
-                )
-                guidance_lines.append(
-                    "- If your provider lacks native tool-calling, emit one JSON object {\"name\": \"tool_name\", \"arguments\": {...}} and nothing else."
-                )
-                if has_protocol:
-                    guidance_lines.append(
-                        "- To communicate/assign work, choose recipients and use send_protocol_message(receiver, intent, payload)."
-                    )
-                guidance_lines.append(
-                    "- If a tool fails or cannot be called, send_protocol_message to gatekeeper intent='tu.defer' with the error; do NOT narrate."
-                )
-                guidance_lines.append("- Stop after your tool call or defer message.")
-                rendered = rendered.rstrip() + "\n" + "\n".join(guidance_lines) + "\n"
-
-            # Showrunner-specific operational steps (runtime layer; no spec edit)
-            if role.id == "showrunner":
-                rendered = (
-                    rendered.rstrip()
-                    + "\n\nShowrunner Steps:\n"
-                    "1) read_hot_sot('customer_directives') to restate the ask.\n"
-                    "2) Decide which roles to engage; send_protocol_message to each with intent='tu.open' and payload {directive, proposed deliverables, timebox}. Do NOT wake media roles (illustrator/audio) unless the customer asked for visuals/audio.\n"
-                    "3) If any tool fails, send_protocol_message to gatekeeper intent='tu.defer' with the error.\n"
-                )
-
-            return rendered
-        except TemplateError as e:
-            logger.error(f"Template rendering error in role {role.id}: {e}")
+            return context
+        except Exception as e:
+            logger.error(f"Context assembly failed for role {role_id}: {e}")
             raise
+
+    def render_prompt(self, role: RoleProfile, state: StudioState) -> str:
+        """
+        Render prompt using RuntimeContextAssembler.
+
+        This method now delegates to assemble_role_context for dynamic prompt
+        generation. Kept for backward compatibility with existing code paths.
+
+        Args:
+            role: RoleProfile object
+            state: Current studio state
+
+        Returns:
+            Formatted prompt string
+        """
+        context = self.assemble_role_context(role.id, state)
+        return context["prompt"]
 
     def extract_artifacts(self, role: RoleProfile, llm_output: str, tu_id: str) -> dict[str, Any]:
         """
@@ -472,6 +395,22 @@ class NodeFactory:
             return json.loads(data)
         except Exception:
             return None
+
+    @staticmethod
+    def _validate_tool_usage(response: Any) -> bool:
+        """
+        Validate that the response contains tool calls.
+
+        This enforces the constraint that tool-capable roles MUST use tools.
+
+        Args:
+            response: Response from LLM (likely has tool_calls attribute)
+
+        Returns:
+            True if response contains tool calls, False otherwise
+        """
+        tool_calls = getattr(response, "tool_calls", None)
+        return bool(tool_calls) and len(tool_calls) > 0
 
     def _execute_tool_loop(
         self,
@@ -715,8 +654,12 @@ class NodeFactory:
                         except Exception as e:
                             logger.warning(f"Trace handler error: {e}")
 
-                # 3. Render prompt
-                prompt = self.render_prompt(role, state)
+                # 3. Assemble context using RuntimeContextAssembler
+                context = self.assemble_role_context(role.id, state)
+                prompt = context["prompt"]
+                assembler_tools = context["tools"]
+
+                logger.debug(f"Role {role.id} assembled context with {len(assembler_tools)} tools from assembler")
 
                 # 4. Invoke LLM or tools based on role type
                 llm_config = self.select_llm(role)
@@ -749,19 +692,33 @@ class NodeFactory:
                                 ]
 
                             if lc_tools and hasattr(llm, "bind_tools"):
-                                bind_kwargs: dict[str, Any] = {}
+                                bind_kwargs: dict[str, Any] = {
+                                    "tool_choice": "required"  # Force tool usage for all providers
+                                }
+
+                                # Add provider-specific kwargs
                                 if provider == "openai":
-                                    bind_kwargs = {"strict": True, "tool_choice": "required"}
+                                    bind_kwargs["strict"] = True
 
                                 try:
                                     llm = llm.bind_tools(lc_tools, **bind_kwargs)
-                                except TypeError:
-                                    # Fallback for providers (e.g., ollama) that don't accept kwargs
-                                    llm = llm.bind_tools(lc_tools)
-
-                                logger.info(
-                                    f"Bound {len(lc_tools)} tools to LLM for role {role.id}"
-                                )
+                                    logger.info(
+                                        f"Bound {len(lc_tools)} tools to LLM for role {role.id} "
+                                        f"with tool_choice=required"
+                                    )
+                                except TypeError as e:
+                                    # Fallback for providers that don't accept specific kwargs
+                                    logger.debug(
+                                        f"Provider {provider} doesn't support bind_tools kwargs, "
+                                        f"falling back: {e}"
+                                    )
+                                    try:
+                                        llm = llm.bind_tools(lc_tools)
+                                        logger.info(f"Bound {len(lc_tools)} tools to LLM for role {role.id}")
+                                    except Exception as inner_e:
+                                        logger.warning(
+                                            f"Failed to bind tools for role {role.id}: {inner_e}"
+                                        )
 
                         # Prefer native tool-calling over legacy JSON envelopes.
                         if role.id == "showrunner":
@@ -784,6 +741,17 @@ class NodeFactory:
                         # Invoke LLM with provider-specific prompt
                         logger.info(f"Invoking {provider} LLM for role {role.id}")
                         response = llm.invoke(llm_prompt)
+
+                        # Validate tool usage if tools were bound
+                        if role_tools and self._validate_tool_usage(response):
+                            logger.info(
+                                f"Role {role.id} response contains tool calls (validated)"
+                            )
+                        elif role_tools:
+                            logger.warning(
+                                f"Role {role.id} response does NOT contain tool calls, "
+                                f"but tools were bound (tool_choice=required should have enforced this)"
+                            )
 
                         # Handle tool calls if present
                         result, tool_updates, used_tools = self._execute_tool_loop(
