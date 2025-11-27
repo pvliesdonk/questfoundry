@@ -105,53 +105,11 @@ interface:
     - write_hot_sot
     - send_protocol_message
 
+capabilities:
+  required:
+    - text_to_speech
+
 behavior:
-  prompt:
-    template: |
-      # Role: {{ identity.name }}
-
-      {{ prompt_content.core_mandate }}
-
-      ## Operating Principles
-      {% for principle in prompt_content.operating_principles %}
-      - **{{ principle.name }}**: {{ principle.description }}
-      {% endfor %}
-
-      ## Anti-patterns to Avoid
-      {% for anti in prompt_content.anti_patterns %}
-      - **{{ anti.name }}**: {{ anti.description }}
-      {% endfor %}
-
-      ## Current Context
-      - TU: {{ context.tu_id }}
-      - Loop: {{ context.loop }}
-      - View: {{ context.view }}
-      - Mode: {{ context.mode }}
-
-      ## Your Task
-      {{ prompt_content.task_guidance }}
-    template_engine: jinja2
-    context_injection:
-      quality_bars:
-        - Presentation
-        - Accessibility
-      project_metadata: true
-      cold_snapshot_context: false
-
-  tools:
-    - name: read_hot_sot
-      enabled: true
-      tool_type: internal
-    - name: write_hot_sot
-      enabled: true
-      tool_type: internal
-    - name: read_exports
-      enabled: true
-      tool_type: internal
-    - name: send_protocol_message
-      enabled: true
-      tool_type: internal
-
   structured_output:
     enabled: true
     schema_ref: pn_playtest_notes
@@ -216,10 +174,12 @@ constraints:
     blocks_on_failure: false
 
   hot_cold_permissions:
-    can_write_hot: true
-    can_read_cold: true
-    can_write_cold: false
-    requires_gatecheck_for_cold: false
+    hot:
+      read: true
+      write: true
+    cold:
+      read: true
+      write: false
 
 raci:
   loops:

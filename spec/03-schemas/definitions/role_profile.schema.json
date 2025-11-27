@@ -240,197 +240,9 @@
 
     "behavior": {
       "type": "object",
-      "required": ["prompt"],
-      "description": "Behavioral configuration: prompt template, tools, structured output. This is where Layer 5 behavior primitives get injected.",
+      "required": [],
+      "description": "Behavioral configuration for role execution. As of v2.0.0, this section contains only structured_output configuration. Prompt templates and tools have been migrated to prompt_content and capabilities sections respectively.",
       "properties": {
-        "prompt": {
-          "type": "object",
-          "required": ["template"],
-          "description": "Prompt construction specification",
-          "properties": {
-            "template": {
-              "type": "string",
-              "description": "Jinja2 template string or file reference (e.g., 'file://spec/05-definitions/templates/plotwright_prompt.j2'). Available variables: inputs (filtered state), quality_bars, expertise, snippets, project_meta."
-            },
-            "template_engine": {
-              "enum": ["jinja2", "mustache"],
-              "default": "jinja2",
-              "description": "Template rendering engine"
-            },
-            "context_injection": {
-              "type": "object",
-              "description": "Layer 0/5 content to inject into prompt context",
-              "properties": {
-                "quality_bars": {
-                  "type": "array",
-                  "items": {
-                    "enum": [
-                      "Integrity",
-                      "Reachability",
-                      "Nonlinearity",
-                      "Gateways",
-                      "Style",
-                      "Determinism",
-                      "Presentation",
-                      "Accessibility"
-                    ]
-                  },
-                  "description": "Which of the 8 quality bars to inject text for (from Layer 0 QUALITY_BARS.md). Runtime loads and injects full bar definitions."
-                },
-                "expertise_refs": {
-                  "type": "array",
-                  "items": {"type": "string", "pattern": "^spec/05-behavior/expertises/.+\\.md$"},
-                  "description": "References to Layer 5 expertise documents to inject into prompt"
-                },
-                "procedure_refs": {
-                  "type": "array",
-                  "items": {"type": "string", "pattern": "^spec/05-behavior/procedures/.+\\.md$"},
-                  "description": "References to Layer 5 procedure documents to inject"
-                },
-                "snippet_refs": {
-                  "type": "array",
-                  "items": {"type": "string", "pattern": "^spec/05-behavior/snippets/.+\\.md$"},
-                  "description": "References to Layer 5 snippet documents (reusable text blocks)"
-                },
-                "project_metadata": {
-                  "type": "boolean",
-                  "default": true,
-                  "description": "Include project name, date, current TU, current loop in prompt context"
-                },
-                "cold_snapshot_context": {
-                  "type": "boolean",
-                  "default": false,
-                  "description": "Include current Cold snapshot reference and timestamp"
-                }
-              }
-            },
-            "system_message": {
-              "type": "string",
-              "description": "Optional override for system message (if not using template)"
-            },
-            "few_shot_examples": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "required": ["input", "output"],
-                "properties": {
-                  "input": {"type": "string"},
-                  "output": {"type": "string"},
-                  "description": {"type": "string"}
-                }
-              },
-              "description": "Few-shot examples to include in prompt"
-            }
-          }
-        },
-        "tools": {
-          "type": "array",
-          "description": "Tools available to this role during execution (e.g., file I/O, validation, protocol messaging, external APIs)",
-          "items": {
-            "type": "object",
-            "required": ["name", "enabled"],
-            "properties": {
-              "name": {
-                "type": "string",
-                "description": "Tool identifier (must be registered in runtime tool registry)",
-                "examples": [
-                  "read_hot_sot",
-                  "write_hot_sot",
-                  "validate_artifact",
-                  "send_protocol_message",
-                  "evaluate_quality_bar",
-                  "create_hook",
-                  "update_tu",
-                  "query_codex",
-                  "stable_diffusion",
-                  "pandoc_export",
-                  "elevenlabs_tts"
-                ]
-              },
-              "enabled": {
-                "type": "boolean",
-                "description": "Is this tool active for this role?"
-              },
-              "tool_type": {
-                "enum": ["internal", "external_api", "file_system"],
-                "default": "internal",
-                "description": "Tool category for runtime routing:\n- internal: Studio-internal tools (Hot/Cold access, protocol messaging)\n- external_api: External service APIs (Stable Diffusion, Pandoc, TTS)\n- file_system: Direct file operations"
-              },
-              "config": {
-                "type": "object",
-                "description": "Tool-specific configuration",
-                "additionalProperties": true
-              },
-              "api_spec": {
-                "type": "object",
-                "description": "External API configuration (for production executors using external_api tools). Layer 5 implementation detail for service orchestration.",
-                "properties": {
-                  "provider": {
-                    "type": "string",
-                    "description": "API provider identifier",
-                    "examples": ["stability_ai", "pandoc", "elevenlabs", "comfyui", "openai_dalle"]
-                  },
-                  "endpoint": {
-                    "type": "string",
-                    "description": "API endpoint URL or command"
-                  },
-                  "retry_policy": {
-                    "type": "object",
-                    "description": "Retry behavior for transient failures",
-                    "properties": {
-                      "max_retries": {
-                        "type": "integer",
-                        "default": 3,
-                        "minimum": 0,
-                        "maximum": 10
-                      },
-                      "backoff_strategy": {
-                        "enum": ["linear", "exponential", "fixed"],
-                        "default": "exponential",
-                        "description": "How to increase delay between retries"
-                      },
-                      "backoff_base_ms": {
-                        "type": "integer",
-                        "default": 1000,
-                        "description": "Base delay in milliseconds for backoff calculation"
-                      }
-                    }
-                  },
-                  "timeout_ms": {
-                    "type": "integer",
-                    "description": "Request timeout in milliseconds"
-                  },
-                  "quality_thresholds": {
-                    "type": "array",
-                    "description": "Quality validation checks after tool execution",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "check": {
-                          "type": "string",
-                          "description": "What to check (e.g., 'file_exists', 'image_dimensions', 'audio_duration')"
-                        },
-                        "requirement": {
-                          "type": "string",
-                          "description": "Expected value or condition"
-                        },
-                        "on_failure": {
-                          "enum": ["retry", "warn", "fail"],
-                          "description": "Action when check fails"
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              "required": {
-                "type": "boolean",
-                "default": false,
-                "description": "Is this tool mandatory for role operation? If true, runtime fails if tool unavailable."
-              }
-            }
-          }
-        },
         "structured_output": {
           "type": "object",
           "description": "Structured output configuration for LLM response parsing",
@@ -461,6 +273,30 @@
               "maximum": 5
             }
           }
+        }
+      }
+    },
+
+    "capabilities": {
+      "type": "object",
+      "description": "Capability requirements for this role. Capabilities define external tools, integrations, and resource access that the role needs to execute. Introduced in v2.0.0 to replace the tools section.",
+      "properties": {
+        "required": {
+          "type": "array",
+          "description": "Array of required capability IDs that must be available for this role to execute. Capability IDs are defined in capabilities.yaml and map to external service integrations, tool plugins, and resource access patterns.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z_]+$",
+            "description": "Capability identifier (e.g., 'image_generation', 'text_synthesis', 'code_execution'). Must match entries in spec/03-schemas/capabilities.schema.json"
+          },
+          "examples": [
+            "image_generation",
+            "audio_synthesis",
+            "text_to_speech",
+            "file_export",
+            "web_scraping",
+            "code_execution"
+          ]
         }
       }
     },
@@ -695,27 +531,38 @@
         },
         "hot_cold_permissions": {
           "type": "object",
-          "description": "Fine-grained Hot/Cold access control from Layer 0 SOURCES_OF_TRUTH.md",
+          "description": "Fine-grained Hot/Cold access control from Layer 0 SOURCES_OF_TRUTH.md. Uses hot/cold sections with read/write flags as of v2.0.0.",
+          "required": ["hot", "cold"],
           "properties": {
-            "can_write_hot": {
-              "type": "boolean",
-              "default": true,
-              "description": "Can this role write to Hot SoT?"
+            "hot": {
+              "type": "object",
+              "required": ["read", "write"],
+              "description": "Permissions for Hot Source of Truth access",
+              "properties": {
+                "read": {
+                  "type": "boolean",
+                  "description": "Can this role read from Hot SoT?"
+                },
+                "write": {
+                  "type": "boolean",
+                  "description": "Can this role write to Hot SoT?"
+                }
+              }
             },
-            "can_read_cold": {
-              "type": "boolean",
-              "default": true,
-              "description": "Can this role read Cold SoT?"
-            },
-            "can_write_cold": {
-              "type": "boolean",
-              "default": false,
-              "description": "Can this role write directly to Cold? (Only SR after gatecheck passes)"
-            },
-            "requires_gatecheck_for_cold": {
-              "type": "boolean",
-              "default": true,
-              "description": "Does this role's Cold-bound content require gatecheck? (False only for PN reading Cold)"
+            "cold": {
+              "type": "object",
+              "required": ["read", "write"],
+              "description": "Permissions for Cold Source of Truth access",
+              "properties": {
+                "read": {
+                  "type": "boolean",
+                  "description": "Can this role read from Cold SoT?"
+                },
+                "write": {
+                  "type": "boolean",
+                  "description": "Can this role write to Cold SoT? (Typically only true for SR after gatecheck passes)"
+                }
+              }
             }
           }
         }

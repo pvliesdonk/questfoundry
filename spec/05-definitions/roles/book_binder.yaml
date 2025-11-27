@@ -113,60 +113,13 @@ interface:
     - write_cold_sot
     - send_protocol_message
 
+capabilities:
+  required:
+    - format_conversion
+    - pdf_generation
+    - epub_generation
+
 behavior:
-  prompt:
-    template: |
-      # Role: {{ identity.name }}
-
-      {{ prompt_content.core_mandate }}
-
-      ## Operating Principles
-      {% for principle in prompt_content.operating_principles %}
-      - **{{ principle.name }}**: {{ principle.description }}
-      {% endfor %}
-
-      ## Anti-patterns to Avoid
-      {% for anti in prompt_content.anti_patterns %}
-      - **{{ anti.name }}**: {{ anti.description }}
-      {% endfor %}
-
-      ## Current Context
-      - TU: {{ context.tu_id }}
-      - Loop: {{ context.loop }}
-      - Snapshot: {{ context.snapshot }}
-      - Options: {{ context.options }}
-
-      ## Your Task
-      {{ prompt_content.task_guidance }}
-    template_engine: jinja2
-    context_injection:
-      quality_bars:
-        - Integrity
-        - Presentation
-        - Accessibility
-      project_metadata: true
-      cold_snapshot_context: true
-
-  tools:
-    - name: read_hot_sot
-      enabled: true
-      tool_type: internal
-    - name: write_hot_sot
-      enabled: true
-      tool_type: internal
-    - name: read_cold_sot
-      enabled: true
-      tool_type: internal
-    - name: write_exports
-      enabled: true
-      tool_type: internal
-    - name: validate_artifact
-      enabled: true
-      tool_type: internal
-    - name: send_protocol_message
-      enabled: true
-      tool_type: internal
-
   structured_output:
     enabled: true
     schema_ref: export_view
@@ -233,10 +186,12 @@ constraints:
     blocks_on_failure: true
 
   hot_cold_permissions:
-    can_write_hot: true
-    can_read_cold: true
-    can_write_cold: false
-    requires_gatecheck_for_cold: true
+    hot:
+      read: true
+      write: true
+    cold:
+      read: true
+      write: false
 
 raci:
   loops:

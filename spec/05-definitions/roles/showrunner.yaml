@@ -124,66 +124,6 @@ interface:
     - wake_dormant_role
 
 behavior:
-  prompt:
-    template: |
-      # Role: {{ identity.name }}
-
-      {{ prompt_content.core_mandate }}
-
-      ## Operating Principles
-      {% for principle in prompt_content.operating_principles %}
-      - **{{ principle.name }}**: {{ principle.description }}
-      {% endfor %}
-
-      ## Anti-patterns to Avoid
-      {% for anti in prompt_content.anti_patterns %}
-      - **{{ anti.name }}**: {{ anti.description }}
-      {% endfor %}
-
-      ## Current Context
-      - TU: {{ context.tu_id }}
-      - Loop: {{ context.loop }}
-      - Snapshot: {{ context.snapshot }}
-
-      ## Your Task
-      {{ prompt_content.task_guidance }}
-    template_engine: jinja2
-    context_injection:
-      quality_bars:
-        - Integrity
-        - Reachability
-      project_metadata: true
-      cold_snapshot_context: true
-
-  tools:
-    - name: read_hot_sot
-      enabled: true
-      tool_type: internal
-    - name: write_hot_sot
-      enabled: true
-      tool_type: internal
-    - name: read_cold_sot
-      enabled: true
-      tool_type: internal
-    - name: write_cold_sot
-      enabled: true
-      tool_type: internal
-    - name: create_snapshot
-      enabled: true
-      tool_type: internal
-    - name: send_protocol_message
-      enabled: true
-      tool_type: internal
-    - name: update_tu
-      enabled: true
-      tool_type: internal
-    - name: wake_role
-      enabled: true
-      tool_type: internal
-    - name: trigger_gatecheck
-      enabled: true
-      tool_type: internal
-
   structured_output:
     enabled: true
     schema_ref: tu_brief
@@ -298,10 +238,12 @@ constraints:
     blocks_on_failure: false
 
   hot_cold_permissions:
-    can_write_hot: true
-    can_read_cold: true
-    can_write_cold: true
-    requires_gatecheck_for_cold: true
+    hot:
+      read: true
+      write: true
+    cold:
+      read: true
+      write: true
 
 raci:
   loops:
