@@ -613,14 +613,7 @@ class NodeFactory:
         """
         # Load role once
         role = self.load_role(role_id)
-        role_tools: list[Tool] = []
-        for tool_def in role.tools:
-            tool_name = tool_def.get("name") if isinstance(tool_def, dict) else str(tool_def)
-            tool = self.tool_registry.get_tool(tool_name)
-            if tool:
-                role_tools.append(tool)
-            else:
-                logger.warning(f"Tool not found for role {role.id}: {tool_name}")
+        # Tools are now loaded dynamically by RuntimeContextAssembler based on capabilities
 
         def role_node(state: StudioState) -> dict[str, Any]:
             """Execute role and update state.
@@ -676,22 +669,11 @@ class NodeFactory:
                             max_tokens=llm_config["max_tokens"],
                         )
 
-                        # Bind tools to LLM if role has tools
-                        if role_tools:
-                            # Convert our tools to LangChain format
-                            lc_tools = [
-                                t.to_langchain_tool()
-                                for t in role_tools
-                                if hasattr(t, "to_langchain_tool")
-                            ]
-                            if not lc_tools:
-                                # Fallback: tools might already be LangChain tools
-                                lc_tools = [
-                                    t._base_tool if hasattr(t, "_base_tool") else t
-                                    for t in role_tools
-                                ]
-
-                            if lc_tools and hasattr(llm, "bind_tools"):
+                        # Bind tools to LLM using assembler tools (not old role_tools)
+                        if assembler_tools:
+                            # Assembler tools are already in the right format from context_assembler
+                            # They come as tool definitions ready for LLM API binding
+                            if hasattr(llm, "bind_tools"):
                                 bind_kwargs: dict[str, Any] = {
                                     "tool_choice": "required"  # Force tool usage for all providers
                                 }
@@ -701,9 +683,9 @@ class NodeFactory:
                                     bind_kwargs["strict"] = True
 
                                 try:
-                                    llm = llm.bind_tools(lc_tools, **bind_kwargs)
+                                    llm = llm.bind_tools(assembler_tools, **bind_kwargs)
                                     logger.info(
-                                        f"Bound {len(lc_tools)} tools to LLM for role {role.id} "
+                                        f"Bound {len(assembler_tools)} tools to LLM for role {role.id} "
                                         f"with tool_choice=required"
                                     )
                                 except TypeError as e:
@@ -713,8 +695,8 @@ class NodeFactory:
                                         f"falling back: {e}"
                                     )
                                     try:
-                                        llm = llm.bind_tools(lc_tools)
-                                        logger.info(f"Bound {len(lc_tools)} tools to LLM for role {role.id}")
+                                        llm = llm.bind_tools(assembler_tools)
+                                        logger.info(f"Bound {len(assembler_tools)} tools to LLM for role {role.id}")
                                     except Exception as inner_e:
                                         logger.warning(
                                             f"Failed to bind tools for role {role.id}: {inner_e}"
@@ -743,19 +725,20 @@ class NodeFactory:
                         response = llm.invoke(llm_prompt)
 
                         # Validate tool usage if tools were bound
-                        if role_tools and self._validate_tool_usage(response):
+                        if assembler_tools and self._validate_tool_usage(response):
                             logger.info(
                                 f"Role {role.id} response contains tool calls (validated)"
                             )
-                        elif role_tools:
+                        elif assembler_tools:
                             logger.warning(
                                 f"Role {role.id} response does NOT contain tool calls, "
                                 f"but tools were bound (tool_choice=required should have enforced this)"
                             )
 
                         # Handle tool calls if present
+                        # For now, pass empty list as tools are handled through assembler
                         result, tool_updates, used_tools = self._execute_tool_loop(
-                            llm, response, role, role_tools, state, llm_prompt
+                            llm, response, role, [], state, llm_prompt
                         )
 
                         # Send role_completed with extracted insight and prompt context
@@ -807,7 +790,7 @@ class NodeFactory:
                     # Service type - attempt to run declared tools (metadata only for now)
                     tool_updates = {}
                     result = {
-                        "tools_declared": [t.tool_id for t in role_tools],
+                        "tools_declared": [],  # Tools now handled by assembler
                         "note": (
                             "Service role executed without LLM; "
                             "tool invocations are not yet orchestrated."

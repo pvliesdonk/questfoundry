@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from questfoundry.runtime.core.capability_mapper import CapabilityMapper
+from questfoundry.runtime.core.schema_registry import DEFINITIONS_ROOT
 from questfoundry.runtime.models.state import StudioState
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,12 @@ class RuntimeContextAssembler:
             capability_mapper: CapabilityMapper instance (creates new if not provided)
         """
         if definitions_path is None:
-            definitions_path = Path("spec/05-definitions")
+            # Use the same spec finding mechanism as SchemaRegistry
+            if DEFINITIONS_ROOT:
+                definitions_path = DEFINITIONS_ROOT
+            else:
+                # Fallback to relative path if not found
+                definitions_path = Path("spec/05-definitions")
 
         self.definitions_path = Path(definitions_path)
         self.capability_mapper = capability_mapper or CapabilityMapper()
@@ -493,14 +499,32 @@ their schemas and descriptions.
         can_send = intents.get("can_send", [])
 
         if can_send:
-            # Generic protocol message sender
+            # Generic protocol message sender - OpenAI function format
             tools.append(
                 {
-                    "tool_id": "send_protocol_message",
-                    "tool_class": "questfoundry.runtime.tools.protocol_tools.SendProtocolMessage",
-                    "category": "protocol",
-                    "description": "Send protocol message to another role",
-                    "implicit": True,  # Derived from protocol.intents.can_send
+                    "type": "function",
+                    "function": {
+                        "name": "send_protocol_message",
+                        "description": "Send protocol message to another role",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "receiver": {
+                                    "type": "string",
+                                    "description": "Target role ID or '*' for broadcast"
+                                },
+                                "intent": {
+                                    "type": "string",
+                                    "description": "Protocol intent (e.g., 'tu.open', 'hook.create')"
+                                },
+                                "payload": {
+                                    "type": "object",
+                                    "description": "Message payload data"
+                                }
+                            },
+                            "required": ["receiver", "intent", "payload"]
+                        }
+                    }
                 }
             )
 
@@ -514,33 +538,67 @@ their schemas and descriptions.
         if hot_perms.get("read"):
             tools.append(
                 {
-                    "tool_id": "read_hot_sot",
-                    "tool_class": "questfoundry.runtime.tools.state_tools.ReadHotSOT",
-                    "category": "state",
-                    "description": "Read from Hot State of Things",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "read_hot_sot",
+                        "description": "Read from Hot State of Things",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string",
+                                    "description": "Key to read from hot state"
+                                }
+                            },
+                            "required": ["key"]
+                        }
+                    }
                 }
             )
 
         if hot_perms.get("write"):
             tools.append(
                 {
-                    "tool_id": "write_hot_sot",
-                    "tool_class": "questfoundry.runtime.tools.state_tools.WriteHotSOT",
-                    "category": "state",
-                    "description": "Write to Hot State of Things",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "write_hot_sot",
+                        "description": "Write to Hot State of Things",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string",
+                                    "description": "Key to write to hot state"
+                                },
+                                "value": {
+                                    "type": "object",
+                                    "description": "Value to write (can be any JSON value)"
+                                }
+                            },
+                            "required": ["key", "value"]
+                        }
+                    }
                 }
             )
 
         if cold_perms.get("read"):
             tools.append(
                 {
-                    "tool_id": "read_cold_sot",
-                    "tool_class": "questfoundry.runtime.tools.state_tools.ReadColdSOT",
-                    "category": "state",
-                    "description": "Read from Cold State of Things (snapshots)",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "read_cold_sot",
+                        "description": "Read from Cold State of Things (snapshots)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string",
+                                    "description": "Key to read from cold state"
+                                }
+                            },
+                            "required": ["key"]
+                        }
+                    }
                 }
             )
 
@@ -548,11 +606,25 @@ their schemas and descriptions.
         if cold_perms.get("write"):
             tools.append(
                 {
-                    "tool_id": "write_cold_sot",
-                    "tool_class": "questfoundry.runtime.tools.state_tools.WriteColdSOT",
-                    "category": "state",
-                    "description": "Write to Cold State of Things (create snapshots)",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "write_cold_sot",
+                        "description": "Write to Cold State of Things (create snapshots)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string",
+                                    "description": "Key to write to cold state"
+                                },
+                                "value": {
+                                    "type": "object",
+                                    "description": "Value to write (will be snapshotted)"
+                                }
+                            },
+                            "required": ["key", "value"]
+                        }
+                    }
                 }
             )
 
@@ -575,15 +647,24 @@ their schemas and descriptions.
                     )
 
                     if tool_config:
+                        # Convert to OpenAI function format
                         tools.append(
                             {
-                                "tool_id": capability_id,
-                                "tool_class": tool_config["tool_class"],
-                                "category": "external",
-                                "description": f"External capability: {capability_id}",
-                                "provider": tool_config["provider_id"],
-                                "config": tool_config["config"],
-                                "required": required,
+                                "type": "function",
+                                "function": {
+                                    "name": capability_id,
+                                    "description": f"External capability: {capability_id}",
+                                    "parameters": {
+                                        "type": "object",
+                                        "properties": {
+                                            "input": {
+                                                "type": "string",
+                                                "description": f"Input for {capability_id}"
+                                            }
+                                        },
+                                        "required": ["input"]
+                                    }
+                                }
                             }
                         )
                     elif required:
@@ -592,29 +673,59 @@ their schemas and descriptions.
                             f"{role_def.get('id')}"
                         )
 
-        # 4. Knowledge tools (always available)
+        # 4. Knowledge tools (always available) - OpenAI function format
         tools.extend(
             [
                 {
-                    "tool_id": "consult_protocol",
-                    "tool_class": "questfoundry.runtime.tools.knowledge_tools.ConsultProtocol",
-                    "category": "knowledge",
-                    "description": "Consult QuestFoundry protocol specifications",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "consult_protocol",
+                        "description": "Consult QuestFoundry protocol specifications",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Query about protocol specifications"
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
                 },
                 {
-                    "tool_id": "consult_role_charter",
-                    "tool_class": "questfoundry.runtime.tools.knowledge_tools.ConsultRoleCharter",
-                    "category": "knowledge",
-                    "description": "Consult role charter and mandate",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "consult_role_charter",
+                        "description": "Consult role charter and mandate",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "role_id": {
+                                    "type": "string",
+                                    "description": "Role ID to consult charter for"
+                                }
+                            },
+                            "required": ["role_id"]
+                        }
+                    }
                 },
                 {
-                    "tool_id": "consult_quality_gate",
-                    "tool_class": "questfoundry.runtime.tools.knowledge_tools.ConsultQualityGate",
-                    "category": "knowledge",
-                    "description": "Consult quality bar requirements",
-                    "implicit": True,
+                    "type": "function",
+                    "function": {
+                        "name": "consult_quality_gate",
+                        "description": "Consult quality bar requirements",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "bar_name": {
+                                    "type": "string",
+                                    "description": "Quality bar name (e.g., 'Integrity', 'Consistency')"
+                                }
+                            },
+                            "required": ["bar_name"]
+                        }
+                    }
                 },
             ]
         )

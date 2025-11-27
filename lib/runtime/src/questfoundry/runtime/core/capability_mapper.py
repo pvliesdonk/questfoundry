@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+from questfoundry.runtime.core.schema_registry import DEFINITIONS_ROOT, SPEC_ROOT
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,11 +111,24 @@ class CapabilityMapper:
             capabilities_path: Path to capabilities.yaml (default: spec/05-definitions/)
             mappings_path: Path to tool_mappings.yaml (default: lib/runtime/config/)
         """
-        # Default paths relative to project root
+        # Default paths using same spec finding mechanism as SchemaRegistry
         if capabilities_path is None:
-            capabilities_path = Path("spec/05-definitions/capabilities.yaml")
+            if DEFINITIONS_ROOT:
+                capabilities_path = DEFINITIONS_ROOT / "capabilities.yaml"
+            else:
+                # Fallback to relative path
+                capabilities_path = Path("spec/05-definitions/capabilities.yaml")
+
         if mappings_path is None:
-            mappings_path = Path("lib/runtime/config/tool_mappings.yaml")
+            # Tool mappings are in lib/runtime/config, not in spec
+            # Try to find it relative to runtime module
+            import questfoundry.runtime
+            runtime_root = Path(questfoundry.runtime.__file__).parent.parent.parent
+            mappings_path = runtime_root / "lib" / "runtime" / "config" / "tool_mappings.yaml"
+
+            # Fallback to relative path if that doesn't work
+            if not mappings_path.exists():
+                mappings_path = Path("lib/runtime/config/tool_mappings.yaml")
 
         self.capabilities_path = Path(capabilities_path)
         self.mappings_path = Path(mappings_path)
