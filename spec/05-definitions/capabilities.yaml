@@ -1,0 +1,720 @@
+# QuestFoundry Capabilities Registry
+# Defines abstract capabilities that roles may require
+#
+# This file separates Layer 5 specifications from runtime implementation details.
+# Capabilities are referenced in role profiles but implemented by the runtime.
+#
+# Schema: spec/03-schemas/definitions/capabilities.schema.json (TBD)
+# Version: 1.0.0
+# Created: 2025-11-27
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-27"
+  updated: "2025-11-27"
+  author: "QuestFoundry Architecture"
+  description: |
+    Abstract capability definitions for QuestFoundry roles. Capabilities define what
+    roles can do beyond pure reasoning and protocol communication. This registry
+    enables runtime flexibility while maintaining specification clarity.
+
+# ==============================================================================
+# CAPABILITY CATEGORIES
+# ==============================================================================
+#
+# 1. EXTERNAL CAPABILITIES
+#    Operations that require external services or tools (image generation, audio
+#    synthesis, web search, etc.). Agents cannot perform these independently.
+#    Runtime must provide implementations or fallbacks.
+#
+# 2. KNOWLEDGE CAPABILITIES
+#    Consultation of specification documents and project knowledge. Always available
+#    through the runtime's knowledge base system.
+#
+# 3. IMPLICIT CAPABILITIES
+#    Capabilities derived from role permissions and protocol rights. Never explicitly
+#    listed in role tool definitions. Include protocol communication, state access,
+#    artifact validation, etc.
+#
+# ==============================================================================
+
+# ==============================================================================
+# EXTERNAL CAPABILITIES
+# ==============================================================================
+# These capabilities require external tools/services. Runtime must provide
+# implementations (via API integrations, local tools, or stub fallbacks).
+
+external_capabilities:
+
+  # --------------------------------------------------------------------------
+  # VISUAL PRODUCTION
+  # --------------------------------------------------------------------------
+
+  - id: image_generation
+    name: Image Generation
+    category: visual_production
+    description: |
+      Generate images from textual descriptions (art plans). Used to create
+      visual assets including illustrations, concept art, and decorative elements.
+      Must support deterministic reproduction via seeds/parameters when requested.
+
+    typical_inputs:
+      - art_plan (textual description with composition, style, mood)
+      - style_guidance (aesthetic constraints)
+      - technical_parameters (resolution, aspect ratio, variants)
+
+    expected_outputs:
+      - rendered_image (binary asset)
+      - generation_metadata (seeds, model info, parameters)
+      - reproducibility_log (for determinism tracking)
+
+    quality_requirements:
+      - Must honor composition intent from art plans
+      - Must support accessibility (alt text generation assistance)
+      - Should support deterministic reproduction when requested
+      - Must handle feasibility constraints gracefully
+
+    roles_requiring:
+      - illustrator
+
+    runtime_notes: |
+      Runtime may implement via:
+      - API services (DALL-E, Midjourney, Stable Diffusion)
+      - Local generation tools
+      - Mock/stub for testing (returns placeholder + logs)
+      Fallback behavior must be graceful and logged.
+
+  - id: image_editing
+    name: Image Editing
+    category: visual_production
+    description: |
+      Edit or manipulate existing images (cropping, color correction, composition
+      adjustments). Used for variant production and refinement of generated assets.
+
+    typical_inputs:
+      - source_image (existing render)
+      - edit_instructions (crop region, adjustments, transformations)
+      - style_guidance
+
+    expected_outputs:
+      - edited_image
+      - edit_log (transformation record)
+
+    quality_requirements:
+      - Must preserve image quality appropriately
+      - Must maintain determinism logs where applicable
+      - Should support batch operations for variants
+
+    roles_requiring:
+      - illustrator
+      - art_director (evaluation/preview)
+
+    runtime_notes: |
+      May be combined with image_generation capability in some implementations.
+
+  # --------------------------------------------------------------------------
+  # AUDIO PRODUCTION
+  # --------------------------------------------------------------------------
+
+  - id: audio_synthesis
+    name: Audio Synthesis
+    category: audio_production
+    description: |
+      Synthesize audio from descriptions or musical notation. Generate sound effects,
+      ambient audio, musical cues, or synthesized speech. Must support reproducibility
+      and safety requirements (volume normalization, frequency ranges).
+
+    typical_inputs:
+      - audio_plan (description of desired sound/music)
+      - duration_spec
+      - safety_constraints (LUFS target, frequency limits)
+      - determinism_seed (optional, for reproducibility)
+
+    expected_outputs:
+      - audio_file (rendered cue)
+      - audio_metadata (format, duration, LUFS)
+      - determinism_log (seeds, synthesis parameters)
+
+    quality_requirements:
+      - Must meet accessibility requirements (caption alignment, safe volume)
+      - Must support deterministic reproduction when requested
+      - Must enforce safety constraints (no startle peaks, frequency limits)
+      - Should support multiple output formats
+
+    roles_requiring:
+      - audio_producer
+      - audio_director (evaluation/preview)
+
+    runtime_notes: |
+      Runtime may implement via:
+      - AI audio generation services
+      - Synthesizer libraries (ChucK, SuperCollider, etc.)
+      - Sample-based synthesis
+      - Mock/stub for testing
+      Fallback must maintain safety and accessibility requirements.
+
+  - id: audio_editing
+    name: Audio Editing
+    category: audio_production
+    description: |
+      Edit, mix, or process audio files. Apply effects, normalize volume, create
+      fades, mix multiple tracks. Used for refining synthesized audio and creating
+      final deliverable assets.
+
+    typical_inputs:
+      - source_audio (one or more audio files)
+      - edit_instructions (mixing, effects, processing)
+      - safety_constraints (normalization targets)
+
+    expected_outputs:
+      - processed_audio
+      - processing_log (effects chain, parameters)
+
+    quality_requirements:
+      - Must maintain audio quality standards
+      - Must enforce safety requirements (LUFS normalization)
+      - Should support reproducibility via parameter logging
+
+    roles_requiring:
+      - audio_producer
+      - audio_director
+
+    runtime_notes: |
+      May use DAW integration, audio processing libraries, or service APIs.
+
+  - id: text_to_speech
+    name: Text-to-Speech
+    category: audio_production
+    description: |
+      Convert written text to spoken audio with appropriate voice, tone, and pacing.
+      Used for narration, dialogue preview, or accessibility features. Must support
+      voice selection and prosody control.
+
+    typical_inputs:
+      - text_content (manuscript sections, dialogue)
+      - voice_parameters (voice selection, tone, pace)
+      - language_code
+
+    expected_outputs:
+      - speech_audio
+      - timing_metadata (word/phrase timestamps)
+
+    quality_requirements:
+      - Must sound natural and appropriate to content
+      - Should support multiple voices and languages
+      - Must provide timing data for synchronization
+      - Must meet accessibility standards
+
+    roles_requiring:
+      - player_narrator (optional, for dry-run mode)
+      - audio_director (optional, for prototyping)
+
+    runtime_notes: |
+      Optional capability. Roles can function without it.
+      Useful for prototyping and accessibility testing.
+
+  # --------------------------------------------------------------------------
+  # INFORMATION RETRIEVAL
+  # --------------------------------------------------------------------------
+
+  - id: web_search
+    name: Web Search
+    category: information_retrieval
+    description: |
+      Search the web for factual information, current events, and research materials.
+      Used to corroborate claims, verify facts, and gather background information
+      that informs creative decisions.
+
+    typical_inputs:
+      - search_query (research question or claim to verify)
+      - search_constraints (date ranges, domain filters, source types)
+
+    expected_outputs:
+      - search_results (with sources, citations, snippets)
+      - reliability_metadata (source reputation, recency)
+
+    quality_requirements:
+      - Must return credible sources with citations
+      - Should support date filtering for current information
+      - Must respect rate limits and API constraints
+      - Should provide source reliability indicators
+
+    roles_requiring:
+      - researcher
+
+    runtime_notes: |
+      Runtime may implement via:
+      - Search engine APIs (Google, Bing, etc.)
+      - Specialized research databases
+      - Cached/mock results for testing
+      Must handle API failures gracefully and log unavailability.
+
+  - id: document_retrieval
+    name: Document Retrieval
+    category: information_retrieval
+    description: |
+      Retrieve and parse external documents (PDFs, academic papers, reference materials).
+      Used for deep research that requires accessing specific published works.
+
+    typical_inputs:
+      - document_identifier (DOI, URL, ISBN)
+      - extraction_parameters (pages, sections)
+
+    expected_outputs:
+      - document_content (parsed text)
+      - document_metadata (authors, publication date, citation info)
+
+    quality_requirements:
+      - Must preserve citation information
+      - Should handle common document formats
+      - Must respect copyright and access restrictions
+
+    roles_requiring:
+      - researcher (optional, web_search may suffice)
+
+    runtime_notes: |
+      Optional enhancement to research capabilities.
+      May use document APIs, parsers, or library integrations.
+
+  # --------------------------------------------------------------------------
+  # LOCALIZATION
+  # --------------------------------------------------------------------------
+
+  - id: machine_translation
+    name: Machine Translation
+    category: localization
+    description: |
+      Translate text between languages as a starting point for localization. Provides
+      rough translations that human Translator role refines for tone, idiom, and
+      cultural appropriateness. Not used directly in production output.
+
+    typical_inputs:
+      - source_text
+      - source_language
+      - target_language
+      - context_hints (domain, register)
+
+    expected_outputs:
+      - translated_text (rough translation)
+      - confidence_scores (per-segment reliability)
+      - glossary_suggestions
+
+    quality_requirements:
+      - Should preserve structure (markdown, anchors)
+      - Must handle terminology consistently
+      - Should provide confidence indicators
+      - Must support bidirectional translation
+
+    roles_requiring:
+      - translator (as assistant/starting point, not for final output)
+
+    runtime_notes: |
+      Optional capability. Translator can work without it.
+      Useful for bootstrapping localization work.
+      Runtime may use translation APIs or local tools.
+
+  # --------------------------------------------------------------------------
+  # DOCUMENT PRODUCTION
+  # --------------------------------------------------------------------------
+
+  - id: format_conversion
+    name: Format Conversion
+    category: document_production
+    description: |
+      Convert documents between formats (Markdown to HTML, HTML to EPUB, EPUB to PDF,
+      etc.). Used in final export assembly to create multiple view formats from Cold
+      snapshots. Must preserve structure, anchors, and accessibility features.
+
+    typical_inputs:
+      - source_document (content + format specification)
+      - target_format (html, epub, pdf, markdown)
+      - conversion_options (styling, layout, navigation)
+
+    expected_outputs:
+      - converted_document
+      - conversion_log (warnings, anchor mappings)
+      - validation_report
+
+    quality_requirements:
+      - Must preserve semantic structure and accessibility
+      - Must maintain internal links and anchors
+      - Must support styling and layout requirements
+      - Should validate output against format standards
+
+    roles_requiring:
+      - book_binder
+
+    runtime_notes: |
+      Critical capability for export functionality.
+      Runtime may use:
+      - Pandoc or similar converters
+      - Format-specific libraries
+      - Custom conversion pipelines
+      Must handle conversion errors gracefully and report issues.
+
+  - id: pdf_generation
+    name: PDF Generation
+    category: document_production
+    description: |
+      Generate high-quality PDF documents with proper typography, navigation, and
+      accessibility features (tagged PDF, bookmarks). Used for final export views.
+
+    typical_inputs:
+      - source_content (structured document)
+      - styling_spec (fonts, layout, page design)
+      - pdf_options (compression, accessibility tags)
+
+    expected_outputs:
+      - pdf_document
+      - generation_log
+      - accessibility_report (PDF/UA compliance)
+
+    quality_requirements:
+      - Must support PDF/UA for accessibility
+      - Must include navigation (bookmarks, TOC)
+      - Should support embedded fonts and images
+      - Must preserve internal links
+
+    roles_requiring:
+      - book_binder
+
+    runtime_notes: |
+      May be implemented as specialized case of format_conversion.
+      High-quality PDF generation requires careful tool selection.
+
+  - id: epub_generation
+    name: EPUB Generation
+    category: document_production
+    description: |
+      Generate EPUB 3.x compliant ebooks with proper structure, navigation, and
+      accessibility features. Used for distributable interactive fiction exports.
+
+    typical_inputs:
+      - source_content (structured manuscript + metadata)
+      - epub_options (navigation, spine order, accessibility)
+
+    expected_outputs:
+      - epub_file
+      - validation_report (EPUB Check compliance)
+
+    quality_requirements:
+      - Must validate against EPUB 3.x standards
+      - Must support navigation documents
+      - Must include accessibility metadata
+      - Should support media overlays (audio sync)
+
+    roles_requiring:
+      - book_binder
+
+    runtime_notes: |
+      May be implemented as part of format_conversion.
+      Must handle EPUB-specific requirements (OPF, NCX, etc.).
+
+# ==============================================================================
+# KNOWLEDGE CAPABILITIES
+# ==============================================================================
+# These capabilities are always available through the runtime's knowledge base.
+# Roles consult specifications and project documentation as needed.
+
+knowledge_capabilities:
+
+  - id: consult_specs
+    name: Consult Specifications
+    category: knowledge_access
+    description: |
+      Access and query QuestFoundry specification documents (protocols, schemas,
+      quality bars, role charters, etc.). Used to resolve ambiguities, understand
+      requirements, and ensure compliance with project standards.
+
+    available_documents:
+      - Layer 1: Charters (role definitions, mandates)
+      - Layer 2: Protocols (communication, lifecycles)
+      - Layer 3: Schemas (artifact definitions, validation)
+      - Layer 4: Quality Bars (quality requirements)
+      - Layer 5: Compiled Definitions (roles, loops, gates)
+      - Project Documentation (style guides, glossaries)
+
+    typical_queries:
+      - "What are the quality bar requirements for Presentation?"
+      - "What protocol intents can Illustrator send?"
+      - "What is the schema for render artifacts?"
+      - "What anti-patterns should I avoid?"
+
+    quality_requirements:
+      - Must provide authoritative, up-to-date information
+      - Should return relevant excerpts with context
+      - Must cite specific documents and sections
+
+    roles_requiring:
+      - all_roles (universal capability)
+
+    runtime_notes: |
+      Always available. Implemented via knowledge base retrieval.
+      Runtime must maintain indexed, searchable spec repository.
+      Should use semantic search for natural language queries.
+
+  - id: consult_project_docs
+    name: Consult Project Documentation
+    category: knowledge_access
+    description: |
+      Access project-specific documentation (style guides, canon documents, world
+      bibles, glossaries, accessibility requirements, etc.). Used to maintain
+      consistency with project creative direction and standards.
+
+    available_documents:
+      - Style guides and addenda
+      - Canon packs and lore documents
+      - Glossaries and terminology
+      - Accessibility requirements
+      - Cultural sensitivity guidelines
+      - Project-specific anti-patterns
+
+    typical_queries:
+      - "What is the established tone for dock scenes?"
+      - "How should union tokens be described?"
+      - "What accessibility requirements apply to audio cues?"
+      - "Are there cultural sensitivities for this setting?"
+
+    quality_requirements:
+      - Must reflect current project state
+      - Should provide versioned access to evolving docs
+      - Must distinguish canonical from working notes
+
+    roles_requiring:
+      - all_roles (universal capability)
+
+    runtime_notes: |
+      Always available. Accesses project workspace knowledge.
+      May integrate with Hot/Cold SoT for living documents.
+      Should track document versions for traceability.
+
+  - id: search_artifacts
+    name: Search Existing Artifacts
+    category: knowledge_access
+    description: |
+      Search through previously created artifacts (sections, hooks, memos, etc.)
+      to find relevant prior work, maintain consistency, and avoid duplication.
+      Semantic search across Hot and Cold SoT (respecting permissions).
+
+    typical_queries:
+      - "What hooks exist about dock security?"
+      - "Which sections reference the foreman character?"
+      - "What research memos cover badge technology?"
+      - "Are there existing art plans for checkpoint scenes?"
+
+    quality_requirements:
+      - Must respect Hot/Cold and spoiler permissions
+      - Should provide context with results
+      - Must support semantic and keyword search
+      - Should rank results by relevance
+
+    roles_requiring:
+      - all_roles (universal, with permission constraints)
+
+    runtime_notes: |
+      Always available within permission boundaries.
+      Implemented via artifact indexing and search.
+      Must enforce safety and traceability constraints.
+
+# ==============================================================================
+# IMPLICIT CAPABILITIES
+# ==============================================================================
+# These capabilities are NEVER explicitly listed in role tool definitions.
+# They are derived from role permissions and protocol rights.
+# Documented here for completeness but not referenced in role configs.
+
+implicit_capabilities:
+
+  - id: protocol_communication
+    name: Protocol Communication
+    category: implicit
+    description: |
+      Send and receive protocol messages according to role's protocol.intents
+      permissions. Derived from can_send/can_receive declarations in role profile.
+
+    derived_from:
+      - protocol.intents.can_send
+      - protocol.intents.can_receive
+
+    runtime_implementation: |
+      Provided by protocol layer. Automatically available based on declarations.
+      Roles never explicitly call "send_protocol_message" in their tool lists.
+      Runtime injects protocol capabilities based on permissions.
+
+    notes: |
+      This is NOT a tool. It's a derived capability from protocol declarations.
+
+  - id: state_read_access
+    name: State Read Access
+    category: implicit
+    description: |
+      Read artifacts from Hot SoT, Cold SoT, or exports based on role's
+      hot_cold_permissions and safety constraints. Derived from permission declarations.
+
+    derived_from:
+      - constraints.hot_cold_permissions.can_read_cold
+      - constraints.safety.can_see_hot
+      - constraints.safety.can_see_spoilers
+
+    runtime_implementation: |
+      Provided by state layer. Automatically enforced based on permissions.
+      Roles never explicitly call "read_hot_sot" in their tool lists.
+      Runtime provides read access through artifact injection and queries.
+
+    notes: |
+      This is NOT a tool. It's enforced by runtime based on permissions.
+
+  - id: state_write_access
+    name: State Write Access
+    category: implicit
+    description: |
+      Write artifacts to Hot SoT or Cold SoT based on role's hot_cold_permissions
+      and lifecycle rights. Derived from permission and lifecycle declarations.
+
+    derived_from:
+      - constraints.hot_cold_permissions.can_write_hot
+      - constraints.hot_cold_permissions.can_write_cold
+      - interface.outputs (artifact types)
+      - interface.side_effects
+
+    runtime_implementation: |
+      Provided by state layer. Roles output artifacts via structured output.
+      Runtime handles state writes based on merge strategies and permissions.
+      Not an explicit tool call.
+
+    notes: |
+      Roles produce artifacts; runtime manages state persistence.
+
+  - id: artifact_validation
+    name: Artifact Validation
+    category: implicit
+    description: |
+      Validate produced artifacts against schemas. Derived from structured_output
+      configuration and validation_required settings.
+
+    derived_from:
+      - behavior.structured_output.enabled
+      - interface.outputs[].validation_required
+
+    runtime_implementation: |
+      Provided by validation layer. Automatically enforces schemas.
+      Roles never call validation explicitly - runtime validates outputs.
+
+    notes: |
+      This is NOT a tool. Runtime enforces schemas automatically.
+
+  - id: lifecycle_operations
+    name: Lifecycle Operations
+    category: implicit
+    description: |
+      Create, transition, or evaluate lifecycle entities (hooks, TUs, gates, views)
+      based on role's protocol.lifecycles permissions.
+
+    derived_from:
+      - protocol.lifecycles.hook (can_create, can_transition)
+      - protocol.lifecycles.tu (can_open, can_close, can_transition)
+      - protocol.lifecycles.gate (can_evaluate, can_decide)
+      - protocol.lifecycles.view (can_bind, can_playtest)
+
+    runtime_implementation: |
+      Provided by lifecycle layer. Roles trigger lifecycle events through
+      protocol messages or artifact output. Runtime enforces permissions.
+
+    notes: |
+      This is NOT a tool. Permissions dictate what lifecycle operations occur.
+
+  - id: context_injection
+    name: Context Injection
+    category: implicit
+    description: |
+      Receive relevant context (TU state, quality bars, project metadata, etc.)
+      based on behavior.prompt.context_injection configuration.
+
+    derived_from:
+      - behavior.prompt.context_injection
+      - constraints.traceability
+
+    runtime_implementation: |
+      Provided by prompt orchestration. Runtime injects context into prompts
+      based on configuration. Not something roles request explicitly.
+
+    notes: |
+      This is NOT a tool. Runtime assembles context automatically.
+
+# ==============================================================================
+# CAPABILITY MAPPING GUIDE
+# ==============================================================================
+#
+# When defining a role's tools in their profile:
+#
+# 1. EXTERNAL CAPABILITIES:
+#    Reference by capability ID in behavior.tools section:
+#
+#    tools:
+#      - capability_ref: image_generation
+#        enabled: true
+#        required: true
+#        fallback_behavior: stub  # or 'error', 'skip'
+#
+# 2. KNOWLEDGE CAPABILITIES:
+#    Never list explicitly. Always available through runtime.
+#    Runtime provides knowledge base access automatically.
+#
+# 3. IMPLICIT CAPABILITIES:
+#    Never list. Derived from permissions and declarations.
+#    Runtime enforces based on role configuration.
+#
+# ==============================================================================
+
+runtime_integration:
+  description: |
+    The runtime uses this capabilities registry to:
+
+    1. Validate role tool configurations reference valid capabilities
+    2. Determine which external integrations to initialize
+    3. Implement graceful fallbacks when capabilities unavailable
+    4. Generate runtime logs and capability audit trails
+    5. Support multiple implementation strategies per capability
+
+  fallback_strategies:
+    stub: |
+      Generate placeholder outputs with logged warnings.
+      Useful for testing and development when external services unavailable.
+
+    error: |
+      Fail gracefully with clear error messages when capability unavailable.
+      Role execution pauses and reports capability requirement unmet.
+
+    skip: |
+      Skip operations requiring unavailable capabilities and continue.
+      Role notes skipped operations in output artifacts.
+
+    manual: |
+      Flag operation for manual completion outside runtime.
+      Useful for human-in-loop workflows or external toolchain integration.
+
+  implementation_notes: |
+    Each capability may have multiple implementations (API services, local tools,
+    mocks). Runtime configuration determines which implementation to use.
+
+    Capabilities should be implemented as plugins/adapters with consistent
+    interfaces. This allows runtime flexibility without changing role definitions.
+
+    Capability availability should be checked at runtime initialization and
+    logged. Roles should receive clear feedback when required capabilities missing.
+
+# ==============================================================================
+# VERSION HISTORY
+# ==============================================================================
+
+version_history:
+  - version: "1.0.0"
+    date: "2025-11-27"
+    changes:
+      - Initial capability registry
+      - Defined 14 external capabilities across 5 categories
+      - Defined 3 knowledge capabilities (always available)
+      - Documented 6 implicit capabilities (derived from permissions)
+      - Established capability mapping guidelines
+      - Documented runtime integration patterns
+    author: "QuestFoundry Architecture"

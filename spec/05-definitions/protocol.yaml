@@ -1,0 +1,1089 @@
+# QuestFoundry Protocol Definition (Machine-Readable)
+# Layer 4 Protocol Synthesis for Runtime Context Assembler
+# Generated from: spec/04-protocol/* (ENVELOPE.md, INTENTS.md, LIFECYCLES/*, CONFORMANCE.md)
+# Version: 1.0.0
+# Last Updated: 2025-11-27
+
+version: "1.0.0"
+protocol_name: "qf-protocol"
+
+# Envelope structure definition
+envelope:
+  version: "1.0.0"
+  schema_ref: "04-protocol/envelope.schema.json"
+
+  required_fields:
+    - protocol
+    - id
+    - time
+    - sender
+    - receiver
+    - intent
+    - context
+    - safety
+    - payload
+
+  # PN Safety Invariant (non-negotiable)
+  pn_safety_rule:
+    description: "Player-Narrator MUST only receive messages that satisfy ALL conditions"
+    conditions:
+      - field: "context.hot_cold"
+        value: "cold"
+      - field: "context.snapshot"
+        required: true
+      - field: "safety.player_safe"
+        value: true
+      - field: "safety.spoilers"
+        value: "forbidden"
+    violation_error_code: "business_rule_violation"
+    violation_rule_ref: "PN_SAFETY_INVARIANT"
+
+# Role definitions (from 02-dictionary/role_abbreviations.md)
+roles:
+  SR:
+    name: "Showrunner"
+    activity: "always_active"
+    primary_artifacts: ["TU Briefs", "ADRs"]
+  GK:
+    name: "Gatekeeper"
+    activity: "always_active"
+    primary_artifacts: ["Gatecheck Reports"]
+  PW:
+    name: "Plotwright"
+    activity: "active"
+    primary_artifacts: ["Section Briefs", "Gateway Maps"]
+  SS:
+    name: "Scene Smith"
+    activity: "active"
+    primary_artifacts: ["Sections", "Edit Notes"]
+  ST:
+    name: "Style Lead"
+    activity: "active"
+    primary_artifacts: ["Style Addenda", "Register Maps"]
+  LW:
+    name: "Lore Weaver"
+    activity: "active"
+    primary_artifacts: ["Canon Packs"]
+  CC:
+    name: "Codex Curator"
+    activity: "active"
+    primary_artifacts: ["Codex Entries"]
+  AD:
+    name: "Art Director"
+    activity: "optional_dormant"
+    primary_artifacts: ["Art Plans", "Shotlists"]
+  IL:
+    name: "Illustrator"
+    activity: "optional_dormant"
+    primary_artifacts: ["Art Assets"]
+  AuD:
+    name: "Audio Director"
+    activity: "optional_dormant"
+    primary_artifacts: ["Audio Plans", "Cuelists"]
+  AuP:
+    name: "Audio Producer"
+    activity: "optional_dormant"
+    primary_artifacts: ["Audio Assets"]
+  TR:
+    name: "Translator"
+    activity: "optional_dormant"
+    primary_artifacts: ["Language Packs"]
+  BB:
+    name: "Book Binder"
+    activity: "active"
+    primary_artifacts: ["View Logs", "Front Matter"]
+  PN:
+    name: "Player-Narrator"
+    activity: "active"
+    primary_artifacts: ["PN Playtest Notes"]
+    special_constraints:
+      - "cold_only"
+      - "player_safe_only"
+  RS:
+    name: "Researcher"
+    activity: "optional_dormant"
+    primary_artifacts: ["Research Memos"]
+
+# Loop definitions (from 02-dictionary/loop_names.md)
+loops:
+  - display_name: "Story Spark"
+    file_name: "story-spark.md"
+    abbreviation: "SS"
+    category: "Discovery"
+  - display_name: "Hook Harvest"
+    file_name: "hook-harvest.md"
+    abbreviation: "HH"
+    category: "Discovery"
+  - display_name: "Lore Deepening"
+    file_name: "lore-deepening.md"
+    abbreviation: "LD"
+    category: "Discovery"
+  - display_name: "Codex Expansion"
+    file_name: "codex-expansion.md"
+    abbreviation: "CE"
+    category: "Refinement"
+  - display_name: "Style Tune-up"
+    file_name: "style-tuneup.md"
+    abbreviation: "ST"
+    category: "Refinement"
+  - display_name: "Art Touch-up"
+    file_name: "art-touchup.md"
+    abbreviation: "AT"
+    category: "Asset"
+  - display_name: "Audio Pass"
+    file_name: "audio-pass.md"
+    abbreviation: "AP"
+    category: "Asset"
+  - display_name: "Translation Pass"
+    file_name: "translation-pass.md"
+    abbreviation: "TP"
+    category: "Asset"
+  - display_name: "Binding Run"
+    file_name: "binding-run.md"
+    abbreviation: "BR"
+    category: "Export"
+  - display_name: "Narration Dry-Run"
+    file_name: "narration-dry-run.md"
+    abbreviation: "NDR"
+    category: "Export"
+  - display_name: "Gatecheck"
+    file_name: "gatecheck.md"
+    abbreviation: "GC"
+    category: "Export"
+  - display_name: "Post-Mortem"
+    file_name: "post-mortem.md"
+    abbreviation: "PM"
+    category: "Export"
+  - display_name: "Archive Snapshot"
+    file_name: "archive-snapshot.md"
+    abbreviation: "AS"
+    category: "Export"
+
+# Intent definitions (from INTENTS.md)
+intents:
+  # General-purpose intents
+  ack:
+    description: "Acknowledge receipt of message"
+    domain: "general"
+    payload_type: "none"
+    allowed_senders: ["*"]
+    allowed_receivers: ["*"]
+    requires_reply_to: true
+
+  error:
+    description: "Error response with standardized error codes"
+    domain: "general"
+    payload_type: "none"
+    allowed_senders: ["*"]
+    allowed_receivers: ["*"]
+    requires_reply_to: true
+    payload_structure:
+      code:
+        type: "enum"
+        values: ["validation_error", "business_rule_violation", "not_authorized", "not_found", "conflict"]
+        required: true
+      message:
+        type: "string"
+        min_length: 5
+        required: true
+      details:
+        type: "object"
+        required: false
+
+  # Hook lifecycle intents
+  hook.create:
+    description: "Create new Hook Card in proposed state"
+    domain: "hook"
+    payload_type: "hook_card"
+    payload_schema: "03-schemas/hook_card.schema.json"
+    allowed_senders: ["SR", "PW", "SS", "ST", "LW", "CC", "AD", "IL", "AuD", "AuP", "TR", "BB", "RS"]
+    allowed_receivers: ["SR", "LW", "PW", "SS", "ST", "CC"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+    safety_requirements:
+      player_safe: false
+
+  hook.update_status:
+    description: "Update Hook Card status (transition state)"
+    domain: "hook"
+    payload_type: "hook_card"
+    payload_schema: "03-schemas/hook_card.schema.json"
+    allowed_senders: ["SR", "LW", "PW", "SS", "ST", "CC"]  # Owner roles
+    allowed_receivers: ["SR", "*"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+
+  # TU lifecycle intents
+  tu.open:
+    description: "Open new Trace Unit in hot-proposed state"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+    safety_requirements:
+      player_safe: false
+
+  tu.start:
+    description: "Start TU work (hot-proposed -> stabilizing)"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+
+  tu.defer:
+    description: "Defer TU for future consideration"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+
+  tu.reject:
+    description: "Reject TU with reason"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+
+  tu.submit_gate:
+    description: "Submit TU for gatecheck (stabilizing -> gatecheck)"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]  # Owner (A)
+    allowed_receivers: ["GK"]
+
+  tu.rework:
+    description: "Rework TU after gatecheck failure (gatecheck -> stabilizing)"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["GK", "SR"]
+    allowed_receivers: ["SR", "*"]
+
+  tu.reactivate:
+    description: "Reactivate deferred TU (deferred -> stabilizing)"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+
+  tu.close:
+    description: "Close TU and merge to Cold (gatecheck -> cold-merged)"
+    domain: "tu"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+    context_requirements:
+      hot_cold: "cold"
+      tu_required: true
+      snapshot_required: true
+
+  # Gate lifecycle intents
+  gate.report.submit:
+    description: "Submit gatecheck report (pre-gate or full)"
+    domain: "gate"
+    payload_type: "gatecheck_report"
+    payload_schema: "03-schemas/gatecheck_report.schema.json"
+    allowed_senders: ["GK"]
+    allowed_receivers: ["SR"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+      snapshot_required: true
+    safety_requirements:
+      player_safe: false
+
+  gate.decision:
+    description: "Final gatecheck decision (pass/conditional_pass/block)"
+    domain: "gate"
+    payload_type: "gatecheck_report"
+    payload_schema: "03-schemas/gatecheck_report.schema.json"
+    allowed_senders: ["GK"]
+    allowed_receivers: ["SR"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+      snapshot_required: true
+    payload_structure:
+      decision:
+        type: "enum"
+        values: ["pass", "conditional_pass", "block"]
+        required: true
+      bars:
+        type: "array"
+        min_items: 8
+        required: true
+
+  gate.feedback:
+    description: "Informal gate feedback (yellow bars, non-blocking)"
+    domain: "gate"
+    payload_type: "gatecheck_report"
+    payload_schema: "03-schemas/gatecheck_report.schema.json"
+    allowed_senders: ["GK"]
+    allowed_receivers: ["SR", "PW", "SS", "ST", "LW", "CC"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+
+  gate.defer:
+    description: "Defer gatecheck before completion"
+    domain: "gate"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR", "GK"]
+    allowed_receivers: ["*"]
+
+  # Merge lifecycle intents
+  merge.request:
+    description: "Request Cold merge approval"
+    domain: "merge"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["SR", "GK"]
+    context_requirements:
+      hot_cold: "hot"
+      tu_required: true
+      snapshot_required: true
+
+  merge.approve:
+    description: "Approve Cold merge after gatecheck"
+    domain: "merge"
+    payload_type: "tu_brief"
+    payload_schema: "03-schemas/tu_brief.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+    context_requirements:
+      hot_cold: "cold"
+      tu_required: true
+      snapshot_required: true
+
+  merge.reject:
+    description: "Reject Cold merge after failed gatecheck"
+    domain: "merge"
+    payload_type: "gatecheck_report"
+    payload_schema: "03-schemas/gatecheck_report.schema.json"
+    allowed_senders: ["GK", "SR"]
+    allowed_receivers: ["SR"]
+    context_requirements:
+      hot_cold: "hot"
+
+  # View/Export lifecycle intents
+  view.export.request:
+    description: "Request view export from Cold snapshot"
+    domain: "view"
+    payload_type: "view_log"
+    payload_schema: "03-schemas/view_log.schema.json"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["BB"]
+    context_requirements:
+      hot_cold: "cold"
+      snapshot_required: true
+      tu_required: true
+    safety_requirements:
+      player_safe: true
+
+  view.export.result:
+    description: "Deliver bound export artifacts"
+    domain: "view"
+    payload_type: "view_log"
+    payload_schema: "03-schemas/view_log.schema.json"
+    allowed_senders: ["BB"]
+    allowed_receivers: ["PN", "SR"]
+    context_requirements:
+      hot_cold: "cold"
+      snapshot_required: true
+    safety_requirements:
+      player_safe: true
+      spoilers: "forbidden"
+
+  view.bind:
+    description: "Start export binding"
+    domain: "view"
+    payload_type: "view_log"
+    payload_schema: "03-schemas/view_log.schema.json"
+    allowed_senders: ["BB"]
+    allowed_receivers: ["SR"]
+
+  view.bound:
+    description: "Export binding complete"
+    domain: "view"
+    payload_type: "view_log"
+    payload_schema: "03-schemas/view_log.schema.json"
+    allowed_senders: ["BB"]
+    allowed_receivers: ["PN"]
+    context_requirements:
+      hot_cold: "cold"
+      snapshot_required: true
+    safety_requirements:
+      player_safe: true
+      spoilers: "forbidden"
+
+  view.feedback:
+    description: "PN feedback on view"
+    domain: "view"
+    payload_type: "pn_playtest_notes"
+    payload_schema: "03-schemas/pn_playtest_notes.schema.json"
+    allowed_senders: ["PN"]
+    allowed_receivers: ["SR"]
+
+  view.publish:
+    description: "Publish view (finalize and archive)"
+    domain: "view"
+    payload_type: "view_log"
+    payload_schema: "03-schemas/view_log.schema.json"
+    allowed_senders: ["SR", "BB"]
+    allowed_receivers: ["*"]
+
+  # PN playtest intents
+  pn.playtest.submit:
+    description: "Submit PN playtest notes after dry-run"
+    domain: "pn"
+    payload_type: "pn_playtest_notes"
+    payload_schema: "03-schemas/pn_playtest_notes.schema.json"
+    allowed_senders: ["PN"]
+    allowed_receivers: ["SR"]
+    context_requirements:
+      hot_cold: "cold"
+      snapshot_required: true
+    safety_requirements:
+      player_safe: true
+      spoilers: "forbidden"
+
+  # Canon transfer intents
+  canon.transfer.export:
+    description: "Export canon transfer package"
+    domain: "canon"
+    payload_type: "canon_transfer_package"
+    payload_schema: "03-schemas/canon_transfer_package.schema.json"
+    allowed_senders: ["LW"]
+    allowed_receivers: ["SR"]
+
+  canon.transfer.import:
+    description: "Import canon transfer package"
+    domain: "canon"
+    payload_type: "canon_transfer_package"
+    payload_schema: "03-schemas/canon_transfer_package.schema.json"
+    allowed_senders: ["LW"]
+    allowed_receivers: ["SR"]
+
+  canon.genesis.create:
+    description: "Create World Genesis manifest"
+    domain: "canon"
+    payload_type: "world_genesis_manifest"
+    payload_schema: "03-schemas/world_genesis_manifest.schema.json"
+    allowed_senders: ["LW"]
+    allowed_receivers: ["SR"]
+
+  # Human interaction intents
+  human.question:
+    description: "Agent asks human a question"
+    domain: "human"
+    payload_type: "human_interaction"
+    payload_schema: "03-schemas/human_interaction.schema.json"
+    allowed_senders: ["*"]
+    allowed_receivers: ["SR"]
+    context_requirements:
+      hot_cold: "hot"
+
+  human.response:
+    description: "Human answer to agent question"
+    domain: "human"
+    payload_type: "none"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+    requires_reply_to: true
+
+  # TU utility intents
+  tu.checkpoint:
+    description: "Record mid-loop checkpoint note"
+    domain: "tu"
+    payload_type: "none"
+    allowed_senders: ["*"]
+    allowed_receivers: ["SR"]
+    context_requirements:
+      tu_required: true
+
+  # Role orchestration intents
+  role.wake:
+    description: "Wake dormant role for TU"
+    domain: "role"
+    payload_type: "none"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+    context_requirements:
+      tu_required: true
+
+  role.dormant:
+    description: "Return role to dormancy"
+    domain: "role"
+    payload_type: "none"
+    allowed_senders: ["SR"]
+    allowed_receivers: ["*"]
+    context_requirements:
+      tu_required: true
+
+# State machines for lifecycles
+state_machines:
+  hook:
+    description: "Hook Card lifecycle (7 states)"
+    spec_ref: "04-protocol/LIFECYCLES/hooks.md"
+    states:
+      proposed:
+        description: "Initial state when hook created"
+        terminal: false
+      accepted:
+        description: "Showrunner approved for work"
+        terminal: false
+      in-progress:
+        description: "Work actively underway"
+        terminal: false
+      resolved:
+        description: "Work completed, awaiting merge"
+        terminal: false
+      canonized:
+        description: "Merged to Cold"
+        terminal: true
+      deferred:
+        description: "Parked for future consideration"
+        terminal: false
+      rejected:
+        description: "Won't pursue"
+        terminal: true
+
+    transitions:
+      - from: "proposed"
+        to: "accepted"
+        intent: "hook.update_status"
+        allowed_senders: ["SR"]
+        payload_field: {status: "accepted"}
+
+      - from: "proposed"
+        to: "deferred"
+        intent: "hook.update_status"
+        allowed_senders: ["SR"]
+        payload_field: {status: "deferred"}
+
+      - from: "proposed"
+        to: "rejected"
+        intent: "hook.update_status"
+        allowed_senders: ["SR"]
+        payload_field: {status: "rejected"}
+
+      - from: "accepted"
+        to: "in-progress"
+        intent: "hook.update_status"
+        allowed_senders: ["owner_r"]  # Role from proposed_next_step
+        payload_field: {status: "in-progress"}
+
+      - from: "accepted"
+        to: "deferred"
+        intent: "hook.update_status"
+        allowed_senders: ["SR", "owner_r"]
+        payload_field: {status: "deferred"}
+
+      - from: "in-progress"
+        to: "resolved"
+        intent: "hook.update_status"
+        allowed_senders: ["owner_r"]
+        payload_field: {status: "resolved"}
+
+      - from: "in-progress"
+        to: "deferred"
+        intent: "hook.update_status"
+        allowed_senders: ["SR", "owner_r"]
+        payload_field: {status: "deferred"}
+
+      - from: "resolved"
+        to: "canonized"
+        intent: "hook.update_status"
+        allowed_senders: ["SR"]
+        payload_field: {status: "canonized"}
+
+      - from: "resolved"
+        to: "in-progress"
+        intent: "hook.update_status"
+        allowed_senders: ["owner_r"]
+        payload_field: {status: "in-progress"}
+
+      - from: "deferred"
+        to: "accepted"
+        intent: "hook.update_status"
+        allowed_senders: ["SR"]
+        payload_field: {status: "accepted"}
+
+      - from: "deferred"
+        to: "rejected"
+        intent: "hook.update_status"
+        allowed_senders: ["SR"]
+        payload_field: {status: "rejected"}
+
+  tu:
+    description: "Trace Unit lifecycle (6 states)"
+    spec_ref: "04-protocol/LIFECYCLES/tu.md"
+    states:
+      hot-proposed:
+        description: "Initial state in Hot"
+        terminal: false
+      stabilizing:
+        description: "Work in progress"
+        terminal: false
+      gatecheck:
+        description: "Quality bar validation"
+        terminal: false
+      cold-merged:
+        description: "Successfully merged to Cold"
+        terminal: true
+      deferred:
+        description: "Parked for future"
+        terminal: false
+      rejected:
+        description: "Won't pursue"
+        terminal: true
+
+    transitions:
+      - from: "hot-proposed"
+        to: "stabilizing"
+        intent: "tu.start"
+        allowed_senders: ["SR", "owner_a"]
+
+      - from: "hot-proposed"
+        to: "deferred"
+        intent: "tu.defer"
+        allowed_senders: ["SR"]
+
+      - from: "hot-proposed"
+        to: "rejected"
+        intent: "tu.reject"
+        allowed_senders: ["SR"]
+
+      - from: "stabilizing"
+        to: "gatecheck"
+        intent: "tu.submit_gate"
+        allowed_senders: ["owner_a"]
+
+      - from: "stabilizing"
+        to: "deferred"
+        intent: "tu.defer"
+        allowed_senders: ["SR", "owner_a"]
+
+      - from: "gatecheck"
+        to: "cold-merged"
+        intent: "tu.close"
+        allowed_senders: ["SR"]
+        requires_context: {hot_cold: "cold", snapshot: true}
+
+      - from: "gatecheck"
+        to: "stabilizing"
+        intent: "tu.rework"
+        allowed_senders: ["GK", "owner_a"]
+
+      - from: "deferred"
+        to: "stabilizing"
+        intent: "tu.reactivate"
+        allowed_senders: ["SR"]
+
+      - from: "deferred"
+        to: "rejected"
+        intent: "tu.reject"
+        allowed_senders: ["SR"]
+
+  gate:
+    description: "Gatecheck lifecycle (4 states + decisions)"
+    spec_ref: "04-protocol/LIFECYCLES/gate.md"
+    states:
+      pre-gate:
+        description: "Early checkpoint sampling"
+        terminal: false
+      gatecheck:
+        description: "Formal quality bar validation"
+        terminal: false
+      decision_pass:
+        description: "All bars green, approved"
+        terminal: true
+      decision_conditional_pass:
+        description: "Some bars yellow, approved with remediation"
+        terminal: true
+      decision_block:
+        description: "One or more bars red, blocked"
+        terminal: true
+      deferred:
+        description: "TU deferred before gatecheck"
+        terminal: false
+
+    transitions:
+      - from: "pre-gate"
+        to: "gatecheck"
+        intent: "gate.report.submit"
+        allowed_senders: ["GK"]
+
+      - from: "pre-gate"
+        to: "deferred"
+        intent: "gate.defer"
+        allowed_senders: ["SR", "GK"]
+
+      - from: "gatecheck"
+        to: "decision_pass"
+        intent: "gate.decision"
+        allowed_senders: ["GK"]
+        payload_field: {decision: "pass"}
+        requires_bars: "all_green"
+
+      - from: "gatecheck"
+        to: "decision_conditional_pass"
+        intent: "gate.decision"
+        allowed_senders: ["GK"]
+        payload_field: {decision: "conditional_pass"}
+        requires_bars: "some_yellow_no_red"
+
+      - from: "gatecheck"
+        to: "decision_block"
+        intent: "gate.decision"
+        allowed_senders: ["GK"]
+        payload_field: {decision: "block"}
+        requires_bars: "one_or_more_red"
+
+  view:
+    description: "View/Export lifecycle (5 states)"
+    spec_ref: "04-protocol/LIFECYCLES/view.md"
+    states:
+      snapshot-selected:
+        description: "Cold snapshot selected for export"
+        terminal: false
+      export-binding:
+        description: "Generating export artifacts"
+        terminal: false
+      pn-dry-run:
+        description: "PN playtesting bound view"
+        terminal: false
+      feedback-collected:
+        description: "PN feedback recorded"
+        terminal: false
+      view-published:
+        description: "View finalized and archived"
+        terminal: true
+      export-failed:
+        description: "Binding errors prevented export"
+        terminal: true
+
+    transitions:
+      - from: "snapshot-selected"
+        to: "export-binding"
+        intent: "view.bind"
+        allowed_senders: ["BB"]
+
+      - from: "snapshot-selected"
+        to: "export-failed"
+        intent: "view.bind_failed"
+        allowed_senders: ["BB"]
+
+      - from: "export-binding"
+        to: "pn-dry-run"
+        intent: "view.bound"
+        allowed_senders: ["BB"]
+        requires_context: {hot_cold: "cold", snapshot: true}
+        requires_safety: {player_safe: true, spoilers: "forbidden"}
+
+      - from: "export-binding"
+        to: "export-failed"
+        intent: "view.bind_failed"
+        allowed_senders: ["BB"]
+
+      - from: "pn-dry-run"
+        to: "feedback-collected"
+        intent: "view.feedback"
+        allowed_senders: ["PN"]
+
+      - from: "feedback-collected"
+        to: "view-published"
+        intent: "view.publish"
+        allowed_senders: ["SR", "BB"]
+
+# Error taxonomy
+error_codes:
+  validation_error:
+    description: "Schema validation failure"
+    category: "validation"
+    typical_causes:
+      - "Invalid field format"
+      - "Missing required field"
+      - "Type mismatch"
+    remediation: "Fix payload data to match schema"
+
+  business_rule_violation:
+    description: "Policy violation"
+    category: "policy"
+    typical_causes:
+      - "Hot content sent to PN"
+      - "Missing TU for Cold merge"
+      - "PN safety boundary violated"
+    remediation: "Respect business rules"
+
+  not_authorized:
+    description: "Permission denied"
+    category: "authorization"
+    typical_causes:
+      - "Sender role not allowed for operation"
+      - "Invalid state transition for role"
+    remediation: "Use authorized role for operation"
+
+  not_found:
+    description: "Referenced entity missing"
+    category: "reference"
+    typical_causes:
+      - "Hook ID does not exist"
+      - "TU ID does not exist"
+      - "Snapshot not found"
+    remediation: "Verify entity exists or create it"
+
+  conflict:
+    description: "State conflict"
+    category: "state"
+    typical_causes:
+      - "TU already merged"
+      - "Duplicate ID"
+      - "Invalid state transition"
+    remediation: "Resolve state conflict before retrying"
+
+# Routing rules (intent -> role matrix)
+routing_matrix:
+  description: "Maps intents to allowed sender/receiver role pairs"
+
+  # Hook domain
+  hook.create:
+    senders: ["SR", "PW", "SS", "ST", "LW", "CC", "AD", "IL", "AuD", "AuP", "TR", "BB", "RS"]
+    receivers: ["SR", "LW", "PW", "SS", "ST", "CC"]
+
+  hook.update_status:
+    senders: ["SR", "LW", "PW", "SS", "ST", "CC"]  # Owner roles + SR
+    receivers: ["SR", "*"]
+
+  # TU domain
+  tu.open:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  tu.start:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  tu.defer:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  tu.reject:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  tu.submit_gate:
+    senders: ["SR"]  # Owner (A)
+    receivers: ["GK"]
+
+  tu.rework:
+    senders: ["GK", "SR"]
+    receivers: ["SR", "*"]
+
+  tu.reactivate:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  tu.close:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  # Gate domain
+  gate.report.submit:
+    senders: ["GK"]
+    receivers: ["SR"]
+
+  gate.decision:
+    senders: ["GK"]
+    receivers: ["SR"]
+
+  gate.feedback:
+    senders: ["GK"]
+    receivers: ["SR", "PW", "SS", "ST", "LW", "CC"]
+
+  gate.defer:
+    senders: ["SR", "GK"]
+    receivers: ["*"]
+
+  # Merge domain
+  merge.request:
+    senders: ["SR"]
+    receivers: ["SR", "GK"]
+
+  merge.approve:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  merge.reject:
+    senders: ["GK", "SR"]
+    receivers: ["SR"]
+
+  # View domain
+  view.export.request:
+    senders: ["SR"]
+    receivers: ["BB"]
+
+  view.export.result:
+    senders: ["BB"]
+    receivers: ["PN", "SR"]
+
+  view.bind:
+    senders: ["BB"]
+    receivers: ["SR"]
+
+  view.bound:
+    senders: ["BB"]
+    receivers: ["PN"]
+
+  view.feedback:
+    senders: ["PN"]
+    receivers: ["SR"]
+
+  view.publish:
+    senders: ["SR", "BB"]
+    receivers: ["*"]
+
+  # PN domain
+  pn.playtest.submit:
+    senders: ["PN"]
+    receivers: ["SR"]
+
+  # Canon domain
+  canon.transfer.export:
+    senders: ["LW"]
+    receivers: ["SR"]
+
+  canon.transfer.import:
+    senders: ["LW"]
+    receivers: ["SR"]
+
+  canon.genesis.create:
+    senders: ["LW"]
+    receivers: ["SR"]
+
+  # Human interaction
+  human.question:
+    senders: ["*"]
+    receivers: ["SR"]
+
+  human.response:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  # Role orchestration
+  role.wake:
+    senders: ["SR"]
+    receivers: ["*"]
+
+  role.dormant:
+    senders: ["SR"]
+    receivers: ["*"]
+
+# Validation rules
+validation:
+  two_pass_validation:
+    description: "Envelope validation uses two-pass approach"
+    pass_1:
+      name: "Envelope structure validation"
+      validates: "envelope.schema.json"
+      checks:
+        - "Required fields present"
+        - "Role names against Layer 2 taxonomy"
+        - "Loop names against Layer 2 taxonomy"
+        - "PN safety constraints"
+        - "Field types and structure"
+
+    pass_2:
+      name: "Payload data validation"
+      validates: "Layer 3 schema for payload.type"
+      checks:
+        - "payload.data against {payload.type}.schema.json"
+      skip_if: "payload.type == 'none'"
+
+  pn_safety_validation:
+    description: "PN safety invariant enforcement"
+    enforcement_points:
+      - "envelope.schema.json (schema validation)"
+      - "Sender validation before transmission"
+      - "Transport routing layer"
+      - "PN ingestion validation"
+
+    violation_response:
+      intent: "error"
+      code: "business_rule_violation"
+      rule: "PN_SAFETY_INVARIANT"
+      reference: "00-north-star/PN_PRINCIPLES.md"
+
+  traceability_rules:
+    cold_merge_requirements:
+      - "context.tu MUST be present"
+      - "context.snapshot MUST be present"
+      - "refs SHOULD include upstream TU/hook IDs"
+
+    tu_linkage:
+      description: "Changes targeting Cold MUST include TU and snapshot"
+      applies_to:
+        - "tu.close"
+        - "merge.approve"
+        - "view.export.request"
+        - "view.export.result"
+
+# Quality bars (for gate decisions)
+quality_bars:
+  - name: "Integrity"
+    description: "Canon consistency and logical coherence"
+  - name: "Reachability"
+    description: "All player-affecting content is reachable"
+  - name: "Nonlinearity"
+    description: "Choices matter and have meaningful consequences"
+  - name: "Choice Integrity"
+    description: "Choices reflect meaningfully in subsequent content"
+  - name: "Style"
+    description: "Voice, tone, and register consistency"
+  - name: "Presentation"
+    description: "Formatting, layout, and readability"
+  - name: "Accessibility"
+    description: "Alt text, screen reader support, color contrast"
+  - name: "Research"
+    description: "Corroboration and source citation"
+
+# Cross-references (for documentation)
+references:
+  layer_0:
+    - "00-north-star/TRACEABILITY.md"
+    - "00-north-star/QUALITY_BARS.md"
+    - "00-north-star/PN_PRINCIPLES.md"
+
+  layer_1:
+    - "01-roles/charters/*.md"
+
+  layer_2:
+    - "02-dictionary/role_abbreviations.md"
+    - "02-dictionary/loop_names.md"
+    - "02-dictionary/taxonomies.md"
+
+  layer_3:
+    - "03-schemas/*.schema.json"
+
+  layer_4:
+    - "04-protocol/ENVELOPE.md"
+    - "04-protocol/INTENTS.md"
+    - "04-protocol/LIFECYCLES/hooks.md"
+    - "04-protocol/LIFECYCLES/tu.md"
+    - "04-protocol/LIFECYCLES/gate.md"
+    - "04-protocol/LIFECYCLES/view.md"
+    - "04-protocol/CONFORMANCE.md"

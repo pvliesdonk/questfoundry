@@ -1,0 +1,450 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/tool_mappings.schema.json",
+  "title": "Tool Mappings Configuration",
+  "description": "Runtime configuration for external tool integrations, capability mappings, and tool exposure rules. Defines how internal roles and capabilities map to external service providers with fallback strategies and availability checks.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version using semantic versioning (semver) format.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0", "2.1.0"]
+    },
+    "last_updated": {
+      "$ref": "#/$defs/date_string",
+      "description": "ISO 8601 date when this configuration was last updated."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this tool mappings configuration.",
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "external_capability_mappings": {
+      "type": "object",
+      "description": "Maps capability IDs to arrays of external service providers that can fulfill those capabilities. Key is capability identifier, value is array of provider configurations.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Provider configuration for a single capability",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "description": "Ordered list of external service providers for this capability. Earlier entries take priority.",
+            "items": {
+              "$ref": "#/$defs/provider_config"
+            },
+            "minItems": 1,
+            "uniqueItems": false
+          }
+        },
+        "required": ["providers"],
+        "additionalProperties": false
+      },
+      "minProperties": 1
+    },
+    "knowledge_capability_mappings": {
+      "type": "object",
+      "description": "Maps knowledge/data capability IDs to configuration and metadata. Defines how knowledge bases and information sources are accessible.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Configuration for a knowledge capability",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable name for this knowledge capability.",
+            "minLength": 3,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of what knowledge this capability provides.",
+            "minLength": 10,
+            "maxLength": 300
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of knowledge capability.",
+            "enum": ["database", "api", "file_system", "knowledge_base", "external_service"],
+            "examples": ["database", "knowledge_base"]
+          },
+          "access_method": {
+            "type": "string",
+            "description": "How this knowledge is accessed.",
+            "minLength": 5,
+            "maxLength": 100,
+            "examples": ["rest_api", "graphql", "direct_access", "authenticated_request"]
+          },
+          "availability": {
+            "type": "string",
+            "description": "Expected availability status.",
+            "enum": ["always_available", "business_hours", "scheduled", "conditional"],
+            "default": "always_available"
+          }
+        },
+        "required": ["name", "description", "type", "access_method"],
+        "additionalProperties": false
+      },
+      "minProperties": 0
+    },
+    "internal_tools": {
+      "type": "object",
+      "description": "Registry of internal tools organized by category. Each category contains tool definitions.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Category of internal tools",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Name of the tool category.",
+            "minLength": 3,
+            "maxLength": 50
+          },
+          "tools": {
+            "type": "array",
+            "description": "Array of tool definitions in this category.",
+            "items": {
+              "type": "object",
+              "description": "Internal tool definition",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique identifier for this internal tool.",
+                  "pattern": "^[a-z_][a-z0-9_]*$",
+                  "examples": ["quality_gate_evaluator", "protocol_envelope_validator"]
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Human-readable name for the tool.",
+                  "minLength": 3,
+                  "maxLength": 100
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Detailed description of the tool's purpose and functionality.",
+                  "minLength": 10,
+                  "maxLength": 300
+                },
+                "type": {
+                  "type": "string",
+                  "description": "Type of internal tool.",
+                  "enum": ["evaluator", "validator", "transformer", "analyzer", "utility"],
+                  "examples": ["evaluator", "validator"]
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Version of this tool.",
+                  "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                }
+              },
+              "required": ["id", "name", "description", "type"],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["category", "tools"],
+        "additionalProperties": false
+      },
+      "minProperties": 1
+    },
+    "runtime_integration": {
+      "type": "object",
+      "description": "Configuration settings for runtime tool integration and behavior.",
+      "properties": {
+        "fallback_behavior": {
+          "type": "string",
+          "description": "Default behavior when a primary provider fails.",
+          "enum": ["use_next_provider", "use_stub", "raise_error", "use_cached_result"],
+          "default": "use_next_provider"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "description": "Default timeout in seconds for external tool calls.",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30
+        },
+        "retry_attempts": {
+          "type": "integer",
+          "description": "Number of retry attempts for failed external tool calls.",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3
+        },
+        "retry_backoff_ms": {
+          "type": "integer",
+          "description": "Milliseconds to wait between retry attempts (exponential).",
+          "minimum": 100,
+          "maximum": 10000,
+          "default": 1000
+        },
+        "cache_enabled": {
+          "type": "boolean",
+          "description": "Whether to cache tool responses.",
+          "default": true
+        },
+        "cache_ttl_seconds": {
+          "type": "integer",
+          "description": "Time-to-live for cached tool responses in seconds.",
+          "minimum": 60,
+          "maximum": 86400,
+          "default": 3600
+        },
+        "logging_level": {
+          "type": "string",
+          "description": "Logging verbosity level for tool integration.",
+          "enum": ["debug", "info", "warning", "error"],
+          "default": "info"
+        },
+        "health_check_interval_seconds": {
+          "type": "integer",
+          "description": "Interval in seconds between provider health checks.",
+          "minimum": 30,
+          "maximum": 3600,
+          "default": 300
+        },
+        "metrics_enabled": {
+          "type": "boolean",
+          "description": "Whether to collect tool performance metrics.",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "tool_exposure_rules": {
+      "type": "object",
+      "description": "Rules governing which tools and capabilities are exposed to different contexts or roles.",
+      "properties": {
+        "external_tool_exposure": {
+          "type": "object",
+          "description": "Rules for exposing external tools.",
+          "properties": {
+            "default_exposure": {
+              "type": "string",
+              "description": "Default exposure level for external tools.",
+              "enum": ["public", "authenticated", "restricted", "internal"],
+              "default": "authenticated"
+            },
+            "exceptions": {
+              "type": "array",
+              "description": "Specific exposure exceptions for named tools.",
+              "items": {
+                "type": "object",
+                "description": "Exception rule for a specific tool or capability",
+                "properties": {
+                  "tool_id": {
+                    "type": "string",
+                    "description": "ID of the tool this rule applies to.",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "exposure_level": {
+                    "type": "string",
+                    "description": "Exposure level for this tool.",
+                    "enum": ["public", "authenticated", "restricted", "internal"]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Reason for this exposure exception.",
+                    "minLength": 10,
+                    "maxLength": 200
+                  }
+                },
+                "required": ["tool_id", "exposure_level"],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": ["default_exposure"],
+          "additionalProperties": false
+        },
+        "internal_tool_exposure": {
+          "type": "object",
+          "description": "Rules for exposing internal tools.",
+          "properties": {
+            "default_exposure": {
+              "type": "string",
+              "description": "Default exposure level for internal tools.",
+              "enum": ["public", "authenticated", "restricted", "internal"],
+              "default": "internal"
+            },
+            "public_tools": {
+              "type": "array",
+              "description": "List of internal tools exposed publicly.",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": ["default_exposure"],
+          "additionalProperties": false
+        },
+        "role_based_access": {
+          "type": "object",
+          "description": "Tool access rules based on role.",
+          "additionalProperties": {
+            "type": "array",
+            "description": "Tools accessible to this role",
+            "items": {
+              "type": "string",
+              "description": "Tool ID",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "last_updated",
+    "description",
+    "external_capability_mappings",
+    "internal_tools",
+    "runtime_integration",
+    "tool_exposure_rules"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "provider_config": {
+      "type": "object",
+      "description": "Configuration for an external service provider.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the service provider.",
+          "minLength": 2,
+          "maxLength": 100,
+          "examples": ["openai", "anthropic", "local_service"]
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Priority order for this provider (1-999). Lower numbers are tried first.",
+          "minimum": 1,
+          "maximum": 999,
+          "examples": [1, 2, 10]
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of provider service.",
+          "enum": ["api_service", "local_tool", "stub"],
+          "examples": ["api_service", "local_tool"]
+        },
+        "availability_check": {
+          "type": "object",
+          "description": "Configuration for checking provider availability.",
+          "properties": {
+            "method": {
+              "type": "string",
+              "description": "Method used to check availability.",
+              "enum": ["ping", "health_endpoint", "test_request", "static"],
+              "examples": ["health_endpoint", "ping"]
+            },
+            "requirements": {
+              "type": "object",
+              "description": "Requirements for availability check (method-specific).",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "URL endpoint for health or ping checks.",
+                  "format": "uri",
+                  "examples": ["https://api.example.com/health"]
+                },
+                "expected_status": {
+                  "type": "integer",
+                  "description": "Expected HTTP status code for availability.",
+                  "minimum": 100,
+                  "maximum": 599,
+                  "default": 200
+                },
+                "timeout_ms": {
+                  "type": "integer",
+                  "description": "Timeout in milliseconds for availability check.",
+                  "minimum": 100,
+                  "maximum": 30000,
+                  "default": 5000
+                },
+                "always_available": {
+                  "type": "boolean",
+                  "description": "If true, provider is assumed always available (for static checks).",
+                  "default": false
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "required": ["method"],
+          "additionalProperties": false
+        },
+        "configuration": {
+          "type": "object",
+          "description": "Provider-specific configuration settings. Structure varies by provider type.",
+          "properties": {
+            "api_key_env": {
+              "type": "string",
+              "description": "Environment variable name for API key.",
+              "pattern": "^[A-Z_][A-Z0-9_]*$",
+              "examples": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+            },
+            "endpoint": {
+              "type": "string",
+              "description": "API endpoint URL for remote services.",
+              "format": "uri",
+              "examples": ["https://api.openai.com/v1", "http://localhost:8080"]
+            },
+            "model": {
+              "type": "string",
+              "description": "Model identifier for API-based services.",
+              "minLength": 1,
+              "maxLength": 100,
+              "examples": ["gpt-4", "claude-3-opus"]
+            },
+            "local_path": {
+              "type": "string",
+              "description": "File system path for local tool executables.",
+              "examples": ["/usr/local/bin/tool", "C:\\Program Files\\tool.exe"]
+            },
+            "max_requests_per_minute": {
+              "type": "integer",
+              "description": "Rate limit for this provider (requests per minute).",
+              "minimum": 1,
+              "maximum": 100000,
+              "examples": [60, 3000]
+            },
+            "request_timeout_seconds": {
+              "type": "integer",
+              "description": "Request timeout specific to this provider.",
+              "minimum": 1,
+              "maximum": 300,
+              "examples": [30, 60]
+            }
+          },
+          "additionalProperties": true
+        },
+        "fallback_strategy": {
+          "type": "string",
+          "description": "What to do if this provider fails.",
+          "enum": ["next_provider", "none"],
+          "default": "next_provider",
+          "examples": ["next_provider"]
+        }
+      },
+      "required": ["name", "priority", "type", "availability_check"],
+      "additionalProperties": false
+    }
+  }
+}

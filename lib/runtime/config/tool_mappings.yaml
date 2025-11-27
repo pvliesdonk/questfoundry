@@ -1,0 +1,1249 @@
+# QuestFoundry Tool Mappings Configuration
+# Maps abstract capabilities to concrete runtime tool implementations
+#
+# This configuration layer sits between the specification (capabilities.yaml) and
+# the runtime (tool implementations in questfoundry.runtime.tools). It defines:
+#
+# 1. How abstract capabilities map to concrete providers/tools
+# 2. Provider availability checks and priority ordering
+# 3. Which tools are internal-only (never exposed to agents)
+# 4. Fallback strategies when capabilities are unavailable
+#
+# Schema: TBD (should validate against tool_mappings.schema.json)
+# Version: 1.0.0
+# Created: 2025-11-27
+
+metadata:
+  version: "1.0.0"
+  created: "2025-11-27"
+  updated: "2025-11-27"
+  author: "QuestFoundry Runtime"
+  description: |
+    Maps abstract capabilities (from spec/05-definitions/capabilities.yaml) to
+    concrete runtime implementations. Separates specification-layer capability
+    definitions from runtime-specific tool implementations and provider choices.
+
+# ==============================================================================
+# EXTERNAL CAPABILITY MAPPINGS
+# ==============================================================================
+#
+# Maps each external capability to one or more provider implementations.
+# Providers are tried in priority order. Each provider configuration includes:
+#
+#   - id: unique provider identifier
+#   - type: provider type (api_service, local_tool, stub)
+#   - tool_class: Runtime tool class that implements this provider
+#   - availability_check: how to verify provider is available at runtime
+#   - config: provider-specific configuration
+#   - fallback_strategy: what to do if this provider fails
+#
+
+external_capability_mappings:
+
+  # --------------------------------------------------------------------------
+  # VISUAL PRODUCTION CAPABILITIES
+  # --------------------------------------------------------------------------
+
+  image_generation:
+    description: |
+      Generate images from textual descriptions. Maps to concrete image
+      generation providers ranked by quality and availability.
+
+    capability_id: image_generation
+    category: visual_production
+
+    providers:
+      - id: dalle3
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateImage
+        provider_name: "OpenAI DALL-E 3"
+        availability_check:
+          type: api_key
+          env_var: OPENAI_API_KEY
+          endpoint: https://api.openai.com/v1/images/generations
+        config:
+          model: dall-e-3
+          quality: hd
+          size: "1024x1024"
+          style: natural
+          timeout_seconds: 60
+          max_retries: 3
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: stable_diffusion_api
+        type: api_service
+        tool_class: questfoundry.runtime.tools.creative_tools.StableDiffusion
+        provider_name: "Stability AI - Stable Diffusion"
+        availability_check:
+          type: api_key
+          env_var: STABILITY_API_KEY
+          endpoint: https://api.stability.ai/v1/generate
+        config:
+          model: stable-diffusion-xl-1024-v1-0
+          steps: 50
+          guidance_scale: 7.5
+          timeout_seconds: 120
+          max_retries: 2
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: midjourney_api
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateImage
+        provider_name: "Midjourney"
+        availability_check:
+          type: api_key
+          env_var: MIDJOURNEY_API_KEY
+          endpoint: https://api.midjourney.com/v1/imagine
+        config:
+          model: midjourney-latest
+          quality_setting: default
+          timeout_seconds: 300  # Midjourney is slower
+          max_retries: 1
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_generator
+        type: stub
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateImage
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          placeholder_color: "#cccccc"
+          placeholder_text: "Generated Image Placeholder"
+          log_warnings: true
+        fallback_strategy: none  # terminal fallback
+        priority: 999
+
+  image_editing:
+    description: |
+      Edit or manipulate existing images. Multiple providers for different
+      editing operations (crop, color correction, composition adjustments).
+
+    capability_id: image_editing
+    category: visual_production
+
+    providers:
+      - id: stable_diffusion_inpaint
+        type: api_service
+        tool_class: questfoundry.runtime.tools.creative_tools.StableDiffusion
+        provider_name: "Stable Diffusion - Inpainting"
+        availability_check:
+          type: api_key
+          env_var: STABILITY_API_KEY
+        config:
+          model: stable-diffusion-xl-inpaint-1024-v1-0
+          guidance_scale: 7.5
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: pillow_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateImage
+        provider_name: "Pillow (local image processing)"
+        availability_check:
+          type: python_package
+          package_name: pillow
+        config:
+          max_image_size: 4096
+          preserve_quality: true
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: imagemagick_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateImage
+        provider_name: "ImageMagick (local)"
+        availability_check:
+          type: command_available
+          command: convert
+        config:
+          quality: 95
+          enable_filters: true
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_editor
+        type: stub
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateImage
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  # --------------------------------------------------------------------------
+  # AUDIO PRODUCTION CAPABILITIES
+  # --------------------------------------------------------------------------
+
+  audio_synthesis:
+    description: |
+      Synthesize audio from descriptions. Maps to AI audio generation and
+      synthesis services.
+
+    capability_id: audio_synthesis
+    category: audio_production
+
+    providers:
+      - id: suno_api
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Suno AI Audio Generation"
+        availability_check:
+          type: api_key
+          env_var: SUNO_API_KEY
+          endpoint: https://api.suno.ai/v1/generate
+        config:
+          model: chirp-v3
+          duration: auto
+          quality: high
+          timeout_seconds: 180
+          max_retries: 2
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: elevenlabs_api
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "ElevenLabs Audio Synthesis"
+        availability_check:
+          type: api_key
+          env_var: ELEVENLABS_API_KEY
+          endpoint: https://api.elevenlabs.io/v1/sound-generation/generate
+        config:
+          model: audio-generation
+          quality: high
+          timeout_seconds: 60
+          max_retries: 2
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: bark_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Bark (local text-to-speech synthesis)"
+        availability_check:
+          type: python_package
+          package_name: bark
+        config:
+          model: bark-small
+          sample_rate: 24000
+          use_gpu: false  # adaptive
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_audio
+        type: stub
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          duration_seconds: 10
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  audio_editing:
+    description: |
+      Edit, mix, or process audio files. Applies effects, normalization,
+      and creates final deliverable audio.
+
+    capability_id: audio_editing
+    category: audio_production
+
+    providers:
+      - id: librosa_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "librosa (audio processing library)"
+        availability_check:
+          type: python_package
+          package_name: librosa
+        config:
+          sr: 22050  # sample rate
+          preserve_quality: true
+          normalization_target: -14.0  # LUFS
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: pydub_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "pydub (audio manipulation)"
+        availability_check:
+          type: python_package
+          package_name: pydub
+        config:
+          normalize_loudness: true
+          target_loudness: -14.0  # LUFS
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: ffmpeg_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "FFmpeg (audio processing)"
+        availability_check:
+          type: command_available
+          command: ffmpeg
+        config:
+          codec: aac
+          bitrate: 128k
+          normalize_loudness: true
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_mixer
+        type: stub
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  text_to_speech:
+    description: |
+      Convert text to spoken audio. Optional capability useful for narration
+      prototyping and accessibility testing.
+
+    capability_id: text_to_speech
+    category: audio_production
+    required: false  # Optional capability
+
+    providers:
+      - id: elevenlabs_tts
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "ElevenLabs Text-to-Speech"
+        availability_check:
+          type: api_key
+          env_var: ELEVENLABS_API_KEY
+          endpoint: https://api.elevenlabs.io/v1/text-to-speech
+        config:
+          model: eleven_turbo_v2
+          voice_engine: eleven_turbo_v2
+          stability: 0.75
+          similarity_boost: 0.75
+          timeout_seconds: 30
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: azure_tts
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Azure Cognitive Services TTS"
+        availability_check:
+          type: api_key
+          env_var: AZURE_SPEECH_KEY
+        config:
+          region: eastus
+          language: en-US
+          timeout_seconds: 30
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: google_tts
+        type: api_service
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Google Cloud Text-to-Speech"
+        availability_check:
+          type: api_key
+          env_var: GOOGLE_APPLICATION_CREDENTIALS
+        config:
+          language_code: en-US
+          voice_name: en-US-Neural2-C
+          audio_encoding: MP3
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: pyttsx3_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "pyttsx3 (local TTS)"
+        availability_check:
+          type: python_package
+          package_name: pyttsx3
+        config:
+          rate: 150
+          volume: 1.0
+        fallback_strategy: next_provider
+        priority: 4
+
+      - id: stub_narration
+        type: stub
+        tool_class: questfoundry.runtime.tools.media_tools.GenerateAudio
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  # --------------------------------------------------------------------------
+  # INFORMATION RETRIEVAL CAPABILITIES
+  # --------------------------------------------------------------------------
+
+  web_search:
+    description: |
+      Search the web for factual information. Multiple search providers
+      ranked by quality and availability.
+
+    capability_id: web_search
+    category: information_retrieval
+
+    providers:
+      - id: tavily
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Tavily Search API"
+        availability_check:
+          type: api_key
+          env_var: TAVILY_API_KEY
+          endpoint: https://api.tavily.com/search
+        config:
+          include_answer: true
+          include_raw_content: false
+          max_results: 10
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: perplexity
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Perplexity AI Search"
+        availability_check:
+          type: api_key
+          env_var: PERPLEXITY_API_KEY
+          endpoint: https://api.perplexity.ai/openai/v1/chat/completions
+        config:
+          model: pplx-7b-online
+          max_results: 10
+          timeout_seconds: 15
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: serper
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Serper Google Search API"
+        availability_check:
+          type: api_key
+          env_var: SERPER_API_KEY
+          endpoint: https://google.serper.dev/search
+        config:
+          max_results: 10
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: google_custom_search
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Google Custom Search Engine"
+        availability_check:
+          type: api_key
+          env_var: GOOGLE_CUSTOM_SEARCH_KEY
+        config:
+          search_engine_id: ""  # must be configured
+          max_results: 10
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 4
+
+      - id: stub_search
+        type: stub
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+          return_cached_results: false
+        fallback_strategy: none
+        priority: 999
+
+  document_retrieval:
+    description: |
+      Retrieve and parse external documents. Optional capability for
+      deep research requiring specific published works.
+
+    capability_id: document_retrieval
+    category: information_retrieval
+    required: false  # Optional capability
+
+    providers:
+      - id: arxiv_retriever
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "ArXiv Paper Retriever"
+        availability_check:
+          type: python_package
+          package_name: arxiv
+        config:
+          timeout_seconds: 30
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: semantic_scholar
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Semantic Scholar API"
+        availability_check:
+          type: api_key
+          env_var: SEMANTIC_SCHOLAR_API_KEY
+        config:
+          timeout_seconds: 20
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: pdf_parser_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "pypdf2 (local PDF parsing)"
+        availability_check:
+          type: python_package
+          package_name: pypdf2
+        config:
+          timeout_seconds: 30
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_document
+        type: stub
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  # --------------------------------------------------------------------------
+  # LOCALIZATION CAPABILITIES
+  # --------------------------------------------------------------------------
+
+  machine_translation:
+    description: |
+      Translate text between languages. Provides rough translations as
+      starting point for human translator refinement. Not for production output.
+
+    capability_id: machine_translation
+    category: localization
+    required: false  # Optional capability
+
+    providers:
+      - id: deepl_api
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "DeepL Translator API"
+        availability_check:
+          type: api_key
+          env_var: DEEPL_API_KEY
+          endpoint: https://api-free.deepl.com/v1/translate
+        config:
+          formality: default
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: google_translate_api
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Google Cloud Translation API"
+        availability_check:
+          type: api_key
+          env_var: GOOGLE_APPLICATION_CREDENTIALS
+        config:
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: azure_translator
+        type: api_service
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Azure Translator Text API"
+        availability_check:
+          type: api_key
+          env_var: AZURE_TRANSLATOR_KEY
+        config:
+          region: eastus
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: googletrans_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "googletrans (local, no API key)"
+        availability_check:
+          type: python_package
+          package_name: googletrans
+        config:
+          timeout_seconds: 10
+        fallback_strategy: next_provider
+        priority: 4
+
+      - id: stub_translation
+        type: stub
+        tool_class: questfoundry.runtime.tools.research_tools.WebSearch
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  # --------------------------------------------------------------------------
+  # DOCUMENT PRODUCTION CAPABILITIES
+  # --------------------------------------------------------------------------
+
+  format_conversion:
+    description: |
+      Convert documents between formats (Markdown, HTML, EPUB, PDF). Critical
+      for export functionality and final assembly of deliverable assets.
+
+    capability_id: format_conversion
+    category: document_production
+
+    providers:
+      - id: pandoc
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "Pandoc Document Converter"
+        availability_check:
+          type: command_available
+          command: pandoc
+          min_version: "2.0"
+        config:
+          pdf_engine: xelatex
+          preserve_structure: true
+          embed_fonts: true
+          timeout_seconds: 60
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: unoconv
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "unoconv (LibreOffice document converter)"
+        availability_check:
+          type: command_available
+          command: unoconv
+        config:
+          preserve_formatting: true
+          timeout_seconds: 60
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: pypandoc_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "pypandoc (Python pandoc wrapper)"
+        availability_check:
+          type: python_package
+          package_name: pypandoc
+        config:
+          auto_install_pandoc: false
+          timeout_seconds: 60
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_converter
+        type: stub
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  pdf_generation:
+    description: |
+      Generate high-quality PDF documents with typography, navigation, and
+      accessibility features. Critical for production exports.
+
+    capability_id: pdf_generation
+    category: document_production
+
+    providers:
+      - id: weasyprint
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PdfExport
+        provider_name: "WeasyPrint (HTML to PDF)"
+        availability_check:
+          type: python_package
+          package_name: weasyprint
+        config:
+          enable_accessibility: true
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: reportlab
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PdfExport
+        provider_name: "ReportLab (PDF generation library)"
+        availability_check:
+          type: python_package
+          package_name: reportlab
+        config:
+          enable_tagged_pdf: true
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: pandoc_pdf
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PdfExport
+        provider_name: "Pandoc with PDF engine"
+        availability_check:
+          type: command_available
+          command: pandoc
+        config:
+          pdf_engine: xelatex
+          enable_accessibility: true
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_pdf
+        type: stub
+        tool_class: questfoundry.runtime.tools.export_tools.PdfExport
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+  epub_generation:
+    description: |
+      Generate EPUB 3.x compliant ebooks with proper structure, navigation,
+      and accessibility features. Used for interactive fiction distribution.
+
+    capability_id: epub_generation
+    category: document_production
+
+    providers:
+      - id: calibre_ebook_convert
+        type: command_available
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "Calibre ebook-convert"
+        availability_check:
+          type: command_available
+          command: ebook-convert
+        config:
+          preserve_formatting: true
+          enable_accessibility: true
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 1
+
+      - id: pandoc_epub
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "Pandoc with EPUB output"
+        availability_check:
+          type: command_available
+          command: pandoc
+        config:
+          epub_version: 3
+          enable_accessibility: true
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 2
+
+      - id: ebooklib_local
+        type: local_tool
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "ebooklib (EPUB generation library)"
+        availability_check:
+          type: python_package
+          package_name: ebooklib
+        config:
+          epub_version: 3
+          timeout_seconds: 120
+        fallback_strategy: next_provider
+        priority: 3
+
+      - id: stub_epub
+        type: stub
+        tool_class: questfoundry.runtime.tools.export_tools.PandocConvert
+        provider_name: "Stub (test/development)"
+        availability_check:
+          type: always_available
+        config:
+          log_warnings: true
+        fallback_strategy: none
+        priority: 999
+
+# ==============================================================================
+# KNOWLEDGE CAPABILITY MAPPINGS
+# ==============================================================================
+#
+# Knowledge capabilities are always available through the runtime knowledge base.
+# These mappings define where knowledge comes from and how to access it.
+#
+
+knowledge_capability_mappings:
+
+  consult_specs:
+    description: |
+      Access and query QuestFoundry specification documents. Always available
+      through runtime knowledge base indexing and retrieval.
+
+    capability_id: consult_specs
+    category: knowledge_access
+    required: true  # Always available
+    tool_class: questfoundry.runtime.tools.knowledge_tools.ConsultProtocol
+
+    implementation:
+      type: knowledge_base_retrieval
+      knowledge_sources:
+        - spec_documents: "spec/01-roles/**/*.yaml"
+        - spec_documents: "spec/02-protocols/**/*.yaml"
+        - spec_documents: "spec/03-schemas/**/*.yaml"
+        - spec_documents: "spec/04-quality-gates/**/*.yaml"
+        - spec_documents: "spec/05-definitions/**/*.yaml"
+      retrieval_method: semantic_search
+      fallback_method: keyword_search
+
+  consult_project_docs:
+    description: |
+      Access project-specific documentation (style guides, canon, glossaries).
+      Always available through runtime knowledge base and Hot SoT integration.
+
+    capability_id: consult_project_docs
+    category: knowledge_access
+    required: true  # Always available
+    tool_class: questfoundry.runtime.tools.knowledge_tools.ConsultGlossary
+
+    implementation:
+      type: knowledge_base_retrieval
+      knowledge_sources:
+        - project_knowledge: "project_workspace/docs/**/*.yaml"
+        - hot_sot_search: "style_guides, canon_packs, glossaries"
+      retrieval_method: semantic_search
+      fallback_method: keyword_search
+
+  search_artifacts:
+    description: |
+      Search through previously created artifacts with permission constraints.
+      Always available within role's Hot/Cold permissions.
+
+    capability_id: search_artifacts
+    category: knowledge_access
+    required: true  # Always available
+    tool_class: questfoundry.runtime.tools.research_tools.LoreIndex
+
+    implementation:
+      type: artifact_search
+      search_scope:
+        - hot_sot: true  # if permitted
+        - cold_sot: true  # if permitted
+        - exports: false  # read-only reference
+      retrieval_method: semantic_and_keyword_search
+      permission_enforcement: strict
+
+# ==============================================================================
+# INTERNAL TOOLS (RUNTIME ONLY)
+# ==============================================================================
+#
+# These tools are NEVER exposed to agents. They are runtime-only operations
+# for protocol, state, validation, and orchestration. Agents cannot explicitly
+# call these; the runtime invokes them as needed.
+#
+# Agents may trigger these indirectly through:
+# - Protocol message outputs (handled by runtime)
+# - Artifact outputs (validated by runtime)
+# - Lifecycle transitions (managed by runtime)
+# - State modifications (handled by state layer)
+#
+
+internal_tools:
+
+  # --------------------------------------------------------------------------
+  # PROTOCOL OPERATIONS (Internal Only)
+  # --------------------------------------------------------------------------
+  # Agents cannot call these directly. Runtime invokes them to handle protocol
+  # communication, envelope validation, and message routing.
+
+  protocol_operations:
+
+    - id: send_protocol_envelope
+      name: Send Protocol Envelope
+      tool_class: questfoundry.runtime.tools.protocol_tools.SendProtocolEnvelope
+      category: protocol
+      description: |
+        Internal runtime operation. Sends protocol envelopes through the
+        protocol layer. Never exposed to agents. Invoked by runtime when
+        processing agent output or lifecycle events.
+      parameters:
+        - name: envelope
+          type: Envelope
+          description: "Protocol envelope to send"
+        - name: validate_schema
+          type: boolean
+          default: true
+        - name: enforce_permissions
+          type: boolean
+          default: true
+      requires_runtime_state: true
+      logging_level: debug
+
+    - id: send_protocol_message
+      name: Send Protocol Message
+      tool_class: questfoundry.runtime.tools.protocol_tools.SendProtocolMessage
+      category: protocol
+      description: |
+        Internal runtime operation. Sends protocol messages. Never exposed to
+        agents. Runtime uses this for communication between roles and framework.
+      parameters:
+        - name: intent
+          type: string
+          description: "Protocol intent identifier"
+        - name: payload
+          type: dict
+          description: "Message payload"
+        - name: sender_role
+          type: string
+          description: "Sending role identifier"
+      requires_runtime_state: true
+      logging_level: debug
+
+  # --------------------------------------------------------------------------
+  # STATE OPERATIONS (Internal Only)
+  # --------------------------------------------------------------------------
+  # Agents cannot call these directly. Runtime invokes them to manage Hot/Cold
+  # state, enforce permissions, and handle artifact persistence.
+
+  state_operations:
+
+    - id: read_hot_sot
+      name: Read Hot State of Things
+      tool_class: questfoundry.runtime.tools.state_tools.ReadHotSOT
+      category: state
+      description: |
+        Internal runtime operation. Reads from Hot SoT (living state). Never
+        exposed to agents. Runtime queries Hot SoT based on role permissions
+        and injects relevant context into prompts.
+      parameters:
+        - name: query
+          type: string
+          description: "Query for Hot SoT search"
+        - name: artifact_types
+          type: list[string]
+          description: "Filter by artifact types"
+        - name: permissions
+          type: RolePermissions
+          description: "Enforce read permissions"
+      requires_runtime_state: true
+      logging_level: debug
+
+    - id: write_hot_sot
+      name: Write Hot State of Things
+      tool_class: questfoundry.runtime.tools.state_tools.WriteHotSOT
+      category: state
+      description: |
+        Internal runtime operation. Writes to Hot SoT. Never exposed to agents.
+        Runtime handles artifact outputs and persists to Hot SoT with merge
+        strategy enforcement.
+      parameters:
+        - name: artifact
+          type: Artifact
+          description: "Artifact to write"
+        - name: merge_strategy
+          type: string
+          enum: [replace, merge, append, version]
+          description: "How to merge with existing state"
+        - name: permissions
+          type: RolePermissions
+          description: "Enforce write permissions"
+      requires_runtime_state: true
+      logging_level: debug
+
+    - id: read_cold_sot
+      name: Read Cold State of Things
+      tool_class: questfoundry.runtime.tools.state_tools.ReadColdSOT
+      category: state
+      description: |
+        Internal runtime operation. Reads from Cold SoT (snapshot state).
+        Never exposed to agents. Runtime provides Cold SoT artifacts when
+        building agent context.
+      parameters:
+        - name: query
+          type: string
+          description: "Query for Cold SoT search"
+        - name: artifact_types
+          type: list[string]
+          description: "Filter by artifact types"
+        - name: permissions
+          type: RolePermissions
+          description: "Enforce read permissions"
+      requires_runtime_state: true
+      logging_level: debug
+
+    - id: write_cold_sot
+      name: Write Cold State of Things
+      tool_class: questfoundry.runtime.tools.state_tools.WriteColdSOT
+      category: state
+      description: |
+        Internal runtime operation. Writes to Cold SoT (snapshot creation).
+        Never exposed to agents. Runtime handles snapshot creation based on
+        lifecycle events and Hot SoT state.
+      parameters:
+        - name: snapshot_id
+          type: string
+          description: "Snapshot identifier"
+        - name: artifacts
+          type: list[Artifact]
+          description: "Artifacts to include in snapshot"
+        - name: metadata
+          type: dict
+          description: "Snapshot metadata"
+      requires_runtime_state: true
+      logging_level: debug
+
+  # --------------------------------------------------------------------------
+  # VALIDATION OPERATIONS (Internal Only)
+  # --------------------------------------------------------------------------
+  # Agents cannot call these. Runtime validates outputs automatically using
+  # these tools.
+
+  validation_operations:
+
+    - id: validate_artifact
+      name: Validate Artifact
+      tool_class: questfoundry.runtime.tools.validation_tools.ValidateArtifact
+      category: validation
+      description: |
+        Internal runtime operation. Validates artifacts against schemas.
+        Never exposed to agents. Runtime automatically validates all agent
+        outputs before accepting them.
+      parameters:
+        - name: artifact
+          type: Artifact
+          description: "Artifact to validate"
+        - name: schema
+          type: string
+          description: "Schema to validate against"
+        - name: strict
+          type: boolean
+          default: true
+      requires_runtime_state: false
+      logging_level: debug
+
+    - id: evaluate_quality_bar
+      name: Evaluate Quality Bar
+      tool_class: questfoundry.runtime.tools.validation_tools.EvaluateQualityBar
+      category: validation
+      description: |
+        Internal runtime operation. Evaluates artifacts against quality gates.
+        Never exposed to agents. Runtime uses this for quality checks and
+        gatekeeper validation.
+      parameters:
+        - name: artifact
+          type: Artifact
+          description: "Artifact to evaluate"
+        - name: quality_gate
+          type: QualityGate
+          description: "Gate definition"
+        - name: evaluation_context
+          type: dict
+          description: "Context for evaluation"
+      requires_runtime_state: true
+      logging_level: debug
+
+  # --------------------------------------------------------------------------
+  # ORCHESTRATION OPERATIONS (Internal Only)
+  # --------------------------------------------------------------------------
+  # Internal coordination between roles and the Showrunner framework.
+
+  orchestration_operations:
+
+    - id: create_snapshot
+      name: Create Snapshot
+      tool_class: questfoundry.runtime.tools.orchestration_tools.CreateSnapshot
+      category: orchestration
+      description: |
+        Internal runtime operation. Creates snapshots of Hot SoT state.
+        Never exposed to agents. Invoked by Showrunner at snapshot points.
+      parameters:
+        - name: snapshot_name
+          type: string
+        - name: include_artifacts
+          type: list[string]
+        - name: metadata
+          type: dict
+      requires_runtime_state: true
+      logging_level: info
+
+    - id: update_tu
+      name: Update Time Unit
+      tool_class: questfoundry.runtime.tools.orchestration_tools.UpdateTU
+      category: orchestration
+      description: |
+        Internal runtime operation. Updates TU lifecycle state. Never exposed
+        to agents. Invoked by Showrunner or through protocol intents.
+      parameters:
+        - name: tu_id
+          type: string
+        - name: new_state
+          type: string
+        - name: context
+          type: dict
+      requires_runtime_state: true
+      logging_level: info
+
+    - id: wake_role
+      name: Wake Role
+      tool_class: questfoundry.runtime.tools.orchestration_tools.WakeRole
+      category: orchestration
+      description: |
+        Internal runtime operation. Activates a role's execution context.
+        Never exposed to agents. Invoked by Showrunner to schedule role work.
+      parameters:
+        - name: role_id
+          type: string
+        - name: context
+          type: dict
+      requires_runtime_state: true
+      logging_level: debug
+
+    - id: sleep_role
+      name: Sleep Role
+      tool_class: questfoundry.runtime.tools.orchestration_tools.SleepRole
+      category: orchestration
+      description: |
+        Internal runtime operation. Deactivates a role's execution context.
+        Never exposed to agents. Invoked by Showrunner when role work completes.
+      parameters:
+        - name: role_id
+          type: string
+        - name: final_state
+          type: dict
+      requires_runtime_state: true
+      logging_level: debug
+
+    - id: trigger_gatecheck
+      name: Trigger Gate Check
+      tool_class: questfoundry.runtime.tools.orchestration_tools.TriggerGatecheck
+      category: orchestration
+      description: |
+        Internal runtime operation. Triggers quality gate evaluation.
+        Never exposed to agents. Invoked when artifacts reach gatecheck.
+      parameters:
+        - name: gate_id
+          type: string
+        - name: artifacts
+          type: list[Artifact]
+        - name: context
+          type: dict
+      requires_runtime_state: true
+      logging_level: info
+
+# ==============================================================================
+# RUNTIME INTEGRATION CONFIGURATION
+# ==============================================================================
+#
+# Defines how the runtime uses these mappings during initialization and execution.
+#
+
+runtime_integration:
+
+  # Capability availability checks at runtime startup
+  initialization:
+    check_external_capabilities: true
+    check_required_first: true
+    log_unavailable_capabilities: true
+    fail_on_missing_required: true
+    fail_on_all_providers_unavailable: true
+
+  # Provider selection strategy
+  provider_selection:
+    strategy: priority_ordered  # Use priority field to select
+    fallback_on_failure: true
+    log_provider_switches: true
+    max_provider_fallbacks: 3  # Max times to fallback per capability
+
+  # Timeout configuration for external services
+  timeouts:
+    default_timeout_seconds: 30
+    streaming_response_timeout: 300
+    api_key_validation_timeout: 10
+
+  # Logging and monitoring
+  logging:
+    log_capability_usage: true
+    log_provider_selection: true
+    log_fallback_events: true
+    log_api_errors: true
+    log_level: info
+
+  # Caching configuration
+  caching:
+    enable_provider_availability_cache: true
+    availability_cache_ttl_seconds: 3600  # Recheck every hour
+    enable_result_caching: false  # Don't cache capability outputs
+
+# ==============================================================================
+# TOOL EXPOSURE RULES
+# ==============================================================================
+#
+# Defines which tools are exposed to agents and under what conditions.
+#
+
+tool_exposure_rules:
+
+  # External capabilities are exposed based on role configuration
+  external_capabilities:
+    exposed_to_agents: true
+    require_explicit_opt_in: false
+    enforce_availability: true
+    enforce_capability_limits: false
+
+  # Knowledge capabilities are always exposed
+  knowledge_capabilities:
+    exposed_to_agents: true
+    always_available: true
+    enforce_availability: false
+    required: true
+
+  # Internal tools MUST NEVER be exposed
+  internal_tools:
+    exposed_to_agents: false
+    override_allowed: false
+    strict_enforcement: true
+    audit_exposure_attempts: true  # Log if agent tries to access
+
+# ==============================================================================
+# VERSION HISTORY
+# ==============================================================================
+
+version_history:
+  - version: "1.0.0"
+    date: "2025-11-27"
+    changes:
+      - Initial tool mappings configuration
+      - Mapped all 14 external capabilities to provider implementations
+      - Defined internal-only tools (protocol, state, validation, orchestration)
+      - Established provider priority ordering and fallback strategies
+      - Documented runtime integration configuration
+      - Defined tool exposure rules for security
+    author: "QuestFoundry Runtime"

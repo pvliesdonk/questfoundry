@@ -1,0 +1,397 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/capabilities.schema.json",
+  "title": "QuestFoundry Capabilities Registry",
+  "description": "Defines abstract capabilities that roles may require, including external tools, knowledge access, and implicit protocol-derived capabilities. Separates Layer 5 specifications from runtime implementation details.",
+  "type": "object",
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "description": "Metadata about the capabilities registry itself.",
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Semantic version of the capabilities registry.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "examples": ["1.0.0", "1.1.0"]
+        },
+        "created": {
+          "type": "string",
+          "description": "ISO 8601 date when the registry was created.",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "updated": {
+          "type": "string",
+          "description": "ISO 8601 date when the registry was last updated.",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author or organization responsible for the registry.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the capabilities registry.",
+          "minLength": 10,
+          "maxLength": 2000
+        }
+      },
+      "required": ["version", "created", "updated", "author", "description"],
+      "additionalProperties": false
+    },
+    "external_capabilities": {
+      "type": "array",
+      "description": "Capabilities that require external services or tools. Runtime must provide implementations or fallbacks.",
+      "items": {
+        "$ref": "#/$defs/capability_definition"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "knowledge_capabilities": {
+      "type": "array",
+      "description": "Capabilities for consulting specifications and project documentation. Always available through runtime knowledge base.",
+      "items": {
+        "$ref": "#/$defs/capability_definition"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "implicit_capabilities": {
+      "type": "array",
+      "description": "Capabilities derived from role permissions and protocol rights. Never explicitly listed in role tool definitions.",
+      "items": {
+        "$ref": "#/$defs/capability_definition"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "runtime_integration": {
+      "type": "object",
+      "description": "Runtime integration patterns and guidelines for capability implementation.",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Overview of how runtime uses the capabilities registry.",
+          "minLength": 10,
+          "maxLength": 2000
+        },
+        "fallback_strategies": {
+          "type": "object",
+          "description": "Defined fallback strategies when capabilities are unavailable.",
+          "properties": {
+            "stub": {
+              "type": "string",
+              "description": "Generate placeholder outputs with logged warnings.",
+              "minLength": 10,
+              "maxLength": 500
+            },
+            "error": {
+              "type": "string",
+              "description": "Fail gracefully with clear error messages.",
+              "minLength": 10,
+              "maxLength": 500
+            },
+            "skip": {
+              "type": "string",
+              "description": "Skip operations requiring unavailable capabilities.",
+              "minLength": 10,
+              "maxLength": 500
+            },
+            "manual": {
+              "type": "string",
+              "description": "Flag operation for manual completion outside runtime.",
+              "minLength": 10,
+              "maxLength": 500
+            }
+          },
+          "additionalProperties": false
+        },
+        "implementation_notes": {
+          "type": "string",
+          "description": "Notes on implementation patterns and runtime flexibility.",
+          "minLength": 10,
+          "maxLength": 2000
+        }
+      },
+      "additionalProperties": false
+    },
+    "version_history": {
+      "type": "array",
+      "description": "Version history entries documenting changes to the capabilities registry.",
+      "items": {
+        "type": "object",
+        "description": "A version history entry.",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Semantic version number.",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "date": {
+            "type": "string",
+            "description": "ISO 8601 date of the version.",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "changes": {
+            "type": "array",
+            "description": "List of changes in this version.",
+            "items": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 500
+            },
+            "minItems": 1
+          },
+          "author": {
+            "type": "string",
+            "description": "Author responsible for this version.",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["version", "date", "changes", "author"],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["metadata", "external_capabilities", "knowledge_capabilities", "implicit_capabilities", "runtime_integration", "version_history"],
+  "additionalProperties": false,
+  "$defs": {
+    "capability_definition": {
+      "type": "object",
+      "description": "Definition of a single capability with metadata and requirements.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the capability (snake_case).",
+          "pattern": "^[a-z_]+$",
+          "minLength": 3,
+          "maxLength": 100,
+          "examples": ["image_generation", "web_search", "protocol_communication"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the capability.",
+          "minLength": 3,
+          "maxLength": 100,
+          "examples": ["Image Generation", "Web Search", "Protocol Communication"]
+        },
+        "category": {
+          "type": "string",
+          "description": "Category classifying the capability type.",
+          "enum": [
+            "visual_production",
+            "audio_production",
+            "information_retrieval",
+            "localization",
+            "document_production",
+            "knowledge_access",
+            "implicit"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of what the capability does and how it is used.",
+          "minLength": 20,
+          "maxLength": 2000
+        },
+        "typical_inputs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "description": "List of typical input types or examples for external/knowledge capabilities.",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              },
+              "minItems": 1
+            },
+            {
+              "type": "object",
+              "description": "Structured input specification for capabilities.",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              }
+            }
+          ]
+        },
+        "typical_outputs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "description": "List of typical output types or examples.",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              },
+              "minItems": 1
+            },
+            {
+              "type": "object",
+              "description": "Structured output specification for capabilities.",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              }
+            }
+          ]
+        },
+        "expected_outputs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "description": "List of expected output types (alternative to typical_outputs).",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              },
+              "minItems": 1
+            },
+            {
+              "type": "object",
+              "description": "Structured expected output specification.",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              }
+            }
+          ]
+        },
+        "quality_requirements": {
+          "type": "array",
+          "description": "List of quality requirements or standards the capability must meet.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "minItems": 1
+        },
+        "roles_requiring": {
+          "type": "array",
+          "description": "Roles that require or commonly use this capability.",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100,
+            "examples": ["illustrator", "audio_producer", "translator", "all_roles"]
+          },
+          "minItems": 1
+        },
+        "required_by_roles": {
+          "type": "array",
+          "description": "Alternative field name for roles that require this capability.",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "minItems": 1
+        },
+        "available_documents": {
+          "type": "array",
+          "description": "For knowledge capabilities, list of available document types.",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "minItems": 1
+        },
+        "typical_queries": {
+          "type": "array",
+          "description": "Example queries or use cases for the capability.",
+          "items": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 300
+          },
+          "minItems": 1
+        },
+        "runtime_notes": {
+          "type": "string",
+          "description": "Implementation notes for the runtime regarding this capability.",
+          "minLength": 10,
+          "maxLength": 1000
+        },
+        "runtime_implementation": {
+          "type": "string",
+          "description": "Details on how the runtime provides/implements this capability.",
+          "minLength": 10,
+          "maxLength": 1000
+        },
+        "derived_from": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Single source of derivation for implicit capabilities.",
+              "minLength": 3,
+              "maxLength": 200
+            },
+            {
+              "type": "array",
+              "description": "List of sources from which this capability is derived.",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 200
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the capability.",
+          "minLength": 5,
+          "maxLength": 1000
+        }
+      },
+      "required": ["id", "name", "category", "description", "roles_requiring"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "enum": ["visual_production", "audio_production", "information_retrieval", "localization", "document_production"]
+              }
+            }
+          },
+          "then": {
+            "required": ["id", "name", "category", "description", "roles_requiring", "quality_requirements"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "category": {
+                "const": "implicit"
+              }
+            }
+          },
+          "then": {
+            "required": ["id", "name", "category", "description", "derived_from", "runtime_implementation"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}
