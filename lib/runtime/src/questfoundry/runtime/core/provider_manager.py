@@ -547,8 +547,8 @@ class ProviderManager:
                 ],
             ) from exc
 
-        # Force JSON output format for all Ollama models
-        # This ensures structured responses are properly formatted
+        # Note: Do NOT force JSON format as it conflicts with tool calling.
+        # When tools are bound, Ollama handles structured output natively.
         # TODO: Ideal behavior is to:
         #   - Track per-model context limits (e.g. via model_tiers.yaml)
         #   - Estimate rendered prompt token count per request
@@ -561,7 +561,7 @@ class ProviderManager:
             temperature=temperature,
             num_predict=max_tokens,
             base_url=base_url,
-            format="json",  # Critical: Forces JSON-only responses
+            # format="json" removed - conflicts with tool calling
             num_ctx=num_ctx,
             **kwargs,
         )

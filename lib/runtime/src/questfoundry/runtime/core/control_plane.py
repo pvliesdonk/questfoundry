@@ -165,6 +165,11 @@ class ControlPlane:
             logger.debug(f"Multi-receiver message to {receiver}, routing to showrunner")
             return SHOWRUNNER
 
+        # Case: Human interaction - messages directed to customer
+        if receiver == "customer":
+            logger.info("Message directed to customer, handling human interaction")
+            return self._handle_human_interaction(last_message, state)
+
         # Normalize receiver to role_id format
         receiver_id = self._normalize_role_id(receiver)
 
@@ -221,6 +226,68 @@ class ControlPlane:
 
         # Convert to snake_case
         return receiver.lower().replace(" ", "_")
+
+    def _handle_human_interaction(self, message: Message, state: StudioState) -> str:
+        """
+        Handle human interaction for messages directed to customer.
+
+        When a role sends human.question to customer, we need to:
+        1. Display the question to the human user
+        2. Collect their response
+        3. Route it back to the sender with human.answer intent
+
+        Args:
+            message: The message with receiver="customer"
+            state: Current studio state
+
+        Returns:
+            Next node to route to (typically the original sender)
+        """
+        sender = message.get("sender", SHOWRUNNER)
+        intent = message.get("intent", "")
+        content = message.get("content", "")
+
+        if intent == "human.question":
+            # Display question to console
+            from rich.console import Console
+            from rich.panel import Panel
+            from rich.prompt import Prompt
+
+            console = Console()
+
+            # Display the question
+            console.print(
+                Panel(
+                    f"[bold cyan]Question from {sender}:[/bold cyan]\n\n{content}",
+                    title="🤔 Input Requested",
+                    border_style="cyan"
+                )
+            )
+
+            # Get user response
+            response = Prompt.ask("[bold]Your response")
+
+            # Create response message
+            response_msg = {
+                "sender": "customer",
+                "receiver": sender,
+                "intent": "human.answer",
+                "content": response,
+                "metadata": {
+                    "responding_to": message.get("tu_id", ""),
+                    "original_intent": intent,
+                }
+            }
+
+            # Add response to state
+            state.setdefault("messages", []).append(response_msg)
+
+            # Route back to original sender
+            return self._normalize_role_id(sender)
+
+        # For other intents, just route back to sender
+        logger.info(f"Customer received {intent}, routing back to {sender}")
+        return self._normalize_role_id(sender)
 
     def _detect_ping_pong(self, message: Message) -> bool:
         """

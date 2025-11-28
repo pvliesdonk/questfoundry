@@ -412,6 +412,48 @@ class NodeFactory:
         tool_calls = getattr(response, "tool_calls", None)
         return bool(tool_calls) and len(tool_calls) > 0
 
+    def _create_synthetic_tool_response(self, role: Any, state: StudioState) -> Any:
+        """
+        Create a synthetic tool response as a fallback when LLM fails to generate proper tool calls.
+
+        This is a last resort to maintain protocol communication when tool calling fails.
+
+        Args:
+            role: The role that failed to generate tool calls
+            state: Current studio state
+
+        Returns:
+            A synthetic response with a basic protocol message tool call
+        """
+        from langchain_core.messages import AIMessage
+
+        logger.warning(f"Creating synthetic tool response for {role.id}")
+
+        # Create a minimal protocol message
+        synthetic_tool_call = {
+            "id": f"synthetic_{role.id}_{datetime.utcnow().timestamp()}",
+            "type": "function",
+            "function": {
+                "name": "send_protocol_message",
+                "arguments": json.dumps({
+                    "receiver": SHOWRUNNER,
+                    "intent": "error.tool_generation",
+                    "content": f"Role {role.id} failed to generate proper tool calls. This is a synthetic fallback message.",
+                    "payload": {
+                        "role": role.id,
+                        "reason": "tool_generation_failure",
+                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                    }
+                })
+            }
+        }
+
+        # Create AIMessage with tool_calls attribute
+        return AIMessage(
+            content=f"[Synthetic response for {role.id} due to tool generation failure]",
+            tool_calls=[synthetic_tool_call]
+        )
+
     def _execute_tool_loop(
         self,
         llm: Any,
@@ -734,6 +776,36 @@ class NodeFactory:
                                 f"Role {role.id} response does NOT contain tool calls, "
                                 f"but tools were bound (tool_choice=required should have enforced this)"
                             )
+
+                            # Error recovery for Ollama - retry with explicit instruction
+                            if provider == "ollama":
+                                logger.info("Attempting Ollama tool call recovery...")
+
+                                # Create explicit tool instruction prompt
+                                tool_names = [t["function"]["name"] for t in assembler_tools]
+                                recovery_prompt = (
+                                    f"{prompt}\n\n"
+                                    "CRITICAL: You MUST use one of the following tools:\n"
+                                    f"{', '.join(tool_names)}\n\n"
+                                    "Call the send_protocol_message tool to communicate.\n"
+                                    "Example: send_protocol_message(receiver='showrunner', intent='report.complete', content='...')"
+                                )
+
+                                # Retry with explicit instruction
+                                try:
+                                    logger.info("Retrying with explicit tool instruction...")
+                                    response = llm.invoke(recovery_prompt)
+
+                                    if self._validate_tool_usage(response):
+                                        logger.info("Recovery successful - tool calls generated")
+                                    else:
+                                        logger.error("Recovery failed - still no tool calls")
+                                        # Create synthetic protocol message as fallback
+                                        response = self._create_synthetic_tool_response(role, state)
+
+                                except Exception as e:
+                                    logger.error(f"Recovery attempt failed: {e}")
+                                    response = self._create_synthetic_tool_response(role, state)
 
                         # Handle tool calls if present
                         # For now, pass empty list as tools are handled through assembler

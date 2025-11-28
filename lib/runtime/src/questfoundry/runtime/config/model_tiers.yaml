@@ -18,7 +18,7 @@ model_tiers:
     anthropic: claude-sonnet-4-5-20250929  # Best coding model, 77.2% SWE-bench
     openai: gpt-4o  # Fast, high-quality prose generation
     google: gemini-3-pro  # 1M context, 1501 Elo on LMArena
-    ollama: qwen3:8b-q4_K_M  # 4.68GB, 128K context, matches Qwen2.5-14B performance
+    ollama: qwen3:8b  # Base model with native tool calling support
     litellm: gpt-4o
 
   # Structured Thinking: Complex reasoning, planning, topology
