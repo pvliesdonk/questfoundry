@@ -412,6 +412,39 @@ class NodeFactory:
         tool_calls = getattr(response, "tool_calls", None)
         return bool(tool_calls) and len(tool_calls) > 0
 
+    def _get_tool_instances_from_specs(self, tool_specs: list[dict]) -> list[Any]:
+        """
+        Convert OpenAI function format tool specifications to actual tool instances.
+
+        Args:
+            tool_specs: List of tools in OpenAI function format
+
+        Returns:
+            List of tool instances from the registry
+        """
+        tool_instances = []
+        registry = get_tool_registry()
+
+        for spec in tool_specs:
+            # Extract tool name from OpenAI format
+            if isinstance(spec, dict) and "function" in spec:
+                tool_name = spec["function"]["name"]
+            elif isinstance(spec, dict) and "name" in spec:
+                tool_name = spec["name"]
+            else:
+                logger.warning(f"Unrecognized tool spec format: {spec}")
+                continue
+
+            # Get tool instance from registry
+            tool_instance = registry.get_tool(tool_name)
+            if tool_instance:
+                tool_instances.append(tool_instance)
+            else:
+                logger.warning(f"Tool '{tool_name}' not found in registry")
+
+        logger.debug(f"Converted {len(tool_specs)} tool specs to {len(tool_instances)} tool instances")
+        return tool_instances
+
     def _create_synthetic_tool_response(self, role: Any, state: StudioState) -> Any:
         """
         Create a synthetic tool response as a fallback when LLM fails to generate proper tool calls.
@@ -808,9 +841,10 @@ class NodeFactory:
                                     response = self._create_synthetic_tool_response(role, state)
 
                         # Handle tool calls if present
-                        # For now, pass empty list as tools are handled through assembler
+                        # Get tool instances from registry based on assembler_tools
+                        tool_instances = self._get_tool_instances_from_specs(assembler_tools)
                         result, tool_updates, used_tools = self._execute_tool_loop(
-                            llm, response, role, [], state, llm_prompt
+                            llm, response, role, tool_instances, state, llm_prompt
                         )
 
                         # Send role_completed with extracted insight and prompt context
