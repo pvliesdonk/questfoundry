@@ -123,8 +123,10 @@ class CapabilityMapper:
             # Tool mappings are in lib/runtime/config, not in spec
             # Try to find it relative to runtime module
             import questfoundry.runtime
-            runtime_root = Path(questfoundry.runtime.__file__).parent.parent.parent
-            mappings_path = runtime_root / "lib" / "runtime" / "config" / "tool_mappings.yaml"
+            # questfoundry.runtime.__file__ is at lib/runtime/src/questfoundry/runtime/__init__.py
+            # Go up 5 levels to reach monorepo root: runtime/ -> questfoundry/ -> src/ -> runtime/ -> lib/ -> root/
+            monorepo_root = Path(questfoundry.runtime.__file__).parent.parent.parent.parent.parent
+            mappings_path = monorepo_root / "lib" / "runtime" / "config" / "tool_mappings.yaml"
 
             # Fallback to relative path if that doesn't work
             if not mappings_path.exists():

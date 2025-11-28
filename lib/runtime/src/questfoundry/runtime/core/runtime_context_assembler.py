@@ -509,7 +509,7 @@ their schemas and descriptions.
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "receiver": {
+                                "recipient": {
                                     "type": "string",
                                     "description": "Target role ID or '*' for broadcast"
                                 },
@@ -522,7 +522,7 @@ their schemas and descriptions.
                                     "description": "Message payload data"
                                 }
                             },
-                            "required": ["receiver", "intent", "payload"]
+                            "required": ["recipient", "intent", "payload"]
                         }
                     }
                 }
