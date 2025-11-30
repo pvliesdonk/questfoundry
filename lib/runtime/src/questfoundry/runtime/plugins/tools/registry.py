@@ -93,7 +93,9 @@ class LangChainToolAdapter(Tool):
         logger.info(
             f"[TOOL] {self.tool_id} invoked", extra={"tool_id": self.tool_id, "args": kwargs}
         )
-        return self._base_tool.run(**kwargs)
+        # Call _run() directly - BaseTool.run() expects positional tool_input,
+        # but _run() takes **kwargs which matches our invocation pattern
+        return self._base_tool._run(**kwargs)
 
 
 class MockTool(Tool):

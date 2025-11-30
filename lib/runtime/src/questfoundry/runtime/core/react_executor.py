@@ -380,9 +380,10 @@ class ReActExecutor:
                         valid_params[key] = value
                 result = tool._run(**valid_params)
             elif hasattr(tool, "invoke"):
-                result = tool.invoke(payload)
+                # LangChainToolAdapter.invoke() takes **kwargs, not a positional dict
+                result = tool.invoke(**payload)
             else:
-                result = tool(payload)
+                result = tool(**payload)
 
             # Convert result to JSON string
             if isinstance(result, str):
