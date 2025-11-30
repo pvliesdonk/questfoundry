@@ -165,9 +165,9 @@ class ControlPlane:
             logger.debug(f"Multi-receiver message to {receiver}, routing to showrunner")
             return SHOWRUNNER
 
-        # Case: Human interaction - messages directed to customer
-        if receiver == "customer":
-            logger.info("Message directed to customer, handling human interaction")
+        # Case: Human interaction - messages directed to customer/human
+        if receiver in ("customer", "human"):
+            logger.info(f"Message directed to {receiver}, handling human interaction")
             return self._handle_human_interaction(last_message, state)
 
         # Normalize receiver to role_id format

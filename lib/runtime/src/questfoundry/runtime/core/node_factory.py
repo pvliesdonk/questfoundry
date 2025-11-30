@@ -988,6 +988,9 @@ class NodeFactory:
                     )
 
                 def _normalize_receiver(msg: dict[str, Any]) -> None:
+                    # Handle "recipient" alias (LLMs often use this instead of "receiver")
+                    if "recipient" in msg and "receiver" not in msg:
+                        msg["receiver"] = msg.pop("recipient")
                     recv = msg.get("receiver")
                     if isinstance(recv, dict):
                         msg["receiver"] = (
