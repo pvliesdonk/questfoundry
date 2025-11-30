@@ -15,6 +15,7 @@ from typing import Any
 from jinja2 import Template, TemplateError
 
 from questfoundry.runtime.core.provider_manager import ProviderManager
+from questfoundry.runtime.core.react_executor import ReActExecutor, ReActResult
 from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.models.role import RoleProfile
@@ -445,6 +446,42 @@ class NodeFactory:
         logger.debug(f"Converted {len(tool_specs)} tool specs to {len(tool_instances)} tool instances")
         return tool_instances
 
+    def _get_tool_map_from_specs(self, tool_specs: list[dict]) -> dict[str, Any]:
+        """
+        Convert OpenAI function format tool specifications to a tool map.
+
+        This builds a dictionary mapping tool names to tool instances for use
+        with the ReActExecutor.
+
+        Args:
+            tool_specs: List of tools in OpenAI function format
+
+        Returns:
+            Dictionary mapping tool names to tool instances
+        """
+        tool_map = {}
+        registry = get_tool_registry()
+
+        for spec in tool_specs:
+            # Extract tool name from OpenAI format
+            if isinstance(spec, dict) and "function" in spec:
+                tool_name = spec["function"]["name"]
+            elif isinstance(spec, dict) and "name" in spec:
+                tool_name = spec["name"]
+            else:
+                logger.warning(f"Unrecognized tool spec format: {spec}")
+                continue
+
+            # Get tool instance from registry
+            tool_instance = registry.get_tool(tool_name)
+            if tool_instance:
+                tool_map[tool_name] = tool_instance
+            else:
+                logger.warning(f"Tool '{tool_name}' not found in registry for tool map")
+
+        logger.debug(f"Built tool map with {len(tool_map)} tools: {list(tool_map.keys())}")
+        return tool_map
+
     def _create_synthetic_tool_response(self, role: Any, state: StudioState) -> Any:
         """
         Create a synthetic tool response as a fallback when LLM fails to generate proper tool calls.
@@ -744,108 +781,78 @@ class NodeFactory:
                             max_tokens=llm_config["max_tokens"],
                         )
 
-                        # Bind tools to LLM using assembler tools (not old role_tools)
+                        # Use ReAct pattern for universal tool calling
+                        # This works across ALL models (Llama, Qwen, GPT, Claude)
+                        # by using explicit text-based instructions instead of
+                        # hidden token injection (which varies by model)
+
                         if assembler_tools:
-                            # Assembler tools are already in the right format from context_assembler
-                            # They come as tool definitions ready for LLM API binding
-                            if hasattr(llm, "bind_tools"):
-                                bind_kwargs: dict[str, Any] = {
-                                    "tool_choice": "required"  # Force tool usage for all providers
-                                }
+                            # Build tool map for ReActExecutor
+                            tool_map = self._get_tool_map_from_specs(assembler_tools)
 
-                                # Add provider-specific kwargs
-                                if provider == "openai":
-                                    bind_kwargs["strict"] = True
-
-                                try:
-                                    llm = llm.bind_tools(assembler_tools, **bind_kwargs)
-                                    logger.info(
-                                        f"Bound {len(assembler_tools)} tools to LLM for role {role.id} "
-                                        f"with tool_choice=required"
-                                    )
-                                except TypeError as e:
-                                    # Fallback for providers that don't accept specific kwargs
-                                    logger.debug(
-                                        f"Provider {provider} doesn't support bind_tools kwargs, "
-                                        f"falling back: {e}"
-                                    )
-                                    try:
-                                        llm = llm.bind_tools(assembler_tools)
-                                        logger.info(f"Bound {len(assembler_tools)} tools to LLM for role {role.id}")
-                                    except Exception as inner_e:
-                                        logger.warning(
-                                            f"Failed to bind tools for role {role.id}: {inner_e}"
-                                        )
-
-                        # Prefer native tool-calling over legacy JSON envelopes.
-                        if role.id == "showrunner":
-                            llm_prompt = (
-                                f"{prompt}\n\n"
-                                "Use the bound tools. Start by reading `customer_directives` "
-                                "from hot_sot. Route your interpretation via protocol messages "
-                                "(send_protocol_message) to wake/assign roles. Provide a brief "
-                                "status summary; no code fences."
-                            )
-                        else:
-                            llm_prompt = (
-                                f"{prompt}\n\n"
-                                "IMPORTANT: Your response MUST be valid JSON only. "
-                                "Do not include any text before or after the JSON object. "
-                                "Do not use markdown code blocks. "
-                                "Output only the raw JSON object."
-                            )
-
-                        # Invoke LLM with provider-specific prompt
-                        logger.info(f"Invoking {provider} LLM for role {role.id}")
-                        response = llm.invoke(llm_prompt)
-
-                        # Validate tool usage if tools were bound
-                        if assembler_tools and self._validate_tool_usage(response):
-                            logger.info(
-                                f"Role {role.id} response contains tool calls (validated)"
-                            )
-                        elif assembler_tools:
-                            logger.warning(
-                                f"Role {role.id} response does NOT contain tool calls, "
-                                f"but tools were bound (tool_choice=required should have enforced this)"
-                            )
-
-                            # Error recovery for Ollama - retry with explicit instruction
-                            if provider == "ollama":
-                                logger.info("Attempting Ollama tool call recovery...")
-
-                                # Create explicit tool instruction prompt
-                                tool_names = [t["function"]["name"] for t in assembler_tools]
-                                recovery_prompt = (
-                                    f"{prompt}\n\n"
-                                    "CRITICAL: You MUST use one of the following tools:\n"
-                                    f"{', '.join(tool_names)}\n\n"
-                                    "Call the send_protocol_message tool to communicate.\n"
-                                    "Example: send_protocol_message(receiver='showrunner', intent='report.complete', content='...')"
+                            # Create role-specific user prompt
+                            if role.id == "showrunner":
+                                user_prompt = (
+                                    f"You are executing as {role.name} for TU: {state.get('tu_id', 'unknown')}.\n\n"
+                                    "Start by reading `customer_directives` from hot_sot using the read_hot_sot tool. "
+                                    "Then route your interpretation via protocol messages (send_protocol_message) "
+                                    "to wake/assign the appropriate roles."
+                                )
+                            else:
+                                user_prompt = (
+                                    f"You are executing as {role.name} for TU: {state.get('tu_id', 'unknown')}.\n\n"
+                                    "Complete your assigned task using the available tools. "
+                                    "When done, provide your Final Answer with any messages to send "
+                                    "and state updates to make."
                                 )
 
-                                # Retry with explicit instruction
-                                try:
-                                    logger.info("Retrying with explicit tool instruction...")
-                                    response = llm.invoke(recovery_prompt)
+                            # Execute with ReAct pattern (NO bind_tools, NO hidden tokens)
+                            logger.info(f"Executing {role.id} with ReAct pattern ({provider})")
+                            executor = ReActExecutor(
+                                tool_map=tool_map,
+                                state=state,
+                                role_id=role.id,
+                            )
+                            react_result = executor.execute(
+                                llm=llm,  # Unbound LLM - no tool binding
+                                system_prompt=prompt,
+                                user_prompt=user_prompt,
+                                tools=assembler_tools,
+                            )
 
-                                    if self._validate_tool_usage(response):
-                                        logger.info("Recovery successful - tool calls generated")
-                                    else:
-                                        logger.error("Recovery failed - still no tool calls")
-                                        # Create synthetic protocol message as fallback
-                                        response = self._create_synthetic_tool_response(role, state)
+                            # Process ReAct result
+                            if react_result.success:
+                                logger.info(
+                                    f"ReAct execution succeeded for {role.id} "
+                                    f"({react_result.iterations} iterations, "
+                                    f"{len(react_result.tool_results)} tool calls)"
+                                )
+                                result = json.dumps(react_result.final_answer or {})
+                                tool_updates = {
+                                    "messages": react_result.messages,
+                                    "tool_results": react_result.tool_results,
+                                }
+                                # Extract hot_sot/cold_sot updates from final answer
+                                if react_result.final_answer:
+                                    if "hot_sot_updates" in react_result.final_answer:
+                                        tool_updates["hot_sot"] = react_result.final_answer["hot_sot_updates"]
+                                    if "cold_sot_updates" in react_result.final_answer:
+                                        tool_updates["cold_sot"] = react_result.final_answer["cold_sot_updates"]
+                            else:
+                                logger.error(f"ReAct execution failed for {role.id}: {react_result.error}")
+                                result = json.dumps({
+                                    "error": react_result.error,
+                                    "iterations": react_result.iterations,
+                                    "tool_results": react_result.tool_results,
+                                })
+                                tool_updates = {}
 
-                                except Exception as e:
-                                    logger.error(f"Recovery attempt failed: {e}")
-                                    response = self._create_synthetic_tool_response(role, state)
-
-                        # Handle tool calls if present
-                        # Get tool instances from registry based on assembler_tools
-                        tool_instances = self._get_tool_instances_from_specs(assembler_tools)
-                        result, tool_updates, used_tools = self._execute_tool_loop(
-                            llm, response, role, tool_instances, state, llm_prompt
-                        )
+                        else:
+                            # No tools - simple LLM invocation
+                            logger.info(f"No tools for {role.id}, invoking LLM directly")
+                            response = llm.invoke(prompt)
+                            result = response.content if hasattr(response, "content") else str(response)
+                            tool_updates = {}
 
                         # Send role_completed with extracted insight and prompt context
                         if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
@@ -915,33 +922,9 @@ class NodeFactory:
                 merged_hot_sot: dict[str, Any] = {}
                 merged_cold_sot: dict[str, Any] = {}
                 merged_artifacts: dict[str, Any] = {}
-                ad_hoc_messages: list[dict[str, Any]] = []
 
-                # Best-effort ad-hoc tool execution when provider returns a JSON "name"/"arguments"
-                # instead of native tool_calls (common with providers lacking tool-calling support).
-                if (
-                    isinstance(parsed_result, dict)
-                    and "name" in parsed_result
-                    and "arguments" in parsed_result
-                ):
-                    tool_name = parsed_result.get("name")
-                    tool_args = parsed_result.get("arguments") or {}
-                    tool = None
-                    if "tool_map" in locals():
-                        tool = locals().get("tool_map", {}).get(tool_name)
-                    if tool:
-                        try:
-                            ad_hoc_result = tool.invoke(
-                                {**tool_args, "state": state, "role_id": role.id}
-                            )
-                            aggregated = self._merge_tool_result({}, ad_hoc_result)
-                            merged_hot_sot.update(aggregated.get("hot_sot", {}))
-                            merged_cold_sot.update(aggregated.get("cold_sot", {}))
-                            merged_artifacts.update(aggregated.get("artifacts", {}))
-                            if isinstance(aggregated.get("messages"), list):
-                                ad_hoc_messages.extend(aggregated["messages"])
-                        except Exception as exc:  # pragma: no cover - defensive
-                            logger.warning(f"Ad-hoc tool {tool_name} failed: {exc}")
+                # Note: Ad-hoc tool execution fallback removed - ReAct handles all
+                # tool calling uniformly via text-based instructions
 
                 # hot_sot / cold_sot / artifacts from extraction + tool outputs + parsed result
                 for source in (
@@ -969,15 +952,11 @@ class NodeFactory:
                 # Roles can override this by including routing info in their output
                 messages_out: list[dict[str, Any]] = []
 
-                # Messages from tools
+                # Messages from ReAct tool execution
                 if isinstance(tool_updates, dict) and isinstance(
                     tool_updates.get("messages"), list
                 ):
                     messages_out.extend(tool_updates["messages"])
-
-                # Messages from ad-hoc tool execution fallback
-                if ad_hoc_messages:
-                    messages_out.extend(ad_hoc_messages)
 
                 # Messages embedded in the LLM JSON (common when provider lacks tool-calling)
                 if isinstance(parsed_result, dict) and isinstance(
