@@ -91,7 +91,7 @@ class LangChainToolAdapter(Tool):
 
     def invoke(self, **kwargs: Any) -> Any:
         logger.info(
-            f"[TOOL] {self.tool_id} invoked", extra={"tool_id": self.tool_id, "args": kwargs}
+            f"[TOOL] {self.tool_id} invoked", extra={"tool_id": self.tool_id, "tool_args": kwargs}
         )
         # Call _run() directly - BaseTool.run() expects positional tool_input,
         # but _run() takes **kwargs which matches our invocation pattern
