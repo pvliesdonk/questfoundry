@@ -76,13 +76,13 @@ class _BaseProtocolTool(_StrictToolSchemaMixin, BaseTool):
 
 class SendProtocolMessage(_BaseProtocolTool):
     name: str = "send_protocol_message"
-    description: str = "Send a TU Protocol message to a recipient"
+    description: str = "Send a TU Protocol message to a receiver"
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
             json_schema_extra={"additionalProperties": False},
         )
-        recipient: str = Field(..., description="Protocol recipient")
+        receiver: str = Field(..., description="Protocol receiver (role ID or '*' for broadcast)")
         intent: str = Field(..., description="Intent code")
         payload: Annotated[dict[str, Any], InjectedToolArg] = Field(
             default_factory=dict, description="Payload"
@@ -97,7 +97,7 @@ class SendProtocolMessage(_BaseProtocolTool):
 
     def _run(
         self,
-        recipient: str,
+        receiver: str,
         intent: str,
         payload: dict[str, Any],
         role_id: str,
@@ -108,7 +108,7 @@ class SendProtocolMessage(_BaseProtocolTool):
         message = self._protocol.send_message(
             state,
             sender=role_id,
-            recipient=recipient,
+            receiver=receiver,
             intent=intent,
             payload=payload,
         )

@@ -98,13 +98,13 @@ class Protocol:
         self,
         state: StudioState,
         sender: str,
-        recipient: str | list[str],
+        receiver: str | list[str],
         intent: str,
         payload: dict[str, Any],
     ) -> Message:
         message_id = self._generate_message_id()
         timestamp = datetime.now(timezone.utc).isoformat()
-        recv_val = _wrap_receiver(recipient)
+        recv_val = _wrap_receiver(receiver)
         envelope: Envelope = {
             "protocol": {"name": "qf-protocol", "version": "1.0.0"},
             "id": message_id,

@@ -16,7 +16,7 @@ def test_send_protocol_message_adds_message(base_state):
     tool = SendProtocolMessage()
 
     update = tool._run(
-        recipient="gatekeeper",
+        receiver="gatekeeper",
         intent="review.request",
         payload={"type": "none", "data": {"note": "please check"}},
         role_id="plotwright",
