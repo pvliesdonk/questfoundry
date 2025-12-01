@@ -109,24 +109,35 @@ class TraceHandler:
             self.console.print(f"[cyan]⏳ {role_name}[/cyan] [dim]started ({time_str})[/dim]")
             return
 
+        elif intent == "role_prompt":
+            # Show prompt BEFORE LLM invocation (so user can abort if wrong)
+            role_name = payload.get("role_name", sender)
+            prompt = payload.get("prompt", "")
+            user_prompt = payload.get("user_prompt", "")
+            tools = payload.get("tools", [])
+
+            if self.verbose and prompt:
+                self.console.print(Panel(
+                    prompt[:2000] + ("..." if len(prompt) > 2000 else ""),
+                    title=f"[bold blue]PROMPT → {role_name}[/bold blue]",
+                    border_style="blue",
+                    padding=(0, 1)
+                ))
+                if user_prompt:
+                    self.console.print(f"[dim]User prompt: {user_prompt[:200]}...[/dim]")
+                if tools:
+                    tool_names = [t.get("function", {}).get("name", t.get("name", "?")) for t in tools]
+                    self.console.print(f"[dim]Tools: {', '.join(tool_names)}[/dim]")
+            return
+
         elif intent == "role_completed":
-            # Show completion with FULL details when verbose
+            # Show completion with response (prompt was already shown in role_prompt)
             role_name = payload.get("role_name", sender)
             insight = payload.get("insight", "")
-            prompt = payload.get("prompt", "")
 
             if self.verbose:
-                # Show full prompt and response
+                # Show response
                 self.console.print(f"\n[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]")
-
-                if prompt:
-                    # Show the prompt that was sent
-                    self.console.print(Panel(
-                        prompt[:2000] + ("..." if len(prompt) > 2000 else ""),
-                        title=f"[bold blue]PROMPT → {role_name}[/bold blue]",
-                        border_style="blue",
-                        padding=(0, 1)
-                    ))
 
                 if insight:
                     # Show the LLM response

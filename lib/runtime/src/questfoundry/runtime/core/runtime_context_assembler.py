@@ -171,9 +171,6 @@ You are **{name}** ({abbreviation}), a {role_type} in the QuestFoundry productio
 ## Core Mandate
 {core_mandate}
 
-## Charter Reference
-{charter_ref}
-
 ## Operating Principles
 """
 
@@ -732,6 +729,98 @@ their schemas and descriptions.
 
         return tools
 
+    def _build_studio_knowledge_layer(self) -> str:
+        """
+        Build STUDIO KNOWLEDGE layer for Showrunner.
+
+        This provides the Showrunner with knowledge about:
+        - Available production loops and their purposes
+        - Available roles that can be woken/assigned
+        - How to route customer directives
+
+        Returns:
+            Formatted studio knowledge block
+        """
+        knowledge_block = """# STUDIO KNOWLEDGE
+
+**CRITICAL: This section defines the production loops and roles you can coordinate.**
+
+## Available Production Loops
+
+These are the ONLY valid loops you can initiate. Do NOT invent loop names.
+
+"""
+        # Load all loop definitions
+        loops_path = self.definitions_path / "loops"
+        if loops_path.exists():
+            for loop_file in sorted(loops_path.glob("*.yaml")):
+                try:
+                    with open(loop_file) as f:
+                        loop_def = yaml.safe_load(f)
+                    loop_id = loop_def.get("id", loop_file.stem)
+                    metadata = loop_def.get("metadata", {})
+                    name = metadata.get("name", loop_id)
+                    loop_type = metadata.get("type", "Unknown")
+                    description = metadata.get("description", "").strip()
+                    # Get first sentence only for brevity
+                    if description:
+                        first_sentence = description.split(".")[0] + "."
+                    else:
+                        first_sentence = "No description."
+
+                    knowledge_block += f"- **{name}** (`{loop_id}`): {loop_type} - {first_sentence}\n"
+                except Exception as e:
+                    logger.debug(f"Failed to load loop {loop_file}: {e}")
+
+        knowledge_block += """
+## Available Roles
+
+These roles can be woken via protocol messages. Use their IDs (lowercase) in receiver field.
+
+"""
+        # Load all role definitions
+        roles_path = self.definitions_path / "roles"
+        if roles_path.exists():
+            for role_file in sorted(roles_path.glob("*.yaml")):
+                try:
+                    with open(role_file) as f:
+                        role_def = yaml.safe_load(f)
+                    identity = role_def.get("identity", {})
+                    role_id = identity.get("id", role_file.stem)
+                    name = identity.get("name", role_id)
+                    abbreviation = identity.get("abbreviation", "")
+                    prompt_content = role_def.get("prompt_content", {})
+                    core_mandate = prompt_content.get("core_mandate", "").strip()
+                    # Get first sentence only
+                    if core_mandate:
+                        first_sentence = core_mandate.split(".")[0] + "."
+                    else:
+                        first_sentence = "No mandate."
+
+                    knowledge_block += f"- **{name}** (`{role_id}`, {abbreviation}): {first_sentence}\n"
+                except Exception as e:
+                    logger.debug(f"Failed to load role {role_file}: {e}")
+
+        knowledge_block += """
+## Routing Customer Directives
+
+When a customer gives you a directive, you must:
+
+1. **Read `customer_directives` from hot_sot** to get the actual directive text
+2. **Determine intent** - what does the customer want?
+3. **Select appropriate loop(s)** from the list above (use exact IDs)
+4. **Send protocol message** to wake the appropriate roles:
+   - Use `send_protocol_message` tool with `receiver` set to a role ID
+   - Use intent `tu.assign` to assign work to a role
+   - Include relevant context in payload
+
+**IMPORTANT**:
+- Only use loop IDs and role IDs from the lists above
+- Do NOT invent or hallucinate loop/role names
+- If unsure which loop to use, use `story_spark` for new content or `hook_harvest` for hooks
+"""
+        return knowledge_block
+
     def assemble_context(
         self, role_id: str, loop_id: str | None, node_id: str | None, state: StudioState
     ) -> dict[str, Any]:
@@ -762,6 +851,11 @@ their schemas and descriptions.
         mission_layer = self._build_mission_layer(loop_id, node_id, role_def)
         interface_layer = self._build_interface_block(role_def)
 
+        # Build studio knowledge layer for showrunner (needs to know loops/roles)
+        studio_knowledge_layer = ""
+        if role_id == "showrunner":
+            studio_knowledge_layer = self._build_studio_knowledge_layer()
+
         # Assemble complete prompt
         prompt = f"""
 {identity_layer}
@@ -769,6 +863,8 @@ their schemas and descriptions.
 {protocol_layer}
 
 {state_layer}
+
+{studio_knowledge_layer}
 
 {mission_layer}
 

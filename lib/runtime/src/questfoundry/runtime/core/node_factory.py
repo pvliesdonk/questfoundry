@@ -808,6 +808,27 @@ class NodeFactory:
 
                             # Execute with ReAct pattern (NO bind_tools, NO hidden tokens)
                             logger.info(f"Executing {role.id} with ReAct pattern ({provider})")
+
+                            # Send role_prompt BEFORE LLM invocation so user can abort if wrong
+                            if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
+                                if self.state_manager._trace_handler:
+                                    try:
+                                        prompt_message = {
+                                            "sender": role.id,
+                                            "receiver": "system",
+                                            "intent": "role_prompt",
+                                            "payload": {
+                                                "role_name": role.name,
+                                                "prompt": prompt,
+                                                "user_prompt": user_prompt,
+                                                "tools": assembler_tools,
+                                            },
+                                            "timestamp": datetime.now(UTC).isoformat(),
+                                        }
+                                        self.state_manager._trace_handler.trace_message(prompt_message)
+                                    except Exception as e:
+                                        logger.debug(f"Failed to trace prompt: {e}")
+
                             executor = ReActExecutor(
                                 tool_map=tool_map,
                                 state=state,
