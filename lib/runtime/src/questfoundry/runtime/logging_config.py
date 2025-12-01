@@ -117,3 +117,49 @@ def set_level(level: str) -> None:
         >>> logger.debug("This will now be visible")
     """
     logging.getLogger().setLevel(level.upper())
+
+
+def setup_file_logging(file_path: str, level: str = "DEBUG") -> logging.FileHandler:
+    """
+    Add file logging handler that captures detailed debug logs.
+
+    This is used for option C: trace + debug logs to file while -v controls screen.
+    The file handler captures all log messages at the specified level (default DEBUG),
+    independent of the console handler's level.
+
+    Args:
+        file_path: Path to the log file
+        level: Logging level for file (default DEBUG to capture everything)
+
+    Returns:
+        The FileHandler instance (for later removal if needed)
+
+    Examples:
+        >>> handler = setup_file_logging("debug.log")
+        >>> # Later: logging.getLogger().removeHandler(handler)
+    """
+    from pathlib import Path
+
+    # Ensure parent directory exists
+    Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Create file handler with detailed formatting
+    file_handler = logging.FileHandler(file_path, encoding="utf-8")
+    file_handler.setLevel(level.upper())
+
+    # Detailed format for file logs (includes timestamp, logger name, level, path)
+    file_formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(file_formatter)
+
+    # Add to root logger
+    root_logger = logging.getLogger()
+    root_logger.addHandler(file_handler)
+
+    # Ensure root logger level allows DEBUG through (handler filters its own level)
+    if root_logger.level > logging.DEBUG:
+        root_logger.setLevel(logging.DEBUG)
+
+    return file_handler

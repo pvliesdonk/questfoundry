@@ -68,10 +68,13 @@ def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
     trace: bool = typer.Option(
-        False, "--trace", "-t", help="Enable trace mode to capture agent communication"
+        False, "--trace", "-t", help="Enable trace mode to show agent communication on screen"
     ),
-    trace_file: str | None = typer.Option(
-        None, "--trace-file", help="Write trace to file (enables --trace automatically)"
+    log_file: str | None = typer.Option(
+        None,
+        "--log-file",
+        "-l",
+        help="Write trace and debug logs to files (<name>-trace.log, <name>-debug.log)",
     ),
     recursion_limit: int = typer.Option(50, "--recursion-limit", "-r", help="Max graph iterations"),
     provider: str | None = typer.Option(
@@ -99,40 +102,89 @@ def ask(
     - Showrunner coordinates but doesn't bottleneck all communication
     - Roles communicate peer-to-peer via protocol
 
+    Logging modes:
+        A) Default: No trace, -v controls screen verbosity
+        B) --trace: Show agent communication on screen (with full prompts/responses)
+        C) --log-file <name>: Write to <name>-trace.log and <name>-debug.log, no screen trace
+
     Examples:
         qf ask "Create a mystery story about a haunted lighthouse"
         qf ask "Review the draft and suggest improvements" -v
         qf ask "Create a story" --trace
-        qf ask "Create a story" --trace --trace-file messages.log
+        qf ask "Create a story" --log-file session1
+        qf ask "Create a story" --log-file session1 --trace  # Both file and screen
         qf ask "Create a story" --provider anthropic:claude-3-haiku-20240307
     """
     try:
-        # Enable trace if trace_file is specified
-        if trace_file:
-            trace = True
+        # Set up file logging if --log-file specified
+        file_handler = None
+        if log_file:
+            from questfoundry.runtime.logging_config import setup_file_logging
 
-        # Create trace handler if --trace enabled
+            debug_log_path = f"{log_file}-debug.log"
+            file_handler = setup_file_logging(debug_log_path, level="DEBUG")
+            logger.info(f"Debug logging to: {debug_log_path}")
+
+        # Create trace handler if --trace or --log-file enabled
         trace_handler = None
-        if trace:
+        if trace or log_file:
             from questfoundry.runtime.core.trace_handler import TraceHandler
 
-            output_file = Path(trace_file) if trace_file else None
-            trace_handler = TraceHandler(output_file=output_file, console=console, verbose=True)
+            # Determine trace file path
+            trace_file_path = Path(f"{log_file}-trace.log") if log_file else None
+
+            # quiet_console: True if only --log-file (no --trace), False if --trace specified
+            quiet_console = log_file is not None and not trace
+
+            trace_handler = TraceHandler(
+                output_file=trace_file_path,
+                console=console,
+                verbose=True,
+                quiet_console=quiet_console,
+            )
 
             # Register for cleanup on interrupt
             _active_trace_handlers.append(trace_handler)
 
-            console.print(
-                Panel(
-                    "[cyan bold]📡 Trace Mode Enabled[/cyan bold]\n\n"
-                    "Agent-to-agent communication will be captured and displayed.\n"
-                    "LLM prompts, outputs, and tool calls will be shown.\n"
-                    f"{'Output: Console and file' if output_file else 'Output: Console only'}",
-                    style="cyan",
-                    border_style="cyan",
-                    title="Trace Mode",
+            # Show appropriate message based on mode
+            if trace and log_file:
+                # Mode: Both screen and file
+                console.print(
+                    Panel(
+                        "[cyan bold]📡 Trace Mode (Screen + File)[/cyan bold]\n\n"
+                        "Agent-to-agent communication displayed on screen.\n"
+                        f"Trace log: {log_file}-trace.log\n"
+                        f"Debug log: {log_file}-debug.log",
+                        style="cyan",
+                        border_style="cyan",
+                        title="Trace Mode",
+                    )
                 )
-            )
+            elif trace:
+                # Mode B: Screen only
+                console.print(
+                    Panel(
+                        "[cyan bold]📡 Trace Mode (Screen)[/cyan bold]\n\n"
+                        "Agent-to-agent communication will be captured and displayed.\n"
+                        "LLM prompts, outputs, and tool calls will be shown.",
+                        style="cyan",
+                        border_style="cyan",
+                        title="Trace Mode",
+                    )
+                )
+            else:
+                # Mode C: File only (--log-file without --trace)
+                console.print(
+                    Panel(
+                        "[cyan bold]📁 File Logging Enabled[/cyan bold]\n\n"
+                        f"Trace log: {log_file}-trace.log\n"
+                        f"Debug log: {log_file}-debug.log\n\n"
+                        "[dim]Use --trace to also show on screen[/dim]",
+                        style="cyan",
+                        border_style="cyan",
+                        title="File Logging",
+                    )
+                )
             console.print()
 
         # Display customer message
@@ -163,6 +215,14 @@ def ask(
         if trace_handler:
             trace_handler.close()
             _active_trace_handlers.remove(trace_handler)
+
+        # Close file handler if created
+        if file_handler:
+            import logging
+
+            logging.getLogger().removeHandler(file_handler)
+            file_handler.close()
+            logger.info(f"Debug log complete: {log_file}-debug.log")
 
         # Display result
         messages = final_state.get("messages", [])

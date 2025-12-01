@@ -25,7 +25,11 @@ class TraceHandler:
     """Capture and log agent-to-agent protocol messages."""
 
     def __init__(
-        self, output_file: Path | None = None, console: Console | None = None, verbose: bool = True
+        self,
+        output_file: Path | None = None,
+        console: Console | None = None,
+        verbose: bool = True,
+        quiet_console: bool = False,
     ):
         """
         Initialize trace handler.
@@ -34,13 +38,20 @@ class TraceHandler:
             output_file: Optional file path to write trace to
             console: Rich Console for screen output (if None, creates new one)
             verbose: If True, show full payload in console; if False, show summary only
+            quiet_console: If True, suppress console output (file-only mode for option C)
 
         Note:
             File output ALWAYS contains full messages regardless of verbose setting,
             as files are for detailed debugging and analysis.
+
+        Modes:
+            - A (default): No trace handler created
+            - B (--trace): quiet_console=False, verbose=True → trace to screen
+            - C (--trace-file): quiet_console=True → trace to file only, screen via -v
         """
         self.output_file = output_file
         self.console = console or Console()
+        self.quiet_console = quiet_console
         # Auto-enable verbose for console if writing to file (debugging mode)
         self.verbose = verbose or (output_file is not None)
         self._file_handle: TextIO | None = None
@@ -52,7 +63,10 @@ class TraceHandler:
             self._file_handle = self.output_file.open("w", encoding="utf-8")
             self._write_header()
 
-        logger.debug(f"Trace handler initialized (file: {output_file}, verbose: {self.verbose})")
+        logger.debug(
+            f"Trace handler initialized (file: {output_file}, verbose: {self.verbose}, "
+            f"quiet_console: {quiet_console})"
+        )
 
     def _write_header(self):
         """Write trace file header."""
@@ -77,8 +91,9 @@ class TraceHandler:
         """
         self._message_count += 1
 
-        # Format message for display
-        self._display_to_console(message)
+        # Format message for display (unless quiet_console mode)
+        if not self.quiet_console:
+            self._display_to_console(message)
 
         # Write to file if configured
         if self._file_handle:
