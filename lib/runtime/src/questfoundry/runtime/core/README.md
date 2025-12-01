@@ -2,6 +2,61 @@
 
 This module provides dynamic prompt assembly from YAML definitions.
 
+## Role Execution Model (CRITICAL)
+
+**This is NOT a ReAct agent loop.** Roles communicate via protocol messages, not "final answers".
+
+### Execution Flow
+
+1. Role receives a message (graph routes based on `receiver` field of last message)
+2. Role does work (reads state via tools, processes information)
+3. Role calls `send_protocol_message(receiver=..., intent=..., content=...)`
+4. **Role is DONE** — execution returns, graph routes to next role
+5. Continue until `receiver = "__terminate__"`
+
+### What This Means for Implementation
+
+- **No "Final Answer" detection** — The `send_protocol_message` call IS the output
+- **No iteration limits on work** — Only count FAILURES (errors, malformed calls)
+- **No looping after message sent** — Role completes immediately after sending
+- **Graph handles routing** — `control_plane.py` routes based on envelope `receiver`
+
+### Why This Matters
+
+When implementing role execution:
+
+```python
+# WRONG - ReAct pattern
+while iterations < max_iterations:
+    result = llm.invoke(...)
+    if "Final Answer:" in result:
+        return parse_final_answer(result)  # WRONG!
+    iterations += 1
+
+# CORRECT - Protocol message pattern
+result = llm.invoke(...)  # LLM calls tools including send_protocol_message
+# When send_protocol_message is called, role is done
+# Graph routes based on message.receiver
+return result
+```
+
+### Parallel Execution
+
+Multiple messages can fan out in parallel:
+
+- `receiver="*"` broadcasts to all active roles
+- Multiple `send_protocol_message` calls to different receivers can execute in parallel
+
+See `spec/04-protocol/FLOWS/` for examples (e.g., Hook Harvest shows SR sending to LW, PW, RS
+simultaneously).
+
+### See Also
+
+- `lib/runtime/AGENTS.md` — Execution model anti-patterns table
+- `spec/04-protocol/` — Full protocol specification
+
+---
+
 ## Overview
 
 ### RuntimeContextAssembler

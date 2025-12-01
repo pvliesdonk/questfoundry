@@ -15,7 +15,7 @@ from typing import Any
 from jinja2 import Template, TemplateError
 
 from questfoundry.runtime.core.provider_manager import ProviderManager
-from questfoundry.runtime.core.react_executor import ReActExecutor, ReActResult
+from questfoundry.runtime.core.protocol_executor import ProtocolExecutor
 from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.models.role import RoleProfile
@@ -799,15 +799,15 @@ class NodeFactory:
                                     "to wake/assign the appropriate roles."
                                 )
                             else:
+                                tu_id = state.get("tu_id", "unknown")
                                 user_prompt = (
-                                    f"You are executing as {role.name} for TU: {state.get('tu_id', 'unknown')}.\n\n"
+                                    f"You are executing as {role.name} for TU: {tu_id}.\n\n"
                                     "Complete your assigned task using the available tools. "
-                                    "When done, provide your Final Answer with any messages to send "
-                                    "and state updates to make."
+                                    "When done, send a protocol message to the receiver."
                                 )
 
-                            # Execute with ReAct pattern (NO bind_tools, NO hidden tokens)
-                            logger.info(f"Executing {role.id} with ReAct pattern ({provider})")
+                            # Execute with protocol executor (NO bind_tools, NO hidden tokens)
+                            logger.info(f"Executing {role.id} with protocol executor ({provider})")
 
                             # Send role_prompt BEFORE LLM invocation so user can abort if wrong
                             if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
@@ -850,7 +850,7 @@ class NodeFactory:
                                         state.get("tu_id", "unknown")
                                     )
 
-                            executor = ReActExecutor(
+                            executor = ProtocolExecutor(
                                 tool_map=tool_map,
                                 state=state,
                                 role_id=role.id,
@@ -860,7 +860,7 @@ class NodeFactory:
                             # Retrieve prior conversation for short-term memory
                             prior_conversation = state.get("role_conversations", {}).get(role.id, "")
 
-                            react_result = executor.execute(
+                            exec_result = executor.execute(
                                 llm=llm,  # Unbound LLM - no tool binding
                                 system_prompt=prompt,
                                 user_prompt=user_prompt,
@@ -868,35 +868,36 @@ class NodeFactory:
                                 prior_conversation=prior_conversation,
                             )
 
-                            # Process ReAct result
-                            if react_result.success:
+                            # Process executor result
+                            # NOTE: State updates (hot_sot, cold_sot) happen via tools during
+                            # execution, not via parsing a "final answer" JSON blob.
+                            if exec_result.success:
                                 logger.info(
-                                    f"ReAct execution succeeded for {role.id} "
-                                    f"({react_result.iterations} iterations, "
-                                    f"{len(react_result.tool_results)} tool calls)"
+                                    f"Execution succeeded for {role.id} "
+                                    f"({exec_result.iterations} iterations, "
+                                    f"{len(exec_result.tool_results)} tool calls)"
                                 )
-                                result = json.dumps(react_result.final_answer or {})
-                                tool_updates = {
-                                    "messages": react_result.messages,
-                                    "tool_results": react_result.tool_results,
-                                    "role_conversations": {role.id: react_result.conversation},
-                                }
-                                # Extract hot_sot/cold_sot updates from final answer
-                                if react_result.final_answer:
-                                    if "hot_sot_updates" in react_result.final_answer:
-                                        tool_updates["hot_sot"] = react_result.final_answer["hot_sot_updates"]
-                                    if "cold_sot_updates" in react_result.final_answer:
-                                        tool_updates["cold_sot"] = react_result.final_answer["cold_sot_updates"]
-                            else:
-                                logger.error(f"ReAct execution failed for {role.id}: {react_result.error}")
+                                # Messages ARE the output - no final_answer to parse
                                 result = json.dumps({
-                                    "error": react_result.error,
-                                    "iterations": react_result.iterations,
-                                    "tool_results": react_result.tool_results,
+                                    "messages": exec_result.messages,
+                                    "tool_results": exec_result.tool_results,
                                 })
-                                # Still store conversation even on failure for debugging
                                 tool_updates = {
-                                    "role_conversations": {role.id: react_result.conversation},
+                                    "messages": exec_result.messages,
+                                    "tool_results": exec_result.tool_results,
+                                    "role_work_summaries": {role.id: exec_result.work_summary},
+                                }
+                            else:
+                                logger.error(f"Execution failed for {role.id}: {exec_result.error}")
+                                result = json.dumps({
+                                    "error": exec_result.error,
+                                    "iterations": exec_result.iterations,
+                                    "failure_count": exec_result.failure_count,
+                                    "tool_results": exec_result.tool_results,
+                                })
+                                # Still store work summary even on failure for debugging
+                                tool_updates = {
+                                    "role_work_summaries": {role.id: exec_result.work_summary},
                                 }
 
                         else:
