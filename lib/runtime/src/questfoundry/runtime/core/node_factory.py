@@ -50,6 +50,114 @@ class NodeFactory:
         self.preferred_provider = preferred_provider  # Store for use in select_llm
         self.tool_registry = get_tool_registry()
 
+    def _extract_task_context_for_role(self, role_id: str, state: StudioState) -> str | None:
+        """
+        Extract task context from protocol messages addressed to this role.
+
+        Looks for messages in state["messages"] where the receiver matches this role,
+        and extracts task description/payload to provide context for the role's prompt.
+
+        Args:
+            role_id: The role identifier (e.g., "plotwright")
+            state: Current studio state containing messages
+
+        Returns:
+            Task context string if found, None otherwise
+        """
+        messages = state.get("messages", [])
+        if not messages:
+            return None
+
+        # Role ID aliases for matching (e.g., "PW" -> "plotwright")
+        role_aliases = {
+            "plotwright": {"plotwright", "pw"},
+            "lore_weaver": {"lore_weaver", "lw"},
+            "scene_smith": {"scene_smith", "ss"},
+            "style_lead": {"style_lead", "st"},
+            "gatekeeper": {"gatekeeper", "gk"},
+            "codex_curator": {"codex_curator", "cc"},
+            "researcher": {"researcher", "rs"},
+            "player_narrator": {"player_narrator", "pn"},
+            "art_director": {"art_director", "ad"},
+            "audio_director": {"audio_director", "audr"},
+            "illustrator": {"illustrator", "il"},
+            "audio_producer": {"audio_producer", "aupr"},
+            "book_binder": {"book_binder", "bb"},
+            "translator": {"translator", "tr"},
+            "showrunner": {"showrunner", "sr"},
+        }
+
+        # Get aliases for this role
+        aliases = role_aliases.get(role_id, {role_id})
+
+        # Find messages addressed to this role (most recent first)
+        task_parts = []
+        for msg in reversed(messages):
+            receiver = msg.get("receiver", "")
+
+            # Normalize receiver to string
+            if isinstance(receiver, dict):
+                receiver = receiver.get("role", "") or receiver.get("id", "")
+            receiver = str(receiver).lower()
+
+            # Check if message is for this role (or broadcast)
+            if receiver in aliases or receiver == "*":
+                payload = msg.get("payload", {})
+                intent = msg.get("intent", "")
+
+                # Extract task details based on intent type
+                if intent in ("tu.assign", "tu.open", "task.assign"):
+                    # Direct task assignment
+                    desc = payload.get("description", "") or payload.get("task", "")
+                    loop = payload.get("loop", "")
+                    deliverables = payload.get("deliverables", [])
+
+                    if desc:
+                        context = f"**Task**: {desc}"
+                        if loop:
+                            context += f"\n**Loop**: {loop}"
+                        if deliverables:
+                            context += f"\n**Deliverables**: {', '.join(deliverables)}"
+                        task_parts.append(context)
+
+                elif intent == "artifact.request":
+                    # Request for specific artifact
+                    artifact_type = payload.get("artifact_type", "")
+                    requirements = payload.get("requirements", "")
+                    if artifact_type:
+                        context = f"**Requested Artifact**: {artifact_type}"
+                        if requirements:
+                            context += f"\n**Requirements**: {requirements}"
+                        task_parts.append(context)
+
+                elif intent == "feedback.request":
+                    # Feedback request
+                    subject = payload.get("subject", "")
+                    question = payload.get("question", "")
+                    if subject or question:
+                        context = f"**Feedback Requested**: {subject or question}"
+                        task_parts.append(context)
+
+                # Also check for generic task/description fields
+                if not task_parts:
+                    for key in ("task", "description", "message", "content"):
+                        if key in payload and payload[key]:
+                            task_parts.append(str(payload[key]))
+                            break
+
+        if not task_parts:
+            return None
+
+        # Return unique tasks (preserve order)
+        seen = set()
+        unique_tasks = []
+        for t in task_parts:
+            if t not in seen:
+                seen.add(t)
+                unique_tasks.append(t)
+
+        return "\n\n".join(unique_tasks)
+
     def load_role(self, role_id: str) -> RoleProfile:
         """
         Load and validate role YAML file.
@@ -798,11 +906,24 @@ class NodeFactory:
                                 )
                             else:
                                 tu_id = state.get("tu_id", "unknown")
-                                user_prompt = (
-                                    f"You are executing as {role.name} for TU: {tu_id}.\n\n"
-                                    "Complete your assigned task using the available tools. "
-                                    "When done, send a protocol message to the receiver."
-                                )
+
+                                # Extract task context from incoming protocol messages
+                                # Look for messages addressed to this role with task details
+                                task_context = self._extract_task_context_for_role(role.id, state)
+
+                                if task_context:
+                                    user_prompt = (
+                                        f"You are executing as {role.name} for TU: {tu_id}.\n\n"
+                                        f"## Your Assigned Task\n{task_context}\n\n"
+                                        "Complete this task using the available tools. "
+                                        "When done, send a protocol message to report completion."
+                                    )
+                                else:
+                                    user_prompt = (
+                                        f"You are executing as {role.name} for TU: {tu_id}.\n\n"
+                                        "Complete your assigned task using the available tools. "
+                                        "When done, send a protocol message to the receiver."
+                                    )
 
                             # Execute with protocol executor (NO bind_tools, NO hidden tokens)
                             logger.info(f"Executing {role.id} with protocol executor ({provider})")

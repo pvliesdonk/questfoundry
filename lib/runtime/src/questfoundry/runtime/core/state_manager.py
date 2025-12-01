@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -114,7 +114,7 @@ class StateManager:
             or "default"
         )
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # Initialize quality bars (8 dimensions)
         quality_bars: dict[str, BarStatus] = {}
@@ -128,9 +128,19 @@ class StateManager:
 
         # Initialize Hot/Cold Sources of Truth
         # Hot: working drafts, proposals, hooks, WIP
-        hot_sot = {
-            "tus": [],  # All TUs in hot
-            "hooks": [],  # Proposed/accepted hooks
+        # Includes all schema-defined arrays plus common ad-hoc keys used by roles
+        hot_sot: dict[str, Any] = {
+            # Schema-defined arrays (studio_state.schema.json)
+            "hooks": [],
+            "tus": [],
+            "canon_packs": [],
+            "style_addenda": [],
+            "research_memos": [],
+            "art_plans": [],
+            "audio_plans": [],
+            "edit_notes": [],
+            "canon_transfer_packages": [],
+            # Legacy/convenience keys
             "topology_notes": None,
             "section_briefs": [],
             "draft_sections": [],
@@ -138,15 +148,27 @@ class StateManager:
             "style_notes": None,
             "lore_notes": None,
             "curator_notes": None,
-            "canon_packs": [],
-            "style_addenda": [],
+            # Common ad-hoc keys used by roles
+            "customer_directives": [],
+            "drafts": [],
+            "sections": [],
+            # Dict-type keys used by roles
+            "canon": {},
+            "style": {},
+            "topology": {},
+            "world_genesis_manifest": {},
         }
 
         # Cold: stable canon, export-safe content
         # Start from default skeleton, then overlay any persisted Cold SoT for this project.
+        # Includes all schema-defined arrays (studio_state.schema.json)
         cold_sot: dict[str, Any] = {
             "current_snapshot": None,
             "snapshots": [],
+            "codex_entries": [],
+            "language_packs": [],
+            "sections": [],
+            # Dict-type keys
             "canon": {},
             "codex": {},
             "manuscript": {},
@@ -171,12 +193,15 @@ class StateManager:
             "artifacts": {},  # DEPRECATED - keep for backwards compatibility
             "quality_bars": quality_bars,
             "messages": [],
+            "role_conversations": {},
             "snapshot_ref": None,
             "parent_tu_id": None,
             "error": None,
             "retry_count": 0,
             "created_at": now,
             "updated_at": now,
+            # Message bus tracking - tracks which messages have been consumed
+            "_consumed_messages": set(),
         }
 
         logger.info(f"Initialized state for loop {loop_id}: TU {tu_id}")
@@ -221,7 +246,7 @@ class StateManager:
                 new_state[key] = value
 
         # Update timestamp
-        new_state["updated_at"] = datetime.now(timezone.utc).isoformat()
+        new_state["updated_at"] = datetime.now(UTC).isoformat()
 
         return new_state
 
@@ -293,7 +318,7 @@ class StateManager:
             "receiver": "broadcast",
             "intent": "lifecycle_transition",
             "payload": {"from": current, "to": new_lifecycle},
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
@@ -398,7 +423,7 @@ class StateManager:
                 "bars_checked": list(bar_results.keys()),
                 "statuses": {k: v.get("status") for k, v in bar_results.items()},
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 
@@ -458,7 +483,7 @@ class StateManager:
         snapshot = {
             "snapshot_id": snapshot_id,
             "tu_id": state["tu_id"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "state": copy.deepcopy(state),
         }
 

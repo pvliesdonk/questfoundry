@@ -64,6 +64,8 @@ class ControlPlane:
     The Control Plane builds a dynamic LangGraph where:
     - Every role can route to every other role
     - Routing is determined by message envelope `receiver` field
+    - Messages are queued per receiver (message bus pattern)
+    - Roles only execute when they have pending messages
     - The Showrunner is coordinator, not bottleneck
     """
 
@@ -93,6 +95,27 @@ class ControlPlane:
         self._message_history: list[tuple[str, str, str]] = []  # (sender, receiver, intent)
         self._max_ping_pong = 3  # Max identical exchanges before intervention
 
+        # Role abbreviation mapping for message bus routing
+        self._abbreviations = {
+            "sr": "showrunner",
+            "gk": "gatekeeper",
+            "pw": "plotwright",
+            "ss": "scene_smith",
+            "sl": "style_lead",
+            "lw": "lore_weaver",
+            "cc": "codex_curator",
+            "rs": "researcher",
+            "ad": "art_director",
+            "il": "illustrator",
+            "aud": "audio_director",
+            "audr": "audio_director",
+            "aup": "audio_producer",
+            "aupr": "audio_producer",
+            "tr": "translator",
+            "bb": "book_binder",
+            "pn": "player_narrator",
+        }
+
     def get_available_roles(self) -> list[str]:
         """
         Get list of all available role IDs from spec definitions.
@@ -120,15 +143,75 @@ class ControlPlane:
         ]
         return roles
 
+    def _get_pending_messages_by_role(self, state: StudioState) -> dict[str, list[Message]]:
+        """
+        Get all unprocessed messages grouped by receiver role.
+
+        Uses state["_consumed_messages"] to track which messages have been consumed.
+        Messages not in the consumed set are considered pending.
+
+        Args:
+            state: Current studio state with messages
+
+        Returns:
+            Dict mapping role_id -> list of pending messages for that role
+        """
+        messages = state.get("messages", [])
+        consumed = state.get("_consumed_messages", set())
+        available_roles = set(self.get_available_roles())
+
+        pending: dict[str, list[Message]] = {}
+
+        for idx, msg in enumerate(messages):
+            receiver = msg.get("receiver", "")
+
+            # Skip system/trace messages
+            if receiver in ("system", "trace", ""):
+                continue
+
+            # Normalize receiver
+            if isinstance(receiver, dict):
+                receiver = receiver.get("role", "") or receiver.get("id", "")
+            receiver = str(receiver).lower().replace(" ", "_")
+
+            # Map abbreviations to full role IDs
+            receiver_id = self._abbreviations.get(receiver, receiver)
+
+            # Check if this message has been consumed
+            if idx in consumed:
+                continue  # Already consumed by target role
+
+            # Only track messages to actual roles
+            if receiver_id in available_roles:
+                pending.setdefault(receiver_id, []).append(msg)
+            elif receiver == BROADCAST or receiver == "*":
+                # Broadcast messages go to all active roles that haven't consumed them
+                # EXCEPT the sender (roles don't receive their own broadcasts)
+                sender = msg.get("sender", "")
+                if isinstance(sender, dict):
+                    sender = sender.get("role", "") or sender.get("id", "")
+                sender = str(sender).lower().replace(" ", "_")
+                sender_id = self._abbreviations.get(sender, sender)
+
+                for role in available_roles:
+                    if role == sender_id:
+                        continue  # Sender doesn't receive their own broadcast
+                    if not self.dormancy.is_dormant(role):
+                        # Check role-specific broadcast consumption
+                        if (idx, role) not in consumed:
+                            pending.setdefault(role, []).append(msg)
+
+        return pending
+
     def route_by_envelope(self, state: StudioState) -> str:
         """
-        Core routing logic - inspects last message envelope to determine next node.
+        Core routing logic - message bus pattern.
 
-        This is the heart of the mesh architecture:
-        - Direct messages route peer-to-peer
-        - Reports to coordinator route to showrunner
-        - Broadcasts trigger parallel execution
-        - Termination signals end the graph
+        Routes to the next role that has pending messages. This ensures:
+        - Roles only execute when they have work (messages) to process
+        - Multiple messages to different roles are processed in sequence
+        - No role executes "empty" without a task
+        - Graph ends when all messages are consumed
 
         Args:
             state: Current studio state with messages
@@ -143,55 +226,69 @@ class ControlPlane:
             logger.debug("No messages, routing to showrunner")
             return SHOWRUNNER
 
+        # Check for termination in the last message
         last_message = messages[-1]
-        receiver = last_message.get("receiver", SHOWRUNNER)
-
-        # Case: Termination signal
-        if receiver == TERMINATE:
+        last_receiver = last_message.get("receiver", "")
+        if last_receiver == TERMINATE:
             logger.info("Termination signal received, ending graph")
             return END
 
-        # Case: Broadcast (parallel execution)
-        if receiver == BROADCAST:
-            # For now, route to showrunner who will coordinate
-            # Future: implement true parallel fan-out
-            logger.debug("Broadcast message, routing to showrunner for coordination")
-            return SHOWRUNNER
-
-        # Case: Multi-receiver (parallel execution)
-        if isinstance(receiver, list):
-            # For now, route to showrunner who will coordinate
-            # Future: implement true parallel fan-out
-            logger.debug(f"Multi-receiver message to {receiver}, routing to showrunner")
-            return SHOWRUNNER
-
-        # Case: Human interaction - messages directed to customer/human
-        if receiver in ("customer", "human"):
-            logger.info(f"Message directed to {receiver}, handling human interaction")
+        # Check for human interaction
+        if last_receiver in ("customer", "human"):
+            logger.info(f"Message directed to {last_receiver}, handling human interaction")
             return self._handle_human_interaction(last_message, state)
 
-        # Normalize receiver to role_id format
-        receiver_id = self._normalize_role_id(receiver)
+        # Get pending messages by role
+        pending = self._get_pending_messages_by_role(state)
 
-        # Case: Dormancy enforcement
-        if self.dormancy.is_dormant(receiver_id):
-            logger.info(f"Role {receiver_id} is dormant, routing to showrunner for wake decision")
-            return SHOWRUNNER
+        if not pending:
+            # No pending messages - all work is done, end the graph
+            logger.info("No pending messages for any role, ending graph")
+            return END
 
-        # Case: Loop detection
-        if self._detect_ping_pong(last_message):
-            logger.warning("Ping-pong detected, routing to showrunner for intervention")
-            return SHOWRUNNER
+        # Route to the first role with pending messages (priority order)
+        # Showrunner has lowest priority - let workers finish first
+        priority_order = [
+            "plotwright", "lore_weaver", "scene_smith", "style_lead",
+            "codex_curator", "researcher", "art_director", "illustrator",
+            "audio_director", "audio_producer", "translator", "book_binder",
+            "player_narrator", "gatekeeper", "showrunner"
+        ]
 
-        # Case: Direct peer-to-peer routing
-        available_roles = self.get_available_roles()
-        if receiver_id in available_roles:
-            logger.debug(f"Direct routing to: {receiver_id}")
-            return receiver_id
+        for role_id in priority_order:
+            if role_id in pending and pending[role_id]:
+                # Check dormancy
+                if self.dormancy.is_dormant(role_id):
+                    logger.debug(f"Role {role_id} has messages but is dormant, skipping")
+                    continue
 
-        # Fallback: unknown receiver, route to showrunner
-        logger.warning(f"Unknown receiver '{receiver}', routing to showrunner")
-        return SHOWRUNNER
+                logger.info(
+                    f"Message bus: routing to {role_id} "
+                    f"({len(pending[role_id])} pending message(s))"
+                )
+                return role_id
+
+        # All pending roles are dormant - route to showrunner to decide wake
+        dormant_with_messages = [r for r in pending if self.dormancy.is_dormant(r)]
+        if dormant_with_messages:
+            # Only route to showrunner if it has pending messages to process
+            if SHOWRUNNER in pending:
+                logger.info(
+                    f"Dormant roles have pending messages: {dormant_with_messages}, "
+                    "routing to showrunner"
+                )
+                return SHOWRUNNER
+            else:
+                # SR has no pending messages - can't wake roles, end graph
+                logger.warning(
+                    f"Dormant roles {dormant_with_messages} have messages but "
+                    "showrunner has no pending messages to wake them. Ending graph."
+                )
+                return END
+
+        # No actionable pending messages - end graph
+        logger.info("No actionable pending messages, ending graph")
+        return END
 
     def _normalize_role_id(self, receiver: str) -> str:
         """
@@ -345,7 +442,8 @@ class ControlPlane:
         2. Executes the role logic
         3. Ensures output messages have proper envelope structure
         4. Traces all output messages
-        5. Traces role_completed
+        5. Advances message cursor (marks messages as consumed)
+        6. Traces role_completed
         """
         base_node = self.node_factory.create_role_node(role_id)
 
@@ -360,6 +458,10 @@ class ControlPlane:
                 "envelope": {"tu_id": state.get("tu_id", "")},
             }
             self._trace_message(start_message)
+
+            # Note current message count BEFORE execution
+            # This is used to advance cursor to consume only pre-existing messages
+            pre_execution_count = len(state.get("messages", []))
 
             # Execute base node
             result = base_node(state)
@@ -378,6 +480,33 @@ class ControlPlane:
 
                 # Trace the message
                 self._trace_message(msg)
+
+            # Mark messages addressed TO this role as consumed by tracking them
+            # We use a set of consumed message indices instead of a simple cursor
+            # to allow multiple roles to have pending messages simultaneously
+            consumed = set(state.get("_consumed_messages", set()))
+            existing_messages = state.get("messages", [])
+            available_roles = set(self.get_available_roles())
+
+            for idx, msg in enumerate(existing_messages):
+                if idx in consumed:
+                    continue  # Already consumed
+
+                receiver = msg.get("receiver", "")
+                if isinstance(receiver, dict):
+                    receiver = receiver.get("role", "") or receiver.get("id", "")
+                receiver = str(receiver).lower().replace(" ", "_")
+                receiver_id = self._abbreviations.get(receiver, receiver)
+
+                # Mark messages to THIS role as consumed
+                if receiver_id == role_id:
+                    consumed.add(idx)
+                # Also consume broadcast messages for this role
+                elif receiver in (BROADCAST, "*"):
+                    # Add role-specific consumed marker for broadcasts
+                    consumed.add((idx, role_id))
+
+            result["_consumed_messages"] = consumed
 
             # Trace role completed
             completed_message: Message = {

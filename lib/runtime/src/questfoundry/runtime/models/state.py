@@ -8,6 +8,15 @@ import operator
 from typing import Annotated, Any, Literal, TypedDict
 
 
+def _set_union(a: set[Any], b: set[Any]) -> set[Any]:
+    """Reducer for sets - performs union of both sets."""
+    if a is None:
+        a = set()
+    if b is None:
+        b = set()
+    return a | b
+
+
 class Artifact(TypedDict):
     """Single artifact in state."""
 
@@ -103,6 +112,11 @@ class StudioState(TypedDict):
     # Metadata
     created_at: str  # ISO format
     updated_at: str  # ISO format
+
+    # Message bus tracking (for routing)
+    # Tracks which message indices have been consumed by which role
+    # Supports both integer indices and (idx, role_id) tuples for broadcasts
+    _consumed_messages: Annotated[set[Any], _set_union]  # Union of consumed sets
 
 
 # Quality bar dimensions

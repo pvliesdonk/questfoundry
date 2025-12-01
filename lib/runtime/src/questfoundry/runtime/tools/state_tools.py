@@ -70,16 +70,123 @@ class _StrictToolSchemaMixin:
         return super().tool_call_schema
 
 
-def _get_nested(data: dict[str, Any], path: str | None) -> Any:
+# Schema-defined array keys in hot_sot and cold_sot
+# When these keys are missing, return [] instead of None
+_ARRAY_KEYS = frozenset({
+    # hot_sot arrays (from studio_state.schema.json)
+    "hooks", "tus", "canon_packs", "style_addenda", "research_memos",
+    "art_plans", "audio_plans", "edit_notes", "canon_transfer_packages",
+    # cold_sot arrays
+    "snapshots", "codex_entries", "language_packs", "sections",
+    # Common ad-hoc arrays used by roles
+    "customer_directives", "section_briefs", "drafts",
+})
+
+# Dict-type keys that should return {} instead of None
+_DICT_KEYS = frozenset({
+    "canon", "style", "topology", "codex", "manuscript",
+    "world_genesis_manifest",
+})
+
+
+def create_empty_hot_sot() -> dict[str, Any]:
+    """Create an empty schema-compliant hot_sot structure.
+
+    All array fields initialized to [] per studio_state.schema.json.
+    Dict fields initialized to {} for role convenience.
+    """
+    return {
+        # Schema-defined arrays
+        "hooks": [],
+        "tus": [],
+        "canon_packs": [],
+        "style_addenda": [],
+        "research_memos": [],
+        "art_plans": [],
+        "audio_plans": [],
+        "edit_notes": [],
+        "canon_transfer_packages": [],
+        # Common ad-hoc arrays used by roles
+        "customer_directives": [],
+        "section_briefs": [],
+        "drafts": [],
+        "sections": [],
+        # Dict-type keys used by roles
+        "canon": {},
+        "style": {},
+        "topology": {},
+        "world_genesis_manifest": {},
+    }
+
+
+def create_empty_cold_sot() -> dict[str, Any]:
+    """Create an empty schema-compliant cold_sot structure.
+
+    All array fields initialized to [] per studio_state.schema.json.
+    Dict fields initialized to {} for role convenience.
+    """
+    return {
+        "current_snapshot": "",
+        "snapshots": [],
+        "codex_entries": [],
+        "language_packs": [],
+        "sections": [],
+        # Dict-type keys
+        "canon": {},
+        "codex": {},
+        "manuscript": {},
+    }
+
+
+def ensure_sot_initialized(state: StudioState) -> StudioState:
+    """Ensure hot_sot and cold_sot are properly initialized.
+
+    If hot_sot or cold_sot are missing or empty, initializes them with
+    schema-compliant empty structures.
+
+    Args:
+        state: Current studio state
+
+    Returns:
+        State with initialized hot_sot and cold_sot
+    """
+    updated = state.copy()
+    if not updated.get("hot_sot"):
+        updated["hot_sot"] = create_empty_hot_sot()
+        logger.debug("Initialized empty hot_sot")
+    if not updated.get("cold_sot"):
+        updated["cold_sot"] = create_empty_cold_sot()
+        logger.debug("Initialized empty cold_sot")
+    return updated
+
+
+def _get_nested(data: dict[str, Any], path: str | None, *, default: Any = None) -> Any:
+    """Get nested value from dict by dot-path.
+
+    Returns appropriate default instead of raising for missing keys:
+    - Known array keys (hooks, tus, sections, etc.) → []
+    - Known dict keys (canon, style, topology, etc.) → {}
+    - Other missing keys → default (None by default)
+    """
     if not path:
         return data
 
+    parts = path.split(".")
     current: Any = data
-    for part in path.split("."):
+    for part in parts:
         if isinstance(current, dict) and part in current:
             current = current[part]
         else:
-            raise StateError(f"State key not found: {path}")
+            # Key not found - return appropriate default based on key type
+            final_key = parts[-1]
+            if final_key in _ARRAY_KEYS:
+                logger.debug("Key '%s' not found, returning empty list", path)
+                return []
+            if final_key in _DICT_KEYS:
+                logger.debug("Key '%s' not found, returning empty dict", path)
+                return {}
+            logger.debug("Key '%s' not found, returning default", path)
+            return default
     return deepcopy(current)
 
 
