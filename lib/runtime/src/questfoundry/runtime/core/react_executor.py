@@ -89,6 +89,7 @@ class ReActResult:
     iterations: int = 0
     error: str | None = None
     raw_responses: list[str] = field(default_factory=list)
+    conversation: str = ""  # Accumulated conversation for short-term memory
 
 
 class ReActExecutor:
@@ -131,6 +132,7 @@ class ReActExecutor:
         system_prompt: str,
         user_prompt: str,
         tools: list[dict],
+        prior_conversation: str = "",
     ) -> ReActResult:
         """Run the ReAct reasoning loop.
 
@@ -139,6 +141,7 @@ class ReActExecutor:
             system_prompt: Role's system prompt from RuntimeContextAssembler
             user_prompt: User/task prompt for this execution
             tools: Tool specifications in OpenAI function format
+            prior_conversation: Prior conversation history for this role (short-term memory)
 
         Returns:
             ReActResult with success status, messages, and tool results
@@ -150,11 +153,11 @@ class ReActExecutor:
 
         # CRITICAL: Prompts are NEVER truncated before LLM invocation.
         # Log errors if prompt might exceed context window.
-        prompt_size = len(full_system) + len(user_prompt)
+        prompt_size = len(full_system) + len(user_prompt) + len(prior_conversation)
         if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
             log.error(
                 f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars "
-                f"(system={len(full_system)}, user={len(user_prompt)}). "
+                f"(system={len(full_system)}, user={len(user_prompt)}, prior={len(prior_conversation)}). "
                 f"Exceeds threshold ({PROMPT_SIZE_ERROR_THRESHOLD}). "
                 "This may cause model context overflow and unpredictable failures. "
                 "Consider reducing prompt content or using a model with larger context. "
@@ -167,7 +170,11 @@ class ReActExecutor:
                 "Monitor for context window issues."
             )
 
-        conversation = user_prompt
+        # Initialize conversation with prior history (short-term memory)
+        if prior_conversation:
+            conversation = prior_conversation + "\n\n---\n\n" + user_prompt
+        else:
+            conversation = user_prompt
         tool_results = []
         raw_responses = []
 
@@ -195,6 +202,7 @@ class ReActExecutor:
                     iterations=iteration + 1,
                     tool_results=tool_results,
                     raw_responses=raw_responses,
+                    conversation=conversation,
                 )
 
             raw_responses.append(response_text)
@@ -216,8 +224,10 @@ class ReActExecutor:
 
             # Check for Final Answer
             if "Final Answer:" in response_text:
+                # Include current response in conversation before returning
+                final_conversation = conversation + f"\n\n{response_text}"
                 return self._parse_final_answer(
-                    response_text, tool_results, iteration + 1, raw_responses
+                    response_text, tool_results, iteration + 1, raw_responses, final_conversation
                 )
 
             # Parse tool call from response text
@@ -226,8 +236,9 @@ class ReActExecutor:
             if tool_call is None:
                 # No tool call and no Final Answer - try to extract any JSON as final
                 log.warning("No tool call or Final Answer found, attempting JSON extraction")
+                final_conversation = conversation + f"\n\n{response_text}"
                 return self._parse_final_answer(
-                    response_text, tool_results, iteration + 1, raw_responses
+                    response_text, tool_results, iteration + 1, raw_responses, final_conversation
                 )
 
             # Execute tool
@@ -260,6 +271,7 @@ class ReActExecutor:
             iterations=self.max_iterations,
             tool_results=tool_results,
             raw_responses=raw_responses,
+            conversation=conversation,
         )
 
     def _extract_content(self, response: Any) -> str:
@@ -445,6 +457,7 @@ class ReActExecutor:
         tool_results: list,
         iterations: int,
         raw_responses: list[str],
+        conversation: str = "",
     ) -> ReActResult:
         """Extract JSON from Final Answer section.
 
@@ -509,6 +522,7 @@ class ReActExecutor:
                     iterations=iterations,
                     tool_results=tool_results,
                     raw_responses=raw_responses,
+                    conversation=conversation,
                 )
 
             data = json.loads(json_str)
@@ -525,6 +539,7 @@ class ReActExecutor:
                 tool_results=tool_results,
                 iterations=iterations,
                 raw_responses=raw_responses,
+                conversation=conversation,
             )
 
         except json.JSONDecodeError as e:
@@ -535,6 +550,7 @@ class ReActExecutor:
                 tool_results=tool_results,
                 iterations=iterations,
                 raw_responses=raw_responses,
+                conversation=conversation,
             )
         except ValueError as e:
             log.error(f"Failed to extract JSON from response: {e}")
@@ -544,4 +560,5 @@ class ReActExecutor:
                 tool_results=tool_results,
                 iterations=iterations,
                 raw_responses=raw_responses,
+                conversation=conversation,
             )

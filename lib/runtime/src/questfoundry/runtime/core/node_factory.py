@@ -856,11 +856,16 @@ class NodeFactory:
                                 role_id=role.id,
                                 trace_callback=trace_callback,
                             )
+
+                            # Retrieve prior conversation for short-term memory
+                            prior_conversation = state.get("role_conversations", {}).get(role.id, "")
+
                             react_result = executor.execute(
                                 llm=llm,  # Unbound LLM - no tool binding
                                 system_prompt=prompt,
                                 user_prompt=user_prompt,
                                 tools=assembler_tools,
+                                prior_conversation=prior_conversation,
                             )
 
                             # Process ReAct result
@@ -874,6 +879,7 @@ class NodeFactory:
                                 tool_updates = {
                                     "messages": react_result.messages,
                                     "tool_results": react_result.tool_results,
+                                    "role_conversations": {role.id: react_result.conversation},
                                 }
                                 # Extract hot_sot/cold_sot updates from final answer
                                 if react_result.final_answer:
@@ -888,7 +894,10 @@ class NodeFactory:
                                     "iterations": react_result.iterations,
                                     "tool_results": react_result.tool_results,
                                 })
-                                tool_updates = {}
+                                # Still store conversation even on failure for debugging
+                                tool_updates = {
+                                    "role_conversations": {role.id: react_result.conversation},
+                                }
 
                         else:
                             # No tools - simple LLM invocation
@@ -1086,6 +1095,10 @@ class NodeFactory:
                     state_update["cold_sot"] = merged_cold_sot
                 if merged_artifacts:
                     state_update["artifacts"] = merged_artifacts
+
+                # Short-term memory: persist role conversation history
+                if isinstance(tool_updates, dict) and "role_conversations" in tool_updates:
+                    state_update["role_conversations"] = tool_updates["role_conversations"]
 
                 return state_update
 

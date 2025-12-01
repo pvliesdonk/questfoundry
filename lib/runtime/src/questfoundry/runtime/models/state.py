@@ -89,6 +89,9 @@ class StudioState(TypedDict):
     # Protocol (with reducer for concurrent updates)
     messages: Annotated[list[Message], operator.add]  # Concatenate lists
 
+    # Short-term memory: per-role conversation history within TU
+    role_conversations: Annotated[dict[str, str], operator.or_]  # Merge dicts
+
     # Traceability
     snapshot_ref: str | None  # Read-only snapshot reference
     parent_tu_id: str | None  # Parent TU if derived
