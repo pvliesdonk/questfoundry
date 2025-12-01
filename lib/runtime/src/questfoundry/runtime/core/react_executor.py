@@ -33,6 +33,11 @@ log = logging.getLogger(__name__)
 PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
 PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD", "16000"))
 
+# Short-term memory cap (characters)
+# Prevents unbounded growth of prior_conversation across re-invocations
+# Set to ~8000 chars to leave headroom for system prompt (~13k) and user prompt
+PRIOR_CONVERSATION_MAX_CHARS = int(os.environ.get("QF_MEMORY_CAP", "8000"))
+
 
 REACT_INSTRUCTIONS = """
 ## Available Tools
@@ -171,7 +176,21 @@ class ReActExecutor:
             )
 
         # Initialize conversation with prior history (short-term memory)
+        # Apply memory cap to prevent unbounded growth
         if prior_conversation:
+            original_len = len(prior_conversation)
+            if original_len > PRIOR_CONVERSATION_MAX_CHARS:
+                # Truncate from the beginning, keeping most recent context
+                truncated = prior_conversation[-PRIOR_CONVERSATION_MAX_CHARS:]
+                # Find a clean break point (newline) to avoid mid-sentence truncation
+                newline_idx = truncated.find("\n")
+                if newline_idx > 0 and newline_idx < 500:
+                    truncated = truncated[newline_idx + 1:]
+                prior_conversation = "[... earlier conversation truncated ...]\n\n" + truncated
+                log.info(
+                    f"Truncated prior_conversation from {original_len} to "
+                    f"{len(prior_conversation)} chars for {self.role_id}"
+                )
             conversation = prior_conversation + "\n\n---\n\n" + user_prompt
         else:
             conversation = user_prompt
