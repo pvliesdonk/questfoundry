@@ -78,11 +78,11 @@ After sending a protocol message, your turn ends and the graph routes to the rec
 ## Important Guidelines
 
 - Always start with a Thought before taking an Action
-- Use exactly ONE action per response
 - Action Input MUST be valid JSON (use double quotes for strings)
 - Wait for Observation before your next action
 - Do NOT include state or role_id in Action Input - these are injected automatically
 - Complete your turn by sending a protocol message to the appropriate receiver
+- For parallel fanout: you MAY send multiple protocol messages in one response
 """
 
 
@@ -251,10 +251,10 @@ class ProtocolExecutor:
             if self.debug:
                 log.info(f"LLM Response (iter {iteration}):\n{response_text[:500]}...")
 
-            # Parse tool call from response
-            tool_call = self._parse_tool_call(response_text)
+            # Parse ALL tool calls from response (supports parallel fanout)
+            all_tool_calls = self._parse_all_tool_calls(response_text)
 
-            if tool_call is None:
+            if not all_tool_calls:
                 # No valid tool call - count as failure
                 log.warning(f"No tool call found in response for {self.role_id}")
                 failure_count += 1
@@ -262,47 +262,65 @@ class ProtocolExecutor:
                 conversation += f"\n\n{response_text}\n\nObservation: {error_msg}"
                 continue
 
-            tool_name = tool_call["name"]
-            tool_args = tool_call["args"]
+            log.info(f"Found {len(all_tool_calls)} tool call(s) in response")
 
-            log.info(f"Executing tool: {tool_name}")
-            log.debug(f"Tool args: {tool_args}")
+            # Execute all tool calls from this response
+            observations = []
+            any_failed = False
+            found_protocol_message = False
 
-            # Execute tool
-            observation, tool_success = self._execute_tool(tool_name, tool_args)
+            for tool_call in all_tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
 
-            tool_results.append({
-                "tool": tool_name,
-                "args": tool_args,
-                "result": observation,
-                "success": tool_success,
-                "iteration": iteration,
-            })
+                log.info(f"Executing tool: {tool_name}")
+                log.debug(f"Tool args: {tool_args}")
 
-            if not tool_success:
-                # Tool execution failed - count as failure
+                # Execute tool
+                observation, tool_success = self._execute_tool(tool_name, tool_args)
+
+                tool_results.append({
+                    "tool": tool_name,
+                    "args": tool_args,
+                    "result": observation,
+                    "success": tool_success,
+                    "iteration": iteration,
+                })
+
+                observations.append(f"{tool_name}: {observation}")
+
+                if not tool_success:
+                    any_failed = True
+                    continue
+
+                work_done.append(f"Called {tool_name}")
+
+                # Check if this was a protocol message
+                if tool_name in PROTOCOL_MESSAGE_TOOLS:
+                    found_protocol_message = True
+                    # Build protocol message from tool args
+                    protocol_msg = {
+                        "sender": self.role_id,
+                        "receiver": tool_args.get("receiver", "showrunner"),
+                        "intent": tool_args.get("intent", "message"),
+                        "content": tool_args.get("content", ""),
+                        "payload": tool_args.get("payload", {}),
+                    }
+                    protocol_messages.append(protocol_msg)
+                    log.info(f"Protocol message to {protocol_msg['receiver']} collected")
+
+            # After processing all actions, decide what to do
+            if any_failed:
                 failure_count += 1
-                conversation += f"\n\n{response_text}\nObservation: {observation}"
-                continue
+            else:
+                failure_count = 0
 
-            # Tool succeeded - reset failure count
-            failure_count = 0
-            work_done.append(f"Called {tool_name}")
-
-            # Check if this was a protocol message (role done for this turn)
-            if tool_name in PROTOCOL_MESSAGE_TOOLS:
-                log.info(f"Protocol message sent by {self.role_id}, turn complete")
-
-                # Build protocol message from tool args
-                protocol_msg = {
-                    "sender": self.role_id,
-                    "receiver": tool_args.get("receiver", "showrunner"),
-                    "intent": tool_args.get("intent", "message"),
-                    "content": tool_args.get("content", ""),
-                    "payload": tool_args.get("payload", {}),
-                }
-                protocol_messages.append(protocol_msg)
-
+            # If we found protocol messages, role is done for this turn
+            if found_protocol_message:
+                log.info(
+                    f"Protocol message(s) sent by {self.role_id}, "
+                    f"turn complete ({len(protocol_messages)} message(s))"
+                )
                 return ExecutorResult(
                     success=True,
                     messages=protocol_messages,
@@ -313,11 +331,12 @@ class ProtocolExecutor:
                     work_summary=self._build_work_summary(work_done),
                 )
 
-            # Not a protocol message - continue loop with observation
+            # No protocol message - continue loop with observations
+            combined_obs = "\n".join(observations)
             if self.debug:
-                log.info(f"Observation: {observation[:500]}...")
+                log.info(f"Observations: {combined_obs[:500]}...")
 
-            conversation += f"\n\n{response_text}\nObservation: {observation}"
+            conversation += f"\n\n{response_text}\nObservation: {combined_obs}"
 
         # Max failures reached
         log.error(f"Max failures ({self.max_failures}) reached for {self.role_id}")
@@ -366,49 +385,99 @@ class ProtocolExecutor:
         return "\n".join(lines)
 
     def _parse_tool_call(self, text: str) -> dict[str, Any] | None:
-        """Parse Action/Action Input from LLM response.
+        """Parse first Action/Action Input from LLM response.
 
-        Looks for:
-            Action: tool_name
-            Action Input: {"arg1": "value1"}
+        For backward compatibility. Use _parse_all_tool_calls for multiple actions.
+        """
+        calls = self._parse_all_tool_calls(text)
+        return calls[0] if calls else None
+
+    def _parse_all_tool_calls(self, text: str) -> list[dict[str, Any]]:
+        """Parse ALL Action/Action Input pairs from LLM response.
+
+        Supports parallel fanout where LLM outputs multiple actions:
+            Action: send_protocol_message
+            Action Input: {"receiver": "plotwright", ...}
+
+            Action: send_protocol_message
+            Action Input: {"receiver": "scene_smith", ...}
 
         Returns:
-            Dict with "name" and "args", or None if no tool call found
+            List of dicts with "name" and "args", empty list if no tool calls found
         """
-        action_match = re.search(r"Action:\s*(\w+)", text, re.IGNORECASE)
-        if not action_match:
-            return None
+        tool_calls = []
 
-        tool_name = action_match.group(1).strip()
+        # Find all Action: lines with their positions
+        action_pattern = re.compile(r"Action:\s*(\w+)", re.IGNORECASE)
+        action_matches = list(action_pattern.finditer(text))
 
-        # Find Action Input: {...}
-        input_match = re.search(
-            r"Action Input:\s*(\{[\s\S]*?\})(?=\n\n|\nThought:|\nAction:|\nObservation:|$)",
-            text,
-            re.IGNORECASE,
-        )
+        if not action_matches:
+            return []
 
-        if not input_match:
+        for i, action_match in enumerate(action_matches):
+            tool_name = action_match.group(1).strip()
+
+            # Determine the search region for Action Input
+            start_pos = action_match.end()
+            end_pos = action_matches[i + 1].start() if i + 1 < len(action_matches) else len(text)
+            search_region = text[start_pos:end_pos]
+
+            # Find Action Input in this region
             input_match = re.search(
-                r"Action Input:\s*(\{[^}]+\})",
-                text,
+                r"Action Input:\s*(\{[\s\S]*?\})(?=\n\n|\nThought:|\nAction:|\nObservation:|$)",
+                search_region,
                 re.IGNORECASE,
             )
 
-        if not input_match:
-            log.warning(f"Found Action '{tool_name}' but no Action Input")
-            return {"name": tool_name, "args": {}}
+            if not input_match:
+                # Try simpler pattern for nested JSON
+                input_match = re.search(
+                    r"Action Input:\s*(\{[\s\S]*\})",
+                    search_region,
+                    re.IGNORECASE,
+                )
 
-        json_str = input_match.group(1).strip()
+            if not input_match:
+                log.warning(f"Found Action '{tool_name}' but no Action Input")
+                tool_calls.append({"name": tool_name, "args": {}})
+                continue
 
+            json_str = input_match.group(1).strip()
+
+            # Try to parse JSON, handling nested structures
+            tool_args = self._parse_json_robust(json_str)
+            tool_calls.append({"name": tool_name, "args": tool_args})
+
+        return tool_calls
+
+    def _parse_json_robust(self, json_str: str) -> dict:
+        """Robustly parse JSON, handling nested structures and common errors."""
+        # First try direct parse
         try:
-            tool_args = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            log.warning(f"Failed to parse Action Input JSON: {e}")
-            log.debug(f"Raw JSON string: {json_str}")
-            tool_args = self._attempt_json_fix(json_str)
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass
 
-        return {"name": tool_name, "args": tool_args}
+        # Try to find balanced braces for nested JSON
+        depth = 0
+        end_idx = 0
+        for i, char in enumerate(json_str):
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end_idx = i + 1
+                    break
+
+        if end_idx > 0:
+            try:
+                return json.loads(json_str[:end_idx])
+            except json.JSONDecodeError:
+                pass
+
+        # Fall back to original fix attempt
+        return self._attempt_json_fix(json_str)
 
     def _attempt_json_fix(self, json_str: str) -> dict:
         """Attempt to fix common JSON formatting issues."""

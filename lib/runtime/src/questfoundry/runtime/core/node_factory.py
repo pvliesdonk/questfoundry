@@ -12,15 +12,13 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from jinja2 import Template, TemplateError
-
-from questfoundry.runtime.core.provider_manager import ProviderManager
 from questfoundry.runtime.core.protocol_executor import ProtocolExecutor
+from questfoundry.runtime.core.provider_manager import ProviderManager
 from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.models.role import RoleProfile
 from questfoundry.runtime.models.state import StudioState
-from questfoundry.runtime.plugins.tools.registry import Tool, get_tool_registry
+from questfoundry.runtime.plugins.tools.registry import get_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -885,7 +883,7 @@ class NodeFactory:
                                 tool_updates = {
                                     "messages": exec_result.messages,
                                     "tool_results": exec_result.tool_results,
-                                    "role_work_summaries": {role.id: exec_result.work_summary},
+                                    "role_conversations": {role.id: exec_result.work_summary},
                                 }
                             else:
                                 logger.error(f"Execution failed for {role.id}: {exec_result.error}")
@@ -897,7 +895,7 @@ class NodeFactory:
                                 })
                                 # Still store work summary even on failure for debugging
                                 tool_updates = {
-                                    "role_work_summaries": {role.id: exec_result.work_summary},
+                                    "role_conversations": {role.id: exec_result.work_summary},
                                 }
 
                         else:
@@ -1073,14 +1071,8 @@ class NodeFactory:
                     msg["envelope"] = envelope
                     msg.setdefault("timestamp", datetime.utcnow().isoformat() + "Z")
 
-                # 6. Trace message if state_manager has trace handler
-                if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
-                    if self.state_manager._trace_handler:
-                        try:
-                            for msg in messages_out:
-                                self.state_manager._trace_handler.trace_message(msg)
-                        except Exception as e:
-                            logger.warning(f"Trace handler error: {e}")
+                # 6. Tracing is handled by control_plane._wrap_node_with_envelope
+                # Do NOT trace here to avoid duplicate messages in trace log
 
                 # 7. Return extracted artifacts mapped to spec-defined state keys
                 # Note: Reducers (Annotated types) handle merging artifacts and messages
