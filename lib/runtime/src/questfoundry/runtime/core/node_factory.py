@@ -829,10 +829,32 @@ class NodeFactory:
                                     except Exception as e:
                                         logger.debug(f"Failed to trace prompt: {e}")
 
+                            # Create trace callback if trace handler is available
+                            trace_callback = None
+                            if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
+                                if self.state_manager._trace_handler:
+                                    def make_trace_cb(handler, tu_id):
+                                        def trace_cb(intent, payload):
+                                            message = {
+                                                "sender": payload.get("role_id", "react"),
+                                                "receiver": "system",
+                                                "intent": intent,
+                                                "payload": payload,
+                                                "timestamp": datetime.now(UTC).isoformat(),
+                                                "envelope": {"tu_id": tu_id},
+                                            }
+                                            handler.trace_message(message)
+                                        return trace_cb
+                                    trace_callback = make_trace_cb(
+                                        self.state_manager._trace_handler,
+                                        state.get("tu_id", "unknown")
+                                    )
+
                             executor = ReActExecutor(
                                 tool_map=tool_map,
                                 state=state,
                                 role_id=role.id,
+                                trace_callback=trace_callback,
                             )
                             react_result = executor.execute(
                                 llm=llm,  # Unbound LLM - no tool binding

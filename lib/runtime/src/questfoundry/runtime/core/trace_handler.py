@@ -116,18 +116,31 @@ class TraceHandler:
             user_prompt = payload.get("user_prompt", "")
             tools = payload.get("tools", [])
 
-            if self.verbose and prompt:
-                self.console.print(Panel(
-                    prompt[:2000] + ("..." if len(prompt) > 2000 else ""),
-                    title=f"[bold blue]PROMPT → {role_name}[/bold blue]",
-                    border_style="blue",
-                    padding=(0, 1)
-                ))
-                if user_prompt:
-                    self.console.print(f"[dim]User prompt: {user_prompt[:200]}...[/dim]")
+            if self.verbose:
+                # Show tools FIRST - prominently so user knows what's available
                 if tools:
                     tool_names = [t.get("function", {}).get("name", t.get("name", "?")) for t in tools]
-                    self.console.print(f"[dim]Tools: {', '.join(tool_names)}[/dim]")
+                    tools_text = "\n".join(f"  • {name}" for name in tool_names)
+                    self.console.print(Panel(
+                        tools_text,
+                        title=f"[bold yellow]TOOLS ({len(tools)})[/bold yellow]",
+                        border_style="yellow",
+                        padding=(0, 1)
+                    ))
+
+                # Show the FULL prompt - no truncation in trace mode
+                # Trace mode exists specifically for debugging; truncation defeats the purpose
+                if prompt:
+                    self.console.print(Panel(
+                        prompt,
+                        title=f"[bold blue]PROMPT → {role_name}[/bold blue] [dim]({len(prompt)} chars)[/dim]",
+                        border_style="blue",
+                        padding=(0, 1)
+                    ))
+
+                # Show user's original request
+                if user_prompt:
+                    self.console.print(f"[dim]User request: {user_prompt[:500]}{'...' if len(user_prompt) > 500 else ''}[/dim]")
             return
 
         elif intent == "role_completed":
@@ -140,10 +153,10 @@ class TraceHandler:
                 self.console.print(f"\n[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]")
 
                 if insight:
-                    # Show the LLM response
+                    # Show the FULL LLM response - no truncation in trace mode
                     self.console.print(Panel(
-                        insight[:3000] + ("..." if len(insight) > 3000 else ""),
-                        title=f"[bold green]RESPONSE ← {role_name}[/bold green]",
+                        insight,
+                        title=f"[bold green]RESPONSE ← {role_name}[/bold green] [dim]({len(insight)} chars)[/dim]",
                         border_style="green",
                         padding=(0, 1)
                     ))
@@ -158,6 +171,22 @@ class TraceHandler:
                     self.console.print(
                         f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
                     )
+            return
+
+        elif intent == "llm_iteration":
+            # Show raw LLM response during ReAct iteration
+            role_id = payload.get("role_id", sender)
+            iteration = payload.get("iteration", "?")
+            max_iter = payload.get("max_iterations", "?")
+            response = payload.get("response", "")
+
+            # Always show full LLM response - this is what we're debugging
+            self.console.print(Panel(
+                response,
+                title=f"[bold magenta]LLM RESPONSE[/bold magenta] [dim]{role_id} iter {iteration}/{max_iter} ({len(response)} chars)[/dim]",
+                border_style="magenta",
+                padding=(0, 1)
+            ))
             return
 
         elif intent == "tool_call":
@@ -178,9 +207,9 @@ class TraceHandler:
             status = "[green]✓[/green]" if success else "[red]✗[/red]"
             self.console.print(f"  {status} [bold]{tool_name}[/bold] returned")
             if self.verbose and result:
-                result_str = str(result)[:500]
-                if len(str(result)) > 500:
-                    result_str += "..."
+                # Show FULL tool result - no truncation in trace mode
+                result_str = str(result)
+                self.console.print(f"  [dim]({len(result_str)} chars)[/dim]")
                 self.console.print(f"  [dim]{result_str}[/dim]")
             return
 

@@ -27,6 +27,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 log = logging.getLogger(__name__)
 
+# Prompt size thresholds (in characters, ~4 chars per token)
+# These are conservative estimates; actual limits depend on model
+# Environment variables allow override without code changes
+PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
+PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD", "16000"))
+
 
 REACT_INSTRUCTIONS = """
 ## Available Tools
@@ -99,6 +105,7 @@ class ReActExecutor:
         state: Any,
         role_id: str,
         max_iterations: int | None = None,
+        trace_callback: Any | None = None,
     ):
         """Initialize ReAct executor.
 
@@ -107,6 +114,7 @@ class ReActExecutor:
             state: Current StudioState for tool execution context
             role_id: ID of the role executing (for tool injection)
             max_iterations: Max tool call iterations (default from env or 5)
+            trace_callback: Optional callback(intent, payload) for tracing events
         """
         self.tool_map = tool_map
         self.state = state
@@ -115,6 +123,7 @@ class ReActExecutor:
             os.getenv("QF_REACT_MAX_ITERATIONS", "5")
         )
         self.debug = os.getenv("QF_REACT_DEBUG", "").lower() in ("true", "1", "yes")
+        self.trace_callback = trace_callback
 
     def execute(
         self,
@@ -138,6 +147,25 @@ class ReActExecutor:
         tool_desc = self._build_tool_descriptions(tools)
         react_section = REACT_INSTRUCTIONS.format(tool_descriptions=tool_desc)
         full_system = system_prompt + "\n\n" + react_section
+
+        # CRITICAL: Prompts are NEVER truncated before LLM invocation.
+        # Log errors if prompt might exceed context window.
+        prompt_size = len(full_system) + len(user_prompt)
+        if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
+            log.error(
+                f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars "
+                f"(system={len(full_system)}, user={len(user_prompt)}). "
+                f"Exceeds threshold ({PROMPT_SIZE_ERROR_THRESHOLD}). "
+                "This may cause model context overflow and unpredictable failures. "
+                "Consider reducing prompt content or using a model with larger context. "
+                "Override threshold with QF_PROMPT_ERROR_THRESHOLD env var."
+            )
+        elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
+            log.warning(
+                f"Large prompt for {self.role_id}: {prompt_size} chars "
+                f"(threshold: {PROMPT_SIZE_WARNING_THRESHOLD}). "
+                "Monitor for context window issues."
+            )
 
         conversation = user_prompt
         tool_results = []
@@ -170,6 +198,18 @@ class ReActExecutor:
                 )
 
             raw_responses.append(response_text)
+
+            # Trace raw LLM response for debugging
+            if self.trace_callback:
+                try:
+                    self.trace_callback("llm_iteration", {
+                        "role_id": self.role_id,
+                        "iteration": iteration + 1,
+                        "max_iterations": self.max_iterations,
+                        "response": response_text,  # Full response, no truncation
+                    })
+                except Exception as e:
+                    log.warning(f"Trace callback failed: {e}")
 
             if self.debug:
                 log.info(f"LLM Response (iter {iteration + 1}):\n{response_text[:500]}...")

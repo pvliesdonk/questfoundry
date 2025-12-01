@@ -1,12 +1,15 @@
 """
 RuntimeContextAssembler - Dynamically assembles agent prompts from YAML definitions.
 
-This class builds the 5-layer prompt structure:
+This class builds the 6-layer prompt structure:
 1. IDENTITY - Role identity and charter reference
 2. PROTOCOL - Valid protocol intents and communication rules
 3. STATE - Current context (TU, loop, state snapshot)
-4. MISSION - Success criteria and task guidance
-5. INTERFACE - Tool usage and protocol enforcement
+4. STATE MANAGEMENT - How to read/write state (tools, keys, workflow)
+5. MISSION - Success criteria and task guidance
+6. INTERFACE - Tool usage and protocol enforcement
+
+Plus STUDIO KNOWLEDGE layer for Showrunner (between STATE MANAGEMENT and MISSION).
 
 Based on: Layer 5 compiled definitions -> Layer 6 runtime prompt orchestration
 """
@@ -332,6 +335,132 @@ Current execution context:
                     state_block += f"- {artifact_type}: {count} item(s)\n"
 
         return state_block
+
+    def _build_state_management_layer(self, role_def: dict[str, Any]) -> str:
+        """
+        Build STATE MANAGEMENT layer explaining how to read/write state.
+
+        This layer teaches agents:
+        1. HOW to read state (use tools, wait for results)
+        2. HOW to write state (use tools with correct keys)
+        3. WHICH keys map to which artifacts (based on role interface)
+
+        Args:
+            role_def: Role definition dictionary
+
+        Returns:
+            Formatted state management block
+        """
+        block = """# STATE MANAGEMENT
+
+**CRITICAL: This section explains HOW to read and write project state.**
+
+## Reading State
+
+To access project data, you MUST use the state tools and WAIT for results:
+
+1. **Call the appropriate read tool** (`read_hot_sot` or `read_cold_sot`)
+2. **Wait for the Observation** - the tool will return the data
+3. **Then use the data** in your reasoning
+
+**DO NOT** write fake observations or assume what data contains.
+**DO NOT** proceed without reading state when required inputs exist.
+
+"""
+
+        # Extract interface for key mapping
+        interface = role_def.get("interface", {})
+        inputs = interface.get("inputs", [])
+        outputs = interface.get("outputs", [])
+
+        # Build read instructions from inputs
+        hot_inputs = []
+        cold_inputs = []
+
+        for inp in inputs:
+            artifact_type = inp.get("artifact_type", "")
+            state_key = inp.get("state_key", "")
+            required = inp.get("required", False)
+
+            if state_key.startswith("hot_sot."):
+                key = state_key.replace("hot_sot.", "")
+                hot_inputs.append((artifact_type, key, required))
+            elif state_key.startswith("cold_sot."):
+                key = state_key.replace("cold_sot.", "")
+                cold_inputs.append((artifact_type, key, required))
+
+        if hot_inputs:
+            block += "### Reading from Hot SoT (Living State)\n\n"
+            block += "Use `read_hot_sot` tool with these keys:\n\n"
+            for artifact, key, required in hot_inputs:
+                req_str = " **[REQUIRED]**" if required else ""
+                block += f"- `read_hot_sot(key=\"{key}\")` → {artifact}{req_str}\n"
+            block += "\n"
+
+        if cold_inputs:
+            block += "### Reading from Cold SoT (Finalized State)\n\n"
+            block += "Use `read_cold_sot` tool with these keys:\n\n"
+            for artifact, key, required in cold_inputs:
+                req_str = " **[REQUIRED]**" if required else ""
+                block += f"- `read_cold_sot(key=\"{key}\")` → {artifact}{req_str}\n"
+            block += "\n"
+
+        # Build write instructions from outputs
+        block += """## Writing State
+
+To save your work, you MUST use the `write_hot_sot` tool:
+
+1. **Call `write_hot_sot`** with the correct key and your artifact data
+2. **The tool handles merging** - lists append, dicts merge
+3. **Wait for confirmation** before considering the write complete
+
+"""
+
+        hot_outputs = []
+        for out in outputs:
+            artifact_type = out.get("artifact_type", "")
+            state_key = out.get("state_key", "")
+            merge_strategy = out.get("merge_strategy", "replace")
+
+            if state_key.startswith("hot_sot."):
+                key = state_key.replace("hot_sot.", "")
+                hot_outputs.append((artifact_type, key, merge_strategy))
+
+        if hot_outputs:
+            block += "### Your Output Keys\n\n"
+            block += "Use `write_hot_sot` tool with these keys:\n\n"
+            for artifact, key, strategy in hot_outputs:
+                block += f"- `write_hot_sot(key=\"{key}\", value={{...}})` → {artifact} (merge: {strategy})\n"
+            block += "\n"
+
+        # Add example workflow
+        block += """## Example Workflow
+
+```
+Thought: I need to read my input before I can do my work.
+Action: read_hot_sot
+Action Input: {"key": "section_briefs"}
+
+[WAIT for Observation - DO NOT write fake data]
+
+Observation: {"brief_id": "B001", "target_section": "act1-hub", ...}
+
+Thought: Now I have the brief. Let me do my work and write the result.
+Action: write_hot_sot
+Action Input: {"key": "drafts", "value": {"section_id": "act1-hub", "content": "..."}}
+
+[WAIT for confirmation]
+
+Observation: {"hot_sot": {"drafts": {...}}}
+
+Thought: My work is saved. I can now provide my final answer.
+```
+
+**NEVER** skip the read step when inputs are required.
+**NEVER** write fake Observations - wait for the actual tool response.
+"""
+
+        return block
 
     def _build_mission_layer(
         self, loop_id: str | None, node_id: str | None, role_def: dict[str, Any]
@@ -671,19 +800,50 @@ their schemas and descriptions.
                         )
 
         # 4. Knowledge tools (always available) - OpenAI function format
+        # These allow agents to consult the Cartridge (spec) for detailed information
         tools.extend(
             [
                 {
                     "type": "function",
                     "function": {
+                        "name": "consult_playbook",
+                        "description": (
+                            "Look up a loop/playbook definition to understand its purpose, "
+                            "participating roles, quality gates, and workflow steps. "
+                            "Use this to get FULL DETAILS about a loop before initiating it."
+                        ),
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "loop_id": {
+                                    "type": "string",
+                                    "description": (
+                                        "Loop ID to look up (e.g., 'story_spark', 'hook_harvest', "
+                                        "'lore_deepening'). Use exact IDs from STUDIO KNOWLEDGE."
+                                    )
+                                }
+                            },
+                            "required": ["loop_id"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
                         "name": "consult_protocol",
-                        "description": "Consult QuestFoundry protocol specifications",
+                        "description": (
+                            "Look up protocol information: valid intents, envelope structure, "
+                            "or message flow patterns."
+                        ),
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "query": {
                                     "type": "string",
-                                    "description": "Query about protocol specifications"
+                                    "description": (
+                                        "Query about protocol (e.g., 'tu.assign', 'envelope', "
+                                        "'intents', 'lifecycle', 'flow', 'example')"
+                                    )
                                 }
                             },
                             "required": ["query"]
@@ -694,13 +854,20 @@ their schemas and descriptions.
                     "type": "function",
                     "function": {
                         "name": "consult_role_charter",
-                        "description": "Consult role charter and mandate",
+                        "description": (
+                            "Look up a role's charter to understand its mandate, capabilities, "
+                            "and responsibilities. Use before delegating work to understand "
+                            "what a role can do."
+                        ),
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "role_id": {
                                     "type": "string",
-                                    "description": "Role ID to consult charter for"
+                                    "description": (
+                                        "Role ID to look up (e.g., 'plotwright', 'gatekeeper', "
+                                        "'scene_smith'). Use exact IDs from STUDIO KNOWLEDGE."
+                                    )
                                 }
                             },
                             "required": ["role_id"]
@@ -711,16 +878,44 @@ their schemas and descriptions.
                     "type": "function",
                     "function": {
                         "name": "consult_quality_gate",
-                        "description": "Consult quality bar requirements",
+                        "description": (
+                            "Look up a quality gate/bar definition to understand validation "
+                            "criteria, pass conditions, and remediation guidance."
+                        ),
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "bar_name": {
                                     "type": "string",
-                                    "description": "Quality bar name (e.g., 'Integrity', 'Consistency')"
+                                    "description": (
+                                        "Quality bar name (e.g., 'integrity', 'reachability', "
+                                        "'consistency', 'style')"
+                                    )
                                 }
                             },
                             "required": ["bar_name"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "consult_glossary",
+                        "description": (
+                            "Look up terminology, artifact types, or conventions used in "
+                            "QuestFoundry. Use when encountering unfamiliar terms."
+                        ),
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "term": {
+                                    "type": "string",
+                                    "description": (
+                                        "Term to look up, or 'all' for full glossary"
+                                    )
+                                }
+                            },
+                            "required": ["term"]
                         }
                     }
                 },
@@ -844,10 +1039,11 @@ When a customer gives you a directive, you must:
         # Load role definition
         role_def = self._load_role(role_id)
 
-        # Build 5 layers
+        # Build 6 layers (5-layer structure + STATE MANAGEMENT)
         identity_layer = self._build_identity_layer(role_def)
         protocol_layer = self._build_protocol_layer(role_def, state)
         state_layer = self._build_state_layer(state)
+        state_management_layer = self._build_state_management_layer(role_def)
         mission_layer = self._build_mission_layer(loop_id, node_id, role_def)
         interface_layer = self._build_interface_block(role_def)
 
@@ -863,6 +1059,8 @@ When a customer gives you a directive, you must:
 {protocol_layer}
 
 {state_layer}
+
+{state_management_layer}
 
 {studio_knowledge_layer}
 
