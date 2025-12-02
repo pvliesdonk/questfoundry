@@ -41,6 +41,7 @@ _tool_logger: structlog.stdlib.BoundLogger | None = None
 _sot_logger: structlog.stdlib.BoundLogger | None = None
 _bus_logger: structlog.stdlib.BoundLogger | None = None
 _prompt_logger: structlog.stdlib.BoundLogger | None = None
+_debug_file_handler: logging.FileHandler | None = None
 
 # Domain configuration
 DOMAINS = {
@@ -51,6 +52,27 @@ DOMAINS = {
 }
 
 
+class _JsonDebugFormatter(logging.Formatter):
+    """Format log records as JSON for debug.jsonl."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        from datetime import datetime, timezone
+
+        data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+        }
+        if record.exc_info:
+            data["exception"] = self.formatException(record.exc_info)
+        return json.dumps(data)
+
+
 def configure_structured_logging(log_dir: Path) -> None:
     """Configure domain-specific structured loggers.
 
@@ -59,11 +81,12 @@ def configure_structured_logging(log_dir: Path) -> None:
     - state-sot.jsonl: Hot/cold SOT mutations
     - message-bus.jsonl: Protocol message routing
     - prompts.jsonl: Prompt engineering traces
+    - debug.jsonl: All DEBUG+ messages from questfoundry loggers
 
     Args:
         log_dir: Directory for log files (created if needed)
     """
-    global _log_dir, _configured
+    global _log_dir, _configured, _debug_file_handler
     import structlog
 
     # Ensure directory exists
@@ -106,6 +129,22 @@ def configure_structured_logging(log_dir: Path) -> None:
 
         # Prevent propagation to root logger
         logger.propagate = False
+
+    # Add debug.jsonl handler for all questfoundry DEBUG messages
+    debug_handler = logging.FileHandler(
+        log_dir / "debug.jsonl",
+        encoding="utf-8",
+    )
+    debug_handler.setLevel(logging.DEBUG)
+    debug_handler.setFormatter(_JsonDebugFormatter())
+    _debug_file_handler = debug_handler
+
+    # Attach to questfoundry root logger to capture all DEBUG+ messages
+    qf_logger = logging.getLogger("questfoundry")
+    qf_logger.addHandler(debug_handler)
+    # Ensure DEBUG level is enabled
+    if qf_logger.level == logging.NOTSET or qf_logger.level > logging.DEBUG:
+        qf_logger.setLevel(logging.DEBUG)
 
     _configured = True
 
@@ -204,7 +243,15 @@ def get_prompt_logger() -> structlog.stdlib.BoundLogger:
 
 def reset_loggers() -> None:
     """Reset cached loggers (for testing)."""
-    global _tool_logger, _sot_logger, _bus_logger, _prompt_logger, _configured
+    global _tool_logger, _sot_logger, _bus_logger, _prompt_logger, _debug_file_handler, _configured
+
+    # Clean up debug handler
+    if _debug_file_handler is not None:
+        qf_logger = logging.getLogger("questfoundry")
+        qf_logger.removeHandler(_debug_file_handler)
+        _debug_file_handler.close()
+        _debug_file_handler = None
+
     _tool_logger = None
     _sot_logger = None
     _bus_logger = None
