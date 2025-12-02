@@ -86,7 +86,7 @@ class TestRouteByEnvelope:
         }
 
         result = control_plane.route_by_envelope(state)
-        assert result == SHOWRUNNER
+        assert result == [SHOWRUNNER]  # Returns list for parallel execution
 
     def test_terminate_signal_routes_to_end(self):
         """Terminate signal should end the graph."""
@@ -121,7 +121,7 @@ class TestRouteByEnvelope:
 
         from langgraph.graph import END
         result = control_plane.route_by_envelope(state)
-        assert result == END
+        assert result == [END]  # Returns list for parallel execution
 
     def test_direct_routing_by_role_id(self):
         """Messages with role_id receiver route directly."""
@@ -155,7 +155,7 @@ class TestRouteByEnvelope:
         }
 
         result = control_plane.route_by_envelope(state)
-        assert result == "scene_smith"
+        assert result == ["scene_smith"]  # Returns list for parallel execution
 
     def test_abbreviation_routing(self):
         """Messages with abbreviation receiver are normalized."""
@@ -189,10 +189,10 @@ class TestRouteByEnvelope:
         }
 
         result = control_plane.route_by_envelope(state)
-        assert result == "gatekeeper"
+        assert result == ["gatekeeper"]  # Returns list for parallel execution
 
-    def test_broadcast_routes_to_showrunner(self):
-        """Broadcast messages route to showrunner for coordination."""
+    def test_broadcast_routes_to_multiple_roles(self):
+        """Broadcast messages route to multiple roles (parallel execution)."""
         control_plane = ControlPlane()
         state: StudioState = {
             "tu_id": "TU-test",
@@ -223,7 +223,12 @@ class TestRouteByEnvelope:
         }
 
         result = control_plane.route_by_envelope(state)
-        assert result == SHOWRUNNER
+        # Broadcast goes to all roles except sender (showrunner)
+        # Returns a list of roles for parallel execution
+        assert isinstance(result, list)
+        assert len(result) > 0
+        # Sender shouldn't receive their own broadcast
+        assert SHOWRUNNER not in result
 
     def test_dormant_role_routes_to_showrunner(self):
         """Messages to dormant roles route to showrunner for wake decision."""
@@ -241,6 +246,16 @@ class TestRouteByEnvelope:
             "artifacts": {},
             "quality_bars": {},
             "messages": [
+                # First message to showrunner so it has pending work
+                {
+                    "sender": "human",
+                    "receiver": "showrunner",
+                    "intent": "human.directive",
+                    "payload": {},
+                    "timestamp": "",
+                    "envelope": {},
+                },
+                # Message to dormant illustrator
                 {
                     "sender": "art_director",
                     "receiver": "illustrator",
@@ -259,7 +274,8 @@ class TestRouteByEnvelope:
         }
 
         result = control_plane.route_by_envelope(state)
-        assert result == SHOWRUNNER
+        # Should route to showrunner (it has pending message and can wake dormant roles)
+        assert result == [SHOWRUNNER]
 
 
 class TestControlPlaneGraph:

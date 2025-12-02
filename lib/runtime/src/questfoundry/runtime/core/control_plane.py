@@ -10,6 +10,7 @@ Based on: Studio Graph Architecture gist (The Mesh & The Coordinator)
 
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -145,6 +146,9 @@ class ControlPlane:
         self._consecutive_executions: int = 0
         self._max_consecutive: int = 3  # Force rotation after N consecutive executions
 
+        # Parallel execution - how many roles to run concurrently
+        self._max_parallel: int = int(os.environ.get("QF_MAX_PARALLEL_ROLES", "4"))
+
         # Role abbreviation mapping for message bus routing
         self._abbreviations = {
             "sr": "showrunner",
@@ -273,13 +277,14 @@ class ControlPlane:
 
         return pending, direct_counts
 
-    def route_by_envelope(self, state: StudioState) -> str:
+    def route_by_envelope(self, state: StudioState) -> list[str]:
         """
-        Core routing logic - message bus pattern.
+        Core routing logic - message bus pattern with parallel execution.
 
-        Routes to the next role that has pending messages. This ensures:
+        Routes to roles that have pending messages. Returns up to _max_parallel
+        roles for concurrent execution. This ensures:
         - Roles only execute when they have work (messages) to process
-        - Multiple messages to different roles are processed in sequence
+        - Multiple roles can process messages in parallel
         - No role executes "empty" without a task
         - Graph ends when all messages are consumed
 
@@ -287,14 +292,14 @@ class ControlPlane:
             state: Current studio state with messages
 
         Returns:
-            Next node ID or END
+            List of next node IDs (for parallel execution) or [END]
         """
         messages = state.get("messages", [])
 
         if not messages:
             # No messages yet - start with showrunner
             logger.debug("No messages, routing to showrunner")
-            return SHOWRUNNER
+            return [SHOWRUNNER]
 
         # Check for termination in the last message
         last_message = messages[-1]
@@ -312,12 +317,12 @@ class ControlPlane:
                     reason="termination_signal",
                 )
 
-            return END
+            return [END]
 
         # Check for human interaction
         if last_receiver in ("customer", "human"):
             logger.info(f"Message directed to {last_receiver}, handling human interaction")
-            return self._handle_human_interaction(last_message, state)
+            return [self._handle_human_interaction(last_message, state)]
 
         # Get pending messages by role (with direct message counts)
         pending, direct_counts = self._get_pending_messages_by_role(state)
@@ -336,7 +341,7 @@ class ControlPlane:
                     reason="no_pending_messages",
                 )
 
-            return END
+            return [END]
 
         # Priority order: workers first, coordinators last
         priority_order = [
@@ -438,24 +443,49 @@ class ControlPlane:
 
             return role_id
 
-        # PASS 1: Route to roles with DIRECT messages (addressed specifically)
+        # Collect eligible roles for parallel execution (up to _max_parallel)
+        eligible_roles: list[str] = []
+
+        # PASS 1: Collect roles with DIRECT messages (addressed specifically)
         # Direct messages take priority over broadcasts
         for role_id in priority_order:
+            if len(eligible_roles) >= self._max_parallel:
+                break
             if direct_counts.get(role_id, 0) > 0:
                 result = try_route_to_role(role_id, is_direct=True)
                 if result == END:
-                    return END
+                    return [END]
                 if result:
-                    return result
+                    eligible_roles.append(result)
 
-        # PASS 2: Route to roles with only BROADCAST messages
+        # PASS 2: Collect roles with only BROADCAST messages (if we have capacity)
         for role_id in priority_order:
+            if len(eligible_roles) >= self._max_parallel:
+                break
             if role_id in pending and direct_counts.get(role_id, 0) == 0:
+                # Skip if already added in PASS 1
+                if role_id in eligible_roles:
+                    continue
                 result = try_route_to_role(role_id, is_direct=False)
                 if result == END:
-                    return END
+                    return [END]
                 if result:
-                    return result
+                    eligible_roles.append(result)
+
+        # If we found eligible roles, return them for parallel execution
+        if eligible_roles:
+            logger.info(f"Parallel routing to {len(eligible_roles)} roles: {eligible_roles}")
+            bus_log = _get_bus_log()
+            if bus_log:
+                pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
+                bus_log.info(
+                    "parallel_route_decision",
+                    next_nodes=eligible_roles,
+                    parallel_count=len(eligible_roles),
+                    pending_counts=pending_counts,
+                    direct_counts=direct_counts,
+                )
+            return eligible_roles
 
         # All pending roles are dormant - route to showrunner to decide wake
         dormant_with_messages = [r for r in pending if self.dormancy.is_dormant(r)]
@@ -466,7 +496,7 @@ class ControlPlane:
                     f"Dormant roles have pending messages: {dormant_with_messages}, "
                     "routing to showrunner"
                 )
-                return SHOWRUNNER
+                return [SHOWRUNNER]
             else:
                 # SR has no pending messages - can't wake roles, end graph
                 logger.warning(
@@ -485,7 +515,7 @@ class ControlPlane:
                         dormant_roles=dormant_with_messages,
                     )
 
-                return END
+                return [END]
 
         # No actionable pending messages - end graph
         logger.info("No actionable pending messages, ending graph")
@@ -500,7 +530,7 @@ class ControlPlane:
                 reason="no_actionable_messages",
             )
 
-        return END
+        return [END]
 
     def _normalize_role_id(self, receiver: str) -> str:
         """

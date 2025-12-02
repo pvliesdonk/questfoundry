@@ -179,9 +179,9 @@ class NodeFactory:
                 intent = msg.get("intent", "")
 
                 # Extract task details based on intent type
-                if intent in ("tu.open", "task.assign"):
+                if intent in ("tu.open", "tu.assign", "task.assign", "work.assign"):
                     # Direct task assignment
-                    desc = payload.get("description", "") or payload.get("task", "")
+                    desc = payload.get("description", "") or payload.get("task", "") or payload.get("content", "")
                     loop = payload.get("loop", "")
                     deliverables = payload.get("deliverables", [])
 
@@ -980,14 +980,26 @@ class NodeFactory:
                             # Build tool map for ProtocolExecutor (text-based fallback)
                             tool_map = self._get_tool_map_from_specs(assembler_tools)
 
+                            # Check if this is a continuing conversation (executor already cached)
+                            # If so, skip identity preamble - just send new task info
+                            is_continuing = role.id in self._executor_cache
+
                             # Create role-specific user prompt
                             if role.id == "showrunner":
-                                user_prompt = (
-                                    f"You are executing as {role.name} for TU: {state.get('tu_id', 'unknown')}.\n\n"
-                                    "Start by reading `customer_directives` from hot_sot using the read_hot_sot tool. "
-                                    "Then route your interpretation via protocol messages (send_protocol_message) "
-                                    "to wake/assign the appropriate roles."
-                                )
+                                if is_continuing:
+                                    # Continuing conversation - just give new task
+                                    user_prompt = (
+                                        "New messages have arrived. Process pending messages and "
+                                        "continue coordinating the team via protocol messages."
+                                    )
+                                else:
+                                    # First turn - full identity and instructions
+                                    user_prompt = (
+                                        f"You are executing as {role.name} for TU: {state.get('tu_id', 'unknown')}.\n\n"
+                                        "Start by reading `customer_directives` from hot_sot using the read_hot_sot tool. "
+                                        "Then route your interpretation via protocol messages (send_protocol_message) "
+                                        "to wake/assign the appropriate roles."
+                                    )
                             else:
                                 tu_id = state.get("tu_id", "unknown")
 
@@ -995,40 +1007,55 @@ class NodeFactory:
                                 # Look for messages addressed to this role with task details
                                 task_context = self._extract_task_context_for_role(role.id, state)
 
-                                # Instruction to read customer directives for creative context
-                                directive_instruction = (
-                                    "**First**, read `customer_directives` from hot_sot using "
-                                    "`read_hot_sot(key='customer_directives')` to understand the "
-                                    "creative direction for this project.\n\n"
-                                )
-
-                                # Protocol guidance to reduce noise and improve routing
-                                protocol_guidance = (
-                                    "**Protocol Rules**:\n"
-                                    "- Do NOT send ack messages - delivery is guaranteed\n"
-                                    "- Send to `showrunner` when: reporting completion, requesting decisions\n"
-                                    "- Send to `gatekeeper` when: submitting work for quality review\n"
-                                    "- Send to specific role when: requesting their expertise\n"
-                                    "- Only broadcast (`receiver: '*'`) for announcements all roles must see\n\n"
-                                )
-
-                                if task_context:
-                                    user_prompt = (
-                                        f"You are executing as {role.name} for TU: {tu_id}.\n\n"
-                                        f"{directive_instruction}"
-                                        f"{protocol_guidance}"
-                                        f"## Your Assigned Task\n{task_context}\n\n"
-                                        "Complete this task using the available tools. "
-                                        "When done, send a protocol message to report completion."
-                                    )
+                                if is_continuing:
+                                    # Continuing conversation - only send new task info
+                                    if task_context:
+                                        user_prompt = (
+                                            f"## New Task Assignment\n{task_context}\n\n"
+                                            "Complete this task using the available tools. "
+                                            "When done, send a protocol message to report completion."
+                                        )
+                                    else:
+                                        user_prompt = (
+                                            "Continue your work on the current task. "
+                                            "Process any pending messages and respond as needed."
+                                        )
                                 else:
-                                    user_prompt = (
-                                        f"You are executing as {role.name} for TU: {tu_id}.\n\n"
-                                        f"{directive_instruction}"
-                                        f"{protocol_guidance}"
-                                        "Complete your assigned task using the available tools. "
-                                        "When done, send a protocol message to the receiver."
+                                    # First turn - full identity and instructions
+                                    # Instruction to read customer directives for creative context
+                                    directive_instruction = (
+                                        "**First**, read `customer_directives` from hot_sot using "
+                                        "`read_hot_sot(key='customer_directives')` to understand the "
+                                        "creative direction for this project.\n\n"
                                     )
+
+                                    # Protocol guidance to reduce noise and improve routing
+                                    protocol_guidance = (
+                                        "**Protocol Rules**:\n"
+                                        "- Do NOT send ack messages - delivery is guaranteed\n"
+                                        "- Send to `showrunner` when: reporting completion, requesting decisions\n"
+                                        "- Send to `gatekeeper` when: submitting work for quality review\n"
+                                        "- Send to specific role when: requesting their expertise\n"
+                                        "- Only broadcast (`receiver: '*'`) for announcements all roles must see\n\n"
+                                    )
+
+                                    if task_context:
+                                        user_prompt = (
+                                            f"You are executing as {role.name} for TU: {tu_id}.\n\n"
+                                            f"{directive_instruction}"
+                                            f"{protocol_guidance}"
+                                            f"## Your Assigned Task\n{task_context}\n\n"
+                                            "Complete this task using the available tools. "
+                                            "When done, send a protocol message to report completion."
+                                        )
+                                    else:
+                                        user_prompt = (
+                                            f"You are executing as {role.name} for TU: {tu_id}.\n\n"
+                                            f"{directive_instruction}"
+                                            f"{protocol_guidance}"
+                                            "Complete your assigned task using the available tools. "
+                                            "When done, send a protocol message to the receiver."
+                                        )
 
                             # Execute with protocol executor (text-based fallback when bind_tools unavailable)
                             logger.info(f"Executing {role.id} with protocol executor ({provider})")
