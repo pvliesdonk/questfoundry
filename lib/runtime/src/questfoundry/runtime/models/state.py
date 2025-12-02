@@ -52,7 +52,7 @@ class Message(TypedDict, total=False):
 
     sender: str  # Role ID or "human"
     receiver: str | list[str]  # Role ID, abbreviation, "*", list, or "__terminate__"
-    intent: str  # Protocol intent (e.g., "tu.assign", "gate.report.submit")
+    intent: str  # Protocol intent (e.g., "tu.open", "gate.report.submit")
     payload: dict[str, Any]  # Message payload
     timestamp: str  # ISO format
     envelope: dict[str, Any]  # Envelope metadata (TU ID, snapshot ref, causality, etc.)
@@ -82,7 +82,7 @@ class StudioState(TypedDict):
 
     # Execution context
     current_node: str  # Currently executing role ID
-    loop_id: str  # Which loop is running
+    loop_id: str | None  # Which loop is running (None = SR decides dynamically)
     loop_context: dict[str, Any]  # Loop-specific context
 
     # Sources of Truth (Hot/Cold architecture per spec/00-north-star/SOURCES_OF_TRUTH.md)

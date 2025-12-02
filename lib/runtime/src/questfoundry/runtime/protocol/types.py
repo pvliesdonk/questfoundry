@@ -19,7 +19,7 @@ class Envelope(TypedDict, total=False):
 
     sender: str  # Role ID or "human"
     receiver: str | list[str]  # Role ID, abbreviation, "*", list, or "__terminate__"
-    intent: str  # Protocol intent (e.g., "tu.assign", "gate.report.submit")
+    intent: str  # Protocol intent (e.g., "tu.open", "gate.report.submit")
     payload: dict[str, Any]  # Message payload
     tu_id: str  # Trace Unit ID for traceability
     snapshot_ref: str | None  # Cold snapshot reference

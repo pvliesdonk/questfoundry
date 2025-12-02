@@ -117,7 +117,7 @@ class NodeFactory:
                 intent = msg.get("intent", "")
 
                 # Extract task details based on intent type
-                if intent in ("tu.assign", "tu.open", "task.assign"):
+                if intent in ("tu.open", "task.assign"):
                     # Direct task assignment
                     desc = payload.get("description", "") or payload.get("task", "")
                     loop = payload.get("loop", "")
@@ -933,9 +933,28 @@ class NodeFactory:
                                 # Look for messages addressed to this role with task details
                                 task_context = self._extract_task_context_for_role(role.id, state)
 
+                                # Instruction to read customer directives for creative context
+                                directive_instruction = (
+                                    "**First**, read `customer_directives` from hot_sot using "
+                                    "`read_hot_sot(key='customer_directives')` to understand the "
+                                    "creative direction for this project.\n\n"
+                                )
+
+                                # Protocol guidance to reduce noise and improve routing
+                                protocol_guidance = (
+                                    "**Protocol Rules**:\n"
+                                    "- Do NOT send ack messages - delivery is guaranteed\n"
+                                    "- Send to `showrunner` when: reporting completion, requesting decisions\n"
+                                    "- Send to `gatekeeper` when: submitting work for quality review\n"
+                                    "- Send to specific role when: requesting their expertise\n"
+                                    "- Only broadcast (`receiver: '*'`) for announcements all roles must see\n\n"
+                                )
+
                                 if task_context:
                                     user_prompt = (
                                         f"You are executing as {role.name} for TU: {tu_id}.\n\n"
+                                        f"{directive_instruction}"
+                                        f"{protocol_guidance}"
                                         f"## Your Assigned Task\n{task_context}\n\n"
                                         "Complete this task using the available tools. "
                                         "When done, send a protocol message to report completion."
@@ -943,6 +962,8 @@ class NodeFactory:
                                 else:
                                     user_prompt = (
                                         f"You are executing as {role.name} for TU: {tu_id}.\n\n"
+                                        f"{directive_instruction}"
+                                        f"{protocol_guidance}"
                                         "Complete your assigned task using the available tools. "
                                         "When done, send a protocol message to the receiver."
                                     )

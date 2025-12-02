@@ -223,7 +223,7 @@ class ConsultProtocol(BaseTool):
     description: str = (
         "Look up protocol information: valid intents, envelope structure, "
         "or message flow patterns. "
-        "Input: query (e.g., 'tu.assign', 'envelope', 'intents')"
+        "Input: query (e.g., 'tu.open', 'envelope', 'intents')"
     )
 
     def _run(self, query: str) -> str:

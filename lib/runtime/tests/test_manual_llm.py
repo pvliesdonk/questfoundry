@@ -99,8 +99,8 @@ def test_node_factory_llm():
         factory = NodeFactory()
         state_manager = StateManager()
 
-        # Create initial state
-        state = state_manager.initialize_state("story_spark", {"scene_text": "A quick test scene"})
+        # Create initial state (loop_id is optional - SR decides dynamically)
+        state = state_manager.initialize_state(context={"scene_text": "A quick test scene"})
 
         print(f"📋 Testing with provider: {provider}")
         print(f"📋 TU ID: {state['tu_id']}")
@@ -127,56 +127,6 @@ def test_node_factory_llm():
 
     except Exception as e:
         print(f"❌ NodeFactory test failed: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
-
-
-def test_story_spark_loop():
-    """Test complete story_spark loop execution."""
-    print("\n=== Testing Story Spark Loop (End-to-End) ===")
-
-    provider = os.getenv("QF_LLM_PROVIDER", "anthropic")
-    key_var = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
-
-    if not os.getenv(key_var):
-        print(f"⚠️  {key_var} not set, skipping loop test")
-        return False
-
-    try:
-        from questfoundry.runtime.cli.showrunner import ParsedIntent, Showrunner
-
-        # Create showrunner
-        showrunner = Showrunner()
-
-        # Create intent
-        intent = ParsedIntent(
-            action="write",
-            args=["A tense confrontation in the cargo bay"],
-            flags={"mode": "workshop"},
-            loop_id="story_spark",
-        )
-
-        print(f"📋 Provider: {provider}")
-        print(f"📝 Scene: {intent.args[0]}")
-        print("🚀 Executing story_spark loop...")
-
-        # Execute
-        result = showrunner.execute_request("write A tense confrontation in the cargo bay", intent)
-
-        if result.success:
-            print("✅ Loop completed successfully!")
-            print(f"📋 TU ID: {result.tu_id}")
-            print(f"📊 Artifacts: {len(result.artifacts)}")
-            print(f"\n{result.summary}")
-            return True
-        else:
-            print(f"❌ Loop failed: {result.error}")
-            return False
-
-    except Exception as e:
-        print(f"❌ Loop test failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -246,7 +196,6 @@ def main():
 
     # Integration tests
     results.append(("NodeFactory LLM", test_node_factory_llm()))
-    results.append(("Story Spark Loop", test_story_spark_loop()))
 
     # Advanced tests
     results.append(("Provider Switching", test_provider_switching()))

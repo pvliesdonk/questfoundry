@@ -242,7 +242,7 @@ class BindToolsExecutor:
 
         # Loop until protocol message sent or max failures/iterations reached
         for iteration in range(1, self.max_iterations + 1):
-            log.debug(f"Iteration {iteration}, failures: {failure_count}/3")
+            log.debug(f"[{self.role_id}] Iteration {iteration}, failures: {failure_count}/3")
 
             # Invoke LLM with bound tools
             try:
@@ -312,7 +312,7 @@ class BindToolsExecutor:
                 failure_count += 1
                 continue
 
-            log.info(f"Found {len(tool_calls)} tool call(s) in response")
+            log.info(f"[{self.role_id}] Found {len(tool_calls)} tool call(s) in response")
 
             # Execute all tool calls from this response
             any_failed = False
@@ -323,8 +323,8 @@ class BindToolsExecutor:
                 tool_args = tool_call.get("args", {})
                 tool_id = tool_call.get("id", f"call-{iteration}")
 
-                log.info(f"Executing tool: {tool_name}")
-                log.debug(f"Tool args: {tool_args}")
+                log.info(f"[{self.role_id}] Executing tool: {tool_name}")
+                log.debug(f"[{self.role_id}] Tool args: {tool_args}")
 
                 # Get structured logger
                 try:

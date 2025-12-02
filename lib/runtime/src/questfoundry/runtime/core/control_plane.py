@@ -138,6 +138,11 @@ class ControlPlane:
         self._role_execution_counts: dict[str, int] = {}
         self._max_role_executions = 15  # Force termination if same role runs too many times
 
+        # Fairness tracking - prevent same role running too many times consecutively
+        self._last_executed_role: str | None = None
+        self._consecutive_executions: int = 0
+        self._max_consecutive: int = 3  # Force rotation after N consecutive executions
+
         # Role abbreviation mapping for message bus routing
         self._abbreviations = {
             "sr": "showrunner",
@@ -186,7 +191,9 @@ class ControlPlane:
         ]
         return roles
 
-    def _get_pending_messages_by_role(self, state: StudioState) -> dict[str, list[Message]]:
+    def _get_pending_messages_by_role(
+        self, state: StudioState
+    ) -> tuple[dict[str, list[Message]], dict[str, int]]:
         """
         Get all unprocessed messages grouped by receiver role.
 
@@ -197,13 +204,16 @@ class ControlPlane:
             state: Current studio state with messages
 
         Returns:
-            Dict mapping role_id -> list of pending messages for that role
+            Tuple of:
+            - Dict mapping role_id -> list of pending messages for that role
+            - Dict mapping role_id -> count of DIRECT messages (not broadcasts)
         """
         messages = state.get("messages", [])
         consumed = state.get("_consumed_messages", set())
         available_roles = set(self.get_available_roles())
 
         pending: dict[str, list[Message]] = {}
+        direct_counts: dict[str, int] = {}  # Track direct (non-broadcast) messages
 
         for idx, msg in enumerate(messages):
             receiver = msg.get("receiver", "")
@@ -227,9 +237,12 @@ class ControlPlane:
             # Only track messages to actual roles
             if receiver_id in available_roles:
                 pending.setdefault(receiver_id, []).append(msg)
+                # This is a DIRECT message - increment direct count
+                direct_counts[receiver_id] = direct_counts.get(receiver_id, 0) + 1
             elif receiver == BROADCAST or receiver == "*":
                 # Broadcast messages go to all active roles that haven't consumed them
                 # EXCEPT the sender (roles don't receive their own broadcasts)
+                # NOTE: Broadcasts do NOT increment direct_counts
                 sender = msg.get("sender", "")
                 if isinstance(sender, dict):
                     sender = sender.get("role", "") or sender.get("id", "")
@@ -252,10 +265,11 @@ class ControlPlane:
                 bus_log.info(
                     "pending_messages_by_role",
                     pending_counts=pending_counts,
+                    direct_counts=direct_counts,
                     total_pending=sum(pending_counts.values()),
                 )
 
-        return pending
+        return pending, direct_counts
 
     def route_by_envelope(self, state: StudioState) -> str:
         """
@@ -303,8 +317,8 @@ class ControlPlane:
             logger.info(f"Message directed to {last_receiver}, handling human interaction")
             return self._handle_human_interaction(last_message, state)
 
-        # Get pending messages by role
-        pending = self._get_pending_messages_by_role(state)
+        # Get pending messages by role (with direct message counts)
+        pending, direct_counts = self._get_pending_messages_by_role(state)
 
         if not pending:
             # No pending messages - all work is done, end the graph
@@ -322,8 +336,7 @@ class ControlPlane:
 
             return END
 
-        # Route to the first role with pending messages (priority order)
-        # Showrunner has lowest priority - let workers finish first
+        # Priority order: workers first, coordinators last
         priority_order = [
             "plotwright",
             "lore_weaver",
@@ -342,55 +355,93 @@ class ControlPlane:
             "showrunner",
         ]
 
-        for role_id in priority_order:
-            if role_id in pending and pending[role_id]:
-                # Check dormancy
-                if self.dormancy.is_dormant(role_id):
-                    logger.debug(f"Role {role_id} has messages but is dormant, skipping")
-                    continue
+        # Helper function to route to a role (checks dormancy, exec count, fairness)
+        def try_route_to_role(role_id: str, is_direct: bool, skip_fairness: bool = False) -> str | None:
+            if role_id not in pending or not pending[role_id]:
+                return None
 
-                # Check execution count - prevent infinite loops
-                exec_count = self._role_execution_counts.get(role_id, 0)
-                if exec_count >= self._max_role_executions:
-                    logger.warning(
-                        f"Role {role_id} has executed {exec_count} times, "
-                        "forcing termination to prevent infinite loop"
-                    )
-                    # Force termination
-                    bus_log = _get_bus_log()
-                    if bus_log:
-                        bus_log.info(
-                            "route_decision",
-                            next_node=END,
-                            next_nodes=[END],
-                            reason="max_role_executions_exceeded",
-                            role=role_id,
-                            exec_count=exec_count,
+            # Check dormancy
+            if self.dormancy.is_dormant(role_id):
+                logger.debug(f"Role {role_id} has messages but is dormant, skipping")
+                return None
+
+            # Check execution count - prevent infinite loops
+            exec_count = self._role_execution_counts.get(role_id, 0)
+            if exec_count >= self._max_role_executions:
+                logger.warning(
+                    f"Role {role_id} has executed {exec_count} times, "
+                    "forcing termination to prevent infinite loop"
+                )
+                # Return special marker for termination
+                return END
+
+            # Fairness check - prevent same role running too many times consecutively
+            if not skip_fairness and role_id == self._last_executed_role:
+                if self._consecutive_executions >= self._max_consecutive:
+                    # Check if other roles have pending work
+                    other_roles_with_work = [
+                        r for r in pending
+                        if r != role_id and not self.dormancy.is_dormant(r)
+                    ]
+                    if other_roles_with_work:
+                        logger.info(
+                            f"Fairness: {role_id} has run {self._consecutive_executions}x "
+                            f"consecutively, skipping for others: {other_roles_with_work}"
                         )
-                    return END
+                        return None  # Skip this role, try others
 
-                # Increment execution count
-                self._role_execution_counts[role_id] = exec_count + 1
+            # Increment execution count
+            self._role_execution_counts[role_id] = exec_count + 1
 
-                logger.info(
-                    f"Message bus: routing to {role_id} "
-                    f"({len(pending[role_id])} pending message(s), exec #{exec_count + 1})"
+            # Update fairness tracking
+            if role_id == self._last_executed_role:
+                self._consecutive_executions += 1
+            else:
+                self._consecutive_executions = 1
+                self._last_executed_role = role_id
+
+            msg_type = "direct" if is_direct else "broadcast"
+            logger.info(
+                f"Message bus: routing to {role_id} "
+                f"({len(pending[role_id])} pending, {msg_type}, exec #{exec_count + 1})"
+            )
+
+            # Log routing decision with structured logging
+            bus_log = _get_bus_log()
+            if bus_log:
+                pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
+                bus_log.info(
+                    "route_decision",
+                    next_node=role_id,
+                    next_nodes=[role_id],
+                    pending_counts=pending_counts,
+                    direct_counts=direct_counts,
+                    message_count=len(pending[role_id]),
+                    message_type=msg_type,
+                    exec_count=exec_count + 1,
+                    consecutive=self._consecutive_executions,
                 )
 
-                # Log routing decision with structured logging
-                bus_log = _get_bus_log()
-                if bus_log:
-                    pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
-                    bus_log.info(
-                        "route_decision",
-                        next_node=role_id,
-                        next_nodes=[role_id],
-                        pending_counts=pending_counts,
-                        message_count=len(pending[role_id]),
-                        exec_count=exec_count + 1,
-                    )
+            return role_id
 
-                return role_id
+        # PASS 1: Route to roles with DIRECT messages (addressed specifically)
+        # Direct messages take priority over broadcasts
+        for role_id in priority_order:
+            if direct_counts.get(role_id, 0) > 0:
+                result = try_route_to_role(role_id, is_direct=True)
+                if result == END:
+                    return END
+                if result:
+                    return result
+
+        # PASS 2: Route to roles with only BROADCAST messages
+        for role_id in priority_order:
+            if role_id in pending and direct_counts.get(role_id, 0) == 0:
+                result = try_route_to_role(role_id, is_direct=False)
+                if result == END:
+                    return END
+                if result:
+                    return result
 
         # All pending roles are dormant - route to showrunner to decide wake
         dormant_with_messages = [r for r in pending if self.dormancy.is_dormant(r)]
@@ -805,8 +856,8 @@ class ControlPlane:
         # Initialize state
         initial_state = self.state_manager.initialize_state(
             tu_id=f"TU-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}",
-            loop_id="interactive",
             context=context or {},
+            # loop_id intentionally omitted - SR will choose the appropriate playbook
         )
 
         # Surface the human directive in hot_sot for easy tool access (spec: SR should

@@ -841,7 +841,7 @@ their schemas and descriptions.
                                 "query": {
                                     "type": "string",
                                     "description": (
-                                        "Query about protocol (e.g., 'tu.assign', 'envelope', "
+                                        "Query about protocol (e.g., 'tu.open', 'envelope', "
                                         "'intents', 'lifecycle', 'flow', 'example')"
                                     ),
                                 }
@@ -1008,7 +1008,7 @@ When a customer gives you a directive, you must:
 3. **Select appropriate loop(s)** from the list above (use exact IDs)
 4. **Send protocol message** to wake the appropriate roles:
    - Use `send_protocol_message` tool with `receiver` set to a role ID
-   - Use intent `tu.assign` to assign work to a role
+   - Use intent `tu.open` to assign work to a role
    - Include relevant context in payload
 
 **IMPORTANT**:

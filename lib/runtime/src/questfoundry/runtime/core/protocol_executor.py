@@ -295,8 +295,8 @@ class ProtocolExecutor:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
 
-                log.info(f"Executing tool: {tool_name}")
-                log.debug(f"Tool args: {tool_args}")
+                log.info(f"[{self.role_id}] Executing tool: {tool_name}")
+                log.debug(f"[{self.role_id}] Tool args: {tool_args}")
 
                 # Execute tool asynchronously
                 observation, tool_success = await self._execute_tool(tool_name, tool_args)

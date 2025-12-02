@@ -269,8 +269,8 @@ class ReActExecutor:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
 
-            log.info(f"Executing tool: {tool_name}")
-            log.debug(f"Tool args: {tool_args}")
+            log.info(f"[{self.role_id}] Executing tool: {tool_name}")
+            log.debug(f"[{self.role_id}] Tool args: {tool_args}")
 
             observation = self._execute_tool(tool_name, tool_args)
             tool_results.append(

@@ -164,8 +164,8 @@ uv run qf write "an action sequence" --mode production
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 questfoundry.runtime.core.node_factory - INFO - Selected LLM provider: openai, model: gpt-3.5-turbo
-questfoundry.runtime.cli.showrunner - INFO - Executing request: write a short scene
-questfoundry.runtime.core.graph_factory - INFO - Creating loop graph: story_spark
+questfoundry.runtime.core.control_plane - INFO - Starting mesh execution with request: write a short scene
+questfoundry.runtime.core.node_factory - INFO - Executing showrunner node
 ...
 
 ┏━━━━━━━━━━━━ ✓ Success ━━━━━━━━━━━━┓

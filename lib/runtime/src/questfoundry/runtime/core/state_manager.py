@@ -81,10 +81,13 @@ class StateManager:
         return f"TU-{year}-{seq:03d}"
 
     def initialize_state(
-        self, loop_id: str, context: dict[str, Any], tu_id: str | None = None
+        self,
+        context: dict[str, Any],
+        tu_id: str | None = None,
+        loop_id: str | None = None,
     ) -> StudioState:
         """
-        Create fresh StudioState for loop execution.
+        Create fresh StudioState for execution.
 
         Steps:
         1. Generate TU ID if not provided
@@ -94,9 +97,9 @@ class StateManager:
         5. Return initialized state
 
         Args:
-            loop_id: Which loop is running
-            context: Loop-specific context dict
+            context: Execution context dict
             tu_id: Optional custom TU ID (auto-generates if None)
+            loop_id: Optional loop identifier (None = SR decides dynamically)
 
         Returns:
             Fresh StudioState ready for execution
