@@ -237,7 +237,7 @@ class ProtocolExecutor:
                         failure_count=failure_count,
                         tool_results=tool_results,
                         raw_responses=raw_responses,
-                        work_summary=self._build_work_summary(work_done),
+                        work_summary=self._build_work_summary(work_done, raw_responses),
                     )
                 continue
 
@@ -371,7 +371,7 @@ class ProtocolExecutor:
                     iterations=iteration,
                     failure_count=0,
                     raw_responses=raw_responses,
-                    work_summary=self._build_work_summary(work_done),
+                    work_summary=self._build_work_summary(work_done, raw_responses),
                 )
 
             # No protocol message - continue loop with observations
@@ -391,7 +391,7 @@ class ProtocolExecutor:
             iterations=iteration,
             failure_count=failure_count,
             raw_responses=raw_responses,
-            work_summary=self._build_work_summary(work_done),
+            work_summary=self._build_work_summary(work_done, raw_responses),
         )
 
     def _extract_content(self, response: Any) -> str:
@@ -593,11 +593,37 @@ class ProtocolExecutor:
             log.error(f"Tool {tool_name} failed: {e}", exc_info=True)
             return json.dumps({"error": str(e), "tool": tool_name}, indent=2), False
 
-    def _build_work_summary(self, work_done: list[str]) -> str:
-        """Build a summary of work done for short-term memory."""
-        if not work_done:
+    def _build_work_summary(
+        self, work_done: list[str], raw_responses: list[str] | None = None
+    ) -> str:
+        """Build a conversation summary for role continuity.
+
+        Args:
+            work_done: List of actions taken (tool names)
+            raw_responses: List of LLM response texts (optional)
+
+        Returns:
+            Summary string including actions AND LLM reasoning
+        """
+        parts = []
+
+        # Include actions taken
+        if work_done:
+            parts.append(f"Actions taken: {', '.join(work_done)}")
+
+        # Include LLM responses (the actual reasoning/decisions)
+        if raw_responses:
+            last_response = raw_responses[-1] if raw_responses else ""
+            if last_response:
+                max_response_chars = PRIOR_CONVERSATION_MAX_CHARS // 2
+                if len(last_response) > max_response_chars:
+                    last_response = "..." + last_response[-max_response_chars:]
+                parts.append(f"Last response:\n{last_response}")
+
+        if not parts:
             return ""
-        summary = f"Actions taken: {', '.join(work_done)}"
+
+        summary = "\n\n".join(parts)
         if len(summary) > PRIOR_CONVERSATION_MAX_CHARS:
             summary = summary[:PRIOR_CONVERSATION_MAX_CHARS] + "..."
         return summary
