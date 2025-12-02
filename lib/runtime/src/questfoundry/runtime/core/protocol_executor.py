@@ -134,7 +134,7 @@ class ProtocolExecutor:
         self.debug = os.getenv("QF_DEBUG", "").lower() in ("true", "1", "yes")
         self.trace_callback = trace_callback
 
-    def execute(
+    async def execute(
         self,
         llm: Any,
         system_prompt: str,
@@ -142,7 +142,7 @@ class ProtocolExecutor:
         tools: list[dict],
         prior_conversation: str = "",
     ) -> ExecutorResult:
-        """Run the tool execution loop until protocol message is sent.
+        """Run the tool execution loop asynchronously until protocol message is sent.
 
         The loop continues until:
         - A protocol message is sent (success, role done for this turn)
@@ -212,7 +212,7 @@ class ProtocolExecutor:
             ]
 
             try:
-                response = llm.invoke(messages)
+                response = await llm.ainvoke(messages)
                 response_text = self._extract_content(response)
             except Exception as e:
                 log.error(f"LLM invocation failed: {e}")
@@ -274,8 +274,8 @@ class ProtocolExecutor:
                 log.info(f"Executing tool: {tool_name}")
                 log.debug(f"Tool args: {tool_args}")
 
-                # Execute tool
-                observation, tool_success = self._execute_tool(tool_name, tool_args)
+                # Execute tool asynchronously
+                observation, tool_success = await self._execute_tool(tool_name, tool_args)
 
                 tool_results.append(
                     {
@@ -497,8 +497,8 @@ class ProtocolExecutor:
         log.warning("Could not fix malformed JSON, using empty args")
         return {}
 
-    def _execute_tool(self, tool_name: str, tool_args: dict[str, Any]) -> tuple[str, bool]:
-        """Execute a tool and return (observation, success).
+    async def _execute_tool(self, tool_name: str, tool_args: dict[str, Any]) -> tuple[str, bool]:
+        """Execute a tool asynchronously and return (observation, success).
 
         Args:
             tool_name: Name of tool to execute
@@ -515,7 +515,17 @@ class ProtocolExecutor:
         try:
             payload = {**tool_args, "state": self.state, "role_id": self.role_id}
 
-            if hasattr(tool, "_run"):
+            # Try async methods first, fall back to sync
+            if hasattr(tool, "ainvoke"):
+                result = await tool.ainvoke(payload)
+            elif hasattr(tool, "_arun"):
+                import inspect
+
+                sig = inspect.signature(tool._arun)
+                valid_params = {k: v for k, v in payload.items() if k in sig.parameters}
+                result = await tool._arun(**valid_params)
+            elif hasattr(tool, "_run"):
+                # Fallback to sync _run (for tools without async support)
                 import inspect
 
                 sig = inspect.signature(tool._run)

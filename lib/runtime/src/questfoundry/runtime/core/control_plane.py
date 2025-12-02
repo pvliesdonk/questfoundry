@@ -22,14 +22,22 @@ from questfoundry.runtime.models.state import Message, StudioState
 
 logger = logging.getLogger(__name__)
 
-# Import structured logging for message bus events
-try:
-    from questfoundry.runtime.structured_logging import get_bus_logger
+# Lazy getter for structured bus logger (configured at runtime by CLI)
+def _get_bus_log():
+    """Get bus logger if configured, None otherwise.
 
-    bus_log = get_bus_logger()
-except (ImportError, RuntimeError):
-    # Graceful fallback if structured_logging not available or not initialized
-    bus_log = None
+    Uses lazy evaluation because configure_structured_logging() is called
+    by CLI after module import. Checking is_configured() avoids the
+    RuntimeError from get_bus_logger() when logging isn't set up.
+    """
+    try:
+        from questfoundry.runtime.structured_logging import get_bus_logger, is_configured
+
+        if is_configured():
+            return get_bus_logger()
+    except ImportError:
+        pass
+    return None
 
 # Optional LangSmith tracing
 try:
@@ -233,6 +241,7 @@ class ControlPlane:
                             pending.setdefault(role, []).append(msg)
 
         # Log pending message counts per role using structured logging
+        bus_log = _get_bus_log()
         if bus_log:
             pending_counts = {role: len(msgs) for role, msgs in pending.items() if msgs}
             if pending_counts:
@@ -244,7 +253,6 @@ class ControlPlane:
 
         return pending
 
-    @traceable(name="route_by_envelope")
     def route_by_envelope(self, state: StudioState) -> str:
         """
         Core routing logic - message bus pattern.
@@ -275,6 +283,7 @@ class ControlPlane:
             logger.info("Termination signal received, ending graph")
 
             # Log termination routing decision
+            bus_log = _get_bus_log()
             if bus_log:
                 bus_log.info(
                     "route_decision",
@@ -298,6 +307,7 @@ class ControlPlane:
             logger.info("No pending messages for any role, ending graph")
 
             # Log END routing decision
+            bus_log = _get_bus_log()
             if bus_log:
                 bus_log.info(
                     "route_decision",
@@ -341,6 +351,7 @@ class ControlPlane:
                 )
 
                 # Log routing decision with structured logging
+                bus_log = _get_bus_log()
                 if bus_log:
                     pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
                     bus_log.info(
@@ -371,6 +382,7 @@ class ControlPlane:
                 )
 
                 # Log END routing decision
+                bus_log = _get_bus_log()
                 if bus_log:
                     bus_log.info(
                         "route_decision",
@@ -386,6 +398,7 @@ class ControlPlane:
         logger.info("No actionable pending messages, ending graph")
 
         # Log END routing decision
+        bus_log = _get_bus_log()
         if bus_log:
             bus_log.info(
                 "route_decision",
@@ -572,6 +585,7 @@ class ControlPlane:
             self._trace_message(start_message)
 
             # Log role execution start with structured logging
+            bus_log = _get_bus_log()
             if bus_log:
                 bus_log.info(
                     "role_start",
@@ -628,6 +642,7 @@ class ControlPlane:
             result["_consumed_messages"] = consumed
 
             # Log consumption tracking via structured logging
+            bus_log = _get_bus_log()
             if bus_log:
                 consumed_indices = [idx for idx in consumed if isinstance(idx, int)]
                 broadcast_consumed = [
@@ -661,6 +676,7 @@ class ControlPlane:
             self._trace_message(completed_message)
 
             # Log role execution completion with structured logging
+            bus_log = _get_bus_log()
             if bus_log:
                 bus_log.info(
                     "role_complete",

@@ -407,8 +407,8 @@ class BindToolsExecutor:
             return str(content) if content else ""
         return str(response)
 
-    def _execute_tool(self, tool_name: str, tool_args: dict[str, Any]) -> tuple[str, bool]:
-        """Execute a tool and return (observation, success).
+    async def _execute_tool(self, tool_name: str, tool_args: dict[str, Any]) -> tuple[str, bool]:
+        """Execute a tool asynchronously and return (observation, success).
 
         Args:
             tool_name: Name of tool to execute
@@ -424,8 +424,8 @@ class BindToolsExecutor:
             return error_msg, False
 
         try:
-            # Invoke tool with provided args
-            result = tool.invoke(tool_args)
+            # Invoke tool asynchronously with provided args
+            result = await tool.ainvoke(tool_args)
 
             # Convert result to JSON string
             if isinstance(result, str):

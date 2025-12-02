@@ -853,9 +853,8 @@ class NodeFactory:
         role = self.load_role(role_id)
         # Tools are now loaded dynamically by RuntimeContextAssembler based on capabilities
 
-        @traceable(name=f"role.{role_id}", tags=["role", role_id])
-        def role_node(state: StudioState) -> dict[str, Any]:
-            """Execute role and update state.
+        async def role_node(state: StudioState) -> dict[str, Any]:
+            """Execute role asynchronously and update state.
 
             Returns:
                 Partial state update dict (only changed fields)
@@ -997,25 +996,54 @@ class NodeFactory:
                                         state.get("tu_id", "unknown"),
                                     )
 
-                            executor = ProtocolExecutor(
-                                tool_map=tool_map,
-                                state=state,
-                                role_id=role.id,
-                                trace_callback=trace_callback,
-                            )
-
                             # Retrieve prior conversation for short-term memory
                             prior_conversation = state.get("role_conversations", {}).get(
                                 role.id, ""
                             )
 
-                            exec_result = executor.execute(
-                                llm=llm,  # Unbound LLM - no tool binding
-                                system_prompt=prompt,
-                                user_prompt=user_prompt,
-                                tools=assembler_tools,
-                                prior_conversation=prior_conversation,
+                            # Select executor based on model's bind_tools support
+                            from questfoundry.runtime.core.bind_tools_executor import (
+                                BindToolsExecutor,
+                                select_executor,
                             )
+
+                            model_name = llm_config.get("model", "")
+                            ExecutorClass = select_executor(model_name)
+
+                            if ExecutorClass == BindToolsExecutor:
+                                # Use native bind_tools for structured tool calling
+                                logger.info(
+                                    f"Using BindToolsExecutor for {role.id} ({model_name})"
+                                )
+                                executor = BindToolsExecutor(
+                                    llm=llm,
+                                    tools=list(tool_map.values()),
+                                    role_id=role.id,
+                                    trace_handler=trace_callback,
+                                )
+                                exec_result = await executor.execute(
+                                    system_prompt=prompt,
+                                    user_prompt=user_prompt,
+                                    prior_conversation=prior_conversation,
+                                )
+                            else:
+                                # Fallback to text-based protocol executor
+                                logger.info(
+                                    f"Using ProtocolExecutor for {role.id} ({model_name})"
+                                )
+                                executor = ProtocolExecutor(
+                                    tool_map=tool_map,
+                                    state=state,
+                                    role_id=role.id,
+                                    trace_callback=trace_callback,
+                                )
+                                exec_result = await executor.execute(
+                                    llm=llm,
+                                    system_prompt=prompt,
+                                    user_prompt=user_prompt,
+                                    tools=assembler_tools,
+                                    prior_conversation=prior_conversation,
+                                )
 
                             # Process executor result
                             # NOTE: State updates (hot_sot, cold_sot) happen via tools during
@@ -1054,9 +1082,9 @@ class NodeFactory:
                                 }
 
                         else:
-                            # No tools - simple LLM invocation
+                            # No tools - simple LLM invocation (async)
                             logger.info(f"No tools for {role.id}, invoking LLM directly")
-                            response = llm.invoke(prompt)
+                            response = await llm.ainvoke(prompt)
                             result = (
                                 response.content if hasattr(response, "content") else str(response)
                             )
