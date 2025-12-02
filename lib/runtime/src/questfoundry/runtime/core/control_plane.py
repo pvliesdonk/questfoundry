@@ -137,6 +137,8 @@ class ControlPlane:
         # Track role execution counts to detect infinite loops
         self._role_execution_counts: dict[str, int] = {}
         self._max_role_executions = 15  # Force termination if same role runs too many times
+        self._total_executions: int = 0  # Track total executions for periodic reset
+        self._reset_threshold: int = 20  # Reset all counts after this many total executions
 
         # Fairness tracking - prevent same role running too many times consecutively
         self._last_executed_role: str | None = None
@@ -392,6 +394,18 @@ class ControlPlane:
 
             # Increment execution count
             self._role_execution_counts[role_id] = exec_count + 1
+            self._total_executions += 1
+
+            # Periodic reset: after N total executions, halve all per-role counts
+            # This allows long-running sessions to continue making progress
+            if self._total_executions >= self._reset_threshold:
+                logger.info(
+                    f"Progress checkpoint: {self._total_executions} total executions, "
+                    f"halving per-role counts to allow continued progress"
+                )
+                for r in self._role_execution_counts:
+                    self._role_execution_counts[r] = self._role_execution_counts[r] // 2
+                self._total_executions = 0
 
             # Update fairness tracking
             if role_id == self._last_executed_role:
@@ -851,6 +865,7 @@ class ControlPlane:
         """
         # Reset execution counters for new run
         self._role_execution_counts.clear()
+        self._total_executions = 0
         self._message_history.clear()
 
         # Initialize state

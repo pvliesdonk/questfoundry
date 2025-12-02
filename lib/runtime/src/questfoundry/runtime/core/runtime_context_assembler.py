@@ -283,12 +283,13 @@ You communicate through the QuestFoundry protocol system using structured messag
 
         return protocol_block
 
-    def _build_state_layer(self, state: StudioState) -> str:
+    def _build_state_layer(self, state: StudioState, role_id: str | None = None) -> str:
         """
         Build STATE layer from current runtime state.
 
         Args:
             state: Current studio state
+            role_id: Optional role identifier for execution history
 
         Returns:
             Formatted state block
@@ -333,6 +334,38 @@ Current execution context:
                 if isinstance(artifacts, list):
                     count = len(artifacts)
                     state_block += f"- {artifact_type}: {count} item(s)\n"
+
+        # Add execution history for this role (messages it has sent)
+        if role_id:
+            messages = state.get("messages", [])
+            role_messages = [
+                m for m in messages
+                if str(m.get("sender", "")).lower() == role_id.lower()
+            ]
+            if role_messages:
+                state_block += f"\n## Your Previous Actions (as {role_id})\n"
+                state_block += "You have already taken the following actions in this session:\n\n"
+                # Show last N messages to avoid context overflow
+                max_history = 5
+                recent_messages = role_messages[-max_history:]
+                for i, msg in enumerate(recent_messages, 1):
+                    intent = msg.get("intent", "unknown")
+                    receiver = msg.get("receiver", "unknown")
+                    payload = msg.get("payload", {})
+                    # Summarize payload content
+                    if isinstance(payload, dict):
+                        content = payload.get("content", payload.get("description", ""))
+                        if len(str(content)) > 100:
+                            content = str(content)[:100] + "..."
+                    else:
+                        content = str(payload)[:100]
+                    state_block += f"{i}. **{intent}** → {receiver}"
+                    if content:
+                        state_block += f": {content}"
+                    state_block += "\n"
+                if len(role_messages) > max_history:
+                    state_block += f"\n_(showing {max_history} of {len(role_messages)} actions)_\n"
+                state_block += "\n**Do not repeat actions you have already taken.**\n"
 
         return state_block
 
@@ -1044,7 +1077,7 @@ When a customer gives you a directive, you must:
         # Build 6 layers (5-layer structure + STATE MANAGEMENT)
         identity_layer = self._build_identity_layer(role_def)
         protocol_layer = self._build_protocol_layer(role_def, state)
-        state_layer = self._build_state_layer(state)
+        state_layer = self._build_state_layer(state, role_id)
         state_management_layer = self._build_state_management_layer(role_def)
         mission_layer = self._build_mission_layer(loop_id, node_id, role_def)
         interface_layer = self._build_interface_block(role_def)
