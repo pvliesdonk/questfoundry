@@ -111,18 +111,6 @@ def _get_prompt_log():
         pass
     return None
 
-# Optional LangSmith tracing
-try:
-    from langsmith import traceable
-except ImportError:
-    # LangSmith not available, use no-op decorator
-    def traceable(**kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-
 # Prompt size thresholds (in characters, ~4 chars per token)
 PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
 PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD", "16000"))
@@ -255,7 +243,6 @@ class BindToolsExecutor:
         """
         self.state = state
 
-    @traceable(name="bind_tools_executor.execute", tags=["executor", "bind_tools"])
     async def execute(
         self,
         user_prompt: str,
