@@ -8,6 +8,12 @@ nul
 *.log
 trace.log
 
+# Structured logging JSONL files (can be written anywhere via --structured-logs)
+**/message-bus.jsonl
+**/prompts.jsonl
+**/state-sot.jsonl
+**/tool-calls.jsonl
+
 # Python
 *.pyc
 __pycache__/

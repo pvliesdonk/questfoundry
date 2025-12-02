@@ -1,0 +1,29 @@
+{
+    "permissions": {
+        "allow": [
+            "Read",
+            "Write",
+            "Edit",
+            "MultiEdit",
+            "Glob",
+            "Grep",
+            "LS",
+            "WebFetch",
+            "WebSearch",
+            "Bash(npm:*)",
+            "Bash(git:*)",
+            "Bash(ls:*)",
+            "Bash(uv:*)",
+            "Bash(echo:*)",
+            "Bash(set:*)",
+            "Bash(export:*)",
+            "Bash(gh:*)"
+        ],
+        "deny": [],
+        "ask": [
+            "Write(spec/**)",
+            "Edit(spec/**)",
+            "MultiEdit(spec/**)"
+        ]
+    }
+}
