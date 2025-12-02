@@ -8,8 +8,9 @@ it routes messages based on envelope metadata, not hardcoded edges.
 Based on: Studio Graph Architecture gist (The Mesh & The Coordinator)
 """
 
+import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -20,6 +21,25 @@ from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.models.state import Message, StudioState
 
 logger = logging.getLogger(__name__)
+
+# Import structured logging for message bus events
+try:
+    from questfoundry.runtime.structured_logging import get_bus_logger
+
+    bus_log = get_bus_logger()
+except (ImportError, RuntimeError):
+    # Graceful fallback if structured_logging not available or not initialized
+    bus_log = None
+
+# Optional LangSmith tracing
+try:
+    from langsmith import traceable
+except ImportError:
+    # LangSmith not available, use no-op decorator
+    def traceable(**kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 
 # Special receiver values
@@ -89,6 +109,7 @@ class ControlPlane:
 
         # Wire up orchestration tools to use our dormancy registry
         from questfoundry.runtime.tools.orchestration_tools import set_dormancy_registry
+
         set_dormancy_registry(self.dormancy)
 
         # Track message history for loop detection
@@ -201,8 +222,19 @@ class ControlPlane:
                         if (idx, role) not in consumed:
                             pending.setdefault(role, []).append(msg)
 
+        # Log pending message counts per role using structured logging
+        if bus_log:
+            pending_counts = {role: len(msgs) for role, msgs in pending.items() if msgs}
+            if pending_counts:
+                bus_log.info(
+                    "pending_messages_by_role",
+                    pending_counts=pending_counts,
+                    total_pending=sum(pending_counts.values()),
+                )
+
         return pending
 
+    @traceable(name="route_by_envelope")
     def route_by_envelope(self, state: StudioState) -> str:
         """
         Core routing logic - message bus pattern.
@@ -231,6 +263,16 @@ class ControlPlane:
         last_receiver = last_message.get("receiver", "")
         if last_receiver == TERMINATE:
             logger.info("Termination signal received, ending graph")
+
+            # Log termination routing decision
+            if bus_log:
+                bus_log.info(
+                    "route_decision",
+                    next_node=END,
+                    next_nodes=[END],
+                    reason="termination_signal",
+                )
+
             return END
 
         # Check for human interaction
@@ -244,15 +286,36 @@ class ControlPlane:
         if not pending:
             # No pending messages - all work is done, end the graph
             logger.info("No pending messages for any role, ending graph")
+
+            # Log END routing decision
+            if bus_log:
+                bus_log.info(
+                    "route_decision",
+                    next_node=END,
+                    next_nodes=[END],
+                    reason="no_pending_messages",
+                )
+
             return END
 
         # Route to the first role with pending messages (priority order)
         # Showrunner has lowest priority - let workers finish first
         priority_order = [
-            "plotwright", "lore_weaver", "scene_smith", "style_lead",
-            "codex_curator", "researcher", "art_director", "illustrator",
-            "audio_director", "audio_producer", "translator", "book_binder",
-            "player_narrator", "gatekeeper", "showrunner"
+            "plotwright",
+            "lore_weaver",
+            "scene_smith",
+            "style_lead",
+            "codex_curator",
+            "researcher",
+            "art_director",
+            "illustrator",
+            "audio_director",
+            "audio_producer",
+            "translator",
+            "book_binder",
+            "player_narrator",
+            "gatekeeper",
+            "showrunner",
         ]
 
         for role_id in priority_order:
@@ -266,6 +329,18 @@ class ControlPlane:
                     f"Message bus: routing to {role_id} "
                     f"({len(pending[role_id])} pending message(s))"
                 )
+
+                # Log routing decision with structured logging
+                if bus_log:
+                    pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
+                    bus_log.info(
+                        "route_decision",
+                        next_node=role_id,
+                        next_nodes=[role_id],
+                        pending_counts=pending_counts,
+                        message_count=len(pending[role_id]),
+                    )
+
                 return role_id
 
         # All pending roles are dormant - route to showrunner to decide wake
@@ -284,10 +359,31 @@ class ControlPlane:
                     f"Dormant roles {dormant_with_messages} have messages but "
                     "showrunner has no pending messages to wake them. Ending graph."
                 )
+
+                # Log END routing decision
+                if bus_log:
+                    bus_log.info(
+                        "route_decision",
+                        next_node=END,
+                        next_nodes=[END],
+                        reason="dormant_roles_no_showrunner",
+                        dormant_roles=dormant_with_messages,
+                    )
+
                 return END
 
         # No actionable pending messages - end graph
         logger.info("No actionable pending messages, ending graph")
+
+        # Log END routing decision
+        if bus_log:
+            bus_log.info(
+                "route_decision",
+                next_node=END,
+                next_nodes=[END],
+                reason="no_actionable_messages",
+            )
+
         return END
 
     def _normalize_role_id(self, receiver: str) -> str:
@@ -357,7 +453,7 @@ class ControlPlane:
                 Panel(
                     f"[bold cyan]Question from {sender}:[/bold cyan]\n\n{content}",
                     title="🤔 Input Requested",
-                    border_style="cyan"
+                    border_style="cyan",
                 )
             )
 
@@ -373,7 +469,7 @@ class ControlPlane:
                 "metadata": {
                     "responding_to": message.get("tu_id", ""),
                     "original_intent": intent,
-                }
+                },
             }
 
             # Add response to state
@@ -439,32 +535,41 @@ class ControlPlane:
 
         The wrapped node:
         1. Traces role_started
-        2. Executes the role logic
+        2. Executes the role logic (supports both sync and async nodes)
         3. Ensures output messages have proper envelope structure
         4. Traces all output messages
         5. Advances message cursor (marks messages as consumed)
         6. Traces role_completed
+
+        Returns an async function that LangGraph will await automatically.
         """
         base_node = self.node_factory.create_role_node(role_id)
 
-        def wrapped_node(state: StudioState) -> dict[str, Any]:
+        async def wrapped_node(state: StudioState) -> dict[str, Any]:
             # Trace role started
             start_message: Message = {
                 "sender": role_id,
                 "receiver": "trace",
                 "intent": "role_started",
                 "payload": {"role_name": role_id},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "envelope": {"tu_id": state.get("tu_id", "")},
             }
             self._trace_message(start_message)
 
-            # Note current message count BEFORE execution
-            # This is used to advance cursor to consume only pre-existing messages
-            pre_execution_count = len(state.get("messages", []))
+            # Log role execution start with structured logging
+            if bus_log:
+                bus_log.info(
+                    "role_start",
+                    role=role_id,
+                    tu_id=state.get("tu_id", ""),
+                )
 
-            # Execute base node
-            result = base_node(state)
+            # Execute base node - handle both sync and async nodes
+            if asyncio.iscoroutinefunction(base_node):
+                result = await base_node(state)
+            else:
+                result = base_node(state)
 
             # Ensure messages have proper envelope structure and trace them
             messages = result.get("messages", [])
@@ -472,7 +577,7 @@ class ControlPlane:
                 if "envelope" not in msg:
                     msg["envelope"] = {}
                 msg["envelope"]["tu_id"] = state.get("tu_id", "")
-                msg["envelope"]["timestamp"] = datetime.now(timezone.utc).isoformat()
+                msg["envelope"]["timestamp"] = datetime.now(UTC).isoformat()
 
                 # If no receiver specified, default to showrunner
                 if not msg.get("receiver"):
@@ -486,7 +591,7 @@ class ControlPlane:
             # to allow multiple roles to have pending messages simultaneously
             consumed = set(state.get("_consumed_messages", set()))
             existing_messages = state.get("messages", [])
-            available_roles = set(self.get_available_roles())
+            set(self.get_available_roles())
 
             for idx, msg in enumerate(existing_messages):
                 if idx in consumed:
@@ -508,6 +613,25 @@ class ControlPlane:
 
             result["_consumed_messages"] = consumed
 
+            # Log consumption tracking via structured logging
+            if bus_log:
+                consumed_indices = [idx for idx in consumed if isinstance(idx, int)]
+                broadcast_consumed = [
+                    (idx, role) for idx, role in consumed if isinstance(idx, tuple)
+                ]
+                try:
+                    bus_log.info(
+                        "message_consumed",
+                        role=role_id,
+                        consumed_indices=consumed_indices,
+                        broadcast_consumed_count=len(broadcast_consumed),
+                        total_consumed=len(consumed),
+                        message_count=len(existing_messages),
+                    )
+                except Exception:
+                    # Silently ignore logging errors
+                    pass
+
             # Trace role completed
             completed_message: Message = {
                 "sender": role_id,
@@ -517,10 +641,19 @@ class ControlPlane:
                     "role_name": role_id,
                     "insight": f"Generated {len(messages)} message(s)",
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "envelope": {"tu_id": state.get("tu_id", "")},
             }
             self._trace_message(completed_message)
+
+            # Log role execution completion with structured logging
+            if bus_log:
+                bus_log.info(
+                    "role_complete",
+                    role=role_id,
+                    message_count=len(messages),
+                    tu_id=state.get("tu_id", ""),
+                )
 
             return result
 
@@ -577,14 +710,15 @@ class ControlPlane:
 
         return compiled
 
-    def run(
+    @traceable(name="control_plane_run")
+    async def run(
         self,
         human_input: str,
         context: dict[str, Any] | None = None,
         recursion_limit: int = 50,
     ) -> StudioState:
         """
-        Run the studio with human input.
+        Run the studio with human input asynchronously.
 
         Args:
             human_input: The user's request/directive
@@ -596,7 +730,7 @@ class ControlPlane:
         """
         # Initialize state
         initial_state = self.state_manager.initialize_state(
-            tu_id=f"TU-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}",
+            tu_id=f"TU-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}",
             loop_id="interactive",
             context=context or {},
         )
@@ -613,7 +747,7 @@ class ControlPlane:
             "receiver": SHOWRUNNER,
             "intent": "human.directive",
             "payload": {"content": human_input},
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "envelope": {
                 "tu_id": initial_state["tu_id"],
             },
@@ -629,16 +763,41 @@ class ControlPlane:
         logger.info(f"Starting studio run with input: {human_input[:100]}...")
 
         try:
-            final_state = graph.invoke(
-                initial_state,
-                config={"recursion_limit": recursion_limit},
-            )
+            # Configure with thread_id for LangSmith tracing
+            config = {
+                "configurable": {
+                    "thread_id": initial_state.get("tu_id", "default"),
+                },
+                "recursion_limit": recursion_limit,
+            }
+
+            # Use ainvoke for asynchronous graph execution
+            final_state = await graph.ainvoke(initial_state, config=config)
             logger.info("Studio run completed successfully")
             return final_state
 
         except Exception as e:
             logger.error(f"Studio run failed: {e}")
             raise
+
+    def run_sync(
+        self,
+        human_input: str,
+        context: dict[str, Any] | None = None,
+        recursion_limit: int = 50,
+    ) -> StudioState:
+        """
+        Synchronous wrapper for run() - use for CLI and synchronous contexts.
+
+        Args:
+            human_input: The user's request/directive
+            context: Optional initial context
+            recursion_limit: Max graph iterations
+
+        Returns:
+            Final studio state
+        """
+        return asyncio.run(self.run(human_input, context, recursion_limit))
 
     def clear_cache(self) -> None:
         """Clear graph cache and message history."""

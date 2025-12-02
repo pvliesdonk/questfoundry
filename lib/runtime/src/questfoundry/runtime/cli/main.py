@@ -17,6 +17,7 @@ from questfoundry.runtime.core.control_plane import ControlPlane
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.logging_config import get_logger, setup_logging
+from questfoundry.runtime.structured_logging import configure_structured_logging
 
 # Set up Rich logging
 setup_logging(level="INFO", show_time=False, show_path=False)
@@ -93,6 +94,11 @@ def ask(
         "--project-dir",
         help="Base directory for projects (default: $QF_PROJECT_DIR or ~/.questfoundry/projects)",
     ),
+    structured_logs: Path | None = typer.Option(
+        None,
+        "--structured-logs",
+        help="Directory for JSONL logs (tools, state, bus, prompts)",
+    ),
 ):
     """
     Talk to the studio in natural language.
@@ -114,8 +120,15 @@ def ask(
         qf ask "Create a story" --log-file session1
         qf ask "Create a story" --log-file session1 --trace  # Both file and screen
         qf ask "Create a story" --provider anthropic:claude-3-haiku-20240307
+        qf ask "Create a story" --structured-logs ./logs  # Enable structured JSON logging
     """
     try:
+        # Set up structured logging if --structured-logs specified
+        if structured_logs:
+            structured_logs.mkdir(parents=True, exist_ok=True)
+            configure_structured_logging(structured_logs)
+            logger.info(f"Structured logging configured in: {structured_logs}")
+
         # Set up file logging if --log-file specified
         file_handler = None
         if log_file:
@@ -205,8 +218,8 @@ def ask(
 
         logger.info(f"Starting mesh execution with recursion_limit={recursion_limit}")
 
-        # Run the mesh
-        final_state = control_plane.run(
+        # Run the mesh (using run_sync which handles async internally via asyncio.run)
+        final_state = control_plane.run_sync(
             human_input=message,
             recursion_limit=recursion_limit,
         )
@@ -289,7 +302,9 @@ def list_playbooks():
     """List available playbooks (workflow knowledge for Showrunner)."""
     try:
         console.print("[bold]Available Playbooks:[/bold]\n")
-        console.print("[dim]These are knowledge resources for the Showrunner, not direct commands.[/dim]\n")
+        console.print(
+            "[dim]These are knowledge resources for the Showrunner, not direct commands.[/dim]\n"
+        )
 
         playbooks = [
             ("story_spark", "Initial story creation and brainstorming"),
@@ -337,7 +352,9 @@ def test_schema(
             console.print(f"[green]✓ Loaded loop: {loop.name}[/green]")
             console.print(f"  ID: {loop.id}")
             console.print(f"  Description: {loop.description}")
-            console.print(f"  [dim]Note: Loop topology is informational; routing is envelope-based.[/dim]")
+            console.print(
+                "  [dim]Note: Loop topology is informational; routing is envelope-based.[/dim]"
+            )
 
         else:
             console.print(f"[red]Unknown type: {definition_type}[/red]")
@@ -384,6 +401,7 @@ def download_spec(
         version_str = tag or "latest"
         if metadata_file.exists():
             import json
+
             metadata = json.loads(metadata_file.read_text())
             version_str = metadata.get("tag", version_str)
 
@@ -412,6 +430,7 @@ def download_spec(
 def version():
     """Show version information."""
     import os
+
     from questfoundry.runtime.core.spec_fetcher import get_spec_source_preference
 
     console.print("[bold]QuestFoundry Runtime[/bold]")
@@ -448,6 +467,7 @@ def main(
         -vvv:   DEBUG + full details - Show everything including library logs
     """
     import logging
+
     from questfoundry.runtime.logging_config import setup_logging
 
     if verbose == 0:
