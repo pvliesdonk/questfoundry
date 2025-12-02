@@ -22,6 +22,16 @@ from questfoundry.runtime.plugins.tools.registry import get_tool_registry
 
 logger = logging.getLogger(__name__)
 
+# Optional LangSmith tracing
+try:
+    from langsmith import traceable
+except ImportError:
+    # LangSmith not available, use no-op decorator
+    def traceable(**kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 
 class NodeFactory:
     """Transform role profiles into LangGraph-compatible Runnable nodes."""
@@ -557,7 +567,7 @@ class NodeFactory:
         Convert OpenAI function format tool specifications to a tool map.
 
         This builds a dictionary mapping tool names to tool instances for use
-        with the ReActExecutor.
+        with the ProtocolExecutor (text-based fallback for models without bind_tools).
 
         Args:
             tool_specs: List of tools in OpenAI function format
@@ -828,11 +838,20 @@ class NodeFactory:
 
         Returns:
             Runnable node function compatible with LangGraph StateGraph
+
+        Note:
+            LangSmith tracing is available via:
+            1. Global control_plane.run() trace via @traceable decorator
+            2. Message bus routing via route_by_envelope() trace
+            3. Individual executor tracing via bind_tools_execute() trace
+            The role_node itself is wrapped by control_plane._wrap_node_with_envelope()
+            which handles envelope-based tracing for LangSmith observability.
         """
         # Load role once
         role = self.load_role(role_id)
         # Tools are now loaded dynamically by RuntimeContextAssembler based on capabilities
 
+        @traceable(name=f"role.{role_id}", tags=["role", role_id])
         def role_node(state: StudioState) -> dict[str, Any]:
             """Execute role and update state.
 
@@ -887,13 +906,13 @@ class NodeFactory:
                             max_tokens=llm_config["max_tokens"],
                         )
 
-                        # Use ReAct pattern for universal tool calling
+                        # Primary: Use bind_tools for native structured tool support
+                        # Fallback: Use text-based protocol executor for universal compatibility
                         # This works across ALL models (Llama, Qwen, GPT, Claude)
-                        # by using explicit text-based instructions instead of
-                        # hidden token injection (which varies by model)
+                        # by using explicit Action/Action Input instructions when bind_tools unavailable
 
                         if assembler_tools:
-                            # Build tool map for ReActExecutor
+                            # Build tool map for ProtocolExecutor (text-based fallback)
                             tool_map = self._get_tool_map_from_specs(assembler_tools)
 
                             # Create role-specific user prompt
@@ -925,7 +944,7 @@ class NodeFactory:
                                         "When done, send a protocol message to the receiver."
                                     )
 
-                            # Execute with protocol executor (NO bind_tools, NO hidden tokens)
+                            # Execute with protocol executor (text-based fallback when bind_tools unavailable)
                             logger.info(f"Executing {role.id} with protocol executor ({provider})")
 
                             # Send role_prompt BEFORE LLM invocation so user can abort if wrong
@@ -1095,8 +1114,8 @@ class NodeFactory:
                 merged_cold_sot: dict[str, Any] = {}
                 merged_artifacts: dict[str, Any] = {}
 
-                # Note: Ad-hoc tool execution fallback removed - ReAct handles all
-                # tool calling uniformly via text-based instructions
+                # Note: ProtocolExecutor (text-based) handles all tool calling
+                # when bind_tools is unavailable, via Action/Action Input format
 
                 # hot_sot / cold_sot / artifacts from extraction + tool outputs + parsed result
                 for source in (
@@ -1124,7 +1143,7 @@ class NodeFactory:
                 # Roles can override this by including routing info in their output
                 messages_out: list[dict[str, Any]] = []
 
-                # Messages from ReAct tool execution
+                # Messages from protocol executor tool execution
                 if isinstance(tool_updates, dict) and isinstance(
                     tool_updates.get("messages"), list
                 ):

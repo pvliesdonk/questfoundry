@@ -1,19 +1,23 @@
-"""ReAct pattern executor using prompt engineering instead of tool binding.
+"""ReAct pattern executor - legacy fallback for text-based tool calling.
 
-This module provides a universal approach to LLM tool calling that works across
-all models and providers by using explicit text-based instructions instead of
-native tool calling APIs (which use hidden tokens that vary by model).
+This module provides the ReAct pattern with text-based tool calling (Action/Action Input)
+as a FALLBACK for models without native bind_tools support. It's retained for backwards
+compatibility and specific use cases requiring the ReAct pattern with "Final Answer" termination.
 
-Why ReAct instead of bind_tools:
-- Llama 3.1: Works with Ollama's tool tokens (trained on them)
-- Llama 3.2: Too small to handle hidden state switching
-- Qwen: Uses different special tokens (<|tool_calls|>) that Ollama doesn't map
+For new implementations, prefer ProtocolExecutor which handles protocol-based message routing
+instead of ReAct's "Final Answer" pattern. ProtocolExecutor is designed for the protocol-based
+execution model used throughout the system.
 
-ReAct uses visible text markers that ALL LLMs understand:
-  "Action: tool_name"
-  "Action Input: {...}"
+**Preferred approaches:**
+- BindToolsExecutor: For models with native bind_tools support (GPT-4, Claude 3, Qwen, Llama 3.1+)
+- ProtocolExecutor: For fallback text-based tool calling with protocol message routing
+- ReActExecutor: Legacy option when ReAct pattern is specifically required
 
-Reference: chart-binder/src/chart_binder/llm/react_adjudicator.py
+**When ReActExecutor might be needed:**
+- Legacy integrations requiring ReAct pattern with "Final Answer" termination
+- Models without bind_tools support that need ReAct-style agent loop
+
+See tests/test_bind_tools_ollama.py for bind_tools validation and ProtocolExecutor examples.
 """
 
 import json
@@ -98,11 +102,11 @@ class ReActResult:
 
 
 class ReActExecutor:
-    """Execute role using ReAct pattern instead of bind_tools.
+    """Execute role using ReAct pattern - fallback for text-based tool calling.
 
-    This provides universal tool calling that works across all LLM providers
-    and models by using explicit text-based instructions rather than hidden
-    token injection.
+    This provides tool calling via explicit text-based instructions (Action/Action Input)
+    as a fallback for models without native bind_tools support. Retained for backwards
+    compatibility and models requiring the ReAct pattern.
     """
 
     def __init__(
@@ -204,7 +208,7 @@ class ReActExecutor:
         for iteration in range(self.max_iterations):
             log.debug(f"ReAct iteration {iteration + 1}/{self.max_iterations}")
 
-            # Invoke LLM (NO tool binding - pure text)
+            # Invoke LLM without bind_tools (text-based fallback approach)
             messages = [
                 SystemMessage(content=full_system),
                 HumanMessage(content=conversation),

@@ -91,36 +91,35 @@ All can execute in parallel.
 
 For full protocol details, see `spec/04-protocol/` (ENVELOPE.md, INTENTS.md, LIFECYCLES/, FLOWS/).
 
-### Why Text-Based Tool Calling (Not bind_tools)
+### Tool Calling Strategy (bind_tools)
 
-The runtime uses text-based `Action/Action Input` format instead of native LLM tool binding
-(`bind_tools`). This provides universal compatibility, though the landscape is evolving.
+The runtime uses native LLM tool binding (`bind_tools`) for tool calling. This was validated
+in December 2025 testing with Ollama Qwen3:8b.
 
-**Current state (December 2025):**
+**Tested Models (December 2025):**
 
 | Model | Native `bind_tools` | Notes |
 |-------|---------------------|-------|
-| Llama 3.1 8B | ✅ Works well | Recommended for native tools if needed |
-| Llama 3.2 1B/3B | ⚠️ Problematic | Over-eager tool calling, JSON bugs, poor "should I call?" decisions |
-| Qwen 2.5 / Qwen 3 | ✅ Works (recent Ollama) | Template issues fixed in 2025; official builds work |
-| Other providers | Varies | Each uses different special tokens |
+| Qwen3:8b via Ollama | ✅ Works correctly | Tested: single/multi-tool, streaming, execution loop |
+| Llama 3.1 8B | ✅ Works well | Good for native tools |
+| Llama 3.2 1B/3B | ⚠️ Use fallback | Too small for reliable tool decisions |
+| GPT-4, Claude 3 | ✅ Works | Native provider support |
 
-**Llama 3.2 (1B/3B) specific issues:**
+**Benefits of bind_tools:**
 
-- Too small for reliable "meta-decisions" (deciding *whether* to call a tool)
-- Aggressive tool-first prompt template causes tool calls even for "hello"
-- Known open bugs: malformed JSON, split `tool_calls` responses
-- Workaround: Don't pass `tools` for generic chat; use separate clients
+- **Structured IDs**: Tool calls have unique IDs for tracking
+- **LangSmith visibility**: Tool calls appear as first-class runs in traces
+- **No parsing failures**: No regex needed to extract tool calls
+- **Better error handling**: Structured responses vs text parsing
+- **Streaming support**: Tool calls visible in stream chunks
 
-**Why we still use text-based format:**
+**Hybrid Fallback:**
 
-- **Universal**: Works across all models without template/parser dependencies
-- **Debuggable**: You can see exactly what the LLM outputs (no hidden tokens)
-- **Consistent**: Same behavior across Ollama, OpenAI, Anthropic, local models
-- **Robust**: No dependency on Ollama version, model version, or template updates
+Text-based `Action/Action Input` format is available as fallback for models that don't
+support native tools (small models, older providers). The runtime auto-selects based on
+model capability.
 
-**Note:** Qwen 2.5 native tools now work in recent Ollama (mid-2025+), but we retain
-text-based format for consistency and to support the broadest range of models.
+**Test file:** `tests/test_bind_tools_ollama.py` validates bind_tools behavior.
 
 ## Required Practices
 
@@ -145,3 +144,48 @@ text-based format for consistency and to support the broadest range of models.
 - Resources re-bundled if spec changed; runtime flows validated when relevant.
 - Public surface changes documented; breaking changes explicitly noted.
 - Tests cover new behavior without trivial or redundant assertions.
+
+## Subagent Usage (for Claude Code / AI Assistants)
+
+When working on this codebase, **use subagents proactively** to parallelize work and maintain
+context efficiency.
+
+### When to Use Subagents
+
+| Task Type | Subagent Type | Example |
+|-----------|---------------|---------|
+| Codebase exploration | `Explore` | "Find all files that handle tool calling" |
+| Multi-file implementation | `implementation-executor` | "Implement the async changes across 5 files" |
+| Complex planning | `project-planner` | "Plan the migration from sync to async" |
+| Documentation lookup | `claude-code-guide` | "How do LangGraph async nodes work?" |
+
+### Parallel Subagent Patterns
+
+**Exploration phase:** Launch multiple Explore agents in parallel:
+
+```
+- Explore: "Find tool calling implementation"
+- Explore: "Find logging/tracing setup"
+- Explore: "Find async patterns used"
+- Explore: "Find documentation files"
+```
+
+**Implementation phase:** Use implementation-executor for well-defined tasks:
+
+```
+- implementation-executor: "Update control_plane.py with async patterns per plan"
+- implementation-executor: "Add structured logging to node_factory.py"
+```
+
+### Anti-Patterns
+
+- **Don't search manually** when Explore agent can do it faster
+- **Don't implement large changes inline** when implementation-executor maintains better context
+- **Don't re-read the same docs** when claude-code-guide has them cached
+
+### Task Tool Best Practices
+
+1. **Be specific** in prompts: Include file paths, line numbers, expected behavior
+2. **Request structured output**: Ask agents to report findings in tables/lists
+3. **Chain appropriately**: Use Explore results to inform implementation-executor prompts
+4. **Parallelize independent work**: Launch multiple agents in single message when possible

@@ -1,24 +1,21 @@
-"""Protocol-message executor using text-based tool calling.
+"""Fallback executor using text-based tool calling via Action/Action Input format.
 
-This module provides universal tool calling that works across all models and providers
-by using explicit text-based instructions (Action/Action Input format) instead of
-native tool binding APIs.
+This module provides a FALLBACK approach for models that don't support bind_tools.
+The preferred approach for capable models is BindToolsExecutor with native structured tool calls.
 
-Why text-based instead of bind_tools (December 2025 status):
-- Llama 3.2 (1B/3B): Over-eager tool calling, JSON bugs, poor meta-decisions
-- Llama 3.1 8B: Works well with native tools (recommended if native needed)
-- Qwen 2.5/3: Now works in recent Ollama (template issues fixed mid-2025)
-- Universal: Text-based works consistently across ALL providers/models
+For models without bind_tools support, ProtocolExecutor provides universal tool calling via
+explicit Action/Action Input text format, enabling compatibility across all LLM providers
+and model sizes (including Llama 3.2 1B/3B, Qwen, smaller models without bind_tools).
 
-Text-based format uses visible markers ALL LLMs understand:
-  "Action: tool_name"
-  "Action Input: {...}"
+**Parsing approach:**
+- Action/Action Input text parsing: Models output explicit tool calls in text format
+- Supports parallel fanout: Multiple action/input pairs in a single response
+- Role termination: Role is DONE when send_protocol_message is called
 
-We retain text-based for consistency and broadest model support.
-
-CRITICAL: This is NOT a ReAct agent loop. Roles communicate via protocol messages.
-When send_protocol_message is called, the role is DONE for this turn.
-See lib/runtime/AGENTS.md for the execution model.
+**Key difference from ReAct:**
+- NOT a ReAct agent loop with "Final Answer" termination
+- Roles communicate via protocol messages to other roles in the system
+- See lib/runtime/AGENTS.md for the protocol-based execution model
 """
 
 from __future__ import annotations
