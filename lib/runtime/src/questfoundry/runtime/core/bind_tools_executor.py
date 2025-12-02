@@ -118,6 +118,10 @@ PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD"
 # Short-term memory cap (characters)
 PRIOR_CONVERSATION_MAX_CHARS = int(os.environ.get("QF_MEMORY_CAP", "8000"))
 
+# Context summarization thresholds
+SUMMARIZATION_MESSAGE_THRESHOLD = int(os.environ.get("QF_SUMMARIZE_MESSAGES", "20"))
+SUMMARIZATION_CHAR_THRESHOLD = int(os.environ.get("QF_SUMMARIZE_CHARS", "12000"))
+
 # Tools that signal "role is done for this turn"
 PROTOCOL_MESSAGE_TOOLS = {"send_protocol_message", "send_message"}
 
@@ -271,8 +275,10 @@ class BindToolsExecutor:
             f"conversation has {len(self.messages)} messages"
         )
 
-        # Check prompt size
+        # Check prompt size and summarize if needed
         prompt_size = sum(len(str(m.content)) for m in self.messages)
+        message_count = len(self.messages)
+
         if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
             log.error(
                 f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars. "
@@ -281,17 +287,19 @@ class BindToolsExecutor:
         elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
             log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
-        # TODO: Implement summarization when context grows too large
-        # For now, truncate if we have too many messages
-        max_history_messages = 50  # Allow longer conversations with cached executor
-        if len(self.messages) > max_history_messages:
-            # Keep system message + most recent messages
-            system_msgs = [m for m in self.messages if isinstance(m, SystemMessage)]
-            non_system = [m for m in self.messages if not isinstance(m, SystemMessage)]
-            recent_msgs = non_system[-(max_history_messages - len(system_msgs)):]
-            self.messages = system_msgs + recent_msgs
+        # Context summarization when thresholds exceeded
+        if message_count > SUMMARIZATION_MESSAGE_THRESHOLD or prompt_size > SUMMARIZATION_CHAR_THRESHOLD:
             log.info(
-                f"Truncated conversation to {len(self.messages)} messages for {self.role_id}"
+                f"Context exceeded thresholds for {self.role_id}: "
+                f"{message_count} msgs (>{SUMMARIZATION_MESSAGE_THRESHOLD}), "
+                f"{prompt_size} chars (>{SUMMARIZATION_CHAR_THRESHOLD}). Summarizing..."
+            )
+            await self._summarize_history()
+
+            # Recompute after summarization
+            prompt_size = sum(len(str(m.content)) for m in self.messages)
+            log.info(
+                f"After summarization: {len(self.messages)} msgs, {prompt_size} chars"
             )
 
         tool_results: list[dict] = []
@@ -595,6 +603,88 @@ class BindToolsExecutor:
         if len(summary) > PRIOR_CONVERSATION_MAX_CHARS:
             summary = summary[:PRIOR_CONVERSATION_MAX_CHARS] + "..."
         return summary
+
+    async def _summarize_history(self) -> None:
+        """Summarize older conversation history to reduce context size.
+
+        Uses the LLM to create a concise summary of older messages,
+        keeping the system message and most recent messages intact.
+
+        This is called automatically when context exceeds thresholds.
+        """
+        # Separate system messages from conversation
+        system_msgs = [m for m in self.messages if isinstance(m, SystemMessage)]
+        non_system = [m for m in self.messages if not isinstance(m, SystemMessage)]
+
+        # Keep the most recent messages (last 6 for context continuity)
+        keep_recent = 6
+        if len(non_system) <= keep_recent:
+            # Not enough to summarize
+            return
+
+        older_msgs = non_system[:-keep_recent]
+        recent_msgs = non_system[-keep_recent:]
+
+        # Build text representation of older messages for summarization
+        older_text_parts = []
+        for msg in older_msgs:
+            if isinstance(msg, HumanMessage):
+                older_text_parts.append(f"User: {msg.content}")
+            elif isinstance(msg, AIMessage):
+                content = self._extract_content(msg)
+                # Include tool call info if present
+                tool_calls = getattr(msg, "tool_calls", None) or []
+                if tool_calls:
+                    tool_names = [tc.get("name", "unknown") for tc in tool_calls]
+                    older_text_parts.append(f"Assistant: {content}\n[Called tools: {', '.join(tool_names)}]")
+                else:
+                    older_text_parts.append(f"Assistant: {content}")
+            elif isinstance(msg, ToolMessage):
+                # Summarize tool results briefly
+                content = str(msg.content)[:200]  # Truncate long tool outputs
+                older_text_parts.append(f"Tool result: {content}...")
+
+        older_text = "\n\n".join(older_text_parts)
+
+        # Create summarization prompt
+        summary_prompt = (
+            f"Summarize the following conversation history concisely. "
+            f"Focus on: decisions made, tools used, key information discovered, "
+            f"and any ongoing tasks. Be brief but preserve essential context.\n\n"
+            f"Conversation to summarize:\n{older_text}\n\n"
+            f"Summary (2-4 sentences):"
+        )
+
+        try:
+            # Use the base LLM (without tools) for summarization
+            response = await self.llm.ainvoke([HumanMessage(content=summary_prompt)])
+            summary_text = self._extract_content(response)
+
+            log.info(
+                f"Summarized {len(older_msgs)} messages into {len(summary_text)} chars "
+                f"for {self.role_id}"
+            )
+
+            # Log summarization event
+            prompt_log = _get_prompt_log()
+            if prompt_log:
+                prompt_log.info(
+                    "context_summarized",
+                    role=self.role_id,
+                    messages_summarized=len(older_msgs),
+                    summary_chars=len(summary_text),
+                )
+
+            # Replace older messages with summary
+            summary_msg = HumanMessage(
+                content=f"[Previous conversation summary: {summary_text}]"
+            )
+            self.messages = system_msgs + [summary_msg] + recent_msgs
+
+        except Exception as e:
+            log.warning(f"Summarization failed for {self.role_id}: {e}, falling back to truncation")
+            # Fallback: just keep recent messages without summary
+            self.messages = system_msgs + recent_msgs
 
 
 def select_executor(model_name: str) -> type:

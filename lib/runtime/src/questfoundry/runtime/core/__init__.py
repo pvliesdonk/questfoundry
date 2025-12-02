@@ -1,17 +1,13 @@
 """
 Core runtime components for QuestFoundry.
 
-Primary Components (Mesh Architecture):
-- ControlPlane: Protocol-driven mesh routing (recommended)
+Components (Mesh Architecture):
+- ControlPlane: Protocol-driven mesh routing
 - NodeFactory: Transforms role profiles into LangGraph nodes
 - SchemaRegistry: Loads and validates YAML definitions
 - StateManager: Manages StudioState during execution
 - RuntimeContextAssembler: Dynamically assembles agent prompts from YAML
 - CapabilityMapper: Maps abstract capabilities to concrete tools
-
-Legacy Components (Static Topology):
-- GraphFactory: Transforms loop patterns into static graphs (deprecated)
-- EdgeEvaluator: Evaluates conditional edges (deprecated)
 """
 
 
@@ -38,14 +34,6 @@ def __getattr__(name):
         from questfoundry.runtime.core.state_manager import StateManager
 
         return StateManager
-    elif name == "GraphFactory":
-        from questfoundry.runtime.core.graph_factory import GraphFactory
-
-        return GraphFactory
-    elif name == "EdgeEvaluator":
-        from questfoundry.runtime.core.edge_evaluator import EdgeEvaluator
-
-        return EdgeEvaluator
     elif name == "RuntimeContextAssembler":
         from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 
@@ -58,7 +46,6 @@ def __getattr__(name):
 
 
 __all__ = [
-    # Primary (Mesh Architecture)
     "ControlPlane",
     "DormancyRegistry",
     "NodeFactory",
@@ -66,7 +53,4 @@ __all__ = [
     "StateManager",
     "RuntimeContextAssembler",
     "CapabilityMapper",
-    # Legacy (Static Topology - deprecated)
-    "GraphFactory",
-    "EdgeEvaluator",
 ]

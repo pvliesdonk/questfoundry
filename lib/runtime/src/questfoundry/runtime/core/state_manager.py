@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -330,11 +331,20 @@ class StateManager:
         """
         Add new artifact to state.
 
+        DEPRECATED: Use write_hot_sot() or write_cold_sot() tools instead.
+        This method writes to both artifacts (deprecated) and hot_sot for
+        backward compatibility.
+
         Steps:
         1. Validate artifact structure
-        2. Add to state["artifacts"]
+        2. Add to state["artifacts"] (deprecated) AND state["hot_sot"]
         3. Log artifact_created message
         4. Return updated state
+
+        Migration path:
+        - Use ReadHotSOT/WriteHotSOT tools for in-progress work
+        - Use ReadColdSOT/WriteColdSOT tools for finalized content
+        - state["artifacts"] will be removed in a future version
 
         Args:
             state: Current state
@@ -343,11 +353,27 @@ class StateManager:
         Returns:
             State with artifact added
         """
+        warnings.warn(
+            "add_artifact() is deprecated. Use write_hot_sot() or write_cold_sot() "
+            "tools based on artifact lifecycle. See state_tools.py.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         artifact_id = artifact.get("role_id", "unknown")
         artifact_type = artifact.get("artifact_type", "unknown")
 
-        # Add artifact
-        new_state = self.update_state(state, {"artifacts": {artifact_id: artifact}})
+        # Build hot_sot key based on artifact type and role
+        hot_sot_key = f"{artifact_type}.{artifact_id}"
+
+        # Add to BOTH artifacts (deprecated) and hot_sot (forward compatible)
+        new_state = self.update_state(
+            state,
+            {
+                "artifacts": {artifact_id: artifact},
+                "hot_sot": {hot_sot_key: artifact},
+            },
+        )
 
         # Log message
         message: Message = {
@@ -355,7 +381,7 @@ class StateManager:
             "receiver": "broadcast",
             "intent": "artifact_created",
             "payload": {"artifact_id": artifact_id, "artifact_type": artifact_type},
-            "timestamp": artifact.get("timestamp", datetime.utcnow().isoformat() + "Z"),
+            "timestamp": artifact.get("timestamp", datetime.now(UTC).isoformat()),
             "envelope": {"tu_id": state["tu_id"], "snapshot_ref": state.get("snapshot_ref")},
         }
 

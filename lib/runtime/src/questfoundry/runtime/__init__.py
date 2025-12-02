@@ -13,11 +13,7 @@ from questfoundry.runtime.models.state import Artifact, BarStatus, Message, Stud
 # Use lazy imports for everything else to avoid dependency issues
 def __getattr__(name):
     """Lazy import to avoid loading modules with heavy dependencies."""
-    if name == "EdgeEvaluator":
-        from questfoundry.runtime.core.edge_evaluator import EdgeEvaluator
-
-        return EdgeEvaluator
-    elif name == "NodeFactory":
+    if name == "NodeFactory":
         from questfoundry.runtime.core.node_factory import NodeFactory
 
         return NodeFactory
@@ -29,13 +25,10 @@ def __getattr__(name):
         from questfoundry.runtime.core.state_manager import StateManager
 
         return StateManager
-    elif name == "GraphFactory":
-        try:
-            from questfoundry.runtime.core.graph_factory import GraphFactory
+    elif name == "ControlPlane":
+        from questfoundry.runtime.core.control_plane import ControlPlane
 
-            return GraphFactory
-        except ImportError:
-            return None
+        return ControlPlane
     elif name == "RuntimeContextAssembler":
         from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 
@@ -74,8 +67,9 @@ __all__ = [
     "SchemaRegistry",
     "StateManager",
     "NodeFactory",
-    "EdgeEvaluator",
-    "GraphFactory",
+    "ControlPlane",
+    "RuntimeContextAssembler",
+    "CapabilityMapper",
     # Models
     "StudioState",
     "BarStatus",
