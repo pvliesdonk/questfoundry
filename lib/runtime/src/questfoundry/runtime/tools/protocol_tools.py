@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools.base import _is_injected_arg_type
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model
 from pydantic.fields import PydanticUndefined
-from typing import Annotated
 
 from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.exceptions import StateError
@@ -77,6 +76,7 @@ class _BaseProtocolTool(_StrictToolSchemaMixin, BaseTool):
 class SendProtocolMessage(_BaseProtocolTool):
     name: str = "send_protocol_message"
     description: str = "Send a TU Protocol message to a receiver"
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -93,6 +93,7 @@ class SendProtocolMessage(_BaseProtocolTool):
         state: Annotated[StudioState | None, InjectedToolArg] = Field(
             default=None, description="Current studio state"
         )
+
     args_schema = Args
 
     def _run(
@@ -118,6 +119,7 @@ class SendProtocolMessage(_BaseProtocolTool):
 class SendProtocolEnvelope(_BaseProtocolTool):
     name: str = "send_protocol_envelope"
     description: str = "Send a full TU Protocol envelope"
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -130,6 +132,7 @@ class SendProtocolEnvelope(_BaseProtocolTool):
         state: Annotated[StudioState | None, InjectedToolArg] = Field(
             default=None, description="Current studio state"
         )
+
     args_schema = Args
 
     def _run(

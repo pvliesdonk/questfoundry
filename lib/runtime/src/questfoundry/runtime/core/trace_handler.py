@@ -134,28 +134,36 @@ class TraceHandler:
             if self.verbose:
                 # Show tools FIRST - prominently so user knows what's available
                 if tools:
-                    tool_names = [t.get("function", {}).get("name", t.get("name", "?")) for t in tools]
+                    tool_names = [
+                        t.get("function", {}).get("name", t.get("name", "?")) for t in tools
+                    ]
                     tools_text = "\n".join(f"  • {name}" for name in tool_names)
-                    self.console.print(Panel(
-                        tools_text,
-                        title=f"[bold yellow]TOOLS ({len(tools)})[/bold yellow]",
-                        border_style="yellow",
-                        padding=(0, 1)
-                    ))
+                    self.console.print(
+                        Panel(
+                            tools_text,
+                            title=f"[bold yellow]TOOLS ({len(tools)})[/bold yellow]",
+                            border_style="yellow",
+                            padding=(0, 1),
+                        )
+                    )
 
                 # Show the FULL prompt - no truncation in trace mode
                 # Trace mode exists specifically for debugging; truncation defeats the purpose
                 if prompt:
-                    self.console.print(Panel(
-                        prompt,
-                        title=f"[bold blue]PROMPT → {role_name}[/bold blue] [dim]({len(prompt)} chars)[/dim]",
-                        border_style="blue",
-                        padding=(0, 1)
-                    ))
+                    self.console.print(
+                        Panel(
+                            prompt,
+                            title=f"[bold blue]PROMPT → {role_name}[/bold blue] [dim]({len(prompt)} chars)[/dim]",
+                            border_style="blue",
+                            padding=(0, 1),
+                        )
+                    )
 
                 # Show user's original request
                 if user_prompt:
-                    self.console.print(f"[dim]User request: {user_prompt[:500]}{'...' if len(user_prompt) > 500 else ''}[/dim]")
+                    self.console.print(
+                        f"[dim]User request: {user_prompt[:500]}{'...' if len(user_prompt) > 500 else ''}[/dim]"
+                    )
             return
 
         elif intent == "role_completed":
@@ -165,16 +173,20 @@ class TraceHandler:
 
             if self.verbose:
                 # Show response
-                self.console.print(f"\n[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]")
+                self.console.print(
+                    f"\n[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
+                )
 
                 if insight:
                     # Show the FULL LLM response - no truncation in trace mode
-                    self.console.print(Panel(
-                        insight,
-                        title=f"[bold green]RESPONSE ← {role_name}[/bold green] [dim]({len(insight)} chars)[/dim]",
-                        border_style="green",
-                        padding=(0, 1)
-                    ))
+                    self.console.print(
+                        Panel(
+                            insight,
+                            title=f"[bold green]RESPONSE ← {role_name}[/bold green] [dim]({len(insight)} chars)[/dim]",
+                            border_style="green",
+                            padding=(0, 1),
+                        )
+                    )
             else:
                 # Brief summary only
                 if insight:
@@ -196,12 +208,14 @@ class TraceHandler:
             response = payload.get("response", "")
 
             # Always show full LLM response - this is what we're debugging
-            self.console.print(Panel(
-                response,
-                title=f"[bold magenta]LLM RESPONSE[/bold magenta] [dim]{role_id} iter {iteration}/{max_iter} ({len(response)} chars)[/dim]",
-                border_style="magenta",
-                padding=(0, 1)
-            ))
+            self.console.print(
+                Panel(
+                    response,
+                    title=f"[bold magenta]LLM RESPONSE[/bold magenta] [dim]{role_id} iter {iteration}/{max_iter} ({len(response)} chars)[/dim]",
+                    border_style="magenta",
+                    padding=(0, 1),
+                )
+            )
             return
 
         elif intent == "tool_call":

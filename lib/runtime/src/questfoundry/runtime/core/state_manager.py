@@ -108,11 +108,7 @@ class StateManager:
         # 1) Explicit project_id passed into StateManager.__init__
         # 2) QF_PROJECT_ID environment variable
         # 3) "default"
-        project_id = (
-            self._project_id
-            or os.getenv("QF_PROJECT_ID")
-            or "default"
-        )
+        project_id = self._project_id or os.getenv("QF_PROJECT_ID") or "default"
 
         now = datetime.now(UTC).isoformat()
 
@@ -178,9 +174,7 @@ class StateManager:
             if persisted is not None:
                 cold_sot.update(persisted)
         except Exception as e:  # pragma: no cover - defensive
-            logger.error(
-                "Failed to load Cold SoT for project '%s': %s", project_id, e
-            )
+            logger.error("Failed to load Cold SoT for project '%s': %s", project_id, e)
 
         state: StudioState = {
             "tu_id": tu_id,
@@ -296,8 +290,10 @@ class StateManager:
         # If TU entered cold-merged, persist Cold SoT snapshot for this project
         if new_lifecycle == "cold-merged":
             envelope = new_state.get("envelope", {})
-            project_id = envelope.get("project_id") or self._project_id or os.getenv(
-                "QF_PROJECT_ID", "default"
+            project_id = (
+                envelope.get("project_id")
+                or self._project_id
+                or os.getenv("QF_PROJECT_ID", "default")
             )
             try:
                 # Save full cold_sot and append a snapshot for audit/history

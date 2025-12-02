@@ -28,6 +28,7 @@ dependencies = [
     "json-logic-qubit>=0.9",
     "httpx>=0.26",
     "numpy>=1.24",
+    "structlog>=24.0",
 ]
 
 [project.optional-dependencies]

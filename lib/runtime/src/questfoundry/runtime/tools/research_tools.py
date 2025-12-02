@@ -137,7 +137,9 @@ class LoreIndex(BaseTool):
 
             self._vectorizer = TfidfVectorizer(stop_words="english")
         except Exception as exc:  # pragma: no cover - deterministic in tests via monkeypatch
-            logger.warning("LoreIndex falling back to keyword search (vectorizer unavailable: %s)", exc)
+            logger.warning(
+                "LoreIndex falling back to keyword search (vectorizer unavailable: %s)", exc
+            )
             self._vectorizer = None
         return self._vectorizer
 
@@ -157,7 +159,11 @@ class LoreIndex(BaseTool):
             if embeddings is not None and len(embeddings) == len(docs) + 1:
                 query_emb = embeddings[0]
                 doc_embs = np.asarray(embeddings[1:])
-                sims = doc_embs @ query_emb / (np.linalg.norm(doc_embs, axis=1) * (np.linalg.norm(query_emb) + 1e-9))
+                sims = (
+                    doc_embs
+                    @ query_emb
+                    / (np.linalg.norm(doc_embs, axis=1) * (np.linalg.norm(query_emb) + 1e-9))
+                )
                 ranked_idx = sims.argsort()[::-1][:k]
                 results = [
                     {"text": docs[idx], "score": float(sims[idx])}
@@ -171,8 +177,12 @@ class LoreIndex(BaseTool):
         if vectorizer is not None:
             doc_matrix = vectorizer.fit_transform(docs)
             query_vec = vectorizer.transform([query])
-            doc_dense = np.asarray(doc_matrix.todense() if hasattr(doc_matrix, "todense") else doc_matrix)
-            query_dense = np.asarray(query_vec.todense() if hasattr(query_vec, "todense") else query_vec)
+            doc_dense = np.asarray(
+                doc_matrix.todense() if hasattr(doc_matrix, "todense") else doc_matrix
+            )
+            query_dense = np.asarray(
+                query_vec.todense() if hasattr(query_vec, "todense") else query_vec
+            )
             sims = (doc_dense @ query_dense.T).ravel()
             ranked_idx = sims.argsort()[::-1][:k]
             results = [

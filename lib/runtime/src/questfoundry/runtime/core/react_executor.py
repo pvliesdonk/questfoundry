@@ -129,9 +129,7 @@ class ReActExecutor:
         self.tool_map = tool_map
         self.state = state
         self.role_id = role_id
-        self.max_iterations = max_iterations or int(
-            os.getenv("QF_REACT_MAX_ITERATIONS", "5")
-        )
+        self.max_iterations = max_iterations or int(os.getenv("QF_REACT_MAX_ITERATIONS", "5"))
         self.debug = os.getenv("QF_REACT_DEBUG", "").lower() in ("true", "1", "yes")
         self.trace_callback = trace_callback
 
@@ -189,7 +187,7 @@ class ReActExecutor:
                 # Find a clean break point (newline) to avoid mid-sentence truncation
                 newline_idx = truncated.find("\n")
                 if newline_idx > 0 and newline_idx < 500:
-                    truncated = truncated[newline_idx + 1:]
+                    truncated = truncated[newline_idx + 1 :]
                 prior_conversation = "[... earlier conversation truncated ...]\n\n" + truncated
                 log.info(
                     f"Truncated prior_conversation from {original_len} to "
@@ -233,12 +231,15 @@ class ReActExecutor:
             # Trace raw LLM response for debugging
             if self.trace_callback:
                 try:
-                    self.trace_callback("llm_iteration", {
-                        "role_id": self.role_id,
-                        "iteration": iteration + 1,
-                        "max_iterations": self.max_iterations,
-                        "response": response_text,  # Full response, no truncation
-                    })
+                    self.trace_callback(
+                        "llm_iteration",
+                        {
+                            "role_id": self.role_id,
+                            "iteration": iteration + 1,
+                            "max_iterations": self.max_iterations,
+                            "response": response_text,  # Full response, no truncation
+                        },
+                    )
                 except Exception as e:
                     log.warning(f"Trace callback failed: {e}")
 
@@ -272,12 +273,14 @@ class ReActExecutor:
             log.debug(f"Tool args: {tool_args}")
 
             observation = self._execute_tool(tool_name, tool_args)
-            tool_results.append({
-                "tool": tool_name,
-                "args": tool_args,
-                "result": observation,
-                "iteration": iteration + 1,
-            })
+            tool_results.append(
+                {
+                    "tool": tool_name,
+                    "args": tool_args,
+                    "result": observation,
+                    "iteration": iteration + 1,
+                }
+            )
 
             if self.debug:
                 log.info(f"Observation: {observation[:500]}...")

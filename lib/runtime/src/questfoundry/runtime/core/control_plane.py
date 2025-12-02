@@ -39,6 +39,7 @@ except ImportError:
     def traceable(**kwargs):
         def decorator(func):
             return func
+
         return decorator
 
 
@@ -79,7 +80,7 @@ class DormancyRegistry:
 
 class ControlPlane:
     """
-    Protocol-driven mesh router for the Studio.
+    Protocol-driven mesh router for the Studio (async-first architecture).
 
     The Control Plane builds a dynamic LangGraph where:
     - Every role can route to every other role
@@ -87,6 +88,15 @@ class ControlPlane:
     - Messages are queued per receiver (message bus pattern)
     - Roles only execute when they have pending messages
     - The Showrunner is coordinator, not bottleneck
+
+    Async Pattern (Preferred):
+    - Use run() for async execution
+    - All role nodes execute asynchronously
+    - Supports both sync and async base nodes via inspection (asyncio.iscoroutinefunction)
+
+    Backward Compatibility:
+    - Use run_sync() for synchronous contexts
+    - Wraps run() with asyncio.run()
     """
 
     def __init__(
@@ -533,15 +543,19 @@ class ControlPlane:
         """
         Wrap a role node to ensure it emits proper envelope messages and traces them.
 
-        The wrapped node:
-        1. Traces role_started
-        2. Executes the role logic (supports both sync and async nodes)
+        Returns an async function that:
+        1. Traces role_started event
+        2. Executes the base role node (supports both sync and async via inspection)
         3. Ensures output messages have proper envelope structure
         4. Traces all output messages
-        5. Advances message cursor (marks messages as consumed)
-        6. Traces role_completed
+        5. Marks messages as consumed (per-role consumption tracking)
+        6. Traces role_completed event
 
-        Returns an async function that LangGraph will await automatically.
+        The async wrapper allows LangGraph to manage concurrency while maintaining
+        message bus semantics (role execution is driven by pending messages).
+
+        Returns:
+            An async callable that LangGraph will await automatically
         """
         base_node = self.node_factory.create_role_node(role_id)
 
@@ -710,7 +724,7 @@ class ControlPlane:
 
         return compiled
 
-    @traceable(name="control_plane_run")
+    @traceable(name="control_plane.run", tags=["control_plane"])
     async def run(
         self,
         human_input: str,
@@ -718,15 +732,27 @@ class ControlPlane:
         recursion_limit: int = 50,
     ) -> StudioState:
         """
-        Run the studio with human input asynchronously.
+        Run the studio with human input asynchronously (preferred entry point).
+
+        Executes the protocol-driven mesh graph where:
+        - Human input is wrapped in a human.directive message
+        - The graph routes messages between roles via route_by_envelope
+        - Roles process messages and emit new protocol messages
+        - Execution continues until receiver="__terminate__"
+
+        This method is async-first and should be called with await.
+        For synchronous contexts, use run_sync() instead.
 
         Args:
             human_input: The user's request/directive
             context: Optional initial context
-            recursion_limit: Max graph iterations
+            recursion_limit: Max graph iterations (prevents infinite loops)
 
         Returns:
-            Final studio state
+            Final studio state with all messages and accumulated context
+
+        Raises:
+            Exception: If graph execution fails (logged with full traceback)
         """
         # Initialize state
         initial_state = self.state_manager.initialize_state(
@@ -787,15 +813,25 @@ class ControlPlane:
         recursion_limit: int = 50,
     ) -> StudioState:
         """
-        Synchronous wrapper for run() - use for CLI and synchronous contexts.
+        Synchronous wrapper for run() - for CLI and synchronous contexts (backward compatibility).
+
+        This method wraps the async run() using asyncio.run(), allowing synchronous code
+        to invoke the async control plane. It blocks until the entire studio execution completes.
+
+        Use this for:
+        - CLI entry points
+        - Synchronous test contexts
+        - Legacy code integrations
+
+        Prefer run() for async-capable contexts.
 
         Args:
             human_input: The user's request/directive
             context: Optional initial context
-            recursion_limit: Max graph iterations
+            recursion_limit: Max graph iterations (prevents infinite loops)
 
         Returns:
-            Final studio state
+            Final studio state with all messages and accumulated context
         """
         return asyncio.run(self.run(human_input, context, recursion_limit))
 

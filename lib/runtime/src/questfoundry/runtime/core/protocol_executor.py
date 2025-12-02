@@ -171,9 +171,7 @@ class ProtocolExecutor:
                 f"Exceeds threshold ({PROMPT_SIZE_ERROR_THRESHOLD})."
             )
         elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
-            log.warning(
-                f"Large prompt for {self.role_id}: {prompt_size} chars."
-            )
+            log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
         # Initialize conversation with prior history (with memory cap)
         if prior_conversation:
@@ -182,7 +180,7 @@ class ProtocolExecutor:
                 truncated = prior_conversation[-PRIOR_CONVERSATION_MAX_CHARS:]
                 newline_idx = truncated.find("\n")
                 if newline_idx > 0 and newline_idx < 500:
-                    truncated = truncated[newline_idx + 1:]
+                    truncated = truncated[newline_idx + 1 :]
                 prior_conversation = "[... earlier conversation truncated ...]\n\n" + truncated
                 log.info(
                     f"Truncated prior_conversation from {original_len} to "
@@ -236,12 +234,15 @@ class ProtocolExecutor:
             # Trace for debugging
             if self.trace_callback:
                 try:
-                    self.trace_callback("llm_iteration", {
-                        "role_id": self.role_id,
-                        "iteration": iteration,
-                        "failure_count": failure_count,
-                        "response": response_text,
-                    })
+                    self.trace_callback(
+                        "llm_iteration",
+                        {
+                            "role_id": self.role_id,
+                            "iteration": iteration,
+                            "failure_count": failure_count,
+                            "response": response_text,
+                        },
+                    )
                 except Exception as e:
                     log.warning(f"Trace callback failed: {e}")
 
@@ -276,13 +277,15 @@ class ProtocolExecutor:
                 # Execute tool
                 observation, tool_success = self._execute_tool(tool_name, tool_args)
 
-                tool_results.append({
-                    "tool": tool_name,
-                    "args": tool_args,
-                    "result": observation,
-                    "success": tool_success,
-                    "iteration": iteration,
-                })
+                tool_results.append(
+                    {
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "result": observation,
+                        "success": tool_success,
+                        "iteration": iteration,
+                    }
+                )
 
                 observations.append(f"{tool_name}: {observation}")
 
@@ -514,6 +517,7 @@ class ProtocolExecutor:
 
             if hasattr(tool, "_run"):
                 import inspect
+
                 sig = inspect.signature(tool._run)
                 valid_params = {k: v for k, v in payload.items() if k in sig.parameters}
                 result = tool._run(**valid_params)

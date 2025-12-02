@@ -394,7 +394,7 @@ To access project data, you MUST use the state tools and WAIT for results:
             block += "Use `read_hot_sot` tool with these keys:\n\n"
             for artifact, key, required in hot_inputs:
                 req_str = " **[REQUIRED]**" if required else ""
-                block += f"- `read_hot_sot(key=\"{key}\")` → {artifact}{req_str}\n"
+                block += f'- `read_hot_sot(key="{key}")` → {artifact}{req_str}\n'
             block += "\n"
 
         if cold_inputs:
@@ -402,7 +402,7 @@ To access project data, you MUST use the state tools and WAIT for results:
             block += "Use `read_cold_sot` tool with these keys:\n\n"
             for artifact, key, required in cold_inputs:
                 req_str = " **[REQUIRED]**" if required else ""
-                block += f"- `read_cold_sot(key=\"{key}\")` → {artifact}{req_str}\n"
+                block += f'- `read_cold_sot(key="{key}")` → {artifact}{req_str}\n'
             block += "\n"
 
         # Build write instructions from outputs
@@ -430,7 +430,7 @@ To save your work, you MUST use the `write_hot_sot` tool:
             block += "### Your Output Keys\n\n"
             block += "Use `write_hot_sot` tool with these keys:\n\n"
             for artifact, key, strategy in hot_outputs:
-                block += f"- `write_hot_sot(key=\"{key}\", value={{...}})` → {artifact} (merge: {strategy})\n"
+                block += f'- `write_hot_sot(key="{key}", value={{...}})` → {artifact} (merge: {strategy})\n'
             block += "\n"
 
         # Add example workflow
@@ -600,7 +600,7 @@ their schemas and descriptions.
         if structured_output.get("enabled"):
             schema_ref = structured_output.get("schema_ref", "")
             output_format = structured_output.get("format", "json")
-            interface_block += f"\n## Structured Output\n"
+            interface_block += "\n## Structured Output\n"
             interface_block += f"- Format: {output_format}\n"
             interface_block += f"- Schema: {schema_ref}\n"
             interface_block += "- Output MUST conform to schema or will be rejected\n"
@@ -637,20 +637,20 @@ their schemas and descriptions.
                             "properties": {
                                 "receiver": {
                                     "type": "string",
-                                    "description": "Target role ID or '*' for broadcast"
+                                    "description": "Target role ID or '*' for broadcast",
                                 },
                                 "intent": {
                                     "type": "string",
-                                    "description": "Protocol intent (e.g., 'tu.open', 'hook.create')"
+                                    "description": "Protocol intent (e.g., 'tu.open', 'hook.create')",
                                 },
                                 "payload": {
                                     "type": "object",
-                                    "description": "Message payload data"
-                                }
+                                    "description": "Message payload data",
+                                },
                             },
-                            "required": ["receiver", "intent", "payload"]
-                        }
-                    }
+                            "required": ["receiver", "intent", "payload"],
+                        },
+                    },
                 }
             )
 
@@ -673,12 +673,12 @@ their schemas and descriptions.
                             "properties": {
                                 "key": {
                                     "type": "string",
-                                    "description": "Key to read from hot state"
+                                    "description": "Key to read from hot state",
                                 }
                             },
-                            "required": ["key"]
-                        }
-                    }
+                            "required": ["key"],
+                        },
+                    },
                 }
             )
 
@@ -694,16 +694,16 @@ their schemas and descriptions.
                             "properties": {
                                 "key": {
                                     "type": "string",
-                                    "description": "Key to write to hot state"
+                                    "description": "Key to write to hot state",
                                 },
                                 "value": {
                                     "type": "object",
-                                    "description": "Value to write (can be any JSON value)"
-                                }
+                                    "description": "Value to write (can be any JSON value)",
+                                },
                             },
-                            "required": ["key", "value"]
-                        }
-                    }
+                            "required": ["key", "value"],
+                        },
+                    },
                 }
             )
 
@@ -719,12 +719,12 @@ their schemas and descriptions.
                             "properties": {
                                 "key": {
                                     "type": "string",
-                                    "description": "Key to read from cold state"
+                                    "description": "Key to read from cold state",
                                 }
                             },
-                            "required": ["key"]
-                        }
-                    }
+                            "required": ["key"],
+                        },
+                    },
                 }
             )
 
@@ -741,16 +741,16 @@ their schemas and descriptions.
                             "properties": {
                                 "key": {
                                     "type": "string",
-                                    "description": "Key to write to cold state"
+                                    "description": "Key to write to cold state",
                                 },
                                 "value": {
                                     "type": "object",
-                                    "description": "Value to write (will be snapshotted)"
-                                }
+                                    "description": "Value to write (will be snapshotted)",
+                                },
                             },
-                            "required": ["key", "value"]
-                        }
-                    }
+                            "required": ["key", "value"],
+                        },
+                    },
                 }
             )
 
@@ -785,12 +785,12 @@ their schemas and descriptions.
                                         "properties": {
                                             "input": {
                                                 "type": "string",
-                                                "description": f"Input for {capability_id}"
+                                                "description": f"Input for {capability_id}",
                                             }
                                         },
-                                        "required": ["input"]
-                                    }
-                                }
+                                        "required": ["input"],
+                                    },
+                                },
                             }
                         )
                     elif required:
@@ -820,12 +820,12 @@ their schemas and descriptions.
                                     "description": (
                                         "Loop ID to look up (e.g., 'story_spark', 'hook_harvest', "
                                         "'lore_deepening'). Use exact IDs from STUDIO KNOWLEDGE."
-                                    )
+                                    ),
                                 }
                             },
-                            "required": ["loop_id"]
-                        }
-                    }
+                            "required": ["loop_id"],
+                        },
+                    },
                 },
                 {
                     "type": "function",
@@ -843,12 +843,12 @@ their schemas and descriptions.
                                     "description": (
                                         "Query about protocol (e.g., 'tu.assign', 'envelope', "
                                         "'intents', 'lifecycle', 'flow', 'example')"
-                                    )
+                                    ),
                                 }
                             },
-                            "required": ["query"]
-                        }
-                    }
+                            "required": ["query"],
+                        },
+                    },
                 },
                 {
                     "type": "function",
@@ -867,12 +867,12 @@ their schemas and descriptions.
                                     "description": (
                                         "Role ID to look up (e.g., 'plotwright', 'gatekeeper', "
                                         "'scene_smith'). Use exact IDs from STUDIO KNOWLEDGE."
-                                    )
+                                    ),
                                 }
                             },
-                            "required": ["role_id"]
-                        }
-                    }
+                            "required": ["role_id"],
+                        },
+                    },
                 },
                 {
                     "type": "function",
@@ -890,12 +890,12 @@ their schemas and descriptions.
                                     "description": (
                                         "Quality bar name (e.g., 'integrity', 'reachability', "
                                         "'consistency', 'style')"
-                                    )
+                                    ),
                                 }
                             },
-                            "required": ["bar_name"]
-                        }
-                    }
+                            "required": ["bar_name"],
+                        },
+                    },
                 },
                 {
                     "type": "function",
@@ -910,14 +910,12 @@ their schemas and descriptions.
                             "properties": {
                                 "term": {
                                     "type": "string",
-                                    "description": (
-                                        "Term to look up, or 'all' for full glossary"
-                                    )
+                                    "description": ("Term to look up, or 'all' for full glossary"),
                                 }
                             },
-                            "required": ["term"]
-                        }
-                    }
+                            "required": ["term"],
+                        },
+                    },
                 },
             ]
         )
@@ -963,7 +961,9 @@ These are the ONLY valid loops you can initiate. Do NOT invent loop names.
                     else:
                         first_sentence = "No description."
 
-                    knowledge_block += f"- **{name}** (`{loop_id}`): {loop_type} - {first_sentence}\n"
+                    knowledge_block += (
+                        f"- **{name}** (`{loop_id}`): {loop_type} - {first_sentence}\n"
+                    )
                 except Exception as e:
                     logger.debug(f"Failed to load loop {loop_file}: {e}")
 
@@ -992,7 +992,9 @@ These roles can be woken via protocol messages. Use their IDs (lowercase) in rec
                     else:
                         first_sentence = "No mandate."
 
-                    knowledge_block += f"- **{name}** (`{role_id}`, {abbreviation}): {first_sentence}\n"
+                    knowledge_block += (
+                        f"- **{name}** (`{role_id}`, {abbreviation}): {first_sentence}\n"
+                    )
                 except Exception as e:
                     logger.debug(f"Failed to load role {role_file}: {e}")
 

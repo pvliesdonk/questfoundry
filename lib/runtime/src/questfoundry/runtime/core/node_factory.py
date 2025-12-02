@@ -30,6 +30,7 @@ except ImportError:
     def traceable(**kwargs):
         def decorator(func):
             return func
+
         return decorator
 
 
@@ -209,9 +210,7 @@ class NodeFactory:
         """
         return role.should_execute(state)
 
-    def assemble_role_context(
-        self, role_id: str, state: StudioState
-    ) -> dict[str, Any]:
+    def assemble_role_context(self, role_id: str, state: StudioState) -> dict[str, Any]:
         """
         Assemble complete role context using RuntimeContextAssembler.
 
@@ -474,9 +473,7 @@ class NodeFactory:
             logger.warning(f"Trace handler error: {e}")
 
     @staticmethod
-    def _merge_tool_result(
-        aggregated: dict[str, Any], result: Any
-    ) -> dict[str, Any]:
+    def _merge_tool_result(aggregated: dict[str, Any], result: Any) -> dict[str, Any]:
         """
         Merge a single tool result into the aggregated updates bucket.
 
@@ -559,7 +556,9 @@ class NodeFactory:
             else:
                 logger.warning(f"Tool '{tool_name}' not found in registry")
 
-        logger.debug(f"Converted {len(tool_specs)} tool specs to {len(tool_instances)} tool instances")
+        logger.debug(
+            f"Converted {len(tool_specs)} tool specs to {len(tool_instances)} tool instances"
+        )
         return tool_instances
 
     def _get_tool_map_from_specs(self, tool_specs: list[dict]) -> dict[str, Any]:
@@ -621,23 +620,25 @@ class NodeFactory:
             "type": "function",
             "function": {
                 "name": "send_protocol_message",
-                "arguments": json.dumps({
-                    "receiver": SHOWRUNNER,
-                    "intent": "error.tool_generation",
-                    "content": f"Role {role.id} failed to generate proper tool calls. This is a synthetic fallback message.",
-                    "payload": {
-                        "role": role.id,
-                        "reason": "tool_generation_failure",
-                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                "arguments": json.dumps(
+                    {
+                        "receiver": SHOWRUNNER,
+                        "intent": "error.tool_generation",
+                        "content": f"Role {role.id} failed to generate proper tool calls. This is a synthetic fallback message.",
+                        "payload": {
+                            "role": role.id,
+                            "reason": "tool_generation_failure",
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        },
                     }
-                })
-            }
+                ),
+            },
         }
 
         # Create AIMessage with tool_calls attribute
         return AIMessage(
             content=f"[Synthetic response for {role.id} due to tool generation failure]",
-            tool_calls=[synthetic_tool_call]
+            tool_calls=[synthetic_tool_call],
         )
 
     def _execute_tool_loop(
@@ -676,13 +677,13 @@ class NodeFactory:
         # Build tool lookup for execution
         tool_map = {}
         for tool in role_tools:
-            if hasattr(tool, '_base_tool'):
+            if hasattr(tool, "_base_tool"):
                 base_tool = tool._base_tool
                 tool_map[tool.name] = base_tool
                 # Also map by tool's own name in case it differs
-                if hasattr(base_tool, 'name'):
+                if hasattr(base_tool, "name"):
                     tool_map[base_tool.name] = base_tool
-            elif hasattr(tool, 'name'):
+            elif hasattr(tool, "name"):
                 tool_map[tool.name] = tool
 
         tu_id = state.get("tu_id", "unknown")
@@ -693,7 +694,7 @@ class NodeFactory:
 
         while iteration < max_iterations:
             # Check if response has tool calls
-            tool_calls = getattr(response, 'tool_calls', None)
+            tool_calls = getattr(response, "tool_calls", None)
 
             if not tool_calls:
                 # No tool calls - return final content
@@ -733,7 +734,9 @@ class NodeFactory:
 
                         payload = dict(tool_args)
                         args_schema = getattr(tool_instance, "args_schema", None)
-                        model_fields = getattr(args_schema, "model_fields", {}) if args_schema else {}
+                        model_fields = (
+                            getattr(args_schema, "model_fields", {}) if args_schema else {}
+                        )
                         if "state" in model_fields:
                             payload["state"] = state
                         if "role_id" in model_fields:
@@ -805,8 +808,7 @@ class NodeFactory:
 
             # Continue the conversation with tool results
             logger.info(
-                f"Role {role.id} iteration {iteration + 1}: "
-                f"processed {len(tool_calls)} tool calls"
+                f"Role {role.id} iteration {iteration + 1}: processed {len(tool_calls)} tool calls"
             )
             response = llm.invoke(messages)
             iteration += 1
@@ -889,7 +891,9 @@ class NodeFactory:
                 prompt = context["prompt"]
                 assembler_tools = context["tools"]
 
-                logger.debug(f"Role {role.id} assembled context with {len(assembler_tools)} tools from assembler")
+                logger.debug(
+                    f"Role {role.id} assembled context with {len(assembler_tools)} tools from assembler"
+                )
 
                 # 4. Invoke LLM or tools based on role type
                 llm_config = self.select_llm(role)
@@ -963,7 +967,9 @@ class NodeFactory:
                                             },
                                             "timestamp": datetime.now(UTC).isoformat(),
                                         }
-                                        self.state_manager._trace_handler.trace_message(prompt_message)
+                                        self.state_manager._trace_handler.trace_message(
+                                            prompt_message
+                                        )
                                     except Exception as e:
                                         logger.debug(f"Failed to trace prompt: {e}")
 
@@ -971,6 +977,7 @@ class NodeFactory:
                             trace_callback = None
                             if self.state_manager and hasattr(self.state_manager, "_trace_handler"):
                                 if self.state_manager._trace_handler:
+
                                     def make_trace_cb(handler, tu_id):
                                         def trace_cb(intent, payload):
                                             message = {
@@ -982,10 +989,12 @@ class NodeFactory:
                                                 "envelope": {"tu_id": tu_id},
                                             }
                                             handler.trace_message(message)
+
                                         return trace_cb
+
                                     trace_callback = make_trace_cb(
                                         self.state_manager._trace_handler,
-                                        state.get("tu_id", "unknown")
+                                        state.get("tu_id", "unknown"),
                                     )
 
                             executor = ProtocolExecutor(
@@ -996,7 +1005,9 @@ class NodeFactory:
                             )
 
                             # Retrieve prior conversation for short-term memory
-                            prior_conversation = state.get("role_conversations", {}).get(role.id, "")
+                            prior_conversation = state.get("role_conversations", {}).get(
+                                role.id, ""
+                            )
 
                             exec_result = executor.execute(
                                 llm=llm,  # Unbound LLM - no tool binding
@@ -1016,10 +1027,12 @@ class NodeFactory:
                                     f"{len(exec_result.tool_results)} tool calls)"
                                 )
                                 # Messages ARE the output - no final_answer to parse
-                                result = json.dumps({
-                                    "messages": exec_result.messages,
-                                    "tool_results": exec_result.tool_results,
-                                })
+                                result = json.dumps(
+                                    {
+                                        "messages": exec_result.messages,
+                                        "tool_results": exec_result.tool_results,
+                                    }
+                                )
                                 tool_updates = {
                                     "messages": exec_result.messages,
                                     "tool_results": exec_result.tool_results,
@@ -1027,12 +1040,14 @@ class NodeFactory:
                                 }
                             else:
                                 logger.error(f"Execution failed for {role.id}: {exec_result.error}")
-                                result = json.dumps({
-                                    "error": exec_result.error,
-                                    "iterations": exec_result.iterations,
-                                    "failure_count": exec_result.failure_count,
-                                    "tool_results": exec_result.tool_results,
-                                })
+                                result = json.dumps(
+                                    {
+                                        "error": exec_result.error,
+                                        "iterations": exec_result.iterations,
+                                        "failure_count": exec_result.failure_count,
+                                        "tool_results": exec_result.tool_results,
+                                    }
+                                )
                                 # Still store work summary even on failure for debugging
                                 tool_updates = {
                                     "role_conversations": {role.id: exec_result.work_summary},
@@ -1042,7 +1057,9 @@ class NodeFactory:
                             # No tools - simple LLM invocation
                             logger.info(f"No tools for {role.id}, invoking LLM directly")
                             response = llm.invoke(prompt)
-                            result = response.content if hasattr(response, "content") else str(response)
+                            result = (
+                                response.content if hasattr(response, "content") else str(response)
+                            )
                             tool_updates = {}
 
                         # Send role_completed with extracted insight and prompt context
@@ -1185,11 +1202,9 @@ class NodeFactory:
                     recv = msg.get("receiver")
                     if isinstance(recv, dict):
                         msg["receiver"] = (
-                            recv.get("role")
-                            or recv.get("id")
-                            or recv.get("name")
-                            or "showrunner"
+                            recv.get("role") or recv.get("id") or recv.get("name") or "showrunner"
                         )
+
                 for msg in messages_out:
                     _normalize_receiver(msg)
 

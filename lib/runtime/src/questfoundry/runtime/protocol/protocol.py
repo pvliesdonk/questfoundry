@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from importlib import resources
 from typing import Any
 
 import jsonschema
-from importlib import resources
 
 from questfoundry.runtime.core.state_manager import StateManager
 from questfoundry.runtime.exceptions import StateError
@@ -82,7 +82,7 @@ def _normalize_tu(tu_id: str | None, fallback_role: str) -> str:
     pattern = re.compile(r"^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$")
     if tu_id and pattern.match(tu_id):
         return tu_id
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     role = _to_abbrev(fallback_role)
     return f"TU-{today}-{role}01"
 
@@ -103,7 +103,7 @@ class Protocol:
         payload: dict[str, Any],
     ) -> Message:
         message_id = self._generate_message_id()
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         recv_val = _wrap_receiver(receiver)
         envelope: Envelope = {
             "protocol": {"name": "qf-protocol", "version": "1.0.0"},
@@ -130,7 +130,7 @@ class Protocol:
     def send_envelope(self, state: StudioState, envelope: Envelope) -> Message:
         envelope = {**envelope}
         message_id = self._generate_message_id()
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         envelope.setdefault("protocol", {"name": "qf-protocol", "version": "1.0.0"})
         envelope.setdefault("id", message_id)
         envelope.setdefault("time", timestamp)
@@ -138,7 +138,13 @@ class Protocol:
         envelope["sender"] = _wrap_sender(sender_val)
         recv_val = envelope.get("receiver", "broadcast")
         envelope["receiver"] = _wrap_receiver(recv_val)
-        envelope.setdefault("tu_id", _normalize_tu(state.get("tu_id"), sender_val if isinstance(sender_val, str) else sender_val.get("role", "*")))
+        envelope.setdefault(
+            "tu_id",
+            _normalize_tu(
+                state.get("tu_id"),
+                sender_val if isinstance(sender_val, str) else sender_val.get("role", "*"),
+            ),
+        )
         envelope.setdefault("snapshot_ref", state.get("snapshot_ref"))
         envelope.setdefault("loop_id", state.get("loop_id"))
         envelope.setdefault("transport", "inproc")
@@ -147,7 +153,10 @@ class Protocol:
             "context",
             {
                 "hot_cold": "hot",
-                "tu": _normalize_tu(state.get("tu_id"), sender_val if isinstance(sender_val, str) else sender_val.get("role", "*")),
+                "tu": _normalize_tu(
+                    state.get("tu_id"),
+                    sender_val if isinstance(sender_val, str) else sender_val.get("role", "*"),
+                ),
                 "loop": LOOP_DISPLAY.get(state.get("loop_id"), state.get("loop_id")),
             },
         )
@@ -158,7 +167,7 @@ class Protocol:
     def _dispatch(self, state: StudioState, envelope: Envelope) -> Message:
         sender = envelope.get("sender") or "system"
         receiver = envelope.get("receiver", "broadcast")
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         message: Message = {
             "sender": sender,
             "receiver": receiver if not isinstance(receiver, list) else "broadcast",
@@ -171,14 +180,16 @@ class Protocol:
 
     @staticmethod
     def _generate_message_id() -> str:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return f"MSG-{now.strftime('%Y%m%dT%H%M%S%fZ')}"
 
     def _load_envelope_schema(self) -> dict[str, Any] | None:
         try:
-            with resources.files("questfoundry.runtime.resources.protocol").joinpath(
-                "envelope.schema.json"
-            ).open("r", encoding="utf-8") as f:
+            with (
+                resources.files("questfoundry.runtime.resources.protocol")
+                .joinpath("envelope.schema.json")
+                .open("r", encoding="utf-8") as f
+            ):
                 return json.load(f)
         except Exception as exc:  # pragma: no cover - schema optional fallback
             logger.debug("Envelope schema load failed: %s", exc)

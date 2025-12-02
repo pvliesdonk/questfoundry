@@ -5,6 +5,7 @@ Architecture: Protocol-driven mesh routing via ControlPlane.
 The Showrunner role coordinates; routing is envelope-based.
 """
 
+import asyncio
 import signal
 import sys
 from pathlib import Path
@@ -25,6 +26,11 @@ logger = get_logger(__name__)
 
 # Track active trace handlers for cleanup on interrupt
 _active_trace_handlers = []
+
+
+def run_async(coro):
+    """Run async coroutine in sync context using asyncio.run()."""
+    return asyncio.run(coro)
 
 
 def cleanup_and_exit(signum=None, frame=None):
@@ -218,10 +224,12 @@ def ask(
 
         logger.info(f"Starting mesh execution with recursion_limit={recursion_limit}")
 
-        # Run the mesh (using run_sync which handles async internally via asyncio.run)
-        final_state = control_plane.run_sync(
-            human_input=message,
-            recursion_limit=recursion_limit,
+        # Run the mesh using asyncio.run() to execute async operation
+        final_state = asyncio.run(
+            control_plane.run(
+                human_input=message,
+                recursion_limit=recursion_limit,
+            )
         )
 
         # Close trace handler if created

@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from questfoundry.runtime.core.schema_registry import DEFINITIONS_ROOT, SPEC_ROOT
+from questfoundry.runtime.core.schema_registry import DEFINITIONS_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,7 @@ class Provider:
                 return False
             # Use shutil.which to check command availability
             import shutil
+
             return shutil.which(command) is not None
 
         else:
@@ -123,6 +124,7 @@ class CapabilityMapper:
             # Tool mappings are in lib/runtime/config, not in spec
             # Try to find it relative to runtime module
             import questfoundry.runtime
+
             # questfoundry.runtime.__file__ is at lib/runtime/src/questfoundry/runtime/__init__.py
             # Go up 5 levels to reach monorepo root: runtime/ -> questfoundry/ -> src/ -> runtime/ -> lib/ -> root/
             monorepo_root = Path(questfoundry.runtime.__file__).parent.parent.parent.parent.parent

@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import logging
 from functools import lru_cache
+from importlib import resources
 from typing import Any
 
 import jsonschema
 import yaml
-from importlib import resources
 from langchain_core.tools import BaseTool
 from pydantic import PrivateAttr
 
@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 @lru_cache(maxsize=128)
 def _load_schema(schema_name: str) -> dict[str, Any]:
     try:
-        with resources.files("questfoundry.runtime.resources.schemas").joinpath(schema_name).open(
-            "r", encoding="utf-8"
-        ) as f:
+        with (
+            resources.files("questfoundry.runtime.resources.schemas")
+            .joinpath(schema_name)
+            .open("r", encoding="utf-8") as f
+        ):
             return json.load(f)
     except FileNotFoundError as exc:
         raise StateError(f"Schema not found: {schema_name}") from exc
@@ -30,9 +32,11 @@ def _load_schema(schema_name: str) -> dict[str, Any]:
 @lru_cache(maxsize=32)
 def _load_quality_gate(gate_id: str) -> dict[str, Any]:
     try:
-        with resources.files("questfoundry.runtime.resources.definitions.quality_gates").joinpath(
-            f"{gate_id}.yaml"
-        ).open("r", encoding="utf-8") as f:
+        with (
+            resources.files("questfoundry.runtime.resources.definitions.quality_gates")
+            .joinpath(f"{gate_id}.yaml")
+            .open("r", encoding="utf-8") as f
+        ):
             return yaml.safe_load(f) or {}
     except FileNotFoundError as exc:
         raise StateError(f"Quality gate not found: {gate_id}") from exc
@@ -118,7 +122,9 @@ class EvaluateQualityBar(BaseTool):
             "checks": results,
         }
 
-    def _run_schema_validation(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+    def _run_schema_validation(
+        self, check: dict[str, Any], artifacts: dict[str, Any]
+    ) -> tuple[str, str]:
         validator = check.get("validator", {})
         method = validator.get("method")
         target = validator.get("target", "")
@@ -153,7 +159,9 @@ class EvaluateQualityBar(BaseTool):
 
         return "skipped", f"unsupported schema_validation method {method}"
 
-    def _run_reference_resolution(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+    def _run_reference_resolution(
+        self, check: dict[str, Any], artifacts: dict[str, Any]
+    ) -> tuple[str, str]:
         target_path = check.get("validator", {}).get("target", "")
         values = self._extract_values(artifacts, target_path)
         ids = {v.get("id") for v in values if isinstance(v, dict) and "id" in v}
@@ -168,7 +176,9 @@ class EvaluateQualityBar(BaseTool):
             return "fail", f"missing references: {missing}"
         return "pass", ""
 
-    def _run_graph_analysis(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+    def _run_graph_analysis(
+        self, check: dict[str, Any], artifacts: dict[str, Any]
+    ) -> tuple[str, str]:
         target_path = check.get("validator", {}).get("target", "")
         values = self._extract_values(artifacts, target_path)
         if not values:
@@ -223,7 +233,9 @@ class EvaluateQualityBar(BaseTool):
                 flat.append(v)
         return flat
 
-    def _run_reference_resolution(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+    def _run_reference_resolution(
+        self, check: dict[str, Any], artifacts: dict[str, Any]
+    ) -> tuple[str, str]:
         target_path = check.get("validator", {}).get("target", "")
         values = self._extract_values(artifacts, target_path)
         # heuristic: treat values as dicts containing "id" and collect referenced ids in any list field ending with "_ids" or "_links"
@@ -239,7 +251,9 @@ class EvaluateQualityBar(BaseTool):
             return "fail", f"missing references: {missing}"
         return "pass", ""
 
-    def _run_graph_analysis(self, check: dict[str, Any], artifacts: dict[str, Any]) -> tuple[str, str]:
+    def _run_graph_analysis(
+        self, check: dict[str, Any], artifacts: dict[str, Any]
+    ) -> tuple[str, str]:
         # Placeholder: treat as pass if target exists, otherwise skip
         target_path = check.get("validator", {}).get("target", "")
         values = self._extract_values(artifacts, target_path)

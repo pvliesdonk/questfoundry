@@ -73,7 +73,9 @@ class PdfExport(BaseTool):
         pandoc_bin = _find_binary("pandoc")
         if pandoc_bin:
             converter = PandocConvert()
-            return converter._run(input_path=input_path, output_path=output_path, output_format=self._format)
+            return converter._run(
+                input_path=input_path, output_path=output_path, output_format=self._format
+            )
 
         # Fallback: weasyprint for HTML -> PDF/EPUB when installed
         backend = None
@@ -108,6 +110,7 @@ class PdfExport(BaseTool):
 def _get_exports_dir(project_id: str = "default") -> Path:
     """Get the exports directory for a project."""
     from questfoundry.runtime.core.cold_store import _default_project_root
+
     base = _default_project_root()
     exports_dir = base / project_id / "exports"
     exports_dir.mkdir(parents=True, exist_ok=True)
@@ -137,6 +140,7 @@ class ReadExports(BaseTool):
     ) -> dict[str, Any]:
         """Read exports from the export directory."""
         import os
+
         pid = project_id or os.getenv("QF_PROJECT_ID", "default")
         exports_dir = _get_exports_dir(pid)
 
@@ -182,12 +186,14 @@ class ReadExports(BaseTool):
         exports = []
         for f in exports_dir.glob(pattern):
             if f.is_file():
-                exports.append({
-                    "filename": f.name,
-                    "format": f.suffix.lstrip("."),
-                    "size_bytes": f.stat().st_size,
-                    "modified": f.stat().st_mtime,
-                })
+                exports.append(
+                    {
+                        "filename": f.name,
+                        "format": f.suffix.lstrip("."),
+                        "size_bytes": f.stat().st_size,
+                        "modified": f.stat().st_mtime,
+                    }
+                )
 
         logger.info(f"Listed {len(exports)} exports from {exports_dir}")
         return {
@@ -224,6 +230,7 @@ class WriteExports(BaseTool):
     ) -> dict[str, Any]:
         """Write content to export directory."""
         import os
+
         valid_formats = ["pdf", "epub", "html", "txt", "md"]
         if format not in valid_formats:
             return {
@@ -245,6 +252,7 @@ class WriteExports(BaseTool):
             if format in {"pdf", "epub"}:
                 # Try to decode as base64 if it looks like binary
                 import base64
+
                 try:
                     binary_content = base64.b64decode(content)
                     export_path.write_bytes(binary_content)

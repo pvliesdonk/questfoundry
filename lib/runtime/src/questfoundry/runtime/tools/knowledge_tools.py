@@ -7,14 +7,12 @@ These tools implement the "Read-Only Cartridge" pattern from the mesh architectu
 - The spec (Layer 0-5) is the agent's knowledge base
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 from langchain_core.tools import BaseTool
-from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +191,9 @@ class ConsultQualityGate(BaseTool):
         if thresholds:
             lines.append("## Pass Thresholds")
             green = thresholds.get("green", {})
-            lines.append(f"- Green: max {green.get('critical_failures', 0)} critical, {green.get('warning_failures', 0)} warnings")
+            lines.append(
+                f"- Green: max {green.get('critical_failures', 0)} critical, {green.get('warning_failures', 0)} warnings"
+            )
             lines.append("")
 
         # Remediation
@@ -377,8 +377,12 @@ class ConsultRoleCharter(BaseTool):
             can_send = intents.get("can_send", [])
             can_receive = intents.get("can_receive", [])
             lines.append("## Protocol Capabilities")
-            lines.append(f"**Can Send**: {', '.join(can_send[:10])}{'...' if len(can_send) > 10 else ''}")
-            lines.append(f"**Can Receive**: {', '.join(can_receive[:10])}{'...' if len(can_receive) > 10 else ''}")
+            lines.append(
+                f"**Can Send**: {', '.join(can_send[:10])}{'...' if len(can_send) > 10 else ''}"
+            )
+            lines.append(
+                f"**Can Receive**: {', '.join(can_receive[:10])}{'...' if len(can_receive) > 10 else ''}"
+            )
             lines.append("")
 
         return "\n".join(lines)

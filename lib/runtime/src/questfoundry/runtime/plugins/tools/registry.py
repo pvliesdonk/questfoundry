@@ -8,7 +8,7 @@ Implements plugin provider pattern for tool access.
 import logging
 from typing import Any
 
-from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.tools import BaseTool
 
 from questfoundry.runtime.tools import (
     # Knowledge tools
@@ -191,9 +191,7 @@ class ToolRegistry:
         )
 
         # Orchestration tools (Showrunner coordination)
-        self._tools["create_snapshot"] = LangChainToolAdapter(
-            "create_snapshot", CreateSnapshot()
-        )
+        self._tools["create_snapshot"] = LangChainToolAdapter("create_snapshot", CreateSnapshot())
         self._tools["update_tu"] = LangChainToolAdapter("update_tu", UpdateTU())
         self._tools["wake_role"] = LangChainToolAdapter("wake_role", WakeRole())
         self._tools["sleep_role"] = LangChainToolAdapter("sleep_role", SleepRole())
@@ -203,21 +201,13 @@ class ToolRegistry:
 
         # Media tools - aliases to actual implementations
         # generate_image -> StableDiffusion (already implements multi-provider image gen)
-        self._tools["generate_image"] = LangChainToolAdapter(
-            "generate_image", StableDiffusion()
-        )
+        self._tools["generate_image"] = LangChainToolAdapter("generate_image", StableDiffusion())
         # generate_audio -> stub (no audio provider implemented yet)
-        self._tools["generate_audio"] = LangChainToolAdapter(
-            "generate_audio", GenerateAudio()
-        )
+        self._tools["generate_audio"] = LangChainToolAdapter("generate_audio", GenerateAudio())
 
         # Export tools (read/write exports)
-        self._tools["read_exports"] = LangChainToolAdapter(
-            "read_exports", ReadExports()
-        )
-        self._tools["write_exports"] = LangChainToolAdapter(
-            "write_exports", WriteExports()
-        )
+        self._tools["read_exports"] = LangChainToolAdapter("read_exports", ReadExports())
+        self._tools["write_exports"] = LangChainToolAdapter("write_exports", WriteExports())
 
         logger.info(f"Registered {len(self._tools)} stub tools")
 

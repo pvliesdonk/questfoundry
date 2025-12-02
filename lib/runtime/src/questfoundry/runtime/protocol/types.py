@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
-from questfoundry.runtime.models.state import Message
-
-
 # Special receiver values for mesh routing
 TERMINATE = "__terminate__"
 BROADCAST = "*"

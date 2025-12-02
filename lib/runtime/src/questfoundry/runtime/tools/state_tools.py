@@ -72,21 +72,41 @@ class _StrictToolSchemaMixin:
 
 # Schema-defined array keys in hot_sot and cold_sot
 # When these keys are missing, return [] instead of None
-_ARRAY_KEYS = frozenset({
-    # hot_sot arrays (from studio_state.schema.json)
-    "hooks", "tus", "canon_packs", "style_addenda", "research_memos",
-    "art_plans", "audio_plans", "edit_notes", "canon_transfer_packages",
-    # cold_sot arrays
-    "snapshots", "codex_entries", "language_packs", "sections",
-    # Common ad-hoc arrays used by roles
-    "customer_directives", "section_briefs", "drafts",
-})
+_ARRAY_KEYS = frozenset(
+    {
+        # hot_sot arrays (from studio_state.schema.json)
+        "hooks",
+        "tus",
+        "canon_packs",
+        "style_addenda",
+        "research_memos",
+        "art_plans",
+        "audio_plans",
+        "edit_notes",
+        "canon_transfer_packages",
+        # cold_sot arrays
+        "snapshots",
+        "codex_entries",
+        "language_packs",
+        "sections",
+        # Common ad-hoc arrays used by roles
+        "customer_directives",
+        "section_briefs",
+        "drafts",
+    }
+)
 
 # Dict-type keys that should return {} instead of None
-_DICT_KEYS = frozenset({
-    "canon", "style", "topology", "codex", "manuscript",
-    "world_genesis_manifest",
-})
+_DICT_KEYS = frozenset(
+    {
+        "canon",
+        "style",
+        "topology",
+        "codex",
+        "manuscript",
+        "world_genesis_manifest",
+    }
+)
 
 
 def create_empty_hot_sot() -> dict[str, Any]:
@@ -256,6 +276,7 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
 class ReadHotSOT(_BaseStateTool):
     name: str = "read_hot_sot"
     description: str = "Read from in-memory hot source of truth"
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -268,6 +289,7 @@ class ReadHotSOT(_BaseStateTool):
         role_id: Annotated[str | None, InjectedToolArg] = Field(
             default=None, description="Caller role id"
         )
+
     args_schema = Args
 
     def _run(
@@ -284,6 +306,7 @@ class ReadHotSOT(_BaseStateTool):
 class WriteHotSOT(_BaseStateTool):
     name: str = "write_hot_sot"
     description: str = "Write to in-memory hot source of truth"
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -305,6 +328,7 @@ class WriteHotSOT(_BaseStateTool):
         role_id: Annotated[str | None, InjectedToolArg] = Field(
             default=None, description="Caller role id"
         )
+
     args_schema = Args
 
     def _run(
@@ -331,6 +355,7 @@ class WriteHotSOT(_BaseStateTool):
 class ReadColdSOT(_BaseStateTool):
     name: str = "read_cold_sot"
     description: str = "Read from persistent cold source of truth"
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -344,6 +369,7 @@ class ReadColdSOT(_BaseStateTool):
         role_id: Annotated[str | None, InjectedToolArg] = Field(
             default=None, description="Caller role id"
         )
+
     args_schema = Args
 
     def _run(
@@ -366,6 +392,7 @@ class ReadColdSOT(_BaseStateTool):
 class WriteColdSOT(_BaseStateTool):
     name: str = "write_cold_sot"
     description: str = "Persist to cold source of truth (SQLite/disk)"
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -388,6 +415,7 @@ class WriteColdSOT(_BaseStateTool):
         role_id: Annotated[str | None, InjectedToolArg] = Field(
             default=None, description="Caller role id"
         )
+
     args_schema = Args
 
     def _run(

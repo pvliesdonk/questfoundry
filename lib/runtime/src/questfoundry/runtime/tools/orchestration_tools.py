@@ -10,7 +10,7 @@ These tools allow the Showrunner to coordinate the studio:
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Any, Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools.base import _is_injected_arg_type
@@ -77,6 +77,7 @@ class CreateSnapshot(_StrictToolSchemaMixin, BaseTool):
         "Returns a snapshot_ref ID that can be used to restore state. "
         "Use before significant changes for traceability."
     )
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -87,6 +88,7 @@ class CreateSnapshot(_StrictToolSchemaMixin, BaseTool):
             ..., description="Current studio state"
         )
         project_id: str | None = Field(default=None, description="Project id override")
+
     args_schema = Args
 
     model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
@@ -156,6 +158,7 @@ class UpdateTU(_StrictToolSchemaMixin, BaseTool):
         "Valid transitions: hot-proposed → stabilizing → gatecheck → cold-merged. "
         "Input: new_state (one of: stabilizing, gatecheck, cold-merged)"
     )
+
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
@@ -165,6 +168,7 @@ class UpdateTU(_StrictToolSchemaMixin, BaseTool):
         state: Annotated[StudioState, InjectedToolArg] = Field(
             ..., description="Current studio state"
         )
+
     args_schema = Args
 
     model_config = {"arbitrary_types_allowed": True, "extra": "ignore"}
@@ -251,6 +255,7 @@ class WakeRole(_StrictToolSchemaMixin, BaseTool):
             json_schema_extra={"additionalProperties": False},
         )
         role_id: str = Field(..., description="Role id to wake")
+
     args_schema = Args
 
     def _run(self, role_id: str) -> dict[str, Any]:
@@ -312,6 +317,7 @@ class TriggerGatecheck(_StrictToolSchemaMixin, BaseTool):
         state: Annotated[StudioState | None, InjectedToolArg] = Field(
             default=None, description="Current studio state"
         )
+
     args_schema = Args
 
     def _run(

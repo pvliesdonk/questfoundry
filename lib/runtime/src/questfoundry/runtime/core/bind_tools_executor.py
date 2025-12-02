@@ -26,7 +26,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from questfoundry.runtime.structured_logging import get_tool_logger
 
@@ -40,7 +40,9 @@ except ImportError:
     def traceable(**kwargs):
         def decorator(func):
             return func
+
         return decorator
+
 
 # Prompt size thresholds (in characters, ~4 chars per token)
 PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
@@ -54,14 +56,16 @@ PROTOCOL_MESSAGE_TOOLS = {"send_protocol_message", "send_message"}
 
 # Models known to NOT support bind_tools reliably (denylist approach)
 # Assume bind_tools works unless the model is in this list or lacks the method
-BIND_TOOLS_DENYLIST = frozenset({
-    "llama-3.2-1b",
-    "llama-3.2-3b",
-    "llama3.2:1b",
-    "llama3.2:3b",
-    "phi-2",
-    "tinyllama",
-})
+BIND_TOOLS_DENYLIST = frozenset(
+    {
+        "llama-3.2-1b",
+        "llama-3.2-3b",
+        "llama3.2:1b",
+        "llama3.2:3b",
+        "phi-2",
+        "tinyllama",
+    }
+)
 
 
 @dataclass
@@ -141,15 +145,13 @@ class BindToolsExecutor:
         self.llm = llm
         self.tools = tools
         self.role_id = role_id
-        self.max_iterations = max_iterations or int(
-            os.getenv("QF_BIND_TOOLS_MAX_ITERATIONS", "5")
-        )
+        self.max_iterations = max_iterations or int(os.getenv("QF_BIND_TOOLS_MAX_ITERATIONS", "5"))
         self.debug = os.getenv("QF_DEBUG", "").lower() in ("true", "1", "yes")
         self.trace_handler = trace_handler
         self.tool_map = {tool.name: tool for tool in tools}
 
-    @traceable(name="bind_tools_execute")
-    def execute(
+    @traceable(name="bind_tools_executor.execute", tags=["executor", "bind_tools"])
+    async def execute(
         self,
         system_prompt: str,
         user_prompt: str,
@@ -189,9 +191,7 @@ class BindToolsExecutor:
                 f"Exceeds threshold ({PROMPT_SIZE_ERROR_THRESHOLD})."
             )
         elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
-            log.warning(
-                f"Large prompt for {self.role_id}: {prompt_size} chars."
-            )
+            log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
         # Initialize conversation with prior history (with memory cap)
         if prior_conversation:
@@ -200,7 +200,7 @@ class BindToolsExecutor:
                 truncated = prior_conversation[-PRIOR_CONVERSATION_MAX_CHARS:]
                 newline_idx = truncated.find("\n")
                 if newline_idx > 0 and newline_idx < 500:
-                    truncated = truncated[newline_idx + 1:]
+                    truncated = truncated[newline_idx + 1 :]
                 prior_conversation = "[... earlier conversation truncated ...]\n\n" + truncated
                 log.info(
                     f"Truncated prior_conversation from {original_len} to "
@@ -231,7 +231,7 @@ class BindToolsExecutor:
 
             # Invoke LLM with bound tools
             try:
-                response = llm_with_tools.invoke(messages)
+                response = await llm_with_tools.ainvoke(messages)
             except Exception as e:
                 log.error(f"LLM invocation failed: {e}")
                 failure_count += 1
@@ -254,12 +254,15 @@ class BindToolsExecutor:
             # Trace for debugging
             if self.trace_handler:
                 try:
-                    self.trace_handler("llm_iteration", {
-                        "role_id": self.role_id,
-                        "iteration": iteration,
-                        "failure_count": failure_count,
-                        "response": response_text,
-                    })
+                    self.trace_handler(
+                        "llm_iteration",
+                        {
+                            "role_id": self.role_id,
+                            "iteration": iteration,
+                            "failure_count": failure_count,
+                            "response": response_text,
+                        },
+                    )
                 except Exception as e:
                     log.warning(f"Trace callback failed: {e}")
 
@@ -300,7 +303,7 @@ class BindToolsExecutor:
                     tool_log = None
 
                 # Execute tool
-                observation, tool_success = self._execute_tool(tool_name, tool_args)
+                observation, tool_success = await self._execute_tool(tool_name, tool_args)
 
                 # Log tool execution
                 if tool_log:
@@ -315,13 +318,15 @@ class BindToolsExecutor:
                     except Exception as e:
                         log.warning(f"Failed to log tool execution: {e}")
 
-                tool_results.append({
-                    "tool": tool_name,
-                    "args": tool_args,
-                    "result": observation,
-                    "success": tool_success,
-                    "iteration": iteration,
-                })
+                tool_results.append(
+                    {
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "result": observation,
+                        "success": tool_success,
+                        "iteration": iteration,
+                    }
+                )
 
                 if not tool_success:
                     any_failed = True
@@ -344,10 +349,12 @@ class BindToolsExecutor:
                     log.info(f"Protocol message to {protocol_msg['receiver']} collected")
 
                 # Add tool result to messages
-                messages.append(ToolMessage(
-                    content=observation,
-                    tool_call_id=tool_id,
-                ))
+                messages.append(
+                    ToolMessage(
+                        content=observation,
+                        tool_call_id=tool_id,
+                    )
+                )
 
             # After processing all actions, decide what to do
             if any_failed:
@@ -448,3 +455,46 @@ class BindToolsExecutor:
         if len(summary) > PRIOR_CONVERSATION_MAX_CHARS:
             summary = summary[:PRIOR_CONVERSATION_MAX_CHARS] + "..."
         return summary
+
+
+def select_executor(model_name: str) -> type:
+    """Select executor based on model's bind_tools support.
+
+    Models known to support bind_tools reliably get BindToolsExecutor.
+    Models that don't support it or are too small get ProtocolExecutor (text-based fallback).
+
+    Args:
+        model_name: Name of the model (e.g., "qwen3:8b", "llama-3.2:1b", "gpt-4")
+
+    Returns:
+        Executor class to use (BindToolsExecutor or ProtocolExecutor)
+    """
+    # Import here to avoid circular imports
+    from questfoundry.runtime.core.protocol_executor import ProtocolExecutor
+
+    # Models known to support bind_tools well
+    BIND_TOOLS_MODELS = {
+        "qwen3",
+        "qwen2.5",
+        "qwen2",
+        "gpt-4",
+        "gpt-3.5",
+        "claude-3",
+        "claude-2",
+        "llama-3.1",
+        "llama3.1",
+        "gemini",
+    }
+
+    model_lower = model_name.lower()
+
+    # Check if any supported model pattern matches
+    if any(m in model_lower for m in BIND_TOOLS_MODELS):
+        return BindToolsExecutor
+
+    # Check denylist for models known to NOT work
+    if any(m in model_lower for m in BIND_TOOLS_DENYLIST):
+        return ProtocolExecutor
+
+    # Default to text-based for unknown models (safer)
+    return ProtocolExecutor
