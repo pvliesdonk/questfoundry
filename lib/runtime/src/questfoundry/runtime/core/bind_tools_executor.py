@@ -449,13 +449,14 @@ class BindToolsExecutor:
 
         try:
             # Inject state and role_id for InjectedToolArg parameters
-            payload = {**tool_args, "state": self.state, "role_id": self.role_id}
+            # Use combined_args to avoid shadowing 'payload' key from tool_args
+            combined_args = {**tool_args, "state": self.state, "role_id": self.role_id}
 
             # Call _run directly with filtered params (like ProtocolExecutor)
             # This avoids Pydantic validation issues with InjectedToolArg
             if hasattr(tool, "_run"):
                 sig = inspect.signature(tool._run)
-                valid_params = {k: v for k, v in payload.items() if k in sig.parameters}
+                valid_params = {k: v for k, v in combined_args.items() if k in sig.parameters}
                 result = tool._run(**valid_params)
             elif hasattr(tool, "invoke"):
                 result = tool.invoke(**tool_args)  # Use original args without state/role_id

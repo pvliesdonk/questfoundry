@@ -532,28 +532,29 @@ class ProtocolExecutor:
             return f"Error: Unknown tool '{tool_name}'. Available tools: {available}", False
 
         try:
-            payload = {**tool_args, "state": self.state, "role_id": self.role_id}
+            # Use combined_args to avoid shadowing 'payload' key from tool_args
+            combined_args = {**tool_args, "state": self.state, "role_id": self.role_id}
 
             # Try async methods first, fall back to sync
             if hasattr(tool, "ainvoke"):
-                result = await tool.ainvoke(payload)
+                result = await tool.ainvoke(combined_args)
             elif hasattr(tool, "_arun"):
                 import inspect
 
                 sig = inspect.signature(tool._arun)
-                valid_params = {k: v for k, v in payload.items() if k in sig.parameters}
+                valid_params = {k: v for k, v in combined_args.items() if k in sig.parameters}
                 result = await tool._arun(**valid_params)
             elif hasattr(tool, "_run"):
                 # Fallback to sync _run (for tools without async support)
                 import inspect
 
                 sig = inspect.signature(tool._run)
-                valid_params = {k: v for k, v in payload.items() if k in sig.parameters}
+                valid_params = {k: v for k, v in combined_args.items() if k in sig.parameters}
                 result = tool._run(**valid_params)
             elif hasattr(tool, "invoke"):
-                result = tool.invoke(**payload)
+                result = tool.invoke(**combined_args)
             else:
-                result = tool(**payload)
+                result = tool(**combined_args)
 
             # Convert to JSON string
             if isinstance(result, str):

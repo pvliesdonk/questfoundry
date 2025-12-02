@@ -100,12 +100,14 @@ class SendProtocolMessage(_BaseProtocolTool):
         self,
         receiver: str,
         intent: str,
-        payload: dict[str, Any],
-        role_id: str,
-        state: StudioState,
+        payload: dict[str, Any] | None = None,
+        role_id: str | None = None,
+        state: StudioState | None = None,
     ) -> dict[str, Any]:  # type: ignore[override]
         if not state:
             raise StateError("State payload is required")
+        if payload is None:
+            payload = {}
         message = self._protocol.send_message(
             state,
             sender=role_id,
