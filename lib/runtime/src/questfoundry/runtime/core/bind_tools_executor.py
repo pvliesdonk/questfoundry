@@ -32,6 +32,18 @@ from questfoundry.runtime.structured_logging import get_tool_logger
 
 log = logging.getLogger(__name__)
 
+
+def _get_prompt_log():
+    """Lazy getter for prompt logger (configured at runtime by CLI)."""
+    try:
+        from questfoundry.runtime.structured_logging import get_prompt_logger, is_configured
+
+        if is_configured():
+            return get_prompt_logger()
+    except ImportError:
+        pass
+    return None
+
 # Optional LangSmith tracing
 try:
     from langsmith import traceable
@@ -253,6 +265,22 @@ class BindToolsExecutor:
             # Extract response content
             response_text = self._extract_content(response)
             raw_responses.append(response_text)
+
+            # Log prompt and response to structured logging
+            prompt_log = _get_prompt_log()
+            if prompt_log:
+                # Get the input messages for this iteration
+                system_content = messages[0].content if messages else ""
+                user_content = messages[1].content if len(messages) > 1 else ""
+                prompt_log.info(
+                    "llm_call",
+                    role=self.role_id,
+                    iteration=iteration,
+                    system_prompt_chars=len(system_content),
+                    user_prompt_chars=len(user_content),
+                    response_chars=len(response_text),
+                    tool_calls_count=len(getattr(response, "tool_calls", []) or []),
+                )
 
             # Trace for debugging
             if self.trace_handler:

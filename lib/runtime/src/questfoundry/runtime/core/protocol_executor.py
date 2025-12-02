@@ -31,6 +31,18 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 log = logging.getLogger(__name__)
 
+
+def _get_prompt_log():
+    """Lazy getter for prompt logger (configured at runtime by CLI)."""
+    try:
+        from questfoundry.runtime.structured_logging import get_prompt_logger, is_configured
+
+        if is_configured():
+            return get_prompt_logger()
+    except ImportError:
+        pass
+    return None
+
 # Prompt size thresholds (in characters, ~4 chars per token)
 PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
 PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD", "16000"))
@@ -230,6 +242,18 @@ class ProtocolExecutor:
                 continue
 
             raw_responses.append(response_text)
+
+            # Log prompt and response to structured logging
+            prompt_log = _get_prompt_log()
+            if prompt_log:
+                prompt_log.info(
+                    "llm_call",
+                    role=self.role_id,
+                    iteration=iteration,
+                    system_prompt_chars=len(full_system),
+                    user_prompt_chars=len(conversation),
+                    response_chars=len(response_text),
+                )
 
             # Trace for debugging
             if self.trace_callback:

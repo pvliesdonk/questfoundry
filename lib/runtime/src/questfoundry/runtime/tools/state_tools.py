@@ -29,6 +29,18 @@ _STATE_LOCK = threading.RLock()
 logger = logging.getLogger(__name__)
 
 
+def _get_sot_log():
+    """Lazy getter for SOT logger (configured at runtime by CLI)."""
+    try:
+        from questfoundry.runtime.structured_logging import get_sot_logger, is_configured
+
+        if is_configured():
+            return get_sot_logger()
+    except ImportError:
+        pass
+    return None
+
+
 class _StrictToolSchemaMixin:
     """Preserve args_schema config and drop injected fields from tool schema."""
 
@@ -300,7 +312,19 @@ class ReadHotSOT(_BaseStateTool):
     ) -> Any:  # type: ignore[override]
         if state is None:
             raise StateError("State payload is required for read_hot_sot")
-        return _get_nested(state.get("hot_sot", {}), key)
+        result = _get_nested(state.get("hot_sot", {}), key)
+
+        # Log to structured logging
+        sot_log = _get_sot_log()
+        if sot_log:
+            sot_log.info(
+                "read_hot_sot",
+                role=role_id,
+                key=key,
+                result_type=type(result).__name__,
+                result_size=len(result) if isinstance(result, (list, dict, str)) else 1,
+            )
+        return result
 
 
 class WriteHotSOT(_BaseStateTool):
@@ -349,6 +373,18 @@ class WriteHotSOT(_BaseStateTool):
             updated_state["hot_sot"] = new_hot
             # Validate whole state to catch structural regressions
             self._validate_state(updated_state)
+
+            # Log to structured logging
+            sot_log = _get_sot_log()
+            if sot_log:
+                sot_log.info(
+                    "write_hot_sot",
+                    role=role_id,
+                    key=key,
+                    value_type=type(value).__name__,
+                    value_size=len(value) if isinstance(value, (list, dict, str)) else 1,
+                )
+
             return {"hot_sot": new_hot}
 
 
@@ -386,7 +422,19 @@ class ReadColdSOT(_BaseStateTool):
             pid = pid or "default"
             stored = self._cold_store.load_cold(pid)
             base_cold = stored or {}
-        return _get_nested(base_cold, key)
+        result = _get_nested(base_cold, key)
+
+        # Log to structured logging
+        sot_log = _get_sot_log()
+        if sot_log:
+            sot_log.info(
+                "read_cold_sot",
+                role=role_id,
+                key=key,
+                result_type=type(result).__name__,
+                result_size=len(result) if isinstance(result, (list, dict, str)) else 1,
+            )
+        return result
 
 
 class WriteColdSOT(_BaseStateTool):
@@ -441,4 +489,16 @@ class WriteColdSOT(_BaseStateTool):
             updated_state = state.copy()
             updated_state["cold_sot"] = new_cold
             self._validate_state(updated_state)
+
+            # Log to structured logging
+            sot_log = _get_sot_log()
+            if sot_log:
+                sot_log.info(
+                    "write_cold_sot",
+                    role=role_id,
+                    key=key,
+                    value_type=type(value).__name__,
+                    value_size=len(value) if isinstance(value, (list, dict, str)) else 1,
+                    project_id=pid,
+                )
             return {"cold_sot": new_cold}
