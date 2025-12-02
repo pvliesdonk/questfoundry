@@ -13,6 +13,7 @@ trace.log
 **/prompts.jsonl
 **/state-sot.jsonl
 **/tool-calls.jsonl
+**/debug.jsonl
 
 # Python
 *.pyc
