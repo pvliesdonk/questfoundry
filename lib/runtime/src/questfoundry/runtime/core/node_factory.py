@@ -1015,10 +1015,20 @@ class NodeFactory:
                                 logger.info(
                                     f"Using BindToolsExecutor for {role.id} ({model_name})"
                                 )
+                                # Convert tools to proper LangChain format for bind_tools
+                                # LangChainToolAdapter wraps BaseTool - extract underlying tool
+                                langchain_tools = []
+                                for tool in tool_map.values():
+                                    if hasattr(tool, "to_langchain_tool"):
+                                        langchain_tools.append(tool.to_langchain_tool())
+                                    else:
+                                        # Already a proper LangChain tool
+                                        langchain_tools.append(tool)
                                 executor = BindToolsExecutor(
                                     llm=llm,
-                                    tools=list(tool_map.values()),
+                                    tools=langchain_tools,
                                     role_id=role.id,
+                                    state=state,
                                     trace_handler=trace_callback,
                                 )
                                 exec_result = await executor.execute(

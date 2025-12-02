@@ -299,9 +299,28 @@ class ProtocolExecutor:
                 if tool_name in PROTOCOL_MESSAGE_TOOLS:
                     found_protocol_message = True
                     # Build protocol message from tool args
+                    # CRITICAL: receiver is REQUIRED - no default to avoid loops
+                    receiver = tool_args.get("receiver")
+                    if not receiver:
+                        log.error(
+                            f"Protocol message from {self.role_id} missing receiver. "
+                            "This is a tool call bug - receiver is required."
+                        )
+                        # Use __terminate__ as safe fallback to avoid infinite loops
+                        receiver = "__terminate__"
+
+                    # SAFETY: Prevent roles from sending messages to themselves
+                    # This creates infinite loops. Convert to termination signal.
+                    if receiver == self.role_id:
+                        log.warning(
+                            f"Role {self.role_id} attempted to send message to itself. "
+                            "Converting to termination to prevent infinite loop."
+                        )
+                        receiver = "__terminate__"
+
                     protocol_msg = {
                         "sender": self.role_id,
-                        "receiver": tool_args.get("receiver", "showrunner"),
+                        "receiver": receiver,
                         "intent": tool_args.get("intent", "message"),
                         "content": tool_args.get("content", ""),
                         "payload": tool_args.get("payload", {}),

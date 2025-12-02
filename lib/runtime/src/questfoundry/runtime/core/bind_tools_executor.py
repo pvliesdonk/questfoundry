@@ -130,6 +130,7 @@ class BindToolsExecutor:
         llm: Any,
         tools: list[Any],
         role_id: str,
+        state: Any = None,
         max_iterations: int | None = None,
         trace_handler: Any | None = None,
     ):
@@ -139,12 +140,14 @@ class BindToolsExecutor:
             llm: LLM instance (will be bound to tools)
             tools: List of LangChain tool objects
             role_id: ID of the role executing (for logging)
+            state: Current StudioState for tool execution context (injected into tools)
             max_iterations: Max tool call iterations (default from env or 5)
             trace_handler: Optional callback(intent, payload) for tracing events
         """
         self.llm = llm
         self.tools = tools
         self.role_id = role_id
+        self.state = state
         self.max_iterations = max_iterations or int(os.getenv("QF_BIND_TOOLS_MAX_ITERATIONS", "5"))
         self.debug = os.getenv("QF_DEBUG", "").lower() in ("true", "1", "yes")
         self.trace_handler = trace_handler
@@ -338,9 +341,28 @@ class BindToolsExecutor:
                 if tool_name in PROTOCOL_MESSAGE_TOOLS:
                     found_protocol_message = True
                     # Build protocol message from tool args
+                    # CRITICAL: receiver is REQUIRED - no default to avoid loops
+                    receiver = tool_args.get("receiver")
+                    if not receiver:
+                        log.error(
+                            f"Protocol message from {self.role_id} missing receiver. "
+                            "This is a tool call bug - receiver is required."
+                        )
+                        # Use __terminate__ as safe fallback to avoid infinite loops
+                        receiver = "__terminate__"
+
+                    # SAFETY: Prevent roles from sending messages to themselves
+                    # This creates infinite loops. Convert to termination signal.
+                    if receiver == self.role_id:
+                        log.warning(
+                            f"Role {self.role_id} attempted to send message to itself. "
+                            "Converting to termination to prevent infinite loop."
+                        )
+                        receiver = "__terminate__"
+
                     protocol_msg = {
                         "sender": self.role_id,
-                        "receiver": tool_args.get("receiver", "showrunner"),
+                        "receiver": receiver,
                         "intent": tool_args.get("intent", "message"),
                         "content": tool_args.get("content", ""),
                         "payload": tool_args.get("payload", {}),
@@ -412,11 +434,13 @@ class BindToolsExecutor:
 
         Args:
             tool_name: Name of tool to execute
-            tool_args: Arguments for the tool
+            tool_args: Arguments from LLM (state/role_id injected automatically)
 
         Returns:
             Tuple of (observation string, success boolean)
         """
+        import inspect
+
         tool = self.tool_map.get(tool_name)
         if tool is None:
             available = list(self.tool_map.keys())
@@ -424,8 +448,19 @@ class BindToolsExecutor:
             return error_msg, False
 
         try:
-            # Invoke tool asynchronously with provided args
-            result = await tool.ainvoke(tool_args)
+            # Inject state and role_id for InjectedToolArg parameters
+            payload = {**tool_args, "state": self.state, "role_id": self.role_id}
+
+            # Call _run directly with filtered params (like ProtocolExecutor)
+            # This avoids Pydantic validation issues with InjectedToolArg
+            if hasattr(tool, "_run"):
+                sig = inspect.signature(tool._run)
+                valid_params = {k: v for k, v in payload.items() if k in sig.parameters}
+                result = tool._run(**valid_params)
+            elif hasattr(tool, "invoke"):
+                result = tool.invoke(**tool_args)  # Use original args without state/role_id
+            else:
+                result = tool(**tool_args)
 
             # Convert result to JSON string
             if isinstance(result, str):

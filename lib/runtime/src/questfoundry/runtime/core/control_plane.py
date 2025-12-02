@@ -134,6 +134,10 @@ class ControlPlane:
         self._message_history: list[tuple[str, str, str]] = []  # (sender, receiver, intent)
         self._max_ping_pong = 3  # Max identical exchanges before intervention
 
+        # Track role execution counts to detect infinite loops
+        self._role_execution_counts: dict[str, int] = {}
+        self._max_role_executions = 15  # Force termination if same role runs too many times
+
         # Role abbreviation mapping for message bus routing
         self._abbreviations = {
             "sr": "showrunner",
@@ -345,9 +349,32 @@ class ControlPlane:
                     logger.debug(f"Role {role_id} has messages but is dormant, skipping")
                     continue
 
+                # Check execution count - prevent infinite loops
+                exec_count = self._role_execution_counts.get(role_id, 0)
+                if exec_count >= self._max_role_executions:
+                    logger.warning(
+                        f"Role {role_id} has executed {exec_count} times, "
+                        "forcing termination to prevent infinite loop"
+                    )
+                    # Force termination
+                    bus_log = _get_bus_log()
+                    if bus_log:
+                        bus_log.info(
+                            "route_decision",
+                            next_node=END,
+                            next_nodes=[END],
+                            reason="max_role_executions_exceeded",
+                            role=role_id,
+                            exec_count=exec_count,
+                        )
+                    return END
+
+                # Increment execution count
+                self._role_execution_counts[role_id] = exec_count + 1
+
                 logger.info(
                     f"Message bus: routing to {role_id} "
-                    f"({len(pending[role_id])} pending message(s))"
+                    f"({len(pending[role_id])} pending message(s), exec #{exec_count + 1})"
                 )
 
                 # Log routing decision with structured logging
@@ -360,6 +387,7 @@ class ControlPlane:
                         next_nodes=[role_id],
                         pending_counts=pending_counts,
                         message_count=len(pending[role_id]),
+                        exec_count=exec_count + 1,
                     )
 
                 return role_id
@@ -646,7 +674,7 @@ class ControlPlane:
             if bus_log:
                 consumed_indices = [idx for idx in consumed if isinstance(idx, int)]
                 broadcast_consumed = [
-                    (idx, role) for idx, role in consumed if isinstance(idx, tuple)
+                    item for item in consumed if isinstance(item, tuple)
                 ]
                 try:
                     bus_log.info(
@@ -770,6 +798,10 @@ class ControlPlane:
         Raises:
             Exception: If graph execution fails (logged with full traceback)
         """
+        # Reset execution counters for new run
+        self._role_execution_counts.clear()
+        self._message_history.clear()
+
         # Initialize state
         initial_state = self.state_manager.initialize_state(
             tu_id=f"TU-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}",
