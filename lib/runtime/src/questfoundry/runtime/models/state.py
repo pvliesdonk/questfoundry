@@ -118,6 +118,11 @@ class StudioState(TypedDict):
     # Supports both integer indices and (idx, role_id) tuples for broadcasts
     _consumed_messages: Annotated[set[Any], _set_union]  # Union of consumed sets
 
+    # Schema-required fields (studio_state.schema.json)
+    meta: dict[str, Any]  # Project and execution metadata
+    protocol: dict[str, Any]  # Protocol state: correlation, message history
+    execution: dict[str, Any]  # Runtime execution metadata
+
 
 # Quality bar dimensions
 QUALITY_BARS = [

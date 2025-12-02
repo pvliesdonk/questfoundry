@@ -554,6 +554,16 @@ class BindToolsExecutor:
             else:
                 result = tool(**tool_args)
 
+            # Apply state updates from tools that return state changes
+            # This ensures subsequent tool calls within the same turn see updated state
+            if isinstance(result, dict):
+                if "hot_sot" in result and isinstance(result["hot_sot"], dict):
+                    self.state["hot_sot"] = result["hot_sot"]
+                    log.debug(f"[{self.role_id}] Applied hot_sot update from {tool_name}")
+                if "cold_sot" in result and isinstance(result["cold_sot"], dict):
+                    self.state["cold_sot"] = result["cold_sot"]
+                    log.debug(f"[{self.role_id}] Applied cold_sot update from {tool_name}")
+
             # Convert result to JSON string
             if isinstance(result, str):
                 try:

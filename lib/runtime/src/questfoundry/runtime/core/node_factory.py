@@ -1274,10 +1274,12 @@ class NodeFactory:
                 # when bind_tools is unavailable, via Action/Action Input format
 
                 # hot_sot / cold_sot / artifacts from extraction + tool outputs + parsed result
+                # Also include state itself, as tools may update it in place during execution
                 for source in (
                     extracted_artifacts,
                     tool_updates if "tool_updates" in locals() else {},
                     parsed_result or {},
+                    state,  # Tools update state["hot_sot"]/["cold_sot"] in place
                 ):
                     if not isinstance(source, dict):
                         continue

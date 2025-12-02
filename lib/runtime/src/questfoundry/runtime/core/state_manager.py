@@ -200,6 +200,25 @@ class StateManager:
             "updated_at": now,
             # Message bus tracking - tracks which messages have been consumed
             "_consumed_messages": set(),
+            # Schema-required fields (studio_state.schema.json)
+            "meta": {
+                "project_id": project_id,
+                "current_tu": tu_id,
+                "current_loop": loop_id or "",
+                "timestamp": now,
+            },
+            "protocol": {
+                "correlation_id": tu_id,
+                "message_history": [],
+                "pending_messages": [],
+            },
+            "execution": {
+                "iteration_count": 0,
+                "current_node": "",
+                "node_history": [],
+                "errors": [],
+                "warnings": [],
+            },
         }
 
         logger.info(f"Initialized state for loop {loop_id}: TU {tu_id}")
