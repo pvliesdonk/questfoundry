@@ -26,11 +26,78 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from questfoundry.runtime.structured_logging import get_tool_logger
 
 log = logging.getLogger(__name__)
+
+
+def serialize_messages(messages: list[BaseMessage]) -> list[dict]:
+    """Serialize LangChain messages to JSON-serializable dicts.
+
+    Args:
+        messages: List of LangChain message objects
+
+    Returns:
+        List of dicts with type and content
+    """
+    result = []
+    for msg in messages:
+        if isinstance(msg, SystemMessage):
+            result.append({"type": "system", "content": msg.content})
+        elif isinstance(msg, HumanMessage):
+            result.append({"type": "human", "content": msg.content})
+        elif isinstance(msg, AIMessage):
+            data = {"type": "ai", "content": msg.content}
+            # Preserve tool_calls if present
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                data["tool_calls"] = msg.tool_calls
+            result.append(data)
+        elif isinstance(msg, ToolMessage):
+            result.append({
+                "type": "tool",
+                "content": msg.content,
+                "tool_call_id": getattr(msg, "tool_call_id", ""),
+            })
+        else:
+            # Fallback for unknown types
+            result.append({"type": "unknown", "content": str(msg.content)})
+    return result
+
+
+def deserialize_messages(data: list[dict]) -> list[BaseMessage]:
+    """Deserialize dicts back to LangChain message objects.
+
+    Args:
+        data: List of dicts from serialize_messages
+
+    Returns:
+        List of LangChain message objects
+    """
+    messages: list[BaseMessage] = []
+    for item in data:
+        msg_type = item.get("type", "unknown")
+        content = item.get("content", "")
+
+        if msg_type == "system":
+            messages.append(SystemMessage(content=content))
+        elif msg_type == "human":
+            messages.append(HumanMessage(content=content))
+        elif msg_type == "ai":
+            msg = AIMessage(content=content)
+            if "tool_calls" in item:
+                msg.tool_calls = item["tool_calls"]
+            messages.append(msg)
+        elif msg_type == "tool":
+            messages.append(ToolMessage(
+                content=content,
+                tool_call_id=item.get("tool_call_id", ""),
+            ))
+        else:
+            # Skip unknown types
+            log.warning(f"Unknown message type during deserialization: {msg_type}")
+    return messages
 
 
 def _get_prompt_log():
@@ -91,7 +158,10 @@ class ExecutorResult:
     failure_count: int = 0  # Counts only failures, not valid tool calls
     error: str | None = None
     raw_responses: list[str] = field(default_factory=list)
-    work_summary: str = ""  # Summary of work done (for short-term memory)
+    # Serialized conversation history for role continuity (proper message objects)
+    conversation_history: list[dict] = field(default_factory=list)
+    # Legacy: text summary for backwards compatibility
+    work_summary: str = ""
 
 
 def supports_bind_tools(llm: Any, model_name: str | None = None) -> bool:
@@ -135,6 +205,9 @@ class BindToolsExecutor:
     - Role is done when it calls send_protocol_message
     - Only FAILURES count against max_failures (not valid tool calls)
     - Messages from send_protocol_message ARE the output
+
+    The executor maintains conversation state between invocations, allowing
+    the same role to continue its conversation across multiple turns.
     """
 
     def __init__(
@@ -142,6 +215,7 @@ class BindToolsExecutor:
         llm: Any,
         tools: list[Any],
         role_id: str,
+        system_prompt: str,
         state: Any = None,
         max_iterations: int | None = None,
         trace_handler: Any | None = None,
@@ -152,6 +226,7 @@ class BindToolsExecutor:
             llm: LLM instance (will be bound to tools)
             tools: List of LangChain tool objects
             role_id: ID of the role executing (for logging)
+            system_prompt: Role's system prompt (set once, used for all turns)
             state: Current StudioState for tool execution context (injected into tools)
             max_iterations: Max tool call iterations (default from env or 5)
             trace_handler: Optional callback(intent, payload) for tracing events
@@ -159,20 +234,36 @@ class BindToolsExecutor:
         self.llm = llm
         self.tools = tools
         self.role_id = role_id
+        self.system_prompt = system_prompt
         self.state = state
         self.max_iterations = max_iterations or int(os.getenv("QF_BIND_TOOLS_MAX_ITERATIONS", "5"))
         self.debug = os.getenv("QF_DEBUG", "").lower() in ("true", "1", "yes")
         self.trace_handler = trace_handler
         self.tool_map = {tool.name: tool for tool in tools}
 
+        # Conversation state - maintained across invocations
+        self.messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
+
+        # Bind tools once at init
+        self.llm_with_tools = llm.bind_tools(tools)
+
+    def update_state(self, state: Any) -> None:
+        """Update the state reference (called before each execution).
+
+        Args:
+            state: New state dict to use for tool execution
+        """
+        self.state = state
+
     @traceable(name="bind_tools_executor.execute", tags=["executor", "bind_tools"])
     async def execute(
         self,
-        system_prompt: str,
         user_prompt: str,
-        prior_conversation: str = "",
     ) -> ExecutorResult:
         """Run the tool execution loop until protocol message is sent.
+
+        The executor maintains conversation state between calls. Each call adds
+        the user_prompt to the existing conversation and continues.
 
         The loop continues until:
         - A protocol message is sent (success, role done for this turn)
@@ -180,26 +271,21 @@ class BindToolsExecutor:
         - Max iterations reached (error, role took too many steps)
 
         Args:
-            system_prompt: Role's system prompt
-            user_prompt: User/task prompt for this execution
-            prior_conversation: Prior conversation history for this role
+            user_prompt: User/task prompt for this turn
 
         Returns:
             ExecutorResult with success status, messages, and tool results
         """
-        # Bind tools to LLM
-        try:
-            llm_with_tools = self.llm.bind_tools(self.tools)
-        except Exception as e:
-            log.error(f"Failed to bind tools to LLM: {e}")
-            return ExecutorResult(
-                success=False,
-                error=f"Failed to bind tools: {e}",
-                iterations=0,
-            )
+        # Add new user message to conversation
+        self.messages.append(HumanMessage(content=user_prompt))
+
+        log.info(
+            f"BindToolsExecutor continuing for {self.role_id}, "
+            f"conversation has {len(self.messages)} messages"
+        )
 
         # Check prompt size
-        prompt_size = len(system_prompt) + len(user_prompt) + len(prior_conversation)
+        prompt_size = sum(len(str(m.content)) for m in self.messages)
         if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
             log.error(
                 f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars. "
@@ -208,28 +294,18 @@ class BindToolsExecutor:
         elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
             log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
-        # Initialize conversation with prior history (with memory cap)
-        if prior_conversation:
-            original_len = len(prior_conversation)
-            if original_len > PRIOR_CONVERSATION_MAX_CHARS:
-                truncated = prior_conversation[-PRIOR_CONVERSATION_MAX_CHARS:]
-                newline_idx = truncated.find("\n")
-                if newline_idx > 0 and newline_idx < 500:
-                    truncated = truncated[newline_idx + 1 :]
-                prior_conversation = "[... earlier conversation truncated ...]\n\n" + truncated
-                log.info(
-                    f"Truncated prior_conversation from {original_len} to "
-                    f"{len(prior_conversation)} chars for {self.role_id}"
-                )
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prior_conversation + "\n\n---\n\n" + user_prompt),
-            ]
-        else:
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt),
-            ]
+        # TODO: Implement summarization when context grows too large
+        # For now, truncate if we have too many messages
+        max_history_messages = 50  # Allow longer conversations with cached executor
+        if len(self.messages) > max_history_messages:
+            # Keep system message + most recent messages
+            system_msgs = [m for m in self.messages if isinstance(m, SystemMessage)]
+            non_system = [m for m in self.messages if not isinstance(m, SystemMessage)]
+            recent_msgs = non_system[-(max_history_messages - len(system_msgs)):]
+            self.messages = system_msgs + recent_msgs
+            log.info(
+                f"Truncated conversation to {len(self.messages)} messages for {self.role_id}"
+            )
 
         tool_results: list[dict] = []
         raw_responses: list[str] = []
@@ -237,7 +313,6 @@ class BindToolsExecutor:
         failure_count = 0
         work_done: list[str] = []
 
-        log.info(f"BindToolsExecutor starting for role {self.role_id}")
         log.debug(f"Available tools: {list(self.tool_map.keys())}")
 
         # Loop until protocol message sent or max failures/iterations reached
@@ -246,7 +321,7 @@ class BindToolsExecutor:
 
             # Invoke LLM with bound tools
             try:
-                response = await llm_with_tools.ainvoke(messages)
+                response = await self.llm_with_tools.ainvoke(self.messages)
             except Exception as e:
                 log.error(f"LLM invocation failed: {e}")
                 failure_count += 1
@@ -258,7 +333,6 @@ class BindToolsExecutor:
                         failure_count=failure_count,
                         tool_results=tool_results,
                         raw_responses=raw_responses,
-                        work_summary=self._build_work_summary(work_done, raw_responses),
                     )
                 continue
 
@@ -269,15 +343,11 @@ class BindToolsExecutor:
             # Log prompt and response to structured logging
             prompt_log = _get_prompt_log()
             if prompt_log:
-                # Get the input messages for this iteration
-                system_content = messages[0].content if messages else ""
-                user_content = messages[1].content if len(messages) > 1 else ""
                 prompt_log.info(
                     "llm_call",
                     role=self.role_id,
                     iteration=iteration,
-                    system_prompt_chars=len(system_content),
-                    user_prompt_chars=len(user_content),
+                    message_count=len(self.messages),
                     response_chars=len(response_text),
                     tool_calls_count=len(getattr(response, "tool_calls", []) or []),
                 )
@@ -301,7 +371,7 @@ class BindToolsExecutor:
                 log.info(f"LLM Response (iter {iteration}):\n{response_text[:500]}...")
 
             # Add AI message to conversation
-            messages.append(response)
+            self.messages.append(response)
 
             # Check for tool calls
             tool_calls = getattr(response, "tool_calls", None) or []
@@ -399,7 +469,7 @@ class BindToolsExecutor:
                     log.info(f"Protocol message to {protocol_msg['receiver']} collected")
 
                 # Add tool result to messages
-                messages.append(
+                self.messages.append(
                     ToolMessage(
                         content=observation,
                         tool_call_id=tool_id,
@@ -425,7 +495,6 @@ class BindToolsExecutor:
                     iterations=iteration,
                     failure_count=0,
                     raw_responses=raw_responses,
-                    work_summary=self._build_work_summary(work_done, raw_responses),
                 )
 
         # Max iterations reached
@@ -438,7 +507,6 @@ class BindToolsExecutor:
             iterations=self.max_iterations,
             failure_count=failure_count,
             raw_responses=raw_responses,
-            work_summary=self._build_work_summary(work_done, raw_responses),
         )
 
     def _extract_content(self, response: Any) -> str:

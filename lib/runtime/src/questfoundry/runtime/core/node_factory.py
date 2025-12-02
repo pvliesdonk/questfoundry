@@ -61,6 +61,68 @@ class NodeFactory:
         self.preferred_provider = preferred_provider  # Store for use in select_llm
         self.tool_registry = get_tool_registry()
 
+        # Executor cache - maintains conversation state across invocations
+        # Key: role_id, Value: BindToolsExecutor instance
+        self._executor_cache: dict[str, Any] = {}
+
+    def get_or_create_executor(
+        self,
+        role_id: str,
+        llm: Any,
+        tools: list[Any],
+        system_prompt: str,
+        state: Any,
+        trace_handler: Any | None = None,
+    ) -> Any:
+        """Get cached executor or create new one for role.
+
+        Args:
+            role_id: Role identifier
+            llm: LLM instance
+            tools: List of LangChain tool objects
+            system_prompt: Role's system prompt
+            state: Current state for tool execution
+            trace_handler: Optional trace callback
+
+        Returns:
+            BindToolsExecutor instance (cached or new)
+        """
+        from questfoundry.runtime.core.bind_tools_executor import BindToolsExecutor
+
+        if role_id in self._executor_cache:
+            # Reuse existing executor, update state reference
+            executor = self._executor_cache[role_id]
+            executor.update_state(state)
+            logger.info(
+                f"Reusing cached executor for {role_id}, "
+                f"conversation has {len(executor.messages)} messages"
+            )
+            return executor
+
+        # Create new executor
+        logger.info(f"Creating new executor for {role_id}")
+        executor = BindToolsExecutor(
+            llm=llm,
+            tools=tools,
+            role_id=role_id,
+            system_prompt=system_prompt,
+            state=state,
+            trace_handler=trace_handler,
+        )
+        self._executor_cache[role_id] = executor
+        return executor
+
+    def clear_executor_cache(self, role_id: str | None = None) -> None:
+        """Clear executor cache (for testing or session reset).
+
+        Args:
+            role_id: Specific role to clear, or None to clear all
+        """
+        if role_id:
+            self._executor_cache.pop(role_id, None)
+        else:
+            self._executor_cache.clear()
+
     def _extract_task_context_for_role(self, role_id: str, state: StudioState) -> str | None:
         """
         Extract task context from protocol messages addressed to this role.
@@ -1017,11 +1079,6 @@ class NodeFactory:
                                         state.get("tu_id", "unknown"),
                                     )
 
-                            # Retrieve prior conversation for short-term memory
-                            prior_conversation = state.get("role_conversations", {}).get(
-                                role.id, ""
-                            )
-
                             # Select executor based on model's bind_tools support
                             from questfoundry.runtime.core.bind_tools_executor import (
                                 BindToolsExecutor,
@@ -1045,18 +1102,16 @@ class NodeFactory:
                                     else:
                                         # Already a proper LangChain tool
                                         langchain_tools.append(tool)
-                                executor = BindToolsExecutor(
+                                # Use cached executor to maintain conversation continuity
+                                executor = self.get_or_create_executor(
+                                    role_id=role.id,
                                     llm=llm,
                                     tools=langchain_tools,
-                                    role_id=role.id,
+                                    system_prompt=prompt,
                                     state=state,
                                     trace_handler=trace_callback,
                                 )
-                                exec_result = await executor.execute(
-                                    system_prompt=prompt,
-                                    user_prompt=user_prompt,
-                                    prior_conversation=prior_conversation,
-                                )
+                                exec_result = await executor.execute(user_prompt)
                             else:
                                 # Fallback to text-based protocol executor
                                 logger.info(
@@ -1068,12 +1123,13 @@ class NodeFactory:
                                     role_id=role.id,
                                     trace_callback=trace_callback,
                                 )
+                                # Note: ProtocolExecutor doesn't maintain conversation state
+                                # (legacy fallback for models without bind_tools support)
                                 exec_result = await executor.execute(
                                     llm=llm,
                                     system_prompt=prompt,
                                     user_prompt=user_prompt,
                                     tools=assembler_tools,
-                                    prior_conversation=prior_conversation,
                                 )
 
                             # Process executor result
@@ -1095,7 +1151,6 @@ class NodeFactory:
                                 tool_updates = {
                                     "messages": exec_result.messages,
                                     "tool_results": exec_result.tool_results,
-                                    "role_conversations": {role.id: exec_result.work_summary},
                                 }
                             else:
                                 logger.error(f"Execution failed for {role.id}: {exec_result.error}")
@@ -1107,10 +1162,8 @@ class NodeFactory:
                                         "tool_results": exec_result.tool_results,
                                     }
                                 )
-                                # Still store work summary even on failure for debugging
-                                tool_updates = {
-                                    "role_conversations": {role.id: exec_result.work_summary},
-                                }
+                                # On failure, no tool updates (conversation state is in cached executor)
+                                tool_updates = {}
 
                         else:
                             # No tools - simple LLM invocation (async)

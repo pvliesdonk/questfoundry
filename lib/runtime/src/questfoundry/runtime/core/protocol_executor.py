@@ -29,6 +29,11 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from questfoundry.runtime.core.bind_tools_executor import (
+    deserialize_messages,
+    serialize_messages,
+)
+
 log = logging.getLogger(__name__)
 
 
@@ -106,7 +111,10 @@ class ExecutorResult:
     failure_count: int = 0  # Counts only failures, not valid tool calls
     error: str | None = None
     raw_responses: list[str] = field(default_factory=list)
-    work_summary: str = ""  # Summary of work done (for short-term memory)
+    # Serialized conversation history for role continuity (proper message objects)
+    conversation_history: list[dict] = field(default_factory=list)
+    # Legacy: text summary for backwards compatibility
+    work_summary: str = ""
 
 
 class ProtocolExecutor:
@@ -152,7 +160,7 @@ class ProtocolExecutor:
         system_prompt: str,
         user_prompt: str,
         tools: list[dict],
-        prior_conversation: str = "",
+        prior_conversation: str | list[dict] = "",
     ) -> ExecutorResult:
         """Run the tool execution loop asynchronously until protocol message is sent.
 
@@ -165,7 +173,9 @@ class ProtocolExecutor:
             system_prompt: Role's system prompt from RuntimeContextAssembler
             user_prompt: User/task prompt for this execution
             tools: Tool specifications in OpenAI function format
-            prior_conversation: Prior conversation history for this role
+            prior_conversation: Prior conversation history - either:
+                - list[dict]: Serialized message history (new format, preferred)
+                - str: Legacy text summary (backwards compatible)
 
         Returns:
             ExecutorResult with success status, messages, and tool results
@@ -175,8 +185,32 @@ class ProtocolExecutor:
         tool_section = TOOL_INSTRUCTIONS.format(tool_descriptions=tool_desc)
         full_system = system_prompt + "\n\n" + tool_section
 
+        # Handle prior_conversation - can be list[dict] or str
+        prior_text = ""
+        if isinstance(prior_conversation, list) and prior_conversation:
+            # New format: deserialize and extract text content
+            restored_messages = deserialize_messages(prior_conversation)
+            log.info(
+                f"Restored {len(restored_messages)} messages from conversation history "
+                f"for {self.role_id}"
+            )
+            # Convert messages to text for protocol executor's text-based approach
+            text_parts = []
+            for msg in restored_messages:
+                if isinstance(msg, SystemMessage):
+                    continue  # Skip system - we use our own
+                elif isinstance(msg, HumanMessage):
+                    text_parts.append(str(msg.content))
+                else:
+                    # AI responses, tool results, etc.
+                    text_parts.append(str(msg.content))
+            prior_text = "\n\n".join(text_parts) if text_parts else ""
+        elif isinstance(prior_conversation, str):
+            # Legacy format: use as-is
+            prior_text = prior_conversation
+
         # Check prompt size
-        prompt_size = len(full_system) + len(user_prompt) + len(prior_conversation)
+        prompt_size = len(full_system) + len(user_prompt) + len(prior_text)
         if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
             log.error(
                 f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars. "
@@ -186,19 +220,19 @@ class ProtocolExecutor:
             log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
         # Initialize conversation with prior history (with memory cap)
-        if prior_conversation:
-            original_len = len(prior_conversation)
+        if prior_text:
+            original_len = len(prior_text)
             if original_len > PRIOR_CONVERSATION_MAX_CHARS:
-                truncated = prior_conversation[-PRIOR_CONVERSATION_MAX_CHARS:]
+                truncated = prior_text[-PRIOR_CONVERSATION_MAX_CHARS:]
                 newline_idx = truncated.find("\n")
                 if newline_idx > 0 and newline_idx < 500:
                     truncated = truncated[newline_idx + 1 :]
-                prior_conversation = "[... earlier conversation truncated ...]\n\n" + truncated
+                prior_text = "[... earlier conversation truncated ...]\n\n" + truncated
                 log.info(
                     f"Truncated prior_conversation from {original_len} to "
-                    f"{len(prior_conversation)} chars for {self.role_id}"
+                    f"{len(prior_text)} chars for {self.role_id}"
                 )
-            conversation = prior_conversation + "\n\n---\n\n" + user_prompt
+            conversation = prior_text + "\n\n---\n\n" + user_prompt
         else:
             conversation = user_prompt
 
@@ -237,6 +271,7 @@ class ProtocolExecutor:
                         failure_count=failure_count,
                         tool_results=tool_results,
                         raw_responses=raw_responses,
+                        conversation_history=serialize_messages(messages),
                         work_summary=self._build_work_summary(work_done, raw_responses),
                     )
                 continue
@@ -371,6 +406,7 @@ class ProtocolExecutor:
                     iterations=iteration,
                     failure_count=0,
                     raw_responses=raw_responses,
+                    conversation_history=serialize_messages(messages),
                     work_summary=self._build_work_summary(work_done, raw_responses),
                 )
 
@@ -391,6 +427,7 @@ class ProtocolExecutor:
             iterations=iteration,
             failure_count=failure_count,
             raw_responses=raw_responses,
+            conversation_history=serialize_messages(messages),
             work_summary=self._build_work_summary(work_done, raw_responses),
         )
 
