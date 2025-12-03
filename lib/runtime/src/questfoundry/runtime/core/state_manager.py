@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.config import get_settings
 from questfoundry.runtime.core.cold_store import ColdStore
 from questfoundry.runtime.exceptions import StateError
 from questfoundry.runtime.models.state import (
@@ -47,25 +47,21 @@ class StateManager:
             trace_handler: Optional trace handler to capture protocol messages
             project_id: Optional project identifier for storage and tracing
             project_root: Optional base directory for projects; when omitted,
-                defaults to ~/.questfoundry/projects or $QF_PROJECT_DIR.
+                defaults to config paths.project_dir.
         """
+        settings = get_settings()
         self._sequence_numbers: dict[int, int] = {}
         self._trace_handler = trace_handler
 
         # Project identity (used for Cold SoT persistence)
         self._project_id = project_id
 
-        # Resolve base dir for projects
+        # Resolve base dir for projects (from centralized config)
         if project_root is not None:
             base_dir = Path(project_root).expanduser()
         else:
-            env_root = os.getenv("QF_PROJECT_DIR")
-            if env_root:
-                base_dir = Path(env_root).expanduser()
-            else:
-                from questfoundry.runtime.core.cold_store import _default_project_root
-
-                base_dir = _default_project_root()
+            # Get from centralized config (already handles env var fallback)
+            base_dir = Path(settings.paths.project_dir).expanduser()
 
         self._cold_store = ColdStore(base_dir=base_dir)
 
@@ -108,11 +104,10 @@ class StateManager:
         if tu_id is None:
             tu_id = self.generate_tu_id()
 
-        # Resolve project identity for storage. Preference order:
-        # 1) Explicit project_id passed into StateManager.__init__
-        # 2) QF_PROJECT_ID environment variable
-        # 3) "default"
-        project_id = self._project_id or os.getenv("QF_PROJECT_ID") or "default"
+        # Resolve project identity for storage (from centralized config)
+        # Preference: explicit __init__ arg > config (handles env var)
+        config_settings = get_settings()
+        project_id = self._project_id or config_settings.paths.project_id
 
         now = datetime.now(UTC).isoformat()
 
@@ -316,7 +311,7 @@ class StateManager:
             project_id = (
                 envelope.get("project_id")
                 or self._project_id
-                or os.getenv("QF_PROJECT_ID", "default")
+                or get_settings().paths.project_id
             )
             try:
                 # Save full cold_sot and append a snapshot for audit/history

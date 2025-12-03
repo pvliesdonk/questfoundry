@@ -15,6 +15,7 @@ from urllib import request
 
 import yaml
 
+from questfoundry.runtime.config import get_settings
 from questfoundry.runtime.exceptions import ProviderError
 
 logger = logging.getLogger(__name__)
@@ -62,14 +63,14 @@ class ProviderManager:
             Tier mapping dict
         """
         if tier_config_path is None:
-            # Auto-detect: look for config/model_tiers.yaml
-            runtime_dir = Path(__file__).parent.parent
-            tier_config_path = runtime_dir / "config" / "model_tiers.yaml"
-
-        # Also check environment variable override
-        env_path = os.getenv("QF_MODEL_TIERS_CONFIG")
-        if env_path:
-            tier_config_path = Path(env_path)
+            # Check centralized config for custom path
+            settings = get_settings()
+            if settings.llm.model_tiers_config:
+                tier_config_path = Path(settings.llm.model_tiers_config)
+            else:
+                # Auto-detect: look for config/model_tiers.yaml
+                runtime_dir = Path(__file__).parent.parent
+                tier_config_path = runtime_dir / "config" / "model_tiers.yaml"
 
         try:
             with open(tier_config_path, encoding="utf-8") as f:
@@ -276,7 +277,8 @@ class ProviderManager:
 
         Args:
             provider: Provider name
-            model_spec: Either a tier name (e.g., "creative-writing") or specific model (e.g., "gpt-4o")
+            model_spec: Either a tier name (e.g., "creative-writing") or
+                specific model (e.g., "gpt-4o")
 
         Returns:
             Actual model name for the provider
@@ -527,11 +529,13 @@ class ProviderManager:
                 ],
             ) from e
 
-        # Get Ollama base URL from OLLAMA_HOST environment variable
-        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        # Get Ollama configuration from centralized config
+        settings = get_settings()
+        base_url = settings.llm.ollama_host
         logger.debug(f"[OLLAMA] Using base_url: {base_url}")
         logger.debug(
-            f"[OLLAMA] Creating ChatOllama with model={model}, temp={temperature}, max_tokens={max_tokens}"
+            f"[OLLAMA] Creating ChatOllama: model={model}, temp={temperature}, "
+            f"max_tokens={max_tokens}"
         )
 
         # Fast preflight check to avoid long timeouts when daemon isn't running
@@ -543,7 +547,7 @@ class ProviderManager:
                 provider_name="ollama",
                 suggestions=[
                     "Start the server: ollama serve",
-                    f"Check OLLAMA_HOST (currently {base_url})",
+                    f"Check OLLAMA_HOST or QF_LLM__OLLAMA_HOST (currently {base_url})",
                 ],
             ) from exc
 
@@ -554,7 +558,7 @@ class ProviderManager:
         #   - Estimate rendered prompt token count per request
         #   - Raise a clear error if prompt_tokens + max_tokens exceeds the model's
         #     context window instead of relying on Ollama's internal truncation
-        num_ctx = int(os.getenv("QF_OLLAMA_NUM_CTX", "32768"))
+        num_ctx = settings.llm.ollama_num_ctx
 
         return ChatOllama(
             model=model,
@@ -581,19 +585,22 @@ class ProviderManager:
                 ],
             ) from e
 
-        api_base = os.getenv("LITELLM_API_BASE")
+        # Get LiteLLM configuration from centralized config
+        settings = get_settings()
+        api_base = settings.llm.litellm_api_base
         if not api_base:
             raise ProviderError(
-                "LITELLM_API_BASE environment variable not set",
+                "LITELLM_API_BASE not set in environment or config",
                 provider_name="litellm",
                 suggestions=[
                     "Set the API base: export LITELLM_API_BASE='http://localhost:4000'",
+                    "Or in config: llm.litellm_api_base = 'http://localhost:4000'",
                     "Start LiteLLM server: litellm --config config.yaml",
                     "Or use a different provider with --provider flag",
                 ],
             )
 
-        api_key = os.getenv("LITELLM_API_KEY", "sk-1234")  # LiteLLM may not require key
+        api_key = settings.llm.litellm_api_key or "sk-1234"  # LiteLLM may not require key
 
         # LiteLLM proxies to various providers - add response_format for OpenAI-compatible endpoints
         return ChatLiteLLM(

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import tempfile
 import urllib.error
@@ -26,32 +25,30 @@ import zipfile
 from pathlib import Path
 from typing import Any, Final
 
+from questfoundry.runtime.config import get_settings
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_CACHE_DIR: Final = Path.home() / ".cache" / "questfoundry" / "spec"
 GITHUB_REPO: Final = "pvliesdonk/questfoundry"
 API_BASE: Final = f"https://api.github.com/repos/{GITHUB_REPO}"
 USER_AGENT: Final = "questfoundry-runtime"
 
 
+def _get_cache_dir() -> Path:
+    """Get spec cache directory from centralized config."""
+    settings = get_settings()
+    return Path(settings.paths.spec_cache_dir).expanduser()
+
+
 def get_spec_source_preference() -> str:
     """
-    Get spec source preference from environment variable.
+    Get spec source preference from centralized config.
 
     Returns:
         One of: 'auto', 'monorepo', 'bundled', 'download'
     """
-    source = os.getenv("QF_SPEC_SOURCE", "auto").lower()
-    valid_sources = {"auto", "monorepo", "bundled", "download"}
-
-    if source not in valid_sources:
-        logger.warning(
-            f"Invalid QF_SPEC_SOURCE value: '{source}'. "
-            f"Valid values: {', '.join(valid_sources)}. Using 'auto'."
-        )
-        return "auto"
-
-    return source
+    settings = get_settings()
+    return settings.paths.spec_source
 
 
 class SpecFetchError(RuntimeError):
@@ -60,9 +57,11 @@ class SpecFetchError(RuntimeError):
 
 def _request_json(url: str) -> dict[str, Any]:
     """Make a JSON request to GitHub API."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    settings = get_settings()
+    timeout = settings.network.spec_fetch_timeout
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             if response.status >= 400:
                 raise SpecFetchError(f"Request failed with status {response.status}")
             payload = response.read().decode("utf-8")
@@ -73,10 +72,12 @@ def _request_json(url: str) -> dict[str, Any]:
 
 def _download_file(url: str, destination: Path) -> None:
     """Download a file from URL to destination path."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    settings = get_settings()
+    timeout = settings.network.spec_download_timeout
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with (
-            urllib.request.urlopen(request, timeout=120) as response,
+            urllib.request.urlopen(req, timeout=timeout) as response,
             destination.open("wb") as output,
         ):
             shutil.copyfileobj(response, output)
@@ -155,7 +156,7 @@ def get_cached_spec_path(tag: str | None = None, cache_dir: Path | None = None) 
     Returns:
         Path to cached spec root, or None if not cached.
     """
-    cache_root = cache_dir or DEFAULT_CACHE_DIR
+    cache_root = cache_dir or _get_cache_dir()
     if not cache_root.exists():
         return None
 
@@ -198,7 +199,7 @@ def download_latest_release_spec(
         >>> spec_path = download_latest_release_spec()
         >>> roles_dir = spec_path / "05-definitions" / "roles"
     """
-    cache_root = cache_dir or DEFAULT_CACHE_DIR
+    cache_root = cache_dir or _get_cache_dir()
     cache_root.mkdir(parents=True, exist_ok=True)
 
     release_info = _fetch_release_info(tag)

@@ -22,12 +22,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
+from questfoundry.runtime.config import get_settings
 from questfoundry.runtime.structured_logging import get_tool_logger
 
 log = logging.getLogger(__name__)
@@ -111,32 +111,36 @@ def _get_prompt_log():
         pass
     return None
 
-# Prompt size thresholds (in characters, ~4 chars per token)
-PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
-PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD", "16000"))
 
-# Short-term memory cap (characters)
-PRIOR_CONVERSATION_MAX_CHARS = int(os.environ.get("QF_MEMORY_CAP", "8000"))
+def _get_memory_config() -> tuple[int, int, int, int, int]:
+    """Get memory settings from centralized config.
 
-# Context summarization thresholds
-SUMMARIZATION_MESSAGE_THRESHOLD = int(os.environ.get("QF_SUMMARIZE_MESSAGES", "20"))
-SUMMARIZATION_CHAR_THRESHOLD = int(os.environ.get("QF_SUMMARIZE_CHARS", "12000"))
+    Returns:
+        Tuple of (error_threshold, warning_threshold, memory_cap,
+                  summarize_messages, summarize_chars)
+    """
+    settings = get_settings()
+    return (
+        settings.memory.prompt_error_threshold,
+        settings.memory.prompt_warning_threshold,
+        settings.memory.memory_cap,
+        settings.memory.summarize_messages_threshold,
+        settings.memory.summarize_chars_threshold,
+    )
+
+
+def _get_bind_tools_denylist() -> frozenset[str]:
+    """Get bind_tools denylist from centralized config.
+
+    Returns:
+        Frozenset of model name patterns that don't support bind_tools reliably
+    """
+    settings = get_settings()
+    return frozenset(settings.llm.bind_tools_denylist)
+
 
 # Tools that signal "role is done for this turn"
 PROTOCOL_MESSAGE_TOOLS = {"send_protocol_message", "send_message"}
-
-# Models known to NOT support bind_tools reliably (denylist approach)
-# Assume bind_tools works unless the model is in this list or lacks the method
-BIND_TOOLS_DENYLIST = frozenset(
-    {
-        "llama-3.2-1b",
-        "llama-3.2-3b",
-        "llama3.2:1b",
-        "llama3.2:3b",
-        "phi-2",
-        "tinyllama",
-    }
-)
 
 
 @dataclass
@@ -177,7 +181,8 @@ def supports_bind_tools(llm: Any, model_name: str | None = None) -> bool:
     # Check denylist if model name provided
     if model_name:
         model_lower = model_name.lower()
-        if any(denied in model_lower for denied in BIND_TOOLS_DENYLIST):
+        denylist = _get_bind_tools_denylist()
+        if any(denied in model_lower for denied in denylist):
             return False
 
     return True
@@ -220,16 +225,17 @@ class BindToolsExecutor:
             role_id: ID of the role executing (for logging)
             system_prompt: Role's system prompt (set once, used for all turns)
             state: Current StudioState for tool execution context (injected into tools)
-            max_iterations: Max tool call iterations (default from env or 5)
+            max_iterations: Max tool call iterations (default from config)
             trace_handler: Optional callback(intent, payload) for tracing events
         """
+        settings = get_settings()
         self.llm = llm
         self.tools = tools
         self.role_id = role_id
         self.system_prompt = system_prompt
         self.state = state
-        self.max_iterations = max_iterations or int(os.getenv("QF_BIND_TOOLS_MAX_ITERATIONS", "5"))
-        self.debug = os.getenv("QF_DEBUG", "").lower() in ("true", "1", "yes")
+        self.max_iterations = max_iterations or settings.runtime.max_iterations
+        self.debug = settings.runtime.debug
         self.trace_handler = trace_handler
         self.tool_map = {tool.name: tool for tool in tools}
 
@@ -275,24 +281,25 @@ class BindToolsExecutor:
             f"conversation has {len(self.messages)} messages"
         )
 
-        # Check prompt size and summarize if needed
+        # Check prompt size and summarize if needed (using centralized config)
+        error_thresh, warn_thresh, _, msg_thresh, char_thresh = _get_memory_config()
         prompt_size = sum(len(str(m.content)) for m in self.messages)
         message_count = len(self.messages)
 
-        if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
+        if prompt_size > error_thresh:
             log.error(
                 f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars. "
-                f"Exceeds threshold ({PROMPT_SIZE_ERROR_THRESHOLD})."
+                f"Exceeds threshold ({error_thresh})."
             )
-        elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
+        elif prompt_size > warn_thresh:
             log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
         # Context summarization when thresholds exceeded
-        if message_count > SUMMARIZATION_MESSAGE_THRESHOLD or prompt_size > SUMMARIZATION_CHAR_THRESHOLD:
+        if message_count > msg_thresh or prompt_size > char_thresh:
             log.info(
                 f"Context exceeded thresholds for {self.role_id}: "
-                f"{message_count} msgs (>{SUMMARIZATION_MESSAGE_THRESHOLD}), "
-                f"{prompt_size} chars (>{SUMMARIZATION_CHAR_THRESHOLD}). Summarizing..."
+                f"{message_count} msgs (>{msg_thresh}), "
+                f"{prompt_size} chars (>{char_thresh}). Summarizing..."
             )
             await self._summarize_history()
 
@@ -589,6 +596,7 @@ class BindToolsExecutor:
         Returns:
             Summary string including actions AND LLM reasoning, capped at max chars
         """
+        _, _, memory_cap, _, _ = _get_memory_config()
         parts = []
 
         # Include actions taken
@@ -601,7 +609,7 @@ class BindToolsExecutor:
             last_response = raw_responses[-1] if raw_responses else ""
             if last_response:
                 # Truncate if too long, keep the important end
-                max_response_chars = PRIOR_CONVERSATION_MAX_CHARS // 2
+                max_response_chars = memory_cap // 2
                 if len(last_response) > max_response_chars:
                     last_response = "..." + last_response[-max_response_chars:]
                 parts.append(f"Last response:\n{last_response}")
@@ -610,8 +618,8 @@ class BindToolsExecutor:
             return ""
 
         summary = "\n\n".join(parts)
-        if len(summary) > PRIOR_CONVERSATION_MAX_CHARS:
-            summary = summary[:PRIOR_CONVERSATION_MAX_CHARS] + "..."
+        if len(summary) > memory_cap:
+            summary = summary[:memory_cap] + "..."
         return summary
 
     async def _summarize_history(self) -> None:
@@ -646,7 +654,8 @@ class BindToolsExecutor:
                 tool_calls = getattr(msg, "tool_calls", None) or []
                 if tool_calls:
                     tool_names = [tc.get("name", "unknown") for tc in tool_calls]
-                    older_text_parts.append(f"Assistant: {content}\n[Called tools: {', '.join(tool_names)}]")
+                    tools_str = ", ".join(tool_names)
+                    older_text_parts.append(f"Assistant: {content}\n[Called tools: {tools_str}]")
                 else:
                     older_text_parts.append(f"Assistant: {content}")
             elif isinstance(msg, ToolMessage):
@@ -713,7 +722,7 @@ def select_executor(model_name: str) -> type:
     from questfoundry.runtime.core.protocol_executor import ProtocolExecutor
 
     # Models known to support bind_tools well
-    BIND_TOOLS_MODELS = {
+    bind_tools_models = {
         "qwen3",
         "qwen2.5",
         "qwen2",
@@ -729,11 +738,12 @@ def select_executor(model_name: str) -> type:
     model_lower = model_name.lower()
 
     # Check if any supported model pattern matches
-    if any(m in model_lower for m in BIND_TOOLS_MODELS):
+    if any(m in model_lower for m in bind_tools_models):
         return BindToolsExecutor
 
-    # Check denylist for models known to NOT work
-    if any(m in model_lower for m in BIND_TOOLS_DENYLIST):
+    # Check denylist for models known to NOT work (from centralized config)
+    denylist = _get_bind_tools_denylist()
+    if any(m in model_lower for m in denylist):
         return ProtocolExecutor
 
     # Default to text-based for unknown models (safer)

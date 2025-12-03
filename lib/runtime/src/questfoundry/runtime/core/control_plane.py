@@ -10,12 +10,12 @@ Based on: Studio Graph Architecture gist (The Mesh & The Coordinator)
 
 import asyncio
 import logging
-import os
 from datetime import UTC, datetime
 from typing import Any
 
 from langgraph.graph import END, StateGraph
 
+from questfoundry.runtime.config import get_settings
 from questfoundry.runtime.core.node_factory import NodeFactory
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
 from questfoundry.runtime.core.state_manager import StateManager
@@ -116,6 +116,9 @@ class ControlPlane:
         preferred_provider: str | None = None,
     ):
         """Initialize the control plane."""
+        # Load runtime settings from centralized config
+        settings = get_settings()
+
         self.schema_registry = schema_registry or SchemaRegistry()
         self.state_manager = state_manager or StateManager()
         self.node_factory = node_factory or NodeFactory(
@@ -131,23 +134,23 @@ class ControlPlane:
 
         set_dormancy_registry(self.dormancy)
 
-        # Track message history for loop detection
+        # Track message history for loop detection (from centralized config)
         self._message_history: list[tuple[str, str, str]] = []  # (sender, receiver, intent)
-        self._max_ping_pong = 3  # Max identical exchanges before intervention
+        self._max_ping_pong = settings.runtime.max_ping_pong
 
         # Track role execution counts to detect infinite loops
         self._role_execution_counts: dict[str, int] = {}
-        self._max_role_executions = 15  # Force termination if same role runs too many times
+        self._max_role_executions = settings.runtime.max_role_executions
         self._total_executions: int = 0  # Track total executions for periodic reset
-        self._reset_threshold: int = 20  # Reset all counts after this many total executions
+        self._reset_threshold: int = settings.runtime.execution_reset_threshold
 
         # Fairness tracking - prevent same role running too many times consecutively
         self._last_executed_role: str | None = None
         self._consecutive_executions: int = 0
-        self._max_consecutive: int = 3  # Force rotation after N consecutive executions
+        self._max_consecutive: int = settings.runtime.max_consecutive_role_executions
 
         # Parallel execution - how many roles to run concurrently
-        self._max_parallel: int = int(os.environ.get("QF_MAX_PARALLEL_ROLES", "4"))
+        self._max_parallel: int = settings.runtime.max_parallel_roles
 
         # Role abbreviation mapping for message bus routing
         self._abbreviations = {
@@ -363,7 +366,9 @@ class ControlPlane:
         ]
 
         # Helper function to route to a role (checks dormancy, exec count, fairness)
-        def try_route_to_role(role_id: str, is_direct: bool, skip_fairness: bool = False) -> str | None:
+        def try_route_to_role(
+            role_id: str, is_direct: bool, skip_fairness: bool = False
+        ) -> str | None:
             if role_id not in pending or not pending[role_id]:
                 return None
 

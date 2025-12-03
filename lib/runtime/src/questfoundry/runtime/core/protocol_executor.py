@@ -22,13 +22,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from questfoundry.runtime.config import get_settings
 from questfoundry.runtime.core.bind_tools_executor import (
     deserialize_messages,
     serialize_messages,
@@ -48,12 +48,20 @@ def _get_prompt_log():
         pass
     return None
 
-# Prompt size thresholds (in characters, ~4 chars per token)
-PROMPT_SIZE_ERROR_THRESHOLD = int(os.environ.get("QF_PROMPT_ERROR_THRESHOLD", "32000"))
-PROMPT_SIZE_WARNING_THRESHOLD = int(os.environ.get("QF_PROMPT_WARNING_THRESHOLD", "16000"))
 
-# Short-term memory cap (characters)
-PRIOR_CONVERSATION_MAX_CHARS = int(os.environ.get("QF_MEMORY_CAP", "8000"))
+def _get_memory_settings() -> tuple[int, int, int]:
+    """Get memory settings from centralized config.
+
+    Returns:
+        Tuple of (prompt_error_threshold, prompt_warning_threshold, memory_cap)
+    """
+    settings = get_settings()
+    return (
+        settings.memory.prompt_error_threshold,
+        settings.memory.prompt_warning_threshold,
+        settings.memory.memory_cap,
+    )
+
 
 # Tools that signal "role is done for this turn"
 PROTOCOL_MESSAGE_TOOLS = {"send_protocol_message", "send_message"}
@@ -144,14 +152,15 @@ class ProtocolExecutor:
             tool_map: Dictionary mapping tool names to tool instances
             state: Current StudioState for tool execution context
             role_id: ID of the role executing (for tool injection)
-            max_failures: Max consecutive failures before giving up (default 3)
+            max_failures: Max consecutive failures before giving up (default from config)
             trace_callback: Optional callback(intent, payload) for tracing events
         """
+        settings = get_settings()
         self.tool_map = tool_map
         self.state = state
         self.role_id = role_id
-        self.max_failures = max_failures or int(os.getenv("QF_MAX_FAILURES", "3"))
-        self.debug = os.getenv("QF_DEBUG", "").lower() in ("true", "1", "yes")
+        self.max_failures = max_failures or settings.runtime.max_failures
+        self.debug = settings.runtime.debug
         self.trace_callback = trace_callback
 
     async def execute(
@@ -209,21 +218,22 @@ class ProtocolExecutor:
             # Legacy format: use as-is
             prior_text = prior_conversation
 
-        # Check prompt size
+        # Check prompt size (using centralized config)
+        error_threshold, warning_threshold, memory_cap = _get_memory_settings()
         prompt_size = len(full_system) + len(user_prompt) + len(prior_text)
-        if prompt_size > PROMPT_SIZE_ERROR_THRESHOLD:
+        if prompt_size > error_threshold:
             log.error(
                 f"PROMPT SIZE ERROR for {self.role_id}: {prompt_size} chars. "
-                f"Exceeds threshold ({PROMPT_SIZE_ERROR_THRESHOLD})."
+                f"Exceeds threshold ({error_threshold})."
             )
-        elif prompt_size > PROMPT_SIZE_WARNING_THRESHOLD:
+        elif prompt_size > warning_threshold:
             log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
-        # Initialize conversation with prior history (with memory cap)
+        # Initialize conversation with prior history (with memory cap from config)
         if prior_text:
             original_len = len(prior_text)
-            if original_len > PRIOR_CONVERSATION_MAX_CHARS:
-                truncated = prior_text[-PRIOR_CONVERSATION_MAX_CHARS:]
+            if original_len > memory_cap:
+                truncated = prior_text[-memory_cap:]
                 newline_idx = truncated.find("\n")
                 if newline_idx > 0 and newline_idx < 500:
                     truncated = truncated[newline_idx + 1 :]
@@ -642,6 +652,7 @@ class ProtocolExecutor:
         Returns:
             Summary string including actions AND LLM reasoning
         """
+        _, _, memory_cap = _get_memory_settings()
         parts = []
 
         # Include actions taken
@@ -652,7 +663,7 @@ class ProtocolExecutor:
         if raw_responses:
             last_response = raw_responses[-1] if raw_responses else ""
             if last_response:
-                max_response_chars = PRIOR_CONVERSATION_MAX_CHARS // 2
+                max_response_chars = memory_cap // 2
                 if len(last_response) > max_response_chars:
                     last_response = "..." + last_response[-max_response_chars:]
                 parts.append(f"Last response:\n{last_response}")
@@ -661,6 +672,6 @@ class ProtocolExecutor:
             return ""
 
         summary = "\n\n".join(parts)
-        if len(summary) > PRIOR_CONVERSATION_MAX_CHARS:
-            summary = summary[:PRIOR_CONVERSATION_MAX_CHARS] + "..."
+        if len(summary) > memory_cap:
+            summary = summary[:memory_cap] + "..."
         return summary
