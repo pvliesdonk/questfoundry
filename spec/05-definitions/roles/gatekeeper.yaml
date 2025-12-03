@@ -119,6 +119,7 @@ protocol:
       - gate.feedback
       - merge.reject
       - hook.create
+      - human.question
       - ack
       - error
     can_receive:

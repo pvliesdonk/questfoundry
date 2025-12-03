@@ -122,6 +122,7 @@ protocol:
       - hook.create
       - artifact.submit
       - feedback.request
+      - human.question
       - ack
       - error
     can_receive:
