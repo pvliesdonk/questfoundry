@@ -40,6 +40,19 @@ def _get_bus_log():
         pass
     return None
 
+
+def _get_health_log():
+    """Get health logger if configured, None otherwise."""
+    try:
+        from questfoundry.runtime.structured_logging import get_health_logger, is_configured
+
+        if is_configured():
+            return get_health_logger()
+    except ImportError:
+        pass
+    return None
+
+
 # Optional LangSmith tracing
 try:
     from langsmith import traceable
@@ -151,6 +164,14 @@ class ControlPlane:
 
         # Parallel execution - how many roles to run concurrently
         self._max_parallel: int = settings.runtime.max_parallel_roles
+
+        # Loop iteration counter for logging (increments each routing decision)
+        self._loop_iteration: int = 0
+
+        # Loop health tracking for stuck loop detection
+        self._last_hot_sot_hash: str | None = None
+        self._iterations_without_artifact_change: int = 0
+        self._last_artifact_change_iteration: int = 0
 
         # Role abbreviation mapping for message bus routing
         self._abbreviations = {
@@ -273,6 +294,7 @@ class ControlPlane:
             if pending_counts:
                 bus_log.info(
                     "pending_messages_by_role",
+                    loop_iteration=self._loop_iteration,
                     pending_counts=pending_counts,
                     direct_counts=direct_counts,
                     total_pending=sum(pending_counts.values()),
@@ -297,11 +319,15 @@ class ControlPlane:
         Returns:
             List of next node IDs (for parallel execution) or [END]
         """
+        # Increment loop iteration counter for logging
+        self._loop_iteration += 1
+
         messages = state.get("messages", [])
 
         if not messages:
             # No messages yet - start with showrunner
             logger.debug("No messages, routing to showrunner")
+            self._log_loop_health(state, [SHOWRUNNER])
             return [SHOWRUNNER]
 
         # Check for termination in the last message
@@ -315,6 +341,7 @@ class ControlPlane:
             if bus_log:
                 bus_log.info(
                     "route_decision",
+                    loop_iteration=self._loop_iteration,
                     next_node=END,
                     next_nodes=[END],
                     reason="termination_signal",
@@ -339,6 +366,7 @@ class ControlPlane:
             if bus_log:
                 bus_log.info(
                     "route_decision",
+                    loop_iteration=self._loop_iteration,
                     next_node=END,
                     next_nodes=[END],
                     reason="no_pending_messages",
@@ -436,6 +464,7 @@ class ControlPlane:
                 pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
                 bus_log.info(
                     "route_decision",
+                    loop_iteration=self._loop_iteration,
                     next_node=role_id,
                     next_nodes=[role_id],
                     pending_counts=pending_counts,
@@ -485,11 +514,14 @@ class ControlPlane:
                 pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
                 bus_log.info(
                     "parallel_route_decision",
+                    loop_iteration=self._loop_iteration,
                     next_nodes=eligible_roles,
                     parallel_count=len(eligible_roles),
                     pending_counts=pending_counts,
                     direct_counts=direct_counts,
                 )
+            # Log loop health before returning
+            self._log_loop_health(state, eligible_roles)
             return eligible_roles
 
         # All pending roles are dormant - route to showrunner to decide wake
@@ -514,6 +546,7 @@ class ControlPlane:
                 if bus_log:
                     bus_log.info(
                         "route_decision",
+                        loop_iteration=self._loop_iteration,
                         next_node=END,
                         next_nodes=[END],
                         reason="dormant_roles_no_showrunner",
@@ -530,12 +563,72 @@ class ControlPlane:
         if bus_log:
             bus_log.info(
                 "route_decision",
+                loop_iteration=self._loop_iteration,
                 next_node=END,
                 next_nodes=[END],
                 reason="no_actionable_messages",
             )
 
+        # Log final loop health before ending
+        self._log_loop_health(state, [END])
         return [END]
+
+    def _compute_hot_sot_hash(self, state: StudioState) -> str:
+        """Compute a hash of the hot_sot for change detection."""
+        import hashlib
+        import json
+
+        hot_sot = state.get("hot_sot", {})
+        try:
+            serialized = json.dumps(hot_sot, sort_keys=True, default=str)
+            return hashlib.md5(serialized.encode()).hexdigest()[:12]
+        except (TypeError, ValueError):
+            return "unhashable"
+
+    def _log_loop_health(self, state: StudioState, next_roles: list[str]) -> None:
+        """Log loop health metrics for detecting stuck loops."""
+        health_log = _get_health_log()
+        if not health_log:
+            return
+
+        # Compute current hot_sot hash
+        current_hash = self._compute_hot_sot_hash(state)
+
+        # Check if artifacts changed
+        artifact_changed = (
+            self._last_hot_sot_hash is not None
+            and current_hash != self._last_hot_sot_hash
+        )
+
+        if artifact_changed:
+            self._iterations_without_artifact_change = 0
+            self._last_artifact_change_iteration = self._loop_iteration
+        else:
+            self._iterations_without_artifact_change += 1
+
+        self._last_hot_sot_hash = current_hash
+
+        # Detect potential stuck loop indicators
+        same_role_repeated = (
+            len(next_roles) == 1
+            and next_roles[0] == self._last_executed_role
+            and self._consecutive_executions >= 3
+        )
+
+        health_log.info(
+            "loop_health",
+            loop_iteration=self._loop_iteration,
+            tu_id=state.get("tu_id", ""),
+            hot_sot_hash=current_hash,
+            artifact_changed=artifact_changed,
+            iterations_without_change=self._iterations_without_artifact_change,
+            last_change_iteration=self._last_artifact_change_iteration,
+            same_role_repeated=same_role_repeated,
+            consecutive_same_role=self._consecutive_executions,
+            next_roles=next_roles,
+            total_executions=self._total_executions,
+            role_execution_counts=dict(self._role_execution_counts),
+        )
 
     def _normalize_role_id(self, receiver: str) -> str:
         """
@@ -835,6 +928,7 @@ class ControlPlane:
             if bus_log:
                 bus_log.info(
                     "role_start",
+                    loop_iteration=self._loop_iteration,
                     role=role_id,
                     tu_id=state.get("tu_id", ""),
                 )
@@ -897,6 +991,7 @@ class ControlPlane:
                 try:
                     bus_log.info(
                         "message_consumed",
+                        loop_iteration=self._loop_iteration,
                         role=role_id,
                         consumed_indices=consumed_indices,
                         broadcast_consumed_count=len(broadcast_consumed),
@@ -926,6 +1021,7 @@ class ControlPlane:
             if bus_log:
                 bus_log.info(
                     "role_complete",
+                    loop_iteration=self._loop_iteration,
                     role=role_id,
                     message_count=len(messages),
                     tu_id=state.get("tu_id", ""),

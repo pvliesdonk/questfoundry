@@ -288,7 +288,7 @@ class ProtocolExecutor:
 
             raw_responses.append(response_text)
 
-            # Log prompt and response to structured logging
+            # Log prompt and response to structured logging (full content)
             prompt_log = _get_prompt_log()
             if prompt_log:
                 prompt_log.info(
@@ -298,6 +298,10 @@ class ProtocolExecutor:
                     system_prompt_chars=len(full_system),
                     user_prompt_chars=len(conversation),
                     response_chars=len(response_text),
+                    # Full content for debugging
+                    system_prompt=full_system,
+                    conversation=conversation,
+                    response=response_text,
                 )
 
             # Trace for debugging

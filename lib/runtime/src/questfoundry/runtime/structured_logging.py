@@ -41,6 +41,7 @@ _tool_logger: structlog.stdlib.BoundLogger | None = None
 _sot_logger: structlog.stdlib.BoundLogger | None = None
 _bus_logger: structlog.stdlib.BoundLogger | None = None
 _prompt_logger: structlog.stdlib.BoundLogger | None = None
+_health_logger: structlog.stdlib.BoundLogger | None = None
 _debug_file_handler: logging.FileHandler | None = None
 
 # Domain configuration
@@ -49,6 +50,7 @@ DOMAINS = {
     "qf.sot": "state-sot.jsonl",
     "qf.bus": "message-bus.jsonl",
     "qf.prompts": "prompts.jsonl",
+    "qf.health": "loop-health.jsonl",
 }
 
 
@@ -241,9 +243,32 @@ def get_prompt_logger() -> structlog.stdlib.BoundLogger:
     return _prompt_logger
 
 
+def get_health_logger() -> "structlog.stdlib.BoundLogger":
+    """Get the loop health logger.
+
+    Logs loop health metrics for detecting stuck loops.
+
+    Returns:
+        Structured logger for health domain
+
+    Raises:
+        RuntimeError: If configure_structured_logging() not called
+    """
+    global _health_logger
+    import structlog
+
+    if not _configured:
+        raise RuntimeError(
+            "Structured logging not configured. Call configure_structured_logging() first."
+        )
+    if _health_logger is None:
+        _health_logger = structlog.get_logger("qf.health")
+    return _health_logger
+
+
 def reset_loggers() -> None:
     """Reset cached loggers (for testing)."""
-    global _tool_logger, _sot_logger, _bus_logger, _prompt_logger, _debug_file_handler, _configured
+    global _tool_logger, _sot_logger, _bus_logger, _prompt_logger, _health_logger, _debug_file_handler, _configured
 
     # Clean up debug handler
     if _debug_file_handler is not None:
@@ -256,6 +281,7 @@ def reset_loggers() -> None:
     _sot_logger = None
     _bus_logger = None
     _prompt_logger = None
+    _health_logger = None
     _configured = False
 
 

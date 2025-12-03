@@ -9,6 +9,8 @@ state. They rely on StateManager/ColdStore for storage semantics but avoid
 additional permission checks (tool exposure already encodes access control).
 """
 
+import hashlib
+import json
 import logging
 import threading
 from copy import deepcopy
@@ -39,6 +41,26 @@ def _get_sot_log():
     except ImportError:
         pass
     return None
+
+
+def _compute_content_hash(value: Any) -> str:
+    """Compute a short hash for artifact evolution tracking."""
+    try:
+        serialized = json.dumps(value, sort_keys=True, default=str)
+        return hashlib.md5(serialized.encode()).hexdigest()[:8]
+    except (TypeError, ValueError):
+        return "unhashable"
+
+
+def _safe_serialize(value: Any, max_size: int = 50000) -> Any:
+    """Safely serialize a value for logging, truncating if too large."""
+    try:
+        serialized = json.dumps(value, default=str)
+        if len(serialized) > max_size:
+            return {"_truncated": True, "_size": len(serialized), "_preview": serialized[:1000]}
+        return value
+    except (TypeError, ValueError):
+        return {"_error": "not_serializable", "_type": type(value).__name__}
 
 
 class _StrictToolSchemaMixin:
@@ -314,7 +336,7 @@ class ReadHotSOT(_BaseStateTool):
             raise StateError("State payload is required for read_hot_sot")
         result = _get_nested(state.get("hot_sot", {}), key)
 
-        # Log to structured logging
+        # Log to structured logging (full content + hash for evolution tracking)
         sot_log = _get_sot_log()
         if sot_log:
             sot_log.info(
@@ -323,6 +345,8 @@ class ReadHotSOT(_BaseStateTool):
                 key=key,
                 result_type=type(result).__name__,
                 result_size=len(result) if isinstance(result, (list, dict, str)) else 1,
+                content_hash=_compute_content_hash(result),
+                value=_safe_serialize(result),
             )
         return result
 
@@ -368,21 +392,30 @@ class WriteHotSOT(_BaseStateTool):
             raise StateError("Value is required for write_hot_sot")
 
         with _STATE_LOCK:
+            # Get previous value for evolution tracking
+            prev_value = _get_nested(state.get("hot_sot", {}), key)
+            prev_hash = _compute_content_hash(prev_value) if prev_value is not None else None
+
             new_hot = _set_nested(state.get("hot_sot", {}), key, value)
             updated_state = state.copy()
             updated_state["hot_sot"] = new_hot
             # Validate whole state to catch structural regressions
             self._validate_state(updated_state)
 
-            # Log to structured logging
+            # Log to structured logging (full content + evolution tracking)
             sot_log = _get_sot_log()
             if sot_log:
+                new_hash = _compute_content_hash(value)
                 sot_log.info(
                     "write_hot_sot",
                     role=role_id,
                     key=key,
                     value_type=type(value).__name__,
                     value_size=len(value) if isinstance(value, (list, dict, str)) else 1,
+                    content_hash=new_hash,
+                    prev_hash=prev_hash,
+                    evolved=prev_hash is not None and prev_hash != new_hash,
+                    value=_safe_serialize(value),
                 )
 
             return {"hot_sot": new_hot}
@@ -424,7 +457,7 @@ class ReadColdSOT(_BaseStateTool):
             base_cold = stored or {}
         result = _get_nested(base_cold, key)
 
-        # Log to structured logging
+        # Log to structured logging (full content + hash for evolution tracking)
         sot_log = _get_sot_log()
         if sot_log:
             sot_log.info(
@@ -433,6 +466,8 @@ class ReadColdSOT(_BaseStateTool):
                 key=key,
                 result_type=type(result).__name__,
                 result_size=len(result) if isinstance(result, (list, dict, str)) else 1,
+                content_hash=_compute_content_hash(result),
+                value=_safe_serialize(result),
             )
         return result
 
@@ -482,6 +517,10 @@ class WriteColdSOT(_BaseStateTool):
         pid = project_id or state.get("loop_context", {}).get("project_id") or "default"
 
         with _STATE_LOCK:
+            # Get previous value for evolution tracking
+            prev_value = _get_nested(state.get("cold_sot", {}), key)
+            prev_hash = _compute_content_hash(prev_value) if prev_value is not None else None
+
             new_cold = _set_nested(state.get("cold_sot", {}), key, value)
             # Persist full cold_sot snapshot
             self._cold_store.save_cold(pid, new_cold)
@@ -490,9 +529,10 @@ class WriteColdSOT(_BaseStateTool):
             updated_state["cold_sot"] = new_cold
             self._validate_state(updated_state)
 
-            # Log to structured logging
+            # Log to structured logging (full content + evolution tracking)
             sot_log = _get_sot_log()
             if sot_log:
+                new_hash = _compute_content_hash(value)
                 sot_log.info(
                     "write_cold_sot",
                     role=role_id,
@@ -500,5 +540,9 @@ class WriteColdSOT(_BaseStateTool):
                     value_type=type(value).__name__,
                     value_size=len(value) if isinstance(value, (list, dict, str)) else 1,
                     project_id=pid,
+                    content_hash=new_hash,
+                    prev_hash=prev_hash,
+                    evolved=prev_hash is not None and prev_hash != new_hash,
+                    value=_safe_serialize(value),
                 )
             return {"cold_sot": new_cold}

@@ -342,16 +342,24 @@ class BindToolsExecutor:
             response_text = self._extract_content(response)
             raw_responses.append(response_text)
 
-            # Log prompt and response to structured logging
+            # Log prompt and response to structured logging (full content)
             prompt_log = _get_prompt_log()
             if prompt_log:
+                tool_calls = getattr(response, "tool_calls", []) or []
                 prompt_log.info(
                     "llm_call",
                     role=self.role_id,
                     iteration=iteration,
                     message_count=len(self.messages),
                     response_chars=len(response_text),
-                    tool_calls_count=len(getattr(response, "tool_calls", []) or []),
+                    tool_calls_count=len(tool_calls),
+                    # Full content for debugging
+                    messages=serialize_messages(self.messages),
+                    response=response_text,
+                    tool_calls=[
+                        {"name": tc.get("name"), "args": tc.get("args")}
+                        for tc in tool_calls
+                    ] if tool_calls else [],
                 )
 
             # Trace for debugging
@@ -684,7 +692,7 @@ class BindToolsExecutor:
                 f"for {self.role_id}"
             )
 
-            # Log summarization event
+            # Log summarization event (full content)
             prompt_log = _get_prompt_log()
             if prompt_log:
                 prompt_log.info(
@@ -692,6 +700,9 @@ class BindToolsExecutor:
                     role=self.role_id,
                     messages_summarized=len(older_msgs),
                     summary_chars=len(summary_text),
+                    # Full content for debugging
+                    original_messages=serialize_messages(older_msgs),
+                    summary=summary_text,
                 )
 
             # Replace older messages with summary
