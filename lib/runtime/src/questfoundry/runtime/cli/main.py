@@ -21,7 +21,7 @@ from questfoundry.runtime.logging_config import get_logger, setup_logging
 from questfoundry.runtime.structured_logging import configure_structured_logging
 
 # Set up Rich logging
-setup_logging(level="INFO", show_time=False, show_path=False)
+setup_logging(level="WARNING", show_time=False, show_path=False)
 logger = get_logger(__name__)
 
 # Track active trace handlers for cleanup on interrupt
