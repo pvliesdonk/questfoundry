@@ -142,7 +142,50 @@ class ProviderManager:
                 "gatekeeper": "validation",
                 "style_lead": "validation",
             },
+            "model_metadata": {},
+            "default_model_limits": {
+                "context_window": 8192,
+                "max_output_tokens": 4096,
+            },
         }
+
+    def get_model_limits(self, model: str) -> dict[str, int]:
+        """
+        Get context window and max output tokens for a model.
+
+        Looks up model in model_metadata from tier config. Falls back to
+        default_model_limits if model not found.
+
+        Args:
+            model: Model name (e.g., 'claude-sonnet-4-5-20250929', 'gpt-4o')
+
+        Returns:
+            Dict with 'context_window' and 'max_output_tokens' keys
+        """
+        model_metadata = self.tier_mapping.get("model_metadata", {})
+        defaults = self.tier_mapping.get("default_model_limits", {
+            "context_window": 8192,
+            "max_output_tokens": 4096,
+        })
+
+        if model in model_metadata:
+            metadata = model_metadata[model]
+            return {
+                "context_window": metadata.get("context_window", defaults["context_window"]),
+                "max_output_tokens": metadata.get("max_output_tokens", defaults["max_output_tokens"]),
+            }
+
+        # Try partial match (e.g., 'claude-3-5-sonnet' matches 'claude-3-5-sonnet-20241022')
+        for known_model, metadata in model_metadata.items():
+            if model.startswith(known_model) or known_model.startswith(model):
+                logger.debug(f"Model '{model}' matched to '{known_model}' for limits lookup")
+                return {
+                    "context_window": metadata.get("context_window", defaults["context_window"]),
+                    "max_output_tokens": metadata.get("max_output_tokens", defaults["max_output_tokens"]),
+                }
+
+        logger.debug(f"No metadata found for model '{model}', using defaults")
+        return defaults
 
     def _detect_providers(self) -> list[str]:
         """
@@ -567,11 +610,8 @@ class ProviderManager:
 
         # Note: Do NOT force JSON format as it conflicts with tool calling.
         # When tools are bound, Ollama handles structured output natively.
-        # TODO: Ideal behavior is to:
-        #   - Track per-model context limits (e.g. via model_tiers.yaml)
-        #   - Estimate rendered prompt token count per request
-        #   - Raise a clear error if prompt_tokens + max_tokens exceeds the model's
-        #     context window instead of relying on Ollama's internal truncation
+        # Model limits are now available via get_model_limits(model) from model_tiers.yaml.
+        # Future: Add pre-flight validation to check estimated_tokens + max_tokens <= context_window.
         num_ctx = settings.llm.ollama_num_ctx
 
         return ChatOllama(

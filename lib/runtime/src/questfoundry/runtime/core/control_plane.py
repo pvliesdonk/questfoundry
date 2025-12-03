@@ -87,13 +87,13 @@ class DormancyRegistry:
     def wake(self, role_id: str) -> None:
         """Wake a dormant role."""
         self._dormant.discard(role_id)
-        logger.info(f"Role woken: {role_id}")
+        logger.debug(f"Role woken: {role_id}")
 
     def sleep(self, role_id: str) -> None:
         """Put a role to sleep."""
         if role_id not in self._always_on:
             self._dormant.add(role_id)
-            logger.info(f"Role dormant: {role_id}")
+            logger.debug(f"Role dormant: {role_id}")
 
     def set_dormant_roles(self, role_ids: set[str]) -> None:
         """Set the initial dormant roles."""
@@ -306,7 +306,7 @@ class ControlPlane:
 
         state.setdefault("messages", []).append(wrapup_msg)
         self._wrapup_sent = True
-        logger.info(
+        logger.debug(
             f"Injected wrap-up message to Showrunner (reason: {reason}, uncommitted: {uncommitted})"
         )
 
@@ -443,7 +443,7 @@ class ControlPlane:
         human_msg, human_idx = self._find_pending_human_message(state)
         if human_msg is not None:
             receiver = human_msg.get("receiver", "")
-            logger.info(f"Found pending human message at index {human_idx}, handling interaction")
+            logger.debug(f"Found pending human message at index {human_idx}, handling interaction")
             # Mark as consumed before handling to prevent re-processing
             consumed = state.setdefault("_consumed_messages", set())
             consumed.add(human_idx)
@@ -456,7 +456,7 @@ class ControlPlane:
             # No pending messages - but first check if we should send wrap-up to SR
             if not self._wrapup_sent:
                 uncommitted = self._get_uncommitted_hot_changes(state)
-                logger.info(
+                logger.debug(
                     f"No pending messages, but wrap-up not sent yet. "
                     f"Uncommitted changes: {uncommitted}"
                 )
@@ -464,7 +464,7 @@ class ControlPlane:
                 return [SHOWRUNNER]
 
             # Wrap-up was already sent - safe to end
-            logger.info("No pending messages for any role, ending graph")
+            logger.debug("No pending messages for any role, ending graph")
             uncommitted = self._get_uncommitted_hot_changes(state)
             if uncommitted:
                 logger.warning(f"Ending graph with uncommitted hot_sot changes: {uncommitted}")
@@ -532,7 +532,7 @@ class ControlPlane:
                         if r != role_id and not self.dormancy.is_dormant(r)
                     ]
                     if other_roles_with_work:
-                        logger.info(
+                        logger.debug(
                             f"Fairness: {role_id} has run {self._consecutive_executions}x "
                             f"consecutively, skipping for others: {other_roles_with_work}"
                         )
@@ -545,7 +545,7 @@ class ControlPlane:
             # Periodic reset: after N total executions, halve all per-role counts
             # This allows long-running sessions to continue making progress
             if self._total_executions >= self._reset_threshold:
-                logger.info(
+                logger.debug(
                     f"Progress checkpoint: {self._total_executions} total executions, "
                     f"halving per-role counts to allow continued progress"
                 )
@@ -561,7 +561,7 @@ class ControlPlane:
                 self._last_executed_role = role_id
 
             msg_type = "direct" if is_direct else "broadcast"
-            logger.info(
+            logger.debug(
                 f"Message bus: routing to {role_id} "
                 f"({len(pending[role_id])} pending, {msg_type}, exec #{exec_count + 1})"
             )
@@ -616,7 +616,7 @@ class ControlPlane:
 
         # If we found eligible roles, return them for parallel execution
         if eligible_roles:
-            logger.info(f"Parallel routing to {len(eligible_roles)} roles: {eligible_roles}")
+            logger.debug(f"Parallel routing to {len(eligible_roles)} roles: {eligible_roles}")
             bus_log = _get_bus_log()
             if bus_log:
                 pending_counts = {r: len(msgs) for r, msgs in pending.items() if msgs}
@@ -637,7 +637,7 @@ class ControlPlane:
         if dormant_with_messages:
             # Only route to showrunner if it has pending messages to process
             if SHOWRUNNER in pending:
-                logger.info(
+                logger.debug(
                     f"Dormant roles have pending messages: {dormant_with_messages}, "
                     "routing to showrunner"
                 )
@@ -646,7 +646,7 @@ class ControlPlane:
                 # SR has no pending messages - but first check if we should send wrap-up
                 if not self._wrapup_sent:
                     uncommitted = self._get_uncommitted_hot_changes(state)
-                    logger.info(
+                    logger.debug(
                         f"Dormant roles with no SR action, but wrap-up not sent. "
                         f"Uncommitted changes: {uncommitted}"
                     )
@@ -683,7 +683,7 @@ class ControlPlane:
         # No actionable pending messages - but first check if we should send wrap-up
         if not self._wrapup_sent:
             uncommitted = self._get_uncommitted_hot_changes(state)
-            logger.info(
+            logger.debug(
                 f"No actionable messages, but wrap-up not sent. "
                 f"Uncommitted changes: {uncommitted}"
             )
@@ -691,7 +691,7 @@ class ControlPlane:
             return [SHOWRUNNER]
 
         # Wrap-up was already sent - safe to end
-        logger.info("No actionable pending messages, ending graph")
+        logger.debug("No actionable pending messages, ending graph")
         uncommitted = self._get_uncommitted_hot_changes(state)
         if uncommitted:
             logger.warning(f"Ending graph with uncommitted hot_sot changes: {uncommitted}")

@@ -268,7 +268,7 @@ class AlignedColdStore:
                         ),
                     )
 
-        logger.info("Created Cold snapshot: %s", snapshot_id)
+        logger.debug("Created Cold snapshot: %s", snapshot_id)
 
     def export_cold_manifest(self) -> dict[str, Any]:
         """Export cold_manifest.json structure."""
@@ -332,7 +332,7 @@ class AlignedColdStore:
             with self.connection() as conn:
                 sql = f"UPDATE cold_book_metadata SET {', '.join(fields)} WHERE id = 1"
                 conn.execute(sql, values)
-                logger.info("Updated book metadata: %s", ", ".join(kwargs.keys()))
+                logger.debug("Updated book metadata: %s", ", ".join(kwargs.keys()))
 
     def get_book_metadata(self) -> dict[str, Any]:
         """Get Cold book metadata."""
@@ -376,7 +376,7 @@ class AlignedColdStore:
                 """,
                 (anchor, title, text_file, order_num, 1 if requires_gate else 0),
             )
-            logger.info("Added book section: %s", anchor)
+            logger.debug("Added book section: %s", anchor)
 
     def get_book_sections(self) -> list[dict[str, Any]]:
         """Get all Cold book sections ordered by order_num."""
@@ -454,7 +454,7 @@ class AlignedColdStore:
                     json.dumps(provenance),
                 ),
             )
-            logger.info("Added art asset: %s/%s", anchor, asset_type)
+            logger.debug("Added art asset: %s/%s", anchor, asset_type)
 
     def get_art_assets(self) -> list[dict[str, Any]]:
         """Get all Cold art assets."""
@@ -516,7 +516,7 @@ class AlignedColdStore:
                 """,
                 (artifact_id, artifact_type, path, status, json.dumps(content)),
             )
-            logger.info("Created Hot artifact: %s", artifact_id)
+            logger.debug("Created Hot artifact: %s", artifact_id)
 
     def update_hot_artifact_status(self, artifact_id: str, new_status: str) -> None:
         """Update Hot artifact status."""
@@ -534,7 +534,7 @@ class AlignedColdStore:
                 """,
                 (new_status, artifact_id),
             )
-            logger.info("Updated %s status to %s", artifact_id, new_status)
+            logger.debug("Updated %s status to %s", artifact_id, new_status)
 
     def get_hot_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         """Get a Hot artifact by ID."""
@@ -618,7 +618,7 @@ class AlignedColdStore:
                 """,
                 (anchor, title, text_file, status, tu_id),
             )
-            logger.info("Added Hot section: %s", anchor)
+            logger.debug("Added Hot section: %s", anchor)
 
     def update_hot_section_status(self, anchor: str, new_status: str) -> None:
         """Update Hot section status."""
@@ -703,7 +703,7 @@ class AlignedColdStore:
                 (tu_id, "tu_brief", path, "proposed", json.dumps(tu_brief)),
             )
 
-        logger.info("Created trace unit: %s", tu_id)
+        logger.debug("Created trace unit: %s", tu_id)
 
     def get_trace_unit(self, tu_id: str) -> dict[str, Any] | None:
         """Get a trace unit by ID."""
@@ -767,7 +767,7 @@ class AlignedColdStore:
                     (tu_id,),
                 )
 
-        logger.info("Updated %s to lifecycle stage: %s", tu_id, new_stage)
+        logger.debug("Updated %s to lifecycle stage: %s", tu_id, new_stage)
 
     def list_trace_units(self, lifecycle_stage: str | None = None) -> list[dict[str, Any]]:
         """List trace units with optional lifecycle filter."""

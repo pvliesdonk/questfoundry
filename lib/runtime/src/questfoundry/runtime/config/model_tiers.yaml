@@ -93,3 +93,49 @@ role_tier_recommendations:
   art_director: creative-writing
   player_narrator: customer-facing
   translator: creative-writing
+
+# Model metadata for token limits and context windows
+# Used for pre-flight validation and context management
+model_metadata:
+  # Anthropic models
+  claude-opus-4-1:
+    context_window: 200000
+    max_output_tokens: 32000
+  claude-sonnet-4-5-20250929:
+    context_window: 200000
+    max_output_tokens: 8192
+  claude-haiku-4-5:
+    context_window: 200000
+    max_output_tokens: 8192
+
+  # OpenAI models
+  gpt-4o:
+    context_window: 128000
+    max_output_tokens: 16384
+  gpt-4o-mini:
+    context_window: 128000
+    max_output_tokens: 16384
+  o1:
+    context_window: 200000
+    max_output_tokens: 100000
+  o3:
+    context_window: 200000
+    max_output_tokens: 100000
+
+  # Google models
+  gemini-3-pro:
+    context_window: 1000000
+    max_output_tokens: 8192
+  gemini-2.5-flash:
+    context_window: 1000000
+    max_output_tokens: 8192
+
+  # Ollama models (defaults, actual limits depend on model)
+  qwen3:8b:
+    context_window: 32768
+    max_output_tokens: 8192
+
+# Default limits when model not found in metadata
+default_model_limits:
+  context_window: 8192
+  max_output_tokens: 4096

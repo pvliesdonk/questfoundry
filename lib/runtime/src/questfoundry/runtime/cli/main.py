@@ -78,7 +78,7 @@ console = Console()
 @app.command()
 def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
+    show_flow: bool = typer.Option(False, "--show-flow", "-f", help="Show message flow summary"),
     trace: bool = typer.Option(
         False, "--trace", "-t", help="Enable trace mode to show agent communication on screen"
     ),
@@ -268,7 +268,7 @@ def ask(
             )
         )
 
-        if verbose:
+        if show_flow:
             console.print("\n[bold]Message Flow:[/bold]")
             for i, msg in enumerate(messages[-10:], 1):  # Last 10 messages
                 sender = msg.get("sender", "?")
