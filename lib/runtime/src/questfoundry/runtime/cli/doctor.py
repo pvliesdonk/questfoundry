@@ -12,6 +12,7 @@ import os
 import platform
 import sys
 from enum import Enum
+from pathlib import Path
 from typing import Any
 from urllib import request
 from urllib.error import URLError
@@ -56,7 +57,7 @@ class ProviderChecker:
         "anthropic": ("ANTHROPIC_API_KEY", "_check_anthropic"),
         "openai": ("OPENAI_API_KEY", "_check_openai"),
         "google": ("GOOGLE_API_KEY", "_check_google"),
-        "ollama": (None, "_check_ollama"),  # No env var required
+        "ollama": ("OLLAMA_HOST", "_check_ollama"),  # Requires explicit host
         "litellm": ("LITELLM_API_BASE", "_check_litellm"),
     }
 
@@ -81,7 +82,14 @@ class ProviderChecker:
         }
 
         # Check if configured
-        if env_var:
+        if provider == "ollama":
+            # Ollama: check env var OR config setting
+            host = os.getenv("OLLAMA_HOST") or self.settings.llm.ollama_host
+            if not host:
+                result["message"] = "OLLAMA_HOST not set (env or config)"
+                return result
+            result["details"]["host"] = host
+        elif env_var:
             value = os.getenv(env_var)
             if not value:
                 result["message"] = f"{env_var} not set"
@@ -162,7 +170,11 @@ class ProviderChecker:
 
     def _check_ollama(self) -> dict[str, Any]:
         """Check Ollama server connectivity."""
-        base_url = self.settings.llm.ollama_host
+        # Prefer env var over config setting
+        base_url = os.getenv("OLLAMA_HOST") or self.settings.llm.ollama_host
+
+        if not base_url:
+            raise RuntimeError("OLLAMA_HOST not configured")
 
         try:
             # Check if server is running
@@ -217,6 +229,7 @@ class ProviderChecker:
 def check_spec_status(settings: QuestFoundrySettings) -> dict[str, Any]:
     """Check spec source and availability."""
     from questfoundry.runtime.core.spec_fetcher import get_spec_source_preference
+    from questfoundry.runtime.spec_loader import is_monorepo_available, _get_monorepo_spec_root
 
     result: dict[str, Any] = {
         "source": get_spec_source_preference(),
@@ -226,6 +239,18 @@ def check_spec_status(settings: QuestFoundrySettings) -> dict[str, Any]:
 
     # Check if spec is available based on source
     source = result["source"]
+
+    # Try monorepo first (for auto or monorepo source)
+    if source in ("monorepo", "auto"):
+        if is_monorepo_available():
+            spec_root = _get_monorepo_spec_root()
+            result["status"] = "available"
+            result["path"] = str(spec_root)
+            result["source"] = "monorepo"
+            return result
+        elif source == "monorepo":
+            result["status"] = "not found"
+            return result
 
     if source == "bundled" or source == "auto":
         # Check bundled spec
@@ -243,8 +268,7 @@ def check_spec_status(settings: QuestFoundrySettings) -> dict[str, Any]:
 
     if source == "download" or (source == "auto" and result["status"] != "available"):
         # Check downloaded spec
-        cache_dir = settings.paths.cache_dir
-        spec_dir = cache_dir / "spec"
+        spec_dir = Path(settings.paths.spec_cache_dir)
         if spec_dir.exists():
             result["status"] = "available"
             result["path"] = str(spec_dir)
@@ -292,7 +316,7 @@ def format_config_dump(settings: QuestFoundrySettings) -> str:
     lines.append(f"  default_provider: {llm.default_provider or 'auto'}")
     lines.append(f"  default_temperature: {llm.default_temperature}")
     lines.append(f"  default_max_tokens: {llm.default_max_tokens}")
-    lines.append(f"  ollama_host: {llm.ollama_host}")
+    lines.append(f"  ollama_host: {llm.ollama_host or '(not set)'}")
     lines.append(f"  ollama_num_ctx: {llm.ollama_num_ctx}")
     if llm.litellm_api_base:
         lines.append(f"  litellm_api_base: {llm.litellm_api_base}")
@@ -316,14 +340,13 @@ def format_config_dump(settings: QuestFoundrySettings) -> str:
     paths = settings.paths
     lines.append(f"  project_dir: {paths.project_dir}")
     lines.append(f"  project_id: {paths.project_id}")
-    lines.append(f"  cache_dir: {paths.cache_dir}")
+    lines.append(f"  spec_cache_dir: {paths.spec_cache_dir}")
     lines.append("")
 
     # Logging settings
     lines.append("[bold]Logging:[/bold]")
     log = settings.logging
     lines.append(f"  level: {log.level}")
-    lines.append(f"  format: {log.format}")
     lines.append("")
 
     # Network settings
@@ -399,7 +422,16 @@ def run_doctor(
     if skip_network:
         # Just show configuration status without network checks
         for provider, (env_var, _) in ProviderChecker.PROVIDERS.items():
-            if env_var:
+            if provider == "ollama":
+                # Ollama: check env var OR config setting
+                host = os.getenv("OLLAMA_HOST") or settings.llm.ollama_host
+                if host:
+                    status = "[yellow]? Configured[/yellow]"
+                    details = f"host={host}"
+                else:
+                    status = "[dim]- Unconfigured[/dim]"
+                    details = "OLLAMA_HOST not set"
+            elif env_var:
                 is_set, masked = get_env_var_status(env_var)
                 if is_set:
                     status = "[yellow]? Configured[/yellow]"
@@ -408,9 +440,8 @@ def run_doctor(
                     status = "[dim]- Unconfigured[/dim]"
                     details = f"{env_var} not set"
             else:
-                # Ollama - always "configured"
-                status = "[yellow]? Configured[/yellow]"
-                details = f"host={settings.llm.ollama_host}"
+                status = "[dim]- Unconfigured[/dim]"
+                details = "No configuration required"
             table.add_row(provider, status, details)
     else:
         # Full connectivity check
@@ -544,11 +575,15 @@ def _run_doctor_json(settings: QuestFoundrySettings, skip_network: bool) -> int:
             }
     else:
         for provider, (env_var, _) in ProviderChecker.PROVIDERS.items():
-            if env_var:
+            if provider == "ollama":
+                # Ollama: check env var OR config setting
+                host = os.getenv("OLLAMA_HOST") or settings.llm.ollama_host
+                status = "configured" if host else "unconfigured"
+            elif env_var:
                 is_set, _ = get_env_var_status(env_var)
                 status = "configured" if is_set else "unconfigured"
             else:
-                status = "configured"
+                status = "unconfigured"
             result["providers"][provider] = {"status": status}
 
     print(json.dumps(result, indent=2))

@@ -34,7 +34,7 @@ class ProviderManager:
         "anthropic": "ANTHROPIC_API_KEY",
         "openai": "OPENAI_API_KEY",
         "google": "GOOGLE_API_KEY",
-        "ollama": None,  # Always available (localhost)
+        "ollama": "OLLAMA_HOST",  # Requires explicit host (env or config)
         "litellm": "LITELLM_API_BASE",
     }
 
@@ -152,12 +152,14 @@ class ProviderManager:
             List of available provider names
         """
         available = []
+        settings = get_settings()
 
         for provider, env_var in self.PROVIDER_ENV_VARS.items():
-            if env_var is None:
-                # Ollama - always available (assumes localhost)
-                available.append(provider)
-            elif os.getenv(env_var):
+            if provider == "ollama":
+                # Ollama: check env var OR config setting
+                if os.getenv("OLLAMA_HOST") or settings.llm.ollama_host:
+                    available.append(provider)
+            elif env_var and os.getenv(env_var):
                 available.append(provider)
 
         return available
@@ -531,7 +533,19 @@ class ProviderManager:
 
         # Get Ollama configuration from centralized config
         settings = get_settings()
-        base_url = settings.llm.ollama_host
+        # Prefer env var over config setting
+        base_url = os.getenv("OLLAMA_HOST") or settings.llm.ollama_host
+
+        if not base_url:
+            raise ProviderError(
+                "OLLAMA_HOST not configured",
+                provider_name="ollama",
+                suggestions=[
+                    "Set OLLAMA_HOST environment variable: export OLLAMA_HOST='http://localhost:11434'",
+                    "Or set in config: llm.ollama_host = 'http://localhost:11434'",
+                    "Or use QF_LLM__OLLAMA_HOST environment variable",
+                ],
+            )
         logger.debug(f"[OLLAMA] Using base_url: {base_url}")
         logger.debug(
             f"[OLLAMA] Creating ChatOllama: model={model}, temp={temperature}, "

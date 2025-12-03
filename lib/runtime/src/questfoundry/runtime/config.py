@@ -178,9 +178,9 @@ class LLMConfig(BaseModel):
         default=None,
         description="Path to custom model tiers YAML config file",
     )
-    ollama_host: str = Field(
-        default="http://localhost:11434",
-        description="Ollama server endpoint URL",
+    ollama_host: str | None = Field(
+        default=None,
+        description="Ollama server endpoint URL (e.g., http://localhost:11434)",
     )
     ollama_num_ctx: int = Field(
         default=32768,
