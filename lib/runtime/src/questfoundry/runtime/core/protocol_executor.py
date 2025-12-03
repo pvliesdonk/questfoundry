@@ -326,10 +326,20 @@ class ProtocolExecutor:
             all_tool_calls = self._parse_all_tool_calls(response_text)
 
             if not all_tool_calls:
-                # No valid tool call - count as failure
+                # No valid tool call - count as failure and provide guidance
                 log.warning(f"No tool call found in response for {self.role_id}")
                 failure_count += 1
-                error_msg = "Error - No tool call found. Use Action/Action Input format."
+                error_msg = (
+                    "Error - No tool call found. You must use tools to communicate.\n"
+                    "Please either:\n"
+                    "1. Call send_protocol_message to send your output to another role, OR\n"
+                    "2. Call another tool to do your work, OR\n"
+                    "3. If you cannot proceed, call send_protocol_message with intent='error' "
+                    "explaining why.\n\n"
+                    "Use the Action/Action Input format:\n"
+                    "Action: tool_name\n"
+                    "Action Input: {\"arg\": \"value\"}"
+                )
                 conversation += f"\n\n{response_text}\n\nObservation: {error_msg}"
                 continue
 

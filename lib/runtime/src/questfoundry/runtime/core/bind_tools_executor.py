@@ -387,9 +387,23 @@ class BindToolsExecutor:
             tool_calls = getattr(response, "tool_calls", None) or []
 
             if not tool_calls:
-                # No tool calls in this response
+                # No tool calls in this response - prompt LLM to use tools or explain
                 log.warning(f"No tool calls found in response for {self.role_id}")
                 failure_count += 1
+
+                # Add guidance message for retry
+                guidance = HumanMessage(
+                    content=(
+                        "You must use tools to communicate. Your response contained no tool calls. "
+                        "Please either:\n"
+                        "1. Call send_protocol_message to send your output to another role, OR\n"
+                        "2. Call another tool to do your work, OR\n"
+                        "3. If you cannot proceed, call send_protocol_message with intent='error' "
+                        "explaining why.\n\n"
+                        "Do NOT respond with plain text - you MUST make a tool call."
+                    )
+                )
+                self.messages.append(guidance)
                 continue
 
             log.info(f"[{self.role_id}] Found {len(tool_calls)} tool call(s) in response")
