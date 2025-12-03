@@ -343,11 +343,12 @@ class TestCapabilityMapperInit:
             with patch.object(CapabilityMapper, "_load_mappings"):
                 mapper = CapabilityMapper()
 
-                assert (
-                    mapper.capabilities_path
-                    == Path("spec/05-definitions/capabilities.yaml")
-                )
-                assert mapper.mappings_path == Path("lib/runtime/config/tool_mappings.yaml")
+                # Check that paths end with expected relative paths
+                # (may be absolute or relative depending on DEFINITIONS_ROOT)
+                assert str(mapper.capabilities_path).endswith("spec/05-definitions/capabilities.yaml") or \
+                       mapper.capabilities_path == Path("spec/05-definitions/capabilities.yaml")
+                assert str(mapper.mappings_path).endswith("lib/runtime/config/tool_mappings.yaml") or \
+                       mapper.mappings_path == Path("lib/runtime/config/tool_mappings.yaml")
 
     def test_init_with_custom_paths(self):
         """Test initialization with custom paths."""

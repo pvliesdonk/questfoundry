@@ -201,4 +201,4 @@ class Protocol:
         try:
             jsonschema.validate(envelope, self._envelope_schema)
         except jsonschema.ValidationError as exc:
-            raise StateError(f"Envelope validation failed: {exc.message}")
+            raise StateError(f"Envelope validation failed: {exc.message}") from exc

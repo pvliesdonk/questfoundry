@@ -442,7 +442,6 @@ class ControlPlane:
         # This ensures human.question messages aren't buried if other messages are added after
         human_msg, human_idx = self._find_pending_human_message(state)
         if human_msg is not None:
-            receiver = human_msg.get("receiver", "")
             logger.debug(f"Found pending human message at index {human_idx}, handling interaction")
             # Mark as consumed before handling to prevent re-processing
             consumed = state.setdefault("_consumed_messages", set())

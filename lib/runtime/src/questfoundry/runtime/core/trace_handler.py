@@ -114,7 +114,7 @@ class TraceHandler:
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                 time_str = dt.strftime("%H:%M:%S")
-            except:
+            except Exception:
                 pass
 
         # Different formatting based on intent type

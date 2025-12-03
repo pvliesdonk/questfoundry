@@ -163,7 +163,6 @@ class RuntimeContextAssembler:
 
         name = identity.get("name", "Unknown Role")
         abbreviation = identity.get("abbreviation", "??")
-        charter_ref = identity.get("charter_ref", "")
         role_type = identity.get("role_type", "reasoning_agent")
         core_mandate = prompt_content.get("core_mandate", "")
 

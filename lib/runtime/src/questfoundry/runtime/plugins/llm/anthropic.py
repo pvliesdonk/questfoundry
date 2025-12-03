@@ -36,10 +36,10 @@ class AnthropicAdapter:
             from langchain_anthropic import ChatAnthropic
 
             self.ChatAnthropic = ChatAnthropic
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "langchain-anthropic not installed. Install with: pip install langchain-anthropic"
-            )
+            ) from e
 
     def get_llm(
         self,

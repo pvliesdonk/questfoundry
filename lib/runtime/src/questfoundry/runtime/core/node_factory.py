@@ -684,7 +684,7 @@ class NodeFactory:
                 "name": "send_protocol_message",
                 "arguments": json.dumps(
                     {
-                        "receiver": SHOWRUNNER,
+                        "receiver": "showrunner",
                         "intent": "error.tool_generation",
                         "content": f"Role {role.id} failed to generate proper tool calls. This is a synthetic fallback message.",
                         "payload": {

@@ -38,10 +38,10 @@ class OpenAIAdapter:
             from langchain_openai import ChatOpenAI
 
             self.ChatOpenAI = ChatOpenAI
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "langchain-openai not installed. Install with: pip install langchain-openai"
-            )
+            ) from e
 
     def get_llm(
         self,

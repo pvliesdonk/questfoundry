@@ -73,7 +73,7 @@ def _find_spec_root() -> Path:
     if source_pref in ("auto", "bundled"):
         try:
             # Test if we can access bundled definitions
-            resource = files("questfoundry.runtime.resources")
+            files("questfoundry.runtime.resources")
             # Return a marker path that SchemaRegistry will recognize
             logger.debug("Bundled resources available")
             return Path("__BUNDLED_RESOURCES__")
@@ -82,7 +82,7 @@ def _find_spec_root() -> Path:
             if source_pref == "bundled":
                 raise FileNotFoundError(
                     "QF_SPEC_SOURCE='bundled' specified but bundled resources not found"
-                )
+                ) from None
 
     # Strategy 3: Check for downloaded spec in cache or download
     if source_pref in ("auto", "download"):
@@ -192,9 +192,9 @@ class SchemaRegistry:
             return schema
 
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in schema {schema_name}: {e}")
+            raise ValueError(f"Invalid JSON in schema {schema_name}: {e}") from e
         except (ImportError, AttributeError, FileNotFoundError) as e:
-            raise FileNotFoundError(f"Schema not found: {schema_name} ({e})")
+            raise FileNotFoundError(f"Schema not found: {schema_name} ({e})") from e
 
     def load_yaml(self, yaml_path: Path) -> dict[str, Any]:
         """
@@ -248,9 +248,9 @@ class SchemaRegistry:
             return data
 
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in {yaml_path}: {e}")
+            raise ValueError(f"Invalid YAML in {yaml_path}: {e}") from e
         except (ImportError, AttributeError) as e:
-            raise FileNotFoundError(f"YAML file not found in bundled resources: {yaml_path} ({e})")
+            raise FileNotFoundError(f"YAML file not found in bundled resources: {yaml_path} ({e})") from e
 
     def validate_against_schema(self, data: dict[str, Any], schema: dict[str, Any]) -> None:
         """
@@ -269,7 +269,7 @@ class SchemaRegistry:
         except jsonschema.ValidationError as e:
             raise jsonschema.ValidationError(
                 f"Validation failed: {e.message}\nPath: {list(e.path)}"
-            )
+            ) from e
 
     def load_role(self, role_id: str) -> RoleProfile:
         """

@@ -18,11 +18,11 @@ from typing import Any, Literal
 
 try:
     from importlib.resources import files
-except ImportError:
+except ImportError as e:
     # Python 3.11 should have this, but provide a clear error
     raise ImportError(
         "importlib.resources.files requires Python 3.9+. Please upgrade to Python 3.11 or later."
-    )
+    ) from e
 
 SpecLayer = Literal["schemas", "protocol", "definitions"]
 

@@ -655,9 +655,9 @@ class TestGatherTools:
             assembler = RuntimeContextAssembler()
             tools = assembler._gather_tools(sample_role_definition)
 
-            protocol_tools = [t for t in tools if t["tool_id"] == "send_protocol_message"]
+            protocol_tools = [t for t in tools if t["function"]["name"] == "send_protocol_message"]
             assert len(protocol_tools) > 0
-            assert protocol_tools[0]["category"] == "protocol"
+            assert protocol_tools[0]["type"] == "function"
 
     def test_gather_tools_state_tools(self, sample_role_definition):
         """Test that state tools are gathered based on permissions."""
@@ -665,11 +665,11 @@ class TestGatherTools:
             assembler = RuntimeContextAssembler()
             tools = assembler._gather_tools(sample_role_definition)
 
-            state_tools = [t for t in tools if t["category"] == "state"]
-            tool_ids = [t["tool_id"] for t in state_tools]
+            state_tools = [t for t in tools if t["function"]["name"] in ["read_hot_sot", "write_hot_sot"]]
+            tool_names = [t["function"]["name"] for t in state_tools]
 
-            assert "read_hot_sot" in tool_ids
-            assert "write_hot_sot" in tool_ids
+            assert "read_hot_sot" in tool_names
+            assert "write_hot_sot" in tool_names
 
     def test_gather_tools_knowledge_tools(self, sample_role_definition):
         """Test that knowledge tools are always gathered."""
@@ -677,12 +677,15 @@ class TestGatherTools:
             assembler = RuntimeContextAssembler()
             tools = assembler._gather_tools(sample_role_definition)
 
-            knowledge_tools = [t for t in tools if t["category"] == "knowledge"]
-            tool_ids = [t["tool_id"] for t in knowledge_tools]
+            knowledge_tools = [t for t in tools if t["function"]["name"] in [
+                "consult_protocol", "consult_role_charter", "consult_quality_gate",
+                "consult_playbook", "consult_glossary"
+            ]]
+            tool_names = [t["function"]["name"] for t in knowledge_tools]
 
-            assert "consult_protocol" in tool_ids
-            assert "consult_role_charter" in tool_ids
-            assert "consult_quality_gate" in tool_ids
+            assert "consult_protocol" in tool_names
+            assert "consult_role_charter" in tool_names
+            assert "consult_quality_gate" in tool_names
 
     def test_gather_tools_no_protocol_tool_if_cant_send(self):
         """Test that protocol tool not gathered if role can't send."""
@@ -701,7 +704,7 @@ class TestGatherTools:
             tools = assembler._gather_tools(role_def)
 
             protocol_tools = [
-                t for t in tools if t["tool_id"] == "send_protocol_message"
+                t for t in tools if t["function"]["name"] == "send_protocol_message"
             ]
             assert len(protocol_tools) == 0
 
