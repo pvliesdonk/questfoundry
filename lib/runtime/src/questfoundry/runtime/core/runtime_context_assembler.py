@@ -483,13 +483,30 @@ Action Input: {"key": "drafts", "value": {"section_id": "act1-hub", "content": "
 
 [WAIT for confirmation]
 
-Observation: {"hot_sot": {"drafts": {...}}}
+Observation: {"hot_sot": {"drafts": {...}}, "success": true}
 
 Thought: My work is saved. I can now provide my final answer.
 ```
 
 **NEVER** skip the read step when inputs are required.
 **NEVER** write fake Observations - wait for the actual tool response.
+
+## Handling Validation Warnings
+
+If your write returns `validation_warnings`, you MUST address them:
+
+```
+Observation: {"hot_sot": {...}, "success": true, "validation_warnings": ["State validation warning: ..."]}
+
+Thought: The write succeeded but has validation warnings. I need to fix the data format.
+Action: write_hot_sot
+Action Input: {"key": "...", "value": <corrected value matching expected schema>}
+```
+
+Common validation issues to avoid:
+- **Missing required fields**: Each artifact type has required fields (e.g., `section_id` for drafts)
+- **Wrong value types**: Arrays vs objects, strings vs numbers
+- **Invalid key paths**: Only use documented keys from "Your Output Keys" above
 """
 
         return block

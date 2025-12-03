@@ -364,14 +364,25 @@ class ReadHotSOT(_BaseStateTool):
 
 class WriteHotSOT(_BaseStateTool):
     name: str = "write_hot_sot"
-    description: str = "Write to in-memory hot source of truth"
+    description: str = (
+        "Write to in-memory hot source of truth. "
+        "Returns {hot_sot: ..., success: true} on success. "
+        "If validation fails, returns {hot_sot: ..., success: true, validation_warnings: [...]} - "
+        "you MUST address these warnings by re-writing with corrected data."
+    )
 
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
             json_schema_extra={"additionalProperties": False},
         )
-        key: str | None = Field(default=None, description="Dot-path within hot_sot to write")
+        key: str | None = Field(
+            default=None,
+            description=(
+                "Dot-path within hot_sot to write. Use keys from your role's 'Your Output Keys' section. "
+                "Common keys: drafts, topology_notes, section_briefs, style, canon, hooks"
+            ),
+        )
         value: (
             dict[str, Any]
             | list[str | int | float | bool | dict[str, Any] | None]
@@ -490,14 +501,25 @@ class ReadColdSOT(_BaseStateTool):
 
 class WriteColdSOT(_BaseStateTool):
     name: str = "write_cold_sot"
-    description: str = "Persist to cold source of truth (SQLite/disk)"
+    description: str = (
+        "Persist to cold source of truth (SQLite/disk). "
+        "Returns {cold_sot: ..., success: true} on success. "
+        "If validation fails, returns {cold_sot: ..., success: true, validation_warnings: [...]} - "
+        "you MUST address these warnings by re-writing with corrected data."
+    )
 
     class Args(BaseModel):
         model_config = ConfigDict(
             extra="forbid",
             json_schema_extra={"additionalProperties": False},
         )
-        key: str | None = Field(default=None, description="Dot-path within cold_sot to write")
+        key: str | None = Field(
+            default=None,
+            description=(
+                "Dot-path within cold_sot to write. Use for finalized, validated content. "
+                "Common keys: sections, codex_entries, snapshots"
+            ),
+        )
         value: (
             dict[str, Any]
             | list[str | int | float | bool | dict[str, Any] | None]
