@@ -435,6 +435,45 @@ def download_spec(
 
 
 @app.command()
+def doctor(
+    show_config: bool = typer.Option(
+        False, "--show-config", "-c", help="Show all configuration values"
+    ),
+    skip_network: bool = typer.Option(
+        False, "--skip-network", "-s", help="Skip network connectivity checks"
+    ),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+):
+    """
+    Check configuration and provider connectivity.
+
+    Validates that providers are properly configured and reachable.
+    Shows current configuration and detects common issues.
+
+    Provider statuses:
+        + Ready:       Configured and responding
+        x Unavailable: Configured but connection failed
+        - Unconfigured: No API key or URL set
+
+    Examples:
+        qf doctor                # Full check with network tests
+        qf doctor --show-config  # Also display all config values
+        qf doctor --skip-network # Skip API connectivity tests
+        qf doctor --json         # Machine-readable output
+    """
+    from questfoundry.runtime.cli.doctor import run_doctor
+
+    exit_code = run_doctor(
+        console=console,
+        show_config=show_config,
+        skip_network=skip_network,
+        output_json=json_output,
+    )
+    if exit_code != 0:
+        sys.exit(exit_code)
+
+
+@app.command()
 def version():
     """Show version information."""
     import os
