@@ -8,6 +8,8 @@ Components (Mesh Architecture):
 - StateManager: Manages StudioState during execution
 - RuntimeContextAssembler: Dynamically assembles agent prompts from YAML
 - CapabilityMapper: Maps abstract capabilities to concrete tools
+- ColdStore: Simple JSON blob storage for Cold SoT (legacy)
+- AlignedColdStore: Schema-aligned portable Cold SoT database
 """
 
 
@@ -42,6 +44,14 @@ def __getattr__(name):
         from questfoundry.runtime.core.capability_mapper import CapabilityMapper
 
         return CapabilityMapper
+    elif name == "ColdStore":
+        from questfoundry.runtime.core.cold_store import ColdStore
+
+        return ColdStore
+    elif name == "AlignedColdStore":
+        from questfoundry.runtime.core.aligned_cold_store import AlignedColdStore
+
+        return AlignedColdStore
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -53,4 +63,6 @@ __all__ = [
     "StateManager",
     "RuntimeContextAssembler",
     "CapabilityMapper",
+    "ColdStore",
+    "AlignedColdStore",
 ]
