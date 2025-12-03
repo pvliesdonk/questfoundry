@@ -168,6 +168,9 @@ class ControlPlane:
         # Loop iteration counter for logging (increments each routing decision)
         self._loop_iteration: int = 0
 
+        # Wrap-up tracking - ensure Showrunner gets a chance to finalize before termination
+        self._wrapup_sent: bool = False
+
         # Loop health tracking for stuck loop detection
         self._last_hot_sot_hash: str | None = None
         self._iterations_without_artifact_change: int = 0
@@ -220,6 +223,92 @@ class ControlPlane:
             "player_narrator",
         ]
         return roles
+
+    def _find_pending_human_message(
+        self, state: StudioState
+    ) -> tuple[Message | None, int | None]:
+        """
+        Find the first unconsumed human-directed message in the queue.
+
+        Scans ALL messages (not just last) to find any message directed to
+        "customer" or "human" that hasn't been consumed yet.
+
+        Args:
+            state: Current studio state with messages
+
+        Returns:
+            Tuple of (message, index) if found, (None, None) otherwise
+        """
+        messages = state.get("messages", [])
+        consumed = state.get("_consumed_messages", set())
+
+        for idx, msg in enumerate(messages):
+            if idx in consumed:
+                continue
+
+            receiver = msg.get("receiver", "")
+            if receiver in ("customer", "human"):
+                return msg, idx
+
+        return None, None
+
+    def _get_uncommitted_hot_changes(self, state: StudioState) -> list[str]:
+        """
+        Get list of hot_sot keys that differ from cold_sot.
+
+        This helps identify work that hasn't been persisted to cold storage yet.
+
+        Args:
+            state: Current studio state
+
+        Returns:
+            List of key paths with uncommitted changes
+        """
+        hot_sot = state.get("hot_sot", {})
+        cold_sot = state.get("cold_sot", {})
+        uncommitted: list[str] = []
+
+        # Check top-level keys for differences
+        for key in hot_sot:
+            hot_value = hot_sot.get(key)
+            cold_value = cold_sot.get(key)
+            if hot_value != cold_value:
+                uncommitted.append(key)
+
+        return uncommitted
+
+    def _inject_wrapup_message(
+        self, state: StudioState, reason: str, uncommitted: list[str]
+    ) -> None:
+        """
+        Inject a wrap-up message to Showrunner before termination.
+
+        Args:
+            state: Current studio state (will be modified)
+            reason: The termination reason
+            uncommitted: List of uncommitted hot_sot paths
+        """
+        content = "Graph seems to be done. Are you ready to wrap up? Do what needs to be done."
+        if uncommitted:
+            content += f"\n\nNote: hot_sot has uncommitted changes in: {', '.join(uncommitted)}"
+
+        wrapup_msg: Message = {
+            "sender": "system",
+            "receiver": "showrunner",
+            "intent": "system.wrapup",
+            "content": content,
+            "payload": {
+                "uncommitted_hot_paths": uncommitted,
+                "termination_reason": reason,
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        state.setdefault("messages", []).append(wrapup_msg)
+        self._wrapup_sent = True
+        logger.info(
+            f"Injected wrap-up message to Showrunner (reason: {reason}, uncommitted: {uncommitted})"
+        )
 
     def _get_pending_messages_by_role(
         self, state: StudioState
@@ -349,17 +438,36 @@ class ControlPlane:
 
             return [END]
 
-        # Check for human interaction
-        if last_receiver in ("customer", "human"):
-            logger.info(f"Message directed to {last_receiver}, handling human interaction")
-            return [self._handle_human_interaction(last_message, state)]
+        # Check for human interaction - scan ALL messages, not just last
+        # This ensures human.question messages aren't buried if other messages are added after
+        human_msg, human_idx = self._find_pending_human_message(state)
+        if human_msg is not None:
+            receiver = human_msg.get("receiver", "")
+            logger.info(f"Found pending human message at index {human_idx}, handling interaction")
+            # Mark as consumed before handling to prevent re-processing
+            consumed = state.setdefault("_consumed_messages", set())
+            consumed.add(human_idx)
+            return [self._handle_human_interaction(human_msg, state)]
 
         # Get pending messages by role (with direct message counts)
         pending, direct_counts = self._get_pending_messages_by_role(state)
 
         if not pending:
-            # No pending messages - all work is done, end the graph
+            # No pending messages - but first check if we should send wrap-up to SR
+            if not self._wrapup_sent:
+                uncommitted = self._get_uncommitted_hot_changes(state)
+                logger.info(
+                    f"No pending messages, but wrap-up not sent yet. "
+                    f"Uncommitted changes: {uncommitted}"
+                )
+                self._inject_wrapup_message(state, "no_pending_messages", uncommitted)
+                return [SHOWRUNNER]
+
+            # Wrap-up was already sent - safe to end
             logger.info("No pending messages for any role, ending graph")
+            uncommitted = self._get_uncommitted_hot_changes(state)
+            if uncommitted:
+                logger.warning(f"Ending graph with uncommitted hot_sot changes: {uncommitted}")
 
             # Log END routing decision
             bus_log = _get_bus_log()
@@ -535,11 +643,28 @@ class ControlPlane:
                 )
                 return [SHOWRUNNER]
             else:
-                # SR has no pending messages - can't wake roles, end graph
+                # SR has no pending messages - but first check if we should send wrap-up
+                if not self._wrapup_sent:
+                    uncommitted = self._get_uncommitted_hot_changes(state)
+                    logger.info(
+                        f"Dormant roles with no SR action, but wrap-up not sent. "
+                        f"Uncommitted changes: {uncommitted}"
+                    )
+                    self._inject_wrapup_message(
+                        state, "dormant_roles_no_showrunner", uncommitted
+                    )
+                    return [SHOWRUNNER]
+
+                # Wrap-up was already sent - can't wake roles, end graph
                 logger.warning(
                     f"Dormant roles {dormant_with_messages} have messages but "
                     "showrunner has no pending messages to wake them. Ending graph."
                 )
+                uncommitted = self._get_uncommitted_hot_changes(state)
+                if uncommitted:
+                    logger.warning(
+                        f"Ending graph with uncommitted hot_sot changes: {uncommitted}"
+                    )
 
                 # Log END routing decision
                 bus_log = _get_bus_log()
@@ -555,8 +680,21 @@ class ControlPlane:
 
                 return [END]
 
-        # No actionable pending messages - end graph
+        # No actionable pending messages - but first check if we should send wrap-up
+        if not self._wrapup_sent:
+            uncommitted = self._get_uncommitted_hot_changes(state)
+            logger.info(
+                f"No actionable messages, but wrap-up not sent. "
+                f"Uncommitted changes: {uncommitted}"
+            )
+            self._inject_wrapup_message(state, "no_actionable_messages", uncommitted)
+            return [SHOWRUNNER]
+
+        # Wrap-up was already sent - safe to end
         logger.info("No actionable pending messages, ending graph")
+        uncommitted = self._get_uncommitted_hot_changes(state)
+        if uncommitted:
+            logger.warning(f"Ending graph with uncommitted hot_sot changes: {uncommitted}")
 
         # Log END routing decision
         bus_log = _get_bus_log()
@@ -694,9 +832,9 @@ class ControlPlane:
         message_id = message.get("id", f"hq-{sender}-{id(message)}")
 
         if intent == "human.question":
+            import questionary
             from rich.console import Console
             from rich.panel import Panel
-            from rich.prompt import Prompt
 
             console = Console()
 
@@ -707,12 +845,10 @@ class ControlPlane:
 
             # Build the display message
             display_msg = f"[bold cyan]Question from {sender}:[/bold cyan]\n\n{question_text}"
-            if suggestions:
-                display_msg += f"\n\n[dim]Suggested answers: {', '.join(suggestions)}[/dim]"
             if context:
                 display_msg += f"\n\n[dim]Context: {context}[/dim]"
 
-            # Display the question
+            # Display the question using Rich Panel
             console.print(
                 Panel(
                     display_msg,
@@ -752,7 +888,24 @@ class ControlPlane:
 
             elif interactive_mode:
                 # Interactive mode: block and prompt for immediate response
-                response = Prompt.ask("[bold]Your response")
+                # Use questionary for better UX - select if suggestions, text otherwise
+                if suggestions:
+                    # Add "Other..." option to allow free-form input
+                    choices = suggestions + ["Other (type your own)..."]
+                    response = questionary.select(
+                        "Select your answer:",
+                        choices=choices,
+                    ).ask()
+                    # If user selected "Other...", prompt for free-form input
+                    if response == "Other (type your own)...":
+                        response = questionary.text("Your response:").ask()
+                else:
+                    response = questionary.text("Your response:").ask()
+
+                # Handle cancelled input (Ctrl+C)
+                if response is None:
+                    response = ""
+                    console.print("[yellow]Input cancelled, using empty response[/yellow]")
             else:
                 # Batch mode: use first suggestion or empty
                 response = suggestions[0] if suggestions else ""

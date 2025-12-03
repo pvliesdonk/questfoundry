@@ -298,13 +298,24 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
         self._schema_registry = schema_registry or SchemaRegistry()
 
     @staticmethod
-    def _validate_state(candidate: StudioState) -> None:
+    def _validate_state(candidate: StudioState) -> list[str]:
+        """
+        Validate state against schema and return any validation warnings.
+
+        Returns:
+            List of validation warning messages (empty if valid)
+        """
+        warnings: list[str] = []
         try:
             registry = SchemaRegistry()
             schema = registry.load_schema("studio_state.schema.json")
             registry.validate_against_schema(candidate, schema)
-        except Exception as exc:  # pragma: no cover - best-effort guard
-            logger.debug("State validation skipped due to error: %s", exc)
+        except Exception as exc:
+            # Capture validation error details for agent feedback
+            error_msg = str(exc)
+            warnings.append(f"State validation warning: {error_msg}")
+            logger.warning("State validation failed: %s", error_msg)
+        return warnings
 
 
 class ReadHotSOT(_BaseStateTool):
@@ -399,8 +410,8 @@ class WriteHotSOT(_BaseStateTool):
             new_hot = _set_nested(state.get("hot_sot", {}), key, value)
             updated_state = state.copy()
             updated_state["hot_sot"] = new_hot
-            # Validate whole state to catch structural regressions
-            self._validate_state(updated_state)
+            # Validate whole state and capture any warnings for agent feedback
+            validation_warnings = self._validate_state(updated_state)
 
             # Log to structured logging (full content + evolution tracking)
             sot_log = _get_sot_log()
@@ -416,9 +427,14 @@ class WriteHotSOT(_BaseStateTool):
                     prev_hash=prev_hash,
                     evolved=prev_hash is not None and prev_hash != new_hash,
                     value=_safe_serialize(value),
+                    validation_warnings=validation_warnings,
                 )
 
-            return {"hot_sot": new_hot}
+            # Include validation warnings in response so agent can address them
+            result: dict[str, Any] = {"hot_sot": new_hot, "success": True}
+            if validation_warnings:
+                result["validation_warnings"] = validation_warnings
+            return result
 
 
 class ReadColdSOT(_BaseStateTool):
@@ -527,7 +543,8 @@ class WriteColdSOT(_BaseStateTool):
 
             updated_state = state.copy()
             updated_state["cold_sot"] = new_cold
-            self._validate_state(updated_state)
+            # Validate whole state and capture any warnings for agent feedback
+            validation_warnings = self._validate_state(updated_state)
 
             # Log to structured logging (full content + evolution tracking)
             sot_log = _get_sot_log()
@@ -544,5 +561,11 @@ class WriteColdSOT(_BaseStateTool):
                     prev_hash=prev_hash,
                     evolved=prev_hash is not None and prev_hash != new_hash,
                     value=_safe_serialize(value),
+                    validation_warnings=validation_warnings,
                 )
-            return {"cold_sot": new_cold}
+
+            # Include validation warnings in response so agent can address them
+            result: dict[str, Any] = {"cold_sot": new_cold, "success": True}
+            if validation_warnings:
+                result["validation_warnings"] = validation_warnings
+            return result

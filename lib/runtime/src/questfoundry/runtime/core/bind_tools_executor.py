@@ -328,6 +328,33 @@ class BindToolsExecutor:
                 log.error(f"LLM invocation failed: {e}")
                 failure_count += 1
                 if failure_count >= 3:
+                    # Ask user if they want to retry
+                    import questionary
+                    from rich.console import Console
+                    from rich.panel import Panel
+
+                    console = Console()
+                    console.print(
+                        Panel(
+                            f"[bold red]LLM Connection Failed[/bold red]\n\n"
+                            f"Role: {self.role_id}\n"
+                            f"Error: {e}\n"
+                            f"Attempts: {failure_count}",
+                            title="⚠️ Connection Error",
+                            border_style="red",
+                        )
+                    )
+
+                    retry = questionary.confirm(
+                        "Retry connection?",
+                        default=True,
+                    ).ask()
+
+                    if retry:
+                        log.info("User requested retry after LLM connection failure")
+                        failure_count = 0
+                        continue
+
                     return ExecutorResult(
                         success=False,
                         error=f"LLM invocation failed: {e}",
