@@ -52,12 +52,17 @@ def cleanup_and_exit(signum=None, frame=None):
 # Register signal handler for Ctrl-C
 signal.signal(signal.SIGINT, cleanup_and_exit)
 
-# Create app
+# Create app with shell completion support
 app = typer.Typer(
     name="qf",
     help="QuestFoundry runtime - Protocol-driven mesh for interactive fiction",
-    add_completion=False,
+    add_completion=True,
 )
+
+# Register config subcommand
+from questfoundry.runtime.cli.config_cmd import config_app
+
+app.add_typer(config_app, name="config")
 
 # Create console for rich output (force UTF-8 for Unicode support on Windows)
 if sys.platform == "win32":
