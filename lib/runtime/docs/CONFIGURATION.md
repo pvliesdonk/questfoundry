@@ -97,6 +97,7 @@ Nested settings use double underscore (`__`) as delimiter.
 | `QF_LLM__LITELLM_API_KEY` | (none) | LiteLLM API key |
 
 **Note:** API keys should be set via standard environment variables:
+
 - `ANTHROPIC_API_KEY` - Anthropic API key
 - `OPENAI_API_KEY` - OpenAI API key
 - `GOOGLE_API_KEY` - Google AI API key
@@ -219,24 +220,30 @@ settings = reload_settings()
 ## Configuration Categories
 
 ### Runtime
+
 Execution limits and safety thresholds that control how the runtime executes roles
 and prevents infinite loops or runaway executions.
 
 ### LLM
+
 Model selection, provider configuration, and generation parameters. Controls which
 models are used and how they generate responses.
 
 ### Memory
+
 Prompt and conversation memory limits. Prevents context overflow and controls how
 much conversation history is retained between role executions.
 
 ### Paths
+
 File system paths and locations for project storage, spec resolution, and cache.
 
 ### Logging
+
 Log levels, output destinations, and structured logging configuration.
 
 ### Network
+
 Timeouts and endpoints for external services (GitHub, SearXNG, ElevenLabs, etc.).
 
 ## Best Practices

@@ -313,7 +313,7 @@ def format_config_dump(settings: QuestFoundrySettings) -> str:
     # LLM settings
     lines.append("[bold]LLM:[/bold]")
     llm = settings.llm
-    lines.append(f"  default_provider: {llm.default_provider or 'auto'}")
+    lines.append(f"  provider: {llm.provider or 'auto'}")
     lines.append(f"  default_temperature: {llm.default_temperature}")
     lines.append(f"  default_max_tokens: {llm.default_max_tokens}")
     lines.append(f"  ollama_host: {llm.ollama_host or '(not set)'}")
@@ -332,7 +332,6 @@ def format_config_dump(settings: QuestFoundrySettings) -> str:
     lines.append(f"  memory_cap: {mem.memory_cap}")
     lines.append(f"  summarize_messages_threshold: {mem.summarize_messages_threshold}")
     lines.append(f"  summarize_chars_threshold: {mem.summarize_chars_threshold}")
-    lines.append(f"  prior_conversation_max_chars: {mem.prior_conversation_max_chars}")
     lines.append("")
 
     # Paths settings
@@ -556,7 +555,7 @@ def _run_doctor_json(settings: QuestFoundrySettings, skip_network: bool) -> int:
                 "max_ping_pong": settings.runtime.max_ping_pong,
             },
             "llm": {
-                "default_provider": settings.llm.default_provider,
+                "provider": settings.llm.provider,
                 "ollama_host": settings.llm.ollama_host,
             },
             "paths": {
