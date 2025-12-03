@@ -575,63 +575,181 @@ class ControlPlane:
         """
         Handle human interaction for messages directed to customer.
 
-        When a role sends human.question to customer, we need to:
-        1. Display the question to the human user
-        2. Collect their response
-        3. Route it back to the sender with human.answer intent
+        Supports three modes:
+        1. **Async mode** (default): Queue question, other agents continue working.
+           Human responds via CLI command, response routed back to asking role.
+        2. **Interactive mode**: Block and prompt for immediate response.
+        3. **Batch mode**: Auto-respond with first suggestion.
+
+        When a role sends human.question to customer, we:
+        1. Queue the question in state.pending_human_questions
+        2. Display it for the human user
+        3. In async mode: continue with other agents (non-blocking)
+        4. When human responds: route response back to asking role
 
         Args:
             message: The message with receiver="customer"
             state: Current studio state
 
         Returns:
-            Next node to route to (typically the original sender)
+            Next node to route to
         """
         sender = message.get("sender", SHOWRUNNER)
         intent = message.get("intent", "")
         content = message.get("content", "")
+        payload = message.get("payload", {})
+        message_id = message.get("id", f"hq-{sender}-{id(message)}")
 
         if intent == "human.question":
-            # Display question to console
             from rich.console import Console
             from rich.panel import Panel
             from rich.prompt import Prompt
 
             console = Console()
 
+            # Extract question details from payload
+            question_text = payload.get("question", content)
+            suggestions = payload.get("suggested_answers", [])
+            context = payload.get("context", {})
+
+            # Build the display message
+            display_msg = f"[bold cyan]Question from {sender}:[/bold cyan]\n\n{question_text}"
+            if suggestions:
+                display_msg += f"\n\n[dim]Suggested answers: {', '.join(suggestions)}[/dim]"
+            if context:
+                display_msg += f"\n\n[dim]Context: {context}[/dim]"
+
             # Display the question
             console.print(
                 Panel(
-                    f"[bold cyan]Question from {sender}:[/bold cyan]\n\n{content}",
+                    display_msg,
                     title="🤔 Input Requested",
                     border_style="cyan",
                 )
             )
 
-            # Get user response
-            response = Prompt.ask("[bold]Your response")
+            # Determine interaction mode
+            meta = state.get("meta", {})
+            async_human = meta.get("async_human_questions", False)
+            interactive_mode = meta.get("interactive_mode", True)
 
-            # Create response message
+            if async_human:
+                # Async mode: queue question and continue with other agents
+                pending_questions = state.setdefault("pending_human_questions", [])
+                pending_questions.append({
+                    "id": message_id,
+                    "sender": sender,
+                    "question": question_text,
+                    "suggestions": suggestions,
+                    "context": context,
+                    "tu_id": context.get("tu_id", message.get("tu_id", "")),
+                    "timestamp": message.get("timestamp", ""),
+                })
+
+                logger.info(
+                    f"Human question from {sender} queued (async mode): '{question_text[:50]}...'"
+                )
+                console.print(
+                    "[yellow]Question queued. Other agents will continue. "
+                    "Use 'answer <id> <response>' to respond.[/yellow]"
+                )
+
+                # Continue with other pending work (route to showrunner for orchestration)
+                return SHOWRUNNER
+
+            elif interactive_mode:
+                # Interactive mode: block and prompt for immediate response
+                response = Prompt.ask("[bold]Your response")
+            else:
+                # Batch mode: use first suggestion or empty
+                response = suggestions[0] if suggestions else ""
+                console.print(f"[dim]Batch mode: using default response '{response}'[/dim]")
+
+            # Create response message (for non-async modes)
             response_msg = {
                 "sender": "customer",
                 "receiver": sender,
-                "intent": "human.answer",
+                "intent": "human.response",
                 "content": response,
+                "payload": {
+                    "answer": response,
+                    "original_question": question_text,
+                },
                 "metadata": {
-                    "responding_to": message.get("tu_id", ""),
+                    "responding_to": message_id,
+                    "tu_id": context.get("tu_id", message.get("tu_id", "")),
                     "original_intent": intent,
                 },
             }
 
-            # Add response to state
+            # Add response to state messages
             state.setdefault("messages", []).append(response_msg)
 
-            # Route back to original sender
+            # Log the interaction for traceability
+            logger.info(
+                f"Human question from {sender} answered: "
+                f"'{question_text[:50]}...' -> '{response[:50]}...'"
+            )
+
+            # Route back to original sender to process the answer
             return self._normalize_role_id(sender)
 
         # For other intents, just route back to sender
         logger.info(f"Customer received {intent}, routing back to {sender}")
         return self._normalize_role_id(sender)
+
+    def answer_pending_question(
+        self, state: StudioState, question_id: str, response: str
+    ) -> bool:
+        """
+        Answer a pending human question (for async mode).
+
+        Called by CLI or external interface when human provides a response
+        to a queued question.
+
+        Args:
+            state: Current studio state
+            question_id: ID of the pending question to answer
+            response: Human's response text
+
+        Returns:
+            True if question was found and answered, False otherwise
+        """
+        pending_questions = state.get("pending_human_questions", [])
+
+        # Find the question by ID
+        for i, question in enumerate(pending_questions):
+            if question.get("id") == question_id:
+                # Create response message
+                response_msg = {
+                    "sender": "customer",
+                    "receiver": question["sender"],
+                    "intent": "human.response",
+                    "content": response,
+                    "payload": {
+                        "answer": response,
+                        "original_question": question["question"],
+                    },
+                    "metadata": {
+                        "responding_to": question_id,
+                        "tu_id": question.get("tu_id", ""),
+                        "original_intent": "human.question",
+                    },
+                }
+
+                # Add response to messages
+                state.setdefault("messages", []).append(response_msg)
+
+                # Remove from pending queue
+                pending_questions.pop(i)
+
+                logger.info(
+                    f"Pending question {question_id} answered: '{response[:50]}...'"
+                )
+                return True
+
+        logger.warning(f"Pending question {question_id} not found")
+        return False
 
     def _detect_ping_pong(self, message: Message) -> bool:
         """

@@ -90,6 +90,36 @@ Pattern: {{ heuristic.pattern }}
 
 {{ role.raw.get("prompt_content", {}).get("task_guidance", "") }}
 
+## Escalating to the Customer
+
+When you encounter decisions that require **creative direction** or **customer preference**, you can ask the human customer via the Showrunner.
+
+**When to escalate:**
+- Major structural choices (e.g., "Should this hub have 3 or 5 exits?")
+- Tone/theme decisions that affect the player journey
+- Gateway fairness trade-offs requiring customer input
+- Ambiguities in the customer directive that block progress
+
+**How to escalate:**
+Send a message with `intent: human.question` to Showrunner:
+```json
+{
+  "receiver": "Showrunner",
+  "intent": "human.question",
+  "content": "Your clear, specific question here",
+  "payload": {
+    "question": "Should the player have a guaranteed path to the finale, or require mastery?",
+    "context": {"section": "act_3_hub", "tu_id": "current TU"},
+    "suggested_answers": ["guaranteed_path", "mastery_required", "hybrid"]
+  }
+}
+```
+
+**Do NOT escalate:**
+- Technical topology details you can decide
+- Small beat ordering within established structure
+- Questions answerable from existing briefs or canon
+
 ## Output Format
 
 Respond with:

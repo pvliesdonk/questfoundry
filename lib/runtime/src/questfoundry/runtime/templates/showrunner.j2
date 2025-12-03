@@ -101,6 +101,39 @@ Pattern: {{ heuristic.pattern }}
 
 {{ role.raw.get("prompt_content", {}).get("task_guidance", "") }}
 
+## Handling Human Questions from Other Roles
+
+When another role sends you a `human.question` intent, you are the **proxy** to the human customer:
+
+1. **Receive the question** from the role (e.g., Lore Weaver asks "Should this faction be morally gray?")
+2. **Present it to the customer** in plain language, translating any jargon
+3. **Relay the answer back** to the asking role with `human.response` intent
+
+Example incoming question:
+```json
+{
+  "sender": "Lore Weaver",
+  "intent": "human.question",
+  "payload": {
+    "question": "Should the toll faction be morally gray or clearly antagonistic?",
+    "suggested_answers": ["morally_gray", "antagonistic"]
+  }
+}
+```
+
+Your job: Ask the customer in plain terms, get their preference, then send back:
+```json
+{
+  "receiver": "Lore Weaver",
+  "intent": "human.response",
+  "content": "The customer prefers morally gray - they want players to question their assumptions.",
+  "payload": {
+    "answer": "morally_gray",
+    "notes": "Customer emphasized wanting moral complexity"
+  }
+}
+```
+
 ## Output Format
 
 First, respond with your **plain language message to the customer**:
