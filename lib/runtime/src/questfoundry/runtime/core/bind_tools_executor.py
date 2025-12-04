@@ -723,6 +723,11 @@ class BindToolsExecutor:
                     return result, True
                 except json.JSONDecodeError:
                     return json.dumps({"result": result}, indent=2, default=str), True
+
+            # Check if tool explicitly failed (e.g., validation error)
+            if isinstance(result, dict) and result.get("success") is False:
+                return json.dumps(result, indent=2, default=str), False
+
             return json.dumps(result, indent=2, default=str), True
 
         except Exception as e:
