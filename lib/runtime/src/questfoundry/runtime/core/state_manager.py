@@ -171,7 +171,7 @@ class StateManager:
         # Start from default skeleton, then overlay any persisted Cold SoT for this project.
         # Includes all schema-defined arrays (studio_state.schema.json)
         cold_sot: dict[str, Any] = {
-            "current_snapshot": None,
+            "current_snapshot": "",  # Empty string per schema, not None
             "snapshots": [],
             "codex_entries": [],
             "language_packs": [],
