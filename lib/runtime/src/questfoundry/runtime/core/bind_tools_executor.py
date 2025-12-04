@@ -502,7 +502,8 @@ class BindToolsExecutor:
                             role_id=self.role_id,
                             context=context
                         )
-                        reasoning_log.info("reasoning", **log_entry)
+                        # FIX: log_entry already contains "event" key, don't pass duplicate
+                        reasoning_log.info(**log_entry)
                         log.debug(f"[{self.role_id}] Captured reasoning: {reasoning['reasoning_type']}")
                 except Exception as e:
                     log.warning(f"[{self.role_id}] Reasoning extraction failed: {e}")
@@ -552,6 +553,17 @@ class BindToolsExecutor:
                     }
                 )
 
+                # CRITICAL FIX: Always create ToolMessage BEFORE checking tool_success
+                # This ensures OpenAI API contract is satisfied - every tool_call_id
+                # must have a corresponding ToolMessage, even if the tool failed.
+                # The observation already contains error JSON when tool_success is False.
+                self.messages.append(
+                    ToolMessage(
+                        content=observation,
+                        tool_call_id=tool_id,
+                    )
+                )
+
                 if not tool_success:
                     any_failed = True
                     continue
@@ -590,14 +602,6 @@ class BindToolsExecutor:
                     }
                     protocol_messages.append(protocol_msg)
                     log.info(f"Protocol message to {protocol_msg['receiver']} collected")
-
-                # Add tool result to messages
-                self.messages.append(
-                    ToolMessage(
-                        content=observation,
-                        tool_call_id=tool_id,
-                    )
-                )
 
             # After processing all actions, decide what to do
             if any_failed:

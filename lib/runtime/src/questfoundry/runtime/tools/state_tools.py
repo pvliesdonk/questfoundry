@@ -14,6 +14,7 @@ import json
 import logging
 import threading
 from copy import deepcopy
+from datetime import date
 from typing import Any, Annotated
 
 import jsonschema
@@ -179,9 +180,12 @@ def create_empty_cold_sot() -> dict[str, Any]:
 
     All array fields initialized to [] per studio_state.schema.json.
     Dict fields initialized to {} for role convenience.
+    current_snapshot initialized with today's date per schema pattern requirement:
+    ^Cold @ \\d{4}-\\d{2}-\\d{2}$
     """
+    today = date.today().strftime("%Y-%m-%d")
     return {
-        "current_snapshot": "",
+        "current_snapshot": f"Cold @ {today}",
         "snapshots": [],
         "codex_entries": [],
         "language_packs": [],

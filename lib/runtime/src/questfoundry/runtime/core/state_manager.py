@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 import logging
 import warnings
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -170,8 +170,9 @@ class StateManager:
         # Cold: stable canon, export-safe content
         # Start from default skeleton, then overlay any persisted Cold SoT for this project.
         # Includes all schema-defined arrays (studio_state.schema.json)
+        today = date.today().strftime("%Y-%m-%d")
         cold_sot: dict[str, Any] = {
-            "current_snapshot": "",  # Empty string per schema, not None
+            "current_snapshot": f"Cold @ {today}",  # Pattern-compliant per schema: ^Cold @ \d{4}-\d{2}-\d{2}$
             "snapshots": [],
             "codex_entries": [],
             "language_packs": [],
