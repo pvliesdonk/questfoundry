@@ -16,6 +16,7 @@ import threading
 from copy import deepcopy
 from typing import Any, Annotated
 
+import jsonschema
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools.base import _is_injected_arg_type
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model
@@ -298,24 +299,72 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
         self._schema_registry = schema_registry or SchemaRegistry()
 
     @staticmethod
-    def _validate_state(candidate: StudioState) -> list[str]:
+    def _validate_state(candidate: StudioState) -> dict[str, Any]:
         """
-        Validate state against schema and return any validation warnings.
+        Validate state against schema and return structured validation results.
 
         Returns:
-            List of validation warning messages (empty if valid)
+            Dict with:
+                - success (bool): True if valid, False if validation errors
+                - errors (list): Structured error details (empty if valid)
+                - message (str): Human-readable summary
         """
-        warnings: list[str] = []
         try:
             registry = SchemaRegistry()
             schema = registry.load_schema("studio_state.schema.json")
             registry.validate_against_schema(candidate, schema)
+            return {"success": True, "errors": [], "message": "Validation passed"}
+        except jsonschema.ValidationError as exc:
+            # Extract field-level details from validation error
+            field_path = ".".join(str(p) for p in exc.path) if exc.path else "(root)"
+
+            # Build structured error information
+            error_detail = {
+                "field": field_path,
+                "message": exc.message,
+                "validator": exc.validator,
+                "constraint": exc.validator_value,
+            }
+
+            # Add instance value if available
+            if hasattr(exc, "instance"):
+                error_detail["actual_value"] = str(exc.instance)[:200]  # Truncate long values
+
+            # Create actionable feedback message
+            feedback_parts = [
+                f"Validation failed for field '{field_path}':",
+                f"  Error: {exc.message}",
+            ]
+
+            if exc.validator == "pattern":
+                feedback_parts.append(f"  Expected pattern: {exc.validator_value}")
+                feedback_parts.append("  → Use consult_schema to review field format requirements")
+            elif exc.validator == "required":
+                feedback_parts.append(f"  Missing required fields: {exc.validator_value}")
+                feedback_parts.append("  → Use consult_schema to see all required fields")
+            elif exc.validator == "type":
+                feedback_parts.append(f"  Expected type: {exc.validator_value}")
+                feedback_parts.append("  → Check the schema for correct data types")
+            else:
+                feedback_parts.append("  → Use consult_schema for detailed field requirements")
+
+            message = "\n".join(feedback_parts)
+
+            logger.warning("State validation failed: %s", message)
+            return {
+                "success": False,
+                "errors": [error_detail],
+                "message": message,
+            }
         except Exception as exc:
-            # Capture validation error details for agent feedback
+            # Catch-all for non-ValidationError exceptions
             error_msg = str(exc)
-            warnings.append(f"State validation warning: {error_msg}")
-            logger.warning("State validation failed: %s", error_msg)
-        return warnings
+            logger.warning("State validation error: %s", error_msg)
+            return {
+                "success": False,
+                "errors": [{"message": error_msg}],
+                "message": f"Validation error: {error_msg}",
+            }
 
 
 class ReadHotSOT(_BaseStateTool):
@@ -367,8 +416,8 @@ class WriteHotSOT(_BaseStateTool):
     description: str = (
         "Write to in-memory hot source of truth. "
         "Returns {hot_sot: ..., success: true} on success. "
-        "If validation fails, returns {hot_sot: ..., success: true, validation_warnings: [...]} - "
-        "you MUST address these warnings by re-writing with corrected data."
+        "If validation fails, returns {success: false, error: '...', errors: [...]} with detailed field-level errors. "
+        "Use consult_schema to understand requirements, then retry with corrected data."
     )
 
     class Args(BaseModel):
@@ -421,8 +470,8 @@ class WriteHotSOT(_BaseStateTool):
             new_hot = _set_nested(state.get("hot_sot", {}), key, value)
             updated_state = state.copy()
             updated_state["hot_sot"] = new_hot
-            # Validate whole state and capture any warnings for agent feedback
-            validation_warnings = self._validate_state(updated_state)
+            # Validate whole state and capture structured errors for agent feedback
+            validation_result = self._validate_state(updated_state)
 
             # Log to structured logging (full content + evolution tracking)
             sot_log = _get_sot_log()
@@ -438,14 +487,20 @@ class WriteHotSOT(_BaseStateTool):
                     prev_hash=prev_hash,
                     evolved=prev_hash is not None and prev_hash != new_hash,
                     value=_safe_serialize(value),
-                    validation_warnings=validation_warnings,
+                    validation_result=validation_result,
                 )
 
-            # Include validation warnings in response so agent can address them
-            result: dict[str, Any] = {"hot_sot": new_hot, "success": True}
-            if validation_warnings:
-                result["validation_warnings"] = validation_warnings
-            return result
+            # Return success=false with structured errors if validation failed
+            if not validation_result["success"]:
+                return {
+                    "success": False,
+                    "error": validation_result["message"],
+                    "errors": validation_result["errors"],
+                    "key": key,
+                }
+
+            # Success: return updated state
+            return {"hot_sot": new_hot, "success": True}
 
 
 class ReadColdSOT(_BaseStateTool):
@@ -504,8 +559,8 @@ class WriteColdSOT(_BaseStateTool):
     description: str = (
         "Persist to cold source of truth (SQLite/disk). "
         "Returns {cold_sot: ..., success: true} on success. "
-        "If validation fails, returns {cold_sot: ..., success: true, validation_warnings: [...]} - "
-        "you MUST address these warnings by re-writing with corrected data."
+        "If validation fails, returns {success: false, error: '...', errors: [...]} with detailed field-level errors. "
+        "Use consult_schema to understand requirements, then retry with corrected data."
     )
 
     class Args(BaseModel):
@@ -565,8 +620,8 @@ class WriteColdSOT(_BaseStateTool):
 
             updated_state = state.copy()
             updated_state["cold_sot"] = new_cold
-            # Validate whole state and capture any warnings for agent feedback
-            validation_warnings = self._validate_state(updated_state)
+            # Validate whole state and capture structured errors for agent feedback
+            validation_result = self._validate_state(updated_state)
 
             # Log to structured logging (full content + evolution tracking)
             sot_log = _get_sot_log()
@@ -583,11 +638,17 @@ class WriteColdSOT(_BaseStateTool):
                     prev_hash=prev_hash,
                     evolved=prev_hash is not None and prev_hash != new_hash,
                     value=_safe_serialize(value),
-                    validation_warnings=validation_warnings,
+                    validation_result=validation_result,
                 )
 
-            # Include validation warnings in response so agent can address them
-            result: dict[str, Any] = {"cold_sot": new_cold, "success": True}
-            if validation_warnings:
-                result["validation_warnings"] = validation_warnings
-            return result
+            # Return success=false with structured errors if validation failed
+            if not validation_result["success"]:
+                return {
+                    "success": False,
+                    "error": validation_result["message"],
+                    "errors": validation_result["errors"],
+                    "key": key,
+                }
+
+            # Success: return updated state
+            return {"cold_sot": new_cold, "success": True}

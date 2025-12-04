@@ -138,6 +138,12 @@ class RuntimeConfig(BaseModel):
         le=10,
         description="Maximum consecutive executions of the same role (fairness)",
     )
+    max_validation_retries: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum validation retry attempts before escalation",
+    )
     debug: bool = Field(
         default=False,
         description="Enable debug mode with verbose output",
