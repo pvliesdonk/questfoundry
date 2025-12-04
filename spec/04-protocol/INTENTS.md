@@ -612,6 +612,16 @@ gatecheck).
 - `not_authorized` —sender role not allowed for transition
 - `NOT_FOUND` — TU ID does not exist
 
+**Loop Health Guidance**
+
+- `tu.update` SHOULD only be sent when there is a material change in the TU brief or underlying Hot
+  SoT (new deliverables, state transition, risks, or assignments).
+- Senders MUST NOT emit unbounded sequences of `tu.update` envelopes with identical payload and
+  context. Such patterns SHOULD be treated as an orchestration error.
+- When recipients reply with `intent = "error"` indicating “no work pending” or “TU already
+  satisfied”, TU owners (typically SR) SHOULD prefer a lifecycle action (`tu.close`, `tu.defer`,
+  `tu.checkpoint`) and/or `role.dormant` over further `tu.update` messages.
+
 **Lifecycle Transition Mapping:**
 
 | From State     | To State      | Intent Subverb   | Sender      |

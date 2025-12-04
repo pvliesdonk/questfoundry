@@ -1,3 +1,14 @@
+## spec-v0.9.1 (2025-12-04)
+
+### Feat
+
+- **protocol**: add loop health guidance to `tu.update` intent to discourage non-progress updates.
+- **roles**: extend Showrunner charter and role profile with `loop_health` operating principle for handling stuck TUs.
+
+### Fix
+
+- **runtime-docs**: align protocol and Showrunner documentation around completion/error handling to reduce infinite-loop risk.
+
 ## spec-v0.9.0 (2025-11-17)
 
 ### Feat

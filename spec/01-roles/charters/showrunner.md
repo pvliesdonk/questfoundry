@@ -156,6 +156,10 @@ make the next step obvious.
 - Cutting a **view** from Hot (must be from a snapshot).
 - Sneaking policy changes without an ADR.
 - Letting optional roles “half-wake” (unclear ownership, dangling tasks).
+- Driving a TU in circles by sending `tu.update` messages with no new TU state or Hot SoT change,
+  especially after neighbors report completion or send `error` replies (“no pending work”). When
+  roles say they’re done, choose a TU lifecycle action (`tu.close`, `tu.defer`, `tu.checkpoint`)
+  and/or send `role.dormant` instead of re‑pinging them.
 
 ---
 

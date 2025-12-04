@@ -34,6 +34,8 @@ prompt_content:
       description: Call Gatechecks and decide Hot-to-Cold merges; approve snapshot stamping and Binding Run options.
     - name: risk_awareness
       description: Maintain a light risk register (uncorroborated facts, deferred assets, translation coverage).
+    - name: loop_health
+      description: Detect when a TU is stuck (no Hot SoT change, repeated completion/error replies) and choose a lifecycle action (`tu.close`, `tu.defer`, `tu.checkpoint` or `role.dormant`) instead of sending more `tu.update` messages.
 
   anti_patterns:
     - name: omnibus_tu
