@@ -9,9 +9,9 @@ instead of generic write_hot_sot(key, value).
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Annotated
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, InjectedToolArg
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from questfoundry.runtime.core.schema_registry import SPEC_ROOT
@@ -342,15 +342,38 @@ class SchemaToolGenerator:
                 # Convert to dict for storage
                 artifact_data = validated.model_dump()
 
-                # Write to hot_sot via state tools
-                # TODO: Integrate with StateManager/WriteHotSOT
-                # For now, return validated data
+                # Write to hot_sot - follows WriteHotSOT pattern
+                # Get state from kwargs (injected by executor)
+                state = all_kwargs.get("state")
+                if state is None:
+                    return {
+                        "success": False,
+                        "error": "State payload is required",
+                        "artifact_type": artifact_type,
+                    }
+
+                # Import state helper functions
+                from questfoundry.runtime.tools.state_tools import _set_nested
+
+                # Write artifact to hot_sot[hot_sot_key]
+                # For arrays (like tus, hooks), append to the list
+                # For dicts, merge/replace
+                current_value = state.get("hot_sot", {}).get(hot_sot_key)
+                if isinstance(current_value, list):
+                    # Array key - append artifact
+                    new_value = current_value + [artifact_data]
+                else:
+                    # Dict key or None - just set the artifact
+                    new_value = artifact_data
+
+                new_hot = _set_nested(state.get("hot_sot", {}), hot_sot_key, new_value)
+
+                # Return updated state (executor will apply it)
                 return {
                     "success": True,
-                    "hot_sot_key": hot_sot_key,
+                    "hot_sot": new_hot,
                     "artifact_type": artifact_type,
                     "data": artifact_data,
-                    "has_state_validation": has_status_field,
                 }
 
             # Build proper signature with explicit parameters
@@ -378,6 +401,16 @@ class SchemaToolGenerator:
                         annotation=field_info.annotation,
                     )
                 params.append(param)
+
+            # Add injected state parameter (like WriteHotSOT)
+            params.append(
+                inspect.Parameter(
+                    "state",
+                    inspect.Parameter.KEYWORD_ONLY,
+                    default=None,
+                    annotation=Annotated[Any | None, InjectedToolArg],
+                )
+            )
 
             # Create new signature
             new_sig = inspect.Signature(params, return_annotation=dict[str, Any])
