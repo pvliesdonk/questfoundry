@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 class SchemaToolGenerator:
     """Generate typed tools from JSON schemas."""
 
+    # Valid state transitions for artifacts with status field
+    # Maps current_status -> allowed_next_statuses
+    STATE_TRANSITIONS = {
+        "draft": ["review", "draft"],  # Can re-save as draft or move to review
+        "review": ["approved", "draft", "review"],  # Can approve, send back to draft, or re-review
+        "approved": ["cold", "review", "approved"],  # Can freeze to cold, send back to review, or re-approve
+        "cold": ["cold"],  # Cold is final (immutable)
+    }
+
     def __init__(self, schemas_root: Path | None = None):
         """
         Initialize schema tool generator.
@@ -75,6 +84,45 @@ class SchemaToolGenerator:
             raise ValueError(f"Invalid JSON in schema {schema_filename}: {e}") from e
         except Exception as e:
             raise FileNotFoundError(f"Failed to load schema {schema_filename}: {e}") from e
+
+    def _validate_state_transition(
+        self, current_status: str | None, new_status: str, artifact_type: str
+    ) -> tuple[bool, str | None]:
+        """
+        Validate state transition for artifacts with status field.
+
+        Args:
+            current_status: Current artifact status (None if new artifact)
+            new_status: Proposed new status
+            artifact_type: Artifact type for error messages
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # If no current status, any status is valid (new artifact)
+        if current_status is None:
+            return (True, None)
+
+        # If statuses are the same, always valid (update without status change)
+        if current_status == new_status:
+            return (True, None)
+
+        # Check if transition is allowed
+        allowed_transitions = self.STATE_TRANSITIONS.get(current_status)
+        if allowed_transitions is None:
+            # Status field exists but not in our transition map - allow it
+            logger.debug(f"Unknown status '{current_status}' for {artifact_type}, allowing transition")
+            return (True, None)
+
+        if new_status not in allowed_transitions:
+            error = (
+                f"Invalid state transition for {artifact_type}: "
+                f"'{current_status}' -> '{new_status}'. "
+                f"Allowed transitions from '{current_status}': {', '.join(allowed_transitions)}"
+            )
+            return (False, error)
+
+        return (True, None)
 
     def _json_type_to_python_type(self, json_type: str | list[str]) -> Any:
         """
@@ -250,12 +298,39 @@ class SchemaToolGenerator:
         tool_name = f"write_{artifact_type}"
         tool_description = f"Write {artifact_type} to hot_sot.{hot_sot_key}. {schema_desc}"
 
+        # Determine if this artifact has state transitions (has "status" field with enum)
+        has_status_field = False
+        if "properties" in schema and "status" in schema["properties"]:
+            status_prop = schema["properties"]["status"]
+            if "enum" in status_prop:
+                has_status_field = True
+
         class GeneratedWriteTool(BaseTool):
             name: str = tool_name
             description: str = tool_description
 
             def _run(self, **kwargs: Any) -> dict[str, Any]:
-                """Validate and write artifact to hot_sot."""
+                """Validate and write artifact to hot_sot with state transition checking."""
+                # State transition validation (if artifact has status field)
+                # TODO: When integrated with StateManager, uncomment and implement:
+                # if has_status_field and "status" in kwargs:
+                #     # Read current artifact to check existing status
+                #     current_artifact = read_hot_sot(hot_sot_key)
+                #     current_status = current_artifact.get("status") if current_artifact else None
+                #     new_status = kwargs["status"]
+                #
+                #     # Validate transition
+                #     is_valid, error = self._validate_state_transition(
+                #         current_status, new_status, artifact_type
+                #     )
+                #     if not is_valid:
+                #         return {
+                #             "success": False,
+                #             "error": error,
+                #             "artifact_type": artifact_type,
+                #             "transition": f"{current_status} -> {new_status}",
+                #         }
+
                 # Validate using Pydantic model
                 try:
                     validated = model(**kwargs)
@@ -277,6 +352,7 @@ class SchemaToolGenerator:
                     "hot_sot_key": hot_sot_key,
                     "artifact_type": artifact_type,
                     "data": artifact_data,
+                    "has_state_validation": has_status_field,
                 }
 
         return GeneratedWriteTool
