@@ -15,6 +15,7 @@ trace.log
 **/tool-calls.jsonl
 **/debug.jsonl
 **/loop-health.jsonl
+**/reasoning.jsonl
 
 # Python
 *.pyc
