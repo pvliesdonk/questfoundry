@@ -131,6 +131,29 @@ class ToolRegistry:
         self._tools: dict[str, Tool] = {}
         self._register_stub_tools()
 
+    def _register_schema_tools(self) -> None:
+        """Register schema-aware typed tools for top artifacts."""
+        try:
+            from questfoundry.runtime.core.schema_tool_generator import (
+                generate_tools_for_top_artifacts,
+            )
+
+            # Generate typed tools for top 5 artifacts
+            generated_tools = generate_tools_for_top_artifacts()
+
+            # Register each generated tool
+            for tool_name, ToolClass in generated_tools.items():
+                # Instantiate and wrap in LangChainToolAdapter
+                tool_instance = ToolClass()
+                self._tools[tool_name] = LangChainToolAdapter(tool_name, tool_instance)
+
+            if generated_tools:
+                logger.info(f"Registered {len(generated_tools)} schema-aware typed tools")
+
+        except Exception as e:
+            # Don't fail the entire registry if schema tools can't be generated
+            logger.warning(f"Failed to register schema-aware tools: {e}")
+
     def _register_stub_tools(self) -> None:
         """Register stub implementations for common tools."""
         # Image generation (provider-aware)
@@ -213,7 +236,10 @@ class ToolRegistry:
         self._tools["read_exports"] = LangChainToolAdapter("read_exports", ReadExports())
         self._tools["write_exports"] = LangChainToolAdapter("write_exports", WriteExports())
 
-        logger.info(f"Registered {len(self._tools)} stub tools")
+        # Schema-aware typed tools (auto-generated from JSON schemas)
+        self._register_schema_tools()
+
+        logger.info(f"Registered {len(self._tools)} tools (includes schema-aware typed tools)")
 
     def get_tool(self, tool_id: str, config: dict[str, Any | None] = None) -> Tool | None:
         """
