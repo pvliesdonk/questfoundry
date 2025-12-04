@@ -113,20 +113,20 @@ def _get_prompt_log():
     return None
 
 
-def _get_memory_config() -> tuple[int, int, int, int, int]:
+def _get_memory_config() -> tuple[int, int, int]:
     """Get memory settings from centralized config.
 
     Returns:
-        Tuple of (error_threshold, warning_threshold, memory_cap,
-                  summarize_messages, summarize_chars)
+        Tuple of (error_threshold, warning_threshold, memory_cap)
+
+    Note: Summarization thresholds are now calculated dynamically per model
+          using calculate_model_aware_thresholds() based on context window size.
     """
     settings = get_settings()
     return (
         settings.memory.prompt_error_threshold,
         settings.memory.prompt_warning_threshold,
         settings.memory.memory_cap,
-        settings.memory.summarize_messages_threshold,
-        settings.memory.summarize_chars_threshold,
     )
 
 
@@ -258,9 +258,9 @@ class BindToolsExecutor:
             log.warning(
                 f"No model info provided for {role_id}, using legacy default thresholds"
             )
-            _, _, _, msg_thresh, char_thresh = _get_memory_config()
-            self.message_threshold = msg_thresh
-            self.char_threshold = char_thresh
+            # Fallback to conservative defaults if model info not provided
+            self.message_threshold = 50  # Conservative default
+            self.char_threshold = 50000  # ~12K tokens
 
         # Conversation state - maintained across invocations
         self.messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
@@ -305,7 +305,7 @@ class BindToolsExecutor:
         )
 
         # Check prompt size and summarize if needed (using centralized config)
-        error_thresh, warn_thresh, _, _, _ = _get_memory_config()
+        error_thresh, warn_thresh, _ = _get_memory_config()
         prompt_size = sum(len(str(m.content)) for m in self.messages)
         message_count = len(self.messages)
 
@@ -732,7 +732,7 @@ class BindToolsExecutor:
         Returns:
             Summary string including actions AND LLM reasoning, capped at max chars
         """
-        _, _, memory_cap, _, _ = _get_memory_config()
+        _, _, memory_cap = _get_memory_config()
         parts = []
 
         # Include actions taken

@@ -330,8 +330,9 @@ def format_config_dump(settings: QuestFoundrySettings) -> str:
     lines.append(f"  prompt_error_threshold: {mem.prompt_error_threshold}")
     lines.append(f"  prompt_warning_threshold: {mem.prompt_warning_threshold}")
     lines.append(f"  memory_cap: {mem.memory_cap}")
-    lines.append(f"  summarize_messages_threshold: {mem.summarize_messages_threshold}")
-    lines.append(f"  summarize_chars_threshold: {mem.summarize_chars_threshold}")
+    lines.append(f"  summarization_context_percentage: {mem.summarization_context_percentage}")
+    lines.append(f"  tokens_per_character: {mem.tokens_per_character}")
+    lines.append(f"  max_message_threshold: {mem.max_message_threshold}")
     lines.append("")
 
     # Paths settings
