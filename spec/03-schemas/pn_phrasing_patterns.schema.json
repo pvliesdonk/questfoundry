@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/pn_phrasing_patterns.schema.json",
+  "title": "PN Phrasing Patterns",
+  "description": "Reusable diegetic phrasing templates for common gates, refusals, and state checks. Maintained by Style Lead for consistency.",
+  "type": "object",
+  "properties": {
+    "project_name": {
+      "type": "string",
+      "description": "Project or act name",
+      "minLength": 1
+    },
+    "voice": {
+      "type": "string",
+      "description": "Register description (e.g., 'Warm, encouraging, child-friendly')",
+      "minLength": 10
+    },
+    "author": {
+      "type": "string",
+      "const": "style_lead",
+      "description": "Fixed role: Style Lead"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Last edit date (YYYY-MM-DD)"
+    },
+    "gateway_checks": {
+      "type": "array",
+      "description": "Gateway requirement patterns",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {
+            "type": "string",
+            "description": "Descriptive label for this pattern",
+            "minLength": 3
+          },
+          "condition": {
+            "type": "string",
+            "description": "What the world checks (diegetic)",
+            "minLength": 5
+          },
+          "phrasing_qualified": {
+            "type": "string",
+            "description": "In-world phrasing when player qualifies",
+            "minLength": 10
+          },
+          "phrasing_unqualified": {
+            "type": "string",
+            "description": "In-world phrasing when player doesn't qualify",
+            "minLength": 10
+          },
+          "hint": {
+            "type": "string",
+            "description": "How player learns about requirement (optional)"
+          }
+        },
+        "required": ["pattern_name", "condition", "phrasing_qualified", "phrasing_unqualified"]
+      }
+    },
+    "state_reflections": {
+      "type": "array",
+      "description": "Inventory/knowledge state patterns",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {
+            "type": "string",
+            "description": "Descriptive label",
+            "minLength": 3
+          },
+          "state": {
+            "type": "string",
+            "description": "What player has/knows",
+            "minLength": 5
+          },
+          "phrasing": {
+            "type": "string",
+            "description": "In-world description of state",
+            "minLength": 10
+          }
+        },
+        "required": ["pattern_name", "state", "phrasing"]
+      }
+    },
+    "conditional_affordances": {
+      "type": "array",
+      "description": "New options enabled by state",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {
+            "type": "string",
+            "description": "Descriptive label",
+            "minLength": 3
+          },
+          "condition": {
+            "type": "string",
+            "description": "State that enables action",
+            "minLength": 5
+          },
+          "phrasing": {
+            "type": "string",
+            "description": "How the new option appears",
+            "minLength": 10
+          }
+        },
+        "required": ["pattern_name", "condition", "phrasing"]
+      }
+    },
+    "refusals": {
+      "type": "array",
+      "description": "Blocked action patterns",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {
+            "type": "string",
+            "description": "Descriptive label",
+            "minLength": 3
+          },
+          "blocker": {
+            "type": "string",
+            "description": "Why action fails (diegetic)",
+            "minLength": 5
+          },
+          "phrasing": {
+            "type": "string",
+            "description": "In-world explanation without mechanics",
+            "minLength": 10
+          }
+        },
+        "required": ["pattern_name", "blocker", "phrasing"]
+      }
+    },
+    "notes_for_scene_smith": {
+      "type": "string",
+      "description": "Usage guidance for Scene Smith"
+    },
+    "notes_for_translator": {
+      "type": "string",
+      "description": "Localization considerations"
+    }
+  },
+  "required": [
+    "project_name",
+    "voice",
+    "author",
+    "tu",
+    "edited"
+  ]
+}

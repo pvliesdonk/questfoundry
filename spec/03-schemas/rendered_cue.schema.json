@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/rendered_cue.schema.json",
+  "title": "Rendered Cue",
+  "description": "Audio Producer's output: final rendered audio cue with technical metadata and file references.",
+  "type": "object",
+  "properties": {
+    "cue_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Kebab-case cue identifier matching audio_plan reference"
+    },
+    "audio_plan_ref": {
+      "type": "string",
+      "description": "Reference to originating audio_plan artifact"
+    },
+    "author": {
+      "type": "string",
+      "const": "audio_producer",
+      "description": "Fixed role: Audio Producer"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Render completion date (YYYY-MM-DD)"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Path to rendered audio file (relative to exports)"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["wav", "mp3", "ogg", "flac"],
+      "description": "Audio file format"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Duration in seconds",
+      "minimum": 0
+    },
+    "sample_rate": {
+      "type": "integer",
+      "description": "Sample rate in Hz (e.g., 44100, 48000)",
+      "minimum": 8000
+    },
+    "bit_depth": {
+      "type": "integer",
+      "description": "Bit depth (e.g., 16, 24)",
+      "enum": [16, 24, 32]
+    },
+    "peak_db": {
+      "type": "number",
+      "description": "Peak loudness in dB (should be < 0)"
+    },
+    "lufs": {
+      "type": "number",
+      "description": "Integrated loudness (LUFS)"
+    },
+    "caption": {
+      "type": "string",
+      "pattern": "^\\[.*\\]$",
+      "description": "Player-safe caption (format: '[<text>]')"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["rendering", "done", "revision_needed"],
+      "description": "Production status"
+    },
+    "quality_notes": {
+      "type": "string",
+      "description": "Technical quality observations or issues"
+    }
+  },
+  "required": [
+    "cue_id",
+    "audio_plan_ref",
+    "author",
+    "tu",
+    "edited",
+    "file_path",
+    "format",
+    "duration_seconds",
+    "caption",
+    "status"
+  ]
+}
