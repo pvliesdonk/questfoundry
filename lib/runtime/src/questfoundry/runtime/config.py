@@ -349,7 +349,7 @@ class LoggingConfig(BaseModel):
         description="Log level for anthropic library",
     )
     reasoning_enabled: bool = Field(
-        default=False,
+        default=True,
         description="Enable extraction and logging of agent reasoning to qf.reasoning domain",
     )
 
