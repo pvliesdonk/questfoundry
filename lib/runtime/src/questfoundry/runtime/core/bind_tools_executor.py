@@ -820,6 +820,9 @@ class BindToolsExecutor:
         keeping the system message and most recent messages intact.
 
         This is called automatically when context exceeds thresholds.
+
+        IMPORTANT: Ensures AIMessage/ToolMessage pairs stay together to avoid
+        OpenAI API errors about missing tool_call_ids.
         """
         # Separate system messages from conversation
         system_msgs = [m for m in self.messages if isinstance(m, SystemMessage)]
@@ -831,8 +834,57 @@ class BindToolsExecutor:
             # Not enough to summarize
             return
 
-        older_msgs = non_system[:-keep_recent]
-        recent_msgs = non_system[-keep_recent:]
+        # Find the split point, ensuring we don't break AIMessage/ToolMessage pairs
+        split_idx = len(non_system) - keep_recent
+
+        # Check if we're splitting an AIMessage from its ToolMessages
+        # Move split point backward to keep the pair together
+        while split_idx > 0:
+            msg_at_split = non_system[split_idx - 1]
+
+            # If the message before split is an AIMessage with tool_calls,
+            # check if any of the kept messages are its ToolMessages
+            if isinstance(msg_at_split, AIMessage):
+                tool_calls = getattr(msg_at_split, "tool_calls", None) or []
+                if tool_calls:
+                    # Get tool_call_ids from this AIMessage
+                    tool_call_ids = {tc.get("id") for tc in tool_calls if tc.get("id")}
+
+                    # Check if any kept messages are ToolMessages responding to these calls
+                    kept_msgs = non_system[split_idx:]
+                    has_tool_response = any(
+                        isinstance(m, ToolMessage) and
+                        getattr(m, "tool_call_id", None) in tool_call_ids
+                        for m in kept_msgs
+                    )
+
+                    if has_tool_response:
+                        # Move split backward to include this AIMessage
+                        split_idx -= 1
+                        continue
+
+            # If the first kept message is a ToolMessage, check if its AIMessage
+            # is being left in the older messages
+            first_kept = non_system[split_idx]
+            if isinstance(first_kept, ToolMessage):
+                tool_call_id = getattr(first_kept, "tool_call_id", None)
+                if tool_call_id:
+                    # Find the AIMessage with this tool_call_id in older messages
+                    for i in range(split_idx - 1, -1, -1):
+                        msg = non_system[i]
+                        if isinstance(msg, AIMessage):
+                            tool_calls = getattr(msg, "tool_calls", None) or []
+                            if any(tc.get("id") == tool_call_id for tc in tool_calls):
+                                # Move split backward to include this AIMessage
+                                split_idx = i
+                                break
+                    continue
+
+            # No pairing issues, we can split here
+            break
+
+        older_msgs = non_system[:split_idx]
+        recent_msgs = non_system[split_idx:]
 
         # Build text representation of older messages for summarization
         older_text_parts = []
@@ -897,4 +949,5 @@ class BindToolsExecutor:
         except Exception as e:
             log.warning(f"Summarization failed for {self.role_id}: {e}, falling back to truncation")
             # Fallback: just keep recent messages without summary
+            # Note: recent_msgs already has AIMessage/ToolMessage pairing preserved
             self.messages = system_msgs + recent_msgs
