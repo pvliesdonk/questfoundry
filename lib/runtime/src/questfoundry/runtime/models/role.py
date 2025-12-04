@@ -16,10 +16,15 @@ class RoleProfile:
 
         # Extract key fields
         self.id = data.get("id", "")
-        self.name = data.get("identity", {}).get("name", "")
-        self.abbreviation = data.get("identity", {}).get("abbreviation", "")
+        identity = data.get("identity", {}) or {}
+        self.name = identity.get("name", "")
+        self.abbreviation = identity.get("abbreviation", "")
         self.role_type = data.get("role_type", "reasoning_agent")
-        self.dormancy_policy = data.get("dormancy_policy", "active")
+        # Dormancy policy is defined under identity in compiled role profiles.
+        # Fall back to top-level key for backward compatibility.
+        self.dormancy_policy = identity.get(
+            "dormancy_policy", data.get("dormancy_policy", "active")
+        )
 
         # Behavior config
         behavior = data.get("behavior", {})

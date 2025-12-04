@@ -233,12 +233,12 @@ class BindToolsExecutor:
             model_name: Model name for calculating context-aware thresholds
             provider_manager: Provider manager for accessing model limits
         """
-        settings = get_settings()
         self.llm = llm
         self.tools = tools
         self.role_id = role_id
         self.system_prompt = system_prompt
         self.state = state
+        settings = get_settings()
         self.max_iterations = max_iterations or settings.runtime.max_iterations
         self.debug = settings.runtime.debug
         self.trace_handler = trace_handler
@@ -253,6 +253,10 @@ class BindToolsExecutor:
             self.message_threshold, self.char_threshold = (
                 calculate_model_aware_thresholds(model_name, provider_manager)
             )
+            # Derive prompt warning/error thresholds from model-aware char limit
+            # Warn at ~50% of usable context, log "error" at full threshold.
+            self.warning_threshold = int(self.char_threshold * 0.5)
+            self.error_threshold = self.char_threshold
         else:
             # Fallback to legacy defaults if model info not provided
             log.warning(
@@ -261,6 +265,8 @@ class BindToolsExecutor:
             # Fallback to conservative defaults if model info not provided
             self.message_threshold = 50  # Conservative default
             self.char_threshold = 50000  # ~12K tokens
+            # Use static memory config for logging thresholds
+            self.error_threshold, self.warning_threshold, _ = _get_memory_config()
 
         # Conversation state - maintained across invocations
         self.messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
@@ -305,7 +311,8 @@ class BindToolsExecutor:
         )
 
         # Check prompt size and summarize if needed (using centralized config)
-        error_thresh, warn_thresh, _ = _get_memory_config()
+        error_thresh = self.error_threshold
+        warn_thresh = self.warning_threshold
         prompt_size = sum(len(str(m.content)) for m in self.messages)
         message_count = len(self.messages)
 

@@ -147,6 +147,29 @@ class ControlPlane:
 
         set_dormancy_registry(self.dormancy)
 
+        # Initialize dormancy from role profiles:
+        # roles with dormancy_policy in {"optional", "default_dormant"} start dormant.
+        try:
+            optional_policies = {"optional", "default_dormant"}
+            dormant_roles: set[str] = set()
+            for role_id in self.get_available_roles():
+                try:
+                    role_profile = self.schema_registry.load_role(role_id)
+                except FileNotFoundError:
+                    continue
+                policy = getattr(role_profile, "dormancy_policy", "active")
+                if policy in optional_policies:
+                    dormant_roles.add(role_id)
+
+            if dormant_roles:
+                self.dormancy.set_dormant_roles(dormant_roles)
+                logger.debug(
+                    "Initialized DormancyRegistry with dormant roles from profiles: %s",
+                    sorted(dormant_roles),
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to initialize DormancyRegistry from role profiles: %s", exc)
+
         # Track message history for loop detection (from centralized config)
         self._message_history: list[tuple[str, str, str]] = []  # (sender, receiver, intent)
         self._max_ping_pong = settings.runtime.max_ping_pong
@@ -328,7 +351,7 @@ class ControlPlane:
             - Dict mapping role_id -> count of DIRECT messages (not broadcasts)
         """
         messages = state.get("messages", [])
-        consumed = state.get("_consumed_messages", set())
+        consumed = state.setdefault("_consumed_messages", set())
         role_cursors: dict[str, int] = state.get("_role_message_cursor", {})  # per-role last seen index
         available_roles = set(self.get_available_roles())
 
@@ -356,6 +379,12 @@ class ControlPlane:
 
             # Only track messages to actual roles
             if receiver_id in available_roles:
+                # Direct message to a dormant role: consume and notify Showrunner instead
+                if self.dormancy.is_dormant(receiver_id):
+                    consumed.add(idx)
+                    self._notify_showrunner_dormant_role(state, receiver_id, msg)
+                    continue
+
                 # Per-role cursor: skip messages at or before the last seen index for this role.
                 # This provides a "new messages only" view for direct messages without changing
                 # broadcast semantics (broadcasts are handled via role-specific consumption).
@@ -398,6 +427,37 @@ class ControlPlane:
                 )
 
         return pending, direct_counts
+
+    def _notify_showrunner_dormant_role(
+        self,
+        state: StudioState,
+        role_id: str,
+        original_msg: Message,
+    ) -> None:
+        """
+        Notify Showrunner when a direct message targets a dormant role.
+
+        This prevents silent black holes for optional roles. The original
+        message is marked consumed; Showrunner receives an error intent with
+        metadata about the dormant role and original sender/intent.
+        """
+        messages = state.setdefault("messages", [])
+        notification: Message = {
+            "sender": "system",
+            "receiver": SHOWRUNNER,
+            "intent": "error",
+            "content": "",
+            "payload": {
+                "type": "role_dormant",
+                "data": {
+                    "role_id": role_id,
+                    "original_intent": original_msg.get("intent"),
+                    "original_sender": original_msg.get("sender"),
+                },
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        messages.append(notification)
 
     def route_by_envelope(self, state: StudioState) -> list[str]:
         """
