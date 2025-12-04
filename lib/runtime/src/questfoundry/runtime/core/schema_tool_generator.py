@@ -11,12 +11,156 @@ import logging
 from pathlib import Path
 from typing import Any, Annotated
 
+import re
 from langchain_core.tools import BaseTool, InjectedToolArg
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from questfoundry.runtime.core.schema_registry import SPEC_ROOT
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_tu_brief_checkpoint(raw_value: Any) -> Any:
+    """
+    Best-effort normalizer for TuBriefModel.checkpoint.
+
+    Spec expectation (from schema): `checkpoint` is a string matching `HH:MM`
+    with 24‑hour hours (00–23) and minutes (00–59).
+
+    In practice, LLMs often emit:
+    - Plain minutes as `"45"` or `"90"`
+    - `MM:SS` style values such as `"45:00"` when the intent is "45 minutes"
+
+    This helper aims to be:
+    - Conservative: only *expands* clearly invalid-but-parseable values
+      into a valid `HH:MM` string.
+    - Non-destructive: if normalization is not confident, the original
+      value is returned so the Pydantic model can surface a precise
+      validation error.
+
+    Normalization rules:
+    - If value already matches `HH:MM` with 00–23 / 00–59, it is returned as-is.
+    - If numeric string (e.g. `"45"`), interpret as minutes and convert to
+      hours:minutes → `"00:45"`, `"01:30"`, etc.
+    - If `MM:SS`-style `"45:00"`, interpret as minutes:seconds, convert
+      minutes to hours:minutes and drop seconds → `"00:45"`, `"01:30"`, etc.
+    - If computed hours exceed 23, clamp to `"23:59"` to satisfy the schema
+      while making the failure mode explicit in logs.
+    """
+    if not isinstance(raw_value, str):
+        return raw_value
+
+    value = raw_value.strip()
+    if not value:
+        return raw_value
+
+    # Already in valid HH:MM form – leave untouched
+    if re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value):
+        return value
+
+    minutes: int | None = None
+
+    # Pure integer → treat as "minutes"
+    if value.isdigit():
+        try:
+            minutes = int(value)
+        except ValueError:
+            minutes = None
+    else:
+        # Attempt to interpret as MM:SS (or more generally "minutes:seconds")
+        mm_ss = re.fullmatch(r"(\d+):(\d{1,2})", value)
+        if mm_ss:
+            try:
+                minutes_part = int(mm_ss.group(1))
+                seconds_part = int(mm_ss.group(2))
+                # Drop seconds; we only track HH:MM granularity
+                minutes = minutes_part + seconds_part // 60
+            except ValueError:
+                minutes = None
+
+    if minutes is None:
+        # Not a form we recognize confidently – let schema validation handle it
+        return raw_value
+
+    # Convert minutes → hours:minutes, clamping to 23:59 if outside schema range
+    hours = minutes // 60
+    mins = minutes % 60
+
+    if hours > 23:
+        logging.getLogger(__name__).warning(
+            "Checkpoint minutes (%s) exceed 23h; clamping to 23:59 for schema compatibility",
+            minutes,
+        )
+        hours = 23
+        mins = 59
+
+    return f"{hours:02d}:{mins:02d}"
+
+
+def _normalize_artifact_input(artifact_type: str, data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Central hook for *input-side* leniency when calling schema-derived tools.
+
+    Motivation
+    ----------
+    The spec-level JSON Schemas are intentionally strict (types, formats,
+    required fields). LLMs, however, frequently emit:
+    - Slightly "off" but obviously fixable values (e.g. `checkpoint="45:00"`
+      instead of `"00:45"`).
+    - Structurally simpler values where a dict is expected (e.g. a summary
+      string for `coverage_report`).
+
+    Rather than loosening the canonical schemas at Layer 3, this function
+    provides **runtime normalizations** that:
+    - Accept common LLM-shaped inputs.
+    - Transform them into spec-compliant structures.
+    - Keep all semantics as close as possible to the original intent.
+
+    Extension pattern
+    -----------------
+    - All normalizations are keyed by `artifact_type` (schema/tool name).
+    - Each block should be:
+      - Localized (only touching fields relevant to that artifact).
+      - Reversible in spirit (we should be able to explain the transform
+        in terms of the spec).
+      - Documented with examples and rationale in comments.
+    - If a value cannot be normalized confidently, it is left untouched so
+      that the Pydantic model can raise a clear validation error.
+
+    Current normalizations
+    ----------------------
+    - `tu_brief.checkpoint`:
+        * Accepts minute-oriented forms like `"45"` or `"45:00"` and converts
+          to `"00:45"` style `HH:MM`.
+    - `codex_pack.coverage_report`:
+        * Accepts a plain string and wraps it as `{"summary": <string>}` so
+          the field is a dict as required by the schema.
+
+    This function is intentionally conservative; new cases should be added
+    only when we see recurring patterns in logs.
+    """
+    if not data:
+        return data
+
+    normalized = dict(data)
+
+    if artifact_type == "tu_brief":
+        checkpoint = normalized.get("checkpoint")
+        if checkpoint is not None:
+            normalized["checkpoint"] = _normalize_tu_brief_checkpoint(checkpoint)
+
+    if artifact_type == "codex_pack":
+        coverage_report = normalized.get("coverage_report")
+        # Schemas expect a dict; if the model provided a string summary,
+        # wrap it in a minimal structured shape.
+        if isinstance(coverage_report, str):
+            normalized["coverage_report"] = {"summary": coverage_report}
+
+    # NOTE: Future extensions (e.g. "hook_card" helpers, richer codex_pack
+    # shapes) should be added here, with clear comments tying behavior back
+    # to the corresponding schema and observed LLM patterns.
+
+    return normalized
 
 
 class SchemaToolGenerator:
@@ -340,9 +484,15 @@ class SchemaToolGenerator:
                             continue
                     filtered_kwargs[key] = value
 
+                # Apply artifact-specific input normalizations before validation.
+                # This is the single choke point where we make schema-derived
+                # tools more forgiving of common LLM-shaped inputs while still
+                # enforcing the canonical spec via the Pydantic model.
+                normalized_kwargs = _normalize_artifact_input(artifact_type, filtered_kwargs)
+
                 # Validate using Pydantic model
                 try:
-                    validated = model(**filtered_kwargs)
+                    validated = model(**normalized_kwargs)
                 except Exception as e:
                     return {
                         "success": False,
