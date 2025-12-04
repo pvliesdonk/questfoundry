@@ -239,7 +239,13 @@ class BindToolsExecutor:
         self.system_prompt = system_prompt
         self.state = state
         settings = get_settings()
+        # Tool-loop limits are driven by runtime config so that
+        # "iteration counting" is based on *failures*, not arbitrary
+        # role turns. max_iterations bounds total tool steps per turn;
+        # max_failures bounds consecutive tool-call failures before
+        # giving up for this role execution.
         self.max_iterations = max_iterations or settings.runtime.max_iterations
+        self.max_failures = settings.runtime.max_failures
         self.debug = settings.runtime.debug
         self.trace_handler = trace_handler
         self.tool_map = {tool.name: tool for tool in tools}
@@ -616,14 +622,21 @@ class BindToolsExecutor:
             else:
                 failure_count = 0
 
-            # Check if max failures reached
-            if failure_count >= 3:
+            # Check if max failures reached. This is the primary
+            # "iteration budget" for a role turn: valid tool calls
+            # are work, repeated failures indicate a stuck agent.
+            if failure_count >= self.max_failures:
                 log.error(
-                    f"Max failures (3) reached for {self.role_id} after {failure_count} consecutive failures"
+                    f"Max failures ({self.max_failures}) reached for {self.role_id} "
+                    f"after {failure_count} consecutive failures"
                 )
                 return ExecutorResult(
                     success=False,
-                    error=f"Max failures (3) reached after {failure_count} consecutive tool failures",
+                    error=(
+                        "Max failures "
+                        f"({self.max_failures}) reached after "
+                        f"{failure_count} consecutive tool failures"
+                    ),
                     messages=protocol_messages,
                     tool_results=tool_results,
                     iterations=iteration,

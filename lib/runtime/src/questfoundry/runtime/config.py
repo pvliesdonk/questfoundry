@@ -138,6 +138,15 @@ class RuntimeConfig(BaseModel):
         le=10,
         description="Maximum consecutive executions of the same role (fairness)",
     )
+    stall_iterations_without_change: int = Field(
+        default=30,
+        ge=5,
+        le=200,
+        description=(
+            "Loop iterations without hot_sot changes before treating the run as "
+            "stalled and emitting a structured stall_detected error"
+        ),
+    )
     max_validation_retries: int = Field(
         default=3,
         ge=1,
