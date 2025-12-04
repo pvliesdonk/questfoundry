@@ -14,6 +14,7 @@ trace.log
 **/state-sot.jsonl
 **/tool-calls.jsonl
 **/debug.jsonl
+**/loop-health.jsonl
 
 # Python
 *.pyc
