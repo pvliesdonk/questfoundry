@@ -1075,6 +1075,43 @@ class ControlPlane:
             }
             self._trace_message(start_message)
 
+            # Extract loop_id and node_id from protocol messages addressed to this role
+            # This ensures the context assembler has the correct loop and node context
+            messages = state.get("messages", [])
+            loop_id = state.get("loop_id")  # Keep existing loop_id if set
+            node_id = state.get("node_id")  # Keep existing node_id if set
+
+            for msg in reversed(messages):
+                receiver = msg.get("receiver", "")
+                if isinstance(receiver, dict):
+                    receiver = receiver.get("role", "") or receiver.get("id", "")
+                receiver = str(receiver).lower().replace(" ", "_")
+                receiver_id = self._abbreviations.get(receiver, receiver)
+
+                # Check if message is for this role
+                if receiver_id == role_id or receiver in ("*", BROADCAST):
+                    payload = msg.get("payload", {})
+
+                    # Extract loop if present
+                    msg_loop = payload.get("loop")
+                    if msg_loop and not loop_id:
+                        loop_id = msg_loop
+
+                    # Extract node if present
+                    msg_node = payload.get("node") or payload.get("node_id")
+                    if msg_node and not node_id:
+                        node_id = msg_node
+
+                    # Stop searching if we found both
+                    if loop_id and node_id:
+                        break
+
+            # Update state with extracted context for context assembler
+            if loop_id:
+                state = {**state, "loop_id": loop_id}
+            if node_id:
+                state = {**state, "node_id": node_id}
+
             # Log role execution start with structured logging
             bus_log = _get_bus_log()
             if bus_log:
@@ -1083,6 +1120,8 @@ class ControlPlane:
                     loop_iteration=self._loop_iteration,
                     role=role_id,
                     tu_id=state.get("tu_id", ""),
+                    loop_id=loop_id,
+                    node_id=node_id,
                 )
 
             # Execute base node - handle both sync and async nodes
