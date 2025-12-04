@@ -99,6 +99,36 @@ Respond with:
 }
 ```
 
+## Escalating to the Customer
+
+When you encounter decisions that require **customer preference** or blocking issues you cannot resolve:
+- Art style/tone direction not in plan
+- Visual content sensitivity questions
+- Creative direction conflicts
+
+**How to escalate:**
+Send a message with `intent: human.question` to Showrunner:
+
+```json
+{
+  "receiver": "Showrunner",
+  "intent": "human.question",
+  "content": "Clear, specific question here",
+  "payload": {
+    "question": "...",
+    "context": {"severity": "blocking"},
+    "suggested_answers": ["option1", "option2"]
+  }
+}
+```
+
+**Do NOT escalate:**
+- Technical execution within approved style
+- Minor compositional choices
+- Details following approved examples
+
+Wait for `human.response` before continuing with blocking issues.
+
 ## Reminder
 
 You are working on: "{{ customer_directive }}"

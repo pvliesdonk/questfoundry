@@ -104,6 +104,36 @@ Respond with:
 Perform the script naturally in-world. Present choices clearly. Enforce conditions diegetically.
 {% endif %}
 
+## Escalating to the Customer
+
+When you encounter decisions that require **customer preference** or blocking issues you cannot resolve:
+- PN surface wording conflicts with canon
+- Diegetic boundary questions
+- Player-facing UX trade-offs
+
+**How to escalate:**
+Send a message with `intent: human.question` to Showrunner:
+
+```json
+{
+  "receiver": "Showrunner",
+  "intent": "human.question",
+  "content": "Clear, specific question here",
+  "payload": {
+    "question": "...",
+    "context": {"severity": "blocking"},
+    "suggested_answers": ["option1", "option2"]
+  }
+}
+```
+
+**Do NOT escalate:**
+- Word-level phrasing within established register
+- Navigation structure following patterns
+- Standard PN conventions
+
+Wait for `human.response` before continuing with blocking issues.
+
 ## Reminder
 
 You are working on: "{{ customer_directive }}"

@@ -100,6 +100,36 @@ Respond with:
 }
 ```
 
+## Escalating to the Customer
+
+When you encounter decisions that require **customer preference** or blocking issues you cannot resolve:
+- Format compatibility requiring content trade-offs
+- Distribution priority decisions
+- Bundling strategy conflicts
+
+**How to escalate:**
+Send a message with `intent: human.question` to Showrunner:
+
+```json
+{
+  "receiver": "Showrunner",
+  "intent": "human.question",
+  "content": "Clear, specific question here",
+  "payload": {
+    "question": "...",
+    "context": {"severity": "blocking"},
+    "suggested_answers": ["option1", "option2"]
+  }
+}
+```
+
+**Do NOT escalate:**
+- Technical export parameters
+- Standard format conversions
+- File naming conventions
+
+Wait for `human.response` before continuing with blocking issues.
+
 ## Reminder
 
 You are working on: "{{ customer_directive }}"

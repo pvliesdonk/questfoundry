@@ -155,6 +155,20 @@ Then, provide your **internal decision**:
 }
 ```
 
+## Merge Workflow (approve_merge decision)
+
+When `decision_type: approve_merge` after a successful gatecheck:
+
+1. **Write to Cold**: Call `write_cold_sot` with the Hot artifacts that passed gates
+2. **Create snapshot**: Call `create_snapshot` to stamp the Cold state
+3. **Send merge.approve**: Broadcast the protocol intent with snapshot ID
+4. **Close TU**: Mark work complete
+
+Example tool sequence:
+- `write_cold_sot(key="manuscript/act1", value=<passed_content>)`
+- `create_snapshot(label="Cold @ YYYY-MM-DD")`
+- `send_protocol_message(intent="merge.approve", receiver="*", payload={...})`
+
 ## Reminder
 
 {% if customer_directive %}

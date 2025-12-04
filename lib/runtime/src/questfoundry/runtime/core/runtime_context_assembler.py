@@ -345,8 +345,18 @@ Current execution context:
                 state_block += f"\n## Your Previous Actions (as {role_id})\n"
                 state_block += "You have already taken the following actions in this session:\n\n"
                 # Show last N messages to avoid context overflow
+                # Intentionally set to 5 for context size management
                 max_history = 5
-                recent_messages = role_messages[-max_history:]
+
+                # Preserve escalation messages regardless of history limit
+                escalations = [
+                    m for m in role_messages
+                    if m.get("escalation") or m.get("priority") == "critical"
+                ]
+                normal = [m for m in role_messages if m not in escalations]
+
+                # Keep all escalations + last N normal messages
+                recent_messages = escalations + normal[-max_history:]
                 for i, msg in enumerate(recent_messages, 1):
                     intent = msg.get("intent", "unknown")
                     receiver = msg.get("receiver", "unknown")

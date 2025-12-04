@@ -41,6 +41,15 @@
     },
     "correlation_id": { "type": "string" },
     "reply_to": { "type": "string" },
+    "priority": {
+      "type": "string",
+      "description": "Message priority level for routing and context preservation",
+      "enum": ["critical", "high", "normal", "low"]
+    },
+    "escalation": {
+      "type": "boolean",
+      "description": "Flag indicating this message requires human escalation or special attention"
+    },
     "context": {
       "type": "object",
       "properties": {
