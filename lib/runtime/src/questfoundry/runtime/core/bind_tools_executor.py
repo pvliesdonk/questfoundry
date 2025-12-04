@@ -391,10 +391,10 @@ class BindToolsExecutor:
                         )
                     )
 
-                    retry = questionary.confirm(
+                    retry = await questionary.confirm(
                         "Retry connection?",
                         default=True,
-                    ).ask()
+                    ).ask_async()
 
                     if retry:
                         log.info("User requested retry after LLM connection failure")
