@@ -47,7 +47,7 @@ Neighbors: @scene @pn @translator @gatekeeper
 
 ## 1) Register & Voice (slice-specific)
 
-<!-- Field: Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (and who uses it) -->
+<!-- Field: Style Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (and who uses it) -->
 <!-- Field: Voice & Address | Type: markdown | Required: yes | Pronouns, formality, directness -->
 <!-- Field: Tense / Aspect / Mood | Type: markdown | Required: yes | Tense policy for narrative -->
 <!-- Validation: Cadence guidance must be concrete (e.g., "short lines near choices") -->
@@ -257,7 +257,7 @@ Change Log
 - `TU`: Must match format `TU-YYYY-MM-DD-<role><seq>`, reference existing TU Brief
 - `Neighbors`: Required role list, must use valid Layer 1 role names (@scene, @pn, @translator,
   @gatekeeper)
-- `Register`: If present, must be one of: neutral | formal | colloquial
+- `Style Register`: If present, must be one of: neutral | formal | colloquial
 - `Voice & Address`: Required, must specify pronouns, formality, directness
 - `Tense / Aspect / Mood`: Required, must specify tense policy
 - `Banned / Preferred`: Required, must list at least ban and prefer sections
@@ -272,9 +272,9 @@ Change Log
 
 ### Cross-Field Validation
 
-- If `Register` conflicts with global policy, must note escalation for ADR
-- `PN Patterns` examples must align with `Register` (§1) and `Banned / Preferred` (§2)
-- `Caption guideline` and `Alt guidance` must match `Register` (same formality level)
+- If `Style Register` conflicts with global policy, must note escalation for ADR
+- `PN Patterns` examples must align with `Style Register` (§1) and `Banned / Preferred` (§2)
+- `Caption guideline` and `Alt guidance` must match `Style Register` (same formality level)
 - If `Before → After` table present, owners must be valid Layer 1 roles
 - `Neighbors` list must include all roles affected by patterns (at minimum: @scene, @pn)
 
@@ -353,7 +353,7 @@ Change Log
 | Header  | Snapshot              | cold-date-ref | yes      | Format: Cold @ YYYY-MM-DD                      |
 | Header  | TU                    | tu-id         | yes      | Format: TU-YYYY-MM-DD-<role><seq>              |
 | Header  | Neighbors             | role-list     | yes      | @role mentions                                 |
-| §1      | Register              | enum          | optional | neutral \| formal \| colloquial                |
+| §1      | Style Register            | enum          | optional | neutral \| formal \| colloquial                |
 | §1      | Voice & Address       | markdown      | yes      | Pronouns, formality, directness                |
 | §1      | Tense / Aspect / Mood | markdown      | yes      | Tense policy                                   |
 | §1      | Cadence               | markdown      | optional | Line length guidance                           |

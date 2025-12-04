@@ -146,13 +146,13 @@ Exclude when: <avoid masking prose or duplicating other cues>
 
 ## 7) Localization & Style
 
-<!-- Field: Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (for caption phrasing) -->
+<!-- Field: Style Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (for caption phrasing) -->
 <!-- Field: Idioms to avoid | Type: markdown-list | Optional: yes | Culture-bound idioms list -->
 <!-- Field: Translator note | Type: markdown | Optional: yes | Portable wording hints; onomatopoeia policy -->
 
 ```
 
-Register: <neutral / formal / colloquial> (for caption phrasing)
+Style Register: <neutral / formal / colloquial> (for caption phrasing)
 Idioms to avoid: <list if any>
 Translator note: <portable wording hints; onomatopoeia policy>
 
@@ -247,7 +247,7 @@ Status: planned
    Exclude when: interior dialogue after inspection; high-density speech
 
 7. Localization & Style
-   Register: neutral
+   Style Register: neutral
    Idioms to avoid: none
    Translator note: keep concrete and short; avoid culture-specific onomatopoeia
 
@@ -296,7 +296,7 @@ Status: planned
 - `Content notes`: Optional, reference Layer-0 content notes if applicable
 - `Inclusion Criteria`: Required, must state include AND exclude conditions
 - `Anchor targets`: Required, path list to manuscript locations
-- `Register`: Optional, if present must be: neutral | formal | colloquial
+- `Style Register`: Optional, if present must be: neutral | formal | colloquial
 - `Idioms to avoid`: Optional, culture-bound idiom list
 - `Translator note`: Optional, portability hints
 - `Determinism`: Required, off-surface repro info
@@ -308,7 +308,7 @@ Status: planned
 ### Cross-Field Validation
 
 - If `Repro expectation` = log-only, then `Producer log fields` must be present
-- `Caption / Text Equivalent` must match `Register` (if specified)
+- `Caption / Text Equivalent` must match `Style Register` (if specified)
 - `Inclusion Criteria` must state both include and exclude conditions
 - `Safety notes` must include all 4 fields (Onset, Intensity, Transients, Content notes check)
 - `Description` must avoid technique terms; verified against `What is heard` and `Salient qualities`
@@ -318,7 +318,7 @@ Status: planned
 - `TU` ID must reference existing TU Brief artifact
 - `Anchor targets` should reference existing manuscript sections
 - If deferral tags present in parent TU, status should be "deferred"
-- `Register` should align with Style Addendum if referenced
+- `Style Register` should align with Style Addendum if referenced
 - `Handoffs` roles must use valid Layer 1 role names
 
 ---
@@ -403,7 +403,7 @@ Status: planned
 | §5      | Content notes             | markdown      | optional | Layer-0 reference if applicable               |
 | §6      | Inclusion Criteria        | markdown      | yes      | Include AND exclude                           |
 | §6      | Anchor targets            | path-list     | yes      | /manuscript/...#anchor                        |
-| §7      | Register                  | enum          | optional | neutral \| formal \| colloquial               |
+| §7      | Style Register            | enum          | optional | neutral \| formal \| colloquial               |
 | §7      | Idioms to avoid           | markdown-list | optional | Culture-bound idioms                          |
 | §7      | Translator note           | markdown      | optional | Portability hints                             |
 | §8      | Determinism               | markdown      | yes      | Off-surface repro info                        |

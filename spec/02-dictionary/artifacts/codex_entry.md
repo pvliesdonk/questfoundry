@@ -32,7 +32,7 @@
 <!-- Field: Snapshot | Type: cold-date-ref | Required: yes | Format: Cold @ YYYY-MM-DD -->
 <!-- Field: TU | Type: tu-id | Required: yes | Format: TU-YYYY-MM-DD-<role><seq> | References TU Brief -->
 <!-- Field: Lineage | Type: markdown | Required: yes | Canon Pack(s) IDs, Research Memos IDs with posture noted -->
-<!-- Field: Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (per Style) -->
+<!-- Field: Style Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (per Style) -->
 <!-- Cross-artifact: Canon Pack and Research Memo IDs must reference existing artifacts -->
 
 ```
@@ -42,7 +42,7 @@ Slug: <kebab-case-anchor>          Locale: <EN|NL|…>
 Owner: Codex Curator               Edited: <YYYY-MM-DD>
 Snapshot: Cold @ <YYYY-MM-DD>      TU: <id>
 Lineage: Canon Pack(s) <ids> · Research Memos <ids> (posture noted)
-Register: <neutral | formal | colloquial> (per Style)
+Style Register: <neutral | formal | colloquial> (per Style)
 
 ```
 
@@ -208,7 +208,7 @@ Slug: union-token                      Locale: EN
 Owner: Codex Curator                   Edited: 2025-10-28
 Snapshot: Cold @ 2025-10-28            TU: TU-2025-10-28-CC03
 Lineage: Canon Pack CP-FT-01 · Research Memo RS-FT-02 (posture: plausible)
-Register: neutral
+Style Register: neutral
 
 1. Overview
    A small badge or card recognized at dock checkpoints to confirm union membership. Inspectors may glance or scan it during routine checks.
@@ -266,7 +266,7 @@ Register: neutral
 - `Snapshot`: Required, format "Cold @ YYYY-MM-DD"
 - `TU`: Must match format `TU-YYYY-MM-DD-<role><seq>`, reference existing TU Brief
 - `Lineage`: Must reference Canon Pack(s) and/or Research Memos with IDs
-- `Register`: If present, must be one of: neutral | formal | colloquial
+- `Style Register`: If present, must be one of: neutral | formal | colloquial
 - `Overview`: Required, 2-5 lines, player-safe, no spoilers/internals/technique
 - `Context`: Required, 2-6 lines, diegetic, no hidden causes
 - `Variants & Synonyms`: Required table, columns: Variant | Register/Region | Notes for Translator
@@ -286,7 +286,7 @@ Register: neutral
 
 - If `Illustrated`, then `Alt guidance` must be present
 - If `Alt guidance` or `Caption guideline` present, then cross-media noted in §5 Relations
-- `Register` in header must match register values in §4 Variants table (or be compatible)
+- `Style Register` in header must match register values in §4 Variants table (or be compatible)
 - `Anchor slug` in §7 must match `Slug` in header
 - `Research posture touched` must align with lineage references (e.g., if uncorroborated:\*, cite
   Research Memo)
@@ -381,7 +381,7 @@ Register: neutral
 | Header  | Snapshot                 | cold-date-ref | yes            | Format: Cold @ YYYY-MM-DD                           |
 | Header  | TU                       | tu-id         | yes            | Format: TU-YYYY-MM-DD-<role><seq>                   |
 | Header  | Lineage                  | markdown      | yes            | Canon Pack(s), Research Memos with posture          |
-| Header  | Register                 | enum          | optional       | neutral \| formal \| colloquial                     |
+| Header  | Style Register           | enum          | optional       | neutral \| formal \| colloquial                     |
 | §1      | Overview                 | markdown      | yes            | 2-5 lines; player-safe                              |
 | §2      | Where to link            | markdown      | optional       | Section themes/anchors                              |
 | §2      | When not to link         | markdown      | optional       | Avoid overlinking/spoilers                          |
