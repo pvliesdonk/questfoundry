@@ -132,14 +132,14 @@ class ToolRegistry:
         self._register_stub_tools()
 
     def _register_schema_tools(self) -> None:
-        """Register schema-aware typed tools for top artifacts."""
+        """Register schema-aware typed tools for all artifacts discovered from role definitions."""
         try:
             from questfoundry.runtime.core.schema_tool_generator import (
-                generate_tools_for_top_artifacts,
+                generate_tools_for_all_artifacts,
             )
 
-            # Generate typed tools for top 5 artifacts
-            generated_tools = generate_tools_for_top_artifacts()
+            # Generate typed tools for all artifacts (discovered from spec/05-definitions/roles/*.yaml)
+            generated_tools = generate_tools_for_all_artifacts()
 
             # Register each generated tool
             for tool_name, ToolClass in generated_tools.items():

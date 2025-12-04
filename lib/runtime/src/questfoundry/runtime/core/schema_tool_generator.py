@@ -309,32 +309,103 @@ class SchemaToolGenerator:
         return tools
 
 
-def generate_tools_for_top_artifacts() -> dict[str, type[BaseTool]]:
+def _discover_artifact_mappings() -> dict[str, str]:
     """
-    Generate typed tools for top 5 priority artifacts.
+    Discover artifact type -> hot_sot key mappings from role definitions.
+
+    Reads spec/05-definitions/roles/*.yaml files and extracts interface.outputs mappings.
+
+    Returns:
+        Dict of {artifact_type: hot_sot_key} (with "hot_sot." prefix stripped)
+    """
+    import yaml
+
+    artifact_mappings: dict[str, str] = {}
+
+    # Find roles directory
+    if SPEC_ROOT == Path("__BUNDLED_RESOURCES__"):
+        # Using bundled resources
+        try:
+            from importlib.resources import files
+
+            roles_dir = files("questfoundry.runtime.resources.definitions.roles")
+            # List all .yaml files
+            for resource in roles_dir.iterdir():
+                if resource.name.endswith(".yaml"):
+                    role_yaml = yaml.safe_load(resource.read_text(encoding="utf-8"))
+                    _extract_mappings_from_role(role_yaml, artifact_mappings)
+        except Exception as e:
+            logger.warning(f"Failed to load bundled role definitions: {e}")
+            return {}
+    else:
+        # Load from filesystem
+        roles_dir = SPEC_ROOT / "05-definitions" / "roles"
+        if not roles_dir.exists():
+            logger.warning(f"Roles directory not found: {roles_dir}")
+            return {}
+
+        for role_file in roles_dir.glob("*.yaml"):
+            try:
+                with open(role_file, encoding="utf-8") as f:
+                    role_yaml = yaml.safe_load(f)
+                    _extract_mappings_from_role(role_yaml, artifact_mappings)
+            except Exception as e:
+                logger.debug(f"Skipping {role_file.name}: {e}")
+
+    logger.info(f"Discovered {len(artifact_mappings)} artifact mappings from role definitions")
+    return artifact_mappings
+
+
+def _extract_mappings_from_role(role_yaml: dict[str, Any], mappings: dict[str, str]) -> None:
+    """Extract artifact mappings from a single role YAML."""
+    interface = role_yaml.get("interface", {})
+    outputs = interface.get("outputs", [])
+
+    for output in outputs:
+        artifact_type = output.get("artifact_type")
+        state_key = output.get("state_key", "")
+
+        if not artifact_type or not state_key:
+            continue
+
+        # Extract hot_sot key (strip "hot_sot." or "cold_sot." prefix)
+        if state_key.startswith("hot_sot."):
+            hot_sot_key = state_key.replace("hot_sot.", "")
+            # Only include hot_sot mappings (agents use WriteHotSOT)
+            if artifact_type not in mappings:
+                mappings[artifact_type] = hot_sot_key
+
+
+def generate_tools_for_all_artifacts() -> dict[str, type[BaseTool]]:
+    """
+    Generate typed tools for all artifacts discovered from role definitions.
+
+    Dynamically discovers artifact -> hot_sot key mappings from spec/05-definitions/roles/*.yaml
 
     Returns:
         Dict of {tool_name: ToolClass}
     """
     generator = SchemaToolGenerator()
 
-    # Top 5 artifacts with their hot_sot keys
-    top_artifacts = {
-        "section_draft": "drafts",
-        "section_brief": "section_briefs",
-        "hook_card": "hooks",
-        "gateway_map": "gateway_map",
-        "tu_brief": "current_tu",
-    }
+    # Discover mappings from role definitions
+    artifact_mappings = _discover_artifact_mappings()
+
+    if not artifact_mappings:
+        logger.warning("No artifact mappings discovered, falling back to minimal set")
+        # Minimal fallback if discovery fails
+        artifact_mappings = {
+            "section_draft": "drafts",
+            "hook_card": "hooks",
+        }
 
     all_tools = {}
 
-    for artifact_type, hot_sot_key in top_artifacts.items():
+    for artifact_type, hot_sot_key in artifact_mappings.items():
         try:
             tools = generator.generate_tools_for_artifact(artifact_type, hot_sot_key)
             all_tools.update(tools)
         except Exception as e:
-            logger.warning(f"Skipping {artifact_type} due to error: {e}")
+            logger.debug(f"Skipping {artifact_type} due to error: {e}")
 
-    logger.info(f"Generated {len(all_tools)} typed tools for top artifacts")
+    logger.info(f"Generated {len(all_tools)} typed tools from {len(artifact_mappings)} artifacts")
     return all_tools
