@@ -230,6 +230,55 @@ class TestRouteByEnvelope:
         # Sender shouldn't receive their own broadcast
         assert SHOWRUNNER not in result
 
+    def test_stall_detection_injects_termination_message(self):
+        """When loop-health indicates a stall, control plane emits stall_detected and routes to TERMINATE."""
+        control_plane = ControlPlane()
+        # Make stall detection trigger quickly for this test
+        control_plane._stall_iterations_without_change = 1
+        # Pretend we've already gone at least one iteration without change;
+        # _log_loop_health will increment this again before the check.
+        control_plane._iterations_without_artifact_change = 1
+
+        state: StudioState = {
+            "tu_id": "TU-stall",
+            "tu_lifecycle": "hot-proposed",
+            "current_node": "",
+            "loop_id": "test",
+            "loop_context": {},
+            "hot_sot": {},
+            "cold_sot": {},
+            "artifacts": {},
+            "quality_bars": {},
+            "messages": [
+                {
+                    "sender": "showrunner",
+                    "receiver": "style_lead",
+                    "intent": "tu.update",
+                    "payload": {},
+                    "timestamp": "",
+                    "envelope": {},
+                }
+            ],
+            "snapshot_ref": None,
+            "parent_tu_id": None,
+            "error": None,
+            "retry_count": 0,
+            "created_at": "",
+            "updated_at": "",
+        }
+
+        # Ensure style_lead is not dormant so it becomes an eligible role
+        control_plane.dormancy.wake("style_lead")
+
+        result = control_plane.route_by_envelope(state)
+        # Stall detection should force termination via TERMINATE
+        assert result == [TERMINATE]
+
+        last_msg = state["messages"][-1]
+        assert last_msg["receiver"] == TERMINATE
+        assert last_msg["intent"] == "error"
+        assert last_msg["payload"]["type"] == "stall_detected"
+
     def test_dormant_role_routes_to_showrunner(self):
         """Messages to dormant roles route to showrunner for wake decision."""
         control_plane = ControlPlane()

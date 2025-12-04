@@ -198,6 +198,12 @@ class ControlPlane:
         self._last_hot_sot_hash: str | None = None
         self._iterations_without_artifact_change: int = 0
         self._last_artifact_change_iteration: int = 0
+        # Stall detection threshold - how many iterations we tolerate with
+        # no hot_sot changes before treating the loop as stalled. This is
+        # checked in conjunction with pending work and role activity.
+        self._stall_iterations_without_change: int = (
+            settings.runtime.stall_iterations_without_change
+        )
 
         # Role abbreviation mapping for message bus routing
         self._abbreviations = {
@@ -580,15 +586,22 @@ class ControlPlane:
                 logger.debug(f"Role {role_id} has messages but is dormant, skipping")
                 return None
 
-            # Check execution count - prevent infinite loops
+            # Check execution count.
+            # NOTE: We no longer terminate solely on execution count. Hard
+            # iteration limits are enforced by the executor (max_failures /
+            # max_iterations) and by the LangGraph recursion_limit. Here we
+            # only log when a role appears unusually active so loop health
+            # can be inspected, but we avoid treating valid work as an
+            # infinite loop on its own.
             exec_count = self._role_execution_counts.get(role_id, 0)
             if exec_count >= self._max_role_executions:
                 logger.warning(
-                    f"Role {role_id} has executed {exec_count} times, "
-                    "forcing termination to prevent infinite loop"
+                    "Role %s has executed %s times (>= max_role_executions=%s); "
+                    "continuing routing but this may indicate a stalled loop",
+                    role_id,
+                    exec_count,
+                    self._max_role_executions,
                 )
-                # Return special marker for termination
-                return END
 
             # Fairness check - prevent same role running too many times consecutively
             if not skip_fairness and role_id == self._last_executed_role:
@@ -683,6 +696,16 @@ class ControlPlane:
 
         # If we found eligible roles, return them for parallel execution
         if eligible_roles:
+            # Log loop health first so stall detection uses up-to-date counters
+            self._log_loop_health(state, eligible_roles)
+
+            # Stall detection: if we've gone too many iterations without any
+            # hot_sot change while work remains, terminate with a structured
+            # stall error rather than silently looping.
+            stall_result = self._maybe_terminate_for_stall(state, eligible_roles, pending)
+            if stall_result is not None:
+                return stall_result
+
             logger.debug(f"Parallel routing to {len(eligible_roles)} roles: {eligible_roles}")
             bus_log = _get_bus_log()
             if bus_log:
@@ -695,8 +718,6 @@ class ControlPlane:
                     pending_counts=pending_counts,
                     direct_counts=direct_counts,
                 )
-            # Log loop health before returning
-            self._log_loop_health(state, eligible_roles)
             return eligible_roles
 
         # All pending roles are dormant - route to showrunner to decide wake
@@ -834,6 +855,82 @@ class ControlPlane:
             total_executions=self._total_executions,
             role_execution_counts=dict(self._role_execution_counts),
         )
+
+    def _maybe_terminate_for_stall(
+        self,
+        state: StudioState,
+        next_roles: list[str],
+        pending: dict[str, list[Message]],
+    ) -> list[str] | None:
+        """
+        Detect and terminate stalled loops based on loop-health metrics.
+
+        A loop is considered "stalled" when:
+        - We have exceeded the configured number of iterations without any
+          hot_sot changes, AND
+        - There are still pending messages to process (i.e., work exists),
+          but execution keeps cycling without making stateful progress.
+
+        On stall:
+        - A structured error message is appended, addressed to TERMINATE.
+        - The control plane routes to END for this TU.
+
+        This provides a clearer failure mode than silently looping until
+        recursion_limit or tool-level guards are hit.
+        """
+        # No work → normal end-of-loop conditions should handle termination.
+        if not pending:
+            return None
+
+        # Require a minimum number of iterations without artifact change.
+        if self._iterations_without_artifact_change < self._stall_iterations_without_change:
+            return None
+
+        logger.warning(
+            "Stall detected after %s iterations without hot_sot change "
+            "(last change at iteration %s); terminating TU %s",
+            self._iterations_without_artifact_change,
+            self._last_artifact_change_iteration,
+            state.get("tu_id", ""),
+        )
+
+        # Append a structured stall-detected message to aid debugging.
+        stall_message: Message = {
+            "sender": "system",
+            "receiver": TERMINATE,
+            "intent": "error",
+            "content": "",
+            "payload": {
+                "type": "stall_detected",
+                "data": {
+                    "tu_id": state.get("tu_id", ""),
+                    "iterations_without_change": self._iterations_without_artifact_change,
+                    "last_change_iteration": self._last_artifact_change_iteration,
+                    "next_roles": next_roles,
+                    "pending_roles": list(pending.keys()),
+                    "role_execution_counts": dict(self._role_execution_counts),
+                },
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        state.setdefault("messages", []).append(stall_message)
+
+        # Log END routing decision for stall.
+        bus_log = _get_bus_log()
+        if bus_log:
+            bus_log.info(
+                "route_decision",
+                loop_iteration=self._loop_iteration,
+                next_node=END,
+                next_nodes=[END],
+                reason="stall_detected",
+                iterations_without_change=self._iterations_without_artifact_change,
+                last_change_iteration=self._last_artifact_change_iteration,
+                next_roles=next_roles,
+                pending_roles=list(pending.keys()),
+            )
+
+        return [END]
 
     def _normalize_role_id(self, receiver: str) -> str:
         """
