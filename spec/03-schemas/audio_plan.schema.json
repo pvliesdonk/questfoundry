@@ -130,9 +130,9 @@
       "minItems": 1,
       "uniqueItems": true
     },
-    "register": {
+    "style_register": {
       "type": "string",
-      "description": "Optional register aligned with Style guidance.",
+      "description": "Optional style register (formality level) aligned with Style guidance.",
       "enum": ["neutral", "formal", "colloquial"]
     },
     "idioms_to_avoid": {

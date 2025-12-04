@@ -54,10 +54,10 @@
       "description": "References to full (non-player-safe) artifacts this summarizes",
       "items": {"type": "string"}
     },
-    "register": {
+    "style_register": {
       "type": "string",
       "enum": ["formal", "casual", "neutral"],
-      "description": "Language register used in summary"
+      "description": "Language register (formality level) used in summary"
     },
     "length_constraint": {
       "type": "string",

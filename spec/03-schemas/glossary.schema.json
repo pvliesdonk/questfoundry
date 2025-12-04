@@ -20,7 +20,7 @@
           "category": {"type": "string", "enum": ["character", "location", "organization", "concept", "item"]},
           "definition": {"type": "string"},
           "pronunciation": {"type": "string"},
-          "register": {"type": "string", "enum": ["formal", "casual", "technical", "neutral"]},
+          "style_register": {"type": "string", "enum": ["formal", "casual", "technical", "neutral"]},
           "translation_notes": {"type": "string"}
         },
         "required": ["term", "category", "definition"]

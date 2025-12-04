@@ -330,7 +330,7 @@
                 "minLength": 3,
                 "maxLength": 80
               },
-              "register": {
+              "style_register": {
                 "type": "string",
                 "minLength": 5,
                 "maxLength": 160
@@ -341,7 +341,7 @@
                 "maxLength": 240
               }
             },
-            "required": ["group", "register"]
+            "required": ["group", "style_register"]
           },
           "minItems": 1
         },
