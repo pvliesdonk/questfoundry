@@ -1269,10 +1269,10 @@ class ControlPlane:
         self._total_executions = 0
         self._message_history.clear()
 
-        # Initialize state
+        # Initialize state (TU ID auto-generated with SR role code)
         initial_state = self.state_manager.initialize_state(
-            tu_id=f"TU-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}",
             context=context or {},
+            role_code="SR",  # Showrunner is always the first role
             # loop_id intentionally omitted - SR will choose the appropriate playbook
         )
 

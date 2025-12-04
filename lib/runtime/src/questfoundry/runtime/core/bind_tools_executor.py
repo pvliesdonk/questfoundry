@@ -217,6 +217,8 @@ class BindToolsExecutor:
         state: Any = None,
         max_iterations: int | None = None,
         trace_handler: Any | None = None,
+        model_name: str | None = None,
+        provider_manager: Any | None = None,
     ):
         """Initialize bind_tools executor.
 
@@ -228,6 +230,8 @@ class BindToolsExecutor:
             state: Current StudioState for tool execution context (injected into tools)
             max_iterations: Max tool call iterations (default from config)
             trace_handler: Optional callback(intent, payload) for tracing events
+            model_name: Model name for calculating context-aware thresholds
+            provider_manager: Provider manager for accessing model limits
         """
         settings = get_settings()
         self.llm = llm
@@ -239,6 +243,24 @@ class BindToolsExecutor:
         self.debug = settings.runtime.debug
         self.trace_handler = trace_handler
         self.tool_map = {tool.name: tool for tool in tools}
+        self.model_name = model_name
+        self.provider_manager = provider_manager
+
+        # Calculate model-aware thresholds
+        if model_name and provider_manager:
+            from questfoundry.runtime.config import calculate_model_aware_thresholds
+
+            self.message_threshold, self.char_threshold = (
+                calculate_model_aware_thresholds(model_name, provider_manager)
+            )
+        else:
+            # Fallback to legacy defaults if model info not provided
+            log.warning(
+                f"No model info provided for {role_id}, using legacy default thresholds"
+            )
+            _, _, _, msg_thresh, char_thresh = _get_memory_config()
+            self.message_threshold = msg_thresh
+            self.char_threshold = char_thresh
 
         # Conversation state - maintained across invocations
         self.messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
@@ -283,7 +305,7 @@ class BindToolsExecutor:
         )
 
         # Check prompt size and summarize if needed (using centralized config)
-        error_thresh, warn_thresh, _, msg_thresh, char_thresh = _get_memory_config()
+        error_thresh, warn_thresh, _, _, _ = _get_memory_config()
         prompt_size = sum(len(str(m.content)) for m in self.messages)
         message_count = len(self.messages)
 
@@ -295,19 +317,42 @@ class BindToolsExecutor:
         elif prompt_size > warn_thresh:
             log.warning(f"Large prompt for {self.role_id}: {prompt_size} chars.")
 
-        # Context summarization when thresholds exceeded
-        if message_count > msg_thresh or prompt_size > char_thresh:
+        # Two-stage hybrid context management
+        model_info = f" ({self.model_name})" if self.model_name else ""
+
+        # Stage 1: Clear old tool results at 60% threshold (lossless for reasoning)
+        stage1_char_threshold = int(self.char_threshold * 0.60)
+        if prompt_size > stage1_char_threshold:
             log.info(
-                f"Context exceeded thresholds for {self.role_id}: "
-                f"{message_count} msgs (>{msg_thresh}), "
-                f"{prompt_size} chars (>{char_thresh}). Summarizing..."
+                f"Context at Stage 1 threshold for {self.role_id}{model_info}: "
+                f"{prompt_size} chars (>{stage1_char_threshold}, 60% of limit). "
+                f"Clearing old tool results..."
+            )
+            cleared_count = self._clear_old_tool_results()
+
+            if cleared_count > 0:
+                # Recompute after clearing
+                prompt_size = sum(len(str(m.content)) for m in self.messages)
+                message_count = len(self.messages)
+                log.info(
+                    f"After tool result cleanup: {message_count} msgs, {prompt_size} chars"
+                )
+
+        # Stage 2: Full summarization at 100% threshold if needed (lossy)
+        if message_count > self.message_threshold or prompt_size > self.char_threshold:
+            log.info(
+                f"Context at Stage 2 threshold for {self.role_id}{model_info}: "
+                f"{message_count} msgs (>{self.message_threshold}), "
+                f"{prompt_size} chars (>{self.char_threshold}). "
+                f"Full summarization needed..."
             )
             await self._summarize_history()
 
             # Recompute after summarization
             prompt_size = sum(len(str(m.content)) for m in self.messages)
+            message_count = len(self.messages)
             log.info(
-                f"After summarization: {len(self.messages)} msgs, {prompt_size} chars"
+                f"After summarization: {message_count} msgs, {prompt_size} chars"
             )
 
         tool_results: list[dict] = []
@@ -698,6 +743,47 @@ class BindToolsExecutor:
             summary = summary[:memory_cap] + "..."
         return summary
 
+    def _clear_old_tool_results(self) -> int:
+        """Clear old tool results to reduce context size (Stage 1 cleanup).
+
+        Replaces verbose ToolMessage content with [result cleared] placeholders.
+        Preserves all AIMessage reasoning text for ReasoningExtractor.
+
+        This is a lossless operation for reasoning extraction, only removes
+        verbose tool results. More aggressive than full summarization.
+
+        Returns:
+            Number of tool results cleared
+        """
+        # Keep the most recent messages (last 6 for context continuity)
+        keep_recent = 6
+        if len(self.messages) <= keep_recent:
+            # Not enough messages to clear
+            return 0
+
+        # Find ToolMessage objects in older messages (exclude last 6)
+        cleared_count = 0
+        for i, msg in enumerate(self.messages[:-keep_recent]):
+            if isinstance(msg, ToolMessage):
+                # Replace verbose content with placeholder
+                original_size = len(str(msg.content))
+                msg.content = "[result cleared]"
+                cleared_count += 1
+                log.debug(
+                    f"Cleared tool result at index {i}, "
+                    f"reduced from {original_size} to {len(msg.content)} chars"
+                )
+
+        if cleared_count > 0:
+            # Recompute prompt size
+            new_size = sum(len(str(m.content)) for m in self.messages)
+            log.info(
+                f"Cleared {cleared_count} old tool results for {self.role_id}, "
+                f"new context size: {new_size} chars"
+            )
+
+        return cleared_count
+
     async def _summarize_history(self) -> None:
         """Summarize older conversation history to reduce context size.
 
@@ -783,47 +869,3 @@ class BindToolsExecutor:
             log.warning(f"Summarization failed for {self.role_id}: {e}, falling back to truncation")
             # Fallback: just keep recent messages without summary
             self.messages = system_msgs + recent_msgs
-
-
-def select_executor(model_name: str) -> type:
-    """Select executor based on model's bind_tools support.
-
-    Models known to support bind_tools reliably get BindToolsExecutor.
-    Models that don't support it or are too small get ProtocolExecutor (text-based fallback).
-
-    Args:
-        model_name: Name of the model (e.g., "qwen3:8b", "llama-3.2:1b", "gpt-4")
-
-    Returns:
-        Executor class to use (BindToolsExecutor or ProtocolExecutor)
-    """
-    # Import here to avoid circular imports
-    from questfoundry.runtime.core.protocol_executor import ProtocolExecutor
-
-    # Models known to support bind_tools well
-    bind_tools_models = {
-        "qwen3",
-        "qwen2.5",
-        "qwen2",
-        "gpt-4",
-        "gpt-3.5",
-        "claude-3",
-        "claude-2",
-        "llama-3.1",
-        "llama3.1",
-        "gemini",
-    }
-
-    model_lower = model_name.lower()
-
-    # Check if any supported model pattern matches
-    if any(m in model_lower for m in bind_tools_models):
-        return BindToolsExecutor
-
-    # Check denylist for models known to NOT work (from centralized config)
-    denylist = _get_bind_tools_denylist()
-    if any(m in model_lower for m in denylist):
-        return ProtocolExecutor
-
-    # Default to text-based for unknown models (safer)
-    return ProtocolExecutor

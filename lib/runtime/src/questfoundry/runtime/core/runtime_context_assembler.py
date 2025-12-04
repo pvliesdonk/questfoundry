@@ -476,50 +476,6 @@ To save your work, you MUST use the `write_hot_sot` tool:
                 block += f'- `write_hot_sot(key="{key}", value={{...}})` → {artifact} (merge: {strategy})\n'
             block += "\n"
 
-        # Add example workflow
-        block += """## Example Workflow
-
-```
-Thought: I need to read my input before I can do my work.
-Action: read_hot_sot
-Action Input: {"key": "section_briefs"}
-
-[WAIT for Observation - DO NOT write fake data]
-
-Observation: {"brief_id": "B001", "target_section": "act1-hub", ...}
-
-Thought: Now I have the brief. Let me do my work and write the result.
-Action: write_hot_sot
-Action Input: {"key": "drafts", "value": {"section_id": "act1-hub", "content": "..."}}
-
-[WAIT for confirmation]
-
-Observation: {"hot_sot": {"drafts": {...}}, "success": true}
-
-Thought: My work is saved. I can now provide my final answer.
-```
-
-**NEVER** skip the read step when inputs are required.
-**NEVER** write fake Observations - wait for the actual tool response.
-
-## Handling Validation Warnings
-
-If your write returns `validation_warnings`, you MUST address them:
-
-```
-Observation: {"hot_sot": {...}, "success": true, "validation_warnings": ["State validation warning: ..."]}
-
-Thought: The write succeeded but has validation warnings. I need to fix the data format.
-Action: write_hot_sot
-Action Input: {"key": "...", "value": <corrected value matching expected schema>}
-```
-
-Common validation issues to avoid:
-- **Missing required fields**: Each artifact type has required fields (e.g., `section_id` for drafts)
-- **Wrong value types**: Arrays vs objects, strings vs numbers
-- **Invalid key paths**: Only use documented keys from "Your Output Keys" above
-"""
-
         return block
 
     def _build_mission_layer(

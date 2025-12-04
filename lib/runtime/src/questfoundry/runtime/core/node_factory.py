@@ -12,7 +12,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from questfoundry.runtime.core.protocol_executor import ProtocolExecutor
 from questfoundry.runtime.core.provider_manager import ProviderManager
 from questfoundry.runtime.core.runtime_context_assembler import RuntimeContextAssembler
 from questfoundry.runtime.core.schema_registry import SchemaRegistry
@@ -73,6 +72,7 @@ class NodeFactory:
         system_prompt: str,
         state: Any,
         trace_handler: Any | None = None,
+        model_name: str | None = None,
     ) -> Any:
         """Get cached executor or create new one for role.
 
@@ -83,6 +83,7 @@ class NodeFactory:
             system_prompt: Role's system prompt
             state: Current state for tool execution
             trace_handler: Optional trace callback
+            model_name: Model name for calculating context-aware thresholds
 
         Returns:
             BindToolsExecutor instance (cached or new)
@@ -100,7 +101,8 @@ class NodeFactory:
             return executor
 
         # Create new executor
-        logger.info(f"Creating new executor for {role_id}")
+        model_info = f" with model {model_name}" if model_name else ""
+        logger.info(f"Creating new executor for {role_id}{model_info}")
         executor = BindToolsExecutor(
             llm=llm,
             tools=tools,
@@ -108,6 +110,8 @@ class NodeFactory:
             system_prompt=system_prompt,
             state=state,
             trace_handler=trace_handler,
+            model_name=model_name,
+            provider_manager=self.provider_manager,
         )
         self._executor_cache[role_id] = executor
         return executor
@@ -627,8 +631,7 @@ class NodeFactory:
         """
         Convert OpenAI function format tool specifications to a tool map.
 
-        This builds a dictionary mapping tool names to tool instances for use
-        with the ProtocolExecutor (text-based fallback for models without bind_tools).
+        This builds a dictionary mapping tool names to tool instances.
 
         Args:
             tool_specs: List of tools in OpenAI function format
@@ -977,7 +980,7 @@ class NodeFactory:
                         # by using explicit Action/Action Input instructions when bind_tools unavailable
 
                         if assembler_tools:
-                            # Build tool map for ProtocolExecutor (text-based fallback)
+                            # Build tool map for executor
                             tool_map = self._get_tool_map_from_specs(assembler_tools)
 
                             # Check if this is a continuing conversation (executor already cached)
@@ -1109,55 +1112,34 @@ class NodeFactory:
                             # Select executor based on model's bind_tools support
                             from questfoundry.runtime.core.bind_tools_executor import (
                                 BindToolsExecutor,
-                                select_executor,
                             )
 
                             model_name = llm_config.get("model", "")
-                            ExecutorClass = select_executor(model_name)
 
-                            if ExecutorClass == BindToolsExecutor:
-                                # Use native bind_tools for structured tool calling
-                                logger.info(
-                                    f"Using BindToolsExecutor for {role.id} ({model_name})"
-                                )
-                                # Convert tools to proper LangChain format for bind_tools
-                                # LangChainToolAdapter wraps BaseTool - extract underlying tool
-                                langchain_tools = []
-                                for tool in tool_map.values():
-                                    if hasattr(tool, "to_langchain_tool"):
-                                        langchain_tools.append(tool.to_langchain_tool())
-                                    else:
-                                        # Already a proper LangChain tool
-                                        langchain_tools.append(tool)
-                                # Use cached executor to maintain conversation continuity
-                                executor = self.get_or_create_executor(
-                                    role_id=role.id,
-                                    llm=llm,
-                                    tools=langchain_tools,
-                                    system_prompt=prompt,
-                                    state=state,
-                                    trace_handler=trace_callback,
-                                )
-                                exec_result = await executor.execute(user_prompt)
-                            else:
-                                # Fallback to text-based protocol executor
-                                logger.info(
-                                    f"Using ProtocolExecutor for {role.id} ({model_name})"
-                                )
-                                executor = ProtocolExecutor(
-                                    tool_map=tool_map,
-                                    state=state,
-                                    role_id=role.id,
-                                    trace_callback=trace_callback,
-                                )
-                                # Note: ProtocolExecutor doesn't maintain conversation state
-                                # (legacy fallback for models without bind_tools support)
-                                exec_result = await executor.execute(
-                                    llm=llm,
-                                    system_prompt=prompt,
-                                    user_prompt=user_prompt,
-                                    tools=assembler_tools,
-                                )
+                            # Use native bind_tools for structured tool calling
+                            logger.info(
+                                f"Using BindToolsExecutor for {role.id} ({model_name})"
+                            )
+                            # Convert tools to proper LangChain format for bind_tools
+                            # LangChainToolAdapter wraps BaseTool - extract underlying tool
+                            langchain_tools = []
+                            for tool in tool_map.values():
+                                if hasattr(tool, "to_langchain_tool"):
+                                    langchain_tools.append(tool.to_langchain_tool())
+                                else:
+                                    # Already a proper LangChain tool
+                                    langchain_tools.append(tool)
+                            # Use cached executor to maintain conversation continuity
+                            executor = self.get_or_create_executor(
+                                role_id=role.id,
+                                llm=llm,
+                                tools=langchain_tools,
+                                system_prompt=prompt,
+                                state=state,
+                                trace_handler=trace_callback,
+                                model_name=model_name,
+                            )
+                            exec_result = await executor.execute(user_prompt)
 
                             # Process executor result
                             # NOTE: State updates (hot_sot, cold_sot) happen via tools during
@@ -1269,9 +1251,6 @@ class NodeFactory:
                 merged_hot_sot: dict[str, Any] = {}
                 merged_cold_sot: dict[str, Any] = {}
                 merged_artifacts: dict[str, Any] = {}
-
-                # Note: ProtocolExecutor (text-based) handles all tool calling
-                # when bind_tools is unavailable, via Action/Action Input format
 
                 # hot_sot / cold_sot / artifacts from extraction + tool outputs + parsed result
                 # Also include state itself, as tools may update it in place during execution

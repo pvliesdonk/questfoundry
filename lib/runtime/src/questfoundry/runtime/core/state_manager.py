@@ -65,23 +65,35 @@ class StateManager:
 
         self._cold_store = ColdStore(base_dir=base_dir)
 
-    def generate_tu_id(self) -> str:
+    def generate_tu_id(self, role_code: str) -> str:
         """
-        Generate unique Trace Unit ID.
+        Generate unique Trace Unit ID following spec format.
 
-        Format: TU-YYYY-NNN
-        Example: TU-2025-042
+        Format: TU-YYYY-MM-DD-ROLESEQ
+        Example: TU-2025-12-04-SR01 (Showrunner, sequence 01)
+
+        Args:
+            role_code: 2-4 letter role abbreviation (SR, PW, LW, ST, CC, etc.)
+
+        Returns:
+            Properly formatted TU ID
         """
-        year = datetime.now().year
-        seq = self._sequence_numbers.get(year, 0) + 1
-        self._sequence_numbers[year] = seq
-        return f"TU-{year}-{seq:03d}"
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+
+        # Track sequence per role per day
+        key = f"{date_str}-{role_code}"
+        seq = self._sequence_numbers.get(key, 0) + 1
+        self._sequence_numbers[key] = seq
+
+        return f"TU-{date_str}-{role_code.upper()}{seq:02d}"
 
     def initialize_state(
         self,
         context: dict[str, Any],
         tu_id: str | None = None,
         loop_id: str | None = None,
+        role_code: str = "SR",
     ) -> StudioState:
         """
         Create fresh StudioState for execution.
@@ -97,12 +109,13 @@ class StateManager:
             context: Execution context dict
             tu_id: Optional custom TU ID (auto-generates if None)
             loop_id: Optional loop identifier (None = SR decides dynamically)
+            role_code: Role code for TU ID generation (default: "SR" for showrunner)
 
         Returns:
             Fresh StudioState ready for execution
         """
         if tu_id is None:
-            tu_id = self.generate_tu_id()
+            tu_id = self.generate_tu_id(role_code)
 
         # Resolve project identity for storage (from centralized config)
         # Preference: explicit __init__ arg > config (handles env var)

@@ -242,17 +242,24 @@ class MemoryConfig(BaseModel):
         le=100000,
         description="Maximum characters for prior conversation history (~2k tokens)",
     )
-    summarize_messages_threshold: int = Field(
-        default=20,
-        ge=1,
-        le=100,
-        description="Number of messages after which to summarize conversation",
+    # Model-aware summarization configuration
+    summarization_context_percentage: float = Field(
+        default=0.60,
+        ge=0.1,
+        le=0.9,
+        description="Percentage of context window to use before summarization",
     )
-    summarize_chars_threshold: int = Field(
-        default=12000,
-        ge=1000,
-        le=100000,
-        description="Character count after which to summarize conversation",
+    tokens_per_character: float = Field(
+        default=0.25,  # 1 token ≈ 4 chars
+        ge=0.1,
+        le=0.5,
+        description="Estimated tokens per character for threshold calculation",
+    )
+    max_message_threshold: int = Field(
+        default=100,
+        ge=20,
+        le=500,
+        description="Maximum message count threshold (cap for large models)",
     )
 
 
@@ -606,6 +613,58 @@ def reload_settings() -> QuestFoundrySettings:
     """
     get_settings.cache_clear()
     return get_settings()
+
+
+def calculate_model_aware_thresholds(
+    model_name: str,
+    provider_manager: Any,
+) -> tuple[int, int]:
+    """Calculate model-aware summarization thresholds.
+
+    Returns (message_threshold, character_threshold) based on model's
+    actual context window from model_tiers.yaml.
+
+    Examples:
+        Gemini (1M tokens): ~100 messages, ~2.4M chars
+        Claude Opus (200K): ~100 messages, ~480K chars
+        GPT-4o (128K): ~100 messages, ~307K chars
+
+    Args:
+        model_name: Name of the model
+        provider_manager: ProviderManager instance for limit lookup
+
+    Returns:
+        Tuple of (message_threshold, character_threshold)
+    """
+    settings = get_settings()
+    limits = provider_manager.get_model_limits(model_name)
+    context_window = limits["context_window"]
+
+    # Calculate character threshold (context_window is in tokens)
+    threshold_tokens = int(
+        context_window * settings.memory.summarization_context_percentage
+    )
+    threshold_chars = int(
+        threshold_tokens / settings.memory.tokens_per_character
+    )
+
+    # Calculate message threshold (scaled with context window)
+    # Base: 20 messages for 8K context, scale linearly
+    base_messages = 20
+    scale_factor = context_window / 8192
+    message_threshold = int(base_messages * scale_factor)
+    message_threshold = min(
+        message_threshold,
+        settings.memory.max_message_threshold
+    )
+
+    logger.info(
+        f"Model-aware thresholds for {model_name} "
+        f"(ctx={context_window} tokens): "
+        f"{message_threshold} messages, {threshold_chars:,} chars"
+    )
+
+    return (message_threshold, threshold_chars)
 
 
 # =============================================================================
