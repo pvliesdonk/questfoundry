@@ -341,6 +341,10 @@ class LoggingConfig(BaseModel):
         default="WARNING",
         description="Log level for anthropic library",
     )
+    reasoning_enabled: bool = Field(
+        default=False,
+        description="Enable extraction and logging of agent reasoning to qf.reasoning domain",
+    )
 
     @field_validator("level", "httpx_level", "openai_level", "anthropic_level")
     @classmethod

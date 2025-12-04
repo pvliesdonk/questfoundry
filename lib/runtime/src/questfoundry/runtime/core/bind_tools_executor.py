@@ -28,7 +28,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from questfoundry.runtime.config import get_settings
-from questfoundry.runtime.structured_logging import get_tool_logger
+from questfoundry.runtime.core.reasoning_extractor import ReasoningExtractor
+from questfoundry.runtime.structured_logging import get_reasoning_logger, get_tool_logger
 
 log = logging.getLogger(__name__)
 
@@ -434,6 +435,32 @@ class BindToolsExecutor:
                 continue
 
             log.info(f"[{self.role_id}] Found {len(tool_calls)} tool call(s) in response")
+
+            # Extract and log reasoning if enabled
+            settings = get_settings()
+            if settings.logging.reasoning_enabled:
+                try:
+                    extractor = ReasoningExtractor()
+                    reasoning = extractor.extract_reasoning(
+                        message_content=response_text,
+                        tool_calls=tool_calls
+                    )
+                    if reasoning:
+                        reasoning_log = get_reasoning_logger()
+                        context = {
+                            "tu_id": self.state.get("loop_context", {}).get("tu_id"),
+                            "loop_id": self.state.get("loop_context", {}).get("loop_id"),
+                            "iteration": iteration,
+                        }
+                        log_entry = extractor.format_for_logging(
+                            reasoning,
+                            role_id=self.role_id,
+                            context=context
+                        )
+                        reasoning_log.info("reasoning", **log_entry)
+                        log.debug(f"[{self.role_id}] Captured reasoning: {reasoning['reasoning_type']}")
+                except Exception as e:
+                    log.warning(f"[{self.role_id}] Reasoning extraction failed: {e}")
 
             # Execute all tool calls from this response
             any_failed = False

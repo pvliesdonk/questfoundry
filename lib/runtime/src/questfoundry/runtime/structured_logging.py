@@ -5,6 +5,7 @@ Provides domain-specific JSONL loggers for debugging:
 - qf.sot: Hot/cold SOT mutations
 - qf.bus: Protocol message routing
 - qf.prompts: Prompt engineering traces
+- qf.reasoning: Agent reasoning extraction
 
 Usage:
     from questfoundry.runtime.structured_logging import (
@@ -13,6 +14,7 @@ Usage:
         get_sot_logger,
         get_bus_logger,
         get_prompt_logger,
+        get_reasoning_logger,
     )
 
     # Configure at startup (e.g., in CLI)
@@ -42,6 +44,7 @@ _sot_logger: structlog.stdlib.BoundLogger | None = None
 _bus_logger: structlog.stdlib.BoundLogger | None = None
 _prompt_logger: structlog.stdlib.BoundLogger | None = None
 _health_logger: structlog.stdlib.BoundLogger | None = None
+_reasoning_logger: structlog.stdlib.BoundLogger | None = None
 _debug_file_handler: logging.FileHandler | None = None
 
 # Domain configuration
@@ -51,6 +54,7 @@ DOMAINS = {
     "qf.bus": "message-bus.jsonl",
     "qf.prompts": "prompts.jsonl",
     "qf.health": "loop-health.jsonl",
+    "qf.reasoning": "reasoning.jsonl",
 }
 
 
@@ -83,6 +87,7 @@ def configure_structured_logging(log_dir: Path) -> None:
     - state-sot.jsonl: Hot/cold SOT mutations
     - message-bus.jsonl: Protocol message routing
     - prompts.jsonl: Prompt engineering traces
+    - reasoning.jsonl: Agent reasoning extraction
     - debug.jsonl: All DEBUG+ messages from questfoundry loggers
 
     Args:
@@ -266,9 +271,32 @@ def get_health_logger() -> "structlog.stdlib.BoundLogger":
     return _health_logger
 
 
+def get_reasoning_logger() -> "structlog.stdlib.BoundLogger":
+    """Get the agent reasoning logger.
+
+    Logs extracted agent reasoning, decision points, and thought processes.
+
+    Returns:
+        Structured logger for reasoning domain
+
+    Raises:
+        RuntimeError: If configure_structured_logging() not called
+    """
+    global _reasoning_logger
+    import structlog
+
+    if not _configured:
+        raise RuntimeError(
+            "Structured logging not configured. Call configure_structured_logging() first."
+        )
+    if _reasoning_logger is None:
+        _reasoning_logger = structlog.get_logger("qf.reasoning")
+    return _reasoning_logger
+
+
 def reset_loggers() -> None:
     """Reset cached loggers (for testing)."""
-    global _tool_logger, _sot_logger, _bus_logger, _prompt_logger, _health_logger, _debug_file_handler, _configured
+    global _tool_logger, _sot_logger, _bus_logger, _prompt_logger, _health_logger, _reasoning_logger, _debug_file_handler, _configured
 
     # Clean up debug handler
     if _debug_file_handler is not None:
@@ -282,6 +310,7 @@ def reset_loggers() -> None:
     _bus_logger = None
     _prompt_logger = None
     _health_logger = None
+    _reasoning_logger = None
     _configured = False
 
 
