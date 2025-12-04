@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/render.schema.json",
+  "title": "Render",
+  "description": "Illustrator's output: final rendered image with technical metadata and file references.",
+  "type": "object",
+  "properties": {
+    "render_id": {
+      "type": "string",
+      "description": "Unique identifier for this render",
+      "minLength": 1
+    },
+    "art_plan_ref": {
+      "type": "string",
+      "description": "Reference to originating art_plan artifact"
+    },
+    "section_anchor": {
+      "type": "string",
+      "pattern": "^anchor[0-9]{3,}$",
+      "description": "Section anchor where this image appears"
+    },
+    "author": {
+      "type": "string",
+      "const": "illustrator",
+      "description": "Fixed role: Illustrator"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Render completion date (YYYY-MM-DD)"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Path to rendered image file (relative to exports)"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["png", "jpg", "webp", "svg"],
+      "description": "Image file format"
+    },
+    "dimensions": {
+      "type": "object",
+      "description": "Image dimensions",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["width", "height"]
+    },
+    "resolution_dpi": {
+      "type": "integer",
+      "description": "Resolution in DPI (e.g., 72, 150, 300)",
+      "minimum": 72
+    },
+    "color_space": {
+      "type": "string",
+      "enum": ["sRGB", "Adobe RGB", "Display P3"],
+      "description": "Color space used"
+    },
+    "alt_text_ref": {
+      "type": "string",
+      "description": "Reference to corresponding alt_text artifact"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["rendering", "done", "revision_needed"],
+      "description": "Production status"
+    },
+    "quality_notes": {
+      "type": "string",
+      "description": "Technical quality observations or issues"
+    },
+    "accessibility_check": {
+      "type": "object",
+      "description": "Accessibility verification",
+      "properties": {
+        "has_alt_text": {"type": "boolean"},
+        "sufficient_contrast": {"type": "boolean"},
+        "readable_at_mobile_size": {"type": "boolean"}
+      }
+    }
+  },
+  "required": [
+    "render_id",
+    "art_plan_ref",
+    "section_anchor",
+    "author",
+    "tu",
+    "edited",
+    "file_path",
+    "format",
+    "dimensions",
+    "status"
+  ]
+}
