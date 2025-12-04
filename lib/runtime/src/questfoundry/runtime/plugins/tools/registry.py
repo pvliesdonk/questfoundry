@@ -17,6 +17,7 @@ from questfoundry.runtime.tools import (
     ConsultProtocol,
     ConsultQualityGate,
     ConsultRoleCharter,
+    ConsultSchema,
     # Orchestration tools
     CreateSnapshot,
     # Validation tools
@@ -188,6 +189,9 @@ class ToolRegistry:
         )
         self._tools["consult_glossary"] = LangChainToolAdapter(
             "consult_glossary", ConsultGlossary()
+        )
+        self._tools["consult_schema"] = LangChainToolAdapter(
+            "consult_schema", ConsultSchema()
         )
 
         # Orchestration tools (Showrunner coordination)

@@ -435,3 +435,195 @@ class ConsultGlossary(BaseTool):
         except Exception as e:
             logger.error(f"Error consulting glossary {term}: {e}")
             return f"Error: {e}"
+
+
+class ConsultSchema(BaseTool):
+    """
+    Consult artifact schema definitions to understand structure and validation requirements.
+
+    Use this when validation fails or before creating artifacts to ensure compliance.
+    """
+
+    name: str = "consult_schema"
+    description: str = (
+        "Look up artifact schema definition to understand required/optional fields, "
+        "validation patterns, and see examples. "
+        "Input: artifact_type (e.g., 'section', 'section_brief', 'hook_card')"
+    )
+
+    def _run(self, artifact_type: str) -> str:
+        """Look up schema definition for an artifact type."""
+        if not SPEC_ROOT:
+            return "Error: Spec root not found"
+
+        try:
+            # Normalize artifact_type (add .schema.json if not present)
+            schema_filename = artifact_type
+            if not schema_filename.endswith(".schema.json"):
+                schema_filename = f"{artifact_type}.schema.json"
+
+            # Try loading schema from 03-schemas directory
+            schema_path = SPEC_ROOT / "03-schemas" / schema_filename
+            if not schema_path.exists():
+                # List available schemas to help agent
+                schemas_dir = SPEC_ROOT / "03-schemas"
+                if schemas_dir.exists():
+                    available = [
+                        f.stem.replace(".schema", "")
+                        for f in schemas_dir.glob("*.schema.json")
+                    ]
+                    return (
+                        f"Schema '{artifact_type}' not found.\n\n"
+                        f"Available artifact schemas: {', '.join(sorted(available[:20]))}"
+                        + ("..." if len(available) > 20 else "")
+                    )
+                return f"Schema '{artifact_type}' not found (schemas directory missing)"
+
+            # Load and parse schema
+            with open(schema_path, encoding="utf-8") as f:
+                import json
+
+                schema = json.load(f)
+
+            # Format schema for agent consumption
+            return self._format_schema(artifact_type.replace(".schema", ""), schema)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in schema {artifact_type}: {e}")
+            return f"Error: Invalid JSON in schema {artifact_type}"
+        except Exception as e:
+            logger.error(f"Error consulting schema {artifact_type}: {e}")
+            return f"Error: {e}"
+
+    def _format_schema(self, artifact_type: str, schema: dict[str, Any]) -> str:
+        """Format JSON schema as readable markdown for agents."""
+        lines = [
+            f"# Artifact Schema: {artifact_type}",
+            "",
+            f"**Title**: {schema.get('title', artifact_type)}",
+            f"**Description**: {schema.get('description', 'No description')}",
+            "",
+        ]
+
+        # Extract properties and required fields
+        properties = schema.get("properties", {})
+        required_fields = schema.get("required", [])
+
+        if not properties:
+            lines.append("⚠️  No properties defined in schema")
+            return "\n".join(lines)
+
+        # Required fields
+        required_props = {k: v for k, v in properties.items() if k in required_fields}
+        if required_props:
+            lines.append("## Required Fields")
+            lines.append("")
+            for field_name, field_schema in required_props.items():
+                lines.extend(self._format_field(field_name, field_schema, required=True))
+            lines.append("")
+
+        # Optional fields
+        optional_props = {k: v for k, v in properties.items() if k not in required_fields}
+        if optional_props:
+            lines.append("## Optional Fields")
+            lines.append("")
+            for field_name, field_schema in optional_props.items():
+                lines.extend(self._format_field(field_name, field_schema, required=False))
+            lines.append("")
+
+        # Add minimal valid example hint
+        lines.append("## Creating This Artifact")
+        lines.append("")
+        lines.append("Minimal valid example must include:")
+        for req_field in required_fields:
+            field_type = properties.get(req_field, {}).get("type", "any")
+            lines.append(f"- `{req_field}` ({field_type})")
+        lines.append("")
+        lines.append("Use write_hot_sot or specific typed tool to create this artifact.")
+        lines.append("")
+
+        return "\n".join(lines)
+
+    def _format_field(self, field_name: str, field_schema: dict[str, Any], required: bool) -> list[str]:
+        """Format a single field definition."""
+        lines = []
+
+        # Field header
+        field_type = field_schema.get("type", "any")
+        description = field_schema.get("description", "")
+
+        header = f"### `{field_name}`"
+        if required:
+            header += " ✅ REQUIRED"
+
+        lines.append(header)
+        lines.append(f"- **Type**: `{field_type}`")
+
+        if description:
+            lines.append(f"- **Description**: {description}")
+
+        # Type-specific constraints
+        if field_type == "string":
+            if "pattern" in field_schema:
+                pattern = field_schema["pattern"]
+                lines.append(f"- **Pattern**: `{pattern}`")
+                # Add human-readable pattern explanation
+                pattern_hint = self._explain_pattern(pattern)
+                if pattern_hint:
+                    lines.append(f"  - {pattern_hint}")
+
+            if "enum" in field_schema:
+                enum_values = field_schema["enum"]
+                lines.append(f"- **Allowed values**: {', '.join(map(str, enum_values))}")
+
+            if "minLength" in field_schema or "maxLength" in field_schema:
+                min_len = field_schema.get("minLength", 0)
+                max_len = field_schema.get("maxLength", "∞")
+                lines.append(f"- **Length**: {min_len} to {max_len} characters")
+
+        elif field_type == "array":
+            items = field_schema.get("items", {})
+            item_type = items.get("type", "any")
+            lines.append(f"- **Items**: `{item_type}`")
+
+            if "minItems" in field_schema:
+                lines.append(f"- **Min items**: {field_schema['minItems']}")
+            if "maxItems" in field_schema:
+                lines.append(f"- **Max items**: {field_schema['maxItems']}")
+
+        elif field_type == "number" or field_type == "integer":
+            if "minimum" in field_schema:
+                lines.append(f"- **Minimum**: {field_schema['minimum']}")
+            if "maximum" in field_schema:
+                lines.append(f"- **Maximum**: {field_schema['maximum']}")
+
+        # Default value
+        if "default" in field_schema:
+            lines.append(f"- **Default**: `{field_schema['default']}`")
+
+        lines.append("")
+        return lines
+
+    def _explain_pattern(self, pattern: str) -> str:
+        """Provide human-readable explanation of common regex patterns."""
+        explanations = {
+            r"^TU-\d{4}-\d{2}-\d{2}-[A-Z]{2,4}\d{2}$": "Format: TU-YYYY-MM-DD-ROLESEQ (e.g., TU-2025-12-04-PW01)",
+            r"^SB-\d{3,}$": "Format: SB-### (e.g., SB-001, SB-042)",
+            r"^anchor\d{3,}$": "Format: anchor### (e.g., anchor001, anchor042)",
+            r"^anchor[0-9]{3,}$": "Format: anchor### (e.g., anchor001, anchor042)",
+            r"^gate_[a-z_]+$": "Format: gate_name (lowercase with underscores, e.g., gate_has_key)",
+        }
+
+        for known_pattern, explanation in explanations.items():
+            if pattern == known_pattern:
+                return explanation
+
+        # Generic hints
+        if pattern.startswith("^") and pattern.endswith("$"):
+            return "Exact match required (no extra characters)"
+        if r"\d" in pattern:
+            return "Must contain digits"
+        if "[A-Z]" in pattern or "[a-z]" in pattern:
+            return "Must contain letters"
+
+        return ""

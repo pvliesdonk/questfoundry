@@ -13,6 +13,7 @@ from questfoundry.runtime.tools.knowledge_tools import (
     ConsultProtocol,
     ConsultQualityGate,
     ConsultRoleCharter,
+    ConsultSchema,
 )
 from questfoundry.runtime.tools.media_tools import (
     GenerateAudio,
@@ -69,6 +70,7 @@ __all__ = [
     "ConsultProtocol",
     "ConsultRoleCharter",
     "ConsultGlossary",
+    "ConsultSchema",
     # Orchestration tools (Showrunner coordination)
     "CreateSnapshot",
     "UpdateTU",
