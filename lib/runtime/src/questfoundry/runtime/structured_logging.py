@@ -149,9 +149,8 @@ def configure_structured_logging(log_dir: Path) -> None:
     # Attach to questfoundry root logger to capture all DEBUG+ messages
     qf_logger = logging.getLogger("questfoundry")
     qf_logger.addHandler(debug_handler)
-    # Ensure DEBUG level is enabled
-    if qf_logger.level == logging.NOTSET or qf_logger.level > logging.DEBUG:
-        qf_logger.setLevel(logging.DEBUG)
+    # Note: Do NOT set logger level here - respect the console verbosity setting
+    # The debug_handler has its own setLevel(DEBUG) to capture all messages to file
 
     _configured = True
 
