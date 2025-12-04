@@ -240,12 +240,18 @@ class SchemaToolGenerator:
         for field_name, field_schema in properties.items():
             type_annotation, field_def = self._build_pydantic_field(field_name, field_schema)
 
-            # If field is not required and has no default, make it Optional
-            if field_name not in required_fields and field_def is ...:
+            # If field is not required, make it Optional with default=None
+            if field_name not in required_fields:
                 from typing import Optional
 
                 type_annotation = Optional[type_annotation]  # type: ignore
-                field_def = None  # Optional fields default to None
+                # If field_def is ..., use None as default
+                # If field_def is Field(...), add default=None to it
+                if field_def is ...:
+                    field_def = None
+                else:
+                    # field_def is a Field() object, update it with default=None
+                    field_def.default = None
 
             field_definitions[field_name] = (type_annotation, field_def)
 
