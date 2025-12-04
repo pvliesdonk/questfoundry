@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cue_list.schema.json",
+  "title": "Cue List",
+  "description": "Audio Director's compact index of all audio cues in a slice. Each row points to a full Audio Plan.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slice name",
+      "minLength": 1
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Last edit date (YYYY-MM-DD)"
+    },
+    "owner": {
+      "type": "string",
+      "const": "audio_director",
+      "description": "Fixed role: Audio Director"
+    },
+    "scope": {
+      "type": "string",
+      "description": "1-2 lines, player-safe slice description",
+      "minLength": 10,
+      "maxLength": 200
+    },
+    "dormancy": {
+      "type": "string",
+      "enum": ["active", "plan-only", "dormant"],
+      "description": "Dormancy state: active | plan-only (deferred:audio) | dormant"
+    },
+    "snapshot": {
+      "type": "string",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$",
+      "description": "Snapshot reference (format: 'Cold @ YYYY-MM-DD')"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "neighbors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "audio_producer",
+          "style_lead",
+          "translator",
+          "player_narrator",
+          "gatekeeper",
+          "book_binder"
+        ]
+      },
+      "minItems": 6,
+      "description": "Required neighbor roles"
+    },
+    "purpose_mix": {
+      "type": "object",
+      "description": "Count breakdown by purpose category",
+      "properties": {
+        "clarify": {"type": "integer", "minimum": 0},
+        "recall": {"type": "integer", "minimum": 0},
+        "mood": {"type": "integer", "minimum": 0},
+        "signpost": {"type": "integer", "minimum": 0},
+        "pace": {"type": "integer", "minimum": 0}
+      },
+      "required": ["clarify", "recall", "mood", "signpost", "pace"]
+    },
+    "placement_policy": {
+      "type": "string",
+      "description": "1-2 lines describing where cues enter/exit relative to prose/choices",
+      "minLength": 10,
+      "maxLength": 200
+    },
+    "accessibility_summary": {
+      "type": "string",
+      "description": "Confirm captions and onset safety",
+      "minLength": 10
+    },
+    "cues": {
+      "type": "array",
+      "description": "Table of audio cues (one row per cue)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cue_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "Kebab-case cue identifier"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": ["clarify", "recall", "mood", "signpost", "pace"],
+            "description": "Cue purpose category"
+          },
+          "placement": {
+            "type": "string",
+            "description": "Short placement description relative to prose",
+            "minLength": 5
+          },
+          "description": {
+            "type": "string",
+            "description": "Plain language description (no technique)",
+            "minLength": 10
+          },
+          "caption": {
+            "type": "string",
+            "pattern": "^\\[.*\\]$",
+            "description": "Player-safe caption (format: '[<text>]')",
+            "minLength": 3
+          },
+          "anchor_target": {
+            "type": "string",
+            "pattern": "^/manuscript/[a-z0-9/_-]+#[a-z0-9_-]+$",
+            "description": "Manuscript anchor reference"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["planned", "producing", "done", "deferred"],
+            "description": "Cue production status"
+          }
+        },
+        "required": ["cue_id", "purpose", "placement", "description", "caption", "anchor_target", "status"]
+      },
+      "minItems": 1
+    },
+    "inclusion_exclusion_rules": {
+      "type": "object",
+      "description": "Non-obvious placement or masking risks per cue",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "safety_notes": {
+      "type": "array",
+      "description": "Onset, intensity, transients, content notes",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "localization_notes": {
+      "type": "array",
+      "description": "Register, onomatopoeia, portability",
+      "items": {"type": "string"}
+    },
+    "pn_coordination": {
+      "type": "string",
+      "description": "Cadence and masking checks with Player-Narrator"
+    },
+    "binder_note": {
+      "type": "string",
+      "description": "View shipping and plan-only status"
+    },
+    "gatekeeper_note": {
+      "type": "string",
+      "description": "Presentation/Accessibility spot-check"
+    },
+    "hooks": {
+      "type": "array",
+      "description": "Follow-up hooks filed",
+      "items": {
+        "type": "string",
+        "pattern": "^hook://[a-z_]+/[a-z_-]+$"
+      }
+    },
+    "accessibility_checklist": {
+      "type": "object",
+      "description": "Accessibility verification (slice-level)",
+      "properties": {
+        "has_captions": {"type": "boolean"},
+        "gentle_onsets": {"type": "boolean"},
+        "no_technique_in_captions": {"type": "boolean"},
+        "readable_on_all_speakers": {"type": "boolean"}
+      },
+      "required": ["has_captions", "gentle_onsets", "no_technique_in_captions", "readable_on_all_speakers"]
+    },
+    "done_checklist": {
+      "type": "object",
+      "description": "Completion checklist (before handing to Producer)",
+      "properties": {
+        "table_complete": {"type": "boolean"},
+        "purpose_mix_sensible": {"type": "boolean"},
+        "captions_player_safe": {"type": "boolean"},
+        "inclusion_rules_clear": {"type": "boolean"},
+        "notes_added": {"type": "boolean"},
+        "dormancy_recorded": {"type": "boolean"},
+        "trace_updated": {"type": "boolean"}
+      },
+      "required": [
+        "table_complete",
+        "purpose_mix_sensible",
+        "captions_player_safe",
+        "inclusion_rules_clear",
+        "notes_added",
+        "dormancy_recorded",
+        "trace_updated"
+      ]
+    }
+  },
+  "required": [
+    "title",
+    "edited",
+    "owner",
+    "scope",
+    "snapshot",
+    "tu",
+    "neighbors",
+    "purpose_mix",
+    "placement_policy",
+    "accessibility_summary",
+    "cues",
+    "safety_notes",
+    "accessibility_checklist",
+    "done_checklist"
+  ]
+}
