@@ -319,18 +319,17 @@ class SchemaToolGenerator:
                 """Validate and write artifact to hot_sot."""
                 # Filter kwargs before validation:
                 # 1. Remove injected args (state, role_id, etc.) - not part of schema
-                # 2. Remove empty optional fields to avoid validation errors
+                # 2. Convert empty optional fields to None (they have default=None in model)
                 filtered_kwargs = {}
                 for key, value in all_kwargs.items():
                     # Skip injected tool args (not in the Pydantic model)
                     if key == "state" or key == "role_id":
                         continue
-                    # Skip optional fields with empty string values
-                    if key not in required_fields and value == "":
-                        continue
-                    # Skip optional fields with empty lists
-                    if key not in required_fields and isinstance(value, list) and len(value) == 0:
-                        continue
+                    # Convert empty optional fields to None (Pydantic will use default)
+                    if key not in required_fields:
+                        if value == "" or (isinstance(value, list) and len(value) == 0):
+                            filtered_kwargs[key] = None
+                            continue
                     filtered_kwargs[key] = value
 
                 # Validate using Pydantic model
