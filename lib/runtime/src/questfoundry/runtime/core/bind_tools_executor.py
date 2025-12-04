@@ -605,6 +605,21 @@ class BindToolsExecutor:
             else:
                 failure_count = 0
 
+            # Check if max failures reached
+            if failure_count >= 3:
+                log.error(
+                    f"Max failures (3) reached for {self.role_id} after {failure_count} consecutive failures"
+                )
+                return ExecutorResult(
+                    success=False,
+                    error=f"Max failures (3) reached after {failure_count} consecutive tool failures",
+                    messages=protocol_messages,
+                    tool_results=tool_results,
+                    iterations=iteration,
+                    failure_count=failure_count,
+                    raw_responses=raw_responses,
+                )
+
             # If we found protocol messages, role is done for this turn
             if found_protocol_message:
                 log.info(

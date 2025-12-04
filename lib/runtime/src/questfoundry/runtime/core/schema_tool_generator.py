@@ -305,36 +305,21 @@ class SchemaToolGenerator:
             if "enum" in status_prop:
                 has_status_field = True
 
-        class GeneratedWriteTool(BaseTool):
-            name: str = tool_name
-            description: str = tool_description
-            args_schema: type[BaseModel] = model  # Pydantic model for input validation
+        # Extract field names and required status from schema
+        # This is needed to generate explicit _run() parameters
+        field_names = list(model.model_fields.keys())
+        required_fields = set(schema.get("required", []))
 
-            def _run(self, **kwargs: Any) -> dict[str, Any]:
-                """Validate and write artifact to hot_sot with state transition checking."""
-                # State transition validation (if artifact has status field)
-                # TODO: When integrated with StateManager, uncomment and implement:
-                # if has_status_field and "status" in kwargs:
-                #     # Read current artifact to check existing status
-                #     current_artifact = read_hot_sot(hot_sot_key)
-                #     current_status = current_artifact.get("status") if current_artifact else None
-                #     new_status = kwargs["status"]
-                #
-                #     # Validate transition
-                #     is_valid, error = self._validate_state_transition(
-                #         current_status, new_status, artifact_type
-                #     )
-                #     if not is_valid:
-                #         return {
-                #             "success": False,
-                #             "error": error,
-                #             "artifact_type": artifact_type,
-                #             "transition": f"{current_status} -> {new_status}",
-                #         }
+        # Create _run method with explicit parameters (not **kwargs)
+        # This is required for bind_tools_executor's parameter filtering to work
+        def make_run_method() -> Any:
+            """Create _run method with explicit parameters matching Pydantic model fields."""
 
+            def _run_impl(self_arg: Any, **all_kwargs: Any) -> dict[str, Any]:
+                """Validate and write artifact to hot_sot."""
                 # Validate using Pydantic model
                 try:
-                    validated = model(**kwargs)
+                    validated = model(**all_kwargs)
                 except Exception as e:
                     return {
                         "success": False,
@@ -355,6 +340,48 @@ class SchemaToolGenerator:
                     "data": artifact_data,
                     "has_state_validation": has_status_field,
                 }
+
+            # Build proper signature with explicit parameters
+            # This allows bind_tools_executor to filter parameters correctly
+            import inspect
+
+            # Create parameters list: self + all model fields
+            params = [
+                inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            ]
+
+            for field_name, field_info in model.model_fields.items():
+                # Determine if field is required
+                if field_name in required_fields:
+                    # Required field - no default
+                    param = inspect.Parameter(
+                        field_name, inspect.Parameter.KEYWORD_ONLY, annotation=field_info.annotation
+                    )
+                else:
+                    # Optional field - default to None
+                    param = inspect.Parameter(
+                        field_name,
+                        inspect.Parameter.KEYWORD_ONLY,
+                        default=None,
+                        annotation=field_info.annotation,
+                    )
+                params.append(param)
+
+            # Create new signature
+            new_sig = inspect.Signature(params, return_annotation=dict[str, Any])
+
+            # Replace __signature__ on the function
+            _run_impl.__signature__ = new_sig  # type: ignore
+
+            return _run_impl
+
+        class GeneratedWriteTool(BaseTool):
+            name: str = tool_name
+            description: str = tool_description
+            args_schema: type[BaseModel] = model  # Pydantic model for input validation
+
+            # Assign the dynamically created _run method
+            _run = make_run_method()
 
         return GeneratedWriteTool
 
