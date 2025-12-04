@@ -308,6 +308,7 @@ class SchemaToolGenerator:
         class GeneratedWriteTool(BaseTool):
             name: str = tool_name
             description: str = tool_description
+            args_schema: type[BaseModel] = model  # Pydantic model for input validation
 
             def _run(self, **kwargs: Any) -> dict[str, Any]:
                 """Validate and write artifact to hot_sot with state transition checking."""
