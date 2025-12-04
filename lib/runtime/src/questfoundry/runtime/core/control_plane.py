@@ -329,6 +329,7 @@ class ControlPlane:
         """
         messages = state.get("messages", [])
         consumed = state.get("_consumed_messages", set())
+        role_cursors: dict[str, int] = state.get("_role_message_cursor", {})  # per-role last seen index
         available_roles = set(self.get_available_roles())
 
         pending: dict[str, list[Message]] = {}
@@ -355,6 +356,13 @@ class ControlPlane:
 
             # Only track messages to actual roles
             if receiver_id in available_roles:
+                # Per-role cursor: skip messages at or before the last seen index for this role.
+                # This provides a "new messages only" view for direct messages without changing
+                # broadcast semantics (broadcasts are handled via role-specific consumption).
+                last_seen = role_cursors.get(receiver_id, -1)
+                if idx <= last_seen:
+                    continue
+
                 pending.setdefault(receiver_id, []).append(msg)
                 # This is a DIRECT message - increment direct count
                 direct_counts[receiver_id] = direct_counts.get(receiver_id, 0) + 1
@@ -1145,12 +1153,14 @@ class ControlPlane:
                 # Trace the message
                 self._trace_message(msg)
 
-            # Mark messages addressed TO this role as consumed by tracking them
+            # Mark messages addressed TO this role as consumed by tracking them.
             # We use a set of consumed message indices instead of a simple cursor
-            # to allow multiple roles to have pending messages simultaneously
+            # to allow multiple roles to have pending messages simultaneously.
             consumed = set(state.get("_consumed_messages", set()))
             existing_messages = state.get("messages", [])
             set(self.get_available_roles())
+
+            highest_index_for_role = -1
 
             for idx, msg in enumerate(existing_messages):
                 if idx in consumed:
@@ -1165,12 +1175,29 @@ class ControlPlane:
                 # Mark messages to THIS role as consumed
                 if receiver_id == role_id:
                     consumed.add(idx)
+                    highest_index_for_role = max(highest_index_for_role, idx)
                 # Also consume broadcast messages for this role
                 elif receiver in (BROADCAST, "*"):
                     # Add role-specific consumed marker for broadcasts
                     consumed.add((idx, role_id))
+                    highest_index_for_role = max(highest_index_for_role, idx)
 
             result["_consumed_messages"] = consumed
+
+            # Update per-role cursor to reflect the highest message index this role has seen.
+            # This enables a "new messages only" view in the router for direct messages.
+            role_cursors: dict[str, int] = dict(state.get("_role_message_cursor", {}))
+            if highest_index_for_role >= 0:
+                role_cursors[role_id] = max(
+                    highest_index_for_role, role_cursors.get(role_id, -1)
+                )
+            elif existing_messages and role_id not in role_cursors:
+                # If there were messages but none addressed to this role, treat the cursor as
+                # "up to current end" so future direct messages are considered new.
+                role_cursors[role_id] = len(existing_messages) - 1
+
+            if role_cursors:
+                result["_role_message_cursor"] = role_cursors
 
             # Log consumption tracking via structured logging
             bus_log = _get_bus_log()

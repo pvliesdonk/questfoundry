@@ -16,6 +16,7 @@ trace.log
 **/debug.jsonl
 **/loop-health.jsonl
 **/reasoning.jsonl
+**/agent-feedback.jsonl
 
 # Python
 *.pyc
