@@ -45,6 +45,7 @@ _bus_logger: structlog.stdlib.BoundLogger | None = None
 _prompt_logger: structlog.stdlib.BoundLogger | None = None
 _health_logger: structlog.stdlib.BoundLogger | None = None
 _reasoning_logger: structlog.stdlib.BoundLogger | None = None
+_feedback_logger: structlog.stdlib.BoundLogger | None = None
 _debug_file_handler: logging.FileHandler | None = None
 
 # Domain configuration
@@ -55,6 +56,7 @@ DOMAINS = {
     "qf.prompts": "prompts.jsonl",
     "qf.health": "loop-health.jsonl",
     "qf.reasoning": "reasoning.jsonl",
+    "qf.feedback": "agent-feedback.jsonl",
 }
 
 
@@ -291,6 +293,37 @@ def get_reasoning_logger() -> "structlog.stdlib.BoundLogger":
     if _reasoning_logger is None:
         _reasoning_logger = structlog.get_logger("qf.reasoning")
     return _reasoning_logger
+
+
+def get_feedback_logger() -> "structlog.stdlib.BoundLogger":
+    """Get the agent feedback logger.
+
+    Logs agent feedback collected at end of session. When structured logging
+    is enabled, writes to agent-feedback.jsonl. When disabled, falls back
+    to standard INFO-level logging.
+
+    Returns:
+        Structured logger for feedback domain
+
+    Note:
+        Unlike other domain loggers, this does NOT require structured logging
+        to be configured. It gracefully falls back to standard logging when
+        --structured-logs is not enabled.
+    """
+    global _feedback_logger
+    import structlog
+
+    # If structured logging is configured, use domain-specific logger
+    if _configured:
+        if _feedback_logger is None:
+            _feedback_logger = structlog.get_logger("qf.feedback")
+        return _feedback_logger
+
+    # Otherwise, return a basic logger that writes to console at INFO level
+    # This matches the user's requirement for fallback behavior
+    if _feedback_logger is None:
+        _feedback_logger = structlog.get_logger("questfoundry.feedback")
+    return _feedback_logger
 
 
 def reset_loggers() -> None:

@@ -64,6 +64,10 @@ class NodeFactory:
         # Key: role_id, Value: BindToolsExecutor instance
         self._executor_cache: dict[str, Any] = {}
 
+        # Engagement tracking for agent feedback collection
+        # Key: role_id, Value: dict with invocations, tool_calls, success/failure counts, timestamps
+        self._engagement_stats: dict[str, dict[str, Any]] = {}
+
     def get_or_create_executor(
         self,
         role_id: str,
@@ -126,6 +130,153 @@ class NodeFactory:
             self._executor_cache.pop(role_id, None)
         else:
             self._executor_cache.clear()
+
+    def _track_engagement(
+        self, role_id: str, success: bool, tool_calls: int, iterations: int
+    ) -> None:
+        """Track agent engagement for feedback collection.
+
+        Args:
+            role_id: Role identifier
+            success: Whether execution succeeded
+            tool_calls: Number of tool calls made
+            iterations: Number of iterations performed
+        """
+        if role_id not in self._engagement_stats:
+            self._engagement_stats[role_id] = {
+                "invocations": 0,
+                "tool_calls": 0,
+                "successes": 0,
+                "failures": 0,
+                "iterations": 0,
+                "first_invoked": datetime.now(UTC),
+                "last_invoked": None,
+            }
+
+        stats = self._engagement_stats[role_id]
+        stats["invocations"] += 1
+        stats["tool_calls"] += tool_calls
+        stats["iterations"] += iterations
+        if success:
+            stats["successes"] += 1
+        else:
+            stats["failures"] += 1
+        stats["last_invoked"] = datetime.now(UTC)
+
+    async def collect_agent_feedback(self) -> dict[str, str]:
+        """Collect feedback from all engaged agents.
+
+        This method asks each agent that was invoked at least once to provide
+        feedback on the session. The feedback is collected in text form only.
+
+        Returns:
+            Dict mapping role_id to feedback text
+
+        Note:
+            - Only collects feedback if runtime.collect_agent_feedback is enabled
+            - Logging destination depends on structured_logs configuration
+            - Each agent gets a short memory context of their engagement stats
+        """
+        from questfoundry.runtime.config import get_settings
+        from questfoundry.runtime.structured_logging import get_feedback_logger
+
+        settings = get_settings()
+
+        # Check if feedback collection is enabled
+        if not settings.runtime.collect_agent_feedback:
+            logger.debug("Agent feedback collection is disabled")
+            return {}
+
+        # Check if we should collect based on logging level
+        # Per user requirements: if --structured-logs is disabled AND logging < INFO, don't collect
+        structured_logs_enabled = settings.logging.structured_logs_dir is not None
+        console_level = logging.getLogger("questfoundry").level
+        should_collect = structured_logs_enabled or console_level <= logging.INFO
+
+        if not should_collect:
+            logger.debug(
+                "Skipping feedback collection - structured logs disabled and console level > INFO"
+            )
+            return {}
+
+        # Get feedback logger
+        feedback_log = get_feedback_logger()
+
+        # Get engaged agents (those with at least one invocation)
+        engaged_agents = {
+            role_id: stats
+            for role_id, stats in self._engagement_stats.items()
+            if stats["invocations"] > 0
+        }
+
+        if not engaged_agents:
+            logger.info("No agents engaged - skipping feedback collection")
+            return {}
+
+        logger.info(f"Collecting feedback from {len(engaged_agents)} engaged agents")
+
+        feedback_results = {}
+
+        for role_id, stats in engaged_agents.items():
+            try:
+                # Build feedback prompt with engagement context
+                feedback_prompt = f"""You are the {role_id} agent. The session has just completed.
+
+Your engagement statistics:
+- Invocations: {stats['invocations']}
+- Tool calls: {stats['tool_calls']}
+- Iterations: {stats['iterations']}
+- Successes: {stats['successes']}
+- Failures: {stats['failures']}
+- Duration: {stats['first_invoked'].isoformat()} to {stats['last_invoked'].isoformat()}
+
+Please provide brief feedback (2-4 sentences) on the process:
+1. What was unclear in your instructions, context, or available tools?
+2. What information was missing that would have helped you perform better?
+3. What could be improved about the workflow or collaboration with other agents?
+
+Focus on concrete observations and actionable suggestions. Be concise."""
+
+                # Get the role's LLM config
+                role = self.load_role(role_id)
+                llm_config = self.select_llm(role)
+
+                if not llm_config:
+                    logger.warning(f"No LLM config for {role_id}, skipping feedback")
+                    continue
+
+                # Create simple LLM client for feedback (no tools, no caching)
+                llm = self.provider_manager.create_llm_client(
+                    provider=llm_config.get("provider"),
+                    model=llm_config["model"],
+                    temperature=0.7,  # Slightly creative for honest feedback
+                    max_tokens=500,  # Short feedback only
+                )
+
+                # Invoke LLM with feedback prompt
+                response = await llm.ainvoke(feedback_prompt)
+                feedback_text = response.content if hasattr(response, "content") else str(response)
+
+                # Store feedback
+                feedback_results[role_id] = feedback_text
+
+                # Log feedback to appropriate destination
+                feedback_log.info(
+                    "agent.feedback",
+                    role_id=role_id,
+                    feedback=feedback_text,
+                    stats=stats,
+                    timestamp=datetime.now(UTC).isoformat(),
+                )
+
+                # Also log at INFO level to console (will respect logging level settings)
+                logger.info(f"Feedback from {role_id}: {feedback_text}")
+
+            except Exception as e:
+                logger.error(f"Failed to collect feedback from {role_id}: {e}", exc_info=True)
+                feedback_results[role_id] = f"[ERROR: {str(e)}]"
+
+        return feedback_results
 
     def _extract_task_context_for_role(self, role_id: str, state: StudioState) -> str | None:
         """
@@ -1140,6 +1291,14 @@ class NodeFactory:
                                 model_name=model_name,
                             )
                             exec_result = await executor.execute(user_prompt)
+
+                            # Track engagement for feedback collection
+                            self._track_engagement(
+                                role_id=role.id,
+                                success=exec_result.success,
+                                tool_calls=len(exec_result.tool_results),
+                                iterations=exec_result.iterations,
+                            )
 
                             # Process executor result
                             # NOTE: State updates (hot_sot, cold_sot) happen via tools during

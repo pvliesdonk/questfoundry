@@ -148,6 +148,10 @@ class RuntimeConfig(BaseModel):
         default=False,
         description="Enable debug mode with verbose output",
     )
+    collect_agent_feedback: bool = Field(
+        default=False,
+        description="Collect feedback from engaged agents at end of session",
+    )
 
 
 class LLMConfig(BaseModel):

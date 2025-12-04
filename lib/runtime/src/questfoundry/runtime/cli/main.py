@@ -24,8 +24,10 @@ from questfoundry.runtime.structured_logging import configure_structured_logging
 setup_logging(level="WARNING", show_time=False, show_path=False)
 logger = get_logger(__name__)
 
-# Track active trace handlers for cleanup on interrupt
+# Track active trace handlers and control plane for cleanup on interrupt
 _active_trace_handlers = []
+_active_control_plane = None
+_collect_feedback_on_interrupt = False
 
 
 def run_async(coro):
@@ -37,6 +39,18 @@ def cleanup_and_exit(signum=None, frame=None):
     """Gracefully shut down on interrupt (Ctrl-C)."""
     console = Console()
     console.print("\n[yellow]⚠️  Interrupted by user. Cleaning up...[/yellow]")
+
+    # Collect feedback from engaged agents if enabled
+    if _collect_feedback_on_interrupt and _active_control_plane is not None:
+        try:
+            console.print("[cyan]Collecting feedback from engaged agents...[/cyan]")
+            feedback_results = asyncio.run(
+                _active_control_plane.node_factory.collect_agent_feedback()
+            )
+            if feedback_results:
+                console.print(f"[green]✓ Collected feedback from {len(feedback_results)} agents[/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️  Failed to collect feedback: {e}[/yellow]")
 
     # Close any active trace handlers
     for handler in _active_trace_handlers:
@@ -110,6 +124,11 @@ def ask(
         "--structured-logs",
         help="Directory for JSONL logs (tools, state, bus, prompts)",
     ),
+    collect_feedback: bool = typer.Option(
+        False,
+        "--collect-feedback",
+        help="Collect feedback from engaged agents at end of session",
+    ),
 ):
     """
     Talk to the studio in natural language.
@@ -134,6 +153,14 @@ def ask(
         qf ask "Create a story" --structured-logs ./logs  # Enable structured JSON logging
     """
     try:
+        # Override config with CLI flag if specified
+        if collect_feedback:
+            from questfoundry.runtime.config import get_settings
+
+            settings = get_settings()
+            settings.runtime.collect_agent_feedback = True
+            logger.info("Agent feedback collection enabled via CLI flag")
+
         # Set up structured logging if --structured-logs specified
         if structured_logs:
             structured_logs.mkdir(parents=True, exist_ok=True)
@@ -227,6 +254,11 @@ def ask(
             preferred_provider=provider,
         )
 
+        # Set global references for Ctrl-C handler
+        global _active_control_plane, _collect_feedback_on_interrupt
+        _active_control_plane = control_plane
+        _collect_feedback_on_interrupt = collect_feedback
+
         logger.info(f"Starting mesh execution with recursion_limit={recursion_limit}")
 
         # Run the mesh using asyncio.run() to execute async operation
@@ -236,6 +268,13 @@ def ask(
                 recursion_limit=recursion_limit,
             )
         )
+
+        # Collect feedback from engaged agents if enabled
+        if collect_feedback:
+            console.print("\n[cyan]Collecting feedback from engaged agents...[/cyan]")
+            feedback_results = asyncio.run(control_plane.node_factory.collect_agent_feedback())
+            if feedback_results:
+                console.print(f"[green]✓ Collected feedback from {len(feedback_results)} agents[/green]")
 
         # Close trace handler if created
         if trace_handler:
@@ -249,6 +288,10 @@ def ask(
             logging.getLogger().removeHandler(file_handler)
             file_handler.close()
             logger.info(f"Debug log complete: {log_file}-debug.log")
+
+        # Clear global references for Ctrl-C handler
+        _active_control_plane = None
+        _collect_feedback_on_interrupt = False
 
         # Display result
         messages = final_state.get("messages", [])
