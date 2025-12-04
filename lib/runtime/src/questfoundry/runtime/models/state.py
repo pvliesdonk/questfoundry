@@ -17,6 +17,17 @@ def _set_union(a: set[Any], b: set[Any]) -> set[Any]:
     return a | b
 
 
+def _first_non_none(a: str | None, b: str | None) -> str | None:
+    """Reducer for error field - takes the first non-None value.
+
+    When multiple nodes fail simultaneously, this ensures we capture
+    one of the errors without triggering LangGraph's concurrent update error.
+    """
+    if a is not None:
+        return a
+    return b
+
+
 class Artifact(TypedDict):
     """Single artifact in state."""
 
@@ -105,8 +116,8 @@ class StudioState(TypedDict):
     snapshot_ref: str | None  # Read-only snapshot reference
     parent_tu_id: str | None  # Parent TU if derived
 
-    # Error handling
-    error: str | None  # Error message if any
+    # Error handling (with reducer for concurrent failures)
+    error: Annotated[str | None, _first_non_none]  # Error message if any (first non-None wins)
     retry_count: int  # Current retry count
 
     # Metadata
