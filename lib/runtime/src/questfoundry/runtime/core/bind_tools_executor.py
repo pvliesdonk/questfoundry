@@ -697,6 +697,15 @@ class BindToolsExecutor:
             else:
                 result = tool(**tool_args)
 
+            # Log tool result for debugging (especially important for validation errors)
+            if isinstance(result, dict):
+                if result.get('success') is False:
+                    log.warning(f'[{self.role_id}] Tool {tool_name} failed: {result.get("error", "Unknown error")}')
+                else:
+                    log.debug(f'[{self.role_id}] Tool {tool_name} succeeded')
+            else:
+                log.debug(f'[{self.role_id}] Tool {tool_name} result: {str(result)[:200]}')
+
             # Apply state updates from tools that return state changes
             # This ensures subsequent tool calls within the same turn see updated state
             if isinstance(result, dict):
