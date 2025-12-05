@@ -595,8 +595,13 @@ Keep reasoning concise (1-3 sentences) and focused on:
 
 ## Available Tools
 
-Your tools are listed below and bound to your LLM API session. Use them according to
-their schemas and descriptions.
+Your tools are bound to your LLM API session via function calling. Use them according
+to their schemas and descriptions. Key tool categories:
+
+- **State tools**: read_hot_sot, write_hot_sot, read_cold_sot, write_cold_sot
+- **Consult tools**: consult_schema, consult_playbook, consult_protocol, consult_role_charter, consult_quality_gate, consult_glossary
+- **Artifact tools**: write_<artifact_type> tools for validated artifact creation
+- **Protocol tools**: send_protocol_message for inter-role communication
 """
 
         # Add input expectations
@@ -629,16 +634,10 @@ their schemas and descriptions.
             for effect in side_effects:
                 interface_block += f"- {effect}\n"
 
-        # Add structured output expectations
-        behavior = role_def.get("behavior", {})
-        structured_output = behavior.get("structured_output", {})
-        if structured_output.get("enabled"):
-            schema_ref = structured_output.get("schema_ref", "")
-            output_format = structured_output.get("format", "json")
-            interface_block += "\n## Structured Output\n"
-            interface_block += f"- Format: {output_format}\n"
-            interface_block += f"- Schema: {schema_ref}\n"
-            interface_block += "- Output MUST conform to schema or will be rejected\n"
+        # Note: We use tool-calling mode exclusively. Schema validation happens
+        # through typed artifact tools (write_tu_brief, etc.) which provide
+        # rich validation feedback on errors. The "structured_output" config
+        # in role YAML is deprecated and ignored.
 
         return interface_block
 

@@ -636,14 +636,19 @@ class TestBuildInterfaceBlock:
             assert "Side Effects" in block
             assert "update_loop_context" in block
 
-    def test_interface_block_structured_output(self, sample_role_definition):
-        """Test interface block includes structured output info."""
+    def test_interface_block_tool_calling_mode(self, sample_role_definition):
+        """Test interface block uses tool-calling mode (structured_output config is ignored)."""
         with patch.object(RuntimeContextAssembler, "_load_protocol"):
             assembler = RuntimeContextAssembler()
             block = assembler._build_interface_block(sample_role_definition)
 
-            assert "Structured Output" in block
-            assert "json" in block
+            # Verify tool-calling mode is used (structured_output is deprecated)
+            assert "Structured Output" not in block
+            assert "function calling" in block
+            # Verify tool categories are documented
+            assert "State tools" in block
+            assert "Consult tools" in block
+            assert "Artifact tools" in block
 
 
 class TestGatherTools:
