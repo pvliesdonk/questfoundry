@@ -35,18 +35,18 @@ transitions:
       allowed_senders: ["GK"]
     preconditions:
       state_requirements:
-        - key: "artifacts.gatecheck_report.pre_gate_complete"
+        - key: "hot_sot.current_gatecheck.pre_gate_complete"
           condition: "== true"
           error_message: "Pre-gate review must be complete"
-        - key: "artifacts.gatecheck_report.critical_flags"
+        - key: "hot_sot.current_gatecheck.critical_flags"
           condition: "len(value) == 0"
           error_message: "Cannot proceed to gatecheck with critical red flags"
     effects:
       state_updates:
-        - key: "artifacts.gatecheck_report.status"
+        - key: "hot_sot.current_gatecheck.status"
           value: "gatecheck"
           operation: "set"
-        - key: "artifacts.gatecheck_report.gatecheck_started"
+        - key: "hot_sot.current_gatecheck.gatecheck_started"
           value: "{{current_timestamp}}"
           operation: "set"
 
@@ -63,10 +63,10 @@ transitions:
           error_message: "Deferral requires reason"
     effects:
       state_updates:
-        - key: "artifacts.gatecheck_report.status"
+        - key: "hot_sot.current_gatecheck.status"
           value: "deferred"
           operation: "set"
-        - key: "artifacts.gatecheck_report.deferral_reason"
+        - key: "hot_sot.current_gatecheck.deferral_reason"
           value: "{{payload.deferral_reason}}"
           operation: "set"
 
@@ -78,7 +78,7 @@ transitions:
       allowed_senders: ["GK"]
     preconditions:
       state_requirements:
-        - key: "artifacts.gatecheck_report.bars"
+        - key: "hot_sot.current_gatecheck.bars"
           condition: "all(bar.status == 'green' for bar in value.values())"
           error_message: "Pass decision requires all bars green"
       artifact_validation:
@@ -86,13 +86,13 @@ transitions:
         schema_ref: "gatecheck_report.schema.json"
     effects:
       state_updates:
-        - key: "artifacts.gatecheck_report.status"
+        - key: "hot_sot.current_gatecheck.status"
           value: "decision:pass"
           operation: "set"
-        - key: "artifacts.gatecheck_report.decision"
+        - key: "hot_sot.current_gatecheck.decision"
           value: "pass"
           operation: "set"
-        - key: "artifacts.gatecheck_report.decided_at"
+        - key: "hot_sot.current_gatecheck.decided_at"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -112,10 +112,10 @@ transitions:
       allowed_senders: ["GK"]
     preconditions:
       state_requirements:
-        - key: "artifacts.gatecheck_report.bars"
+        - key: "hot_sot.current_gatecheck.bars"
           condition: "all(bar.status in ['green', 'yellow'] for bar in value.values()) and any(bar.status == 'yellow' for bar in value.values())"
           error_message: "Conditional pass requires no red bars and at least one yellow"
-        - key: "artifacts.gatecheck_report.remediation_plan"
+        - key: "hot_sot.current_gatecheck.remediation_plan"
           condition: "!= null"
           error_message: "Conditional pass requires time-boxed remediation plan"
       artifact_validation:
@@ -123,13 +123,13 @@ transitions:
         schema_ref: "gatecheck_report.schema.json"
     effects:
       state_updates:
-        - key: "artifacts.gatecheck_report.status"
+        - key: "hot_sot.current_gatecheck.status"
           value: "decision:conditional-pass"
           operation: "set"
-        - key: "artifacts.gatecheck_report.decision"
+        - key: "hot_sot.current_gatecheck.decision"
           value: "conditional_pass"
           operation: "set"
-        - key: "artifacts.gatecheck_report.decided_at"
+        - key: "hot_sot.current_gatecheck.decided_at"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -150,10 +150,10 @@ transitions:
       allowed_senders: ["GK"]
     preconditions:
       state_requirements:
-        - key: "artifacts.gatecheck_report.bars"
+        - key: "hot_sot.current_gatecheck.bars"
           condition: "any(bar.status == 'red' for bar in value.values())"
           error_message: "Block decision requires at least one red bar"
-        - key: "artifacts.gatecheck_report.remediation_notes"
+        - key: "hot_sot.current_gatecheck.remediation_notes"
           condition: "len(value) > 0"
           error_message: "Block decision requires remediation notes with smallest viable fixes"
       artifact_validation:
@@ -161,13 +161,13 @@ transitions:
         schema_ref: "gatecheck_report.schema.json"
     effects:
       state_updates:
-        - key: "artifacts.gatecheck_report.status"
+        - key: "hot_sot.current_gatecheck.status"
           value: "decision:block"
           operation: "set"
-        - key: "artifacts.gatecheck_report.decision"
+        - key: "hot_sot.current_gatecheck.decision"
           value: "block"
           operation: "set"
-        - key: "artifacts.gatecheck_report.decided_at"
+        - key: "hot_sot.current_gatecheck.decided_at"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:

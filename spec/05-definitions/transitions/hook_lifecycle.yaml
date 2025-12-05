@@ -34,18 +34,18 @@ transitions:
       allowed_senders: ["SR"]
     preconditions:
       state_requirements:
-        - key: "artifacts.current_hook.header.status"
+        - key: "hot_sot.current_hook.header.status"
           condition: "== 'proposed'"
           error_message: "Hook must be in proposed state"
-        - key: "artifacts.current_hook.proposed_next_step.owner_r"
+        - key: "hot_sot.current_hook.proposed_next_step.owner_r"
           condition: "!= null"
           error_message: "Hook must have owner role assigned"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "accepted"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
       protocol_messages:
@@ -69,13 +69,13 @@ transitions:
           error_message: "Deferral requires reason"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "deferred"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "metadata.deferral_reason"
           value: "{{payload.deferral_reason}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 
@@ -92,13 +92,13 @@ transitions:
           error_message: "Rejection requires reason"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "rejected"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "metadata.rejection_reason"
           value: "{{payload.rejection_reason}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 
@@ -110,15 +110,15 @@ transitions:
       allowed_senders: ["{{hook.proposed_next_step.owner_r}}"]
     preconditions:
       state_requirements:
-        - key: "artifacts.current_hook.header.status"
+        - key: "hot_sot.current_hook.header.status"
           condition: "== 'accepted'"
           error_message: "Hook must be accepted before starting work"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "in-progress"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
       role_signals:
@@ -139,13 +139,13 @@ transitions:
           error_message: "Deferral requires reason"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "deferred"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "metadata.deferral_reason"
           value: "{{payload.deferral_reason}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 
@@ -161,10 +161,10 @@ transitions:
         schema_ref: "hook_card.schema.json"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "resolved"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
       protocol_messages:
@@ -188,13 +188,13 @@ transitions:
           error_message: "Deferral requires reason"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "deferred"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "metadata.deferral_reason"
           value: "{{payload.deferral_reason}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 
@@ -211,20 +211,20 @@ transitions:
           error_message: "Canonization requires Cold location reference"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "canonized"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "locations_links.cold_ref"
           value: "{{payload.cold_location}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
       filesystem_operations:
         - operation: "create_snapshot"
           hot_cold: "cold"
           path: "{{payload.cold_location}}"
-          artifact_ref: "artifacts.current_hook"
+          artifact_ref: "hot_sot.current_hook"
 
   # resolved → in-progress (Rework needed)
   - from_state: resolved
@@ -239,13 +239,13 @@ transitions:
           error_message: "Rework requires reason"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "in-progress"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "metadata.rework_reason"
           value: "{{payload.rework_reason}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 
@@ -257,10 +257,10 @@ transitions:
       allowed_senders: ["SR"]
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "accepted"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 
@@ -277,13 +277,13 @@ transitions:
           error_message: "Rejection requires reason"
     effects:
       artifact_updates:
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.status"
           value: "rejected"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "metadata.rejection_reason"
           value: "{{payload.rejection_reason}}"
-        - artifact_key: "artifacts.current_hook"
+        - artifact_key: "hot_sot.current_hook"
           field: "header.edited"
           value: "{{current_timestamp}}"
 

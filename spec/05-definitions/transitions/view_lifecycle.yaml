@@ -37,10 +37,10 @@ transitions:
         snapshot_must_exist: true
         snapshot_ref_required: true
       state_requirements:
-        - key: "artifacts.view_log.cold_snapshot_ref"
+        - key: "exports.view_log.cold_snapshot_ref"
           condition: "!= null"
           error_message: "Export requires valid Cold snapshot reference"
-        - key: "artifacts.view_log.export_targets"
+        - key: "exports.view_log.export_targets"
           condition: "len(value) > 0"
           error_message: "Export requires at least one target format (PDF, HTML, EPUB)"
       quality_bars:
@@ -50,10 +50,10 @@ transitions:
           required_status: "yellow"
     effects:
       state_updates:
-        - key: "artifacts.view_log.status"
+        - key: "exports.view_log.status"
           value: "export-binding"
           operation: "set"
-        - key: "artifacts.view_log.binding_started"
+        - key: "exports.view_log.binding_started"
           value: "{{current_timestamp}}"
           operation: "set"
 
@@ -70,13 +70,13 @@ transitions:
           error_message: "Bind failure requires error details"
     effects:
       state_updates:
-        - key: "artifacts.view_log.status"
+        - key: "exports.view_log.status"
           value: "export-failed"
           operation: "set"
-        - key: "artifacts.view_log.error"
+        - key: "exports.view_log.error"
           value: "{{payload.error}}"
           operation: "set"
-        - key: "artifacts.view_log.failed_at"
+        - key: "exports.view_log.failed_at"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -98,15 +98,15 @@ transitions:
         required: true
         schema_ref: "view_log.schema.json"
       state_requirements:
-        - key: "artifacts.view_log.export_artifacts"
+        - key: "exports.view_log.export_artifacts"
           condition: "len(value) > 0"
           error_message: "Bound view must have generated export artifacts"
     effects:
       state_updates:
-        - key: "artifacts.view_log.status"
+        - key: "exports.view_log.status"
           value: "pn-dry-run"
           operation: "set"
-        - key: "artifacts.view_log.binding_completed"
+        - key: "exports.view_log.binding_completed"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -135,13 +135,13 @@ transitions:
           error_message: "Bind failure requires error details"
     effects:
       state_updates:
-        - key: "artifacts.view_log.status"
+        - key: "exports.view_log.status"
           value: "export-failed"
           operation: "set"
-        - key: "artifacts.view_log.error"
+        - key: "exports.view_log.error"
           value: "{{payload.error}}"
           operation: "set"
-        - key: "artifacts.view_log.failed_at"
+        - key: "exports.view_log.failed_at"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -165,13 +165,13 @@ transitions:
           error_message: "Feedback requires PN playtest notes"
     effects:
       state_updates:
-        - key: "artifacts.view_log.status"
+        - key: "exports.view_log.status"
           value: "feedback-collected"
           operation: "set"
-        - key: "artifacts.view_log.pn_playtest_notes"
+        - key: "exports.view_log.pn_playtest_notes"
           value: "{{payload.pn_playtest_notes}}"
           operation: "set"
-        - key: "artifacts.view_log.playtest_completed"
+        - key: "exports.view_log.playtest_completed"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -195,17 +195,17 @@ transitions:
         schema_ref: "view_log.schema.json"
     effects:
       state_updates:
-        - key: "artifacts.view_log.status"
+        - key: "exports.view_log.status"
           value: "view-published"
           operation: "set"
-        - key: "artifacts.view_log.published_at"
+        - key: "exports.view_log.published_at"
           value: "{{current_timestamp}}"
           operation: "set"
       filesystem_operations:
         - operation: "write"
           hot_cold: "cold"
           path: "views/{{view_log.id}}"
-          artifact_ref: "artifacts.view_log"
+          artifact_ref: "exports.view_log"
       protocol_messages:
         - sender: "SR"
           receiver: "*"

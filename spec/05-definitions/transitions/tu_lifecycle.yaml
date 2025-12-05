@@ -45,13 +45,13 @@ transitions:
           error_message: "TU must specify a loop"
     effects:
       state_updates:
-        - key: "artifacts.current_tu"
+        - key: "hot_sot.current_tu"
           value: "{{payload}}"
           operation: "set"
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "hot-proposed"
           operation: "set"
-        - key: "artifacts.current_tu.opened"
+        - key: "hot_sot.current_tu.opened"
           value: "{{current_timestamp}}"
           operation: "set"
       protocol_messages:
@@ -71,21 +71,21 @@ transitions:
       allowed_senders: ["SR", "{{tu.owner_a}}"]
     preconditions:
       state_requirements:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           condition: "== 'hot-proposed'"
           error_message: "TU must be in hot-proposed state"
-        - key: "artifacts.current_tu.awake"
+        - key: "hot_sot.current_tu.awake"
           condition: "len(value) > 0"
           error_message: "TU must have at least one awake role"
-        - key: "artifacts.current_tu.timebox"
+        - key: "hot_sot.current_tu.timebox"
           condition: "in ['45 min', '90 min']"
           error_message: "TU must have valid timebox"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "stabilizing"
           operation: "set"
-        - key: "artifacts.current_tu.started"
+        - key: "hot_sot.current_tu.started"
           value: "{{current_timestamp}}"
           operation: "set"
       role_signals:
@@ -110,13 +110,13 @@ transitions:
           error_message: "Deferral requires reason and revisit condition"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "deferred"
           operation: "set"
-        - key: "artifacts.current_tu.deferral_tags"
+        - key: "hot_sot.current_tu.deferral_tags"
           value: "{{payload.deferral_tags}}"
           operation: "set"
-        - key: "artifacts.current_tu.linkage"
+        - key: "hot_sot.current_tu.linkage"
           value: "{{payload.linkage}}"
           operation: "set"
 
@@ -133,13 +133,13 @@ transitions:
           error_message: "Rejection requires reason"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "rejected"
           operation: "set"
-        - key: "artifacts.current_tu.rejection_reason"
+        - key: "hot_sot.current_tu.rejection_reason"
           value: "{{payload.rejection_reason}}"
           operation: "set"
-        - key: "artifacts.current_tu.closed"
+        - key: "hot_sot.current_tu.closed"
           value: "{{current_timestamp}}"
           operation: "set"
 
@@ -151,7 +151,7 @@ transitions:
       allowed_senders: ["{{tu.owner_a}}"]
     preconditions:
       state_requirements:
-        - key: "artifacts.current_tu.deliverables"
+        - key: "hot_sot.current_tu.deliverables"
           condition: "len(value) > 0"
           error_message: "TU must have deliverables before gatecheck"
       artifact_validation:
@@ -162,7 +162,7 @@ transitions:
           required_status: "green"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "gatecheck"
           operation: "set"
       protocol_messages:
@@ -193,13 +193,13 @@ transitions:
           error_message: "Deferral requires reason"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "deferred"
           operation: "set"
-        - key: "artifacts.current_tu.deferral_tags"
+        - key: "hot_sot.current_tu.deferral_tags"
           value: "{{payload.deferral_tags}}"
           operation: "set"
-        - key: "artifacts.current_tu.linkage"
+        - key: "hot_sot.current_tu.linkage"
           value: "{{payload.linkage}}"
           operation: "set"
 
@@ -218,25 +218,25 @@ transitions:
         - bar: "Presentation"
           required_status: "green"
       state_requirements:
-        - key: "artifacts.gatecheck_report.decision"
+        - key: "hot_sot.current_gatecheck.decision"
           condition: "== 'pass'"
           error_message: "Gatekeeper must approve before merge"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "cold-merged"
           operation: "set"
-        - key: "artifacts.current_tu.closed"
+        - key: "hot_sot.current_tu.closed"
           value: "{{current_timestamp}}"
           operation: "set"
-        - key: "artifacts.current_tu.cold_snapshot_ref"
+        - key: "hot_sot.current_tu.cold_snapshot_ref"
           value: "{{cold_snapshot_id}}"
           operation: "set"
       filesystem_operations:
         - operation: "create_snapshot"
           hot_cold: "cold"
           path: "snapshots/{{cold_snapshot_id}}"
-          artifact_ref: "artifacts.current_tu.deliverables"
+          artifact_ref: "hot_sot.current_tu.deliverables"
       protocol_messages:
         - sender: "SR"
           receiver: "*"
@@ -258,10 +258,10 @@ transitions:
           error_message: "Rework requires remediation notes from Gatekeeper"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "stabilizing"
           operation: "set"
-        - key: "artifacts.current_tu.remediation_notes"
+        - key: "hot_sot.current_tu.remediation_notes"
           value: "{{payload.remediation_notes}}"
           operation: "append"
       protocol_messages:
@@ -280,10 +280,10 @@ transitions:
       allowed_senders: ["SR"]
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "stabilizing"
           operation: "set"
-        - key: "artifacts.current_tu.reactivated"
+        - key: "hot_sot.current_tu.reactivated"
           value: "{{current_timestamp}}"
           operation: "set"
       role_signals:
@@ -304,13 +304,13 @@ transitions:
           error_message: "Rejection requires reason"
     effects:
       state_updates:
-        - key: "artifacts.current_tu.status"
+        - key: "hot_sot.current_tu.status"
           value: "rejected"
           operation: "set"
-        - key: "artifacts.current_tu.rejection_reason"
+        - key: "hot_sot.current_tu.rejection_reason"
           value: "{{payload.rejection_reason}}"
           operation: "set"
-        - key: "artifacts.current_tu.closed"
+        - key: "hot_sot.current_tu.closed"
           value: "{{current_timestamp}}"
           operation: "set"
 
