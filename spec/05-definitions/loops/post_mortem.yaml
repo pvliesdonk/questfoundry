@@ -73,7 +73,7 @@ traceability:
 context:
   required_artifacts:
     - artifact_type: tu_brief
-      state_key: hot_sot.tu_brief
+      state_key: hot_sot.current_tu
     - artifact_type: gatecheck_report
       state_key: gates.gatecheck_report
 

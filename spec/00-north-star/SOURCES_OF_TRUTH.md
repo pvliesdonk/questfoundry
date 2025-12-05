@@ -27,6 +27,20 @@ Curated, stabilized canon and presentation rules:
 
 ---
 
+## 1.1) State Architecture
+
+The studio state is composed of several top-level objects. The primary stores for content and work are:
+
+- **`hot_sot`**: The single source of truth for all active, work-in-progress artifacts.
+  - Contains collections of artifacts (e.g., `hooks`, `tus`, `canon_packs`).
+  - Contains special keys for the **single active artifact** being worked on in a loop (e.g., `hot_sot.current_tu`, `hot_sot.current_hook`).
+- **`cold_sot`**: The source of truth for all canonical, player-safe content that has passed a gatecheck.
+- **`exports`**: A dedicated object for metadata related to views and exports of the Cold SoT, such as the `view_log`.
+
+The legacy `artifacts` object is **DEPRECATED**. All state transitions and roles must read from and write to `hot_sot`, `cold_sot`, or `exports`.
+
+---
+
 ## 2) Ownership & Permissions (human-level)
 
 | Action                    | Who initiates      | Who must agree                             | Who can block                         |

@@ -313,7 +313,7 @@ class ShowrunnerInterface:
     def _generate_next_steps(self, state: dict) -> list[str]:
         """Generate suggested next steps for customer."""
         # Based on final state, suggest natural language next steps
-        tu_status = state.get("meta", {}).get("current_tu", {}).get("status")
+        tu_status = state.get("hot_sot", {}).get("current_tu", {}).get("status")
 
         if tu_status == "hot-proposed":
             return [

@@ -73,7 +73,9 @@ class StudioState(TypedDict):
     loop_context: dict[str, Any]            # Loop-specific context
 
     # Artifacts and quality
-    artifacts: dict[str, Artifact]          # Generated artifacts by ID
+    hot_sot: dict[str, Any]                 # Hot Source of Truth (WIP artifacts)
+    cold_sot: dict[str, Any]                # Cold Source of Truth (canon)
+    exports: dict[str, Any]                 # Views and exports on Cold SoT
     quality_bars: dict[str, BarStatus]      # 8 quality dimensions
 
     # Protocol
@@ -166,7 +168,9 @@ def initialize_state(
         "current_node": "plotwright",  # From loop.topology.entry_node
         "loop_id": "story_spark",
         "loop_context": {"scene_text": "cargo bay confrontation"},
-        "artifacts": {},
+        "hot_sot": {},
+        "cold_sot": {},
+        "exports": {},
         "quality_bars": {
             "Integrity": {"status": "not_checked", ...},
             "Reachability": {"status": "not_checked", ...},
@@ -241,9 +245,9 @@ def update_state(
     Example:
     new_state = update_state(state, {
         "current_node": "scene_smith",
-        "artifacts": {
-            **state["artifacts"],
-            "plotwright": {...}
+        "hot_sot": {
+            **state["hot_sot"],
+            "current_hook": {...}
         }
     })
     """
@@ -303,44 +307,27 @@ def transition_tu(
 └─────────────┘
 ```
 
-### 4. Add Artifact
+### 4. Add Artifact (DEPRECATED)
+
+> **Note:** The `add_artifact` function is deprecated. Artifacts are now written directly to `hot_sot` or `cold_sot` using dedicated tools like `write_hot_sot`. This section is preserved for historical context only.
+
+The modern approach involves using a tool to directly modify the `hot_sot` or `cold_sot` objects.
+
+Example:
 
 ```python
-def add_artifact(
-    state: StudioState,
-    artifact: Artifact
-) -> StudioState:
-    """
-    Add new artifact to state.
+# A role would call a tool like this:
+write_hot_sot(key="current_tu", value={...})
 
-    Steps:
-    1. Validate artifact against Artifact schema
-    2. Determine state_key (hot vs cold)
-    3. Add to state["artifacts"]
-    4. Log artifact_created message
-    5. Return updated state
-
-    Example:
-    artifact = {
-        "artifact_type": "scene",
-        "content": "The crew discovers contraband...",
-        "role_id": "plotwright",
-        "timestamp": "2025-11-20T10:35:00Z",
-        "tu_id": "TU-2025-042",
-        "state_key": "artifacts.hot.scenes.TU-2025-042",
-        "metadata": {"word_count": 250}
-    }
-
-    new_state = add_artifact(state, artifact)
-    """
+# The tool would then update the state:
+def write_hot_sot(state: StudioState, key: str, value: Any) -> StudioState:
+    new_state = copy.deepcopy(state)
+    new_state["hot_sot"][key] = value
+    # ... (add message, validate, etc.)
+    return new_state
 ```
 
-**Hot vs Cold State Keys**:
-
-- **Hot** (discovery space): `artifacts.hot.scenes.TU-2025-042`
-- **Cold** (canon): `artifacts.cold.scenes.cargo_bay_confrontation`
-
-Artifacts start in hot, move to cold when TU lifecycle → cold-merged.
+The concept of a generic `add_artifact` function is removed in favor of more explicit, direct state manipulation through tools that operate on a specific Source of Truth.
 
 ### 5. Update Quality Bars
 
@@ -588,17 +575,15 @@ state = state_manager.initialize_state(
     context={"scene_text": "cargo bay confrontation"}
 )
 
-# Add artifact
-artifact = {
+# Add an artifact to hot_sot (now done via tools, this is illustrative)
+scene_artifact = {
     "artifact_type": "scene",
     "content": "The crew discovers contraband...",
     "role_id": "plotwright",
     "timestamp": datetime.now().isoformat(),
-    "tu_id": state["tu_id"],
-    "state_key": f"artifacts.hot.scenes.{state['tu_id']}",
-    "metadata": {}
+    "tu_id": state["tu_id"]
 }
-state = state_manager.add_artifact(state, artifact)
+state["hot_sot"]["current_scene"] = scene_artifact
 
 # Update quality bars
 bars = {

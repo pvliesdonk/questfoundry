@@ -209,11 +209,11 @@ interface:
   inputs:
     - artifact_type: hook_card
       required: false
-      state_key: artifacts.current_hook
+      state_key: hot_sot.current_hook
       filter: "status == 'accepted'"
   outputs:
     - artifact_type: hook_card
-      state_key: artifacts.current_hook
+      state_key: hot_sot.current_hook
       validation_required: true
 
 behavior:
@@ -278,7 +278,7 @@ llm_config:
        validate_artifact(response, "hook_card")
 
        # Update state
-       state.artifacts.current_hook = response
+       state.hot_sot.current_hook = response
        return state
    ```
 
@@ -312,7 +312,7 @@ topology:
       type: conditional
       condition:
         evaluator: artifact_field_match
-        expression: "state.artifacts.current_gatecheck.decision"
+        expression: "state.hot_sot.current_gatecheck.decision"
         routes:
           pass: END
           conditional_pass: END
@@ -357,7 +357,7 @@ execution:
 
    # Add conditional edge
    def route_gatecheck(state):
-       decision = state.artifacts.current_gatecheck.decision
+       decision = state.hot_sot.current_gatecheck.decision
        if decision in ["pass", "conditional_pass"]:
            return END
        else:

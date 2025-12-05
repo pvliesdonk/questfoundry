@@ -135,7 +135,8 @@ def evaluate_python_expression(
 
     context = {
         'state': state,
-        'artifacts': state['artifacts'],
+        'hot_sot': state['hot_sot'],
+        'cold_sot': state['cold_sot'],
         'quality_bars': state['quality_bars'],
         'tu_lifecycle': state['tu_lifecycle'],
         'error': state.get('error')
@@ -167,12 +168,16 @@ def evaluate_python_expression(
 "all(bar['status'] != 'red' for bar in state['quality_bars'].values())"
 
 # Artifact checks
-"'plotwright' in state['artifacts']"
-"len(state['artifacts']) >= 3"
+"'current_hook' in state['hot_sot']"
+"len(state['hot_sot']['hooks']) >= 3"
 
 # Error checks
-"state['error'] is None"
-"state['retry_count'] < 3"
+...
+1. **Test python_expression**:
+   - Simple equality: ""state['tu_lifecycle'] == 'cold-merged'""
+   - Complex logic: ""all(bar['status'] != 'red' for bar in state['quality_bars'].values())""
+   - Nested access: ""state['hot_sot']['current_hook']['header']['word_count'] > 200""
+   - Edge cases: Empty `hot_sot`, missing keys, null values
 ```
 
 **SECURITY**: Never use plain `eval()` or `exec()`. Use:
@@ -211,7 +216,8 @@ def evaluate_json_logic(
 
     data = {
         'tu_lifecycle': state['tu_lifecycle'],
-        'artifacts': state['artifacts'],
+        'hot_sot': state['hot_sot'],
+        'cold_sot': state['cold_sot'],
         'quality_bars': state['quality_bars'],
         'error': state.get('error')
     }

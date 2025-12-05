@@ -132,7 +132,8 @@ def render_prompt(role: RoleProfile, state: StudioState) -> str:
         "tu_id": state["tu_id"],
         "tu_lifecycle": state["tu_lifecycle"],
         "loop_context": state["loop_context"],
-        "artifacts": state["artifacts"],
+        "hot_sot": state["hot_sot"],
+        "cold_sot": state["cold_sot"],
         "quality_bars": state["quality_bars"],
         "messages": state["messages"]
     }
@@ -321,7 +322,8 @@ def create_role_node(role_id: str) -> Runnable:
         # 6. Update state
         new_state = {**state}
         new_state["current_node"] = role.id
-        new_state["artifacts"][role.id] = {
+        # The specific key in hot_sot would be determined by the role's output interface
+        new_state["hot_sot"][f"output_for_{role.id}"] = {
             "content": result,
             "role_id": role.id,
             "timestamp": datetime.now().isoformat()
@@ -331,7 +333,7 @@ def create_role_node(role_id: str) -> Runnable:
         message = {
             "sender": role.id,
             "intent": "artifact_created",
-            "payload": {"artifact_id": role.id}
+            "payload": {"artifact_id": f"output_for_{role.id}"}
         }
         new_state["messages"].append(message)
 
@@ -403,7 +405,7 @@ def illustrator_node(state: StudioState) -> StudioState:
     })
 
     # Update state with result
-    state["artifacts"]["illustration"] = {
+    state["hot_sot"]["illustration"] = {
         "type": "image",
         "url": image_url
     }
@@ -427,7 +429,7 @@ def illustrator_node(state: StudioState) -> StudioState:
 def export_service_node(state: StudioState) -> StudioState:
     # No LLM - direct tool invocation
     format = state["loop_context"]["export_format"]
-    input_file = state["artifacts"]["manuscript"]["file_path"]
+    input_file = state["cold_sot"]["manuscript"]["file_path"]
 
     output_file = pandoc_tool.invoke({
         "input": input_file,
@@ -436,7 +438,7 @@ def export_service_node(state: StudioState) -> StudioState:
         "output": f"export.{format}"
     })
 
-    state["artifacts"]["export"] = {
+    state["exports"]["export"] = {
         "type": "file",
         "path": output_file,
         "format": format
@@ -583,7 +585,9 @@ test_state = {
     "tu_lifecycle": "hot-proposed",
     "current_node": "entry",
     "loop_context": {"scene_text": "cargo bay confrontation"},
-    "artifacts": {},
+    "hot_sot": {},
+    "cold_sot": {},
+    "exports": {},
     "quality_bars": {},
     "messages": []
 }
@@ -592,7 +596,7 @@ test_state = {
 result_state = plotwright_node(test_state)
 
 # Check result
-assert "plotwright" in result_state["artifacts"]
+assert "output_for_plotwright" in result_state["hot_sot"]
 assert result_state["current_node"] == "plotwright"
 ```
 
