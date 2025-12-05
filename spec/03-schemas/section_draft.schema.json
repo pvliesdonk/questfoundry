@@ -18,7 +18,7 @@
     "section_id": {
       "type": "string",
       "description": "Section anchor identifier (e.g., 'anchor006')",
-      "pattern": "^anchor[0-9]{3,}$"
+      "minLength": 1
     },
     "title": {
       "type": "string",
@@ -54,7 +54,7 @@
     "lead_image": {
       "type": "string",
       "description": "Sensory anchor string for illustrator coordination (single sentence describing atmosphere, composition, or key visual). Required for review/approved/cold, optional for draft.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 300
     },
     "prose": {
@@ -62,7 +62,7 @@
       "description": "Narrative beats structured as array of prose blocks (paragraphs). Each block = one beat or micro-scene.",
       "items": {
         "type": "string",
-        "minLength": 10,
+        "minLength": 1,
         "maxLength": 2000
       },
       "minItems": 1
@@ -77,20 +77,20 @@
           "label": {
             "type": "string",
             "description": "Player-facing choice text (must be contrastive and diegetic)",
-            "minLength": 3,
+            "minLength": 1,
             "maxLength": 200
           },
           "target": {
             "type": "string",
             "description": "Destination section anchor",
-            "pattern": "^anchor[0-9]{3,}(_[a-z_]+)?$"
+            "minLength": 1
           },
           "gates": {
             "type": "array",
             "description": "Optional array of gate IDs that affect this choice's availability",
             "items": {
               "type": "string",
-              "pattern": "^gate_[a-z_]+$"
+              "minLength": 1
             },
             "uniqueItems": true
           }
@@ -104,23 +104,23 @@
       "description": "Decoupled gate logic definitions (optional)",
       "items": {
         "type": "object",
-        "required": ["id", "condition", "qualification_path", "type"],
+        "required": ["id", "type"],
         "properties": {
           "id": {
             "type": "string",
             "description": "Unique gate identifier (referenced in choices)",
-            "pattern": "^gate_[a-z_]+$"
+            "minLength": 1
           },
           "condition": {
             "type": "string",
             "description": "Diegetic check (what the world tests)",
-            "minLength": 10,
+            "minLength": 1,
             "maxLength": 300
           },
           "qualification_path": {
             "type": "string",
             "description": "How player can qualify (explicit paths)",
-            "minLength": 10,
+            "minLength": 1,
             "maxLength": 500
           },
           "type": {

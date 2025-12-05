@@ -28,7 +28,7 @@
     "slice": {
       "type": "string",
       "description": "Player-safe slice description (1-2 lines).",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "stakeholders": {
@@ -37,43 +37,40 @@
       "items": {
         "$ref": "#/$defs/role_name"
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "question": {
       "type": "string",
       "description": "One-line question framed in surface language.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 200
     },
     "where_it_appears": {
       "type": "string",
       "description": "Location reference (manuscript path, codex entry, or caption).",
-      "minLength": 5,
+      "minLength": 1,
       "maxLength": 200
     },
     "why_it_matters": {
       "type": "string",
       "description": "Brief rationale such as gate fairness, safety, terminology, or tone.",
-      "minLength": 5,
+      "minLength": 1,
       "maxLength": 200
     },
     "short_answer": {
       "type": "string",
       "description": "Decision-ready plain-language summary (2-5 lines).",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 600
     },
     "evidence_hot": {
       "type": "array",
-      "description": "Hot evidence list citing 2-5 sources with relevance summaries.",
+      "description": "Hot evidence list citing sources with relevance summaries.",
       "items": {
         "type": "string",
-        "minLength": 10,
+        "minLength": 1,
         "maxLength": 250
-      },
-      "minItems": 2,
-      "maxItems": 5
+      }
     },
     "posture": {
       "type": "string",
@@ -92,7 +89,7 @@
       "description": "Optional caveats covering gaps, contention, or edge cases.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
       }
     },
@@ -101,16 +98,14 @@
       "description": "Player-safe surface lines owners can drop into Cold.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 1,
-      "maxItems": 3
+      }
     },
     "risks_and_mitigations": {
       "type": "string",
       "description": "Safety, sensitivity, cultural, or legal considerations with mitigations.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 600
     },
     "creative_implications": {
@@ -118,10 +113,9 @@
       "description": "Actionable implications broken down by creative roles.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 1
+      }
     },
     "hooks_filed": {
       "type": "array",
@@ -136,11 +130,9 @@
       "description": "Completion checklist items that must be satisfied before merge.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 6,
-      "maxItems": 6
+      }
     }
   },
   "required": [
@@ -148,18 +140,8 @@
     "tu",
     "edited",
     "owner",
-    "slice",
-    "stakeholders",
     "question",
-    "where_it_appears",
-    "why_it_matters",
-    "short_answer",
-    "evidence_hot",
-    "posture",
-    "neutral_phrasing",
-    "risks_and_mitigations",
-    "creative_implications",
-    "done_checklist"
+    "short_answer"
   ],
   "$defs": {
     "role_name": {

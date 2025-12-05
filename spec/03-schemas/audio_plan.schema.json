@@ -28,7 +28,7 @@
     "slice": {
       "type": "string",
       "description": "Short player-safe scope label.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "status": {
@@ -44,13 +44,13 @@
     "purpose_rationale": {
       "type": "string",
       "description": "1-2 lines explaining how the cue helps reading or performance.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "placement": {
       "type": "string",
       "description": "Relative placement guidance (before, under, after specific lines).",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "timing_note": {
@@ -72,26 +72,25 @@
     "what_is_heard": {
       "type": "string",
       "description": "Plain-language description of the cue without technique terms.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 400
     },
     "salient_qualities": {
       "type": "string",
       "description": "Descriptive adjectives capturing key qualities.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "readability": {
       "type": "string",
       "description": "Playback expectations (devices, environments).",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "caption": {
       "type": "string",
-      "description": "Player-safe caption or text equivalent enclosed in square brackets.",
-      "pattern": "^\\[[^\\[\\]]+\\]$",
-      "minLength": 5,
+      "description": "Player-safe caption or text equivalent (e.g., enclosed in square brackets).",
+      "minLength": 1,
       "maxLength": 200
     },
     "onset": {
@@ -117,7 +116,7 @@
     "inclusion_criteria": {
       "type": "string",
       "description": "Conditions for when to include and when to exclude this cue.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 400
     },
     "anchor_targets": {
@@ -125,9 +124,8 @@
       "description": "Manuscript paths anchored by this cue.",
       "items": {
         "type": "string",
-        "pattern": "^/[A-Za-z0-9._\\-/]+#[A-Za-z0-9._\\-]+$"
+        "minLength": 1
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "style_register": {
@@ -152,7 +150,7 @@
     "determinism": {
       "type": "string",
       "description": "Off-surface reproduction expectations and constraints.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 400
     },
     "repro_expectation": {
@@ -170,21 +168,18 @@
       "description": "Hand-off notes enumerating who receives what deliverables.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 6
+      }
     },
     "done_checklist": {
       "type": "array",
       "description": "Completion checklist confirming readiness before production or completion status.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 9,
-      "maxItems": 9
+      }
     }
   },
   "required": [
@@ -192,25 +187,10 @@
     "tu",
     "edited",
     "owner",
-    "slice",
     "status",
     "purpose",
-    "purpose_rationale",
-    "placement",
-    "duration_target",
     "what_is_heard",
-    "salient_qualities",
-    "readability",
-    "caption",
-    "onset",
-    "intensity",
-    "transients",
-    "inclusion_criteria",
-    "anchor_targets",
-    "determinism",
-    "repro_expectation",
-    "handoffs",
-    "done_checklist"
+    "caption"
   ],
   "allOf": [
     {

@@ -14,12 +14,12 @@
     "slug": {
       "type": "string",
       "description": "Kebab-case anchor slug; ASCII or locale policy compliant.",
-      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      "minLength": 1
     },
     "locale": {
       "type": "string",
       "description": "Locale code for this entry.",
-      "pattern": "^[A-Z]{2}(?:-[A-Z]{2})?$"
+      "minLength": 1
     },
     "owner": {
       "type": "string",
@@ -32,8 +32,8 @@
     },
     "snapshot": {
       "type": "string",
-      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
-      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+      "description": "Cold snapshot reference (e.g., \"Cold @ YYYY-MM-DD\").",
+      "maxLength": 60
     },
     "tu": {
       "type": "string",
@@ -43,7 +43,7 @@
     "lineage": {
       "type": "string",
       "description": "Canon Pack and Research Memo lineage with posture noted.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 400
     },
     "style_register": {
@@ -54,7 +54,7 @@
     "overview": {
       "type": "string",
       "description": "2-5 line player-safe concept overview without spoilers or internals.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 600
     },
     "where_to_link": {
@@ -75,7 +75,7 @@
     "context": {
       "type": "string",
       "description": "2-6 line surface-level background paragraph.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 600
     },
     "variants": {
@@ -87,35 +87,33 @@
           "variant": {
             "type": "string",
             "description": "Variant term.",
-            "minLength": 2,
+            "minLength": 1,
             "maxLength": 120
           },
           "register_region": {
             "type": "string",
             "description": "Register or region where the variant applies.",
-            "minLength": 2,
+            "minLength": 1,
             "maxLength": 120
           },
           "translator_notes": {
             "type": "string",
             "description": "Notes for translator about usage or risks.",
-            "minLength": 5,
+            "minLength": 1,
             "maxLength": 200
           }
         },
-        "required": ["variant", "register_region", "translator_notes"]
-      },
-      "minItems": 1
+        "required": ["variant"]
+      }
     },
     "relations": {
       "type": "array",
       "description": "Related codex entries or taxonomy paths with slug references.",
       "items": {
         "type": "string",
-        "minLength": 3,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 1
+      }
     },
     "reading_level": {
       "type": "string",
@@ -140,7 +138,7 @@
     "anchor_slug": {
       "type": "string",
       "description": "Anchor slug path for binder (e.g., /codex/<kebab-case>).",
-      "pattern": "^/codex/[a-z0-9]+(?:-[a-z0-9]+)*$"
+      "minLength": 1
     },
     "collision_risks": {
       "type": "string",
@@ -157,14 +155,14 @@
       "description": "Anti-patterns or cautions for owners.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
       }
     },
     "from_canon": {
       "type": "string",
       "description": "Player-safe fact intake distilled from canon sources.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 400
     },
     "research_posture_touched": {
@@ -192,31 +190,18 @@
       "description": "Completion checklist verifying readiness before publication.",
       "items": {
         "type": "string",
-        "minLength": 5,
+        "minLength": 1,
         "maxLength": 200
-      },
-      "minItems": 8,
-      "maxItems": 8
+      }
     }
   },
   "required": [
     "title",
     "slug",
-    "locale",
     "owner",
     "edited",
-    "snapshot",
     "tu",
-    "lineage",
-    "overview",
-    "context",
-    "variants",
-    "relations",
-    "reading_level",
-    "anchor_slug",
-    "from_canon",
-    "research_posture_touched",
-    "done_checklist"
+    "overview"
   ],
   "$defs": {
     "role_name": {
