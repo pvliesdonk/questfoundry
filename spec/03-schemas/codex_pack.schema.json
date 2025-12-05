@@ -6,27 +6,21 @@
   "type": "object",
   "required": [
     "pack_name",
-    "theme",
     "author",
     "tu_id",
     "edited",
-    "entry_count",
-    "status",
-    "coverage_report",
-    "entries",
-    "crosslink_map"
+    "status"
   ],
   "properties": {
     "pack_name": {
       "type": "string",
       "description": "Name of this codex pack",
-      "minLength": 3,
+      "minLength": 1,
       "maxLength": 100
     },
     "theme": {
       "type": "string",
       "description": "Thematic scope or slice description",
-      "minLength": 3,
       "maxLength": 300
     },
     "author": {
@@ -57,7 +51,6 @@
     "coverage_report": {
       "type": "object",
       "description": "Coverage metrics and completeness assessment",
-      "required": ["terms_identified", "terms_defined", "coverage_percent", "completeness"],
       "properties": {
         "terms_identified": {
           "type": "integer",
@@ -85,7 +78,6 @@
           "description": "Terms/concepts covered in this pack",
           "items": {
             "type": "object",
-            "required": ["term", "note"],
             "properties": {
               "term": {
                 "type": "string",
@@ -103,7 +95,6 @@
           "description": "Terms intentionally skipped",
           "items": {
             "type": "object",
-            "required": ["term", "reason"],
             "properties": {
               "term": {
                 "type": "string",
@@ -122,7 +113,6 @@
           "description": "Terms that need canon before defining",
           "items": {
             "type": "object",
-            "required": ["term", "missing"],
             "properties": {
               "term": {
                 "type": "string",
@@ -168,7 +158,6 @@
           "description": "New disambiguation pages or redirects",
           "items": {
             "type": "object",
-            "required": ["term", "disambiguates"],
             "properties": {
               "term": {
                 "type": "string",
@@ -189,7 +178,7 @@
       "description": "List of all codex entries in this pack",
       "items": {
         "type": "object",
-        "required": ["id", "title", "category", "status", "file"],
+        "required": ["id", "title"],
         "properties": {
           "id": {
             "type": "string",
@@ -219,8 +208,7 @@
           }
         },
         "additionalProperties": false
-      },
-      "minItems": 1
+      }
     },
     "crosslink_map": {
       "type": "object",
@@ -231,7 +219,6 @@
           "description": "Crosslinks within this pack",
           "items": {
             "type": "object",
-            "required": ["from", "to", "link_type", "bidirectional"],
             "properties": {
               "from": {
                 "type": "string",
@@ -261,7 +248,6 @@
           "description": "Crosslinks to entries in other packs",
           "items": {
             "type": "object",
-            "required": ["from", "to", "pack"],
             "properties": {
               "from": {
                 "type": "string",
@@ -275,8 +261,7 @@
               },
               "pack": {
                 "type": "string",
-                "description": "Target pack name",
-                "minLength": 3
+                "description": "Target pack name"
               }
             },
             "additionalProperties": false

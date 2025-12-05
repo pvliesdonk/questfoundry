@@ -28,7 +28,7 @@
     "slice": {
       "type": "string",
       "description": "Player-safe scope description (1-2 lines).",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "hooks_answered": {
@@ -36,10 +36,8 @@
       "description": "List of hook IDs or short names resolved by this pack.",
       "items": {
         "type": "string",
-        "minLength": 2,
         "maxLength": 80
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "research_posture_touched": {
@@ -68,13 +66,12 @@
           "hook_id": {
             "type": "string",
             "description": "Hook ID or short name (must match hooks_answered list).",
-            "minLength": 2,
             "maxLength": 80
           },
           "answer": {
             "type": "string",
             "description": "Crisp answer text (2-6 lines).",
-            "minLength": 20,
+            "minLength": 1,
             "maxLength": 600
           },
           "evidence": {
@@ -85,13 +82,11 @@
           "consequences": {
             "type": "string",
             "description": "Consequences or unlocks resulting from the answer.",
-            "minLength": 10,
             "maxLength": 400
           }
         },
-        "required": ["hook_id", "answer", "consequences"]
-      },
-      "minItems": 1
+        "required": ["hook_id", "answer"]
+      }
     },
     "timeline_anchors_hot": {
       "type": "array",
@@ -107,13 +102,12 @@
           "description": {
             "type": "string",
             "description": "Event description tied to the anchor.",
-            "minLength": 10,
+            "minLength": 1,
             "maxLength": 400
           }
         },
         "required": ["anchor", "description"]
-      },
-      "minItems": 2
+      }
     },
     "invariants_constraints_hot": {
       "type": "array",
@@ -124,25 +118,22 @@
           "statement": {
             "type": "string",
             "description": "Invariant or constraint statement.",
-            "minLength": 10,
+            "minLength": 1,
             "maxLength": 400
           },
           "owner": {
             "type": "string",
             "description": "Owner responsible (Lore, Plot, Curator).",
-            "minLength": 2,
             "maxLength": 40
           },
           "reason": {
             "type": "string",
             "description": "One-line reasoning for the invariant or constraint.",
-            "minLength": 5,
             "maxLength": 240
           }
         },
-        "required": ["statement", "owner", "reason"]
-      },
-      "minItems": 1
+        "required": ["statement"]
+      }
     },
     "entity_state_deltas_hot": {
       "type": "array",
@@ -153,29 +144,25 @@
           "entity": {
             "type": "string",
             "description": "Entity name.",
-            "minLength": 2,
             "maxLength": 80
           },
           "before": {
             "type": "string",
             "description": "State before the canon change.",
-            "minLength": 5,
             "maxLength": 240
           },
           "after": {
             "type": "string",
             "description": "State after the canon change.",
-            "minLength": 5,
             "maxLength": 240
           },
           "visibility": {
             "type": "string",
             "description": "Who could know about this change.",
-            "minLength": 2,
             "maxLength": 80
           }
         },
-        "required": ["entity", "before", "after", "visibility"]
+        "required": ["entity"]
       }
     },
     "knowledge_ledger_hot": {
@@ -187,19 +174,16 @@
           "actor": {
             "type": "string",
             "description": "Actor or group being tracked.",
-            "minLength": 2,
             "maxLength": 80
           },
           "knows_at_t0": {
             "type": "string",
             "description": "Knowledge held at T0.",
-            "minLength": 5,
             "maxLength": 300
           },
           "gains_by_t1_t2": {
             "type": "string",
             "description": "Knowledge gained by T1/T2.",
-            "minLength": 5,
             "maxLength": 300
           },
           "notes": {
@@ -208,14 +192,13 @@
             "maxLength": 200
           }
         },
-        "required": ["actor", "knows_at_t0", "gains_by_t1_t2"]
-      },
-      "minItems": 1
+        "required": ["actor"]
+      }
     },
     "player_safe_summary": {
       "type": "string",
       "description": "Player-safe summary covering exposed concepts without spoilers.",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 800
     },
     "downstream_effects": {
@@ -225,35 +208,34 @@
         "plotwright_notes": {
           "type": "array",
           "description": "Gate reasons, loop differences, keystone resilience for Plotwright",
-          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+          "items": { "type": "string", "maxLength": 400 }
         },
         "scene_smith_notes": {
           "type": "array",
           "description": "Phrasing cues, micro-context, beats to reflect for Scene Smith (constraints, not draft prose)",
-          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+          "items": { "type": "string", "maxLength": 400 }
         },
         "style_lead_notes": {
           "type": "array",
           "description": "Pattern nudges, banned/preferred forms for Style Lead",
-          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+          "items": { "type": "string", "maxLength": 400 }
         },
         "codex_curator_notes": {
           "type": "array",
           "description": "New/updated entries, crosslink hints for Codex Curator",
-          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+          "items": { "type": "string", "maxLength": 400 }
         },
         "translator_notes": {
           "type": "array",
           "description": "Terminology risks, register map nudges for Translator",
-          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+          "items": { "type": "string", "maxLength": 400 }
         },
         "gatekeeper_notes": {
           "type": "array",
           "description": "Presentation watchouts, anchor collisions for Gatekeeper",
-          "items": { "type": "string", "minLength": 10, "maxLength": 400 }
+          "items": { "type": "string", "maxLength": 400 }
         }
       },
-      "required": ["plotwright_notes", "scene_smith_notes", "style_lead_notes", "codex_curator_notes"],
       "additionalProperties": false
     },
     "hooks_filed": {
@@ -269,16 +251,13 @@
       "description": "Checklist confirming all required tasks before approval.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 7,
-      "maxItems": 7
+      }
     },
     "lineage": {
       "type": "string",
       "description": "Lineage references (TU, Research Memos, prior Canon Packs, ADRs).",
-      "minLength": 20,
+      "minLength": 1,
       "maxLength": 600
     },
     "neighbors_notified": {
@@ -287,13 +266,11 @@
       "items": {
         "$ref": "#/$defs/role_name"
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "snapshot_impact": {
       "type": "string",
       "description": "Impact on Cold snapshots or upcoming exports.",
-      "minLength": 10,
       "maxLength": 400
     }
   },
@@ -303,18 +280,8 @@
     "edited",
     "owner",
     "slice",
-    "hooks_answered",
-    "research_posture_touched",
-    "canon_answers_hot",
-    "timeline_anchors_hot",
-    "invariants_constraints_hot",
-    "knowledge_ledger_hot",
     "player_safe_summary",
-    "downstream_effects",
-    "checks",
-    "lineage",
-    "neighbors_notified",
-    "snapshot_impact"
+    "lineage"
   ],
   "$defs": {
     "role_name": {

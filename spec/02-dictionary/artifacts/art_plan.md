@@ -45,7 +45,7 @@ Status: planned | rendering | done | deferred
 ## 1) Purpose (pick one; add rationale)
 
 <!-- Field: Purpose (Art) | Type: enum | Required: yes | Values: clarify | recall | mood | signpost -->
-<!-- Field: Rationale (Purpose) | Type: markdown | Required: yes | 1-2 lines on why this image helps the reader -->
+<!-- Field: Rationale (Purpose) | Type: markdown | Required: no | 1-2 lines on why this image helps the reader -->
 <!-- Validation: Purpose must be one of 4 values; rationale must explain reader benefit -->
 
 ```
@@ -64,7 +64,7 @@ Rationale: <1–2 lines on why this image helps the reader here>
 ## 2) Subject & Focal Affordance
 
 <!-- Field: Subject | Type: markdown | Required: yes | What image shows; concrete nouns -->
-<!-- Field: Focal affordance | Type: markdown | Required: yes | What must be readable at target sizes -->
+<!-- Field: Focal affordance | Type: markdown | Required: no | What must be readable at target sizes -->
 <!-- Validation: Subject must use concrete nouns, no abstractions -->
 <!-- Cross-field: Focal affordance must align with Legibility at size (§3) -->
 
@@ -79,13 +79,13 @@ Focal affordance (what must be readable): <e.g., lapel badge vs scanner>
 
 ## 3) Composition Intent (no technique terms)
 
-<!-- Field: Composition Intent | Type: markdown | Required: yes | Framing, angle, hierarchy; no technique terms -->
+<!-- Field: Composition Intent | Type: markdown | Required: no | Framing, angle, hierarchy; no technique terms -->
 <!-- Field: Framing | Type: enum | Optional: yes | Values: tight | medium | wide -->
 <!-- Field: Angle | Type: enum | Optional: yes | Values: eye | low | high | oblique -->
 <!-- Field: Distance | Type: enum | Optional: yes | Values: close | room | establishing -->
 <!-- Field: Hierarchy | Type: markdown | Optional: yes | Eye movement order (first/second) -->
 <!-- Field: Spatial cues | Type: markdown | Optional: yes | Lines, occlusion, overlap for depth/reading -->
-<!-- Field: Legibility at size | Type: markdown | Required: yes | Target sizes; what survives thumbnail/print -->
+<!-- Field: Legibility at size | Type: markdown | Required: no | Target sizes; what survives thumbnail/print -->
 <!-- Validation: Must not use technique terms (lens mm, f-stop, LUT, render settings) -->
 <!-- Cross-field: Legibility must support Focal affordance (§2) -->
 
@@ -102,7 +102,7 @@ Legibility at size: <target sizes; what must survive thumbnail/print>
 
 ## 4) Iconography & Motifs
 
-<!-- Field: Iconography & Motifs | Type: markdown | Required: yes | Motifs to include/avoid -->
+<!-- Field: Iconography & Motifs | Type: markdown | Required: no | Motifs to include/avoid -->
 <!-- Validation: Must list motifs to include AND motifs to avoid -->
 <!-- Cross-artifact: Motifs should align with Canon Pack invariants and Style Addendum patterns -->
 
@@ -117,7 +117,7 @@ Motifs to avoid: <list>
 
 ## 5) Light / Palette / Texture (descriptive, not technical)
 
-<!-- Field: Light / Palette / Texture | Type: markdown | Required: yes | Descriptive styling; no technical terms -->
+<!-- Field: Light / Palette / Texture | Type: markdown | Required: no | Descriptive styling; no technical terms -->
 <!-- Validation: Must be descriptive (e.g., "sodium lamp glow"), not technical (e.g., "3200K color temp") -->
 
 ```
@@ -132,7 +132,7 @@ Texture: <e.g., wet metal, worn fabric>
 
 ## 6) Environment & Props (player-safe)
 
-<!-- Field: Environment & Props | Type: markdown | Required: yes | Location tells and props; player-safe -->
+<!-- Field: Environment & Props | Type: markdown | Required: no | Location tells and props; player-safe -->
 <!-- Validation: No spoilers, no secret identities, no internals -->
 <!-- Cross-artifact: Environment details must align with Canon Pack player-safe summaries -->
 
@@ -147,7 +147,7 @@ Props: <only those needed for clarity/signpost>
 
 ## 7) Characters & Poses (player-safe)
 
-<!-- Field: Characters & Poses | Type: markdown | Required: yes | Who visible, pose, face; player-safe -->
+<!-- Field: Characters & Poses | Type: markdown | Required: no | Who visible, pose, face; player-safe -->
 <!-- Validation: Use roles/titles, not secret identities; gestures readable at a glance -->
 <!-- Cross-artifact: Character visibility must align with Canon Pack knowledge ledger -->
 
@@ -163,7 +163,7 @@ Face visibility: <yes/no; if no, say why (mood/ambiguity)>
 
 ## 8) Inclusion Criteria (where this slot appears)
 
-<!-- Field: Inclusion Criteria | Type: markdown | Required: yes | When asset appears; conditions -->
+<!-- Field: Inclusion Criteria | Type: markdown | Required: no | When asset appears; conditions -->
 <!-- Validation: Must state both include and exclude conditions -->
 <!-- Cross-artifact: Anchors should reference existing manuscript sections -->
 
@@ -178,8 +178,8 @@ Exclude when: <avoid duplication or spoiler contexts>
 
 ## 9) Caption (player-safe, one line) & Alt Guidance (one sentence)
 
-<!-- Field: Caption | Type: markdown | Required: yes | One-line atmospheric/clarifying text; player-safe; no technique -->
-<!-- Field: Alt | Type: markdown | Required: yes | One-sentence concrete description; subject + relation + location -->
+<!-- Field: Caption | Type: markdown | Required: no | One-line atmospheric/clarifying text; player-safe; no technique -->
+<!-- Field: Alt | Type: markdown | Required: no | One-sentence concrete description; subject + relation + location -->
 <!-- Validation: Caption must be 1 line, no technique (DAW/plugins/seeds/models/lenses) -->
 <!-- Validation: Alt must be 1 sentence, format: subject + relation + location, spoiler-safe -->
 <!-- Cross-field: Caption and Alt must match register from Style Addendum -->
@@ -213,8 +213,8 @@ Selection rule: <when to choose which variant>
 
 ## 11) Placement & Anchors (for Binder)
 
-<!-- Field: Anchor targets | Type: path-list | Required: yes | Where asset appears: /manuscript/...#anchor -->
-<!-- Field: Placement (Art) | Type: markdown | Required: yes | before/after choice block, at section start, figure callout -->
+<!-- Field: Anchor targets | Type: path-list | Required: no | Where asset appears: /manuscript/...#anchor -->
+<!-- Field: Placement (Art) | Type: markdown | Required: no | before/after choice block, at section start, figure callout -->
 <!-- Field: Anchor stability risks | Type: markdown | Optional: yes | Diacritics/renames to coordinate with Translator/Binder -->
 <!-- Cross-artifact: Anchor targets should reference existing manuscript sections or codex entries -->
 
@@ -230,7 +230,7 @@ Anchor stability risks: <diacritics/renames to coordinate with Translator/Binder
 
 ## 12) Accessibility & Localization Notes
 
-<!-- Field: Accessibility (Art/Audio) | Type: markdown | Required: yes | Risks (busy textures, ambiguous silhouettes) + mitigation -->
+<!-- Field: Accessibility (Art/Audio) | Type: markdown | Required: no | Risks (busy textures, ambiguous silhouettes) + mitigation -->
 <!-- Field: Localization | Type: markdown | Optional: yes | Caption idioms to avoid; register; terms checked with Curator -->
 <!-- Validation: Accessibility must state risks AND mitigations -->
 <!-- Cross-artifact: Localization terms should align with Codex Curator entries -->
@@ -246,8 +246,8 @@ Localization: <caption idioms to avoid; register; terms checked with Curator>
 
 ## 13) Determinism (off-surface; do not expose to players)
 
-<!-- Field: Determinism | Type: markdown | Required: yes | Off-surface repro info -->
-<!-- Field: Repro expectation | Type: enum | Required: yes | Values: none | log-only -->
+<!-- Field: Determinism | Type: markdown | Required: no | Off-surface repro info -->
+<!-- Field: Repro expectation | Type: enum | Required: no | Values: none | log-only -->
 <!-- Field: Producer log fields | Type: markdown | Optional: yes | Off-surface technique: seed/model OR capture, chain, hash -->
 <!-- Validation: If Repro expectation = log-only, then Producer log fields must be present -->
 <!-- Validation: Producer logs must NEVER appear in player-facing surfaces (caption/alt) -->
@@ -263,7 +263,7 @@ Producer log fields (off-surface): <seed/model OR capture session, chain summary
 
 ## 14) Handoffs
 
-<!-- Field: Handoffs | Type: markdown-list | Required: yes | Who gets what next: Role + deliverable + deadline -->
+<!-- Field: Handoffs | Type: markdown-list | Required: no | Who gets what next: Role + deliverable + deadline -->
 <!-- Validation: Must include at least: Illustrator, Style, Translator, Gatekeeper, Binder -->
 <!-- Cross-artifact: Roles must use valid Layer 1 role names -->
 
@@ -281,7 +281,7 @@ To Binder: anchor list for dry bind
 
 ## 15) Done checklist (tick before handing to Illustrator)
 
-<!-- Field: Done checklist | Type: markdown-list | Required: yes | Pass/fail criteria before handoff -->
+<!-- Field: Done checklist | Type: markdown-list | Required: no | Pass/fail criteria before handoff -->
 <!-- Validation: All 8 items must be checked before status changes to rendering/done -->
 
 - [ ] Purpose chosen (**clarify/recall/mood/signpost**) with rationale
@@ -372,42 +372,42 @@ Status: planned
 ### Field-Level Validation
 
 - `Title`: Required, slot id / short name
-- `TU`: Must match format `TU-YYYY-MM-DD-<role><seq>`, reference existing TU Brief
-- `Edited`: Must be YYYY-MM-DD format, cannot be future date
-- `Owner`: Must be "Art Director" (role from Layer 1 role index)
+- `TU`: Required, must match format `TU-YYYY-MM-DD-<role><seq>`, reference existing TU Brief
+- `Edited`: Required, must be YYYY-MM-DD format, cannot be future date
+- `Owner`: Required, must be "Art Director" (role from Layer 1 role index)
 - `Slice`: Required, short scope label, player-safe
 - `Status (Art)`: Required, must be one of: planned | rendering | done | deferred
 - `Purpose (Art)`: Required, must be one of: clarify | recall | mood | signpost
-- `Rationale (Purpose)`: Required, 1-2 lines explaining reader benefit
 - `Subject`: Required, concrete nouns, no abstractions
-- `Focal affordance`: Required, what must be readable at target sizes
-- `Composition Intent`: Required, no technique terms (no lens mm, f-stop, LUT, render settings)
+- `Rationale (Purpose)`: Optional, 1-2 lines explaining reader benefit
+- `Focal affordance`: Optional, what must be readable at target sizes
+- `Composition Intent`: Optional, no technique terms (no lens mm, f-stop, LUT, render settings)
 - `Framing`: Optional, if present must be: tight | medium | wide
 - `Angle`: Optional, if present must be: eye | low | high | oblique
 - `Distance`: Optional, if present must be: close | room | establishing
 - `Hierarchy`: Optional, eye movement order
 - `Spatial cues`: Optional, depth/reading guides
-- `Legibility at size`: Required, target sizes with survivability criteria
-- `Iconography & Motifs`: Required, must list include AND avoid
-- `Light / Palette / Texture`: Required, descriptive not technical
-- `Environment & Props`: Required, player-safe, no spoilers
-- `Characters & Poses`: Required, roles/titles (no secret identities), readable gestures
-- `Inclusion Criteria`: Required, must state include AND exclude conditions
-- `Caption`: Required, 1 line, player-safe, no technique
-- `Alt`: Required, 1 sentence, format: subject + relation + location
+- `Legibility at size`: Optional, target sizes with survivability criteria
+- `Iconography & Motifs`: Optional, if present must list include AND avoid
+- `Light / Palette / Texture`: Optional, descriptive not technical
+- `Environment & Props`: Optional, player-safe, no spoilers
+- `Characters & Poses`: Optional, roles/titles (no secret identities), readable gestures
+- `Inclusion Criteria`: Optional, if present must state include AND exclude conditions
+- `Caption`: Optional, 1 line, player-safe, no technique
+- `Alt`: Optional, 1 sentence, format: subject + relation + location
 - `Variants / Crops`: Optional, if present must include selection rule
 - `Selection rule`: Optional, required if variants present
-- `Anchor targets`: Required, path list to manuscript/codex locations
-- `Placement (Art)`: Required, timing relative to prose/choices
+- `Anchor targets`: Optional, path list to manuscript/codex locations
+- `Placement (Art)`: Optional, timing relative to prose/choices
 - `Anchor stability risks`: Optional, coordination notes
-- `Accessibility (Art/Audio)`: Required, risks AND mitigations
+- `Accessibility (Art/Audio)`: Optional, if present must state risks AND mitigations
 - `Localization`: Optional, caption idioms/register/terms
-- `Determinism`: Required, off-surface repro info
-- `Repro expectation`: Required, must be: none | log-only
+- `Determinism`: Optional, off-surface repro info
+- `Repro expectation`: Optional, must be: none | log-only
 - `Producer log fields`: Optional, required if repro = log-only, must be off-surface
-- `Handoffs`: Required, must include at least 5 roles (Illustrator, Style, Translator, Gatekeeper,
+- `Handoffs`: Optional, if present should include at least 5 roles (Illustrator, Style, Translator, Gatekeeper,
   Binder)
-- `Done checklist`: Required, 8 items, all must be ticked before rendering/done
+- `Done checklist`: Optional, 8 items recommended before rendering/done
 
 ### Cross-Field Validation
 
@@ -518,37 +518,36 @@ Status: planned
 | Header  | Slice                     | markdown      | yes      | Short scope label                        |
 | Header  | Status (Art)              | enum          | yes      | planned \| rendering \| done \| deferred |
 | §1      | Purpose (Art)             | enum          | yes      | clarify \| recall \| mood \| signpost    |
-| §1      | Rationale (Purpose)       | markdown      | yes      | 1-2 lines reader benefit                 |
+| §1      | Rationale (Purpose)       | markdown      | no       | 1-2 lines reader benefit                 |
 | §2      | Subject                   | markdown      | yes      | Concrete nouns                           |
-| §2      | Focal affordance          | markdown      | yes      | What must be readable                    |
-| §3      | Composition Intent        | markdown      | yes      | No technique terms                       |
-| §3      | Framing                   | enum          | optional | tight \| medium \| wide                  |
-| §3      | Angle                     | enum          | optional | eye \| low \| high \| oblique            |
-| §3      | Distance                  | enum          | optional | close \| room \| establishing            |
-| §3      | Hierarchy                 | markdown      | optional | Eye movement order                       |
-| §3      | Spatial cues              | markdown      | optional | Depth/reading guides                     |
-| §3      | Legibility at size        | markdown      | yes      | Target sizes survivability               |
-| §4      | Iconography & Motifs      | markdown      | yes      | Include AND avoid                        |
-| §5      | Light / Palette / Texture | markdown      | yes      | Descriptive not technical                |
-| §6      | Environment & Props       | markdown      | yes      | Player-safe location tells               |
-| §7      | Characters & Poses        | markdown      | yes      | Roles/titles, readable gestures          |
-| §8      | Inclusion Criteria        | markdown      | yes      | Include AND exclude conditions           |
-| §9      | Caption                   | markdown      | yes      | 1 line, player-safe, no technique        |
-| §9      | Alt                       | markdown      | yes      | 1 sentence, subject+relation+location    |
-| §10     | Variants / Crops          | markdown      | optional | Variant intents                          |
-| §10     | Selection rule            | markdown      | optional | When to choose variant                   |
-| §11     | Anchor targets            | path-list     | yes      | /manuscript/...#anchor                   |
-| §11     | Placement (Art)           | markdown      | yes      | Timing relative to prose/choices         |
-| §11     | Anchor stability risks    | markdown      | optional | Coordination notes                       |
-| §12     | Accessibility (Art/Audio) | markdown      | yes      | Risks AND mitigations                    |
-| §12     | Localization              | markdown      | optional | Caption idioms/register/terms            |
-| §13     | Determinism               | markdown      | yes      | Off-surface repro info                   |
-| §13     | Repro expectation         | enum          | yes      | none \| log-only                         |
-| §13     | Producer log fields       | markdown      | optional | Off-surface technique                    |
-| §14     | Handoffs                  | markdown-list | yes      | Min 5 roles                              |
-| §15     | Done checklist            | markdown-list | yes      | 8 items; all must be ticked              |
+| §2      | Focal affordance          | markdown      | no       | What must be readable                    |
+| §3      | Composition Intent        | markdown      | no       | No technique terms                       |
+| §3      | Framing                   | enum          | no       | tight \| medium \| wide                  |
+| §3      | Angle                     | enum          | no       | eye \| low \| high \| oblique            |
+| §3      | Distance                  | enum          | no       | close \| room \| establishing            |
+| §3      | Hierarchy                 | markdown      | no       | Eye movement order                       |
+| §3      | Spatial cues              | markdown      | no       | Depth/reading guides                     |
+| §3      | Legibility at size        | markdown      | no       | Target sizes survivability               |
+| §4      | Iconography & Motifs      | markdown      | no       | Include AND avoid                        |
+| §5      | Light / Palette / Texture | markdown      | no       | Descriptive not technical                |
+| §6      | Environment & Props       | markdown      | no       | Player-safe location tells               |
+| §7      | Characters & Poses        | markdown      | no       | Roles/titles, readable gestures          |
+| §8      | Inclusion Criteria        | markdown      | no       | Include AND exclude conditions           |
+| §9      | Caption                   | markdown      | no       | 1 line, player-safe, no technique        |
+| §9      | Alt                       | markdown      | no       | 1 sentence, subject+relation+location    |
+| §10     | Variants / Crops          | markdown      | no       | Variant intents                          |
+| §10     | Selection rule            | markdown      | no       | When to choose variant                   |
+| §11     | Anchor targets            | path-list     | no       | /manuscript/...#anchor                   |
+| §11     | Placement (Art)           | markdown      | no       | Timing relative to prose/choices         |
+| §11     | Anchor stability risks    | markdown      | no       | Coordination notes                       |
+| §12     | Accessibility (Art/Audio) | markdown      | no       | Risks AND mitigations                    |
+| §12     | Localization              | markdown      | no       | Caption idioms/register/terms            |
+| §13     | Determinism               | markdown      | no       | Off-surface repro info                   |
+| §13     | Repro expectation         | enum          | no       | none \| log-only                         |
+| §13     | Producer log fields       | markdown      | no       | Off-surface technique                    |
+| §14     | Handoffs                  | markdown-list | no       | Min 5 roles recommended                  |
+| §15     | Done checklist            | markdown-list | no       | 8 items recommended                      |
 
-**Total fields: 36** (5 metadata, 3 content, 1 classification, 4 relationships, 2 validation, 2
-localization, 4 accessibility, 7 spatial, 6 presentation, 2 determinism)
+**Total fields: 36** (8 required, 28 optional)
 
 ---

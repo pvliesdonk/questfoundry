@@ -49,24 +49,19 @@
         "slice": {
           "type": "string",
           "description": "Scope description (player-safe, 1-2 lines, no spoilers)",
-          "minLength": 10,
+          "minLength": 1,
           "maxLength": 200
         },
         "snapshot_context": {
           "type": "string",
-          "description": "Cold snapshot reference (format: 'Cold @ YYYY-MM-DD')",
-          "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+          "description": "Cold snapshot reference. Recommended format: 'Cold @ YYYY-MM-DD'."
         }
       },
       "required": [
         "short_name",
         "id",
         "status",
-        "raised_by",
-        "tu",
-        "edited",
-        "slice",
-        "snapshot_context"
+        "raised_by"
       ]
     },
     "classification": {
@@ -126,12 +121,12 @@
           "pattern": "^(no|yes \\(.+\\))$"
         }
       },
-      "required": ["type_primary", "bars_affected", "blocking"]
+      "required": ["type_primary", "blocking"]
     },
     "player_safe_summary": {
       "type": "string",
       "description": "Brief player-facing need description (1-3 lines, no spoilers, no internals)",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "hot_details": {
@@ -174,10 +169,8 @@
       "type": "array",
       "description": "Exit criteria to close this hook (each tied to Quality Bars)",
       "items": {
-        "type": "string",
-        "minLength": 10
-      },
-      "minItems": 1
+        "type": "string"
+      }
     },
     "dormancy_deferrals": {
       "type": "object",
@@ -193,13 +186,11 @@
         },
         "fallback": {
           "type": "string",
-          "description": "Required if deferrals set. What happens without deferred work",
-          "minLength": 10
+          "description": "Required if deferrals set. What happens without deferred work"
         },
         "revisit": {
           "type": "string",
-          "description": "Required if deferrals set. Loop name or milestone/date to revisit",
-          "minLength": 5
+          "description": "Required if deferrals set. Loop name or milestone/date to revisit"
         }
       }
     },
@@ -235,7 +226,7 @@
         "decision": {
           "type": "string",
           "description": "One sentence resolution decision",
-          "minLength": 10,
+          "minLength": 1,
           "maxLength": 200
         },
         "work_performed": {
@@ -270,9 +261,7 @@
     "header",
     "classification",
     "player_safe_summary",
-    "proposed_next_step",
-    "acceptance_criteria",
-    "locations_links"
+    "proposed_next_step"
   ],
   "allOf": [
     {

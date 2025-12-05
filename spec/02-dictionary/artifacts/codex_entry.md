@@ -26,12 +26,12 @@
 <!-- Field: Title | Type: string | Required: yes | Player-safe, no codewords -->
 <!-- Field: Slug | Type: string | Required: yes | Format: kebab-case-anchor | URL-safe identifier -->
 <!-- Validation: Slug must be ASCII or locale policy compliant; no spaces, no punctuation except hyphens -->
-<!-- Field: Locale | Type: locale-code | Required: yes | ISO codes: EN | EN-GB | NL | DE | ... -->
+<!-- Field: Locale | Type: locale-code | Required: no | ISO codes: EN | EN-GB | NL | DE | ... -->
 <!-- Field: Owner | Type: role-name | Required: yes | Fixed: Codex Curator -->
 <!-- Field: Edited | Type: date | Required: yes | Format: YYYY-MM-DD -->
-<!-- Field: Snapshot | Type: cold-date-ref | Required: yes | Format: Cold @ YYYY-MM-DD -->
+<!-- Field: Snapshot | Type: cold-date-ref | Required: no | Format: Cold @ YYYY-MM-DD (recommended) -->
 <!-- Field: TU | Type: tu-id | Required: yes | Format: TU-YYYY-MM-DD-<role><seq> | References TU Brief -->
-<!-- Field: Lineage | Type: markdown | Required: yes | Canon Pack(s) IDs, Research Memos IDs with posture noted -->
+<!-- Field: Lineage | Type: markdown | Required: no | Canon Pack(s) IDs, Research Memos IDs with posture noted -->
 <!-- Field: Style Register | Type: enum | Optional: yes | Values: neutral | formal | colloquial (per Style) -->
 <!-- Cross-artifact: Canon Pack and Research Memo IDs must reference existing artifacts -->
 
@@ -96,7 +96,7 @@ Style Register: <neutral | formal | colloquial> (per Style)
 
 ## 4) Variants & Synonyms (player-safe)
 
-<!-- Field: Variants & Synonyms | Type: table | Required: yes | Register/region variants with translator notes -->
+<!-- Field: Variants & Synonyms | Type: table | Required: no | Register/region variants with translator notes -->
 <!-- Validation: Columns must be: Variant | Register/Region | Notes for Translator -->
 <!-- Cross-field: Register values must match header register or be compatible variants -->
 
@@ -109,7 +109,7 @@ Style Register: <neutral | formal | colloquial> (per Style)
 
 ## 5) Relations (See also)
 
-<!-- Field: Relations (See also) | Type: markdown-list | Required: yes | Related codex entries with slug references -->
+<!-- Field: Relations (See also) | Type: markdown-list | Required: no | Related codex entries with slug references -->
 <!-- Validation: All slug references must resolve to existing or planned Codex Entry artifacts -->
 <!-- Cross-artifact: Bidirectional links should be reciprocal (if A → B, then B should → A) -->
 
@@ -121,7 +121,7 @@ Style Register: <neutral | formal | colloquial> (per Style)
 
 ## 6) Accessibility & Presentation
 
-<!-- Field: Reading level | Type: enum | Required: yes | Values: plain | needs glossary link -->
+<!-- Field: Reading level | Type: enum | Required: no | Values: plain | needs glossary link -->
 <!-- Field: Alt guidance | Type: markdown | Required if illustrated: yes | Format: subject + relation + location, one sentence -->
 <!-- Field: Caption guideline | Type: markdown | Optional: yes | One line, atmospheric/clarifying; no technique -->
 <!-- Field: Link text | Type: markdown | Optional: yes | Anchor text guidance; avoid "click here" -->
@@ -166,8 +166,8 @@ Binder note: ensure TOC/grouping under <category> (ASCII slugs if policy)
 
 ## 9) Lineage & Trace
 
-<!-- Field: From Canon | Type: markdown | Required: yes | Summary of player-safe fact intake from Canon Pack -->
-<!-- Field: Research posture touched | Type: enum | Required: yes | Taxonomy: Research Posture Levels (taxonomies.md §8) -->
+<!-- Field: From Canon | Type: markdown | Required: no | Summary of player-safe fact intake from Canon Pack -->
+<!-- Field: Research posture touched | Type: enum | Required: no | Taxonomy: Research Posture Levels (taxonomies.md §8) -->
 <!-- Allowed values: corroborated | plausible | disputed | uncorroborated:low | uncorroborated:medium | uncorroborated:high -->
 <!-- Validation: All 6 values are flat (not nested); use "medium" not "med" -->
 <!-- Field: Hooks filed | Type: markdown-list | Optional: yes | Follow-up hooks for translator/curator -->
@@ -185,7 +185,7 @@ Hooks filed: hook://translator/<term> (if tricky), hook://curator/<child-term> (
 
 ## 10) Done checklist
 
-<!-- Field: Done checklist | Type: markdown-list | Required: yes | Pass/fail criteria before handoff -->
+<!-- Field: Done checklist | Type: markdown-list | Required: no | Pass/fail criteria before handoff -->
 <!-- Validation: All items must be checked before status changes to approved/merged -->
 
 - [ ] Overview is **player-safe**, concise, in register
@@ -375,21 +375,21 @@ Style Register: neutral
 | ------- | ------------------------ | ------------- | -------------- | --------------------------------------------------- |
 | Header  | Title                    | string        | yes            | Player-safe, no codewords                           |
 | Header  | Slug                     | string        | yes            | kebab-case, ASCII or locale policy                  |
-| Header  | Locale                   | locale-code   | yes            | ISO: EN \| EN-GB \| NL \| DE \| ...                 |
+| Header  | Locale                   | locale-code   | no             | ISO: EN \| EN-GB \| NL \| DE \| ...                 |
 | Header  | Owner                    | role-name     | yes            | Fixed: Codex Curator                                |
 | Header  | Edited                   | date          | yes            | Format: YYYY-MM-DD                                  |
-| Header  | Snapshot                 | cold-date-ref | yes            | Format: Cold @ YYYY-MM-DD                           |
+| Header  | Snapshot                 | cold-date-ref | no             | Format: Cold @ YYYY-MM-DD (recommended)             |
 | Header  | TU                       | tu-id         | yes            | Format: TU-YYYY-MM-DD-<role><seq>                   |
-| Header  | Lineage                  | markdown      | yes            | Canon Pack(s), Research Memos with posture          |
+| Header  | Lineage                  | markdown      | no             | Canon Pack(s), Research Memos with posture          |
 | Header  | Style Register           | enum          | optional       | neutral \| formal \| colloquial                     |
 | §1      | Overview                 | markdown      | yes            | 2-5 lines; player-safe                              |
 | §2      | Where to link            | markdown      | optional       | Section themes/anchors                              |
 | §2      | When not to link         | markdown      | optional       | Avoid overlinking/spoilers                          |
 | §2      | PN cue                   | markdown      | optional       | 1 line in-voice nudge                               |
 | §3      | Context                  | markdown      | yes            | 2-6 lines; diegetic                                 |
-| §4      | Variants & Synonyms      | table         | yes            | Columns: Variant, Register/Region, Translator notes |
-| §5      | Relations (See also)     | markdown-list | yes            | Slug references, taxonomy paths                     |
-| §6      | Reading level            | enum          | yes            | plain \| needs glossary link                        |
+| §4      | Variants & Synonyms      | table         | no             | Columns: Variant, Register/Region, Translator notes |
+| §5      | Relations (See also)     | markdown-list | no             | Slug references, taxonomy paths                     |
+| §6      | Reading level            | enum          | no             | plain \| needs glossary link                        |
 | §6      | Alt guidance             | markdown      | if illustrated | Subject + relation + location                       |
 | §6      | Caption guideline        | markdown      | optional       | One line, atmospheric, no technique                 |
 | §6      | Link text                | markdown      | optional       | Descriptive anchors                                 |
@@ -397,12 +397,11 @@ Style Register: neutral
 | §7      | Collision risks          | markdown      | optional       | Diacritics/punctuation issues                       |
 | §7      | Binder note              | markdown      | optional       | TOC/grouping instructions                           |
 | §8      | Notes (what to avoid)    | markdown-list | implicit       | Anti-patterns, cautions                             |
-| §9      | From Canon               | markdown      | yes            | Player-safe fact intake                             |
-| §9      | Research posture touched | enum          | yes            | Research Posture Levels (§8) - 6 flat values        |
+| §9      | From Canon               | markdown      | no             | Player-safe fact intake                             |
+| §9      | Research posture touched | enum          | no             | Research Posture Levels (§8) - 6 flat values        |
 | §9      | Hooks filed              | markdown-list | optional       | hook://<domain>/<topic>                             |
-| §10     | Done checklist           | markdown-list | yes            | 8 items; all must be ticked                         |
+| §10     | Done checklist           | markdown-list | no             | Checklist items (recommended)                       |
 
-**Total fields: 29** (7 metadata, 3 content, 1 classification, 4 relationships, 1 validation, 4
-localization, 5 accessibility, 2 spatial, 1 presentation, 1 determinism)
+**Total fields: 29** (7 required, 22 optional)
 
 ---

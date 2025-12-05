@@ -30,25 +30,25 @@
 <!-- Field: Responsible (R) | Type: role-list | Required: yes | Comma-separated roles -->
 <!-- Field: Loop | Type: enum | Required: yes | Taxonomy: TU Types & Loop Alignment (taxonomies.md §3) - 13 loops -->
 <!-- Field: Slice | Type: markdown | Required: yes | Player-safe, 1-2 lines -->
-<!-- Field: Snapshot context | Type: cold-date-ref | Required: yes | Format: Cold @ YYYY-MM-DD -->
-<!-- Field: Awake | Type: role-list | Required: yes | Roles actively working this TU -->
-<!-- Field: Dormant | Type: role-list | Required: yes | Roles not participating -->
+<!-- Field: Snapshot context | Type: cold-date-ref | Required: no | Format: Cold @ YYYY-MM-DD (recommended) -->
+<!-- Field: Awake | Type: role-list | Required: no | Roles actively working this TU -->
+<!-- Field: Dormant | Type: role-list | Required: no | Roles not participating -->
 <!-- Field: Deferral tags | Type: deferral-list | Optional | Space-separated (taxonomies.md §7) -->
-<!-- Field: Press | Type: bar-list | Required: yes | Bars this TU will flip to green -->
+<!-- Field: Press | Type: bar-list | Required: no | Bars this TU will flip to green -->
 <!-- Field: Monitor | Type: bar-list | Optional | Bars to watch but not flip -->
-<!-- Field: Pre-gate risks | Type: markdown-list | Required: yes | Smallest likely failures -->
-<!-- Field: Inputs | Type: markdown-list | Required: yes | Prerequisites for TU -->
+<!-- Field: Pre-gate risks | Type: markdown-list | Required: no | Smallest likely failures -->
+<!-- Field: Inputs | Type: markdown-list | Required: no | Prerequisites for TU -->
 <!-- Field: Deliverables | Type: markdown-list | Required: yes | Exit artifacts -->
-<!-- Field: Bars green | Type: bar-list | Required: yes | Must be green before merge -->
-<!-- Field: Merge/View | Type: markdown | Required: yes | Merge decision + Binder involvement -->
-<!-- Field: Timebox | Type: duration | Required: yes | 45-90 min typical -->
+<!-- Field: Bars green | Type: bar-list | Required: no | Must be green before merge -->
+<!-- Field: Merge/View | Type: markdown | Required: no | Merge decision + Binder involvement -->
+<!-- Field: Timebox | Type: duration | Required: no | 45-90 min typical -->
 <!-- Field: Checkpoint | Type: time | Optional | Mid-TU review time -->
 <!-- Field: Handoffs | Type: markdown | Optional | Who gets what when -->
 <!-- Field: Trigger | Type: markdown | Optional | Escalation condition -->
 <!-- Field: Lane | Type: role-name | Optional | Escalation owner -->
 <!-- Field: Record | Type: markdown | Optional | Where escalation documented -->
 <!-- Field: Tracelog | Type: path | Optional | TU log file path -->
-<!-- Field: Linkage | Type: markdown | Required: yes | Hooks filed, snapshot impact -->
+<!-- Field: Linkage | Type: markdown | Required: no | Hooks filed, snapshot impact -->
 
 ```
 
@@ -503,29 +503,29 @@ effort.
 | Header       | Responsible (R)  | role-list     | yes         | Comma-separated, from ROLE_INDEX                        |
 | Scope        | Loop             | enum          | yes         | TU Types & Loop Alignment (taxonomies.md §3) - 13 loops |
 | Scope        | Slice            | markdown      | yes         | Player-safe, 1-2 lines                                  |
-| Scope        | Snapshot context | cold-date-ref | yes         | Format: Cold @ YYYY-MM-DD                               |
-| Roles        | Awake            | role-list     | yes         | Comma-separated abbreviations                           |
-| Roles        | Dormant          | role-list     | yes         | Complement of Awake                                     |
+| Scope        | Snapshot context | cold-date-ref | no          | Format: Cold @ YYYY-MM-DD (recommended)                 |
+| Roles        | Awake            | role-list     | no          | Comma-separated abbreviations                           |
+| Roles        | Dormant          | role-list     | no          | Complement of Awake                                     |
 | Roles        | Deferral tags    | deferral-list | optional    | Space-separated (taxonomies.md §7)                      |
-| Bars         | Press            | bar-list      | yes         | From taxonomies.md §5 (8 bars)                          |
+| Bars         | Press            | bar-list      | no          | From taxonomies.md §5 (8 bars)                          |
 | Bars         | Monitor          | bar-list      | optional    | From taxonomies.md §5, no overlap with Press            |
-| Bars         | Pre-gate risks   | markdown-list | yes         | Specific, testable risks                                |
-| Inputs       | Inputs           | markdown-list | yes         | Prerequisites                                           |
+| Bars         | Pre-gate risks   | markdown-list | no          | Specific, testable risks                                |
+| Inputs       | Inputs           | markdown-list | no          | Prerequisites                                           |
 | Inputs       | Pairing plan     | markdown      | optional    | Which pair guides                                       |
 | Deliverables | Deliverables     | markdown-list | yes         | Concrete exit artifacts                                 |
-| Exit         | Bars green       | bar-list      | yes         | Subset of Press bars                                    |
-| Exit         | Merge/View       | markdown      | yes         | Merge decision + Binder flag                            |
-| Timebox      | Timebox          | duration      | yes         | 45-90 min typical                                       |
+| Exit         | Bars green       | bar-list      | no          | Subset of Press bars                                    |
+| Exit         | Merge/View       | markdown      | no          | Merge decision + Binder flag                            |
+| Timebox      | Timebox          | duration      | no          | 45-90 min typical                                       |
 | Timebox      | Checkpoint       | time          | optional    | Mid-TU review time                                      |
 | Timebox      | Handoffs         | markdown      | optional    | Who, what, when                                         |
 | Gatekeeper   | Pre-gate         | markdown      | recommended | Sample files/anchors                                    |
-| Gatekeeper   | Gatecheck        | markdown      | yes         | Pass/fail by bar                                        |
+| Gatekeeper   | Gatecheck        | markdown      | no          | Pass/fail by bar                                        |
 | Escalation   | Trigger          | markdown      | optional    | Escalation condition                                    |
 | Escalation   | Lane             | role-name     | optional    | Escalation owner                                        |
 | Escalation   | Record           | markdown      | optional    | Where documented                                        |
 | Trace        | Tracelog         | path          | optional    | TU log file path                                        |
-| Trace        | Linkage          | markdown      | yes         | Hooks, snapshot impact                                  |
+| Trace        | Linkage          | markdown      | no          | Hooks, snapshot impact                                  |
 
-**Total fields:** 27 (20 required, 7 optional/recommended)
+**Total fields:** 27 (7 required, 20 optional/recommended)
 
 ---

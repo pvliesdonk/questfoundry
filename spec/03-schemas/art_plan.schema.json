@@ -28,7 +28,7 @@
     "slice": {
       "type": "string",
       "description": "Short player-safe scope label such as \"Act I - Foreman Gate (3 sections)\".",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "status": {
@@ -44,25 +44,22 @@
     "purpose_rationale": {
       "type": "string",
       "description": "1-2 lines explaining how the image helps the reader here.",
-      "minLength": 10,
       "maxLength": 240
     },
     "subject": {
       "type": "string",
       "description": "Concrete nouns describing what the image shows.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "focal_affordance": {
       "type": "string",
       "description": "What must remain readable at target sizes.",
-      "minLength": 10,
       "maxLength": 240
     },
     "composition_intent": {
       "type": "string",
       "description": "Framing, angle, and hierarchy guidance expressed without technique terms.",
-      "minLength": 20,
       "maxLength": 600
     },
     "framing": {
@@ -93,49 +90,41 @@
     "legibility_at_size": {
       "type": "string",
       "description": "Target sizes and what must remain readable at thumbnail/print.",
-      "minLength": 20,
       "maxLength": 400
     },
     "iconography_motifs": {
       "type": "string",
       "description": "Motifs to include and avoid, aligned with canon and style patterns.",
-      "minLength": 20,
       "maxLength": 400
     },
     "light_palette_texture": {
       "type": "string",
       "description": "Descriptive notes on light, palette, and texture without technique jargon.",
-      "minLength": 20,
       "maxLength": 400
     },
     "environment_props": {
       "type": "string",
       "description": "Player-safe location tells and props that communicate context.",
-      "minLength": 20,
       "maxLength": 400
     },
     "characters_poses": {
       "type": "string",
       "description": "Roles/titles visible and the readable gestures or poses they hold.",
-      "minLength": 20,
       "maxLength": 400
     },
     "inclusion_criteria": {
       "type": "string",
       "description": "Conditions for when to include and when to exclude this slot.",
-      "minLength": 20,
       "maxLength": 400
     },
     "caption": {
       "type": "string",
       "description": "Player-safe caption (one line, no technique).",
-      "minLength": 5,
       "maxLength": 200
     },
     "alt_text": {
       "type": "string",
       "description": "Alt text describing subject, relation, and location in one sentence.",
-      "minLength": 10,
       "maxLength": 240
     },
     "variants": {
@@ -143,7 +132,6 @@
       "description": "Optional variant or crop descriptions.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
       }
     },
@@ -156,16 +144,13 @@
       "type": "array",
       "description": "Manuscript paths anchored by this slot.",
       "items": {
-        "type": "string",
-        "pattern": "^/[A-Za-z0-9._\\-/]+#[A-Za-z0-9._\\-]+$"
+        "type": "string"
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "placement": {
       "type": "string",
       "description": "Timing for placement relative to prose or choices.",
-      "minLength": 10,
       "maxLength": 240
     },
     "anchor_stability_risks": {
@@ -176,7 +161,6 @@
     "accessibility": {
       "type": "string",
       "description": "Accessibility risks and mitigations for readability.",
-      "minLength": 20,
       "maxLength": 400
     },
     "localization": {
@@ -187,7 +171,6 @@
     "determinism": {
       "type": "string",
       "description": "Off-surface reproduction expectations including any constraints.",
-      "minLength": 20,
       "maxLength": 400
     },
     "repro_expectation": {
@@ -205,21 +188,16 @@
       "description": "Hand-off notes enumerating who receives which deliverables.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 5
+      }
     },
     "done_checklist": {
       "type": "array",
       "description": "Completion checklist confirming readiness before changing status to rendering.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 8,
-      "maxItems": 8
+      }
     }
   },
   "required": [
@@ -230,25 +208,7 @@
     "slice",
     "status",
     "purpose",
-    "purpose_rationale",
-    "subject",
-    "focal_affordance",
-    "composition_intent",
-    "legibility_at_size",
-    "iconography_motifs",
-    "light_palette_texture",
-    "environment_props",
-    "characters_poses",
-    "inclusion_criteria",
-    "caption",
-    "alt_text",
-    "anchor_targets",
-    "placement",
-    "accessibility",
-    "determinism",
-    "repro_expectation",
-    "handoffs",
-    "done_checklist"
+    "subject"
   ],
   "$defs": {
     "role_name": {

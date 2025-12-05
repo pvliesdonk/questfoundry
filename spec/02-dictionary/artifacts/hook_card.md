@@ -28,10 +28,10 @@
 <!-- Field: ID | Type: string | Required: yes | Format: HK-YYYYMMDD-seq (seq = 01-999) -->
 <!-- Field: Status | Type: enum | Required: yes | Taxonomy: Hook Status Lifecycle (taxonomies.md §2) -->
 <!-- Field: Raised by | Type: role-name | Required: yes | Must exist in Layer 1 ROLE_INDEX -->
-<!-- Field: TU | Type: tu-id | Required: yes | Must reference existing TU Brief -->
-<!-- Field: Edited | Type: date | Required: yes | Format: YYYY-MM-DD -->
-<!-- Field: Slice | Type: markdown | Required: yes | Player-safe, 1-2 lines | No spoilers -->
-<!-- Field: Snapshot context | Type: cold-date-ref | Required: yes | Format: Cold @ YYYY-MM-DD -->
+<!-- Field: TU | Type: tu-id | Required: no | Must reference existing TU Brief -->
+<!-- Field: Edited | Type: date | Required: no | Format: YYYY-MM-DD -->
+<!-- Field: Slice | Type: markdown | Required: no | Player-safe, 1-2 lines | No spoilers -->
+<!-- Field: Snapshot context | Type: cold-date-ref | Required: no | Format: Cold @ YYYY-MM-DD (recommended) -->
 
 ```
 
@@ -56,7 +56,7 @@ Snapshot context: Cold @ <YYYY-MM-DD> (Hot details allowed in §3)
 <!-- Field: Secondary (optional) | Type: enum | Optional | Same values as primary -->
 <!-- Validation: Cannot be same as primary type -->
 
-<!-- Field: Bars affected | Type: enum-list | Required: yes | Taxonomy: Quality Bar Categories (taxonomies.md §5) -->
+<!-- Field: Bars affected | Type: enum-list | Required: conditional (if blocking=yes) | Taxonomy: Quality Bar Categories (taxonomies.md §5) -->
 <!-- Allowed values: Integrity | Reachability | Nonlinearity | Gateways | Style | Determinism | Presentation | Accessibility -->
 <!-- Total: 8 bars | Comma-separated list -->
 
@@ -134,7 +134,7 @@ Consult: <roles>      Dormancy: <keep art/audio/translation/research dormant?> (
 
 > What must be true to close this hook?
 
-<!-- Field: Acceptance Criteria | Type: markdown-list | Required: yes | Min: 1 criterion -->
+<!-- Field: Acceptance Criteria | Type: markdown-list | Required: no | Min: 0 criteria -->
 <!-- Constraints: Each criterion must tie to at least one Quality Bar -->
 <!-- Validation: Bars mentioned here should be subset of "Bars affected" in §1 -->
 
@@ -169,7 +169,7 @@ Revisit: <loop or milestone name/date>
 
 > Pin where this matters and connect related work.
 
-<!-- Field: Locations | Type: path-list | Required: yes | Player-safe anchor paths -->
+<!-- Field: Locations | Type: path-list | Required: no | Player-safe anchor paths -->
 <!-- Format: /manuscript/...#anchor or /codex/... -->
 <!-- Validation: Paths must resolve (checked by Binder during dry bind) -->
 
@@ -177,7 +177,7 @@ Revisit: <loop or milestone name/date>
 <!-- Format: HK-<id>, HK-<id> -->
 <!-- Validation: Referenced hooks must exist -->
 
-<!-- Field: Lineage | Type: markdown | Required: yes | Trace to source artifacts -->
+<!-- Field: Lineage | Type: markdown | Required: no | Trace to source artifacts -->
 <!-- References: Canon Packs, Research Memos, Style Addendum, ADRs -->
 
 ```
@@ -543,13 +543,13 @@ Slice: Act I — Checkpoint
 | Header  | ID                  | string        | yes         | Format: HK-YYYYMMDD-seq                                 |
 | Header  | Status              | enum          | yes         | Hook Status Lifecycle (taxonomies.md §2) - 7 values     |
 | Header  | Raised by           | role-name     | yes         | Layer 1 ROLE_INDEX                                      |
-| Header  | TU                  | tu-id         | yes         | Must reference existing TU Brief                        |
-| Header  | Edited              | date          | yes         | Format: YYYY-MM-DD                                      |
-| Header  | Slice               | markdown      | yes         | Player-safe, 1-2 lines                                  |
-| Header  | Snapshot context    | cold-date-ref | yes         | Format: Cold @ YYYY-MM-DD                               |
+| Header  | TU                  | tu-id         | no          | Must reference existing TU Brief                        |
+| Header  | Edited              | date          | no          | Format: YYYY-MM-DD                                      |
+| Header  | Slice               | markdown      | no          | Player-safe, 1-2 lines                                  |
+| Header  | Snapshot context    | cold-date-ref | no          | Format: Cold @ YYYY-MM-DD (recommended)                 |
 | §1      | Type (primary)      | enum          | yes         | Hook Types (taxonomies.md §1) - 13 values               |
 | §1      | Secondary           | enum          | optional    | Hook Types (taxonomies.md §1) - cannot equal primary    |
-| §1      | Bars affected       | enum-list     | yes         | Quality Bar Categories (taxonomies.md §5) - 8 bars      |
+| §1      | Bars affected       | enum-list     | conditional | Quality Bar Categories (taxonomies.md §5) - if blocking |
 | §1      | Blocking?           | enum          | yes         | no \| yes (explain)                                     |
 | §2      | Player-Safe Summary | markdown      | yes         | 1-3 lines, no spoilers/meta/technique                   |
 | §3      | Hot Details         | markdown      | optional    | Spoilers allowed, Hot-only                              |
@@ -558,13 +558,13 @@ Slice: Act I — Checkpoint
 | §4      | Accountable (A)     | role-name     | yes         | Usually Showrunner                                      |
 | §4      | Consult             | role-list     | optional    | Comma-separated                                         |
 | §4      | Dormancy            | markdown      | optional    | See §6                                                  |
-| §5      | Acceptance Criteria | markdown-list | yes         | Min 1 criterion, tied to bars                           |
+| §5      | Acceptance Criteria | markdown-list | no          | Criteria tied to bars (recommended)                     |
 | §6      | Deferral tags       | deferral-list | optional    | Deferral Types (taxonomies.md §7) - space-separated     |
 | §6      | Fallback            | markdown      | conditional | Required if deferrals set                               |
 | §6      | Revisit             | markdown      | conditional | Required if deferrals set                               |
-| §7      | Locations           | path-list     | yes         | /manuscript/...#anchor or /codex/...                    |
+| §7      | Locations           | path-list     | no          | /manuscript/...#anchor or /codex/...                    |
 | §7      | Related hooks       | id-list       | optional    | HK-<id> format                                          |
-| §7      | Lineage             | markdown      | yes         | Canon Packs, Research Memos, ADRs                       |
+| §7      | Lineage             | markdown      | no          | Canon Packs, Research Memos, ADRs                       |
 | §8      | Decision            | markdown      | conditional | Required on close, one sentence                         |
 | §8      | Work performed      | tu-id-list    | conditional | Required on close                                       |
 | §8      | View impact         | enum          | conditional | Required on close: none \| rebind needed                |
@@ -572,6 +572,6 @@ Slice: Act I — Checkpoint
 | §8      | Status transition   | markdown      | conditional | Required on close                                       |
 | §8      | Owner               | role-name     | conditional | Required on close                                       |
 
-**Total fields:** 28 (10 required always, 6 conditional, 12 optional)
+**Total fields:** 28 (4 required always, 7 conditional, 17 optional)
 
 ---

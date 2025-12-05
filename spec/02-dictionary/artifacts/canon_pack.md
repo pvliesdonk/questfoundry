@@ -27,8 +27,8 @@
 <!-- Field: Edited | Type: date | Required: yes | Format: YYYY-MM-DD -->
 <!-- Field: Owner | Type: role-name | Required: yes | Fixed: Lore Weaver -->
 <!-- Field: Slice | Type: markdown | Required: yes | 1-2 lines, player-safe scope -->
-<!-- Field: Hooks answered | Type: id-list | Required: yes | Hook IDs or short names this pack resolves -->
-<!-- Field: Research posture touched | Type: enum | Required: yes | Taxonomy: Research Posture Levels (taxonomies.md §8) -->
+<!-- Field: Hooks answered | Type: id-list | Required: no | Hook IDs or short names this pack resolves -->
+<!-- Field: Research posture touched | Type: enum | Required: no | Taxonomy: Research Posture Levels (taxonomies.md §8) -->
 <!-- Allowed values: corroborated | plausible | disputed | uncorroborated:low | uncorroborated:medium | uncorroborated:high -->
 <!-- Validation: All 6 values are flat (not nested); use "medium" not "med" -->
 <!-- Field: Sensitivity | Type: markdown | Optional: yes | Values: none | content note refs -->
@@ -49,7 +49,7 @@ Sensitivity: <none | content note refs>
 
 ## 1) Canon Answers (Hot)
 
-<!-- Field: Canon Answers (Hot) | Type: markdown-list | Required: yes | Per hook: Answer, Evidence/Reasoning, Consequences -->
+<!-- Field: Canon Answers (Hot) | Type: markdown-list | Required: no | Per hook: Answer, Evidence/Reasoning, Consequences -->
 <!-- Validation: Spoilers allowed; keep 2-6 lines per answer; avoid prose flourish -->
 <!-- Cross-field: Each hook ID must match a hook listed in "Hooks answered" header -->
 
@@ -70,7 +70,7 @@ _(Repeat per hook in this cluster.)_
 
 ## 2) Timeline Anchors (Hot)
 
-<!-- Field: Timeline Anchors (Hot) | Type: markdown-list | Required: yes | T0/T1/T2/T3 with events -->
+<!-- Field: Timeline Anchors (Hot) | Type: markdown-list | Required: no | T0/T1/T2/T3 with events -->
 <!-- Validation: Must include at least T0 (past), T2 (now); T1 and T3 optional but recommended -->
 
 > Place events on a simple axis so neighbors can reason about "before/after/ongoing."
@@ -88,7 +88,7 @@ T3 <near-future invariant>: <what must happen or cannot happen during slice>
 
 ## 3) Invariants & Constraints (Hot)
 
-<!-- Field: Invariants & Constraints (Hot) | Type: markdown-list | Required: yes | World rules with owner and reasoning -->
+<!-- Field: Invariants & Constraints (Hot) | Type: markdown-list | Required: no | World rules with owner and reasoning -->
 <!-- Validation: Each invariant must name Owner (Lore/Plot/Curator) and Why (1 line) -->
 <!-- Cross-field: Constraints must align with accepted hooks and canon answers -->
 
@@ -114,7 +114,7 @@ T3 <near-future invariant>: <what must happen or cannot happen during slice>
 
 ## 5) Knowledge Ledger (Hot)
 
-<!-- Field: Knowledge Ledger (Hot) | Type: table | Required: yes | Who knows what when -->
+<!-- Field: Knowledge Ledger (Hot) | Type: table | Required: no | Who knows what when -->
 <!-- Validation: Columns must be: Actor, Knows at T0, Gains at T1/T2, Notes (how they'd express it) -->
 <!-- Cross-field: Knowledge changes must align with Timeline Anchors (T0/T1/T2) -->
 
@@ -144,7 +144,7 @@ _(Repeat per concept needing a surface-safe summary.)_
 
 ## 7) Downstream Effects (to neighbors)
 
-<!-- Field: Downstream Effects | Type: markdown-list | Required: yes | Actionable next steps per role -->
+<!-- Field: Downstream Effects | Type: markdown-list | Required: no | Actionable next steps per role -->
 <!-- Validation: Must include at least Plotwright, Scene Smith, Style Lead, Codex Curator sections -->
 <!-- Cross-field: All phrasing must remain player-safe (no spoilers) -->
 
@@ -194,7 +194,7 @@ _(Repeat per concept needing a surface-safe summary.)_
 
 ## 9) Checks (tick before handoff)
 
-<!-- Field: Checks | Type: markdown-list | Required: yes | Pass/fail criteria before handoff -->
+<!-- Field: Checks | Type: markdown-list | Required: no | Pass/fail criteria before handoff -->
 <!-- Validation: All items must be checked before status changes to approved/merged -->
 
 - [ ] All accepted hooks in this cluster have **Hot answers** or a deferral hook
@@ -210,8 +210,8 @@ _(Repeat per concept needing a surface-safe summary.)_
 ## 10) Traceability
 
 <!-- Field: Lineage | Type: markdown | Required: yes | Trace to TU, Canon Packs, Research Memos, ADRs -->
-<!-- Field: Neighbors notified | Type: role-list | Required: yes | @role mentions for affected neighbors -->
-<!-- Field: Snapshot impact | Type: markdown | Required: yes | Cold update implications -->
+<!-- Field: Neighbors notified | Type: role-list | Required: no | @role mentions for affected neighbors -->
+<!-- Field: Snapshot impact | Type: markdown | Required: no | Cold update implications -->
 <!-- Cross-artifact: All referenced IDs must exist (TUs, Research Memos, Canon Packs, ADRs) -->
 
 ```
@@ -376,22 +376,22 @@ Sensitivity: workplace injury (see content notes)
 | Header  | Edited                         | date          | yes      | Format: YYYY-MM-DD                                   |
 | Header  | Owner                          | role-name     | yes      | Fixed: Lore Weaver                                   |
 | Header  | Slice                          | markdown      | yes      | 1-2 lines, player-safe scope                         |
-| Header  | Hooks answered                 | id-list       | yes      | Hook Card IDs/short names                            |
-| Header  | Research posture touched       | enum          | yes      | Research Posture Levels (§8) - 6 flat values         |
+| Header  | Hooks answered                 | id-list       | no       | Hook Card IDs/short names                            |
+| Header  | Research posture touched       | enum          | no       | Research Posture Levels (§8) - 6 flat values         |
 | Header  | Sensitivity                    | markdown      | optional | none \| content note refs                            |
-| §1      | Canon Answers (Hot)            | markdown-list | yes      | Per hook: Answer (2-6 lines), Evidence, Consequences |
-| §2      | Timeline Anchors (Hot)         | markdown-list | yes      | T0/T1/T2/T3 with events                              |
-| §3      | Invariants & Constraints (Hot) | markdown-list | yes      | Invariant/Constraint with owner and why              |
+| §1      | Canon Answers (Hot)            | markdown-list | no       | Per hook: Answer (2-6 lines), Evidence, Consequences |
+| §2      | Timeline Anchors (Hot)         | markdown-list | no       | T0/T1/T2/T3 with events                              |
+| §3      | Invariants & Constraints (Hot) | markdown-list | no       | Invariant/Constraint with owner and why              |
 | §4      | Entity/State Deltas (Hot)      | table         | optional | Columns: Entity, Before, After, Visibility           |
-| §5      | Knowledge Ledger (Hot)         | table         | yes      | Columns: Actor, Knows at T0, Gains, Notes            |
+| §5      | Knowledge Ledger (Hot)         | table         | no       | Columns: Actor, Knows at T0, Gains, Notes            |
 | §6      | Player-Safe Summary            | markdown      | yes      | 2-4 lines per concept; no spoilers                   |
-| §7      | Downstream Effects             | markdown-list | yes      | Per role: actionable next steps                      |
+| §7      | Downstream Effects             | markdown-list | no       | Per role: actionable next steps                      |
 | §8      | Hooks filed                    | markdown-list | optional | Format: hook://<domain>/<topic>                      |
-| §9      | Checks                         | markdown-list | yes      | 7 items; all must be ticked                          |
+| §9      | Checks                         | markdown-list | no       | Checklist items (recommended)                        |
 | §10     | Lineage                        | markdown      | yes      | TU, Research Memos, Canon Packs, ADRs                |
-| §10     | Neighbors notified             | role-list     | yes      | @role mentions                                       |
-| §10     | Snapshot impact                | markdown      | yes      | Cold update implications                             |
+| §10     | Neighbors notified             | role-list     | no       | @role mentions                                       |
+| §10     | Snapshot impact                | markdown      | no       | Cold update implications                             |
 
-**Total fields: 34** (6 metadata, 11 content, 2 classification, 5 relationships, 1 validation)
+**Total fields: 34** (7 required, 27 optional)
 
 ---

@@ -434,6 +434,90 @@ Several fields directly reference or imply relationships between Phase 1 taxonom
 
 ---
 
+## Schema Relaxations (2025-12)
+
+The following 6 priority schemas have been relaxed to improve LLM generation compatibility.
+Fields marked "required" in tables above may now be **optional** per these updated requirements:
+
+### tu_brief.schema.json
+
+**Required (7):** `id`, `opened`, `owner_a`, `responsible_r`, `loop`, `slice`, `deliverables`
+
+**Changed to optional:** `snapshot_context`, `awake`, `dormant`, `deferral_tags`, `press`, `monitor`,
+`pre_gate_risks`, `inputs`, `pairing_plan`, `bars_green`, `merge_view`, `timebox`, `checkpoint`,
+`handoffs`, `pre_gate`, `gatecheck`, `trigger`, `lane`, `record`, `tracelog`, `linkage`
+
+**Constraints relaxed:** Removed strict patterns from `timebox`, `checkpoint`, `snapshot_context`
+
+---
+
+### hook_card.schema.json
+
+**Top-level required (4):** `header`, `classification`, `player_safe_summary`, `proposed_next_step`
+
+**header.required (4):** `short_name`, `id`, `status`, `raised_by`
+
+**classification.required (2):** `type_primary`, `blocking`
+
+**proposed_next_step.required (3):** `loop`, `owner_r`, `accountable_a`
+
+**Changed to optional:** `header.tu`, `header.edited`, `header.slice`, `header.snapshot_context`,
+`classification.type_secondary`, `classification.bars_affected`, `hot_details`, `acceptance_criteria`,
+`dormancy_deferrals`, `locations_links`, `resolution`
+
+**Constraints relaxed:** Removed strict pattern from `snapshot_context`
+
+---
+
+### gatecheck_report.schema.json
+
+**Required (6):** `title`, `checked`, `gatekeeper`, `scope`, `decision`, `bars`
+
+**Changed to optional:** `mode`, `cold_snapshot`, `artifacts_samples`, `why`, `checklist`,
+`next_actions`, `handoffs`, `incidents`, `escalation`, `trace`
+
+**Constraints relaxed:** `bars` minItems 8→1, removed `cold_snapshot` pattern
+
+---
+
+### canon_pack.schema.json
+
+**Required (7):** `title`, `tu`, `edited`, `owner`, `slice`, `player_safe_summary`, `lineage`
+
+**Changed to optional:** `snapshot_context`, `hooks_answered`, `sensitivity`, `research_posture`,
+`canon_answers_hot`, `timeline_anchors_hot`, `invariants_constraints_hot`, `entity_state_deltas_hot`,
+`knowledge_ledger_hot`, `downstream_effects`, `hooks_filed`, `checks`
+
+**Constraints relaxed:** Removed all nested required fields in `canon_answers_hot`, `downstream_effects`, etc.
+
+---
+
+### codex_pack.schema.json
+
+**Required (5):** `pack_name`, `author`, `tu_id`, `edited`, `status`
+
+**Changed to optional:** `theme`, `entry_count`, `coverage_report`, `global_updates`, `entries`,
+`crosslink_map`
+
+**Constraints relaxed:** Removed nested required fields in `coverage_report`, `entries`, `crosslink_map`
+
+---
+
+### art_plan.schema.json
+
+**Required (8):** `title`, `tu`, `edited`, `owner`, `slice`, `status`, `purpose`, `subject`
+
+**Changed to optional:** `purpose_rationale`, `focal_affordance`, `composition_intent`, `framing`,
+`angle`, `distance`, `hierarchy`, `spatial_cues`, `legibility_at_size`, `iconography_motifs`,
+`light_palette_texture`, `environment_props`, `characters_poses`, `inclusion_criteria`, `caption`,
+`alt_text`, `variants`, `selection_rule`, `anchor_targets`, `placement`, `anchor_stability_risks`,
+`accessibility`, `localization`, `determinism`, `repro_expectation`, `producer_log_fields`, `handoffs`,
+`done_checklist`
+
+**Constraints relaxed:** Removed all minLength constraints, removed minItems/maxItems from arrays
+
+---
+
 ## Notes for Layer 3 (Schemas)
 
 When formalizing these fields into Layer 3 schemas:

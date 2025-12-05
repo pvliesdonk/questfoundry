@@ -27,9 +27,9 @@
 <!-- Field: Checked | Type: date | Required: yes | Format: YYYY-MM-DD -->
 <!-- Field: Gatekeeper | Type: name-or-agent | Required: yes | Human name or agent ID -->
 <!-- Field: Scope | Type: markdown | Required: yes | Slice or export target -->
-<!-- Field: Mode | Type: enum | Required: yes | pre-gate | gatecheck -->
-<!-- Field: Cold snapshot | Type: cold-date-ref | Required: yes | Format: cold@YYYY-MM-DD -->
-<!-- Field: Artifacts/Samples | Type: path-list | Required: yes | Paths or short list -->
+<!-- Field: Mode | Type: enum | Required: no | pre-gate | gatecheck -->
+<!-- Field: Cold snapshot | Type: cold-date-ref | Required: no | Format: cold@YYYY-MM-DD (recommended) -->
+<!-- Field: Artifacts/Samples | Type: path-list | Required: no | Paths or short list -->
 <!-- Field: Dormancy state | Type: deferral-list | Optional | Space-separated (taxonomies.md §7) -->
 
 ```
@@ -48,8 +48,8 @@ Dormancy state: <deferred:art deferred:audio deferred:translation deferred:resea
 ## 1) Summary (one screen)
 
 <!-- Field: Decision | Type: enum | Required: yes | pass | conditional pass | block -->
-<!-- Field: Why | Type: markdown | Required: yes | 1-2 lines tied to Bars -->
-<!-- Field: Next actions | Type: markdown | Required: yes | Smallest fixes + owners -->
+<!-- Field: Why | Type: markdown | Required: no | 1-2 lines tied to Bars -->
+<!-- Field: Next actions | Type: markdown | Required: no | Smallest fixes + owners -->
 
 ```
 
@@ -125,7 +125,7 @@ Accessibility snapshot: <alt present/na; captions present/na; reading-order ok>
 
 ## 5) Handoffs (smallest next steps)
 
-<!-- Field: Handoffs | Type: markdown-list | Required: yes | Bar, fix, owner, TU, due date -->
+<!-- Field: Handoffs | Type: markdown-list | Required: no | Bar, fix, owner, TU, due date -->
 
 ```
 
@@ -282,13 +282,13 @@ Hot spoilers
 | Header  | Checked                | date          | yes         | YYYY-MM-DD                        |
 | Header  | Gatekeeper             | name-or-agent | yes         | Human or agent                    |
 | Header  | Scope                  | markdown      | yes         | Slice or export                   |
-| Header  | Mode                   | enum          | yes         | pre-gate \| gatecheck             |
-| Header  | Cold snapshot          | cold-date-ref | yes         | cold@YYYY-MM-DD                   |
-| Header  | Artifacts/Samples      | path-list     | yes         | Paths checked                     |
+| Header  | Mode                   | enum          | no          | pre-gate \| gatecheck             |
+| Header  | Cold snapshot          | cold-date-ref | no          | cold@YYYY-MM-DD (recommended)     |
+| Header  | Artifacts/Samples      | path-list     | no          | Paths checked                     |
 | Header  | Dormancy state         | deferral-list | optional    | Space-separated                   |
 | §1      | Decision               | enum          | yes         | pass \| conditional pass \| block |
-| §1      | Why                    | markdown      | yes         | 1-2 lines                         |
-| §1      | Next actions           | markdown      | yes         | Fixes + owners                    |
+| §1      | Why                    | markdown      | no          | 1-2 lines                         |
+| §1      | Next actions           | markdown      | no          | Fixes + owners                    |
 | §2      | Bar (table)            | enum          | yes         | 8 bars from taxonomies.md §5      |
 | §2      | Status (table)         | enum          | yes         | green \| yellow \| red            |
 | §2      | Evidence               | markdown      | yes         | Player-safe                       |
@@ -300,12 +300,12 @@ Hot spoilers
 | §4      | Audio                  | enum          | optional    | none \| plans \| cues             |
 | §4      | Locales                | markdown      | optional    | Coverage %                        |
 | §4      | Accessibility snapshot | markdown      | optional    | Alt/captions/order                |
-| §5      | Handoffs               | markdown-list | yes         | Bar, fix, owner, TU, due          |
+| §5      | Handoffs               | markdown-list | no          | Bar, fix, owner, TU, due          |
 | §6      | Topic                  | markdown      | optional    | Escalation decision               |
 | §6      | Lane                   | role-name     | optional    | Escalation owner                  |
 | §6      | Level                  | enum          | optional    | L1 \| L2 \| L3                    |
 | §6      | Bundle attached        | enum          | optional    | yes \| no                         |
 
-**Total fields:** 28 (18 required, 10 optional/conditional)
+**Total fields:** 28 (6 required, 22 optional/conditional)
 
 ---

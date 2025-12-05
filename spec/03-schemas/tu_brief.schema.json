@@ -34,13 +34,12 @@
     "slice": {
       "type": "string",
       "description": "Player-safe slice description (1-2 lines).",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "snapshot_context": {
       "type": "string",
-      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
-      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+      "description": "Cold snapshot reference. Recommended format: 'Cold @ YYYY-MM-DD'."
     },
     "awake": {
       "type": "array",
@@ -48,7 +47,6 @@
       "items": {
         "$ref": "#/$defs/role_name"
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "dormant": {
@@ -88,20 +86,16 @@
       "description": "Smallest likely failure points to watch before gate.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 1
+      }
     },
     "inputs": {
       "type": "array",
       "description": "Prerequisites required before starting the TU.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 1
+      }
     },
     "pairing_plan": {
       "type": "string",
@@ -113,7 +107,6 @@
       "description": "Concrete exit artifacts expected at TU completion.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
       },
       "minItems": 1
@@ -124,24 +117,21 @@
       "items": {
         "$ref": "#/$defs/quality_bar"
       },
-      "minItems": 1,
       "uniqueItems": true
     },
     "merge_view": {
       "type": "string",
       "description": "Merge decision and Binder involvement notes.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "timebox": {
       "type": "string",
-      "description": "Timeboxed duration for this TU (45-90 min typical).",
-      "pattern": "^\\d{2,3} min$"
+      "description": "Timeboxed duration for this TU (45-90 min typical). Recommended format: 'XX min'."
     },
     "checkpoint": {
       "type": "string",
-      "description": "Optional mid-TU review time (HH:MM).",
-      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+      "description": "Optional mid-TU review time. Recommended format: HH:MM."
     },
     "handoffs": {
       "type": "string",
@@ -156,7 +146,7 @@
     "gatecheck": {
       "type": "string",
       "description": "Gatecheck plan detailing pass/fail criteria by bar.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "trigger": {
@@ -183,7 +173,7 @@
     "linkage": {
       "type": "string",
       "description": "Hooks filed, snapshot impact, and trace notes.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     }
   },
@@ -194,18 +184,7 @@
     "responsible_r",
     "loop",
     "slice",
-    "snapshot_context",
-    "awake",
-    "dormant",
-    "press",
-    "pre_gate_risks",
-    "inputs",
-    "deliverables",
-    "bars_green",
-    "merge_view",
-    "timebox",
-    "gatecheck",
-    "linkage"
+    "deliverables"
   ],
   "$defs": {
     "role_name": {

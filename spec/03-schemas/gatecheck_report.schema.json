@@ -24,7 +24,7 @@
     "scope": {
       "type": "string",
       "description": "Slice or export target reviewed during the gatecheck.",
-      "minLength": 5,
+      "minLength": 1,
       "maxLength": 240
     },
     "mode": {
@@ -34,18 +34,15 @@
     },
     "cold_snapshot": {
       "type": "string",
-      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
-      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+      "description": "Cold snapshot reference. Recommended format: \"Cold @ YYYY-MM-DD\"."
     },
     "artifacts_samples": {
       "type": "array",
       "description": "Paths or short descriptions of artifacts sampled during the gatecheck.",
       "items": {
         "type": "string",
-        "minLength": 3,
         "maxLength": 200
-      },
-      "minItems": 1
+      }
     },
     "dormancy_state": {
       "type": "array",
@@ -63,13 +60,13 @@
     "why": {
       "type": "string",
       "description": "1-2 lines explaining the decision and tying it to bar status.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 240
     },
     "next_actions": {
       "type": "string",
       "description": "Smallest viable fixes and responsible owners.",
-      "minLength": 10,
+      "minLength": 1,
       "maxLength": 400
     },
     "bars": {
@@ -100,13 +97,13 @@
           "evidence": {
             "type": "string",
             "description": "Player-safe evidence supporting the status. For Nonlinearity/Determinism when branches converge, cite choice integrity evidence: diegetic bridge, first-paragraph reflection of chosen path (not necessarily literal echo), and a state-aware affordance. See 02-dictionary/conventions/choice_integrity.md.",
-            "minLength": 5,
+            "minLength": 1,
             "maxLength": 400
           },
           "smallest_viable_fix": {
             "type": "string",
             "description": "Smallest fix needed to move the bar to green. For \"fake agency\" issues, propose: add a micro-beat between scenes to set a visible state flag; add a diegetic bridge; reflect the chosen path in the next scene's first paragraph; condition one affordance by state.",
-            "minLength": 5,
+            "minLength": 1,
             "maxLength": 400
           },
           "owner": {
@@ -135,14 +132,13 @@
           }
         ]
       },
-      "minItems": 8
+      "minItems": 1
     },
     "incidents": {
       "type": "array",
       "description": "Optional list of incidents observed during the gatecheck.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
       }
     },
@@ -174,13 +170,11 @@
     },
     "handoffs": {
       "type": "array",
-      "description": "Required handoff list with bar, fix, owner, TU, and due date.",
+      "description": "Handoff list with bar, fix, owner, TU, and due date.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 1
+      }
     },
     "escalation": {
       "type": "object",
@@ -212,10 +206,8 @@
       "description": "Gatekeeper checklist confirming decision, fixes, safety, dormancy, handoffs, and trace updates.",
       "items": {
         "type": "string",
-        "minLength": 5,
         "maxLength": 200
-      },
-      "minItems": 6
+      }
     }
   },
   "required": [
@@ -223,15 +215,8 @@
     "checked",
     "gatekeeper",
     "scope",
-    "mode",
-    "cold_snapshot",
-    "artifacts_samples",
     "decision",
-    "why",
-    "next_actions",
-    "bars",
-    "handoffs",
-    "checklist"
+    "bars"
   ],
   "allOf": [
     {
