@@ -13,7 +13,7 @@ from typing import Any, Annotated
 
 import re
 from langchain_core.tools import BaseTool, InjectedToolArg
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
 from questfoundry.runtime.core.schema_registry import SPEC_ROOT
 
@@ -161,6 +161,69 @@ def _normalize_artifact_input(artifact_type: str, data: dict[str, Any]) -> dict[
     # to the corresponding schema and observed LLM patterns.
 
     return normalized
+
+
+def _format_validation_errors(exc: ValidationError, artifact_type: str) -> dict[str, Any]:
+    """
+    Format Pydantic ValidationError into LLM-friendly feedback.
+
+    Instead of raw Pydantic error strings with URLs and truncated input dumps,
+    this produces a clean structured response that helps the LLM understand
+    exactly what needs to be fixed.
+
+    Returns a dict with:
+    - success: False
+    - artifact_type: The artifact being validated
+    - error_count: Number of validation errors
+    - missing_fields: List of required fields that were not provided
+    - invalid_fields: List of fields with value errors (type, format, constraint)
+    - hint: A concise instruction for the LLM
+    """
+    missing_fields: list[str] = []
+    invalid_fields: list[dict[str, str]] = []
+
+    for error in exc.errors():
+        # Build field path (e.g., "header.status" for nested fields)
+        field_path = ".".join(str(loc) for loc in error["loc"])
+        error_type = error["type"]
+        msg = error["msg"]
+
+        if error_type == "missing":
+            missing_fields.append(field_path)
+        else:
+            # Format the error message without Pydantic jargon
+            # Common error types: string_too_short, string_too_long, enum,
+            # string_pattern_mismatch, list_type, dict_type, etc.
+            clean_msg = msg
+
+            # Simplify common Pydantic messages
+            if "String should have at least" in msg:
+                clean_msg = msg.replace("String should have at least", "minimum")
+            elif "String should have at most" in msg:
+                clean_msg = msg.replace("String should have at most", "maximum")
+            elif "Input should be" in msg:
+                clean_msg = msg.replace("Input should be", "expected")
+
+            invalid_fields.append({
+                "field": field_path,
+                "issue": clean_msg,
+            })
+
+    # Build hint based on error types
+    hints = []
+    if missing_fields:
+        hints.append(f"Add missing required fields: {', '.join(missing_fields)}")
+    if invalid_fields:
+        hints.append("Fix invalid field values (see invalid_fields for details)")
+
+    return {
+        "success": False,
+        "artifact_type": artifact_type,
+        "error_count": len(exc.errors()),
+        "missing_fields": missing_fields if missing_fields else None,
+        "invalid_fields": invalid_fields if invalid_fields else None,
+        "hint": ". ".join(hints) if hints else "Check field values against schema requirements",
+    }
 
 
 class SchemaToolGenerator:
@@ -493,10 +556,14 @@ class SchemaToolGenerator:
                 # Validate using Pydantic model
                 try:
                     validated = model(**normalized_kwargs)
+                except ValidationError as e:
+                    # Return LLM-friendly validation feedback
+                    return _format_validation_errors(e, artifact_type)
                 except Exception as e:
+                    # Catch-all for unexpected errors
                     return {
                         "success": False,
-                        "error": f"Validation failed: {e}",
+                        "error": str(e),
                         "artifact_type": artifact_type,
                     }
 
