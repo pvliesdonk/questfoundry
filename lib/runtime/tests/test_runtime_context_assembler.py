@@ -713,6 +713,35 @@ class TestGatherTools:
             ]
             assert len(protocol_tools) == 0
 
+    def test_gather_tools_excludes_typed_artifact_tools(self, sample_role_definition):
+        """Test that typed artifact tools (write_<artifact>) are NOT included.
+
+        Schema validation for artifacts now happens inside write_hot_sot.
+        LLMs use a single tool (write_hot_sot) for all artifact writes.
+        """
+        with patch.object(RuntimeContextAssembler, "_load_protocol"):
+            assembler = RuntimeContextAssembler()
+            tools = assembler._gather_tools(sample_role_definition)
+
+            tool_names = [t["function"]["name"] for t in tools]
+
+            # Verify no typed artifact tools are included
+            typed_artifact_patterns = [
+                "write_tu_brief",
+                "write_hook_card",
+                "write_canon_pack",
+                "write_gatecheck_report",
+                "write_section_draft",
+                "write_style_addendum",
+                "write_codex_pack",
+                "write_art_plan",
+            ]
+            for pattern in typed_artifact_patterns:
+                assert pattern not in tool_names, f"Typed artifact tool '{pattern}' should not be in tools"
+
+            # Verify write_hot_sot IS included (the unified interface)
+            assert "write_hot_sot" in tool_names, "write_hot_sot should be the unified write interface"
+
 
 class TestAssembleContext:
     """Tests for complete context assembly."""

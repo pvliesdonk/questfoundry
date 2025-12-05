@@ -978,64 +978,16 @@ to their schemas and descriptions. Key tool categories:
             ]
         )
 
-        # 5. Typed tools based on interface.outputs (schema-aware artifact tools)
-        # Dynamically add typed tools (write_section_draft, write_hook_card, etc.)
-        # based on what artifacts this role produces according to their YAML definition
-        interface = role_def.get("interface", {})
-        outputs = interface.get("outputs", [])
-        registry = get_tool_registry()
-
-        for output in outputs:
-            artifact_type = output.get("artifact_type")
-            if not artifact_type:
-                continue
-
-            # Check if a typed tool exists for this artifact
-            tool_name = f"write_{artifact_type}"
-            if registry.has_tool(tool_name):
-                # Get tool instance from registry
-                tool_wrapper = registry.get_tool(tool_name)
-                if not tool_wrapper:
-                    continue
-
-                # Extract the underlying LangChain BaseTool
-                if hasattr(tool_wrapper, "to_langchain_tool"):
-                    base_tool = tool_wrapper.to_langchain_tool()
-                else:
-                    # Tool wrapper doesn't expose BaseTool, skip
-                    continue
-
-                # Convert LangChain BaseTool to OpenAI function format
-                # Extract args_schema (Pydantic model) and convert to JSON schema
-                tool_description = getattr(base_tool, "description", f"Write {artifact_type} artifact")
-
-                # Get the args_schema (Pydantic model)
-                args_schema = getattr(base_tool, "args_schema", None)
-                if args_schema:
-                    # Convert Pydantic model to JSON schema
-                    schema_dict = args_schema.model_json_schema()
-                    parameters = {
-                        "type": "object",
-                        "properties": schema_dict.get("properties", {}),
-                        "required": schema_dict.get("required", []),
-                    }
-                else:
-                    # No schema, use generic object
-                    parameters = {"type": "object", "properties": {}}
-
-                # Add tool in OpenAI function format
-                tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": tool_name,
-                            "description": tool_description,
-                            "parameters": parameters,
-                        },
-                    }
-                )
-
-                logger.debug(f"Added typed tool {tool_name} for {role_def.get('id', 'unknown')}")
+        # 5. Typed artifact tools (write_tu_brief, write_hook_card, etc.) - REMOVED
+        #
+        # Schema validation for artifacts now happens inside write_hot_sot.
+        # When write_hot_sot receives a key that maps to an artifact type (e.g., "current_tu" -> "tu_brief"),
+        # it automatically validates the value against the artifact's schema before writing.
+        #
+        # This simplifies the LLM interface: one tool (write_hot_sot) instead of many artifact-specific tools.
+        # LLMs use: write_hot_sot(key="current_tu", value={...}) for all artifact writes.
+        #
+        # See: lib/runtime/src/questfoundry/runtime/tools/state_tools.py - WriteHotSOT._run()
 
         return tools
 

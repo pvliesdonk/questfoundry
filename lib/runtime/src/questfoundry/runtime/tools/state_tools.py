@@ -20,7 +20,7 @@ from typing import Any, Annotated
 import jsonschema
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools.base import _is_injected_arg_type
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, create_model
 from pydantic.fields import PydanticUndefined
 
 from questfoundry.runtime.core.cold_store import ColdStore
@@ -143,6 +143,35 @@ _DICT_KEYS = frozenset(
         "world_genesis_manifest",
     }
 )
+
+# Cached key-to-artifact mapping (populated lazily)
+_KEY_TO_ARTIFACT_CACHE: dict[str, str] | None = None
+
+
+def _get_key_to_artifact_mapping() -> dict[str, str]:
+    """Build reverse mapping: hot_sot_key -> artifact_type.
+
+    Maps hot_sot keys to their corresponding artifact schema types.
+    Example: {"current_tu": "tu_brief", "hooks": "hook_card", ...}
+
+    Uses cached value after first call to avoid repeated file reads.
+    """
+    global _KEY_TO_ARTIFACT_CACHE
+    if _KEY_TO_ARTIFACT_CACHE is not None:
+        return _KEY_TO_ARTIFACT_CACHE
+
+    try:
+        from questfoundry.runtime.core.schema_tool_generator import _discover_artifact_mappings
+
+        artifact_mappings = _discover_artifact_mappings()
+        # Reverse: artifact_type -> hot_sot_key becomes hot_sot_key -> artifact_type
+        _KEY_TO_ARTIFACT_CACHE = {v: k for k, v in artifact_mappings.items()}
+        logger.debug(f"Built key-to-artifact mapping: {_KEY_TO_ARTIFACT_CACHE}")
+    except Exception as e:
+        logger.warning(f"Failed to build key-to-artifact mapping: {e}")
+        _KEY_TO_ARTIFACT_CACHE = {}
+
+    return _KEY_TO_ARTIFACT_CACHE
 
 
 def create_empty_hot_sot() -> dict[str, Any]:
@@ -418,10 +447,11 @@ class ReadHotSOT(_BaseStateTool):
 class WriteHotSOT(_BaseStateTool):
     name: str = "write_hot_sot"
     description: str = (
-        "Write to in-memory hot source of truth. "
+        "Write to Hot State of Things. For artifact keys (current_tu, hooks, drafts, etc.), "
+        "automatically validates value against artifact schema before writing. "
         "Returns {hot_sot: ..., success: true} on success. "
-        "If validation fails, returns {success: false, error: '...', errors: [...]} with detailed field-level errors. "
-        "Use consult_schema to understand requirements, then retry with corrected data."
+        "If validation fails, returns {success: false, missing_fields: [...], invalid_fields: [...], hint: '...'} "
+        "with LLM-friendly feedback. Use consult_schema to check field requirements before writing."
     )
 
     class Args(BaseModel):
@@ -465,6 +495,48 @@ class WriteHotSOT(_BaseStateTool):
             raise StateError("State payload is required for write_hot_sot")
         if value is None:
             raise StateError("Value is required for write_hot_sot")
+
+        # Artifact validation: detect artifact type from key and validate before write
+        top_key = key.split(".")[0] if key else None
+        key_to_artifact = _get_key_to_artifact_mapping()
+        artifact_type = key_to_artifact.get(top_key) if top_key else None
+
+        if artifact_type and isinstance(value, dict):
+            # Import validation utilities from schema_tool_generator
+            try:
+                from questfoundry.runtime.core.schema_tool_generator import (
+                    SchemaToolGenerator,
+                    _format_validation_errors,
+                    _normalize_artifact_input,
+                )
+
+                generator = SchemaToolGenerator()
+                schema = generator._load_schema(artifact_type)
+                model = generator.generate_pydantic_model(artifact_type, schema)
+
+                # Apply normalizations (e.g., checkpoint format fixes for tu_brief)
+                normalized_value = _normalize_artifact_input(artifact_type, value)
+
+                # Validate using Pydantic model
+                try:
+                    validated = model(**normalized_value)
+                    value = validated.model_dump()  # Use validated/normalized data
+                except ValidationError as e:
+                    # Return LLM-friendly validation feedback
+                    field_names = list(model.model_fields.keys())
+                    required_fields = set(schema.get("required", []))
+                    return _format_validation_errors(
+                        e, artifact_type, field_names, required_fields
+                    )
+            except ImportError:
+                # schema_tool_generator not available, skip artifact validation
+                logger.debug(f"Schema validation skipped for {artifact_type}: import error")
+            except FileNotFoundError:
+                # Schema file not found, skip artifact validation
+                logger.debug(f"Schema validation skipped for {artifact_type}: schema not found")
+            except Exception as e:
+                # Other errors during validation setup, log and continue with generic validation
+                logger.warning(f"Artifact validation error for {artifact_type}: {e}")
 
         with _STATE_LOCK:
             # Get previous value for evolution tracking
