@@ -376,7 +376,7 @@
           "check_type": "style_consistency",
           "validator": {
             "method": "llm_eval",
-            "target": "artifacts.current_canon_pack.prose",
+            "target": "hot_sot.current_canon_pack.prose",
             "expression": "Compare prose voice against style_addenda guidelines",
             "parameters": {
               "llm_prompt": "Evaluate if this prose maintains consistent voice with the style guide. Return 'pass' or 'fail' with explanation.",

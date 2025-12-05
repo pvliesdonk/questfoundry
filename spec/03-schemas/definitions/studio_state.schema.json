@@ -4,7 +4,7 @@
   "title": "Studio State",
   "description": "Shared state object for LangGraph execution. This maps to a TypedDict/Pydantic model that all nodes (roles) read from and write to. Encapsulates Hot/Cold SoT, protocol state, quality gates, and execution metadata.",
   "type": "object",
-  "required": ["meta", "hot_sot", "cold_sot", "protocol", "execution"],
+  "required": ["meta", "hot_sot", "cold_sot", "protocol", "execution", "exports"],
 
   "properties": {
     "meta": {
@@ -27,7 +27,7 @@
         "current_tu": {
           "type": "string",
           "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
-          "description": "Current Trace Unit ID tracking this work (e.g., 'TU-2025-11-19-SR01')"
+          "description": "Current Trace Unit ID. This is a pointer to the full TU Brief object in hot_sot.current_tu."
         },
         "current_loop": {
           "type": "string",
@@ -54,9 +54,29 @@
       "type": "object",
       "description": "Hot Source of Truth: work-in-progress artifacts, drafts, spoilers, internal reasoning. From Layer 0 SOURCES_OF_TRUTH.md.",
       "properties": {
+        "current_tu": {
+          "type": "object",
+          "description": "The active TU Brief being worked on. Validates against tu_brief.schema.json.",
+          "$ref": "../../tu_brief.schema.json"
+        },
+        "current_hook": {
+          "type": "object",
+          "description": "The active Hook Card being worked on. Validates against hook_card.schema.json.",
+          "$ref": "../../hook_card.schema.json"
+        },
+        "current_gatecheck": {
+          "type": "object",
+          "description": "The active Gatecheck Report. Validates against gatecheck_report.schema.json.",
+          "$ref": "../../gatecheck_report.schema.json"
+        },
+        "current_canon_pack": {
+          "type": "object",
+          "description": "The active Canon Pack being developed. Validates against canon_pack.schema.json.",
+          "$ref": "../../canon_pack.schema.json"
+        },
         "hooks": {
           "type": "array",
-          "description": "Hook Cards (spec/03-schemas/hook_card.schema.json)",
+          "description": "Collection of all Hook Cards in the hot state. For the active hook, see current_hook.",
           "items": {
             "type": "object",
             "description": "Reference to hook_card.schema.json - runtime validates each item"
@@ -64,7 +84,7 @@
         },
         "tus": {
           "type": "array",
-          "description": "Trace Unit Briefs (spec/03-schemas/tu_brief.schema.json)",
+          "description": "Collection of all Trace Unit Briefs in the hot state. For the active TU, see current_tu.",
           "items": {
             "type": "object",
             "description": "Reference to tu_brief.schema.json"
@@ -72,7 +92,7 @@
         },
         "canon_packs": {
           "type": "array",
-          "description": "Canon Packs: spoiler-level story facts (spec/03-schemas/canon_pack.schema.json)",
+          "description": "Collection of all Canon Packs in the hot state.",
           "items": {
             "type": "object",
             "description": "Reference to canon_pack.schema.json"
@@ -201,6 +221,18 @@
       }
     },
 
+    "exports": {
+      "type": "object",
+      "description": "State related to views and exports of the Cold SoT.",
+      "properties": {
+        "view_log": {
+          "type": "object",
+          "description": "The active View Log being worked on. Validates against view_log.schema.json.",
+          "$ref": "../../view_log.schema.json"
+        }
+      }
+    },
+
     "protocol": {
       "type": "object",
       "description": "Layer 4 protocol state: message tracking, correlation, envelope history",
@@ -265,32 +297,6 @@
               "timeout_at": {"type": "string", "format": "date-time"}
             }
           }
-        }
-      }
-    },
-
-    "artifacts": {
-      "type": "object",
-      "description": "Current working artifacts (mutable during loop execution). Each key is an artifact identifier, value is the artifact object validated against Layer 3 schema.",
-      "additionalProperties": {
-        "description": "Artifact data validated against appropriate Layer 3 schema based on type field"
-      },
-      "properties": {
-        "current_hook": {
-          "type": "object",
-          "description": "Hook Card currently being worked on (validates against hook_card.schema.json)"
-        },
-        "current_tu": {
-          "type": "object",
-          "description": "TU Brief for current trace unit (validates against tu_brief.schema.json)"
-        },
-        "current_canon_pack": {
-          "type": "object",
-          "description": "Canon Pack being developed (validates against canon_pack.schema.json)"
-        },
-        "current_gatecheck": {
-          "type": "object",
-          "description": "Current gatecheck report (validates against gatecheck_report.schema.json)"
         }
       }
     },
