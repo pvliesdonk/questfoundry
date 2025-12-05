@@ -47,3 +47,4 @@ py-repo/
 lib/compiler/.spec_cache/
 lib/compiler/src/questfoundry_compiler/_bundled_spec/
 .claude/settings.local.json
+lib/runtime/logs/agent-feedback.jsonl
