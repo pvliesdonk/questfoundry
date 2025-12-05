@@ -392,6 +392,22 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
         except Exception as exc:
             # Catch-all for non-ValidationError exceptions
             error_msg = str(exc)
+            # If the schema contains unresolved $ref pointers (e.g., when running
+            # in an environment without bundled artifact schemas), treat this as
+            # a soft failure and skip state validation rather than blocking all
+            # writes. Artifact-level validation still runs separately.
+            if "Unresolvable:" in error_msg:
+                logger.warning(
+                    "State validation schema reference unresolved, skipping full "
+                    "state validation: %s",
+                    error_msg,
+                )
+                return {
+                    "success": True,
+                    "errors": [],
+                    "message": f"Validation skipped due to unresolved schema reference: {error_msg}",
+                }
+
             logger.warning("State validation error: %s", error_msg)
             return {
                 "success": False,

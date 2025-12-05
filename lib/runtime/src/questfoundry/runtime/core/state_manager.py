@@ -216,6 +216,8 @@ class StateManager:
                 "current_loop": loop_id or "",
                 "timestamp": now,
             },
+            # Exports block for views / View Log (can be populated by export workflows)
+            "exports": {},
             "protocol": {
                 "correlation_id": tu_id,
                 "message_history": [],

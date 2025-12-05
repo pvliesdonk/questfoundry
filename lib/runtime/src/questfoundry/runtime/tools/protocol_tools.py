@@ -13,6 +13,7 @@ from questfoundry.runtime.exceptions import StateError
 from questfoundry.runtime.models.state import StudioState
 from questfoundry.runtime.protocol import Protocol
 from questfoundry.runtime.protocol.types import Envelope
+from questfoundry.runtime.tools.state_tools import WriteHotSOT
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,44 @@ class SendProtocolMessage(_BaseProtocolTool):
             raise StateError("State payload is required")
         if payload is None:
             payload = {}
+
+        hot_sot_update: dict[str, Any] | None = None
+        write_success: bool | None = None
+
+        # For TU open, ensure the active TU brief is written to hot_sot.current_tu.
+        # This aligns runtime behavior with the spec contract that:
+        # - Showrunner writes tu_brief → hot_sot.current_tu
+        # - Gatekeeper reads tu_brief ← hot_sot.current_tu
+        if intent == "tu.open":
+            tu_brief: Any | None = None
+            if isinstance(payload, dict):
+                # Common shape from tools: {"tu_brief": {...}}
+                tu_brief = payload.get("tu_brief")
+                # Also support already-wrapped payloads: {"type": "...", "data": {"tu_brief": {...}}}
+                if tu_brief is None and isinstance(payload.get("data"), dict):
+                    tu_brief = payload["data"].get("tu_brief")
+
+            if isinstance(tu_brief, dict):
+                try:
+                    writer = WriteHotSOT()
+                    write_result = writer._run(
+                        key="current_tu",
+                        value=tu_brief,
+                        state=state,
+                        role_id=role_id,
+                    )
+                    if isinstance(write_result, dict):
+                        hot_sot = write_result.get("hot_sot")
+                        if isinstance(hot_sot, dict):
+                            hot_sot_update = hot_sot
+                        write_success = write_result.get("success")
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.error(
+                        "Failed to write TU brief to hot_sot.current_tu on tu.open: %s",
+                        exc,
+                    )
+                    write_success = False
+
         message = self._protocol.send_message(
             state,
             sender=role_id,
@@ -115,7 +154,20 @@ class SendProtocolMessage(_BaseProtocolTool):
             intent=intent,
             payload=payload,
         )
-        return {"messages": [message]}
+        result: dict[str, Any] = {"messages": [message]}
+
+        # Propagate hot_sot updates so executors can apply them to state in-place.
+        if hot_sot_update is not None:
+            result["hot_sot"] = hot_sot_update
+
+        # If TU write failed validation, mark the tool call as unsuccessful so
+        # executors can treat it as a failure (no protocol message routed).
+        if write_success is False:
+            result["success"] = False
+        elif write_success is True:
+            result["success"] = True
+
+        return result
 
 
 class SendProtocolEnvelope(_BaseProtocolTool):
