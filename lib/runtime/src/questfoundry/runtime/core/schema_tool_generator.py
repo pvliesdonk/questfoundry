@@ -163,7 +163,12 @@ def _normalize_artifact_input(artifact_type: str, data: dict[str, Any]) -> dict[
     return normalized
 
 
-def _format_validation_errors(exc: ValidationError, artifact_type: str) -> dict[str, Any]:
+def _format_validation_errors(
+    exc: ValidationError,
+    artifact_type: str,
+    all_fields: list[str] | None = None,
+    required_fields: set[str] | None = None,
+) -> dict[str, Any]:
     """
     Format Pydantic ValidationError into LLM-friendly feedback.
 
@@ -171,12 +176,19 @@ def _format_validation_errors(exc: ValidationError, artifact_type: str) -> dict[
     this produces a clean structured response that helps the LLM understand
     exactly what needs to be fixed.
 
+    Args:
+        exc: The Pydantic ValidationError
+        artifact_type: Name of the artifact being validated
+        all_fields: All field names from the schema (optional, for listing optionals)
+        required_fields: Set of required field names (optional, for listing optionals)
+
     Returns a dict with:
     - success: False
     - artifact_type: The artifact being validated
     - error_count: Number of validation errors
     - missing_fields: List of required fields that were not provided
     - invalid_fields: List of fields with value errors (type, format, constraint)
+    - optional_fields: List of optional fields available (if schema info provided)
     - hint: A concise instruction for the LLM
     """
     missing_fields: list[str] = []
@@ -209,12 +221,18 @@ def _format_validation_errors(exc: ValidationError, artifact_type: str) -> dict[
                 "issue": clean_msg,
             })
 
+    # Compute optional fields if schema info provided
+    optional_fields: list[str] | None = None
+    if all_fields is not None and required_fields is not None:
+        optional_fields = sorted([f for f in all_fields if f not in required_fields])
+
     # Build hint based on error types
     hints = []
     if missing_fields:
         hints.append(f"Add missing required fields: {', '.join(missing_fields)}")
     if invalid_fields:
         hints.append("Fix invalid field values (see invalid_fields for details)")
+    hints.append("Use consult_schema tool to check field types and allowed values")
 
     return {
         "success": False,
@@ -222,7 +240,8 @@ def _format_validation_errors(exc: ValidationError, artifact_type: str) -> dict[
         "error_count": len(exc.errors()),
         "missing_fields": missing_fields if missing_fields else None,
         "invalid_fields": invalid_fields if invalid_fields else None,
-        "hint": ". ".join(hints) if hints else "Check field values against schema requirements",
+        "optional_fields": optional_fields,
+        "hint": ". ".join(hints),
     }
 
 
@@ -557,8 +576,13 @@ class SchemaToolGenerator:
                 try:
                     validated = model(**normalized_kwargs)
                 except ValidationError as e:
-                    # Return LLM-friendly validation feedback
-                    return _format_validation_errors(e, artifact_type)
+                    # Return LLM-friendly validation feedback with schema context
+                    return _format_validation_errors(
+                        e,
+                        artifact_type,
+                        all_fields=field_names,
+                        required_fields=required_fields,
+                    )
                 except Exception as e:
                     # Catch-all for unexpected errors
                     return {
