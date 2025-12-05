@@ -56,11 +56,13 @@ def serialize_messages(messages: list[BaseMessage]) -> list[dict]:
                 data["tool_calls"] = msg.tool_calls
             result.append(data)
         elif isinstance(msg, ToolMessage):
-            result.append({
-                "type": "tool",
-                "content": msg.content,
-                "tool_call_id": getattr(msg, "tool_call_id", ""),
-            })
+            result.append(
+                {
+                    "type": "tool",
+                    "content": msg.content,
+                    "tool_call_id": getattr(msg, "tool_call_id", ""),
+                }
+            )
         else:
             # Fallback for unknown types
             result.append({"type": "unknown", "content": str(msg.content)})
@@ -91,10 +93,12 @@ def deserialize_messages(data: list[dict]) -> list[BaseMessage]:
                 msg.tool_calls = item["tool_calls"]
             messages.append(msg)
         elif msg_type == "tool":
-            messages.append(ToolMessage(
-                content=content,
-                tool_call_id=item.get("tool_call_id", ""),
-            ))
+            messages.append(
+                ToolMessage(
+                    content=content,
+                    tool_call_id=item.get("tool_call_id", ""),
+                )
+            )
         else:
             # Skip unknown types
             log.warning(f"Unknown message type during deserialization: {msg_type}")
@@ -256,8 +260,8 @@ class BindToolsExecutor:
         if model_name and provider_manager:
             from questfoundry.runtime.config import calculate_model_aware_thresholds
 
-            self.message_threshold, self.char_threshold = (
-                calculate_model_aware_thresholds(model_name, provider_manager)
+            self.message_threshold, self.char_threshold = calculate_model_aware_thresholds(
+                model_name, provider_manager
             )
             # Derive prompt warning/error thresholds from model-aware char limit
             # Warn at ~50% of usable context, log "error" at full threshold.
@@ -265,9 +269,7 @@ class BindToolsExecutor:
             self.error_threshold = self.char_threshold
         else:
             # Fallback to legacy defaults if model info not provided
-            log.warning(
-                f"No model info provided for {role_id}, using legacy default thresholds"
-            )
+            log.warning(f"No model info provided for {role_id}, using legacy default thresholds")
             # Fallback to conservative defaults if model info not provided
             self.message_threshold = 50  # Conservative default
             self.char_threshold = 50000  # ~12K tokens
@@ -347,9 +349,7 @@ class BindToolsExecutor:
                 # Recompute after clearing
                 prompt_size = sum(len(str(m.content)) for m in self.messages)
                 message_count = len(self.messages)
-                log.info(
-                    f"After tool result cleanup: {message_count} msgs, {prompt_size} chars"
-                )
+                log.info(f"After tool result cleanup: {message_count} msgs, {prompt_size} chars")
 
         # Stage 2: Full summarization at 100% threshold if needed (lossy)
         if message_count > self.message_threshold or prompt_size > self.char_threshold:
@@ -364,9 +364,7 @@ class BindToolsExecutor:
             # Recompute after summarization
             prompt_size = sum(len(str(m.content)) for m in self.messages)
             message_count = len(self.messages)
-            log.info(
-                f"After summarization: {message_count} msgs, {prompt_size} chars"
-            )
+            log.info(f"After summarization: {message_count} msgs, {prompt_size} chars")
 
         tool_results: list[dict] = []
         raw_responses: list[str] = []
@@ -443,9 +441,10 @@ class BindToolsExecutor:
                     messages=serialize_messages(self.messages),
                     response=response_text,
                     tool_calls=[
-                        {"name": tc.get("name"), "args": tc.get("args")}
-                        for tc in tool_calls
-                    ] if tool_calls else [],
+                        {"name": tc.get("name"), "args": tc.get("args")} for tc in tool_calls
+                    ]
+                    if tool_calls
+                    else [],
                 )
 
             # Trace for debugging
@@ -500,8 +499,7 @@ class BindToolsExecutor:
                 try:
                     extractor = ReasoningExtractor()
                     reasoning = extractor.extract_reasoning(
-                        message_content=response_text,
-                        tool_calls=tool_calls
+                        message_content=response_text, tool_calls=tool_calls
                     )
                     if reasoning:
                         reasoning_log = get_reasoning_logger()
@@ -511,13 +509,13 @@ class BindToolsExecutor:
                             "iteration": iteration,
                         }
                         log_entry = extractor.format_for_logging(
-                            reasoning,
-                            role_id=self.role_id,
-                            context=context
+                            reasoning, role_id=self.role_id, context=context
                         )
                         # FIX: log_entry already contains "event" key, don't pass duplicate
                         reasoning_log.info(**log_entry)
-                        log.debug(f"[{self.role_id}] Captured reasoning: {reasoning['reasoning_type']}")
+                        log.debug(
+                            f"[{self.role_id}] Captured reasoning: {reasoning['reasoning_type']}"
+                        )
                 except Exception as e:
                     log.warning(f"[{self.role_id}] Reasoning extraction failed: {e}")
 
@@ -723,12 +721,31 @@ class BindToolsExecutor:
 
             # Log tool result for debugging (especially important for validation errors)
             if isinstance(result, dict):
-                if result.get('success') is False:
-                    log.warning(f'[{self.role_id}] Tool {tool_name} failed: {result.get("error", "Unknown error")}')
+                if result.get("success") is False:
+                    # Promote validation / structured failures to ERROR and surface cause.
+                    # Prefer explicit "error" field, then "hint" (from _format_validation_errors),
+                    # and finally a truncated JSON payload so operators can see why the tool failed.
+                    error_detail: str
+                    if isinstance(result.get("error"), str) and result["error"]:
+                        error_detail = result["error"]
+                    elif isinstance(result.get("hint"), str) and result["hint"]:
+                        error_detail = result["hint"]
+                    else:
+                        try:
+                            error_detail = json.dumps(result, default=str)[:500]
+                        except TypeError:
+                            error_detail = str(result)[:500]
+
+                    log.error(
+                        "[%s] Tool %s failed: %s",
+                        self.role_id,
+                        tool_name,
+                        error_detail,
+                    )
                 else:
-                    log.debug(f'[{self.role_id}] Tool {tool_name} succeeded')
+                    log.debug(f"[{self.role_id}] Tool {tool_name} succeeded")
             else:
-                log.debug(f'[{self.role_id}] Tool {tool_name} result: {str(result)[:200]}')
+                log.debug(f"[{self.role_id}] Tool {tool_name} result: {str(result)[:200]}")
 
             # Apply state updates from tools that return state changes
             # This ensures subsequent tool calls within the same turn see updated state
@@ -877,8 +894,8 @@ class BindToolsExecutor:
                     # Check if any kept messages are ToolMessages responding to these calls
                     kept_msgs = non_system[split_idx:]
                     has_tool_response = any(
-                        isinstance(m, ToolMessage) and
-                        getattr(m, "tool_call_id", None) in tool_call_ids
+                        isinstance(m, ToolMessage)
+                        and getattr(m, "tool_call_id", None) in tool_call_ids
                         for m in kept_msgs
                     )
 
@@ -965,9 +982,7 @@ class BindToolsExecutor:
                 )
 
             # Replace older messages with summary
-            summary_msg = HumanMessage(
-                content=f"[Previous conversation summary: {summary_text}]"
-            )
+            summary_msg = HumanMessage(content=f"[Previous conversation summary: {summary_text}]")
             self.messages = system_msgs + [summary_msg] + recent_msgs
 
         except Exception as e:
