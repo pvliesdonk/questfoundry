@@ -421,7 +421,10 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
                 return {
                     "success": True,
                     "errors": [],
-                    "message": f"Validation skipped due to unresolved schema reference: {error_msg}",
+                    "message": (
+                        "Validation skipped due to unresolved schema reference: "
+                        f"{error_msg}"
+                    ),
                 }
 
             logger.error("State validation error: %s", error_msg)
@@ -482,10 +485,11 @@ class WriteHotSOT(_BaseStateTool):
         "Write to Hot State of Things. For artifact keys (current_tu, hooks, drafts, etc.), "
         "automatically validates value against artifact schema before writing. "
         "Returns {hot_sot: ..., success: true} when the write command executes and passes "
-        "validation; domain-level outcomes (e.g., no-op, duplicate content) are reflected in "
-        "the payload, not in the success flag. "
-        "If validation fails, returns {success: false, missing_fields: [...], invalid_fields: [...], hint: '...'} "
-        "with LLM-friendly feedback. Use consult_schema to check field requirements before writing."
+        "validation; domain-level outcomes (e.g., no-op, duplicate content) are reflected "
+        "in the payload, not in the success flag. "
+        "If validation fails, returns {success: false, missing_fields: [...], "
+        "invalid_fields: [...], hint: '...'} with LLM-friendly feedback. Use "
+        "consult_schema to check field requirements before writing."
     )
 
     class Args(BaseModel):
@@ -496,7 +500,8 @@ class WriteHotSOT(_BaseStateTool):
         key: str | None = Field(
             default=None,
             description=(
-                "Dot-path within hot_sot to write. Use keys from your role's 'Your Output Keys' section. "
+                "Dot-path within hot_sot to write. Use keys from your role's "
+                "'Your Output Keys' section. "
                 "Common keys: drafts, topology_notes, section_briefs, style, canon, hooks"
             ),
         )
@@ -563,9 +568,7 @@ class WriteHotSOT(_BaseStateTool):
                     # Return LLM-friendly validation feedback
                     field_names = list(model.model_fields.keys())
                     required_fields = set(schema.get("required", []))
-                    return _format_validation_errors(
-                        e, artifact_type, field_names, required_fields
-                    )
+                    return _format_validation_errors(e, artifact_type, field_names, required_fields)
             except ImportError:
                 # schema_tool_generator not available, skip artifact validation
                 logger.debug(f"Schema validation skipped for {artifact_type}: import error")
@@ -588,9 +591,9 @@ class WriteHotSOT(_BaseStateTool):
             validation_result = self._validate_state(updated_state)
 
             # Log to structured logging (full content + evolution tracking)
+            new_hash = _compute_content_hash(value)
             sot_log = _get_sot_log()
             if sot_log:
-                new_hash = _compute_content_hash(value)
                 sot_log.info(
                     "write_hot_sot",
                     role=role_id,
@@ -614,6 +617,12 @@ class WriteHotSOT(_BaseStateTool):
                 }
 
             # Success: return updated state
+            logger.info(
+                "Role %s successfully wrote to hot_sot key=%s (evolved=%s)",
+                role_id or "<unknown>",
+                key,
+                prev_hash is not None and prev_hash != new_hash,
+            )
             return {"hot_sot": new_hot, "success": True}
 
 
@@ -672,10 +681,11 @@ class WriteColdSOT(_BaseStateTool):
     name: str = "write_cold_sot"
     description: str = (
         "Persist to cold source of truth (SQLite/disk). "
-        "Returns {cold_sot: ..., success: true} when the persistence command executes and passes "
-        "validation; whether the resulting content is semantically \"good\" is encoded in the "
-        "returned structure, not in the success flag. "
-        "If validation fails, returns {success: false, error: '...', errors: [...]} with detailed field-level errors. "
+        "Returns {cold_sot: ..., success: true} when the persistence command executes and "
+        'passes validation; whether the resulting content is semantically "good" is encoded '
+        "in the returned structure, not in the success flag. "
+        "If validation fails, returns {success: false, error: '...', errors: [...]} with "
+        "detailed field-level errors. "
         "Use consult_schema to understand requirements, then retry with corrected data."
     )
 

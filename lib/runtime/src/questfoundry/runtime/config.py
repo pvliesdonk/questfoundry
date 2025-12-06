@@ -139,7 +139,7 @@ class RuntimeConfig(BaseModel):
         description="Maximum consecutive executions of the same role (fairness)",
     )
     stall_iterations_without_change: int = Field(
-        default=30,
+        default=10,
         ge=5,
         le=200,
         description=(

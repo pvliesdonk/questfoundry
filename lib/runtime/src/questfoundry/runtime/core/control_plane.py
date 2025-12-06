@@ -23,6 +23,7 @@ from questfoundry.runtime.models.state import Message, StudioState
 
 logger = logging.getLogger(__name__)
 
+
 # Lazy getter for structured bus logger (configured at runtime by CLI)
 def _get_bus_log():
     """Get bus logger if configured, None otherwise.
@@ -253,9 +254,7 @@ class ControlPlane:
         ]
         return roles
 
-    def _find_pending_human_message(
-        self, state: StudioState
-    ) -> tuple[Message | None, int | None]:
+    def _find_pending_human_message(self, state: StudioState) -> tuple[Message | None, int | None]:
         """
         Find the first unconsumed human-directed message in the queue.
 
@@ -358,7 +357,8 @@ class ControlPlane:
         """
         messages = state.get("messages", [])
         consumed = state.setdefault("_consumed_messages", set())
-        role_cursors: dict[str, int] = state.get("_role_message_cursor", {})  # per-role last seen index
+        # Per-role last seen index
+        role_cursors: dict[str, int] = state.get("_role_message_cursor", {})
         available_roles = set(self.get_available_roles())
 
         pending: dict[str, list[Message]] = {}
@@ -608,8 +608,7 @@ class ControlPlane:
                 if self._consecutive_executions >= self._max_consecutive:
                     # Check if other roles have pending work
                     other_roles_with_work = [
-                        r for r in pending
-                        if r != role_id and not self.dormancy.is_dormant(r)
+                        r for r in pending if r != role_id and not self.dormancy.is_dormant(r)
                     ]
                     if other_roles_with_work:
                         logger.debug(
@@ -738,9 +737,7 @@ class ControlPlane:
                         f"Dormant roles with no SR action, but wrap-up not sent. "
                         f"Uncommitted changes: {uncommitted}"
                     )
-                    self._inject_wrapup_message(
-                        state, "dormant_roles_no_showrunner", uncommitted
-                    )
+                    self._inject_wrapup_message(state, "dormant_roles_no_showrunner", uncommitted)
                     return [SHOWRUNNER]
 
                 # Wrap-up was already sent - can't wake roles, end graph
@@ -750,9 +747,7 @@ class ControlPlane:
                 )
                 uncommitted = self._get_uncommitted_hot_changes(state)
                 if uncommitted:
-                    logger.warning(
-                        f"Ending graph with uncommitted hot_sot changes: {uncommitted}"
-                    )
+                    logger.warning(f"Ending graph with uncommitted hot_sot changes: {uncommitted}")
 
                 # Log END routing decision
                 bus_log = _get_bus_log()
@@ -772,8 +767,7 @@ class ControlPlane:
         if not self._wrapup_sent:
             uncommitted = self._get_uncommitted_hot_changes(state)
             logger.debug(
-                f"No actionable messages, but wrap-up not sent. "
-                f"Uncommitted changes: {uncommitted}"
+                f"No actionable messages, but wrap-up not sent. Uncommitted changes: {uncommitted}"
             )
             self._inject_wrapup_message(state, "no_actionable_messages", uncommitted)
             return [SHOWRUNNER]
@@ -814,16 +808,13 @@ class ControlPlane:
     def _log_loop_health(self, state: StudioState, next_roles: list[str]) -> None:
         """Log loop health metrics for detecting stuck loops."""
         health_log = _get_health_log()
-        if not health_log:
-            return
 
         # Compute current hot_sot hash
         current_hash = self._compute_hot_sot_hash(state)
 
         # Check if artifacts changed
         artifact_changed = (
-            self._last_hot_sot_hash is not None
-            and current_hash != self._last_hot_sot_hash
+            self._last_hot_sot_hash is not None and current_hash != self._last_hot_sot_hash
         )
 
         if artifact_changed:
@@ -840,6 +831,25 @@ class ControlPlane:
             and next_roles[0] == self._last_executed_role
             and self._consecutive_executions >= 3
         )
+
+        # Persist a compact loop-health snapshot into execution metadata so roles
+        # (especially showrunner) can see loop status in their STATE layer.
+        execution_meta = state.setdefault("execution", {})
+        execution_meta["loop_health"] = {
+            "loop_iteration": self._loop_iteration,
+            "hot_sot_hash": current_hash,
+            "artifact_changed": artifact_changed,
+            "iterations_without_change": self._iterations_without_artifact_change,
+            "last_change_iteration": self._last_artifact_change_iteration,
+            "same_role_repeated": same_role_repeated,
+            "consecutive_same_role": self._consecutive_executions,
+            "next_roles": next_roles,
+            "total_executions": self._total_executions,
+            "role_execution_counts": dict(self._role_execution_counts),
+        }
+
+        if not health_log:
+            return
 
         health_log.info(
             "loop_health",
@@ -1029,15 +1039,17 @@ class ControlPlane:
             if async_human:
                 # Async mode: queue question and continue with other agents
                 pending_questions = state.setdefault("pending_human_questions", [])
-                pending_questions.append({
-                    "id": message_id,
-                    "sender": sender,
-                    "question": question_text,
-                    "suggestions": suggestions,
-                    "context": context,
-                    "tu_id": context.get("tu_id", message.get("tu_id", "")),
-                    "timestamp": message.get("timestamp", ""),
-                })
+                pending_questions.append(
+                    {
+                        "id": message_id,
+                        "sender": sender,
+                        "question": question_text,
+                        "suggestions": suggestions,
+                        "context": context,
+                        "tu_id": context.get("tu_id", message.get("tu_id", "")),
+                        "timestamp": message.get("timestamp", ""),
+                    }
+                )
 
                 logger.info(
                     f"Human question from {sender} queued (async mode): '{question_text[:50]}...'"
@@ -1108,9 +1120,7 @@ class ControlPlane:
         logger.info(f"Customer received {intent}, routing back to {sender}")
         return self._normalize_role_id(sender)
 
-    def answer_pending_question(
-        self, state: StudioState, question_id: str, response: str
-    ) -> bool:
+    def answer_pending_question(self, state: StudioState, question_id: str, response: str) -> bool:
         """
         Answer a pending human question (for async mode).
 
@@ -1153,9 +1163,7 @@ class ControlPlane:
                 # Remove from pending queue
                 pending_questions.pop(i)
 
-                logger.info(
-                    f"Pending question {question_id} answered: '{response[:50]}...'"
-                )
+                logger.info(f"Pending question {question_id} answered: '{response[:50]}...'")
                 return True
 
         logger.warning(f"Pending question {question_id} not found")
@@ -1257,13 +1265,33 @@ class ControlPlane:
                 if receiver_id == role_id or receiver in ("*", BROADCAST):
                     payload = msg.get("payload", {})
 
-                    # Extract loop if present
-                    msg_loop = payload.get("loop")
+                    # Extract loop if present.
+                    # Prefer explicit payload["loop"], but fall back to the
+                    # canonical TU brief location used by send_protocol_message:
+                    # payload["tu_brief"]["loop"]. Also handle the wrapped
+                    # shape: {"type": "...", "data": {"tu_brief": {...}}}.
+                    msg_loop = None
+                    msg_node = None
+                    tu_brief: dict[str, Any] | None = None
+                    if isinstance(payload, dict):
+                        msg_loop = payload.get("loop")
+                        msg_node = payload.get("node") or payload.get("node_id")
+                        if tu_brief is None:
+                            candidate = payload.get("tu_brief")
+                            if candidate is None and isinstance(payload.get("data"), dict):
+                                candidate = payload["data"].get("tu_brief")
+                            if isinstance(candidate, dict):
+                                tu_brief = candidate
+                        if tu_brief is not None:
+                            if not msg_loop:
+                                msg_loop = tu_brief.get("loop") or tu_brief.get("loop_id")
+                            if not msg_node:
+                                msg_node = tu_brief.get("node") or tu_brief.get("node_id")
+
                     if msg_loop and not loop_id:
                         loop_id = msg_loop
 
                     # Extract node if present
-                    msg_node = payload.get("node") or payload.get("node_id")
                     if msg_node and not node_id:
                         node_id = msg_node
 
@@ -1272,10 +1300,23 @@ class ControlPlane:
                         break
 
             # Update state with extracted context for context assembler
+            original_loop_id = state.get("loop_id")
+            original_node_id = state.get("node_id")
             if loop_id:
                 state = {**state, "loop_id": loop_id}
             if node_id:
                 state = {**state, "node_id": node_id}
+
+            if (loop_id and loop_id != original_loop_id) or (
+                node_id and node_id != original_node_id
+            ):
+                logger.info(
+                    "Resolved execution context for %s from protocol messages: "
+                    "loop_id=%s, node_id=%s",
+                    role_id,
+                    loop_id,
+                    node_id,
+                )
 
             # Log role execution start with structured logging
             bus_log = _get_bus_log()
@@ -1345,9 +1386,7 @@ class ControlPlane:
             # This enables a "new messages only" view in the router for direct messages.
             role_cursors: dict[str, int] = dict(state.get("_role_message_cursor", {}))
             if highest_index_for_role >= 0:
-                role_cursors[role_id] = max(
-                    highest_index_for_role, role_cursors.get(role_id, -1)
-                )
+                role_cursors[role_id] = max(highest_index_for_role, role_cursors.get(role_id, -1))
             elif existing_messages and role_id not in role_cursors:
                 # If there were messages but none addressed to this role, treat the cursor as
                 # "up to current end" so future direct messages are considered new.
@@ -1360,9 +1399,7 @@ class ControlPlane:
             bus_log = _get_bus_log()
             if bus_log:
                 consumed_indices = [idx for idx in consumed if isinstance(idx, int)]
-                broadcast_consumed = [
-                    item for item in consumed if isinstance(item, tuple)
-                ]
+                broadcast_consumed = [item for item in consumed if isinstance(item, tuple)]
                 try:
                     bus_log.info(
                         "message_consumed",

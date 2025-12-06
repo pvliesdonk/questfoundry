@@ -23,7 +23,6 @@ import yaml
 from questfoundry.runtime.core.capability_mapper import CapabilityMapper
 from questfoundry.runtime.core.schema_registry import DEFINITIONS_ROOT
 from questfoundry.runtime.models.state import StudioState
-from questfoundry.runtime.plugins.tools.registry import get_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +301,9 @@ Current execution context:
         # Add TU context if available
         tu_id = getattr(state, "tu_id", None)
         tu_brief = getattr(state, "tu_brief", None)
+        if isinstance(state, dict):
+            tu_id = state.get("tu_id", tu_id)
+            tu_brief = state.get("tu_brief", tu_brief)
 
         if tu_id:
             state_block += f"\n## Current Trace Unit\n- TU ID: {tu_id}\n"
@@ -311,6 +313,9 @@ Current execution context:
         # Add loop context if available
         loop_id = getattr(state, "loop_id", None)
         node_id = getattr(state, "node_id", None)
+        if isinstance(state, dict):
+            loop_id = state.get("loop_id", loop_id)
+            node_id = state.get("node_id", node_id)
 
         if loop_id:
             state_block += f"\n## Current Loop\n- Loop: {loop_id}\n"
@@ -319,15 +324,21 @@ Current execution context:
 
         # Add Hot/Cold context
         hot_cold = getattr(state, "hot_cold", "hot")
+        if isinstance(state, dict):
+            hot_cold = state.get("hot_cold", hot_cold)
         state_block += f"\n## State Context\n- Hot/Cold: {hot_cold}\n"
 
         # Add snapshot context if available
         snapshot_id = getattr(state, "snapshot_id", None)
+        if isinstance(state, dict):
+            snapshot_id = state.get("snapshot_id", snapshot_id)
         if snapshot_id:
             state_block += f"- Snapshot: {snapshot_id}\n"
 
         # Add relevant artifacts from state
         hot_sot = getattr(state, "hot_sot", {})
+        if isinstance(state, dict):
+            hot_sot = state.get("hot_sot", hot_sot)
         if hot_sot:
             state_block += "\n## Available Artifacts\n"
             for artifact_type, artifacts in hot_sot.items():
@@ -335,12 +346,31 @@ Current execution context:
                     count = len(artifacts)
                     state_block += f"- {artifact_type}: {count} item(s)\n"
 
+        # Add loop health snapshot if available (for all roles, especially showrunner)
+        execution_meta: dict[str, Any] = {}
+        if isinstance(state, dict):
+            execution_meta = state.get("execution", {}) or {}
+        else:
+            execution_meta = getattr(state, "execution", {}) or {}
+
+        loop_health = execution_meta.get("loop_health")
+        if isinstance(loop_health, dict):
+            state_block += "\n## Loop Health\n"
+            lh_iter = loop_health.get("loop_iteration")
+            lh_iwc = loop_health.get("iterations_without_change")
+            lh_last = loop_health.get("last_change_iteration")
+            lh_next = loop_health.get("next_roles", [])
+            state_block += f"- Loop iteration: {lh_iter}\n"
+            state_block += f"- Iterations without Hot SoT change: {lh_iwc}\n"
+            state_block += f"- Last change at iteration: {lh_last}\n"
+            if lh_next:
+                state_block += f"- Next roles (planned): {', '.join(lh_next)}\n"
+
         # Add execution history for this role (messages it has sent)
         if role_id:
             messages = state.get("messages", [])
             role_messages = [
-                m for m in messages
-                if str(m.get("sender", "")).lower() == role_id.lower()
+                m for m in messages if str(m.get("sender", "")).lower() == role_id.lower()
             ]
             if role_messages:
                 state_block += f"\n## Your Previous Actions (as {role_id})\n"
@@ -351,7 +381,8 @@ Current execution context:
 
                 # Preserve escalation messages regardless of history limit
                 escalations = [
-                    m for m in role_messages
+                    m
+                    for m in role_messages
                     if m.get("escalation") or m.get("priority") == "critical"
                 ]
                 normal = [m for m in role_messages if m not in escalations]
@@ -473,7 +504,10 @@ To save your work, you MUST use the `write_hot_sot` tool:
             block += "### Your Output Keys\n\n"
             block += "Use `write_hot_sot` tool with these keys:\n\n"
             for artifact, key, strategy in hot_outputs:
-                block += f'- `write_hot_sot(key="{key}", value={{...}})` → {artifact} (merge: {strategy})\n'
+                block += (
+                    f'- `write_hot_sot(key="{key}", value={{...}})` → '
+                    f"{artifact} (merge: {strategy})\n"
+                )
             block += "\n"
 
         return block
@@ -599,7 +633,8 @@ Your tools are bound to your LLM API session via function calling. Use them acco
 to their schemas and descriptions. Key tool categories:
 
 - **State tools**: read_hot_sot, write_hot_sot, read_cold_sot, write_cold_sot
-- **Consult tools**: consult_schema, consult_playbook, consult_protocol, consult_role_charter, consult_quality_gate, consult_glossary
+- **Consult tools**: consult_schema, consult_playbook, consult_protocol,
+  consult_role_charter, consult_quality_gate, consult_glossary
 - **Artifact tools**: write_<artifact_type> tools for validated artifact creation
 - **Protocol tools**: send_protocol_message for inter-role communication
 """
@@ -639,6 +674,28 @@ to their schemas and descriptions. Key tool categories:
         # rich validation feedback on errors. The "structured_output" config
         # in role YAML is deprecated and ignored.
 
+        # Showrunner-specific loop health and TU closure guidance.
+        identity = role_def.get("identity", {})
+        role_id = identity.get("id") or role_def.get("id", "")
+        if str(role_id).lower() == "showrunner":
+            interface_block += """
+## Loop Health and TU Closure (Showrunner)
+
+You are responsible for deciding when a Trace Unit (TU) is DONE or STUCK.
+
+- Check the STATE layer, including the **Loop Health** section and
+  `hot_sot.current_tu`.
+- When work for the current TU is complete or clearly stalled, you MUST choose a
+  lifecycle action instead of sending more `tu.update` messages:
+  - Use `send_protocol_message` with an appropriate `intent` such as `tu.close`,
+    `tu.defer`, `tu.reject`, or `error`.
+  - When you are issuing the final decision for this TU, set
+    `receiver="__terminate__"` so the execution loop ends cleanly.
+- Use interim `tu.update` messages to coordinate roles, but do **not** keep the
+  TU open once success criteria are met or no further Hot SoT progress is
+  possible.
+"""
+
         return interface_block
 
     def _gather_tools(self, role_def: dict[str, Any]) -> list[dict[str, Any]]:
@@ -675,7 +732,9 @@ to their schemas and descriptions. Key tool categories:
                                 },
                                 "intent": {
                                     "type": "string",
-                                    "description": "Protocol intent (e.g., 'tu.open', 'hook.create')",
+                                    "description": (
+                                        "Protocol intent (e.g., 'tu.open', 'hook.create')"
+                                    ),
                                 },
                                 "payload": {
                                     "type": "object",
@@ -966,8 +1025,9 @@ to their schemas and descriptions. Key tool categories:
                                 "artifact_type": {
                                     "type": "string",
                                     "description": (
-                                        "Artifact type to look up schema for (e.g., 'section_draft', "
-                                        "'hook_card', 'gateway_map', 'tu_brief')"
+                                        "Artifact type to look up schema for "
+                                        "(e.g., 'section_draft', 'hook_card', "
+                                        "'gateway_map', 'tu_brief')"
                                     ),
                                 }
                             },
@@ -981,11 +1041,13 @@ to their schemas and descriptions. Key tool categories:
         # 5. Typed artifact tools (write_tu_brief, write_hook_card, etc.) - REMOVED
         #
         # Schema validation for artifacts now happens inside write_hot_sot.
-        # When write_hot_sot receives a key that maps to an artifact type (e.g., "current_tu" -> "tu_brief"),
-        # it automatically validates the value against the artifact's schema before writing.
+        # When write_hot_sot receives a key that maps to an artifact type
+        # (e.g., "current_tu" -> "tu_brief"), it automatically validates the
+        # value against the artifact's schema before writing.
         #
-        # This simplifies the LLM interface: one tool (write_hot_sot) instead of many artifact-specific tools.
-        # LLMs use: write_hot_sot(key="current_tu", value={...}) for all artifact writes.
+        # This simplifies the LLM interface: one tool (write_hot_sot) instead
+        # of many artifact-specific tools. LLMs use:
+        # write_hot_sot(key="current_tu", value={...}) for all artifact writes.
         #
         # See: lib/runtime/src/questfoundry/runtime/tools/state_tools.py - WriteHotSOT._run()
 

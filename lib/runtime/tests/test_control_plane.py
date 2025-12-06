@@ -6,16 +6,16 @@ Uses mock LLMs for unit tests and real Haiku for integration tests.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from langgraph.graph import END
 
 from questfoundry.runtime.core.control_plane import (
-    ControlPlane,
-    DormancyRegistry,
-    TERMINATE,
     BROADCAST,
     SHOWRUNNER,
+    TERMINATE,
+    ControlPlane,
+    DormancyRegistry,
 )
-from questfoundry.runtime.models.state import StudioState, Message
+from questfoundry.runtime.models.state import StudioState
 
 
 class TestDormancyRegistry:
@@ -119,7 +119,6 @@ class TestRouteByEnvelope:
             "updated_at": "",
         }
 
-        from langgraph.graph import END
         result = control_plane.route_by_envelope(state)
         assert result == [END]  # Returns list for parallel execution
 
@@ -231,7 +230,7 @@ class TestRouteByEnvelope:
         assert SHOWRUNNER not in result
 
     def test_stall_detection_injects_termination_message(self):
-        """When loop-health indicates a stall, control plane emits stall_detected and routes to TERMINATE."""
+        """When loop-health indicates a stall, control plane emits stall_detected."""
         control_plane = ControlPlane()
         # Make stall detection trigger quickly for this test
         control_plane._stall_iterations_without_change = 1
@@ -271,8 +270,9 @@ class TestRouteByEnvelope:
         control_plane.dormancy.wake("style_lead")
 
         result = control_plane.route_by_envelope(state)
-        # Stall detection should force termination via TERMINATE
-        assert result == [TERMINATE]
+        # Stall detection should force termination of the graph (END node),
+        # while emitting a protocol error message addressed to TERMINATE.
+        assert result == [END]
 
         last_msg = state["messages"][-1]
         assert last_msg["receiver"] == TERMINATE
@@ -312,7 +312,7 @@ class TestRouteByEnvelope:
                     "payload": {},
                     "timestamp": "",
                     "envelope": {},
-                }
+                },
             ],
             "snapshot_ref": None,
             "parent_tu_id": None,
