@@ -614,8 +614,17 @@ class BindToolsExecutor:
                     protocol_messages.append(protocol_msg)
                     log.info(f"Protocol message to {protocol_msg['receiver']} collected")
 
-            # After processing all actions, decide what to do
+            # After processing all actions, decide what to do.
+            # Invariants:
+            # - A turn should not route protocol messages that were produced in the
+            #   same iteration as a failed tool call (e.g., a validation failure on
+            #   write_hot_sot). The agent must either fix the failure and retry, or
+            #   hit max_failures and abort the turn.
             if any_failed:
+                # Treat the entire iteration as failed work: discard any protocol
+                # messages collected in this iteration so they are not routed.
+                protocol_messages = []
+                found_protocol_message = False
                 failure_count += 1
             else:
                 failure_count = 0
@@ -693,7 +702,16 @@ class BindToolsExecutor:
             tool_args: Arguments from LLM (state/role_id injected automatically)
 
         Returns:
-            Tuple of (observation string, success boolean)
+            Tuple of (observation string, success boolean).
+
+        Semantics:
+            - The returned success flag answers: \"did the tool **execute** without internal
+              errors or an explicit {success: false} contract?\"
+            - It does **not** mean the domain-level outcome was \"good\" (e.g., a search tool
+              may legitimately return \"no results\" with success=True). Tools that want to
+              signal an expected-but-unsuccessful outcome should encode that in their payload
+              while keeping success=True, so the executor does not treat the iteration as a
+              hard failure.
         """
         import inspect
 

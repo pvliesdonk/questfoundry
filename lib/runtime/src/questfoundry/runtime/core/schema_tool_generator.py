@@ -381,16 +381,25 @@ class SchemaToolGenerator:
 
         return type_map.get(json_type, Any)
 
-    def _build_pydantic_field(self, field_name: str, field_schema: dict[str, Any]) -> tuple[Any, Any]:
+    def _build_pydantic_field(
+        self, field_name: str, field_schema: dict[str, Any]
+    ) -> tuple[Any, dict[str, Any]]:
         """
-        Build Pydantic field from JSON schema property.
+        Build Pydantic field metadata from JSON schema property.
 
         Args:
             field_name: Field name
             field_schema: JSON schema property definition
 
         Returns:
-            Tuple of (type_annotation, Field(...))
+            Tuple of (type_annotation, field_kwargs)
+
+        Notes:
+            This helper does NOT decide whether the field is required; callers are
+            responsible for choosing defaults based on the schema's \"required\" list.
+            For optional fields, they can safely inject default=None without
+            loosening the canonical JSON Schema, provided they also use
+            model_dump(exclude_unset=True) so unset optionals are omitted.
         """
         # Get base type
         json_type = field_schema.get("type", "string")
@@ -434,11 +443,12 @@ class SchemaToolGenerator:
             enum_values = tuple(field_schema["enum"])
             python_type = Literal[enum_values]  # type: ignore
 
-        # Default value
+        # Default value (if present in schema). Whether this makes the field
+        # required or optional is decided by the caller based on schema.required.
         if "default" in field_schema:
             field_kwargs["default"] = field_schema["default"]
 
-        return (python_type, Field(**field_kwargs) if field_kwargs else...)
+        return python_type, field_kwargs
 
     def generate_pydantic_model(
         self, artifact_type: str, schema: dict[str, Any] | None = None
@@ -464,20 +474,31 @@ class SchemaToolGenerator:
         field_definitions: dict[str, Any] = {}
 
         for field_name, field_schema in properties.items():
-            type_annotation, field_def = self._build_pydantic_field(field_name, field_schema)
+            json_type, field_kwargs = self._build_pydantic_field(field_name, field_schema)
 
-            # If field is not required, make it Optional with default=None
-            if field_name not in required_fields:
+            is_required = field_name in required_fields
+            type_annotation = json_type
+
+            # Optional fields: wrap type in Optional[...] and give them a default.
+            # Required fields: keep raw type; default only if schema specifies one.
+            if not is_required:
                 from typing import Optional
 
                 type_annotation = Optional[type_annotation]  # type: ignore
-                # If field_def is ..., use None as default
-                # If field_def is Field(...), add default=None to it
-                if field_def is ...:
-                    field_def = None
-                else:
-                    # field_def is a Field() object, update it with default=None
-                    field_def.default = None
+                # If schema did not provide a default, make the field optional with
+                # default=None so it can be omitted by callers.
+                field_kwargs = dict(field_kwargs)  # avoid mutating shared dict
+                field_kwargs.setdefault("default", None)
+
+            # Build FieldInfo or use bare defaults when no extra metadata exists.
+            if field_kwargs:
+                default = field_kwargs.pop("default", Field(...)) if is_required else field_kwargs.pop(
+                    "default", None
+                )
+                field_def = Field(default=default, **field_kwargs)
+            else:
+                # No constraints/description/defaults recorded in schema
+                field_def = Field(...) if is_required else Field(default=None)
 
             field_definitions[field_name] = (type_annotation, field_def)
 

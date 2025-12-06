@@ -342,6 +342,19 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
                 - errors (list): Structured error details (empty if valid)
                 - message (str): Human-readable summary
         """
+        # Normalize candidate to satisfy StudioState schema invariants.
+        # This is defensive: older or hand-constructed states may be missing
+        # keys that are now required at the root level.
+        # - ensure_sot_initialized() guarantees hot_sot/cold_sot skeletons
+        # - exports is required by studio_state.schema.json, even for loops
+        #   that never touch view/export flows.
+        candidate = ensure_sot_initialized(candidate)
+        if "exports" not in candidate:
+            normalized = candidate.copy()
+            normalized["exports"] = {}
+            candidate = normalized
+            logger.debug("Initialized missing 'exports' block on StudioState before validation")
+
         try:
             registry = SchemaRegistry()
             schema = registry.load_schema("studio_state.schema.json")
@@ -383,7 +396,10 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
 
             message = "\n".join(feedback_parts)
 
-            logger.warning("State validation failed: %s", message)
+            # Treat schema validation failures as hard errors in logs so they
+            # are visible in monitoring; the tool still returns a structured
+            # {success: False, ...} payload to the caller.
+            logger.error("State validation failed: %s", message)
             return {
                 "success": False,
                 "errors": [error_detail],
@@ -408,7 +424,7 @@ class _BaseStateTool(_StrictToolSchemaMixin, BaseTool):
                     "message": f"Validation skipped due to unresolved schema reference: {error_msg}",
                 }
 
-            logger.warning("State validation error: %s", error_msg)
+            logger.error("State validation error: %s", error_msg)
             return {
                 "success": False,
                 "errors": [{"message": error_msg}],
@@ -465,7 +481,9 @@ class WriteHotSOT(_BaseStateTool):
     description: str = (
         "Write to Hot State of Things. For artifact keys (current_tu, hooks, drafts, etc.), "
         "automatically validates value against artifact schema before writing. "
-        "Returns {hot_sot: ..., success: true} on success. "
+        "Returns {hot_sot: ..., success: true} when the write command executes and passes "
+        "validation; domain-level outcomes (e.g., no-op, duplicate content) are reflected in "
+        "the payload, not in the success flag. "
         "If validation fails, returns {success: false, missing_fields: [...], invalid_fields: [...], hint: '...'} "
         "with LLM-friendly feedback. Use consult_schema to check field requirements before writing."
     )
@@ -536,7 +554,11 @@ class WriteHotSOT(_BaseStateTool):
                 # Validate using Pydantic model
                 try:
                     validated = model(**normalized_value)
-                    value = validated.model_dump()  # Use validated/normalized data
+                    # Use validated/normalized data, omitting unset optional fields so
+                    # we don't inject schema-defaulted or None-valued optionals into
+                    # StudioState. The StudioState JSON Schema remains the single
+                    # source of truth for required vs optional.
+                    value = validated.model_dump(exclude_unset=True)
                 except ValidationError as e:
                     # Return LLM-friendly validation feedback
                     field_names = list(model.model_fields.keys())
@@ -650,7 +672,9 @@ class WriteColdSOT(_BaseStateTool):
     name: str = "write_cold_sot"
     description: str = (
         "Persist to cold source of truth (SQLite/disk). "
-        "Returns {cold_sot: ..., success: true} on success. "
+        "Returns {cold_sot: ..., success: true} when the persistence command executes and passes "
+        "validation; whether the resulting content is semantically \"good\" is encoded in the "
+        "returned structure, not in the success flag. "
         "If validation fails, returns {success: false, error: '...', errors: [...]} with detailed field-level errors. "
         "Use consult_schema to understand requirements, then retry with corrected data."
     )

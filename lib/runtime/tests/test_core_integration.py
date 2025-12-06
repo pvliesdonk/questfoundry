@@ -190,6 +190,17 @@ class TestStateManager:
 
         assert result is True
 
+    def test_initialize_state_matches_studio_state_schema(self, manager):
+        """StudioState from initialize_state should satisfy the spec schema."""
+        from questfoundry.runtime.core.schema_registry import SchemaRegistry
+
+        state = manager.initialize_state(loop_id="story_spark", context={})
+
+        registry = SchemaRegistry()
+        schema = registry.load_schema("studio_state.schema.json")
+        # Will raise jsonschema.ValidationError if invalid
+        registry.validate_against_schema(state, schema)
+
 
 class TestNodeFactory:
     """Test NodeFactory functionality."""

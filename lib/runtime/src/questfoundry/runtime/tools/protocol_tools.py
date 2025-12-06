@@ -147,21 +147,31 @@ class SendProtocolMessage(_BaseProtocolTool):
                     )
                     write_success = False
 
-        message = self._protocol.send_message(
-            state,
-            sender=role_id,
-            receiver=receiver,
-            intent=intent,
-            payload=payload,
-        )
-        result: dict[str, Any] = {"messages": [message]}
+        # Only emit a protocol message when either:
+        # - this is not a tu.open with a failed TU write, or
+        # - the TU write succeeded. This ensures we never route a tu.open that
+        #   implicitly assumes hot_sot.current_tu was persisted when it wasn't.
+        message: dict[str, Any] | None = None
+        if not (intent == "tu.open" and write_success is False):
+            message = self._protocol.send_message(
+                state,
+                sender=role_id,
+                receiver=receiver,
+                intent=intent,
+                payload=payload,
+            )
+
+        result: dict[str, Any] = {}
+        if message is not None:
+            result["messages"] = [message]
 
         # Propagate hot_sot updates so executors can apply them to state in-place.
         if hot_sot_update is not None:
             result["hot_sot"] = hot_sot_update
 
         # If TU write failed validation, mark the tool call as unsuccessful so
-        # executors can treat it as a failure (no protocol message routed).
+        # executors can treat it as a failure (and so no protocol message is
+        # routed from this iteration).
         if write_success is False:
             result["success"] = False
         elif write_success is True:

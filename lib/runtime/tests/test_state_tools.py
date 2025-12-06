@@ -121,6 +121,22 @@ def test_write_hot_sot_artifact_validates_against_schema(base_state):
                 assert result.get("success") is True
 
 
+def test_write_hot_sot_initializes_missing_exports_block(base_state):
+    """
+    write_hot_sot should tolerate legacy states that are missing the
+    top-level 'exports' key by initializing it to {} before validation.
+    """
+    tool = WriteHotSOT()
+
+    # Simulate a legacy/hand-constructed state without exports
+    legacy_state = base_state.copy()
+    legacy_state.pop("exports", None)
+
+    result = tool._run(key="custom_list", value="item", state=legacy_state)
+
+    assert result.get("success") is True
+
+
 def test_write_hot_sot_artifact_returns_validation_errors(base_state):
     """Test that artifact validation errors return LLM-friendly format."""
     from pydantic import ValidationError
