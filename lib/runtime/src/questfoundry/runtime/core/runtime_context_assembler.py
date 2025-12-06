@@ -694,6 +694,20 @@ You are responsible for deciding when a Trace Unit (TU) is DONE or STUCK.
 - Use interim `tu.update` messages to coordinate roles, but do **not** keep the
   TU open once success criteria are met or no further Hot SoT progress is
   possible.
+
+## TU Lifecycle Guardrails (Showrunner)
+
+Before you call `send_protocol_message` with `intent="tu.open"`:
+
+- Use `consult_playbook(loop_id)` for the loop you intend to run (see
+  STUDIO KNOWLEDGE for valid loop IDs such as `story_spark`, `hook_harvest`).
+- Prefer to call `consult_schema("tu_brief")` to understand required fields
+  before constructing `tu_brief`.
+
+If you attempt `tu.open` without first consulting the relevant playbook, the
+runtime may reject the tool call with a policy violation and tell you which
+consults are missing. Always ground TU lifecycle actions in the spec via the
+consult_* tools.
 """
 
         return interface_block

@@ -1288,6 +1288,17 @@ class ControlPlane:
                             if not msg_node:
                                 msg_node = tu_brief.get("node") or tu_brief.get("node_id")
 
+                    # As a fallback, respect loop context from the envelope
+                    # when payload does not provide it. This ensures roles
+                    # still see the correct loop when upstream nodes only set
+                    # loop_id on the envelope (e.g., hook/create flows).
+                    if not msg_loop:
+                        envelope = msg.get("envelope", {})
+                        if isinstance(envelope, dict):
+                            msg_loop = envelope.get("loop_id") or envelope.get("context", {}).get(
+                                "loop_id"
+                            )
+
                     if msg_loop and not loop_id:
                         loop_id = msg_loop
 

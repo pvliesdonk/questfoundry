@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -32,6 +33,19 @@ from questfoundry.runtime.core.reasoning_extractor import ReasoningExtractor
 from questfoundry.runtime.structured_logging import get_reasoning_logger, get_tool_logger
 
 log = logging.getLogger(__name__)
+
+# Tools that consult the Cartridge/spec for guidance. Successful calls are
+# tracked in state.execution['consults'] so policy guards (e.g., on tu.open)
+# can verify that roles have looked up the relevant spec before taking
+# structural actions.
+CONSULT_TOOL_NAMES: set[str] = {
+    "consult_playbook",
+    "consult_protocol",
+    "consult_role_charter",
+    "consult_quality_gate",
+    "consult_glossary",
+    "consult_schema",
+}
 
 
 def serialize_messages(messages: list[BaseMessage]) -> list[dict]:
@@ -554,6 +568,25 @@ class BindToolsExecutor:
                     except Exception as e:
                         log.warning(f"Failed to log tool execution: {e}")
 
+                # Track successful consult_* usage in execution metadata so that
+                # policy guards (e.g., on tu.open) can verify prerequisites.
+                if tool_success and tool_name in CONSULT_TOOL_NAMES and isinstance(
+                    self.state, dict
+                ):
+                    exec_meta = self.state.get("execution") or {}
+                    consults = list(exec_meta.get("consults") or [])
+                    consults.append(
+                        {
+                            "tool": tool_name,
+                            "args": tool_args,
+                            "role": self.role_id,
+                            "iteration": iteration,
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        }
+                    )
+                    exec_meta["consults"] = consults
+                    self.state["execution"] = exec_meta
+
                 tool_results.append(
                     {
                         "tool": tool_name,
@@ -722,6 +755,42 @@ class BindToolsExecutor:
             return error_msg, False
 
         try:
+            # Policy guard for protocol messages that manipulate TU lifecycle.
+            # We enforce these at the executor level so that unit tests using
+            # tools directly (without BindToolsExecutor) remain unaffected.
+            if tool_name == "send_protocol_message":
+                intent = tool_args.get("intent")
+                # Showrunner must consult loop/playbook before opening a TU.
+                if intent == "tu.open" and str(self.role_id).lower() == "showrunner":
+                    exec_meta = {}
+                    if isinstance(self.state, dict):
+                        exec_meta = self.state.get("execution") or {}
+                    consults = exec_meta.get("consults") or []
+                    has_playbook = any(
+                        isinstance(c, dict) and c.get("tool") == "consult_playbook"
+                        for c in consults
+                    )
+                    if not has_playbook:
+                        result = {
+                            "success": False,
+                            "error": (
+                                "Policy guard: Showrunner must consult the target loop/playbook "
+                                "before calling send_protocol_message with intent='tu.open'. "
+                                "Call consult_playbook(loop_id=...) for the intended loop, then "
+                                "retry tu.open."
+                            ),
+                            "failure_type": "policy_violation",
+                            "missing_prereqs": [
+                                "consult_playbook(loop_id) before send_protocol_message(intent='tu.open')"
+                            ],
+                        }
+                        log.warning(
+                            "[%s] Blocking send_protocol_message(intent='tu.open') due to "
+                            "missing consult_playbook; see missing_prereqs for details",
+                            self.role_id,
+                        )
+                        return json.dumps(result, indent=2), False
+
             # Inject state and role_id for InjectedToolArg parameters
             # Use combined_args to avoid shadowing 'payload' key from tool_args
             combined_args = {**tool_args, "state": self.state, "role_id": self.role_id}
