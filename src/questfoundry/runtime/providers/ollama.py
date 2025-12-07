@@ -118,7 +118,7 @@ def check_ollama_available(base_url: str = DEFAULT_BASE_URL) -> bool:
         url = f"{base_url}/api/tags"
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=5) as response:
-            return response.status == 200
+            return bool(response.status == 200)
     except (urllib.error.URLError, TimeoutError):
         return False
 

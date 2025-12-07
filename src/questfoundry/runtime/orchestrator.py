@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
@@ -124,12 +124,14 @@ def _build_sr_tools(state: StudioState) -> list[BaseTool]:
     tools.append(Terminate())
 
     # State tools with injected state
+    # Cast StudioState to dict[str, Any] for Pydantic field assignment
+    state_dict = cast(dict[str, Any], state)
     read_tool = ReadArtifact()
-    read_tool.state = state
+    read_tool.state = state_dict
     tools.append(read_tool)
 
     write_tool = WriteArtifact()
-    write_tool.state = state
+    write_tool.state = state_dict
     tools.append(write_tool)
 
     return tools
@@ -198,12 +200,14 @@ class Orchestrator:
         sr_prompt = _build_sr_system_prompt(self.roles)
 
         # Create SR executor
-        # Note: SR's "done" tool is "terminate"
+        # Note: SR's "done" tool is "terminate", but we also stop on delegate_to
+        # so the orchestrator can intercept and execute delegations
         sr_executor = ToolExecutor(
             llm=self.llm,
             tools=sr_tools,
             done_tool_name="terminate",
             system_prompt=sr_prompt,
+            stop_tools=["delegate_to"],  # Stop when SR delegates so we can execute it
         )
 
         # Track delegations
@@ -226,19 +230,27 @@ class Orchestrator:
                 state["metadata"]["delegation_history"] = delegation_history
                 return state
 
-            # Check if SR called terminate
+            # Check done_tool_result for what stopped execution
             done_result = sr_result.done_tool_result or {}
-            if "termination" in done_result:
+            stop_tool = done_result.get("_stop_tool", "")
+
+            # Check if SR called terminate
+            if stop_tool == "terminate" or "termination" in done_result:
                 # Workflow complete
-                term = done_result["termination"]
+                term = done_result.get("termination", {"reason": "terminated"})
                 logger.info(f"Workflow terminated: {term.get('reason')}")
                 state["metadata"]["termination"] = term
                 state["metadata"]["delegation_history"] = delegation_history
                 state["metadata"]["total_delegations"] = delegation_count
                 return state
 
-            # Check for delegation request in tool results
-            delegation_request = self._find_delegation_request(sr_result.tool_results)
+            # Check for delegation request (either from stop_tool or tool_results)
+            delegation_request = None
+            if stop_tool == "delegate_to" and done_result.get("success"):
+                delegation_request = done_result.get("delegation_request")
+            if delegation_request is None:
+                # Fallback: search tool_results (shouldn't be needed now)
+                delegation_request = self._find_delegation_request(sr_result.tool_results)
 
             if delegation_request is None:
                 # SR didn't delegate or terminate - give it another chance
@@ -295,7 +307,7 @@ class Orchestrator:
                 try:
                     parsed = json.loads(result.get("result", "{}"))
                     if parsed.get("success") and "delegation_request" in parsed:
-                        return parsed["delegation_request"]
+                        return cast(dict[str, Any], parsed["delegation_request"])
                 except json.JSONDecodeError:
                     pass
         return None

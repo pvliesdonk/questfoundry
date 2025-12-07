@@ -9,7 +9,7 @@ Each role runs as an independent agent that:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from jinja2 import Template
 from langchain_core.language_models import BaseChatModel
@@ -71,11 +71,13 @@ def _build_role_tools(
     tools.append(ConsultSchema())
 
     # State tools with injected state and role_id
+    # Cast StudioState to dict[str, Any] for Pydantic field assignment
+    state_dict = cast(dict[str, Any], state)
     read_tool = ReadHotSot()
-    read_tool.state = state
+    read_tool.state = state_dict
 
     write_tool = WriteHotSot()
-    write_tool.state = state
+    write_tool.state = state_dict
     write_tool.role_id = role.id
 
     tools.append(read_tool)

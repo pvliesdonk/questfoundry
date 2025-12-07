@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class ResourceLoader:
         if role_path.exists():
             try:
                 with open(role_path, encoding="utf-8") as f:
-                    return json.load(f)
+                    return cast(dict[str, Any], json.load(f))
             except (json.JSONDecodeError, OSError) as e:
                 logger.error(f"Failed to load role {role_id}: {e}")
                 return None
@@ -102,9 +102,9 @@ class ResourceLoader:
         try:
             from questfoundry.generated import roles as roles_module
 
-            # Look for ROLES dict or individual role
-            if hasattr(roles_module, "ROLES"):
-                roles_dict = roles_module.ROLES
+            # Look for ALL_ROLES dict (the actual export name)
+            if hasattr(roles_module, "ALL_ROLES"):
+                roles_dict = roles_module.ALL_ROLES
                 if role_id in roles_dict:
                     role_ir = roles_dict[role_id]
                     return self._role_ir_to_dict(role_ir)
@@ -117,7 +117,7 @@ class ResourceLoader:
     def _role_ir_to_dict(self, role_ir: Any) -> dict[str, Any]:
         """Convert RoleIR object to dict for consistency."""
         if hasattr(role_ir, "model_dump"):
-            return role_ir.model_dump()
+            return cast(dict[str, Any], role_ir.model_dump())
         if hasattr(role_ir, "__dict__"):
             return dict(role_ir.__dict__)
         return {"raw": str(role_ir)}
@@ -143,7 +143,7 @@ class ResourceLoader:
         if loop_path.exists():
             try:
                 with open(loop_path, encoding="utf-8") as f:
-                    return json.load(f)
+                    return cast(dict[str, Any], json.load(f))
             except (json.JSONDecodeError, OSError) as e:
                 logger.error(f"Failed to load loop {loop_id}: {e}")
                 return None
@@ -177,7 +177,7 @@ class ResourceLoader:
         if schema_path.exists():
             try:
                 with open(schema_path, encoding="utf-8") as f:
-                    return json.load(f)
+                    return cast(dict[str, Any], json.load(f))
             except (json.JSONDecodeError, OSError) as e:
                 logger.error(f"Failed to load schema {artifact_type}: {e}")
                 return None
@@ -201,8 +201,8 @@ class ResourceLoader:
             try:
                 from questfoundry.generated import roles as roles_module
 
-                if hasattr(roles_module, "ROLES"):
-                    return list(roles_module.ROLES.keys())
+                if hasattr(roles_module, "ALL_ROLES"):
+                    return list(roles_module.ALL_ROLES.keys())
             except ImportError:
                 pass
             return []

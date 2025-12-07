@@ -57,12 +57,13 @@ class LangChainAdapter(LLMAdapter):
         """Convert our messages to LangChain messages."""
         from langchain_core.messages import (
             AIMessage,
+            BaseMessage,
             HumanMessage,
             SystemMessage,
             ToolMessage,
         )
 
-        result = []
+        result: list[BaseMessage] = []
         for msg in messages:
             if isinstance(msg, OurSystemMessage):
                 result.append(SystemMessage(content=msg.content))

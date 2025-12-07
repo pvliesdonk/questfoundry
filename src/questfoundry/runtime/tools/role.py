@@ -53,8 +53,12 @@ class ReturnToSR(BaseTool):
         message: str,
         artifacts: list[str] | None = None,
         recommendation: str | None = None,
+        **kwargs: Any,  # Accept extra args LLM might pass
     ) -> str:
         """Return DelegationResult to SR."""
+        # Log any unexpected kwargs for debugging
+        if kwargs:
+            logger.debug(f"return_to_sr received extra kwargs: {list(kwargs.keys())}")
         # Validate status
         valid_statuses = {"completed", "blocked", "needs_review", "error"}
         if status not in valid_statuses:

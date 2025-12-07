@@ -44,6 +44,9 @@ dependencies = [
     # Utilities
     "structlog>=24.0",
     "python-dotenv>=1.0",
+
+    # Template rendering
+    "jinja2>=3.0",
 ]
 
 [project.optional-dependencies]

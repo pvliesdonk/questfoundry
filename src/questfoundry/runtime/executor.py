@@ -104,7 +104,7 @@ class ToolExecutor:
     - Executing tools and appending ToolMessages
     - Nudging LLM when it doesn't make tool calls
     - Tracking consult_* usage for policy guards
-    - Terminating when the specified done_tool is called
+    - Terminating when any specified stop_tool is called
 
     Parameters
     ----------
@@ -120,6 +120,9 @@ class ToolExecutor:
         Maximum LLM invocations before giving up.
     max_failures : int
         Maximum consecutive failures before giving up.
+    stop_tools : list[str] | None
+        Additional tools that stop execution (for orchestrator intercepts).
+        These are checked for successful calls and will stop the loop.
 
     Examples
     --------
@@ -145,6 +148,7 @@ class ToolExecutor:
         max_iterations: int = 50,
         max_failures: int = 3,
         on_tool_call: Callable[[str, dict[str, Any], Any], None] | None = None,
+        stop_tools: list[str] | None = None,
     ):
         self.llm = llm
         self.tools = tools
@@ -153,6 +157,12 @@ class ToolExecutor:
         self.max_iterations = max_iterations
         self.max_failures = max_failures
         self.on_tool_call = on_tool_call
+
+        # Tools that stop execution when called successfully
+        # Includes done_tool plus any additional stop tools
+        self.stop_tool_names: set[str] = {done_tool_name}
+        if stop_tools:
+            self.stop_tool_names.update(stop_tools)
 
         # Build tool lookup
         self.tool_map: dict[str, BaseTool] = {tool.name: tool for tool in tools}
@@ -293,14 +303,18 @@ class ToolExecutor:
                     any_failed = True
                     continue
 
-                # Check if this was the done tool
-                if tool_name == self.done_tool_name:
+                # Check if this was a stop tool (done tool or other stop tools)
+                if tool_name in self.stop_tool_names:
                     found_done = True
                     # Parse the observation as the done result
                     try:
-                        done_result = json.loads(observation)
+                        parsed = json.loads(observation)
+                        # Only treat as done if the tool succeeded
+                        if parsed.get("success", True):
+                            done_result = parsed
+                            done_result["_stop_tool"] = tool_name
                     except json.JSONDecodeError:
-                        done_result = {"raw": observation}
+                        done_result = {"raw": observation, "_stop_tool": tool_name}
 
             # Update failure count
             if any_failed:
