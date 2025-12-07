@@ -264,26 +264,18 @@ class DomainIR(BaseModel):
                         )
 
         # Validate artifact field types reference known enums
+        primitive_types = {"str", "string", "int", "float", "bool", "list", "dict", "Any"}
         for artifact_id, artifact in self.artifacts.items():
             for field in artifact.fields:
                 # Check if type is a known enum (non-primitive)
-                if field.type not in self.enums and field.type not in {
-                    "str",
-                    "string",
-                    "int",
-                    "float",
-                    "bool",
-                    "list",
-                    "dict",
-                    "Any",
-                }:
-                    # Could be a list type like list[str]
-                    if not field.type.startswith("list[") and not field.type.startswith(
-                        "dict["
-                    ):
-                        errors.append(
-                            f"Artifact '{artifact_id}' field '{field.name}' "
-                            f"references unknown type '{field.type}'"
-                        )
+                is_primitive = field.type in primitive_types
+                is_known_enum = field.type in self.enums
+                is_generic = field.type.startswith("list[") or field.type.startswith("dict[")
+
+                if not is_primitive and not is_known_enum and not is_generic:
+                    errors.append(
+                        f"Artifact '{artifact_id}' field '{field.name}' "
+                        f"references unknown type '{field.type}'"
+                    )
 
         return errors

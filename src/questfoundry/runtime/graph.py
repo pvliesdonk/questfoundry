@@ -6,10 +6,11 @@ from compiled loop definitions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 
 from questfoundry.runtime.state import Intent, StudioState
@@ -113,7 +114,7 @@ def build_graph(
     loop: LoopIR,
     roles: dict[str, RoleIR],
     llm: BaseChatModel,
-) -> StateGraph:
+) -> StateGraph[StudioState]:
     """Build a LangGraph StateGraph from a loop definition.
 
     Args:
@@ -124,7 +125,7 @@ def build_graph(
     Returns:
         Compiled StateGraph ready for execution.
     """
-    graph = StateGraph(StudioState)
+    graph: StateGraph[StudioState] = StateGraph(StudioState)
 
     # Add nodes for each role in the loop
     for node in loop.nodes:
@@ -132,7 +133,7 @@ def build_graph(
         if role is None:
             raise ValueError(f"Unknown role '{node.role}' in loop '{loop.id}'")
 
-        graph.add_node(node.id, create_role_node(role, llm))
+        graph.add_node(node.id, create_role_node(role, llm))  # type: ignore[call-overload]
 
     # Add conditional edges based on routing
     router = create_router(loop)
@@ -159,7 +160,7 @@ def build_graph(
 # =============================================================================
 
 
-def create_example_graph(llm: BaseChatModel) -> StateGraph:
+def create_example_graph(llm: BaseChatModel) -> StateGraph[StudioState]:
     """Create a simple example graph for testing.
 
     This creates a minimal 2-node graph:
