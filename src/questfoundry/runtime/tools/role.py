@@ -173,14 +173,22 @@ class ReadHotSot(BaseTool):
 class WriteHotSot(BaseTool):
     """Write to the hot Source of Truth (mutable draft storage).
 
-    Use this to create or update artifacts. Writing validates against
-    schema if available. Use consult_schema to check field requirements.
+    Use this to create or update artifacts. For known artifact keys
+    (hooks, briefs, scenes, etc.), automatically validates against
+    artifact schema before writing. Returns LLM-friendly validation
+    errors if data doesn't match schema.
+
+    Returns {success: true, ...} when write succeeds.
+    Returns {success: false, missing_fields: [...], invalid_fields: [...], hint: '...'}
+    when validation fails - use consult_schema to check field requirements.
     """
 
     name: str = "write_hot_sot"
     description: str = (
         "Write to hot_store (mutable draft storage). "
-        "Inputs: key (artifact_id or path), value (data to write)"
+        "For artifact keys (hooks, briefs, scenes, etc.), validates against schema. "
+        "Inputs: key (artifact_id or path like 'hooks'), value (data to write). "
+        "Returns success:false with missing_fields, invalid_fields, hint if validation fails."
     )
 
     # State is injected by executor
@@ -189,8 +197,12 @@ class WriteHotSot(BaseTool):
     # Role ID for tracking who wrote
     role_id: str = Field(default="unknown")
 
-    def _run(self, key: str, value: Any) -> str:
-        """Write to hot_store."""
+    def _run(self, key: str, value: Any, **kwargs: Any) -> str:
+        """Write to hot_store with artifact validation."""
+        # Log any unexpected kwargs for debugging
+        if kwargs:
+            logger.debug(f"write_hot_sot received extra kwargs: {list(kwargs.keys())}")
+
         if not key:
             return json.dumps(
                 {
@@ -207,13 +219,29 @@ class WriteHotSot(BaseTool):
                 }
             )
 
+        # Artifact validation: detect artifact type from key
+        if isinstance(value, dict):
+            validation_result = self._validate_artifact(key, value)
+            if validation_result is not None:
+                if not validation_result.get("success", True):
+                    # Validation failed - return LLM-friendly feedback
+                    return json.dumps(validation_result)
+                # Use validated/normalized data
+                value = validation_result.get("validated", value)
+
         hot_store = self.state.setdefault("hot_store", {})
 
         # Check if updating existing artifact
         is_update = key in hot_store
 
-        # If value is a dict and looks like artifact data, wrap in Artifact
-        if isinstance(value, dict) and "type" in value:
+        # Handle array keys (hooks, briefs, etc.) - append to list
+        top_key = key.split(".")[0]
+        if top_key in {"hooks", "briefs", "scenes", "canon_entries", "gatecheck_reports"}:
+            existing = hot_store.get(top_key, [])
+            if not isinstance(existing, list):
+                existing = []
+            hot_store[top_key] = existing + [value]
+        elif isinstance(value, dict) and "type" in value:
             from questfoundry.runtime.state import Artifact
 
             # Create or update artifact
@@ -245,6 +273,31 @@ class WriteHotSot(BaseTool):
                 "key": key,
             }
         )
+
+    def _validate_artifact(self, key: str, value: dict[str, Any]) -> dict[str, Any] | None:
+        """Validate artifact data if key maps to a known artifact type.
+
+        Returns:
+            None if no validation needed (unknown key)
+            {"success": True, "validated": data} if valid
+            {"success": False, ...} with LLM-friendly errors if invalid
+        """
+        try:
+            from questfoundry.runtime.validation import detect_artifact_type, validate_artifact
+
+            artifact_type = detect_artifact_type(key)
+            if artifact_type is None:
+                return None  # No validation for this key
+
+            return validate_artifact(artifact_type, value)
+        except ImportError:
+            # Validation module not available
+            logger.debug(f"Validation module not available, skipping validation for {key}")
+            return None
+        except Exception as e:
+            # Validation setup error - log and continue without validation
+            logger.warning(f"Artifact validation error for {key}: {e}")
+            return None
 
 
 # Factory functions for creating tool instances with injected state
