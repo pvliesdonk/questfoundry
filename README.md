@@ -1,168 +1,174 @@
-# QuestFoundry Mono-Repo
+# QuestFoundry v3
 
-**QuestFoundry** is a layered architecture for collaborative interactive fiction authoring. This
-mono-repo contains the complete QuestFoundry project, from specification to implementation.
+**QuestFoundry** is an AI-powered interactive fiction studio. Write your game logic in MyST
+(Markedly Structured Text), compile it to Python, and execute it with LangGraph.
 
-## Architecture Overview
+> **Status:** v3 alpha — architecture defined, implementation in progress
 
-QuestFoundry is organized into **7 layers**, grouped into three main areas:
+## What's New in v3
 
-### Specification (Layers 0-5)
+v3 is a complete reimagining of QuestFoundry:
 
-Located in `spec/` — The canonical definition of QuestFoundry
+| Aspect | v2 | v3 |
+|--------|----|----|
+| Structure | 7 numbered layers (L0-L6) | Integrated domain model |
+| Authoring | Prose + YAML/JSON separately | MyST (prose = config) |
+| Roles | 15 roles | 8 consolidated archetypes |
+| Runtime | LangChain + LangGraph | Pure LangGraph |
+| Protocol | Agent-to-agent messages | State-based routing |
 
-- **Layer 0** (`spec/00-north-star/`) — Foundational principles, loops, quality bars
-- **Layer 1** (`spec/01-roles/`) — 15 studio roles (charters, briefs)
-- **Layer 2** (`spec/02-dictionary/`) — Common language (artifacts, taxonomies, glossary)
-- **Layer 3** (`spec/03-schemas/`) — JSON schemas (machine validation)
-- **Layer 4** (`spec/04-protocol/`) — Communication protocol (intents, lifecycles, flows)
-- **Layer 5** (`spec/05-definitions/`) — Executable definitions (roles, loops, quality gates, transitions)
+## The 8 Roles
 
-### Implementation (Layer 6)
-
-Located in `lib/` — Runtime implementations of the specification
-
-- **Layer 6** (`lib/python/`) — Python library implementation (`questfoundry-py`)
-- **Layer 6** (`lib/compiler/`) — Spec compiler (`questfoundry-compiler`)
-
-### CLI Tools (Layer 7)
-
-Located in `cli/` — Command-line interface tools
-
-- **Layer 7** (`cli/prompt_generator/`) — Prompt generator (`qf-generate`)
+| Role | Archetype | Agency | Mandate |
+|------|-----------|--------|---------|
+| **Showrunner** | Product Owner | High | Manage by Exception |
+| **Lorekeeper** | Librarian | Medium | Maintain the Truth |
+| **Narrator** | Dungeon Master | High | Run the Game |
+| **Publisher** | Book Binder | Zero | Assemble the Artifact |
+| **Creative Director** | Visionary | High | Ensure Sensory Coherence |
+| **Plotwright** | Architect | Medium | Design the Topology |
+| **Scene Smith** | Writer | Medium | Fill with Prose |
+| **Gatekeeper** | Auditor | Low | Enforce Quality Bars |
 
 ## Repository Structure
 
 ```text
-.
-├── spec/                 # Layers 0-5 (The Specification)
-│   ├── 00-north-star/
-│   ├── 01-roles/
-│   ├── 02-dictionary/
-│   ├── 03-schemas/
-│   ├── 04-protocol/
-│   ├── 05-definitions/   # Executable definitions (Cartridge Architecture)
-│   ├── manifests/        # Manifest schemas
-│   ├── AGENTS.md
-│   └── README.md
-│
-├── lib/                  # Layer 6 (Implementation)
-│   ├── python/           # questfoundry-py package
-│   │   ├── src/
-│   │   ├── tests/
-│   │   ├── AGENTS.md
-│   │   └── README.md
-│   └── compiler/         # questfoundry-compiler package
-│       ├── src/
-│       ├── tests/
-│       └── README.md
-│
-├── cli/                  # Layer 7 (CLI Tools)
-│   └── prompt_generator/ # qf-generate CLI tool
-│
-├── agents.md             # Global agent guidelines
-├── README.md             # This file
-└── LICENSE
+src/questfoundry/
+├── domain/         # MyST source of truth
+│   ├── roles/      # Role definitions
+│   ├── loops/      # Workflow graphs
+│   ├── ontology/   # Artifacts, enums
+│   └── protocol/   # Intents, routing rules
+├── compiler/       # MyST → Python code generator
+├── generated/      # Auto-generated (DO NOT EDIT)
+└── runtime/        # LangGraph execution engine
+
+_archive/           # v2 content (reference only)
 ```
 
 ## Quick Start
 
-### Understanding QuestFoundry
+### Installation
 
-1. **Read the spec overview**: Start with [`spec/README.md`](spec/README.md)
-2. **Learn the working model**: Read [`spec/00-north-star/WORKING_MODEL.md`](spec/00-north-star/WORKING_MODEL.md)
-3. **Explore the roles**: See [`spec/00-north-star/ROLE_INDEX.md`](spec/00-north-star/ROLE_INDEX.md)
+```bash
+# Clone and install
+git clone https://github.com/questfoundry/questfoundry.git
+cd questfoundry
+uv sync
 
-### Using the Python Library
+# Verify installation
+uv run qf version
+```
 
-1. **Install the package**: `pip install questfoundry-py`
-2. **Or develop locally**: Navigate to `lib/python/` and run `uv sync`
-3. **Read the library docs**: See [`lib/python/README.md`](lib/python/README.md)
-4. **Run tests**: From `lib/python/`, run `uv run pytest`
+### Usage (Coming Soon)
+
+```bash
+# Compile domain to generated code
+qf compile
+
+# Run a workflow loop
+qf run story-spark
+
+# Validate without generating
+qf validate
+```
+
+## How It Works
+
+### 1. Write Domain Specs in MyST
+
+```markdown
+# Showrunner
+
+:::{role-meta}
+id: showrunner
+abbr: SR
+archetype: Product Owner
+agency: high
+mandate: "Manage by Exception"
+:::
+
+The Showrunner is the primary interface for the Human Customer...
+```
+
+### 2. Compile to Python
+
+```bash
+qf compile
+```
+
+This generates:
+
+- Pydantic models from `ontology/`
+- Role configurations from `roles/`
+- LangGraph definitions from `loops/`
+
+### 3. Execute with LangGraph
+
+```bash
+qf run story-spark
+```
+
+The runtime:
+
+- Loads compiled graph definitions
+- Routes messages via intents (not direct agent calls)
+- Manages hot/cold state stores
+- Connects to LLM providers (Ollama, OpenAI)
 
 ## Key Concepts
 
-### Single Source of Truth
+### MyST as Source of Truth
 
-- The `spec/` directory is the **canonical source** for all schemas and behavior primitives
-- The **spec compiler** (`lib/compiler/`) transforms primitives into runtime artifacts
-- Implementation libraries use compiled manifests, not source specs directly
-- **No duplication** of resources across layers
+Domain knowledge lives in MyST files with custom directives:
 
-### Layered Architecture
+- `{role-meta}`, `{role-tools}`, `{role-constraints}` — role definitions
+- `{loop-meta}`, `{graph-node}`, `{graph-edge}` — workflow graphs
+- `{artifact-type}`, `{enum-type}` — data structures
 
-Each layer has a specific responsibility:
+### System-as-Router
 
-1. **L0-L5** define WHAT the system does (specification)
-2. **L6** implements HOW it works (runtime)
-3. **L7** provides user-facing tools (CLI)
+Roles don't call each other directly. They post **Intents**, and the runtime routes based on loop
+definitions:
 
-### Customer/Showrunner Model
+1. Role completes work → writes to `hot_store`
+2. Role posts Intent → `handoff(status="stabilized")`
+3. Router reads loop definition → finds matching edge
+4. Router activates next role → based on condition
 
-QuestFoundry operates as a **virtual studio**:
+### Hot vs Cold
 
-- **Customer** (external user) gives high-level directives
-- **Showrunner** (AI orchestrator) breaks down work and coordinates
-- **15 internal roles** (AI agents) perform specialized tasks
-- **Gatekeeper** (AI quality control) validates all outputs
+- **hot_store**: Working drafts, mutable, internal
+- **cold_store**: Committed canon, append-only, player-safe
 
-### Hot/Cold Separation
+## Development
 
-- **Hot** = internal, spoilers allowed, work-in-progress
-- **Cold** = player-facing, no spoilers, validated and canonical
+```bash
+# Install dev dependencies
+uv sync
 
-### Cartridge Architecture (Executable Definitions)
+# Run checks
+uv run ruff check src/
+uv run mypy src/
+uv run pytest
 
-QuestFoundry uses the **Cartridge Architecture** where specifications ARE executable code:
+# Format code
+uv run ruff format src/
+```
 
-- **Role Profiles** (`spec/05-definitions/roles/`) — Complete role definitions with behavior and interfaces
-- **Loop Patterns** (`spec/05-definitions/loops/`) — Executable loop state machines
-- **Quality Gates** (`spec/05-definitions/quality_gates/`) — Reusable quality bar validators
-- **Transitions** (`spec/05-definitions/transitions/`) — Lifecycle state machines
-- **Templates** (`spec/05-definitions/templates/`) — Jinja2 prompt templates
+See [`AGENTS.md`](AGENTS.md) for contribution guidelines.
 
-(The previous v2 atomic behavior primitives in `05-behavior/` have been archived to `spec/_archive/05-behavior-deprecated/`)
+## Architecture Documentation
 
-The **spec compiler** (`lib/compiler/`) assembles these primitives into:
+For the complete v3 architecture, see:
 
-- **Manifests** (`dist/compiled/manifests/*.manifest.json`) — Runtime-ready JSON for playbook execution
-- **Standalone prompts** (`dist/compiled/standalone_prompts/*.md`) — Complete role prompts
+- [`src/questfoundry/domain/ARCHITECTURE.md`](src/questfoundry/domain/ARCHITECTURE.md) — Master blueprint
 
-The compiler is available as:
+For v2 reference material:
 
-- **Build-time tool**: `questfoundry-compiler` package (used by `questfoundry-py`)
-- **CLI tool**: `qf-compile` for manual compilation
-- **Web service**: Dynamic compilation for prompt generation
-
-The **PlaybookExecutor** (in `questfoundry-py`) provides generic loop execution from compiled manifests.
-
-**Benefits:**
-
-- Single source of truth for role expertise and procedures
-- No N-way updates when logic changes
-- Validated cross-references prevent broken dependencies
-- Generic executor reduces maintenance burden
-
-## Development Guidelines
-
-For development rules and conventions, see:
-
-- **Global guidelines**: [`AGENTS.md`](AGENTS.md)
-- **Specification work**: [`spec/AGENTS.md`](spec/AGENTS.md)
-- **Python library**: [`lib/python/AGENTS.md`](lib/python/AGENTS.md)
-
-## Contributing
-
-This is a mono-repo with clear separation between specification and implementation:
-
-1. **Spec changes** go in `spec/` (behavior primitives, schemas, documentation)
-2. **Compiler changes** go in `lib/compiler/` (cross-reference validation, assembly logic)
-3. **Library changes** go in `lib/python/` (runtime implementation, execution engine)
-4. **CLI changes** go in `cli/` (command-line tools)
-5. **Never duplicate** resources between layers
-
-Follow the guidelines in [`AGENTS.md`](AGENTS.md) for commit conventions and workflow.
+- [`_archive/spec/`](_archive/spec/) — Original L0-L5 specifications
+- [`_archive/lib/`](_archive/lib/) — Previous runtime implementation
 
 ## License
 
-See [`LICENSE`](LICENSE) for details.
+MIT — See [`LICENSE`](LICENSE) for details.
