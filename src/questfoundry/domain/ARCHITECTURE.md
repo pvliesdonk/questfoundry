@@ -1,7 +1,7 @@
 # QuestFoundry v3: Integrated Cartridge Architecture
 
 **Status:** Master Blueprint
-**Version:** 3.0.0
+**Version:** 3.1.0
 
 ---
 
@@ -24,8 +24,40 @@ MyST Source → Compiler → Generated Code → Runtime
 | Structure | 7 numbered layers | 4 vertical domain modules |
 | Authoring | Prose + YAML/JSON separately | MyST (prose = config) |
 | Roles | 15 roles | 8 archetypes |
-| Protocol | Agent-to-agent message passing | State-based routing (LangGraph native) |
-| Runtime | LangChain + LangGraph | Pure LangGraph |
+| Protocol | Agent-to-agent message passing | **SR-orchestrated handoff** |
+| Runtime | LangChain + LangGraph | **Handoff-based orchestration** |
+
+### Orchestration Model
+
+QuestFoundry uses **Showrunner-centric orchestration** where:
+
+- **SR is the hub** — all delegation flows through the Showrunner
+- **Roles are specialists** — each role has its own agent, prompt, and tools
+- **Loops are guidance** — not hardcoded graphs, but heuristics SR uses to decide routing
+- **Dynamic delegation** — SR decides at runtime who to delegate to based on context
+
+```
+                    ┌─────────────────┐
+                    │   Showrunner    │
+                    │  (Orchestrator) │
+                    └────────┬────────┘
+                             │ delegate_to(role, task)
+           ┌─────────────────┼─────────────────┐
+           ▼                 ▼                 ▼
+    ┌────────────┐    ┌────────────┐    ┌────────────┐
+    │ Plotwright │    │ Lorekeeper │    │  Narrator  │
+    └─────┬──────┘    └─────┬──────┘    └─────┬──────┘
+          │                 │                 │
+          └─────────────────┴─────────────────┘
+                            │ returns result + intent
+                            ▼
+                    ┌─────────────────┐
+                    │   Showrunner    │
+                    │ (decides next)  │
+                    └─────────────────┘
+```
+
+This differs from static graph approaches (LangGraph, etc.) where edges are predetermined at build time.
 
 ---
 
@@ -35,7 +67,7 @@ MyST Source → Compiler → Generated Code → Runtime
 src/questfoundry/
 ├── domain/                 # MyST Source of Truth
 │   ├── roles/              # 8 role definitions
-│   ├── loops/              # Workflow graphs
+│   ├── loops/              # Workflow guidance (heuristics for SR)
 │   ├── ontology/           # Data structures
 │   └── protocol/           # Communication rules
 │
@@ -45,14 +77,13 @@ src/questfoundry/
 │   └── generators/         # Code generators
 │
 ├── generated/              # Checked-in generated code
-│   ├── models/             # Pydantic models
-│   ├── roles/              # Role configurations
-│   └── graphs/             # LangGraph definitions
+│   ├── models/             # Pydantic models (artifacts, enums)
+│   └── roles/              # Role configurations
 │
 └── runtime/                # Execution engine
-    ├── engine.py           # Graph executor
+    ├── orchestrator.py     # SR-based handoff orchestration
     ├── state.py            # StudioState
-    ├── router.py           # Intent-based routing
+    ├── roles.py            # Role agent execution
     └── providers/          # LLM SDK wrappers
 ```
 
@@ -135,43 +166,61 @@ hot_store (draft)
 
 ---
 
-## 5. Protocol: System-as-Router
+## 5. Protocol: SR-Orchestrated Handoff
 
-### Intent-Based Routing
+### Delegation Model
 
-Roles do not call each other directly. They post **Intents** to the message bus, and the runtime routes based on loop definitions.
+The Showrunner (SR) is the sole orchestrator. Other roles do not call each other — they return results to SR, who decides the next action.
 
 ```python
-class Intent(BaseModel):
-    """A role's declaration of work status."""
+class DelegationResult(BaseModel):
+    """Result returned by a role after completing delegated work."""
 
-    type: Literal["handoff", "escalation", "broadcast", "terminate"]
-    source_role: str
-    status: str                         # e.g., "stabilized", "blocked"
-    payload: dict[str, Any] | None = None
-    reason: str | None = None           # For escalations
+    role_id: str                        # Which role executed
+    status: str                         # e.g., "completed", "blocked", "needs_review"
+    artifacts: list[str]                # IDs of artifacts created/modified
+    message: str                        # Summary for SR
+    recommendation: str | None = None   # Suggested next action
 ```
 
-### Routing Flow
+### Orchestration Flow
 
-1. **Role completes work** → writes to `hot_store`
-2. **Role posts Intent** → `Intent(type="handoff", status="stabilized")`
-3. **Router reads loop definition** → finds edge matching intent
-4. **Router activates next role** → based on `condition` match
-5. **Repeat** until `Intent(type="terminate")`
+1. **SR receives request** → analyzes what needs to be done
+2. **SR delegates** → `delegate_to("plotwright", task="Design topology for mystery story")`
+3. **Role executes** → works independently, returns `DelegationResult`
+4. **SR evaluates** → reads result, decides next action
+5. **SR delegates again** → or terminates if work is complete
+6. **Repeat** until SR decides to terminate
 
-### Example Routing Rules (from loop definition)
+### SR's Decision Tools
 
-```yaml
-edges:
-  - source: plotwright
-    target: scene_smith
-    condition: "intent.status == 'topology_complete'"
+SR has tools for orchestration:
 
-  - source: plotwright
-    target: showrunner
-    condition: "intent.type == 'escalation'"
+```python
+# Delegation
+delegate_to(role: str, task: str) -> DelegationResult
+
+# State management
+read_artifact(artifact_id: str) -> Artifact
+write_artifact(artifact: Artifact) -> str
+
+# Quality gates
+request_gatecheck(artifact_ids: list[str]) -> GatecheckResult
+
+# Lifecycle
+merge_to_cold(artifact_ids: list[str]) -> MergeResult
+terminate(reason: str) -> None
 ```
+
+### Loop Definitions as Guidance
+
+Loop definitions (in `domain/loops/*.md`) are **not compiled to executable graphs**. They serve as:
+
+1. **Documentation** — human-readable workflow descriptions
+2. **SR guidance** — heuristics SR can reference when deciding routing
+3. **Validation** — ensuring all roles/transitions are defined
+
+SR reads loop guidance but makes dynamic decisions based on actual context.
 
 ---
 
@@ -494,63 +543,63 @@ class HookCard(BaseModel):
 
 ### 7.2 Role Configs (`generated/roles/`)
 
-From `{role-meta}` + `{role-tools}` + `{role-prompt}`:
+From `{role-meta}` + `{role-tools}` + `{role-constraints}` + `{role-prompt}`:
 
 ```python
 # generated/roles/showrunner.py
-from questfoundry.runtime.base import RoleConfig
+from questfoundry.compiler.models import Agency, RoleIR, RoleToolIR
 
-SHOWRUNNER = RoleConfig(
+SHOWRUNNER = RoleIR(
     id="showrunner",
     abbr="SR",
     archetype="Product Owner",
-    agency="high",
+    agency=Agency.HIGH,
     mandate="Manage by Exception",
-    tools=["read_state", "write_state", "post_intent"],
-    constraints=[
-        "MUST NOT modify cold_store directly",
-        # ...
+    tools=[
+        RoleToolIR(name="delegate_to", description="Delegate work to another role"),
+        RoleToolIR(name="read_artifact", description="Read an artifact from store"),
+        RoleToolIR(name="write_artifact", description="Write an artifact to hot store"),
+        RoleToolIR(name="request_gatecheck", description="Request quality validation"),
+        RoleToolIR(name="merge_to_cold", description="Promote artifacts to cold store"),
+        RoleToolIR(name="terminate", description="End the session"),
     ],
-    prompt_template="""You are the Product Owner...""",
+    constraints=[
+        "MUST NOT modify cold_store directly (use merge_to_cold)",
+        "MUST delegate domain-specific work to specialist roles",
+        "SHOULD wake only the roles needed for current work",
+    ],
+    prompt_template="""You are the Product Owner, responsible for: Manage by Exception.
+...
+""",
 )
 ```
 
-### 7.3 LangGraph Definitions (`generated/graphs/`)
+### 7.3 Loop Definitions (NOT compiled to graphs)
 
-From `{loop-meta}` + `{graph-node}` + `{graph-edge}`:
+Loop definitions in `domain/loops/*.md` are **parsed but not compiled to executable code**. They serve as:
+
+1. **Validation source** — compiler checks all referenced roles exist
+2. **Documentation** — human-readable workflow guidance
+3. **Runtime reference** — SR can query loop metadata for guidance
+
+The compiler extracts loop IR for validation but does not generate graph code:
 
 ```python
-# generated/graphs/story_spark.py
-from langgraph.graph import StateGraph
-from questfoundry.runtime.state import StudioState
-from questfoundry.runtime.nodes import create_role_node
+# compiler/models/ir.py
+@dataclass
+class LoopIR:
+    """Loop intermediate representation — for validation, not execution."""
 
-def build_story_spark_graph() -> StateGraph:
-    """Auto-generated from domain/loops/story_spark.md"""
-
-    graph = StateGraph(StudioState)
-
-    # Nodes
-    graph.add_node("showrunner", create_role_node("showrunner"))
-    graph.add_node("plotwright", create_role_node("plotwright"))
-    graph.add_node("scene_smith", create_role_node("scene_smith"))
-    graph.add_node("lorekeeper", create_role_node("lorekeeper"))
-    graph.add_node("gatekeeper", create_role_node("gatekeeper"))
-
-    # Edges with conditions
-    graph.add_conditional_edges(
-        "showrunner",
-        route_by_intent,
-        {
-            "brief_approved": "plotwright",
-            "escalation": "showrunner",
-        }
-    )
-    # ... more edges
-
-    graph.set_entry_point("showrunner")
-    return graph.compile()
+    id: str
+    name: str
+    trigger: str
+    entry_point: str
+    nodes: list[GraphNodeIR]     # Roles involved
+    edges: list[GraphEdgeIR]     # Possible transitions (guidance only)
+    quality_gates: list[QualityGateIR]
 ```
+
+At runtime, SR decides routing dynamically — loop edges are suggestions, not constraints.
 
 ---
 
@@ -562,22 +611,75 @@ def build_story_spark_graph() -> StateGraph:
 ┌─────────────────────────────────────────────────────┐
 │                    CLI (qf)                         │
 ├─────────────────────────────────────────────────────┤
-│                   Engine                            │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐             │
-│  │ Router  │  │ State   │  │Providers│             │
-│  └────┬────┘  └────┬────┘  └────┬────┘             │
-│       │            │            │                   │
-│       ▼            ▼            ▼                   │
-│  ┌─────────────────────────────────────┐           │
-│  │        LangGraph StateGraph          │           │
-│  │  ┌────┐  ┌────┐  ┌────┐  ┌────┐    │           │
-│  │  │ SR │→│ PW │→│ SS │→│ GK │     │           │
-│  │  └────┘  └────┘  └────┘  └────┘    │           │
-│  └─────────────────────────────────────┘           │
+│                 Orchestrator                        │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              Showrunner Agent                │   │
+│  │  ┌─────────────────────────────────────┐    │   │
+│  │  │  Tools: delegate_to, read_artifact, │    │   │
+│  │  │  write_artifact, request_gatecheck, │    │   │
+│  │  │  merge_to_cold, terminate           │    │   │
+│  │  └─────────────────────────────────────┘    │   │
+│  └──────────────────┬──────────────────────────┘   │
+│                     │                               │
+│     ┌───────────────┼───────────────┐              │
+│     ▼               ▼               ▼              │
+│  ┌──────┐       ┌──────┐       ┌──────┐           │
+│  │  PW  │       │  LK  │       │  GK  │  ...      │
+│  │Agent │       │Agent │       │Agent │           │
+│  └──────┘       └──────┘       └──────┘           │
+│                                                    │
+│  ┌─────────────────────────────────────────────┐  │
+│  │              StudioState                     │  │
+│  │  hot_store | cold_store | messages | ...    │  │
+│  └─────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
-### 8.2 Provider Abstraction
+### 8.2 Orchestrator
+
+The orchestrator manages the SR agent and handles delegation to specialist roles:
+
+```python
+# runtime/orchestrator.py
+class Orchestrator:
+    """SR-centric orchestration engine."""
+
+    def __init__(self, roles: dict[str, RoleIR], llm: BaseChatModel):
+        self.roles = roles
+        self.llm = llm
+        self.sr_agent = self._create_sr_agent()
+
+    async def run(self, request: str) -> StudioState:
+        """Execute a complete session."""
+        state = create_initial_state(request)
+
+        while True:
+            # SR decides what to do
+            sr_response = await self.sr_agent.invoke(state)
+
+            if sr_response.tool_call == "terminate":
+                break
+
+            if sr_response.tool_call == "delegate_to":
+                role_id = sr_response.args["role"]
+                task = sr_response.args["task"]
+                result = await self._execute_role(role_id, task, state)
+                state = self._update_state(state, result)
+
+            # ... handle other tools
+
+        return state
+
+    async def _execute_role(
+        self, role_id: str, task: str, state: StudioState
+    ) -> DelegationResult:
+        """Execute a specialist role and return result."""
+        role = self.roles[role_id]
+        role_agent = self._create_role_agent(role)
+        return await role_agent.invoke(task, state)
+```
+
+### 8.3 Provider Abstraction
 
 ```python
 # runtime/providers/base.py
@@ -605,27 +707,39 @@ class OllamaProvider(LLMProvider):
     async def complete(self, messages, tools=None):
         # Direct HTTP to Ollama API
         ...
-
-# runtime/providers/openai.py
-class OpenAIProvider(LLMProvider):
-    """Direct OpenAI SDK integration."""
-    ...
 ```
 
-### 8.3 Engine Flow
+### 8.4 Role Execution
+
+Each role runs as an independent agent with its own conversation history:
 
 ```python
-# runtime/engine.py
-async def run_loop(loop_id: str, initial_state: StudioState) -> StudioState:
-    """Execute a complete loop."""
+# runtime/roles.py
+class RoleAgent:
+    """Agent for a specialist role."""
 
-    # Load compiled graph
-    graph = load_graph(loop_id)
+    def __init__(self, role: RoleIR, llm: BaseChatModel):
+        self.role = role
+        self.llm = llm
+        self.messages: list[BaseMessage] = []
 
-    # Run to completion
-    final_state = await graph.ainvoke(initial_state)
+    async def invoke(self, task: str, state: StudioState) -> DelegationResult:
+        """Execute the role's task and return result."""
+        # Build role-specific prompt
+        system_prompt = self._build_prompt(task, state)
 
-    return final_state
+        # Role has its own conversation history
+        self.messages.append(SystemMessage(content=system_prompt))
+        self.messages.append(HumanMessage(content=task))
+
+        # Execute with role's tools
+        response = await self.llm.ainvoke(
+            self.messages,
+            tools=self._get_role_tools(),
+        )
+
+        # Parse response into DelegationResult
+        return self._parse_result(response)
 ```
 
 ---
@@ -711,38 +825,46 @@ When writing v3 domain files, consult:
 
 ## 12. Implementation Phases
 
-### Phase 1: Foundation
+### Phase 1: Foundation ✓
 
-- [ ] `pyproject.toml` with pure LangGraph deps
-- [ ] MyST parser for directives
-- [ ] `StudioState` implementation
-- [ ] Ollama provider
+- [x] `pyproject.toml` with dependencies
+- [x] MyST parser for directives
+- [x] `StudioState` implementation
+- [x] Compiler IR models
 
-### Phase 2: Ontology
+### Phase 2: Ontology ✓
 
-- [ ] `domain/ontology/artifacts.md` (HookCard, Brief)
-- [ ] `domain/ontology/taxonomy.md` (enums)
-- [ ] Compiler: ontology → Pydantic models
+- [x] `domain/ontology/artifacts.md` (HookCard, Brief, Scene, etc.)
+- [x] `domain/ontology/taxonomy.md` (enums)
+- [x] Compiler: ontology → Pydantic models
 
-### Phase 3: Story Spark Loop
+### Phase 3: Roles ✓
 
-- [ ] `domain/roles/showrunner.md`
-- [ ] `domain/roles/plotwright.md`
-- [ ] `domain/roles/lorekeeper.md`
-- [ ] `domain/roles/narrator.md`
-- [ ] `domain/loops/story_spark.md`
-- [ ] Compiler: roles + loops → LangGraph
+- [x] All 8 role definitions in `domain/roles/`
+- [x] Compiler: roles → RoleIR configurations
+- [x] `domain/loops/story_spark.md` (as guidance documentation)
 
-### Phase 4: Execution
+### Phase 4: Orchestrator (Current)
 
-- [ ] Router implementation
-- [ ] End-to-end Story Spark test
-- [ ] OpenAI provider
+- [ ] `runtime/orchestrator.py` — SR-centric handoff engine
+- [ ] `runtime/roles.py` — Role agent execution
+- [ ] SR tools: `delegate_to`, `read_artifact`, `write_artifact`, etc.
+- [ ] DelegationResult model
+- [ ] End-to-end test with SR delegating to one role
 
-### Phase 5: Remaining Roles & Loops
+### Phase 5: Full Integration
 
-- [ ] Creative Director, Scene Smith, Publisher, Gatekeeper
-- [ ] Additional loops
+- [ ] All role tools implemented
+- [ ] Gatekeeper quality bar evaluation
+- [ ] Hot → Cold merge flow
+- [ ] Multi-turn delegation test (SR → PW → LK → GK → SR)
+
+### Phase 6: Polish
+
+- [ ] CLI integration (`qf run`)
+- [ ] OpenAI/Anthropic providers
+- [ ] Streaming output
+- [ ] State persistence/checkpointing
 
 ---
 
@@ -777,4 +899,5 @@ When writing v3 domain files, consult:
 | `domain/protocol/` | `{aspect}.md` | `intents.md`, `routing.md` |
 | `generated/models/` | `{category}.py` | `artifacts.py`, `enums.py` |
 | `generated/roles/` | `{role_id}.py` | `showrunner.py` |
-| `generated/graphs/` | `{loop_id}.py` | `story_spark.py` |
+
+Note: Loop definitions are NOT compiled to `generated/graphs/`. They serve as documentation and guidance only.

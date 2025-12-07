@@ -7,8 +7,6 @@ parsed IR into Pydantic models.
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from questfoundry.compiler.generators.ontology import (
     class_name,
     generate_artifacts_code,
@@ -25,7 +23,6 @@ from questfoundry.compiler.models import (
     EnumValueIR,
     StoreType,
 )
-
 
 # =============================================================================
 # Helper Function Tests
@@ -188,9 +185,13 @@ class TestGenerateArtifactsCode:
         code = generate_artifacts_code(artifacts, {})
 
         assert "class HookCard(BaseModel):" in code
-        assert "Hook Card artifact" in code
-        assert 'title: str = Field(..., description="Hook title")' in code
-        assert 'owner: str | None = Field(default=None, description="Owner role")' in code
+        # Class docstring starts with artifact name
+        assert '"""Hook Card.' in code
+        # Fields with documentation - now multi-line with title and examples
+        assert "title: str = Field(" in code
+        assert 'description="Hook title"' in code
+        assert "owner: str | None = Field(" in code
+        assert 'description="Owner role"' in code
 
     def test_artifact_with_enum_field(self) -> None:
         """Artifacts with enum fields import the enum."""
@@ -235,7 +236,10 @@ class TestGenerateArtifactsCode:
 
         code = generate_artifacts_code(artifacts, {})
 
-        assert '_lifecycle: list[str] = ["draft", "review", "final"]' in code
+        # Lifecycle is now a ClassVar uppercase class constant
+        assert 'LIFECYCLE: ClassVar[list[str]] = ["draft", "review", "final"]' in code
+        # Docstring includes lifecycle info
+        assert "draft → review → final" in code
 
 
 # =============================================================================

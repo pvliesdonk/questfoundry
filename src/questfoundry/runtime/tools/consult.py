@@ -1,0 +1,317 @@
+"""Consult tools - allow agents to look up compiled resources for guidance.
+
+These tools implement the "menu + consult" pattern:
+- SR gets a menu of available roles/loops in system prompt
+- Agents use consult_* tools to get details when needed
+
+Available tools:
+- consult_role_charter: Look up role responsibilities, tools, constraints
+- consult_playbook: Look up loop/workflow guidance
+- consult_schema: Look up artifact schema definitions
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from langchain_core.tools import BaseTool
+
+from questfoundry.runtime.resources import get_resource_loader
+
+logger = logging.getLogger(__name__)
+
+
+class ConsultRoleCharter(BaseTool):
+    """Look up a role's charter (responsibilities, tools, constraints).
+
+    Use this to understand what a role can do before delegating work,
+    or to understand your own capabilities and constraints.
+    """
+
+    name: str = "consult_role_charter"
+    description: str = (
+        "Look up a role's charter to understand its archetype, mandate, "
+        "available tools, and constraints. "
+        "Input: role_id (e.g., 'plotwright', 'scene_smith', 'lorekeeper')"
+    )
+
+    def _run(self, role_id: str) -> str:
+        """Look up role charter."""
+        loader = get_resource_loader()
+
+        # Normalize role_id
+        role_id = role_id.lower().replace(" ", "_").replace("-", "_")
+
+        # Try to load role
+        role = loader.load_role(role_id)
+        if role is None:
+            # List available roles to help agent
+            available = loader.list_roles()
+            if not available:
+                # Fallback to generated.roles module
+                try:
+                    from questfoundry.generated.roles import ALL_ROLES
+
+                    available = list(ALL_ROLES.keys())
+                except ImportError:
+                    pass
+
+            if available:
+                return (
+                    f"Role '{role_id}' not found.\n\n"
+                    f"Available roles: {', '.join(sorted(available))}"
+                )
+            return f"Role '{role_id}' not found and no roles available."
+
+        return self._format_role(role_id, role)
+
+    def _format_role(self, role_id: str, role: dict[str, Any]) -> str:
+        """Format role definition for agent consumption."""
+        # Handle both dict and RoleIR object
+        if hasattr(role, "model_dump"):
+            role = role.model_dump()
+
+        lines = [
+            f"# Role: {role_id}",
+            "",
+            f"**Archetype**: {role.get('archetype', 'Unknown')}",
+            f"**Abbreviation**: {role.get('abbr', role_id[:2].upper())}",
+            f"**Agency**: {role.get('agency', 'medium')}",
+            f"**Mandate**: {role.get('mandate', 'No mandate defined')}",
+            "",
+        ]
+
+        # Tools
+        tools = role.get("tools", [])
+        if tools:
+            lines.append("## Available Tools")
+            for tool in tools:
+                if isinstance(tool, dict):
+                    name = tool.get("name", "unknown")
+                    desc = tool.get("description", "")
+                else:
+                    # RoleToolIR object
+                    name = getattr(tool, "name", "unknown")
+                    desc = getattr(tool, "description", "")
+                lines.append(f"- **{name}**: {desc}")
+            lines.append("")
+
+        # Constraints
+        constraints = role.get("constraints", [])
+        if constraints:
+            lines.append("## Constraints")
+            for c in constraints:
+                lines.append(f"- {c}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+
+class ConsultPlaybook(BaseTool):
+    """Look up a loop/playbook definition to understand workflow guidance.
+
+    Use this to understand:
+    - What roles participate in a workflow
+    - What the expected sequence of work is
+    - What quality gates apply
+    """
+
+    name: str = "consult_playbook"
+    description: str = (
+        "Look up a loop/playbook definition to understand its workflow, "
+        "participating roles, and quality gates. "
+        "Input: loop_id (e.g., 'story_spark')"
+    )
+
+    def _run(self, loop_id: str) -> str:
+        """Look up playbook/loop definition."""
+        loader = get_resource_loader()
+
+        # Normalize loop_id
+        loop_id = loop_id.lower().replace(" ", "_").replace("-", "_")
+
+        # Try to load loop
+        loop = loader.load_loop(loop_id)
+        if loop is None:
+            # List available loops
+            available = loader.list_loops()
+            if available:
+                return (
+                    f"Loop '{loop_id}' not found.\n\n"
+                    f"Available loops: {', '.join(sorted(available))}"
+                )
+            return (
+                f"Loop '{loop_id}' not found.\n\n"
+                "Note: Loop definitions are guidance documents, not executable graphs. "
+                "They may not be exported to generated/ yet."
+            )
+
+        return self._format_loop(loop_id, loop)
+
+    def _format_loop(self, loop_id: str, loop: dict[str, Any]) -> str:
+        """Format loop definition for agent consumption."""
+        lines = [
+            f"# Loop: {loop_id}",
+            "",
+        ]
+
+        # Description
+        if "description" in loop:
+            lines.append("## Description")
+            lines.append(loop["description"])
+            lines.append("")
+
+        # Nodes (roles/steps)
+        nodes = loop.get("nodes", [])
+        if nodes:
+            lines.append("## Workflow Steps")
+            for node in nodes:
+                if isinstance(node, dict):
+                    node_id = node.get("id", node.get("node_id", "unknown"))
+                    role = node.get("role", node.get("role_id", ""))
+                    desc = node.get("description", "")
+                    lines.append(f"- **{node_id}** ({role}): {desc}")
+                else:
+                    lines.append(f"- {node}")
+            lines.append("")
+
+        # Edges (transitions)
+        edges = loop.get("edges", [])
+        if edges:
+            lines.append("## Transitions")
+            for edge in edges:
+                if isinstance(edge, dict):
+                    src = edge.get("source", "?")
+                    tgt = edge.get("target", "?")
+                    cond = edge.get("condition", "")
+                    lines.append(f"- {src} → {tgt}: {cond}")
+            lines.append("")
+
+        # Quality gates
+        gates = loop.get("gates", [])
+        if gates:
+            lines.append("## Quality Gates")
+            for gate in gates:
+                if isinstance(gate, dict):
+                    before = gate.get("before", "")
+                    role = gate.get("role", "gatekeeper")
+                    bars = gate.get("bars", [])
+                    lines.append(f"- Before {before} ({role}): {', '.join(bars)}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+
+class ConsultSchema(BaseTool):
+    """Look up artifact schema to understand required/optional fields.
+
+    Use this when:
+    - Validation fails and you need to understand field requirements
+    - Before creating an artifact to ensure compliance
+    - To understand field types and allowed values
+    """
+
+    name: str = "consult_schema"
+    description: str = (
+        "Look up artifact schema definition to understand required/optional fields, "
+        "types, and validation patterns. "
+        "Input: artifact_type (e.g., 'hook_card', 'section_draft')"
+    )
+
+    def _run(self, artifact_type: str) -> str:
+        """Look up schema definition."""
+        loader = get_resource_loader()
+
+        # Normalize artifact_type
+        artifact_type = artifact_type.lower().replace(" ", "_").replace("-", "_")
+        artifact_type = artifact_type.replace(".schema.json", "").replace(".schema", "")
+
+        # Try to load schema
+        schema = loader.load_schema(artifact_type)
+        if schema is None:
+            # List available schemas
+            available = loader.list_schemas()
+            if available:
+                return (
+                    f"Schema '{artifact_type}' not found.\n\n"
+                    f"Available schemas: {', '.join(sorted(available)[:20])}"
+                    + ("..." if len(available) > 20 else "")
+                )
+            return f"Schema '{artifact_type}' not found and no schemas available."
+
+        return self._format_schema(artifact_type, schema)
+
+    def _format_schema(self, artifact_type: str, schema: dict[str, Any]) -> str:
+        """Format JSON schema as readable markdown for agents."""
+        lines = [
+            f"# Schema: {artifact_type}",
+            "",
+        ]
+
+        # Description
+        if "description" in schema:
+            lines.append(schema["description"])
+            lines.append("")
+
+        # Required fields
+        required = set(schema.get("required", []))
+        properties = schema.get("properties", {})
+
+        if properties:
+            lines.append("## Fields")
+            lines.append("")
+
+            # Required fields first
+            if required:
+                lines.append("### Required Fields")
+                for name in sorted(required):
+                    if name in properties:
+                        prop = properties[name]
+                        lines.append(self._format_property(name, prop, required=True))
+                lines.append("")
+
+            # Optional fields
+            optional = [n for n in properties if n not in required]
+            if optional:
+                lines.append("### Optional Fields")
+                for name in sorted(optional):
+                    prop = properties[name]
+                    lines.append(self._format_property(name, prop, required=False))
+                lines.append("")
+
+        return "\n".join(lines)
+
+    def _format_property(self, name: str, prop: dict[str, Any], required: bool) -> str:
+        """Format a single property."""
+        prop_type = prop.get("type", "any")
+        if isinstance(prop_type, list):
+            prop_type = " | ".join(prop_type)
+
+        desc = prop.get("description", "")
+        marker = "*" if required else ""
+
+        parts = [f"- **{name}**{marker} ({prop_type})"]
+
+        if desc:
+            parts.append(f": {desc}")
+
+        # Add enum values if present
+        if "enum" in prop:
+            enum_vals = ", ".join(f"`{v}`" for v in prop["enum"])
+            parts.append(f" Allowed values: {enum_vals}")
+
+        # Add pattern if present
+        if "pattern" in prop:
+            parts.append(f" Pattern: `{prop['pattern']}`")
+
+        # Add min/max length
+        if "minLength" in prop or "maxLength" in prop:
+            length_parts = []
+            if "minLength" in prop:
+                length_parts.append(f"min: {prop['minLength']}")
+            if "maxLength" in prop:
+                length_parts.append(f"max: {prop['maxLength']}")
+            parts.append(f" Length: {', '.join(length_parts)}")
+
+        return "".join(parts)

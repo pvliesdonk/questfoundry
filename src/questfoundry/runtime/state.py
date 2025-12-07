@@ -148,6 +148,66 @@ class Artifact(BaseModel):
 # =============================================================================
 
 
+class DelegationResult(BaseModel):
+    """Result returned by a specialist role to the Showrunner.
+
+    When SR delegates work to a role via delegate_to(), the role executes
+    autonomously and returns a DelegationResult when complete. SR then
+    evaluates the result and decides the next action.
+
+    Attributes
+    ----------
+    role_id : str
+        The role that performed the work.
+    status : str
+        Work outcome: "completed", "blocked", "needs_review", "error".
+    artifacts : list[str]
+        IDs of artifacts created or modified during this delegation.
+    message : str
+        Summary of work done for SR to understand the outcome.
+    recommendation : str | None
+        Optional suggestion for SR's next action (e.g., "engage lorekeeper
+        to verify canon consistency").
+
+    Examples
+    --------
+    Successful completion::
+
+        result = DelegationResult(
+            role_id="plotwright",
+            status="completed",
+            artifacts=["topology-001"],
+            message="Created story topology with 5 scenes and 3 branches.",
+            recommendation="Engage scene_smith to draft scene content.",
+        )
+
+    Blocked on missing information::
+
+        result = DelegationResult(
+            role_id="scene_smith",
+            status="blocked",
+            artifacts=[],
+            message="Cannot draft scene - missing character backstory.",
+            recommendation="Engage lorekeeper to establish character canon.",
+        )
+    """
+
+    role_id: str
+    """The role that performed the work."""
+
+    status: str
+    """Work outcome: completed, blocked, needs_review, error."""
+
+    artifacts: list[str] = Field(default_factory=list)
+    """IDs of artifacts created or modified."""
+
+    message: str
+    """Summary of work done."""
+
+    recommendation: str | None = None
+    """Optional suggestion for next action."""
+
+
 class Intent(BaseModel):
     """A role's declaration of work status used for routing decisions.
 
