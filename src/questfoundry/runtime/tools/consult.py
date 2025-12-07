@@ -131,23 +131,55 @@ class ConsultPlaybook(BaseTool):
         # Normalize loop_id
         loop_id = loop_id.lower().replace(" ", "_").replace("-", "_")
 
-        # Try to load loop
+        # Try to load loop from JSON files first
         loop = loader.load_loop(loop_id)
-        if loop is None:
-            # List available loops
-            available = loader.list_loops()
-            if available:
-                return (
-                    f"Loop '{loop_id}' not found.\n\n"
-                    f"Available loops: {', '.join(sorted(available))}"
-                )
+        if loop is not None:
+            return self._format_loop(loop_id, loop)
+
+        # Fallback: try generated loops module
+        loop = self._get_loop_from_generated(loop_id)
+        if loop is not None:
+            return self._format_loop(loop_id, loop)
+
+        # List available loops
+        available = self._list_available_loops()
+        if available:
             return (
                 f"Loop '{loop_id}' not found.\n\n"
-                "Note: Loop definitions are guidance documents, not executable graphs. "
-                "They may not be exported to generated/ yet."
+                f"Available loops: {', '.join(sorted(available))}"
             )
+        return f"Loop '{loop_id}' not found and no loops available."
 
-        return self._format_loop(loop_id, loop)
+    def _get_loop_from_generated(self, loop_id: str) -> dict[str, Any] | None:
+        """Get loop definition from generated loops module."""
+        try:
+            from questfoundry.generated.loops import ALL_LOOPS
+
+            loop_ir = ALL_LOOPS.get(loop_id)
+            if loop_ir is not None:
+                # Convert LoopIR to dict for formatting
+                return loop_ir.model_dump()
+        except ImportError:
+            logger.debug("generated.loops module not available")
+        return None
+
+    def _list_available_loops(self) -> list[str]:
+        """List available loops from both JSON files and generated module."""
+        available = set()
+
+        # Check resource loader
+        loader = get_resource_loader()
+        available.update(loader.list_loops())
+
+        # Add loops from generated module
+        try:
+            from questfoundry.generated.loops import ALL_LOOPS
+
+            available.update(ALL_LOOPS.keys())
+        except ImportError:
+            pass
+
+        return list(available)
 
     def _format_loop(self, loop_id: str, loop: dict[str, Any]) -> str:
         """Format loop definition for agent consumption."""
@@ -155,6 +187,16 @@ class ConsultPlaybook(BaseTool):
             f"# Loop: {loop_id}",
             "",
         ]
+
+        # Name and trigger info
+        if "name" in loop:
+            lines.append(f"**Name**: {loop['name']}")
+        if "trigger" in loop:
+            lines.append(f"**Trigger**: {loop['trigger']}")
+        if "entry_point" in loop:
+            lines.append(f"**Entry Point**: {loop['entry_point']}")
+        if lines[-1] != "":
+            lines.append("")
 
         # Description
         if "description" in loop:
@@ -165,13 +207,13 @@ class ConsultPlaybook(BaseTool):
         # Nodes (roles/steps)
         nodes = loop.get("nodes", [])
         if nodes:
-            lines.append("## Workflow Steps")
+            lines.append("## Workflow Steps (Nodes)")
             for node in nodes:
                 if isinstance(node, dict):
                     node_id = node.get("id", node.get("node_id", "unknown"))
                     role = node.get("role", node.get("role_id", ""))
-                    desc = node.get("description", "")
-                    lines.append(f"- **{node_id}** ({role}): {desc}")
+                    timeout = node.get("timeout", 300)
+                    lines.append(f"- **{node_id}** (role: {role}, timeout: {timeout}s)")
                 else:
                     lines.append(f"- {node}")
             lines.append("")
@@ -179,17 +221,19 @@ class ConsultPlaybook(BaseTool):
         # Edges (transitions)
         edges = loop.get("edges", [])
         if edges:
-            lines.append("## Transitions")
+            lines.append("## Transitions (Edges)")
             for edge in edges:
                 if isinstance(edge, dict):
                     src = edge.get("source", "?")
                     tgt = edge.get("target", "?")
                     cond = edge.get("condition", "")
-                    lines.append(f"- {src} → {tgt}: {cond}")
+                    # Format target nicely
+                    tgt_display = "END" if tgt == "__end__" else tgt
+                    lines.append(f"- {src} → {tgt_display}: `{cond}`")
             lines.append("")
 
-        # Quality gates
-        gates = loop.get("gates", [])
+        # Quality gates (handle both "gates" and "quality_gates" keys)
+        gates = loop.get("quality_gates", loop.get("gates", []))
         if gates:
             lines.append("## Quality Gates")
             for gate in gates:
@@ -197,7 +241,11 @@ class ConsultPlaybook(BaseTool):
                     before = gate.get("before", "")
                     role = gate.get("role", "gatekeeper")
                     bars = gate.get("bars", [])
-                    lines.append(f"- Before {before} ({role}): {', '.join(bars)}")
+                    blocking = gate.get("blocking", True)
+                    blocking_str = "blocking" if blocking else "non-blocking"
+                    lines.append(
+                        f"- Before **{before}** ({role}, {blocking_str}): {', '.join(bars)}"
+                    )
             lines.append("")
 
         return "\n".join(lines)
