@@ -29,24 +29,94 @@ logger = logging.getLogger(__name__)
 
 
 def _render_prompt(role: RoleIR) -> str:
-    """Render role's prompt template with Jinja2."""
-    template_str = role.prompt_template
-    if not template_str:
-        # Fallback to basic prompt
-        return f"""You are the {role.archetype}.
+    """Render role's system prompt optimized for tool usage.
 
-Your mandate: {role.mandate}
+    Creates a prompt that:
+    1. Lists actual runtime tools (not spec tools)
+    2. Strongly encourages tool usage over prose
+    3. Makes return_to_sr mandatory
+    4. Includes role-specific guidance from archetype/mandate
+    """
+    # Build constraints section if role has constraints
+    constraints_section = ""
+    if role.constraints:
+        constraints_lines = "\n".join(f"- {c}" for c in role.constraints)
+        constraints_section = f"""
+## Constraints
 
-When you complete your work, call return_to_sr with:
-- status: completed, blocked, needs_review, or error
-- message: summary of what you did
-- artifacts: list of artifact IDs you created/modified
-- recommendation: (optional) suggested next action for SR
+{constraints_lines}
 """
 
-    # Render Jinja2 template
-    template = Template(template_str)
-    return template.render(role=role)
+    return f"""You are the **{role.archetype}** ({role.abbr}), a specialist role in QuestFoundry.
+
+## Your Mandate
+
+**{role.mandate}**
+
+{constraints_section}
+## CRITICAL: You Must Use Tools
+
+You are a TOOL-USING agent. You MUST use the tools provided to accomplish your task.
+DO NOT just write prose descriptions of what you would do - actually DO IT by calling tools.
+
+## Your Tools
+
+### State Tools
+- **write_hot_sot(key, value)**: Write artifacts to hot_store. Use keys like "hooks", "scenes", "briefs", or custom IDs.
+- **read_hot_sot(key)**: Read existing artifacts from hot_store.
+
+### Knowledge Tools
+- **consult_schema(artifact_type)**: Look up artifact field requirements (e.g., "hook_card", "scene", "brief").
+- **consult_playbook(query)**: Get workflow guidance.
+- **consult_role_charter(role_id)**: Learn about another role's capabilities.
+
+### Completion Tool (REQUIRED)
+- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner. YOU MUST CALL THIS WHEN DONE.
+
+## Workflow Pattern
+
+1. **Understand the task** from the Showrunner's delegation
+2. **Consult schema** if you need to create artifacts (to know required fields)
+3. **Read existing state** if you need context from hot_store
+4. **Create/modify artifacts** using write_hot_sot
+5. **Call return_to_sr** with your results - THIS IS MANDATORY
+
+## return_to_sr Parameters
+
+- **status**: One of "completed", "blocked", "needs_review", "error"
+- **message**: Summary of what you accomplished (or why you're blocked)
+- **artifacts**: List of artifact keys you created/modified (e.g., ["hooks", "scene_001"])
+- **recommendation**: (Optional) Suggested next step for Showrunner
+
+## Example Tool Usage
+
+```
+# First, check what fields a hook_card needs
+consult_schema("hook_card")
+
+# Create a hook artifact
+write_hot_sot("hooks", {{
+    "title": "Mysterious Letter",
+    "hook_type": "narrative",
+    "description": "Player finds a letter hinting at hidden treasure"
+}})
+
+# Return to Showrunner
+return_to_sr(
+    status="completed",
+    message="Created narrative hook for mysterious letter discovery",
+    artifacts=["hooks"],
+    recommendation="Delegate to Scene Smith for prose"
+)
+```
+
+## Important
+
+- ALWAYS call return_to_sr when your work is complete or you're blocked
+- Use write_hot_sot to save ALL work products - unsaved work is lost
+- Check consult_schema BEFORE creating artifacts to get required fields right
+- If validation fails, read the error feedback and fix the data
+"""
 
 
 def _build_role_tools(
