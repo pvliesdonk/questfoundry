@@ -37,12 +37,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
 from questfoundry.compiler.models import RoleIR
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.cold_store import ColdStore
 from questfoundry.runtime.executor import ToolExecutor
 from questfoundry.runtime.roles import RoleAgentPool
 from questfoundry.runtime.state import DelegationResult, StudioState, create_initial_state
@@ -166,12 +169,18 @@ class Orchestrator:
         LangChain-compatible LLM.
     max_delegations : int
         Maximum number of delegations before forced termination.
+    cold_store : ColdStore | None, optional
+        SQLite-based Cold Store for persistent canon. If None, roles won't
+        have access to cold_store tools. Defaults to None.
 
     Examples
     --------
     Run a complete workflow::
 
-        orchestrator = Orchestrator(roles, llm)
+        from questfoundry.runtime import get_cold_store
+
+        cold = get_cold_store("project.qfproj")
+        orchestrator = Orchestrator(roles, llm, cold_store=cold)
         result = await orchestrator.run("Create a mystery story")
         print(f"Completed: {result.metadata}")
     """
@@ -181,10 +190,12 @@ class Orchestrator:
         roles: dict[str, RoleIR],
         llm: BaseChatModel,
         max_delegations: int = 50,
+        cold_store: ColdStore | None = None,
     ):
         self.roles = roles
         self.llm = llm
         self.max_delegations = max_delegations
+        self.cold_store = cold_store
 
     async def run(
         self,
@@ -208,8 +219,8 @@ class Orchestrator:
         # Create initial state
         state = create_initial_state(loop_id, request)
 
-        # Create role agent pool
-        role_pool = RoleAgentPool(self.roles, self.llm, state)
+        # Create role agent pool with cold_store access
+        role_pool = RoleAgentPool(self.roles, self.llm, state, self.cold_store)
 
         # Build SR tools and prompt
         sr_tools = _build_sr_tools(state)

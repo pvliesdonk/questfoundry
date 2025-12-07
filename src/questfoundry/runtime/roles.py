@@ -9,9 +9,8 @@ Each role runs as an independent agent that:
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from jinja2 import Template
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
@@ -23,7 +22,16 @@ from questfoundry.runtime.tools.consult import (
     ConsultRoleCharter,
     ConsultSchema,
 )
-from questfoundry.runtime.tools.role import ReadHotSot, ReturnToSR, WriteHotSot
+from questfoundry.runtime.tools.role import (
+    PromoteToCanon,
+    ReadColdSot,
+    ReadHotSot,
+    ReturnToSR,
+    WriteHotSot,
+)
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.cold_store import ColdStore
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +69,12 @@ DO NOT just write prose descriptions of what you would do - actually DO IT by ca
 
 ## Your Tools
 
-### State Tools
+### Hot Store Tools (mutable working drafts)
 - **write_hot_sot(key, value)**: Write artifacts to hot_store. Use keys like "hooks", "scenes", "briefs", or custom IDs.
 - **read_hot_sot(key)**: Read existing artifacts from hot_store.
+
+### Cold Store Tools (immutable canon)
+- **read_cold_sot(key)**: Read from cold_store (approved canon). Use 'list' to see available sections, or provide section_id.
 
 ### Knowledge Tools
 - **consult_schema(artifact_type)**: Look up artifact field requirements (e.g., "hook_card", "scene", "brief").
@@ -122,13 +133,17 @@ return_to_sr(
 def _build_role_tools(
     role: RoleIR,
     state: StudioState,
+    cold_store: ColdStore | None = None,
 ) -> list[BaseTool]:
     """Build tool list for a role.
 
     All roles get:
     - Consult tools (playbook, schema, role_charter)
-    - State tools (read_hot_sot, write_hot_sot)
+    - State tools (read_hot_sot, write_hot_sot, read_cold_sot)
     - return_to_sr (the "done" signal)
+
+    Gatekeeper ONLY gets:
+    - promote_to_canon (write to cold_store)
 
     Role-specific tools from the spec are noted in the prompt but
     may map to the same underlying tools with different permissions.
@@ -143,15 +158,29 @@ def _build_role_tools(
     # State tools with injected state and role_id
     # Cast StudioState to dict[str, Any] for Pydantic field assignment
     state_dict = cast(dict[str, Any], state)
-    read_tool = ReadHotSot()
-    read_tool.state = state_dict
 
-    write_tool = WriteHotSot()
-    write_tool.state = state_dict
-    write_tool.role_id = role.id
+    # Hot store tools (read/write)
+    read_hot_tool = ReadHotSot()
+    read_hot_tool.state = state_dict
+    tools.append(read_hot_tool)
 
-    tools.append(read_tool)
-    tools.append(write_tool)
+    write_hot_tool = WriteHotSot()
+    write_hot_tool.state = state_dict
+    write_hot_tool.role_id = role.id
+    tools.append(write_hot_tool)
+
+    # Cold store tools (read for ALL roles)
+    read_cold_tool = ReadColdSot()
+    read_cold_tool.cold_store = cold_store
+    tools.append(read_cold_tool)
+
+    # Gatekeeper ONLY: promote_to_canon (write to cold_store)
+    if role.id.lower() == "gatekeeper":
+        promote_tool = PromoteToCanon()
+        promote_tool.state = state_dict
+        promote_tool.cold_store = cold_store
+        promote_tool.role_id = role.id
+        tools.append(promote_tool)
 
     # Return to SR tool with role_id
     return_tool = ReturnToSR()
@@ -167,6 +196,8 @@ class RoleAgent:
     Each RoleAgent:
     - Maintains its own conversation history across delegations
     - Has access to consult tools + state tools + return_to_sr
+    - Has access to cold_store for canon lookup (all roles)
+    - Has access to promote_to_canon (Gatekeeper only)
     - Executes until it calls return_to_sr
 
     Parameters
@@ -176,13 +207,15 @@ class RoleAgent:
     llm : BaseChatModel
         LangChain-compatible LLM.
     state : StudioState
-        Shared state (hot_store, cold_store, etc.).
+        Shared state (hot_store, etc.).
+    cold_store : ColdStore | None, optional
+        SQLite-based Cold Store for persistent canon. Defaults to None.
 
     Examples
     --------
     Execute a role for a task::
 
-        agent = RoleAgent(plotwright_ir, llm, state)
+        agent = RoleAgent(plotwright_ir, llm, state, cold_store)
         result = await agent.execute("Design a topology for a mystery story")
         if result.status == "completed":
             print(f"Created artifacts: {result.artifacts}")
@@ -193,13 +226,15 @@ class RoleAgent:
         role: RoleIR,
         llm: BaseChatModel,
         state: StudioState,
+        cold_store: ColdStore | None = None,
     ):
         self.role = role
         self.llm = llm
         self.state = state
+        self.cold_store = cold_store
 
-        # Build tools and prompt
-        self.tools = _build_role_tools(role, state)
+        # Build tools and prompt (cold_store passed for all roles)
+        self.tools = _build_role_tools(role, state, cold_store)
         self.system_prompt = _render_prompt(role)
 
         # Create executor (maintains conversation history)
@@ -272,6 +307,8 @@ class RoleAgentPool:
         LangChain-compatible LLM (shared across agents).
     state : StudioState
         Shared state.
+    cold_store : ColdStore | None, optional
+        SQLite-based Cold Store for persistent canon. Defaults to None.
     """
 
     def __init__(
@@ -279,10 +316,12 @@ class RoleAgentPool:
         roles: dict[str, RoleIR],
         llm: BaseChatModel,
         state: StudioState,
+        cold_store: ColdStore | None = None,
     ):
         self.roles = roles
         self.llm = llm
         self.state = state
+        self.cold_store = cold_store
         self._agents: dict[str, RoleAgent] = {}
 
     def get_agent(self, role_id: str) -> RoleAgent | None:
@@ -307,6 +346,7 @@ class RoleAgentPool:
                 role=self.roles[role_id],
                 llm=self.llm,
                 state=self.state,
+                cold_store=self.cold_store,
             )
 
         return self._agents[role_id]

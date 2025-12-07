@@ -3,6 +3,8 @@
 These tools are used by specialist roles (not SR) to:
 - Return results to SR when work is complete
 - Read/write artifacts in hot_store
+- Read from cold_store (canon lookup)
+- Promote artifacts to cold_store (Gatekeeper only)
 
 The return_to_sr tool is the "done" signal for role execution.
 It requires the role to summarize its work for logging and SR decision-making.
@@ -13,10 +15,13 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import BaseTool
 from pydantic import Field
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.cold_store import ColdStore
 
 logger = logging.getLogger(__name__)
 
@@ -314,5 +319,305 @@ def write_hot_sot(state: dict[str, Any], role_id: str) -> WriteHotSot:
     """Create WriteHotSot tool with injected state and role_id."""
     tool = WriteHotSot()
     tool.state = state
+    tool.role_id = role_id
+    return tool
+
+
+# =============================================================================
+# Cold Store Tools
+# =============================================================================
+
+
+class ReadColdSot(BaseTool):
+    """Read from the Cold Source of Truth (immutable canon storage).
+
+    Use this to look up established canon, previously approved content,
+    or player-safe material. Cold content has passed Gatekeeper validation
+    and is safe for player-facing use.
+
+    Available to ALL roles for canon lookup.
+    """
+
+    name: str = "read_cold_sot"
+    description: str = (
+        "Read from cold_store (immutable canon storage). "
+        "Use for canon lookup, approved content, player-safe material. "
+        "Input: key (section_id or 'list' to see available sections)"
+    )
+
+    # ColdStore is injected by executor
+    cold_store: Any = Field(default=None)
+
+    def _run(self, key: str) -> str:
+        """Read from cold_store."""
+        if self.cold_store is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Cold store not available",
+                    "hint": "Cold store may not be initialized for this session.",
+                }
+            )
+
+        if not key:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "key is required",
+                    "hint": "Use 'list' to see available sections, or provide a section_id.",
+                }
+            )
+
+        # Handle 'list' command
+        if key.lower() == "list":
+            sections = self.cold_store.list_sections()
+            snapshots = self.cold_store.list_snapshots()
+            return json.dumps(
+                {
+                    "success": True,
+                    "sections": sections[:50],  # Limit for readability
+                    "section_count": len(sections),
+                    "snapshots": snapshots[:10],
+                    "snapshot_count": len(snapshots),
+                }
+            )
+
+        # Handle 'latest_snapshot' command
+        if key.lower() in ("latest_snapshot", "latest"):
+            snapshot = self.cold_store.get_latest_snapshot()
+            if snapshot is None:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "No snapshots exist yet",
+                        "hint": "Content must be promoted to cold_store and snapshotted first.",
+                    }
+                )
+            return json.dumps(
+                {
+                    "success": True,
+                    "snapshot_id": snapshot.id,
+                    "description": snapshot.description,
+                    "section_count": len(snapshot.section_ids),
+                    "section_ids": snapshot.section_ids,
+                    "created_at": snapshot.created_at.isoformat(),
+                }
+            )
+
+        # Try to get section by ID
+        section = self.cold_store.get_section(key)
+        if section is not None:
+            return json.dumps(
+                {
+                    "success": True,
+                    "section_id": section.id,
+                    "content": section.content,
+                    "metadata": section.metadata,
+                    "content_hash": section.content_hash,
+                    "created_at": section.created_at.isoformat(),
+                }
+            )
+
+        # Try to get snapshot by ID
+        snapshot = self.cold_store.get_snapshot(key)
+        if snapshot is not None:
+            return json.dumps(
+                {
+                    "success": True,
+                    "snapshot_id": snapshot.id,
+                    "description": snapshot.description,
+                    "section_ids": snapshot.section_ids,
+                    "manifest_hash": snapshot.manifest_hash,
+                    "created_at": snapshot.created_at.isoformat(),
+                }
+            )
+
+        # Not found
+        available = self.cold_store.list_sections()[:20]
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"Key '{key}' not found in cold_store",
+                "available_sections": available,
+                "hint": "Use 'list' to see all available sections.",
+            }
+        )
+
+
+class PromoteToCanon(BaseTool):
+    """Promote artifacts from hot_store to cold_store (Gatekeeper only).
+
+    This tool is the ONLY mechanism for writing to cold_store.
+    It should only be used AFTER all quality bars have passed.
+
+    The promotion:
+    1. Reads artifact(s) from hot_store
+    2. Extracts player-safe content (no spoilers)
+    3. Writes to cold_store as immutable section
+    4. Optionally creates a snapshot
+
+    IMPORTANT: This tool is restricted to Gatekeeper role.
+    Other roles attempting to use it will receive an error.
+    """
+
+    name: str = "promote_to_canon"
+    description: str = (
+        "Promote hot_store artifacts to cold_store (GATEKEEPER ONLY). "
+        "Use ONLY after all quality bars pass. "
+        "Inputs: artifact_ids (list of hot_store keys to promote), "
+        "create_snapshot (bool, whether to create snapshot after promotion), "
+        "snapshot_description (optional description for snapshot)"
+    )
+
+    # Injected by executor
+    state: dict[str, Any] = Field(default_factory=dict)
+    cold_store: Any = Field(default=None)
+    role_id: str = Field(default="unknown")
+
+    def _run(
+        self,
+        artifact_ids: list[str],
+        create_snapshot: bool = True,
+        snapshot_description: str = "",
+        **kwargs: Any,
+    ) -> str:
+        """Promote artifacts from hot_store to cold_store."""
+        # Log any unexpected kwargs
+        if kwargs:
+            logger.debug(f"promote_to_canon received extra kwargs: {list(kwargs.keys())}")
+
+        # CRITICAL: Only Gatekeeper can promote to canon
+        if self.role_id.lower() != "gatekeeper":
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"Role '{self.role_id}' cannot promote to canon",
+                    "hint": "Only Gatekeeper can write to cold_store. "
+                    "Request Gatekeeper to perform promotion after quality check.",
+                }
+            )
+
+        if self.cold_store is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Cold store not available",
+                }
+            )
+
+        if not artifact_ids:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "artifact_ids is required",
+                    "hint": "Provide list of hot_store artifact IDs to promote.",
+                }
+            )
+
+        hot_store = self.state.get("hot_store", {})
+        promoted = []
+        errors = []
+
+        for artifact_id in artifact_ids:
+            if artifact_id not in hot_store:
+                errors.append(f"Artifact '{artifact_id}' not found in hot_store")
+                continue
+
+            artifact = hot_store[artifact_id]
+
+            # Extract content for cold_store
+            if hasattr(artifact, "model_dump"):
+                artifact_data = artifact.model_dump()
+            elif isinstance(artifact, dict):
+                artifact_data = artifact
+            else:
+                artifact_data = {"value": artifact}
+
+            # Extract player-safe content
+            # For artifacts with 'data' field, use that as content
+            if "data" in artifact_data and isinstance(artifact_data["data"], dict):
+                content_data = artifact_data["data"]
+            else:
+                content_data = artifact_data
+
+            # Convert to prose/string for cold section
+            if isinstance(content_data, dict):
+                # Try to get prose content
+                content = content_data.get(
+                    "content",
+                    content_data.get(
+                        "prose",
+                        content_data.get("text", json.dumps(content_data, indent=2)),
+                    ),
+                )
+            else:
+                content = str(content_data)
+
+            # Build metadata (exclude spoiler-sensitive fields)
+            metadata = {
+                "source_artifact_id": artifact_id,
+                "source_type": artifact_data.get("type", "unknown"),
+                "promoted_by": self.role_id,
+                "promoted_at": datetime.now().isoformat(),
+            }
+
+            # Copy safe metadata fields
+            for key in ("title", "author", "tags", "status"):
+                if key in artifact_data:
+                    metadata[key] = artifact_data[key]
+                elif "data" in artifact_data and key in artifact_data["data"]:
+                    metadata[key] = artifact_data["data"][key]
+
+            # Add to cold_store
+            try:
+                self.cold_store.add_section(
+                    section_id=artifact_id,
+                    content=content,
+                    metadata=metadata,
+                    source_artifact_id=artifact_id,
+                )
+                promoted.append(artifact_id)
+            except Exception as e:
+                errors.append(f"Failed to promote '{artifact_id}': {e}")
+
+        # Create snapshot if requested and we promoted something
+        snapshot_id = None
+        if create_snapshot and promoted:
+            desc = snapshot_description or f"Promoted {len(promoted)} artifact(s)"
+            snapshot_id = self.cold_store.create_snapshot(desc)
+
+        return json.dumps(
+            {
+                "success": len(promoted) > 0,
+                "promoted": promoted,
+                "errors": errors if errors else None,
+                "snapshot_id": snapshot_id,
+            }
+        )
+
+
+# Factory functions for Cold Store tools
+
+
+def read_cold_sot(cold_store: ColdStore | None) -> ReadColdSot:
+    """Create ReadColdSot tool with injected cold_store."""
+    tool = ReadColdSot()
+    tool.cold_store = cold_store
+    return tool
+
+
+def promote_to_canon(
+    state: dict[str, Any],
+    cold_store: ColdStore | None,
+    role_id: str,
+) -> PromoteToCanon:
+    """Create PromoteToCanon tool with injected state and cold_store.
+
+    Note: Only Gatekeeper should be given this tool. The tool itself
+    also validates role_id as a safety check.
+    """
+    tool = PromoteToCanon()
+    tool.state = state
+    tool.cold_store = cold_store
     tool.role_id = role_id
     return tool
