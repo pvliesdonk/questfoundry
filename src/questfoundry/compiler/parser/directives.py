@@ -529,9 +529,7 @@ def parse_myst_string(content: str, source_path: Path | None = None) -> ParseRes
         directive_type = DirectiveType.from_string(directive_name)
 
         if directive_type is None:
-            result.errors.append(
-                f"Unknown directive '{directive_name}' at line {line_number}"
-            )
+            result.errors.append(f"Unknown directive '{directive_name}' at line {line_number}")
             continue
 
         # Parse YAML content
@@ -552,9 +550,7 @@ def parse_myst_string(content: str, source_path: Path | None = None) -> ParseRes
                     parsed_content = {"value": parsed_content}
 
         except yaml.YAMLError as e:
-            result.errors.append(
-                f"Invalid YAML in '{directive_name}' at line {line_number}: {e}"
-            )
+            result.errors.append(f"Invalid YAML in '{directive_name}' at line {line_number}: {e}")
             continue
 
         directive = Directive(

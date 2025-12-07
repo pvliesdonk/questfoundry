@@ -528,6 +528,8 @@ class EnumTypeIR(BaseModel):
     ----------
     id : str
         Unique enum identifier (e.g., "hook_type", "artifact_status").
+    description : str
+        Optional description of what this enum represents.
     values : list[EnumValueIR]
         Allowed values for this enum. Defaults to empty list.
 
@@ -535,6 +537,7 @@ class EnumTypeIR(BaseModel):
     --------
     >>> hook_type = EnumTypeIR(
     ...     id="hook_type",
+    ...     description="The category of change a hook represents",
     ...     values=[
     ...         EnumValueIR(name="narrative", description="Story changes"),
     ...         EnumValueIR(name="scene", description="Scene updates"),
@@ -546,6 +549,9 @@ class EnumTypeIR(BaseModel):
 
     id: str
     """Unique enum identifier."""
+
+    description: str = ""
+    """Optional description of what this enum represents."""
 
     values: list[EnumValueIR] = Field(default_factory=list)
     """Allowed enum values."""
@@ -935,9 +941,7 @@ class DomainIR(BaseModel):
         for loop_id, loop in self.loops.items():
             for node in loop.nodes:
                 if node.role not in self.roles:
-                    errors.append(
-                        f"Loop '{loop_id}' references unknown role '{node.role}'"
-                    )
+                    errors.append(f"Loop '{loop_id}' references unknown role '{node.role}'")
 
             for edge in loop.edges:
                 node_ids = {n.id for n in loop.nodes}

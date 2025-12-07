@@ -3,6 +3,8 @@
 from questfoundry.compiler.parser.directives import (
     Directive,
     DirectiveType,
+    ParseResult,
+    parse_domain_directory,
     parse_myst_file,
     parse_myst_string,
 )
@@ -10,6 +12,8 @@ from questfoundry.compiler.parser.directives import (
 __all__ = [
     "Directive",
     "DirectiveType",
+    "ParseResult",
+    "parse_domain_directory",
     "parse_myst_file",
     "parse_myst_string",
 ]
