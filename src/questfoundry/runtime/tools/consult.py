@@ -227,20 +227,60 @@ class ConsultSchema(BaseTool):
         artifact_type = artifact_type.lower().replace(" ", "_").replace("-", "_")
         artifact_type = artifact_type.replace(".schema.json", "").replace(".schema", "")
 
-        # Try to load schema
+        # Try to load schema from JSON files first
         schema = loader.load_schema(artifact_type)
-        if schema is None:
-            # List available schemas
-            available = loader.list_schemas()
-            if available:
-                return (
-                    f"Schema '{artifact_type}' not found.\n\n"
-                    f"Available schemas: {', '.join(sorted(available)[:20])}"
-                    + ("..." if len(available) > 20 else "")
-                )
-            return f"Schema '{artifact_type}' not found and no schemas available."
+        if schema is not None:
+            return self._format_schema(artifact_type, schema)
 
-        return self._format_schema(artifact_type, schema)
+        # Fallback: generate schema from Pydantic models
+        schema = self._get_schema_from_pydantic(artifact_type)
+        if schema is not None:
+            return self._format_schema(artifact_type, schema)
+
+        # List available schemas
+        available = self._list_available_schemas()
+        if available:
+            return (
+                f"Schema '{artifact_type}' not found.\n\n"
+                f"Available schemas: {', '.join(sorted(available))}"
+            )
+        return f"Schema '{artifact_type}' not found and no schemas available."
+
+    def _get_schema_from_pydantic(self, artifact_type: str) -> dict[str, Any] | None:
+        """Get JSON schema from Pydantic model."""
+        try:
+            from questfoundry.runtime.validation import get_artifact_model
+
+            model = get_artifact_model(artifact_type)
+            if model is not None:
+                return model.model_json_schema()
+        except ImportError:
+            logger.debug("validation module not available for schema generation")
+        return None
+
+    def _list_available_schemas(self) -> list[str]:
+        """List available schema types from both JSON files and Pydantic models."""
+        available = set()
+
+        # Check resource loader
+        loader = get_resource_loader()
+        available.update(loader.list_schemas())
+
+        # Add schemas from Pydantic models
+        try:
+            from questfoundry.runtime.validation import _get_artifact_models
+
+            models = _get_artifact_models()
+            # Deduplicate by getting unique model classes
+            seen_models: set[str] = set()
+            for key, model in models.items():
+                if model.__name__ not in seen_models:
+                    seen_models.add(model.__name__)
+                    available.add(key)
+        except ImportError:
+            pass
+
+        return list(available)
 
     def _format_schema(self, artifact_type: str, schema: dict[str, Any]) -> str:
         """Format JSON schema as readable markdown for agents."""
