@@ -1,26 +1,34 @@
-# Claude Code Guidelines (QuestFoundry Mono-Repo)
+# Claude Code Guidelines (QuestFoundry v3)
 
-This file provides Claude Code-specific guidance derived from `AGENTS.md`. It's a streamlined reference for AI assistants working in this repository.
+Streamlined reference for Claude Code assistants. See `AGENTS.md` for full policy.
 
 ## Quick Reference
 
 - **Concise & factual**: State results directly; avoid filler
-- **Scope-aware**: Respect layer boundaries (spec → lib → cli)
+- **Domain-first**: All knowledge lives in MyST files under `src/questfoundry/domain/`
+- **Never edit generated/**: Run `qf compile` to regenerate
 - **Tool-driven**: Use `uv`, `pre-commit`, standard repo tooling
 - **Atomic work**: Small commits, no WIP; verify CI before handing back
 
-## Repository Structure
+## Repository Structure (v3)
 
-- **spec/**: L0–L5 canonical source (roles, artifacts, schemas, protocols, executable definitions)
-- **lib/**: L6 implementations (python, runtime, compiler)
-- **cli/**: L7 tools
-- **spec/** is read-only from lib/; changes flow downward
+```text
+src/questfoundry/
+├── domain/         # MyST source of truth
+│   ├── roles/      # 8 role definitions
+│   ├── loops/      # Workflow graphs
+│   ├── ontology/   # Artifacts, enums
+│   └── protocol/   # Intents, routing
+├── compiler/       # MyST → Python
+├── generated/      # DO NOT EDIT
+└── runtime/        # LangGraph engine
+```
 
 ## Before You Work
 
-1. Read the relevant `AGENTS.md` in the directory you're touching (root, spec, lib/python, lib/runtime)
-2. Read `CONTRIBUTING.md` in that area
-3. Check layer boundaries—don't hand-edit bundled resources
+1. Read `src/questfoundry/domain/ARCHITECTURE.md` for the full v3 design
+2. Check `_archive/` for v2 reference material if needed
+3. Never edit files in `generated/`
 
 ## Workflows
 
@@ -28,51 +36,51 @@ This file provides Claude Code-specific guidance derived from `AGENTS.md`. It's 
 
 ```bash
 uv sync                      # Install dependencies
-# Make your changes
-uv run ruff check .          # Lint
-uv run mypy                  # Type-check
+uv run ruff check src/       # Lint
+uv run mypy src/             # Type-check
 uv run pytest                # Test
-uv run ruff format .         # Format
+uv run ruff format src/      # Format
 ```
 
-### Pre-Commit & CI
+### Domain Changes
 
 ```bash
-pre-commit run --all-files   # Local check before commit
-# If installed with --user, ensure ~/.local/bin is on PATH
-```
-
-### Spec Changes
-
-If you modify `spec/`, re-bundle resources:
-
-```bash
-uv run hatch run bundle      # (Python)
-uv run hatch run bundle      # (Runtime)
+# Edit MyST files in src/questfoundry/domain/
+qf compile                   # Regenerate generated/
 ```
 
 ## Commits
 
 - **Format**: Conventional commits (`type(scope): subject`)
-- **Common scopes**: `spec`, `runtime`, `cli`, `compiler`, or component-level
+- **Scopes**: `domain`, `compiler`, `runtime`, `cli`
 - **Size**: Small, atomic; no WIP commits
-- **CI**: All checks must pass before considering work done
 
-## Definition of Done
+## Hot vs. Cold
 
-- ✅ Requirements satisfied with minimal change
-- ✅ Cross-references updated across layers
-- ✅ Hot/Cold boundaries respected (no spoilers in player-facing surfaces)
-- ✅ Lint, type-check, tests pass
-- ✅ Resources re-bundled if spec changed
-- ✅ Public API changes documented; breaking changes noted
-
-## Hot vs. Cold Reminder
-
-- **Hot**: Internal, implementation, spoilers
-- **Cold**: Player-facing, user-visible surfaces
+- **hot_store**: Working drafts, mutable, internal
+- **cold_store**: Committed canon, append-only, player-safe
 - **Rule**: Never leak Hot details into Cold
 
-## Area-Specific Notes
+## The 8 Roles (v3)
 
-See dedicated CLAUDE.md files in `spec/`, `lib/python/`, and `lib/runtime/` for detailed guidance on those areas.
+| Role | Abbr | Agency | Mandate |
+|------|------|--------|---------|
+| Showrunner | SR | High | Manage by Exception |
+| Lorekeeper | LK | Medium | Maintain the Truth |
+| Narrator | NR | High | Run the Game |
+| Publisher | PB | Zero | Assemble the Artifact |
+| Creative Director | CD | High | Ensure Sensory Coherence |
+| Plotwright | PW | Medium | Design the Topology |
+| Scene Smith | SS | Medium | Fill with Prose |
+| Gatekeeper | GK | Low | Enforce Quality Bars |
+
+## MyST Directives
+
+Domain files use custom directives. Key types:
+
+- `{role-meta}`, `{role-tools}`, `{role-constraints}`, `{role-prompt}`
+- `{loop-meta}`, `{graph-node}`, `{graph-edge}`, `{quality-gate}`
+- `{artifact-type}`, `{artifact-field}`, `{enum-type}`
+- `{intent-type}`, `{routing-rule}`, `{quality-bar}`
+
+See `ARCHITECTURE.md` for full directive vocabulary.

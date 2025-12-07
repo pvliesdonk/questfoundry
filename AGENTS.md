@@ -1,8 +1,6 @@
-# Agent Guidelines (QuestFoundry Mono-Repo)
+# Agent Guidelines (QuestFoundry v3)
 
 These rules are **binding** for all assistant work in this repo. Treat them as policy, not advice.
-Always apply the most specific guidance available (root → area-specific AGENTS → local
-CONTRIBUTING).
 
 ## Assistant Rules
 
@@ -12,37 +10,74 @@ CONTRIBUTING).
 - Propose better/safer approaches when they exist; avoid praise or filler.
 - Stay within the requested scope; if work implies extra epics, pause and confirm.
 
-## Repository Context
+## Repository Context (v3 Architecture)
 
-- Layered architecture: **spec/** (L0–L5 canonical source), **lib/** (L6 implementations: python,
-  runtime, compiler), **cli/** (L7 tools).
-- **spec/** owns roles, artifacts, schemas, protocols, executable definitions, and runtime interface
-  docs. It is the single source of truth for bundled resources.
-- **lib/python** and **lib/runtime** implement the spec; **lib/compiler** compiles definitions.
-- Hot vs. Cold: never leak spoilers or internal (Hot) details into player-facing (Cold) surfaces.
+QuestFoundry v3 uses an **Integrated Domain Model** where MyST files are both documentation and
+executable configuration.
+
+### Directory Structure
+
+```text
+src/questfoundry/
+├── domain/         # MyST source of truth (roles, loops, ontology, protocol)
+├── compiler/       # MyST → generated code
+├── generated/      # Auto-generated Python (DO NOT EDIT)
+└── runtime/        # LangGraph execution engine
+```
+
+### Key Principles
+
+- **domain/** is the single source of truth
+- **generated/** is output from compilation—never edit manually
+- **runtime/** consumes generated code
+- **_archive/** contains v2 content for reference only
+
+### Hot vs. Cold
+
+- **Hot**: Internal, implementation, spoilers (hot_store)
+- **Cold**: Player-facing, canon (cold_store)
+- **Rule**: Never leak Hot details into Cold
 
 ## Non-Negotiables
 
-- Read and follow the relevant CONTRIBUTING/AGENTS in the directory you touch (root, spec,
-  lib/python, lib/runtime).
-- Respect layer boundaries: change spec first, then implementations; do not hand-edit bundled
-  resources.
-- Use repo-standard tooling: `uv` for Python workflows, `pre-commit`, and existing lint/type/test
-  configs.
-- Run `pre-commit run --all-files` before handing work back; if installed with `--user`, ensure
-  `~/.local/bin` is on `PATH`.
-- No “fluff” files: create only files with a clear, maintained purpose.
+- Read `src/questfoundry/domain/ARCHITECTURE.md` before making significant changes
+- Use repo-standard tooling: `uv` for Python workflows, `pre-commit`
+- Run `pre-commit run --all-files` before handing work back
+- No "fluff" files: create only files with a clear, maintained purpose
+- Do not edit files in `generated/`—run `qf compile` instead
+
+## Workflows
+
+### Code Changes
+
+```bash
+uv sync                      # Install dependencies
+# Make your changes
+uv run ruff check src/       # Lint
+uv run mypy src/             # Type-check
+uv run pytest                # Test
+uv run ruff format src/      # Format
+```
+
+### Domain Changes
+
+```bash
+# Edit files in src/questfoundry/domain/
+qf compile                   # Regenerate generated/
+qf validate                  # Check without generating
+```
 
 ## Commit, Branch, PR
 
-- Conventional commits `type(scope): subject`; common scopes include `spec`, `runtime`, `cli`,
-  `compiler`, or more precise component scopes.
-- Prefer small, atomic commits; avoid WIP commits. One PR/epic per branch.
-- All CI gates (lint, type-check, tests) must pass before considering work done.
+- Conventional commits `type(scope): subject`
+- Common scopes: `domain`, `compiler`, `runtime`, `cli`
+- Prefer small, atomic commits; avoid WIP commits
+- All CI gates (lint, type-check, tests) must pass before considering work done
 
 ## Definition of Done
 
-- Requirements are satisfied with minimal necessary change.
-- Cross-references updated across affected layers; no Hot→Cold leakage.
-- Formatting/lint/type/tests pass with repo tools; resources re-bundled if spec changes.
-- Notes/assumptions and validation steps are captured in the response when relevant.
+- Requirements are satisfied with minimal necessary change
+- Hot/Cold boundaries respected
+- Formatting/lint/type/tests pass with repo tools
+- Generated code regenerated if domain changed
+- Notes/assumptions and validation steps are captured when relevant
