@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cold_book.schema.json",
+  "title": "Cold Book",
+  "description": "Story structure, section order, and metadata for deterministic book builds. Defines the canonical reading order and bibliographic information.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference",
+      "const": "https://questfoundry.liesdonk.nl/schemas/cold_book.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "Book manifest format version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "metadata": {
+      "$ref": "#/$defs/book_metadata",
+      "description": "Bibliographic metadata for the book"
+    },
+    "sections": {
+      "type": "array",
+      "description": "Ordered list of book sections with anchors and text files",
+      "items": {
+        "$ref": "#/$defs/section_entry"
+      },
+      "minItems": 1
+    },
+    "start_section": {
+      "type": "string",
+      "description": "Anchor of the starting section (must exist in sections array)",
+      "pattern": "^anchor\\d{3,}$"
+    }
+  },
+  "required": ["$schema", "version", "metadata", "sections", "start_section"],
+  "$defs": {
+    "book_metadata": {
+      "type": "object",
+      "description": "Bibliographic information for the book",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Book title",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "Book subtitle (optional)",
+          "maxLength": 200
+        },
+        "language": {
+          "type": "string",
+          "description": "Primary language code (ISO 639-1 or 639-3)",
+          "pattern": "^[a-z]{2,3}$"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author name or studio name",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "isbn": {
+          "type": "string",
+          "description": "ISBN-13 or ISBN-10 (optional)",
+          "pattern": "^(978|979)?[0-9]{9}[0-9X]$"
+        },
+        "published_at": {
+          "$ref": "#/$defs/date_string",
+          "description": "Publication date (YYYY-MM-DD)"
+        },
+        "edition": {
+          "type": "string",
+          "description": "Edition information (optional)",
+          "maxLength": 100
+        },
+        "copyright": {
+          "type": "string",
+          "description": "Copyright statement (optional)",
+          "maxLength": 200
+        },
+        "publisher": {
+          "type": "string",
+          "description": "Publisher name (optional)",
+          "maxLength": 200
+        }
+      },
+      "required": ["title", "language", "author", "published_at"]
+    },
+    "section_entry": {
+      "type": "object",
+      "description": "Single section definition with anchor, title, and file path",
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "description": "Unique section anchor (format: anchor001, anchor002, etc.)",
+          "pattern": "^anchor\\d{3,}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Section title (player-visible)",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "text_file": {
+          "type": "string",
+          "description": "Relative path to section markdown file (e.g., 'sections/001.md')",
+          "pattern": "^sections/\\d{3,}\\.md$"
+        },
+        "order": {
+          "type": "integer",
+          "description": "Sequential order number (1, 2, 3, ...)",
+          "minimum": 1
+        },
+        "player_safe": {
+          "type": "boolean",
+          "description": "Must be true (Cold is player-safe only)",
+          "const": true
+        },
+        "requires_gate": {
+          "type": "boolean",
+          "description": "Whether section requires gateway condition"
+        }
+      },
+      "required": ["anchor", "title", "text_file", "order", "player_safe", "requires_gate"]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

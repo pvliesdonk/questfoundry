@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cold_build_lock.schema.json",
+  "title": "Cold Build Lock",
+  "description": "Tool version pinning for reproducible builds. Optional manifest to lock tool versions and build flags.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference",
+      "const": "https://questfoundry.liesdonk.nl/schemas/cold_build_lock.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "Build lock format version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "tools": {
+      "type": "object",
+      "description": "Tool versions (key=tool name, value=version string)",
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*$": {
+          "type": "string",
+          "description": "Tool version (semver or other version scheme)",
+          "minLength": 1,
+          "maxLength": 50
+        }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "flags": {
+      "type": "object",
+      "description": "Tool-specific command-line flags",
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*_args$": {
+          "type": "array",
+          "description": "Command-line arguments for specific tool",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "description": "Optional environment variables for build",
+      "patternProperties": {
+        "^[A-Z][A-Z0-9_]*$": {
+          "type": "string",
+          "description": "Environment variable value",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["$schema", "version", "tools"]
+}

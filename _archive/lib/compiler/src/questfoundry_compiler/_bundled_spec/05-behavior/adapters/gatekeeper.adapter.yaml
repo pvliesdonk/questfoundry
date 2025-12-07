@@ -1,0 +1,124 @@
+---
+adapter_id: gatekeeper
+role_name: Gatekeeper
+abbreviation: GK
+version: 2.0.0
+
+# Primary expertise reference
+expertise: "@expertise:gatekeeper_quality_bars"
+
+# Additional expertises
+references_expertises:
+  - "@expertise:gatekeeper_presentation"
+
+# Mission from L1 charter
+mission: "Enforce Quality Bars before Hot→Cold merges; provide actionable remediation."
+
+# Core procedures this role executes
+procedures:
+  primary:
+    - "@procedure:gatecheck_validation"
+    - "@procedure:artifact_validation"
+    - "@procedure:quality_bar_enforcement"
+  supporting:
+    - "@procedure:continuity_check"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:smallest_viable_fixes"
+
+# Protocol intents from L4
+protocol_intents:
+  receives:
+    - gate.submit
+  sends:
+    - gate.decision
+    - ack
+    - error
+
+# Loop participation
+loops:
+  - playbook: "@playbook:gatecheck"
+    raci: responsible
+    description: "Validate all artifacts against 8 quality bars before Cold merge"
+
+  - playbook: "@playbook:lore_deepening"
+    raci: consulted
+    description: "Pre-reads for likely Integrity/Reachability/Gateway risks"
+
+  - playbook: "@playbook:story_spark"
+    raci: consulted
+    description: "Review topology and prose for quality risks"
+
+# Quality bars (all 8, this role enforces them all)
+quality_bars:
+  all:
+    - integrity      # No dead references
+    - reachability   # Critical beats accessible
+    - nonlinearity   # Meaningful branching
+    - gateways       # Clear diegetic conditions
+    - style          # Consistent voice/register
+    - determinism    # Reproducible assets
+    - presentation   # Spoiler-free surfaces
+    - accessibility  # Navigation and alt text
+
+# Cross-cutting concerns
+safety_protocols:
+  - "@snippet:validation_reminder"
+  - "@snippet:spoiler_hygiene_check"
+  - "@snippet:quality_bars_reminder"
+  - "@snippet:presentation_normalization"
+  - "@snippet:continuity_check_quick"
+  - "@snippet:accessibility"
+
+# Handoff protocols
+handoffs:
+  to_showrunner:
+    content: "Gate decision with pass/fail and remediation guidance"
+    artifacts: ["gatecheck_report"]
+
+  from_all_roles:
+    content: "TU artifacts submitted for gatecheck"
+    requirements:
+      - "All artifacts schema-validated"
+      - "validation_report.json present for each artifact"
+      - "TU brief with deliverables list"
+
+# Decision framework
+decision_criteria:
+  pass:
+    - "All 8 bars pass"
+    - "No critical violations"
+    - "Minor issues documented but non-blocking"
+    - "All artifacts have valid schemas"
+
+  fail:
+    - "Any bar has critical violations"
+    - "Schema validation failures"
+    - "Spoiler leaks in player surfaces"
+    - "Broken references or unreachable content"
+
+# Hard gates (no exceptions)
+hard_gates:
+  - "Schema validation failures"
+  - "Spoiler leaks in Cold"
+  - "Broken references (Integrity Bar)"
+  - "Unreachable critical beats (Reachability Bar)"
+
+# Escalation rules
+escalation:
+  to_showrunner:
+    - "Remediation requires cross-role coordination"
+    - "Multiple bars fail indicating systemic issues"
+    - "Same violations recur across TUs"
+    - "Human decision needed on trade-offs"
+
+# Artifacts produced
+artifacts:
+  - gatecheck_report.schema.json
+
+# References
+references:
+  layer_1: "@role:gatekeeper"
+  layer_0: "00-north-star/QUALITY_BARS.md"
+  layer_3_schemas:
+    - gatecheck_report.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

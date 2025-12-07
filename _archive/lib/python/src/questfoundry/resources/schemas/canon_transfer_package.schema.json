@@ -1,0 +1,486 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/canon_transfer_package.schema.json",
+  "title": "Canon Transfer Package",
+  "description": "Generated from 02-dictionary/artifacts/canon_transfer_package.md. Packages stabilized canon from a completed project for export to downstream projects (sequels, shared universes, franchise continuity). Invariant canon is immutable; mutable canon is extensible.",
+  "type": "object",
+  "properties": {
+    "source_project": {
+      "type": "string",
+      "description": "Source project slug (kebab-case identifier).",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "export_date": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this package was exported."
+    },
+    "snapshot_id": {
+      "type": "string",
+      "description": "Cold snapshot tag/commit from source project.",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "exported_by": {
+      "type": "string",
+      "description": "Lore Weaver name or agent identifier who created this export.",
+      "minLength": 2,
+      "maxLength": 120
+    },
+    "package_version": {
+      "type": "string",
+      "description": "Semantic version of this package (MAJOR.MINOR.PATCH).",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "description": {
+      "type": "string",
+      "description": "1-2 line purpose description for this export.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "invariant_canon": {
+      "type": "array",
+      "description": "Immutable canon rules that downstream projects cannot change.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canon pack element ID.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "theme": {
+            "type": "string",
+            "description": "Canon theme (geography, factions, metaphysics, etc.).",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "canon": {
+            "type": "string",
+            "description": "Canon statement (2-6 lines, spoilers allowed).",
+            "minLength": 20,
+            "maxLength": 600
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this is immutable.",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "consequences": {
+            "type": "string",
+            "description": "What this enables/constrains for downstream projects.",
+            "minLength": 10,
+            "maxLength": 400
+          }
+        },
+        "required": ["id", "theme", "canon", "rationale", "consequences"]
+      },
+      "minItems": 1
+    },
+    "mutable_canon": {
+      "type": "array",
+      "description": "Extensible canon rules that downstream projects can detail/extend.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canon pack element ID.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "theme": {
+            "type": "string",
+            "description": "Canon theme (geography, factions, metaphysics, etc.).",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "canon": {
+            "type": "string",
+            "description": "Canon statement (current state, 2-6 lines).",
+            "minLength": 20,
+            "maxLength": 600
+          },
+          "extension_guidance": {
+            "type": "string",
+            "description": "How downstream can extend this canon.",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "constraints": {
+            "type": "string",
+            "description": "What cannot change when extending.",
+            "minLength": 10,
+            "maxLength": 400
+          }
+        },
+        "required": ["id", "theme", "canon", "extension_guidance", "constraints"]
+      }
+    },
+    "codex_baseline": {
+      "type": "array",
+      "description": "Player-safe codex entries for universe-wide transfer.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Codex entry ID.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "title": {
+            "type": "string",
+            "description": "Entry title (player-safe).",
+            "minLength": 3,
+            "maxLength": 160
+          },
+          "topic": {
+            "type": "string",
+            "description": "Topic category.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "text": {
+            "type": "string",
+            "description": "Player-safe text (2-4 lines, no spoilers).",
+            "minLength": 20,
+            "maxLength": 600
+          },
+          "cross_refs": {
+            "type": "array",
+            "description": "Cross-references to other entries.",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 80
+            }
+          },
+          "inherited": {
+            "type": "boolean",
+            "description": "Always true for transferred codex entries.",
+            "enum": [true]
+          },
+          "source": {
+            "type": "string",
+            "description": "Source project slug (must match source_project).",
+            "minLength": 3,
+            "maxLength": 80
+          }
+        },
+        "required": ["id", "title", "topic", "text", "inherited", "source"]
+      },
+      "minItems": 1
+    },
+    "timeline_anchors": {
+      "type": "array",
+      "description": "Timeline anchors (T0/T1/T2) from source project.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "type": "string",
+            "description": "Timeline anchor label (T0/T1/T2).",
+            "enum": ["T0", "T1", "T2"]
+          },
+          "year": {
+            "type": "string",
+            "description": "Year notation (e.g., Y-18, Y+0).",
+            "pattern": "^Y[+-]\\d+$"
+          },
+          "event": {
+            "type": "string",
+            "description": "Event description.",
+            "minLength": 10,
+            "maxLength": 400
+          },
+          "significance": {
+            "type": "string",
+            "description": "Why this anchor matters for downstream.",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "required": ["anchor", "year", "event", "significance"]
+      },
+      "minItems": 2
+    },
+    "entity_registry": {
+      "type": "object",
+      "description": "All entities defined in source project.",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "description": "Character entities.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "role": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "status": {
+                "type": "string",
+                "enum": ["alive", "dead", "unknown"]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "role", "status", "description"]
+          }
+        },
+        "places": {
+          "type": "array",
+          "description": "Place entities.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "type": {
+                "type": "string",
+                "enum": ["hub", "gate", "landmark", "region"]
+              },
+              "geography": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "type", "description"]
+          }
+        },
+        "factions": {
+          "type": "array",
+          "description": "Faction entities.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "structure": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "influence": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "structure", "influence", "description"]
+          }
+        },
+        "items": {
+          "type": "array",
+          "description": "Item/technology entities.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "function": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "availability": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "function", "availability", "description"]
+          }
+        }
+      },
+      "required": ["characters", "places", "factions", "items"]
+    },
+    "downstream_constraints": {
+      "type": "object",
+      "description": "Clear rules for downstream projects (what can/cannot change).",
+      "properties": {
+        "invariants": {
+          "type": "array",
+          "description": "Rules that cannot change.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        },
+        "mutables": {
+          "type": "array",
+          "description": "Rules that can be extended.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "timeline_guidance": {
+          "type": "string",
+          "description": "How to extend timeline (T3+ guidance).",
+          "minLength": 20,
+          "maxLength": 400
+        },
+        "entity_baseline": {
+          "type": "string",
+          "description": "Summary of entity baseline from source.",
+          "minLength": 20,
+          "maxLength": 400
+        },
+        "you_can": {
+          "type": "array",
+          "description": "Examples of allowed changes.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        },
+        "you_cannot": {
+          "type": "array",
+          "description": "Examples of forbidden changes.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["invariants", "timeline_guidance", "you_can", "you_cannot"]
+    },
+    "validation_report": {
+      "type": "object",
+      "description": "Gatekeeper validation report.",
+      "properties": {
+        "integrity": {
+          "type": "boolean",
+          "description": "All entity references resolve."
+        },
+        "presentation": {
+          "type": "boolean",
+          "description": "No source project spoilers in invariant canon/codex."
+        },
+        "consistency": {
+          "type": "boolean",
+          "description": "Timeline anchors chronologically ordered."
+        },
+        "schema_compliance": {
+          "type": "boolean",
+          "description": "Package validates against schema."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["APPROVED", "REJECTED"],
+          "description": "Overall validation status."
+        },
+        "validated_by": {
+          "type": "string",
+          "description": "Gatekeeper name or agent identifier.",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "validation_date": {
+          "$ref": "#/$defs/date_string"
+        }
+      },
+      "required": [
+        "integrity",
+        "presentation",
+        "consistency",
+        "schema_compliance",
+        "status",
+        "validated_by",
+        "validation_date"
+      ]
+    },
+    "lineage": {
+      "type": "object",
+      "description": "Traceability information.",
+      "properties": {
+        "export_tu": {
+          "type": "string",
+          "description": "TU ID for this export (format: TU-YYYY-MM-DD-LW-CanonTransferExport).",
+          "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-LW-CanonTransferExport$"
+        },
+        "source_snapshot": {
+          "type": "string",
+          "description": "Source project Cold snapshot tag.",
+          "minLength": 3,
+          "maxLength": 80
+        },
+        "package_file": {
+          "type": "string",
+          "description": "Package filename.",
+          "pattern": "^canon_transfer_package_[a-z0-9\\-]+\\.json$"
+        }
+      },
+      "required": ["export_tu", "source_snapshot", "package_file"]
+    }
+  },
+  "required": [
+    "source_project",
+    "export_date",
+    "snapshot_id",
+    "exported_by",
+    "package_version",
+    "description",
+    "invariant_canon",
+    "codex_baseline",
+    "timeline_anchors",
+    "entity_registry",
+    "downstream_constraints",
+    "validation_report",
+    "lineage"
+  ],
+  "$defs": {
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

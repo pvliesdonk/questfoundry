@@ -1,0 +1,146 @@
+---
+playbook_id: gatecheck
+playbook_name: Gatecheck
+abbreviation: GC
+version: 2.0.0
+category: Export
+
+# Purpose and outcome
+purpose: "Validate quality bars and deliver decisions to coordinate merge approvals with snapshot stamping per TRACEABILITY. Enable Gatekeeper to evaluate all 8 quality bars and deliver pass/conditional pass/block decisions."
+
+outcome: "A gatecheck report with bar statuses (green/yellow/red), decision (pass/conditional pass/block), smallest viable fixes for yellow/red bars, and owner assignments—ready for merge approval or remediation."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "Owner submits work within TU for gatecheck (status: stabilizing → gatecheck)"
+    - "Pre-gate feedback provided earlier; now ready for full evaluation"
+    - "Any loop nearing merge to Cold requires gatecheck"
+  protocol_intent: "tu.submit_gate"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Reviews quality bars, provides decision, identifies smallest viable fixes"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Receives decision, coordinates next steps (merge approval or remediation)"
+  consulted:
+    - role: "Owner (varies by loop)"
+      responsibilities: "Receives feedback, addresses fixes if needed (LW, CC, PW, SS, etc.)"
+
+# Inputs
+inputs:
+  - "TU Brief from owner (status: stabilizing → gatecheck)"
+  - "Artifacts to review (Canon Pack, Codex entries, Topology notes, Art/Audio plans, etc.)"
+  - "Current Cold snapshot for reference"
+  - "Prior pre-gate notes (if any)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:gatecheck_validation"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:continuity_check"
+    - "@procedure:spoiler_hygiene"
+
+# The 8 Quality Bars
+quality_bars_evaluated:
+  all:
+    - integrity:
+        definition: "Referential consistency, timeline coherence, link resolution"
+    - reachability:
+        definition: "Critical beats reachable, no dead ends"
+    - nonlinearity:
+        definition: "Hubs/loops intentional and meaningful"
+    - gateways:
+        definition: "Gateway conditions enforceable, diegetic"
+    - style:
+        definition: "Voice/register/motif consistency"
+    - determinism:
+        definition: "Reproducible when promised (seeds/logs off-surface)"
+    - presentation:
+        definition: "Spoiler safety; no internals on player surfaces"
+    - accessibility:
+        definition: "Alt text, descriptive links, readable pacing"
+
+# Decision framework
+decision_criteria:
+  pass:
+    - "All 8 bars green"
+    - "No critical violations"
+    - "Minor issues documented but non-blocking"
+
+  conditional_pass:
+    - "Yellow bars with smallest viable fixes identified"
+    - "Owner can address within current TU"
+    - "No hard-gate violations (spoilers, broken refs)"
+
+  block:
+    - "Red bars (critical failures)"
+    - "Hard-gate violations (spoilers in Cold, schema failures, broken refs)"
+    - "Fixes require cross-loop coordination or major rework"
+
+# Hard gates (no exceptions)
+hard_gates:
+  - "Schema validation failures"
+  - "Spoiler leaks in Cold"
+  - "Broken references (Integrity Bar)"
+  - "Unreachable critical beats (Reachability Bar)"
+
+# Procedure steps
+procedure_steps:
+  - step: 1
+    name: "Gate Report Submission"
+    owner: "Owner"
+    action: "Owner signals work ready for gatecheck"
+    protocol_intent: "tu.submit_gate"
+
+  - step: 2
+    name: "Evaluate All 8 Quality Bars"
+    owner: "@adapter:gatekeeper"
+    action: "Review against all bars; assign green/yellow/red status to each"
+
+  - step: 3
+    name: "Decision & Smallest Viable Fixes"
+    owner: "@adapter:gatekeeper"
+    action: "Deliver pass/conditional pass/block decision with actionable remediation notes"
+    protocol_intent: "gate.decision"
+
+  - step: 4
+    name: "Remediation or Merge Approval"
+    owner: "@adapter:showrunner"
+    action: "If pass: approve merge. If conditional: route fixes to owner. If block: escalate."
+
+# Success criteria
+success_criteria:
+  - "All 8 bars evaluated and statused"
+  - "Decision clear: pass/conditional pass/block"
+  - "If not pass: smallest viable fixes identified with owner assigned"
+  - "Hard-gate violations flagged immediately"
+
+# Handoffs
+handoffs:
+  to_showrunner:
+    content: "Gate decision with pass/fail and remediation guidance"
+    artifacts: ["gatecheck_report"]
+
+  from_all_roles:
+    content: "TU artifacts submitted for gatecheck"
+    requirements:
+      - "All artifacts schema-validated"
+      - "validation_report.json present for each artifact"
+      - "TU brief with deliverables list"
+
+# Artifacts produced
+artifacts:
+  - gatecheck_report.schema.json
+
+# References
+references:
+  layer_0: "00-north-star/QUALITY_BARS.md"
+  layer_3_schemas:
+    - gatecheck_report.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

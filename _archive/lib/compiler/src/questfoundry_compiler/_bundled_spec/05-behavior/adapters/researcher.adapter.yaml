@@ -1,0 +1,190 @@
+---
+adapter_id: researcher
+role_name: Researcher
+abbreviation: RS
+version: 2.0.0
+
+# Primary expertise reference
+expertise: "@expertise:researcher_verification"
+
+# Additional expertises
+references_expertises:
+  - "@expertise:researcher_fact_checking"
+
+# Mission from L1 charter
+mission: "Corroborate claims and constraints, record uncertainty plainly, and hand neighbors just enough truth to work safely."
+
+# Core procedures this role executes
+procedures:
+  primary:
+    - "@procedure:fact_corroboration"
+    - "@procedure:research_memo_creation"
+    - "@procedure:uncertainty_posture_assessment"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+
+# Protocol intents from L4
+protocol_intents:
+  receives:
+    - research.request
+    - tu.open
+    - hook.accept
+  sends:
+    - research.memo
+    - research.posture
+    - research.phrasing
+    - hook.create
+    - ack
+
+# Loop participation
+loops:
+  - playbook: "@playbook:hook_harvest"
+    raci: consulted
+    description: "Triage: which hooks need verification vs canon vs style"
+
+  - playbook: "@playbook:lore_deepening"
+    raci: consulted
+    description: "Evidence & constraints; corroborate factual claims"
+
+  - playbook: "@playbook:story_spark"
+    raci: consulted
+    description: "Feasibility notes on gateways/affordances"
+
+  - playbook: "@playbook:style_tune_up"
+    raci: consulted
+    description: "Terminology accuracy; sensitive language flags"
+
+# Quality bars focus
+quality_bars:
+  primary:
+    - integrity      # Factual consistency and plausibility
+    - presentation   # No internals on surface suggestions; player-safe neutral phrasing
+  secondary:
+    - accessibility  # Terminology clarity; sensitive content flagged
+    - gateways       # Diegetic gate mechanisms grounded in plausibility
+
+# Cross-cutting concerns
+safety_protocols:
+  - "@snippet:spoiler_hygiene_check"
+  - "@snippet:validation_reminder"
+  - "@snippet:research_posture"
+
+# Role dormancy (optional role)
+dormancy:
+  activation_criteria:
+    - "High-stakes plausibility claims (medicine, law, engineering)"
+    - "Cultural/historical accuracy when factual basis needed"
+    - "Terminology requiring real-world validation"
+  when_dormant:
+    - "Owners keep surfaces neutral"
+    - "Mark items as uncorroborated:<risk>"
+    - "Showrunner schedules Research TU before release if risk ≥ med"
+
+# Research memo structure
+research_memo_structure:
+  components:
+    - question        # What was asked
+    - answer          # Concise response
+    - citations       # 2-5 sources
+    - caveats         # Limitations, disputes, edge cases
+    - creative_affordances  # What this enables or forbids
+
+# Uncertainty posture grading
+uncertainty_posture:
+  grades:
+    - corroborated     # Multiple reliable sources confirm
+    - plausible        # Reasonable but not directly confirmed
+    - disputed         # Conflicting evidence or expert disagreement
+    - uncorroborated   # No evidence found; flagged by risk level
+  risk_levels:
+    - low              # Minor detail; neutral phrasing safe
+    - med              # Moderate stakes; research pass recommended
+    - high             # Critical claim; research required before release
+
+# Content risk flagging
+content_risks:
+  flag_categories:
+    - "Harmful stereotypes"
+    - "Safety issues"
+    - "Sensitive topics (trauma, violence, discrimination)"
+  response: "Propose mitigations aligned with Style/Accessibility docs"
+
+# Verisimilitude opportunities
+verisimilitude:
+  identify:
+    - "Where realism can heighten stakes"
+    - "Where plausible mechanisms enhance affordances"
+  output: "Hooks for Plot/Scene/Lore/Curator"
+
+# Handoff protocols
+handoffs:
+  from_any_role:
+    content: "Receive research requests for fact validation"
+    artifacts: ["research.request"]
+
+  to_lore_weaver:
+    content: "Provide evidence grading and constraints (not outcomes)"
+    artifacts: ["research.memo", "research.posture"]
+    note: "Constraints only; never dictate canon outcomes"
+
+  to_plotwright:
+    content: "Suggest plausible mechanisms for gates via hooks"
+    artifacts: ["hook_card"]
+
+  to_style_lead:
+    content: "Flag sensitive language and terminology accuracy issues"
+    artifacts: ["content_risk_flags"]
+
+  to_codex_curator:
+    content: "Coordinate terminology requiring codex entry"
+    trigger: "Terms need player-facing definition"
+
+  to_translator:
+    content: "Coordinate culture/idiom concerns"
+    trigger: "Cross-cultural validation needed"
+
+# Context awareness requirements
+context_requirements:
+  - "Current TU and questions list"
+  - "Hot: Accepted hooks, Plot/Lore notes, Style/Translator concerns, PN dry-run flags"
+  - "Cold: Surfaces where claims appear (for neutral phrasing)"
+  - "Prior research memos (for consistency)"
+  - "Uncertainty posture history (track risk over time)"
+
+# Escalation rules
+escalation:
+  ask_human:
+    - "High-stakes claims with disputed evidence"
+    - "Sensitive content requiring policy-level decision"
+    - "Cultural/linguistic matters beyond role expertise"
+
+  wake_showrunner:
+    - "When findings pressure canon significantly (coordinate with Lore)"
+    - "When findings require topology change (coordinate with Plotwright)"
+
+  coordinate_with_lore_weaver:
+    - "Set constraints based on findings (not canon outcomes)"
+    - "High-stakes plausibility (medicine, law, engineering)"
+
+  coordinate_with_translator:
+    - "Cultural/linguistic matters"
+    - "Idiom and register accuracy"
+
+  coordinate_with_style_lead:
+    - "Sensitive topics and terminology"
+    - "Content warnings and accessibility notes"
+
+# Artifacts produced
+artifacts:
+  - research_memo.schema.json
+  - uncertainty_assessment.schema.json
+
+# References
+references:
+  layer_1: "@role:researcher"
+  layer_3_schemas:
+    - research_memo.schema.json
+    - uncertainty_assessment.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/cold_fonts.schema.json",
+  "title": "Cold Fonts",
+  "description": "Font file mappings for consistent typography across exports. Optional manifest for projects using custom fonts.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference",
+      "const": "https://questfoundry.liesdonk.nl/schemas/cold_fonts.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "Fonts manifest format version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "fonts": {
+      "type": "array",
+      "description": "List of font files with hashes and CSS properties",
+      "items": {
+        "$ref": "#/$defs/font_entry"
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["$schema", "version", "fonts"],
+  "$defs": {
+    "font_entry": {
+      "type": "object",
+      "description": "Single font file with metadata and hash",
+      "properties": {
+        "logical_name": {
+          "type": "string",
+          "description": "Logical font identifier (e.g., 'body', 'display', 'heading', 'mono')",
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "filename": {
+          "type": "string",
+          "description": "Font file name (e.g., 'SourceSerifPro-Regular.woff2')",
+          "pattern": "^[A-Za-z0-9_-]+\\.(woff2|woff|ttf|otf)$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256_hash",
+          "description": "SHA-256 hash of font file (hex lowercase)"
+        },
+        "family": {
+          "type": "string",
+          "description": "CSS font-family name (e.g., 'Source Serif Pro')",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "weight": {
+          "type": "integer",
+          "description": "CSS font-weight (100-900, typical: 400=normal, 700=bold)",
+          "minimum": 100,
+          "maximum": 900,
+          "multipleOf": 100
+        },
+        "style": {
+          "type": "string",
+          "description": "CSS font-style",
+          "enum": ["normal", "italic", "oblique"]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "description": "Font file size in bytes (optional)",
+          "minimum": 1
+        },
+        "license": {
+          "type": "string",
+          "description": "Font license (optional, e.g., 'OFL 1.1', 'MIT', 'Commercial')",
+          "maxLength": 200
+        }
+      },
+      "required": ["logical_name", "filename", "sha256", "family", "weight", "style"]
+    },
+    "sha256_hash": {
+      "type": "string",
+      "description": "SHA-256 hash in hexadecimal (64 lowercase hex chars)",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

@@ -1,0 +1,115 @@
+---
+playbook_id: audio_pass
+playbook_name: Audio Pass
+abbreviation: AP
+version: 2.0.0
+category: Asset
+
+# Purpose and outcome
+purpose: "Decide what the audience should hear and why—ambience, foley, stingers, or voice—then (optionally) produce audio that fits style and narrative intent without leaking spoilers. This loop supports plan-only merges when the Audio Producer is dormant."
+
+outcome: "An Audio Plan (cues, purpose, timing/placement, captions/text-equivalents, safety notes) and, if active, audio assets with reproducibility notes. Ready for Gatekeeper checks and merge to Cold (plans may merge as deferred; assets merge only on full pass)."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "A chapter/scene needs mood scaffolding or clarifying sound cues"
+    - "Style Lead requests motif reinforcement via sound"
+    - "Replacement/upgrade of existing sounds or VO"
+    - "Export targets include audio plan/assets"
+  tu_format: "tu-audio-<scope>"
+  showrunner_decision: "Confirm Audio Director/Audio Producer activation; either may be dormant"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:audio_director"
+      responsibilities: "Choose cue targets and why; specify placement, duration, intensity; write player-safe cue descriptions and captions/text-equivalents"
+    - role: "@adapter:audio_producer"
+      responsibilities: "If active: create/arrange/mix assets; export masters; log reproducibility notes"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Scope the pass; decide plan-only vs asset production; sequence merge"
+  consulted:
+    - role: "@adapter:style_lead"
+      responsibilities: "Ensure audio language aligns with register/motifs; veto drift"
+    - role: "@adapter:player_narrator"
+      responsibilities: "Confirm cues can be referenced diegetically when appropriate; never expose technique"
+    - role: "@adapter:translator"
+      responsibilities: "If active: flag VO/linguistic content and localization needs"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Check Presentation Safety (no spoilers; safe levels), Style, and Determinism/Reproducibility (when promised)"
+
+# Inputs
+inputs:
+  - "Cold snapshot (canon, codex, style guardrails)"
+  - "Target scenes/sections (Hot drafts acceptable for planning)"
+  - "PN Principles (diegetic references; no plumbing)"
+  - "Accessibility requirements (text equivalents, loudness safety)"
+  - "Localization posture (Translator active or dormant)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:cue_slot_selection"
+    - "@procedure:audio_plan_authoring"
+    - "@procedure:leitmotif_management"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:audio_text_equivalents_captions"
+    - "@procedure:audio_caption_text_alignment"
+    - "@procedure:audio_dynamic_range_safety"
+    - "@procedure:audio_mix_ready_delivery"
+    - "@procedure:determinism_logging"
+    - "@procedure:dynamic_range_safety"
+    - "@procedure:audio_reproducibility_planning"
+
+# Merge options
+merge_options:
+  plan_only: "Plans merge as deferred without asset production"
+  full_pass: "Plans + assets merge together"
+
+# Success criteria
+success_criteria:
+  - "Audio Plans specify purpose, placement, intensity, captions/text-equivalents, safety notes"
+  - "If assets: match plan intent; determinism logged off-surface"
+  - "No spoilers in captions or text equivalents"
+  - "Audio language consistent with Style register/motifs"
+  - "Safety: no extreme volumes, startles marked, accessible text equivalents"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - presentation   # Text equivalents player-safe; no technique in captions
+    - accessibility  # Safety notes (intensity, startle); text equivalents present
+  secondary:
+    - style          # Captions portable; register aligned
+    - determinism    # Logs off-surface when promised
+
+# Handoffs
+handoffs:
+  to_audio_producer:
+    content: "Audio plans for production"
+    condition: "If Audio Producer active"
+
+  to_gatekeeper:
+    content: "Plans and assets for Presentation and Accessibility checks"
+
+# Artifacts produced
+artifacts:
+  - audio_plan.schema.json
+  - cuelist.schema.json
+  - audio_render.schema.json
+  - determinism_log.schema.json
+  - safety_checklist.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - audio_plan.schema.json
+    - cuelist.schema.json
+    - audio_render.schema.json
+    - determinism_log.schema.json
+    - safety_checklist.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

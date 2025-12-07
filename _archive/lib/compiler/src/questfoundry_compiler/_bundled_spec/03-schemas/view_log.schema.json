@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/view_log.schema.json",
+  "title": "View Log",
+  "description": "Generated from 02-dictionary/artifacts/view_log_ENRICHED.md. Records a bound player-safe view with coverage, anchor health, gatecheck results, and export artifacts.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Name of the bound view.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "bound": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date the view was bound."
+    },
+    "binder": {
+      "type": "string",
+      "description": "Book Binder name or agent identifier.",
+      "minLength": 2,
+      "maxLength": 160
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "cold_snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "targets": {
+      "type": "array",
+      "description": "Export targets included in this view (e.g., PDF, HTML, EPUB).",
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 40
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "options_and_coverage": {
+      "type": "string",
+      "description": "Player-safe summary of art, audio, language, research, and accessibility coverage.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "dormancy": {
+      "type": "array",
+      "description": "Optional deferral tags declaring dormant tracks.",
+      "items": {
+        "$ref": "#/$defs/deferral_tag"
+      },
+      "uniqueItems": true
+    },
+    "anchor_map": {
+      "type": "string",
+      "description": "Anchor integrity report including counts for manuscript, codex, crosslinks, locales, orphans, collisions.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "presentation_status": {
+      "type": "string",
+      "description": "Presentation bar status.",
+      "enum": ["green", "yellow", "red"]
+    },
+    "presentation_notes": {
+      "type": "string",
+      "description": "Notes or smallest fixes if presentation status is yellow or red.",
+      "maxLength": 400
+    },
+    "accessibility_status": {
+      "type": "string",
+      "description": "Accessibility bar status.",
+      "enum": ["green", "yellow", "red"]
+    },
+    "accessibility_notes": {
+      "type": "string",
+      "description": "Notes or smallest fixes if accessibility status is yellow or red.",
+      "maxLength": 400
+    },
+    "gatekeeper": {
+      "type": "string",
+      "description": "Gatekeeper identity for this view.",
+      "minLength": 2,
+      "maxLength": 160
+    },
+    "gatecheck_id": {
+      "type": "string",
+      "description": "Identifier referencing the associated Gatecheck Report.",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "export_artifacts": {
+      "type": "array",
+      "description": "List of exported artifacts with optional hashes for reproducibility.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Artifact kind (e.g., PDF, HTML, EPUB, Bundle).",
+            "minLength": 3,
+            "maxLength": 40
+          },
+          "path": {
+            "type": "string",
+            "description": "Path or name for the artifact.",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "hash": {
+            "type": "string",
+            "description": "Optional hash or identifier for reproducibility.",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional notes about the artifact.",
+            "maxLength": 200
+          }
+        },
+        "required": ["kind", "path"]
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "title",
+    "bound",
+    "binder",
+    "tu",
+    "cold_snapshot",
+    "targets",
+    "options_and_coverage",
+    "anchor_map",
+    "presentation_status",
+    "accessibility_status",
+    "gatekeeper",
+    "gatecheck_id",
+    "export_artifacts"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "presentation_status": {
+            "enum": ["yellow", "red"]
+          }
+        },
+        "required": ["presentation_status"]
+      },
+      "then": {
+        "required": ["presentation_notes"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "accessibility_status": {
+            "enum": ["yellow", "red"]
+          }
+        },
+        "required": ["accessibility_status"]
+      },
+      "then": {
+        "required": ["accessibility_notes"]
+      }
+    }
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

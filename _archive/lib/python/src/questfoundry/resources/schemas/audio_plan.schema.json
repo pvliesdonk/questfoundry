@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/audio_plan.schema.json",
+  "title": "Audio Plan",
+  "description": "Generated from 02-dictionary/artifacts/audio_plan_ENRICHED.md. Specifies an audio cue so an Audio Producer can realize it without guessing while keeping player surfaces safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Cue identifier or short name.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this plan was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the plan; fixed to Audio Director.",
+      "enum": ["Audio Director"]
+    },
+    "slice": {
+      "type": "string",
+      "description": "Short player-safe scope label.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "status": {
+      "type": "string",
+      "description": "Current audio status for the cue.",
+      "enum": ["planned", "producing", "done", "deferred"]
+    },
+    "purpose": {
+      "type": "string",
+      "description": "Primary audio purpose for this cue.",
+      "enum": ["clarify", "recall", "mood", "signpost", "pace"]
+    },
+    "purpose_rationale": {
+      "type": "string",
+      "description": "1-2 lines explaining how the cue helps reading or performance.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "placement": {
+      "type": "string",
+      "description": "Relative placement guidance (before, under, after specific lines).",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "timing_note": {
+      "type": "string",
+      "description": "Optional note describing enter/exit moments in words.",
+      "maxLength": 240
+    },
+    "duration_target": {
+      "type": "string",
+      "description": "Expected cue duration (e.g., '2-4 s').",
+      "minLength": 3,
+      "maxLength": 40
+    },
+    "duck_policy": {
+      "type": "string",
+      "description": "Optional ducking policy when cue sits under speech.",
+      "enum": ["soft", "moderate", "strong"]
+    },
+    "what_is_heard": {
+      "type": "string",
+      "description": "Plain-language description of the cue without technique terms.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "salient_qualities": {
+      "type": "string",
+      "description": "Descriptive adjectives capturing key qualities.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "readability": {
+      "type": "string",
+      "description": "Playback expectations (devices, environments).",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "caption": {
+      "type": "string",
+      "description": "Player-safe caption or text equivalent enclosed in square brackets.",
+      "pattern": "^\\[[^\\[\\]]+\\]$",
+      "minLength": 5,
+      "maxLength": 200
+    },
+    "onset": {
+      "type": "string",
+      "description": "Cue onset guidance to avoid startle.",
+      "enum": ["soft", "gradual"]
+    },
+    "intensity": {
+      "type": "string",
+      "description": "Overall loudness posture for player comfort.",
+      "enum": ["conservative", "moderate"]
+    },
+    "transients": {
+      "type": "string",
+      "description": "Transient behavior guidance to avoid piercing highs.",
+      "enum": ["none", "gentle"]
+    },
+    "content_notes": {
+      "type": "string",
+      "description": "Optional content notes referencing Layer-0 guidance.",
+      "maxLength": 240
+    },
+    "inclusion_criteria": {
+      "type": "string",
+      "description": "Conditions for when to include and when to exclude this cue.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "anchor_targets": {
+      "type": "array",
+      "description": "Manuscript paths anchored by this cue.",
+      "items": {
+        "type": "string",
+        "pattern": "^/[A-Za-z0-9._\\-/]+#[A-Za-z0-9._\\-]+$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "register": {
+      "type": "string",
+      "description": "Optional register aligned with Style guidance.",
+      "enum": ["neutral", "formal", "colloquial"]
+    },
+    "idioms_to_avoid": {
+      "type": "array",
+      "description": "Optional list of idioms or phrases to avoid for portability.",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 120
+      }
+    },
+    "translator_note": {
+      "type": "string",
+      "description": "Optional translator guidance for localized phrasing.",
+      "maxLength": 240
+    },
+    "determinism": {
+      "type": "string",
+      "description": "Off-surface reproduction expectations and constraints.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "repro_expectation": {
+      "type": "string",
+      "description": "Whether producer logging is required.",
+      "enum": ["none", "log-only"]
+    },
+    "producer_log_fields": {
+      "type": "string",
+      "description": "Optional list of producer log fields (required if repro expectation is log-only).",
+      "maxLength": 400
+    },
+    "handoffs": {
+      "type": "array",
+      "description": "Hand-off notes enumerating who receives what deliverables.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 6
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist confirming readiness before production or completion status.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 9,
+      "maxItems": 9
+    }
+  },
+  "required": [
+    "title",
+    "tu",
+    "edited",
+    "owner",
+    "slice",
+    "status",
+    "purpose",
+    "purpose_rationale",
+    "placement",
+    "duration_target",
+    "what_is_heard",
+    "salient_qualities",
+    "readability",
+    "caption",
+    "onset",
+    "intensity",
+    "transients",
+    "inclusion_criteria",
+    "anchor_targets",
+    "determinism",
+    "repro_expectation",
+    "handoffs",
+    "done_checklist"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "repro_expectation": {
+            "const": "log-only"
+          }
+        },
+        "required": ["repro_expectation"]
+      },
+      "then": {
+        "required": ["producer_log_fields"]
+      }
+    }
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

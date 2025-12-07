@@ -1,0 +1,186 @@
+---
+playbook_id: hook_harvest
+playbook_name: Hook Harvest
+abbreviation: HH
+version: 2.0.0
+category: Discovery
+
+# Purpose and outcome
+purpose: "Sweep up newly proposed hooks (narrative, scene, factual, taxonomy), remove duplicates, cluster related ideas, and triage what should advance now, later, or never."
+
+outcome: "A prioritized, tagged hook set ready for Lore Deepening (canonization) and follow-on loops, with risks and dependencies made explicit."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "After Story Spark or any burst of drafting that produced hooks"
+    - "Before a stabilization window or merge train"
+    - "On demand when the backlog looks fuzzy or drifted"
+  tu_format: "tu-hook-harvest-<date>"
+  showrunner_decision: "Confirms whether Researcher is active (affects factual triage)"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:showrunner"
+      responsibilities: "Runs the session; decides activation of dormant roles; final triage calls"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Accountable for harvest outcomes"
+  consulted:
+    - role: "@adapter:lore_weaver"
+      responsibilities: "Flags canon collisions/opportunities; suggests deepening order"
+    - role: "@adapter:plotwright"
+      responsibilities: "Judges structural impact; identifies gateway implications"
+    - role: "@adapter:scene_smith"
+      responsibilities: "Judges scene viability; surfaces prose opportunities/risks"
+    - role: "@adapter:codex_curator"
+      responsibilities: "Flags taxonomy/coverage gaps; ensures player-safe surface downstream"
+    - role: "@adapter:researcher"
+      responsibilities: "Validates factual hooks; assigns uncertainty levels/citations"
+    - role: "@adapter:style_lead"
+      responsibilities: "Notes tone/voice/aesthetic implications"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Points out quality bars likely to fail if a hook advances"
+  informed:
+    - role: "@adapter:player_narrator"
+      responsibilities: "Informed of hooks that may impact future narration"
+
+# Inputs
+inputs:
+  - "Hook cards in Hot SoT with status 'proposed'"
+  - "Recent topology notes, section drafts, style addenda"
+  - "Open QA notes from Gatekeeper (integrity/reachability/nonlinearity risks)"
+  - "Prior harvest decisions (for consistency)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:hook_triaging"
+    - "@procedure:clustering"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:tu_lifecycle"
+
+# Validation requirements
+validation_requirements:
+  critical: "All roles producing JSON artifacts in this loop MUST validate before handoff"
+  reference: "@snippet:validation_reminder"
+  hard_gate: "Invalid artifacts STOP the loop. No exceptions."
+
+# Procedure steps
+procedure_steps:
+  - step: 1
+    name: "Open Hook Harvest TU"
+    owner: "@adapter:showrunner"
+    action: "Open TU and broadcast to consulted roles"
+    protocol_intent: "tu.open"
+
+  - step: 2
+    name: "Collect"
+    action: "Sweep all new 'proposed' hooks; reject obvious dupes; link provenance"
+
+  - step: 3
+    name: "Cluster"
+    action: "Group by theme (e.g., 'Wormhole economy', 'Kestrel arc'), then by type (narrative|scene|factual|taxonomy)"
+
+  - step: 4
+    name: "Annotate"
+    action: "Add or confirm triage tags, uncertainty levels, dependencies for each hook"
+    triage_tags:
+      - quick-win
+      - needs-research
+      - structure-impact
+      - style-impact
+      - deferred
+      - reject
+    uncertainty: "For factual: uncorroborated:low/med/high with any citations"
+
+  - step: 5
+    name: "Decide"
+    owner: "@adapter:showrunner"
+    action: "Mark each as accepted, deferred, or rejected (with 1-line reason)"
+    protocol_intents:
+      - "hook.accept (to owner role for next loop)"
+      - "hook.defer (with wake conditions)"
+      - "hook.reject (with reason and provenance)"
+
+  - step: 6
+    name: "Package"
+    action: "Produce Harvest Sheet summarizing decisions for hand-off"
+
+# Deliverables
+deliverables:
+  harvest_sheet:
+    format: "Human text; attach to TU"
+    contents:
+      - "Date and TU-ID"
+      - "Cluster headings with lists of hooks (accepted/deferred/rejected)"
+      - "Risk notes (dormant Researcher? style pressure? topology churn?)"
+      - "Activation requests (roles Showrunner should wake for next loops)"
+
+  updated_hooks:
+    contents:
+      - "Status set (accepted/deferred/rejected)"
+      - "Triage tags"
+      - "Uncertainty level"
+      - "Dependencies"
+
+# Success criteria
+success_criteria:
+  - "Hooks are deduped, clustered, and tagged; uncertainty visible"
+  - "Clear next loop and owner for each accepted hook"
+  - "Showrunner has a short activation list (which dormant roles to wake)"
+  - "Gatekeeper has a risk snapshot aligned to Quality Bars"
+
+# Failure modes & remedies
+failure_modes:
+  foggy_clusters:
+    symptom: "Hooks clustered by source role instead of player value"
+    remedy: "Recut by player value instead of source role"
+
+  endless_acceptance:
+    symptom: "Too many hooks accepted without capacity check"
+    remedy: "Enforce capacity; defer with explicit wake conditions"
+
+  taxonomy_canon_confusion:
+    symptom: "Taxonomy hooks becoming secret lore"
+    remedy: "Hand to Lore Weaver or mark 'deferred'; Curator does not canonize"
+
+  research_dormant_risk:
+    symptom: "Research dormant but factual heavy"
+    remedy: "Accept with uncorroborated:<risk> only if Showrunner signs the risk; otherwise defer"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - integrity  # Traceability
+  secondary:
+    - planning_hygiene  # Clear ownership, scope control
+
+# Handoffs
+handoffs:
+  to_lore_deepening:
+    content: "Accepted list (narrative/scene/factual hooks requiring canon)"
+    format: "Clustered by theme, with dependencies and uncertainty notes"
+
+  to_story_spark:
+    content: "Hooks that re-shape topology"
+
+  to_codex_expansion:
+    content: "Taxonomy/clarity hooks accepted (player-safe coverage)"
+
+  to_style_tune_up:
+    content: "Hooks whose primary effect is tone/voice/aesthetics"
+
+# Artifacts produced
+artifacts:
+  - hook_card.schema.json
+  - harvest_sheet.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - hook_card.schema.json
+    - harvest_sheet.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

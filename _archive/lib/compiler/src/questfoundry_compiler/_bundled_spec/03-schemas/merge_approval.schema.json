@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/merge_approval.schema.json",
+  "title": "merge approval",
+  "description": "Schema for merge approval (stub - to be fully defined)",
+  "type": "object",
+  "properties": {},
+  "required": []
+}

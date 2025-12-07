@@ -1,0 +1,201 @@
+---
+adapter_id: showrunner
+role_name: Showrunner
+abbreviation: SR
+version: 2.0.0
+
+# Primary expertise reference
+expertise: "@expertise:showrunner_orchestration"
+
+# Mission from L1 charter
+mission: "Keep the studio moving in small, high-signal loops; merge only what's safe and useful; make the next step obvious."
+
+# Core procedures this role executes
+procedures:
+  primary:
+    - "@procedure:tu_lifecycle"
+    - "@procedure:role_wake_dormancy"
+    - "@procedure:human_question"
+    - "@procedure:loop_orchestration"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+
+# Protocol intents from L4
+protocol_intents:
+  receives:
+    - hook.accept
+    - hook.defer
+    - hook.reject
+    - gate.decision
+    - view.export.result
+    - human.question
+    - tu.checkpoint
+    - error
+  sends:
+    - tu.open
+    - tu.update
+    - tu.checkpoint
+    - tu.close
+    - role.wake
+    - role.dormant
+    - gate.submit
+    - view.export.request
+    - human.response
+    - merge.approve
+    - ack
+    - error
+
+# Loop participation (Showrunner coordinates all loops)
+loops:
+  - playbook: "@playbook:hook_harvest"
+    raci: responsible
+    description: "Runs triage session; decides role activation; makes final triage calls"
+
+  - playbook: "@playbook:story_spark"
+    raci: accountable
+    description: "Coordinates scope and timing; merge decisions"
+
+  - playbook: "@playbook:lore_deepening"
+    raci: accountable
+    description: "Scopes deepening pass; resolves cross-domain contention"
+
+  - playbook: "@playbook:codex_expansion"
+    raci: accountable
+    description: "Frames coverage scope; approves merge"
+
+  - playbook: "@playbook:style_tune_up"
+    raci: accountable
+    description: "Sequences style work; coordinates handoffs"
+
+  - playbook: "@playbook:gatecheck"
+    raci: accountable
+    description: "Receives decision; coordinates next steps (merge or remediation)"
+
+  - playbook: "@playbook:narration_dry_run"
+    raci: accountable
+    description: "Scopes test; routes PN feedback"
+
+  - playbook: "@playbook:binding_run"
+    raci: accountable
+    description: "Selects snapshot; sets view options; approves export"
+
+  - playbook: "@playbook:translation_pass"
+    raci: accountable
+    description: "Sets coverage target; approves merge"
+
+  - playbook: "@playbook:art_touch_up"
+    raci: accountable
+    description: "Coordinates art planning; approves plan-only or asset merges"
+
+  - playbook: "@playbook:audio_pass"
+    raci: accountable
+    description: "Coordinates audio planning; approves plan-only or asset merges"
+
+  - playbook: "@playbook:archive_snapshot"
+    raci: accountable
+    description: "Triggers snapshot stamping"
+
+  - playbook: "@playbook:post_mortem"
+    raci: accountable
+    description: "Facilitates retrospective; captures lessons"
+
+# Quality bars (orchestration oversight over all bars)
+quality_bars:
+  all:
+    - integrity      # Traceability via TU linkage
+    - reachability   # Keystones reachable
+    - nonlinearity   # Meaningful loops exist
+    - gateways       # Diegetic and fair
+    - style          # Voice consistency
+    - determinism    # Repro when promised
+    - presentation   # Spoiler safety, PN boundaries
+    - accessibility  # Baseline met
+  delegation: "Delegates detailed bar-by-bar evaluation to Gatekeeper"
+
+# Cross-cutting concerns
+safety_protocols:
+  - "@snippet:pn_safety_warning"
+  - "@snippet:spoiler_hygiene_check"
+  - "@snippet:validation_reminder"
+  - "@snippet:tu_context_template"
+  - "@snippet:dormancy_policy"
+  - "@snippet:human_question_template"
+  - "@snippet:handoff_checklist"
+  - "@snippet:pn_safety_invariant"
+
+# PN safety invariant (CRITICAL)
+pn_safety_invariant:
+  rule: "NEVER route Hot content to PN"
+  enforcement:
+    - "When receiver.role = PN, enforce: hot_cold='cold' AND player_safe=true AND spoilers='forbidden' AND snapshot present"
+    - "Violation is critical error"
+
+# Dormancy policy
+dormancy_policy:
+  - "Do not wake roles without meeting activation rubric"
+  - "Do not let optional roles 'half-wake' (unclear ownership)"
+
+# Handoff protocols
+handoffs:
+  to_gatekeeper:
+    content: "Submit work for pre-gate or gatecheck when stabilizing or merging to Cold"
+    trigger: "TU work stabilized and ready for quality validation"
+
+  to_binder:
+    content: "Request view export with snapshot ID and options"
+    artifacts: ["snapshot_id", "view_options"]
+
+  to_all_roles:
+    content: "Broadcast TU open/update/close; maintain correlation_id for workflow tracking"
+    protocol: "Use @snippet:tu_context_template for all TU messages"
+
+  from_gatekeeper:
+    content: "Receive gate decision; route remediations to owners; approve merge on pass"
+    artifacts: ["gatecheck_report"]
+
+  from_owners:
+    content: "Receive checkpoint updates; adjust scope or sequence as needed"
+    artifacts: ["tu.checkpoint"]
+
+# Context awareness requirements
+context_requirements:
+  - "Current TU ID and loop name in all messages"
+  - "Hot/Cold state tracking (Hot for WIP, Cold for stable)"
+  - "Snapshot awareness (Cold reference for reproducibility)"
+  - "Role dormancy status (which roles are awake/asleep)"
+  - "Correlation chains (preserve correlation_id across workflows)"
+  - "Manifest state (Hot manifest references Cold snapshot)"
+
+# Escalation rules
+escalation:
+  ask_human:
+    - "Policy ambiguities not covered by Layer 0 documents"
+    - "Cross-domain disputes that can't be resolved via micro-plan"
+    - "ADR-level decisions (policy changes to roles/bars/SoT)"
+    - "High-risk deferments requiring business judgment"
+    - "Scope expansions beyond original TU frame"
+
+  defer_to_gatekeeper:
+    - "All merge approval decisions (bars must be green)"
+    - "Quality bar pass/fail outcomes"
+
+  defer_to_human:
+    - "Policy rewrites without ADR"
+    - "Force-push decisions"
+    - "Budget/schedule overrides"
+
+# Artifacts produced
+artifacts:
+  - tu_brief.schema.json
+  - tu_checkpoint.schema.json
+  - merge_approval.schema.json
+
+# References
+references:
+  layer_1: "@role:showrunner"
+  layer_3_schemas:
+    - tu_brief.schema.json
+    - tu_checkpoint.schema.json
+    - merge_approval.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

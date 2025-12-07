@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/register_map.schema.json",
+  "title": "Register Map",
+  "description": "Generated from 02-dictionary/artifacts/register_map_ENRICHED.md. Pins locale-specific voice, register, punctuation, idioms, and accessibility guidance for translators and adjacent roles.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Locale code headline (e.g., NL, EN-GB, DE).",
+      "pattern": "^[A-Z]{2}(?:-[A-Z]{2})?$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this register map was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the map; fixed to Translator.",
+      "enum": ["Translator"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "Book or slice name this register map supports.",
+      "minLength": 5,
+      "maxLength": 200
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "neighbors": {
+      "type": "array",
+      "description": "Roles paired on this register guidance; must include style, binder, PN, gatekeeper.",
+      "items": {
+        "type": "string",
+        "enum": ["@style", "@binder", "@pn", "@gatekeeper"]
+      },
+      "minItems": 4,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "@style"
+          }
+        },
+        {
+          "contains": {
+            "const": "@binder"
+          }
+        },
+        {
+          "contains": {
+            "const": "@pn"
+          }
+        },
+        {
+          "contains": {
+            "const": "@gatekeeper"
+          }
+        }
+      ]
+    },
+    "locale": {
+      "type": "string",
+      "description": "ISO locale code for this register map.",
+      "pattern": "^[A-Z]{2}(?:-[A-Z]{2})?$"
+    },
+    "voice_and_address": {
+      "type": "string",
+      "description": "Pronouns, formality, titles, and directness guidance.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "second_person": {
+      "type": "string",
+      "description": "Default second-person form (e.g., tu/vous/du/usted).",
+      "minLength": 2,
+      "maxLength": 40
+    },
+    "formality_switch_rules": {
+      "type": "string",
+      "description": "Optional rules describing when to switch formality levels.",
+      "maxLength": 400
+    },
+    "titles_honorifics": {
+      "type": "string",
+      "description": "Optional localized titles and honorific conventions.",
+      "maxLength": 400
+    },
+    "directness_level": {
+      "type": "string",
+      "description": "Guidance on sentence directness and clause length near choices.",
+      "minLength": 10,
+      "maxLength": 200
+    },
+    "tense_aspect_mood": {
+      "type": "string",
+      "description": "Narrative tense/aspect/mood policy including progressive, imperatives, and modals.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "narrative_tense": {
+      "type": "string",
+      "description": "Primary narrative tense selection (e.g., present simple).",
+      "minLength": 5,
+      "maxLength": 120
+    },
+    "pn_patterns": {
+      "type": "array",
+      "description": "Localized PN patterns with player-safe examples.",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 240
+      },
+      "minItems": 3
+    },
+    "punctuation_numerals": {
+      "type": "string",
+      "description": "Rules for quotation, decimals, dashes, time/date, and choice markers.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "orthography_typography": {
+      "type": "string",
+      "description": "Casing, diacritics, hyphenation, and directionality guidance.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "idiom_lexicon_policy": {
+      "type": "string",
+      "description": "Banned idioms, preferred turns, loanword policy, and localization stance.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "accessibility_readability": {
+      "type": "string",
+      "description": "Accessibility guidance covering sentence length, numbers, names, and alt/caption register.",
+      "minLength": 20,
+      "maxLength": 600
+    }
+  },
+  "required": [
+    "title",
+    "edited",
+    "owner",
+    "scope",
+    "snapshot",
+    "tu",
+    "neighbors",
+    "locale",
+    "voice_and_address",
+    "second_person",
+    "directness_level",
+    "tense_aspect_mood",
+    "narrative_tense",
+    "pn_patterns",
+    "punctuation_numerals",
+    "orthography_typography",
+    "idiom_lexicon_policy",
+    "accessibility_readability"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

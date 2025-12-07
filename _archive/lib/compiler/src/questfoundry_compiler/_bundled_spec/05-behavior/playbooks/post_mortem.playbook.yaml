@@ -1,0 +1,107 @@
+---
+playbook_id: post_mortem
+playbook_name: Post-Mortem
+abbreviation: PM
+version: 2.0.0
+category: Export
+
+# Purpose and outcome
+purpose: "Conduct a structured retrospective after completing a major milestone, release, or significant TU cluster. Extract actionable lessons, identify process improvements, track quality bar trends, and update best practices to reduce recurring issues and strengthen the workflow."
+
+outcome: "A post-mortem report documenting successes, failures, surprising discoveries, and concrete action items with owners and deadlines."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "After major milestone completion (chapter release, act completion, full book export)"
+    - "After a significant TU cluster or multi-loop pass completes (e.g., 5+ related TUs)"
+    - "When recurring quality bar issues suggest systemic process review needed"
+    - "Periodic retrospectives (e.g., quarterly, per-release cycle)"
+    - "After protocol violations or critical incidents (immediate post-mortem)"
+  tu_format: "tu-post-mortem-<milestone|incident>"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:showrunner"
+      responsibilities: "Facilitate session; document findings; create action items; update best practices"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Accountable for improvements implementation"
+  consulted:
+    - role: "All Roles"
+      responsibilities: "Contribute candid feedback; propose improvements; avoid blame; focus on systems"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Summarize quality bar trends and recurring systemic issues from gatechecks"
+    - role: "@adapter:book_binder"
+      responsibilities: "Report on export determinism, format issues, Cold SoT compliance (if relevant)"
+    - role: "@adapter:player_narrator"
+      responsibilities: "Highlight recurring UX patterns from dry-run sessions (if relevant)"
+
+# Inputs
+inputs:
+  tu_records: "Completed TUs from the milestone/period under review"
+  gatecheck_reports: "Bar status trends, recurring failures, pass/block rates"
+  pn_playtest_notes: "From Narration Dry-Run sessions"
+  hook_harvest_sheets: "Triage patterns, acceptance/deferral/rejection rates"
+  binding_run_logs: "Export issues, determinism failures, format problems"
+  timeline_metrics:
+    - "Cycle time (TU open → merge)"
+    - "Gate pass rates per loop"
+    - "Rework cycles per artifact type"
+    - "Dormant role activation frequency"
+  team_observations: "Anecdotes, pain points, discoveries"
+  incident_reports: "If post-mortem follows protocol violation"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:retrospective_facilitation"
+    - "@procedure:lessons_extraction"
+    - "@procedure:action_item_creation"
+
+# Retrospective structure
+retrospective_structure:
+  what_went_well:
+    - "Successes and wins"
+    - "Effective practices to preserve"
+    - "Quality bar improvements"
+  what_needs_improvement:
+    - "Pain points and blockers"
+    - "Recurring issues"
+    - "Quality bar failures"
+  surprising_discoveries:
+    - "Unexpected findings"
+    - "Process insights"
+    - "New opportunities"
+  action_items:
+    - "Concrete improvements with owners and deadlines"
+    - "Process updates"
+    - "Tool/template changes"
+
+# Retrospective principles
+principles:
+  - "Avoid blame; focus on systems"
+  - "Be candid and constructive"
+  - "Propose solutions, not just problems"
+  - "Commit to actionable improvements"
+
+# Success criteria
+success_criteria:
+  - "All participating roles contribute feedback"
+  - "Quality bar trends identified and analyzed"
+  - "Actionable items with owners and deadlines"
+  - "Best practices updated based on lessons learned"
+  - "Systemic issues documented with proposed solutions"
+
+# Artifacts produced
+artifacts:
+  - post_mortem_report.schema.json
+  - action_items.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - post_mortem_report.schema.json
+    - action_items.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"
