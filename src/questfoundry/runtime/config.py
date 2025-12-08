@@ -119,13 +119,19 @@ class LLMConfig(BaseModel):
     )
 
 
+def _get_ollama_host_default() -> str:
+    """Get Ollama host from environment, with fallback to localhost."""
+    return os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+
 class OllamaConfig(BaseModel):
     """Ollama-specific configuration."""
 
     host: str = Field(
-        default="http://localhost:11434",
+        default_factory=_get_ollama_host_default,
         description="Ollama server URL",
     )
+
     model: str = Field(
         default="qwen3:8b",
         description="Default Ollama model",

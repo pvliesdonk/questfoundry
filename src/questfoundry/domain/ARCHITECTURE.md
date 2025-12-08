@@ -823,7 +823,145 @@ When writing v3 domain files, consult:
 
 ---
 
-## 12. Implementation Phases
+## 12. Content Gap Inventory (v2 → v3)
+
+A comprehensive audit of `_archive/spec/` vs `src/questfoundry/domain/` reveals significant content gaps. This inventory guides migration priority.
+
+### 12.1 Critical Gaps (Blocking)
+
+| Area | v2 Files | v3 Files | Gap | Priority |
+|------|----------|----------|-----|----------|
+| **Protocol** | 32 | 0 | 100% | 🔴 BLOCKER |
+| **Loops** | 13 | 1 | 92% | 🔴 HIGH |
+| **Quality Bars** | 8+ definitions | 0 | 100% | 🔴 HIGH |
+
+#### Protocol Layer (32 → 0 files)
+
+The entire `domain/protocol/` directory is empty. v2 had:
+
+- **ENVELOPE.md** — Message wrapper spec (envelope structure, routing fields)
+- **INTENTS.md** — Complete intent catalog (30+ intent types with semantics)
+- **LIFECYCLES/** — State machines for:
+  - Hook lifecycle (proposed → accepted → resolved → canonized)
+  - Texture Unit lifecycle (draft → review → approved → published)
+  - Gate lifecycle (pending → passed/failed)
+  - View lifecycle (requested → rendered → stale)
+- **FLOWS/** — End-to-end message choreography for each loop
+
+**Impact:** Without protocol definitions, SR delegates vague tasks. Roles lack shared vocabulary for intents, status reporting, and context passing.
+
+**Migration Path:**
+
+1. `domain/protocol/ENVELOPE.md` — Define message wrapper structure
+2. `domain/protocol/INTENTS.md` — Catalog all intent types with `{intent-type}` directives
+3. `domain/protocol/lifecycles/` — State machines for artifacts
+4. `domain/protocol/FLOWS.md` — Message choreography per loop
+
+### 12.2 High Priority Gaps
+
+#### Loops (13 → 1 loops)
+
+Only `story_spark.md` exists. Missing loops from v2:
+
+| Loop | Purpose | v2 Reference |
+|------|---------|--------------|
+| `hook_harvest` | Extract change hooks during play | `00-north-star/LOOPS/hook_harvest.md` |
+| `scene_weave` | Compose scenes from beats | `00-north-star/LOOPS/scene_weave.md` |
+| `choice_tree` | Design branching narratives | `00-north-star/LOOPS/choice_tree.md` |
+| `lore_sync` | Maintain canon consistency | `00-north-star/LOOPS/lore_sync.md` |
+| `draft_review` | Edit/revise prose | `00-north-star/LOOPS/draft_review.md` |
+| `canon_commit` | Stabilize hot → cold | `00-north-star/LOOPS/canon_commit.md` |
+| `character_arc` | Track character development | `00-north-star/LOOPS/character_arc.md` |
+| `timeline_build` | Construct event sequences | `00-north-star/LOOPS/timeline_build.md` |
+| `world_expand` | Expand setting/lore | `00-north-star/LOOPS/world_expand.md` |
+| `plot_refine` | Iterate story structure | `00-north-star/LOOPS/plot_refine.md` |
+| `quality_gate` | Run quality bar checks | `00-north-star/LOOPS/quality_gate.md` |
+| `texture_finish` | Final polish pass | `00-north-star/LOOPS/texture_finish.md` |
+
+#### Quality Bars & Principles (44 → 1 file)
+
+v2 had extensive principle documentation:
+
+- `00-north-star/QUALITY-BARS/` — 8 detailed bar definitions
+- `00-north-star/POLICIES/` — Operating principles
+- `00-north-star/PATTERNS/` — Design patterns
+- `00-north-star/ANTI-PATTERNS/` — What to avoid
+
+v3 has: Section 10 table listing bar names but no `{quality-bar}` definitions.
+
+### 12.3 Medium Priority Gaps
+
+#### Role Depth (8 roles defined, ~75% depth reduced)
+
+v3 has all 8 role files but lacks v2's depth:
+
+| Missing Per Role | v2 Location |
+|------------------|-------------|
+| Brief (1-pager) | `01-roles/briefs/` |
+| Charter (full spec) | `01-roles/charters/` |
+| Consultation Guide | `01-roles/charters/` appendices |
+| Example Dialogues | `01-roles/examples/` |
+
+#### Artifact Types (37 → 5 migrated)
+
+v3 `ontology/artifacts.md` has 5 types. v2 defined 37+:
+
+**Migrated:** Brief, CanonEntry, GatecheckReport, HookCard, Scene
+
+**Missing:**
+
+- Act, Beat, Chapter, Character, Choice, Dialogue, Draft, Entity, Event
+- Fact, Item, Location, Metadata, Moment, PlotPoint, Prose
+- Relationship, Timeline, World, Texture, TU, View, Codex
+- Section, Sequence, Transition, Gate, Checkpoint, Milestone
+- Arc, Thread, Theme, Motif, Symbol, Setting, Era, Region
+
+#### Glossary/Dictionary (47 → 2 files)
+
+v2 had extensive terminology:
+
+- `02-dictionary/GLOSSARY.md` — Master term definitions
+- `02-dictionary/ACRONYMS.md` — Abbreviation reference
+- `02-dictionary/TAXONOMY/` — Classification hierarchies
+
+v3 has `ontology/artifacts.md` and `ontology/taxonomy.md` only.
+
+### 12.4 Gap Resolution Strategy
+
+**Phase A: Protocol Foundation (Unblocks everything)**
+
+1. Create `domain/protocol/ENVELOPE.md` with `{envelope-spec}` directive
+2. Create `domain/protocol/INTENTS.md` with all `{intent-type}` directives
+3. Create `domain/protocol/lifecycles/hook.md`, `tu.md`, `gate.md`
+4. Update SR prompt to reference protocol vocabulary
+
+**Phase B: Loop Skeleton**
+
+1. Migrate loop files with basic `{loop-meta}` and workflow descriptions
+2. Add `{graph-node}` and `{graph-edge}` for SR guidance
+3. Cross-reference intents used by each loop
+
+**Phase C: Quality Infrastructure**
+
+1. Define `{quality-bar}` directives for all 8 bars
+2. Add check criteria and failure conditions
+3. Wire into Gatekeeper evaluation
+
+**Phase D: Role Enrichment**
+
+1. Add consultation guides to each role file
+2. Expand constraint sets from v2 charters
+3. Include example interactions
+
+**Phase E: Ontology Completion**
+
+1. Migrate remaining artifact types in batches
+2. Add `{artifact-field}` definitions for each
+3. Regenerate Pydantic models
+
+---
+
+## 13. Implementation Phases
 
 ### Phase 1: Foundation ✓
 
@@ -928,16 +1066,26 @@ This allows:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
+| **Protocol** | 🟡 Partial | Core v3 protocol: intents, delegation, quality_bars, artifact lifecycle |
+| **Quality Bars** | ✅ Complete | 8 bars defined in `protocol/quality_bars.md` |
+| **Loops** | 🔴 HIGH | 1/13 migrated (story_spark only) |
+| Role Agents | ✅ Complete | All 8 roles executable (depth reduced 75%) |
+| Artifacts | 🟡 Partial | 5/37+ migrated |
 | Orchestrator | ✅ Complete | SR-centric handoff working |
-| Role Agents | ✅ Complete | All 8 roles executable |
 | Tool Calling | ✅ Complete | Ollama, Google, OpenAI |
-| Artifacts | 🟡 Partial | 5/20+ migrated |
-| Loops | 🟡 Partial | 1/12 migrated |
 | CLI | ✅ Complete | `qf ask/doctor/config/roles` with -v flags |
 | Logging | ✅ Complete | Rich console + structured JSONL |
 | Tests | ✅ Complete | Integration + unit tests |
 | Persistence | ⬜ Not Started | Checkpointing deferred |
 | Role Config | ⬜ Roadmap | Per-role model/provider/temp |
+
+### Next Steps (Priority Order)
+
+1. ~~**Phase A: Protocol Foundation**~~ ✅ — Core v3 protocol created (intents, delegation, quality_bars, artifact lifecycle)
+2. **Phase B: Loop Migration** — Migrate remaining 12 loops from v2
+3. ~~**Phase C: Quality Bars**~~ ✅ — 8 bars defined in `protocol/quality_bars.md`
+4. **Phase D: Role Enrichment** — Add consultation guides, expand constraints
+5. **Phase E: Ontology Completion** — Migrate remaining 32+ artifact types
 
 ---
 

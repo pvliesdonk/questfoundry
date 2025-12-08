@@ -13,7 +13,7 @@ nul
 *.log
 trace.log
 
-# Structured logging JSONL files (can be written anywhere via --structured-logs)
+# Structured logging JSONL files (can be written anywhere via --log-dir)
 **/message-bus.jsonl
 **/prompts.jsonl
 **/state-sot.jsonl
@@ -22,6 +22,11 @@ trace.log
 **/loop-health.jsonl
 **/reasoning.jsonl
 **/agent-feedback.jsonl
+**/llm.jsonl
+**/tools.jsonl
+**/state.jsonl
+**/delegations.jsonl
+logs/
 
 # Python
 *.pyc
