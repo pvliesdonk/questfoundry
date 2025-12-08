@@ -86,11 +86,6 @@ class StreamingCallbacks:
         self.verbose = verbose
         self._buffer = ""
         self._current_text = Text()
-        self._current_role = "SR"  # Track which agent is running
-
-    def set_role(self, role: str) -> None:
-        """Set the current role for display purposes."""
-        self._current_role = role
 
     def on_llm_start(self, iteration: int) -> None:
         """Called when LLM inference begins."""
@@ -104,9 +99,8 @@ class StreamingCallbacks:
         if self.live:
             self._buffer += token
             self._current_text.append(token)
-            title = f"{self._current_role} Thinking"
             self.live.update(
-                Panel(self._current_text, title=title, border_style="cyan")
+                Panel(self._current_text, title="SR Thinking", border_style="cyan")
             )
 
     def on_llm_end(self, _iteration: int, _has_tool_calls: bool) -> None:
@@ -117,7 +111,7 @@ class StreamingCallbacks:
             self.console.print(
                 Panel(
                     self._buffer[:2000] + ("..." if len(self._buffer) > 2000 else ""),
-                    title=f"[cyan]{self._current_role} Response[/cyan]",
+                    title="[cyan]SR Response[/cyan]",
                     border_style="dim cyan",
                 )
             )
@@ -288,8 +282,9 @@ def ask(
 
     try:
         # Set up logging based on verbosity
-        # Default to INFO (1) if no -v flags
-        effective_verbosity = verbose if verbose > 0 else 1
+        # With --stream: default to WARNING (0) to avoid log/panel overlap
+        # Without --stream: default to INFO (1) for useful output
+        effective_verbosity = verbose if (stream or verbose > 0) else 1
 
         # Derive log directory from project path when --log is enabled
         log_dir: Path | None = None

@@ -254,14 +254,16 @@ class Orchestrator:
         # Create initial state
         state = create_initial_state(loop_id, request)
 
-        # Create role agent pool with cold_store access and streaming
+        # Create role agent pool with cold_store access
+        # NOTE: Roles don't get streaming callbacks - only SR uses the Live panel
+        # This prevents overlapping/conflicting panel updates
         role_pool = RoleAgentPool(
             self.roles,
             self.llm,
             state,
             self.cold_store,
             stream=self.stream,
-            callbacks=self.callbacks,
+            callbacks=None,  # Roles don't stream to avoid panel conflicts
         )
 
         # Build SR tools and prompt
@@ -352,12 +354,8 @@ class Orchestrator:
                 )
                 continue
 
-            # Execute role (update callbacks to show current role)
-            if self.callbacks and hasattr(self.callbacks, "set_role"):
-                self.callbacks.set_role(role_id.upper())
+            # Execute role
             delegation_result = await agent.execute(task)
-            if self.callbacks and hasattr(self.callbacks, "set_role"):
-                self.callbacks.set_role("SR")
 
             # Record in history
             delegation_history.append(
