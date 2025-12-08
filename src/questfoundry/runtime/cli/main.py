@@ -289,7 +289,7 @@ def ask(
         # Set up cold store if project specified
         cold_store = None
         if project:
-            from questfoundry.runtime.cold_store import get_cold_store
+            from questfoundry.runtime.stores import get_cold_store
 
             cold_store = get_cold_store(project)
             console.print(f"[green]+ Cold store: {project}[/green]")

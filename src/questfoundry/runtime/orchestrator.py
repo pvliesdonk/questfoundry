@@ -45,7 +45,7 @@ from langchain_core.tools import BaseTool
 from questfoundry.compiler.models import RoleIR
 
 if TYPE_CHECKING:
-    from questfoundry.runtime.cold_store import ColdStore
+    from questfoundry.runtime.stores import ColdStore
 from questfoundry.runtime.executor import ToolExecutor
 from questfoundry.runtime.roles import RoleAgentPool
 from questfoundry.runtime.state import DelegationResult, StudioState, create_initial_state

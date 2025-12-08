@@ -1,12 +1,5 @@
 """Runtime module - SR-orchestrated handoff execution engine."""
 
-from questfoundry.runtime.cold_store import (
-    ColdSection,
-    ColdSnapshot,
-    ColdStore,
-    ColdStoreStats,
-    get_cold_store,
-)
 from questfoundry.runtime.executor import (
     ExecutorCallbacks,
     ExecutorResult,
@@ -19,6 +12,17 @@ from questfoundry.runtime.state import (
     StudioState,
     create_initial_state,
 )
+from questfoundry.runtime.stores import (
+    AssetProvenance,
+    AssetType,
+    BookMetadata,
+    ColdAsset,
+    ColdSection,
+    ColdSnapshot,
+    ColdStore,
+    HotStore,
+    get_cold_store,
+)
 
 __all__ = [
     # State management
@@ -27,11 +31,15 @@ __all__ = [
     "Intent",
     "StudioState",
     "create_initial_state",
-    # Cold Store
+    # Stores
+    "HotStore",
+    "ColdStore",
     "ColdSection",
     "ColdSnapshot",
-    "ColdStore",
-    "ColdStoreStats",
+    "ColdAsset",
+    "BookMetadata",
+    "AssetType",
+    "AssetProvenance",
     "get_cold_store",
     # Executor
     "ExecutorCallbacks",

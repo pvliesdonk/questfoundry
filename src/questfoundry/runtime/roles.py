@@ -43,7 +43,7 @@ from questfoundry.runtime.tools.role import (
 from questfoundry.runtime.tracing import trace_role_execution
 
 if TYPE_CHECKING:
-    from questfoundry.runtime.cold_store import ColdStore
+    from questfoundry.runtime.stores import ColdStore
 
 logger = logging.getLogger(__name__)
 
@@ -146,14 +146,67 @@ return_to_sr(status="completed", message="Topology validated and promoted to can
 """
 
 
-def _render_prompt(role: RoleIR) -> str:
-    """Render role's system prompt optimized for tool usage.
+def _get_artifact_menu() -> str:
+    """Get menu of available artifact types for prompts."""
+    # These are the compiled artifact types from domain/ontology/artifacts.md
+    # Format: type_id -> brief description
+    artifacts = {
+        "brief": "Work order from SR to specialist role",
+        "scene": "Narrative unit with content, gates, choices",
+        "hook_card": "Story hook that captures change/event",
+        "canon_entry": "Validated fact in cold store",
+        "gatecheck_report": "Quality validation results (Gatekeeper only)",
+    }
+    lines = ["## Available Artifact Types", ""]
+    for artifact_id, desc in artifacts.items():
+        lines.append(f"- **{artifact_id}**: {desc}")
+    lines.append("")
+    lines.append("Use `consult_schema(artifact_type)` to see required/optional fields.")
+    return "\n".join(lines)
 
-    Creates a prompt that:
-    1. Lists actual runtime tools (not spec tools)
-    2. Strongly encourages tool usage over prose
-    3. Makes return_to_sr mandatory
-    4. Includes role-specific guidance from archetype/mandate
+
+# Role -> primary artifact types mapping
+# This tells each role what artifact types they typically create
+ROLE_PRIMARY_ARTIFACTS: dict[str, list[str]] = {
+    "showrunner": ["brief"],
+    "plotwright": ["scene"],  # Creates scene topology/structure
+    "scene_smith": ["scene"],  # Fills scene content/prose
+    "lorekeeper": ["canon_entry"],
+    "creative_director": ["scene"],  # Style guidance on scenes
+    "narrator": ["scene"],  # Runtime scene delivery
+    "publisher": [],  # Assembles, doesn't create artifacts
+    "gatekeeper": ["gatecheck_report"],
+}
+
+
+def _get_role_artifact_hint(role_id: str) -> str:
+    """Get hint about which artifact types this role should create."""
+    artifacts = ROLE_PRIMARY_ARTIFACTS.get(role_id.lower(), [])
+    if not artifacts:
+        return ""
+
+    artifact_list = ", ".join(f"`{a}`" for a in artifacts)
+    consult_calls = ", ".join(f'`consult_schema("{a}")`' for a in artifacts)
+
+    return f"""## Your Primary Artifact Types
+
+You typically create: {artifact_list}
+
+**FIRST STEP**: Call {consult_calls} to see required fields before writing.
+"""
+
+
+def _render_prompt(role: RoleIR) -> str:
+    """Render role's system prompt using menu+consult pattern.
+
+    The prompt is minimal - just enough for the agent to know:
+    1. Who it is (archetype, mandate)
+    2. What tools are available
+    3. What artifact types exist (menu)
+    4. How to look up details (consult_* tools)
+
+    Agents use consult_schema, consult_playbook, consult_role_charter
+    to get detailed information when needed.
     """
     # Gatekeeper gets a specialized prompt
     if role.id.lower() == "gatekeeper":
@@ -169,78 +222,43 @@ def _render_prompt(role: RoleIR) -> str:
 {constraints_lines}
 """
 
+    artifact_menu = _get_artifact_menu()
+    role_artifact_hint = _get_role_artifact_hint(role.id)
+
     return f"""You are the **{role.archetype}** ({role.abbr}), a specialist role in QuestFoundry.
 
 ## Your Mandate
 
 **{role.mandate}**
 
-{constraints_section}
-## CRITICAL: You Must Use Tools
+{constraints_section}{role_artifact_hint}
+## Tools
 
-You are a TOOL-USING agent. You MUST use the tools provided to accomplish your task.
-DO NOT just write prose descriptions of what you would do - actually DO IT by calling tools.
+You MUST use tools to accomplish tasks. Do not describe what you would do - call tools.
 
-## Your Tools
+### State Tools
+- **write_hot_sot(key, value)**: Write artifact to hot_store (key = artifact type like "scene", "brief")
+- **read_hot_sot(key)**: Read from hot_store
+- **read_cold_sot(key)**: Read from cold_store (canon)
 
-### Hot Store Tools (mutable working drafts)
-- **write_hot_sot(key, value)**: Write artifacts to hot_store. Use keys like "hooks", "scenes", "briefs", or custom IDs.
-- **read_hot_sot(key)**: Read existing artifacts from hot_store.
+### Knowledge Tools (use these to look up details)
+- **consult_schema(artifact_type)**: Get required/optional fields for an artifact type
+- **consult_playbook(loop_id)**: Get workflow guidance
+- **consult_role_charter(role_id)**: Learn about a role's capabilities
 
-### Cold Store Tools (immutable canon)
-- **read_cold_sot(key)**: Read from cold_store (approved canon). Use 'list' to see available sections, or provide section_id.
+### Completion (REQUIRED)
+- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
+  - status: "completed" | "blocked" | "needs_review" | "error"
+  - artifacts: list of keys you created/modified
 
-### Knowledge Tools
-- **consult_schema(artifact_type)**: Look up artifact field requirements (e.g., "hook_card", "scene", "brief").
-- **consult_playbook(query)**: Get workflow guidance.
-- **consult_role_charter(role_id)**: Learn about another role's capabilities.
+{artifact_menu}
 
-### Completion Tool (REQUIRED)
-- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner. YOU MUST CALL THIS WHEN DONE.
+## Workflow
 
-## Workflow Pattern
-
-1. **Understand the task** from the Showrunner's delegation
-2. **Consult schema** if you need to create artifacts (to know required fields)
-3. **Read existing state** if you need context from hot_store
-4. **Create/modify artifacts** using write_hot_sot
-5. **Call return_to_sr** with your results - THIS IS MANDATORY
-
-## return_to_sr Parameters
-
-- **status**: One of "completed", "blocked", "needs_review", "error"
-- **message**: Summary of what you accomplished (or why you're blocked)
-- **artifacts**: List of artifact keys you created/modified (e.g., ["hooks", "scene_001"])
-- **recommendation**: (Optional) Suggested next step for Showrunner
-
-## Example Tool Usage
-
-```
-# First, check what fields a hook_card needs
-consult_schema("hook_card")
-
-# Create a hook artifact
-write_hot_sot("hooks", {{
-    "title": "Mysterious Letter",
-    "hook_type": "narrative",
-    "description": "Player finds a letter hinting at hidden treasure"
-}})
-
-# Return to Showrunner
-return_to_sr(
-    status="completed",
-    message="Created narrative hook for mysterious letter discovery",
-    artifacts=["hooks"],
-    recommendation="Delegate to Scene Smith for prose"
-)
-```
-
-## Important
-
-- ALWAYS call return_to_sr when your work is complete or you're blocked
-- Use write_hot_sot to save ALL work products - unsaved work is lost
-- Check consult_schema BEFORE creating artifacts to get required fields right
-- If validation fails, read the error feedback and fix the data
+1. Read task from Showrunner delegation
+2. Call `consult_schema(artifact_type)` to learn required fields BEFORE creating artifacts
+3. Use `write_hot_sot` to save work
+4. Call `return_to_sr` when done - THIS IS MANDATORY
 """
 
 

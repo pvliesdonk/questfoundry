@@ -269,13 +269,100 @@ The **Prose** sections are not compiled but are indexed for the Agent's RAG/Cont
 
 ---
 
-## 8. Runtime Architecture
+## 8. Agent Prompt Pattern: Menu + Consult
+
+Role prompts follow the **Menu + Consult** pattern to minimize prompt size while ensuring agents know how to find information.
+
+### Core Principle
+
+```
+System Prompt (small) ──→ Tells agent WHAT exists (menu)
+                    └──→ Tells agent HOW to look up details (consult tools)
+
+Agent Runtime ──→ Calls consult_* tools to get full details when needed
+```
+
+### Prompt Structure
+
+Each role's system prompt contains:
+
+1. **Identity** — Brief archetype and mandate
+2. **Constraints** — Role-specific behavioral rules
+3. **Primary Artifact Types** — What this role typically creates
+4. **Tool List** — Available tools with one-line descriptions
+5. **Artifact Menu** — All valid artifact types (not invented ones)
+6. **Workflow** — Minimal steps emphasizing "consult first, then write"
+
+### The Artifact Menu
+
+Roles see a menu of **available artifact types**:
+
+```markdown
+## Available Artifact Types
+
+- **brief**: Work order from SR to specialist role
+- **scene**: Narrative unit with content, gates, choices
+- **hook_card**: Story hook that captures change/event
+- **canon_entry**: Validated fact in cold store
+- **gatecheck_report**: Quality validation results (Gatekeeper only)
+
+Use `consult_schema(artifact_type)` to see required/optional fields.
+```
+
+This prevents models from inventing artifact names like `story_topology` or `section_draft`.
+
+### Role-to-Artifact Mapping
+
+Each role has primary artifact types it typically creates:
+
+| Role | Primary Artifacts |
+|------|-------------------|
+| Showrunner | `brief` |
+| Plotwright | `scene` |
+| Scene Smith | `scene` |
+| Lorekeeper | `canon_entry` |
+| Gatekeeper | `gatecheck_report` |
+| Creative Director | `scene` |
+| Narrator | `scene` |
+| Publisher | *(assembles, doesn't create)* |
+
+The prompt tells each role: "You typically create: `scene`. **FIRST STEP**: Call `consult_schema("scene")` to see required fields before writing."
+
+### Consult Tools
+
+Three tools provide detailed lookup:
+
+| Tool | Purpose |
+|------|---------|
+| `consult_schema(artifact_type)` | Get required/optional fields for an artifact |
+| `consult_playbook(loop_id)` | Get workflow guidance for a loop |
+| `consult_role_charter(role_id)` | Learn about another role's capabilities |
+
+### Why Menu + Consult?
+
+1. **Smaller prompts** — Less token usage, faster inference
+2. **Always current** — Details come from compiled source, not stale prompt text
+3. **Tool-using behavior** — Agents learn to look things up, not guess
+4. **Explicit guidance** — "Call consult_schema FIRST" prevents schema errors
+
+### Implementation
+
+Located in `runtime/roles.py`:
+
+- `_get_artifact_menu()` — Generates the artifact type menu
+- `ROLE_PRIMARY_ARTIFACTS` — Maps roles to their output artifact types
+- `_get_role_artifact_hint()` — Generates "Your Primary Artifact Types" section
+- `_render_prompt()` — Assembles the minimal prompt with menu + consult guidance
+
+---
+
+## 9. Runtime Architecture
 
 *(Unchanged: SR-centric Orchestrator, LangGraph State, Tool Execution)*
 
 ---
 
-## 9. Build Pipeline
+## 10. Build Pipeline
 
 ```
 1. Parse MyST files
@@ -285,7 +372,7 @@ The **Prose** sections are not compiled but are indexed for the Agent's RAG/Cont
 
 ---
 
-## 10. Quality Bars (v3)
+## 11. Quality Bars (v3)
 
 | Bar | Description |
 |-----|-------------|
@@ -300,14 +387,14 @@ The **Prose** sections are not compiled but are indexed for the Agent's RAG/Cont
 
 ---
 
-## 11. Migration Notes
+## 12. Migration Notes
 
 **v2 Archives:** `_archive/spec/`
 **Not Migrated:** Layered L0-L5 structure, 15-role model, Static Flows.
 
 ---
 
-## 12. v2 → v3 Migration Inventory & Priorities
+## 13. v2 → v3 Migration Inventory & Priorities
 
 > **Status:** Triaged
 > **Strategy:** Hybrid Consolidation
@@ -380,9 +467,9 @@ Migrate essential missing artifacts to `domain/ontology/artifacts.md`:
 
 ---
 
-## 13. Implementation Phases
+## 14. Implementation Phases
 
-This section maps the priorities from Chapter 12 into a chronological execution plan.
+This section maps the priorities from Chapter 13 into a chronological execution plan.
 
 ### Phase 1: Foundation (Completed) ✓
 

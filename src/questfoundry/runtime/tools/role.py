@@ -21,7 +21,7 @@ from langchain_core.tools import BaseTool
 from pydantic import Field
 
 if TYPE_CHECKING:
-    from questfoundry.runtime.cold_store import ColdStore
+    from questfoundry.runtime.stores import ColdStore
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +364,7 @@ class ReadColdSot(BaseTool):
                 {
                     "success": False,
                     "error": "key is required",
-                    "hint": "Use 'list' to see available sections, or provide a section_id.",
+                    "hint": "Use 'list' to see available sections, or provide an anchor.",
                 }
             )
 
@@ -393,27 +393,33 @@ class ReadColdSot(BaseTool):
                         "hint": "Content must be promoted to cold_store and snapshotted first.",
                     }
                 )
+            # Get section anchors for this snapshot
+            section_anchors = self.cold_store.get_snapshot_section_anchors(snapshot.snapshot_id)
             return json.dumps(
                 {
                     "success": True,
-                    "snapshot_id": snapshot.id,
+                    "snapshot_id": snapshot.snapshot_id,
                     "description": snapshot.description,
-                    "section_count": len(snapshot.section_ids),
-                    "section_ids": snapshot.section_ids,
+                    "section_count": snapshot.section_count,
+                    "section_ids": section_anchors,  # Keep as section_ids for API compat
                     "created_at": snapshot.created_at.isoformat(),
                 }
             )
 
-        # Try to get section by ID
+        # Try to get section by anchor
         section = self.cold_store.get_section(key)
         if section is not None:
             return json.dumps(
                 {
                     "success": True,
-                    "section_id": section.id,
+                    "section_id": section.anchor,  # Use anchor as external ID
+                    "anchor": section.anchor,
+                    "title": section.title,
                     "content": section.content,
-                    "metadata": section.metadata,
                     "content_hash": section.content_hash,
+                    "order": section.order,
+                    "requires_gate": section.requires_gate,
+                    "source_brief_id": section.source_brief_id,
                     "created_at": section.created_at.isoformat(),
                 }
             )
@@ -421,12 +427,13 @@ class ReadColdSot(BaseTool):
         # Try to get snapshot by ID
         snapshot = self.cold_store.get_snapshot(key)
         if snapshot is not None:
+            section_anchors = self.cold_store.get_snapshot_section_anchors(snapshot.snapshot_id)
             return json.dumps(
                 {
                     "success": True,
-                    "snapshot_id": snapshot.id,
+                    "snapshot_id": snapshot.snapshot_id,
                     "description": snapshot.description,
-                    "section_ids": snapshot.section_ids,
+                    "section_ids": section_anchors,
                     "manifest_hash": snapshot.manifest_hash,
                     "created_at": snapshot.created_at.isoformat(),
                 }
@@ -540,6 +547,13 @@ class PromoteToCanon(BaseTool):
             else:
                 content_data = artifact_data
 
+            # Extract title
+            title = (
+                content_data.get("title")
+                or artifact_data.get("title")
+                or artifact_id
+            )
+
             # Convert to prose/string for cold section
             if isinstance(content_data, dict):
                 # Try to get prose content
@@ -553,28 +567,13 @@ class PromoteToCanon(BaseTool):
             else:
                 content = str(content_data)
 
-            # Build metadata (exclude spoiler-sensitive fields)
-            metadata = {
-                "source_artifact_id": artifact_id,
-                "source_type": artifact_data.get("type", "unknown"),
-                "promoted_by": self.role_id,
-                "promoted_at": datetime.now().isoformat(),
-            }
-
-            # Copy safe metadata fields
-            for key in ("title", "author", "tags", "status"):
-                if key in artifact_data:
-                    metadata[key] = artifact_data[key]
-                elif "data" in artifact_data and key in artifact_data["data"]:
-                    metadata[key] = artifact_data["data"][key]
-
-            # Add to cold_store
+            # Add to cold_store using new API
             try:
                 self.cold_store.add_section(
-                    section_id=artifact_id,
+                    anchor=artifact_id,
+                    title=title,
                     content=content,
-                    metadata=metadata,
-                    source_artifact_id=artifact_id,
+                    source_brief_id=artifact_id,  # Track lineage
                 )
                 promoted.append(artifact_id)
             except Exception as e:
