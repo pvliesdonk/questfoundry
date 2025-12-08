@@ -390,13 +390,13 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 - [x] StudioState & Orchestrator
 - [x] Basic "Story Spark" loop (Graph only)
 
-### Phase 2: Architecture Refactor (Current)
+### Phase 2: Architecture Refactor (Complete) ✓
 
 *Goal: Prepare the directories and file structures for Hybrid content.*
 
-- [ ] Create `domain/principles/` and `domain/playbooks/` directories.
-- [ ] Refactor existing `domain/roles/` files to include "Operational Guidelines" headers.
-- [ ] Refactor `domain/loops/story_spark.md` to include "Guidance" (Playbook) headers.
+- [x] Create `domain/principles/` and `domain/playbooks/` directories.
+- [x] Refactor existing `domain/roles/` files to include "Operational Guidelines" headers.
+- [x] Refactor `domain/loops/story_spark.md` to include "Guidance" (Playbook) headers.
 
 ### Phase 3: Critical Migration (Executing Priority 1)
 
