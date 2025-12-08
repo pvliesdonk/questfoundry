@@ -823,141 +823,433 @@ When writing v3 domain files, consult:
 
 ---
 
-## 12. Content Gap Inventory (v2 → v3)
+## 12. Comprehensive Gap Inventory (v2 → v3)
 
-A comprehensive audit of `_archive/spec/` vs `src/questfoundry/domain/` reveals significant content gaps. This inventory guides migration priority.
+> **Status:** Complete Audit
+> **Last Updated:** 2025-01-20
+> **Purpose:** Definitive inventory of all v2 content not migrated to v3
 
-### 12.1 Critical Gaps (Blocking)
+This section documents ALL gaps between `_archive/spec/` (v2) and `src/questfoundry/domain/` (v3). Gaps include:
 
-| Area | v2 Files | v3 Files | Gap | Priority |
-|------|----------|----------|-----|----------|
-| **Protocol** | 32 | 0 | 100% | 🔴 BLOCKER |
-| **Loops** | 13 | 1 | 92% | 🔴 HIGH |
-| **Quality Bars** | 8+ definitions | 0 | 100% | 🔴 HIGH |
+- **Missing files**: Content that exists in v2 but has no v3 equivalent
+- **Depth reduction**: Content that exists in v3 but with significantly less detail
+- **Structural changes**: v2 patterns not carried forward to v3
 
-#### Protocol Layer (32 → 0 files)
+---
 
-The entire `domain/protocol/` directory is empty. v2 had:
+### 12.1 Gap Summary Matrix
 
-- **ENVELOPE.md** — Message wrapper spec (envelope structure, routing fields)
-- **INTENTS.md** — Complete intent catalog (30+ intent types with semantics)
-- **LIFECYCLES/** — State machines for:
-  - Hook lifecycle (proposed → accepted → resolved → canonized)
-  - Texture Unit lifecycle (draft → review → approved → published)
-  - Gate lifecycle (pending → passed/failed)
-  - View lifecycle (requested → rendered → stale)
-- **FLOWS/** — End-to-end message choreography for each loop
+| Category | v2 Content | v3 Content | Gap % | Priority |
+|----------|------------|------------|-------|----------|
+| **Principles** | 10+ documents | 0 | 100% | 🔴 HIGH |
+| **Loops** | 13 loops | 1 loop | 92% | 🔴 HIGH |
+| **Playbooks** | 14+ playbooks | 0 | 100% | 🟡 MEDIUM |
+| **Role Briefs** | 15 briefs | 0 | 100% | 🟡 MEDIUM |
+| **Role Charters** | 15 charters | 0 | 100% | 🔴 HIGH |
+| **Role Interfaces** | 15 interfaces | 0 | 100% | 🟡 MEDIUM |
+| **Artifacts** | 40+ types | 5 types | 87% | 🔴 HIGH |
+| **Glossary** | 200+ terms | ~20 terms | 90% | 🟡 MEDIUM |
+| **Protocol Envelope** | 1 spec | 0 | 100% | 🔴 BLOCKER |
+| **Protocol Intents** | 30+ intents | ~15 intents | 50% | 🟡 MEDIUM |
+| **Protocol Flows** | 13 flows | 0 | 100% | 🔴 HIGH |
+| **Lifecycles** | 5 lifecycles | 1 partial | 80% | 🔴 HIGH |
+| **YAML Definitions** | 13 loops | 1 loop | 92% | 🔴 HIGH |
+| **Runtime Spec** | 6+ docs | 0 | 100% | 🟡 MEDIUM |
 
-**Impact:** Without protocol definitions, SR delegates vague tasks. Roles lack shared vocabulary for intents, status reporting, and context passing.
+---
 
-**Migration Path:**
+### 12.2 Principles & Policies (00-north-star)
 
-1. `domain/protocol/ENVELOPE.md` — Define message wrapper structure
-2. `domain/protocol/INTENTS.md` — Catalog all intent types with `{intent-type}` directives
-3. `domain/protocol/lifecycles/` — State machines for artifacts
-4. `domain/protocol/FLOWS.md` — Message choreography per loop
+#### 12.2.1 Missing Principle Documents
 
-### 12.2 High Priority Gaps
+| Document | v2 Path | Purpose | Notes |
+|----------|---------|---------|-------|
+| **NORTH_STAR.md** | `00-north-star/NORTH_STAR.md` | Core vision statement | Foundational—no v3 equivalent |
+| **PN_PRINCIPLES.md** | `00-north-star/PN_PRINCIPLES.md` | Procedural narrative principles | Design philosophy |
+| **SPOILER_HYGIENE.md** | `00-north-star/SPOILER_HYGIENE.md` | Hot/Cold information barriers | Critical for player safety |
+| **INCIDENT_RESPONSE.md** | `00-north-star/INCIDENT_RESPONSE.md` | Error handling playbook | Operational guidance |
+| **TRACEABILITY.md** | `00-north-star/TRACEABILITY.md` | Artifact lineage tracking | Audit trail spec |
+| **ACCESSIBILITY.md** | `00-north-star/ACCESSIBILITY.md` | Accessibility requirements | Quality bar context |
+| **COLD_SOT_FORMAT.md** | `00-north-star/COLD_SOT_FORMAT.md` | Cold store format spec | Serialization rules |
+| **SOURCES_OF_TRUTH.md** | `00-north-star/SOURCES_OF_TRUTH.md` | Authority hierarchy | Canon precedence |
+| **EVERGREEN_MANUSCRIPT.md** | `00-north-star/EVERGREEN_MANUSCRIPT.md` | Living document guidelines | Maintenance patterns |
+| **QUALITY_BARS_DETAIL.md** | `00-north-star/QUALITY-BARS/*.md` | Detailed bar specifications | v3 has summary only |
 
-#### Loops (13 → 1 loops)
+#### 12.2.2 Missing Policies
 
-Only `story_spark.md` exists. Missing loops from v2:
+| Policy | v2 Path | Purpose |
+|--------|---------|---------|
+| **HOOK_POLICY.md** | `00-north-star/POLICIES/HOOK_POLICY.md` | Hook creation/resolution rules |
+| **GATE_POLICY.md** | `00-north-star/POLICIES/GATE_POLICY.md` | Gatecheck procedure |
+| **ESCALATION_POLICY.md** | `00-north-star/POLICIES/ESCALATION_POLICY.md` | When/how to escalate to SR |
+| **DORMANCY_POLICY.md** | `00-north-star/POLICIES/DORMANCY_POLICY.md` | Role sleep/wake signals |
 
-| Loop | Purpose | v2 Reference |
-|------|---------|--------------|
-| `hook_harvest` | Extract change hooks during play | `00-north-star/LOOPS/hook_harvest.md` |
-| `scene_weave` | Compose scenes from beats | `00-north-star/LOOPS/scene_weave.md` |
-| `choice_tree` | Design branching narratives | `00-north-star/LOOPS/choice_tree.md` |
-| `lore_sync` | Maintain canon consistency | `00-north-star/LOOPS/lore_sync.md` |
-| `draft_review` | Edit/revise prose | `00-north-star/LOOPS/draft_review.md` |
-| `canon_commit` | Stabilize hot → cold | `00-north-star/LOOPS/canon_commit.md` |
-| `character_arc` | Track character development | `00-north-star/LOOPS/character_arc.md` |
-| `timeline_build` | Construct event sequences | `00-north-star/LOOPS/timeline_build.md` |
-| `world_expand` | Expand setting/lore | `00-north-star/LOOPS/world_expand.md` |
-| `plot_refine` | Iterate story structure | `00-north-star/LOOPS/plot_refine.md` |
-| `quality_gate` | Run quality bar checks | `00-north-star/LOOPS/quality_gate.md` |
-| `texture_finish` | Final polish pass | `00-north-star/LOOPS/texture_finish.md` |
+#### 12.2.3 Missing Patterns & Anti-Patterns
 
-#### Quality Bars & Principles (44 → 1 file)
+v2 had `00-north-star/PATTERNS/` and `00-north-star/ANTI-PATTERNS/` directories with design guidance. v3 has none.
 
-v2 had extensive principle documentation:
+---
 
-- `00-north-star/QUALITY-BARS/` — 8 detailed bar definitions
-- `00-north-star/POLICIES/` — Operating principles
-- `00-north-star/PATTERNS/` — Design patterns
-- `00-north-star/ANTI-PATTERNS/` — What to avoid
+### 12.3 Loops (00-north-star/LOOPS)
 
-v3 has: Section 10 table listing bar names but no `{quality-bar}` definitions.
+#### 12.3.1 Missing Loop Definitions (12 of 13)
 
-### 12.3 Medium Priority Gaps
+| Loop ID | v2 Path | Purpose | Roles Involved |
+|---------|---------|---------|----------------|
+| `hook_harvest` | `LOOPS/hook_harvest.md` | Extract change hooks during play | NR, LK, SR |
+| `scene_weave` | `LOOPS/scene_weave.md` | Compose scenes from beats | SS, PW, CD |
+| `choice_tree` | `LOOPS/choice_tree.md` | Design branching narratives | PW, LK, SR |
+| `lore_sync` | `LOOPS/lore_sync.md` | Maintain canon consistency | LK, GK, SR |
+| `draft_review` | `LOOPS/draft_review.md` | Edit/revise prose | SS, CD, GK |
+| `canon_commit` | `LOOPS/canon_commit.md` | Stabilize hot → cold | GK, SR, LK |
+| `character_arc` | `LOOPS/character_arc.md` | Track character development | LK, PW, CD |
+| `timeline_build` | `LOOPS/timeline_build.md` | Construct event sequences | PW, LK |
+| `world_expand` | `LOOPS/world_expand.md` | Expand setting/lore | LK, CD, PW |
+| `plot_refine` | `LOOPS/plot_refine.md` | Iterate story structure | PW, SR, GK |
+| `quality_gate` | `LOOPS/quality_gate.md` | Run quality bar checks | GK, SR |
+| `texture_finish` | `LOOPS/texture_finish.md` | Final polish pass | CD, SS, PB |
 
-#### Role Depth (8 roles defined, ~75% depth reduced)
+#### 12.3.2 Depth Reduction in Existing Loop (story_spark)
 
-v3 has all 8 role files but lacks v2's depth:
+**v2 `story_spark.md` (161 lines) vs v3 `story_spark.md` (176 lines)**
 
-| Missing Per Role | v2 Location |
-|------------------|-------------|
-| Brief (1-pager) | `01-roles/briefs/` |
-| Charter (full spec) | `01-roles/charters/` |
-| Consultation Guide | `01-roles/charters/` appendices |
-| Example Dialogues | `01-roles/examples/` |
+Despite similar line counts, v3 is ~80% less informative:
 
-#### Artifact Types (37 → 5 migrated)
+| Section | v2 | v3 |
+|---------|----|----|
+| **Triggers** | Detailed trigger conditions | Not specified |
+| **Inputs** | Explicit input artifacts | Not specified |
+| **Procedure** | 8-step detailed procedure | Only graph edges |
+| **Deliverables** | Explicit output list | Implicit in artifacts |
+| **Success Criteria** | Measurable criteria | Not specified |
+| **Failure Modes** | Error handling guidance | Not specified |
+| **RACI Matrix** | Role responsibilities | Not specified |
+| **Hand-offs** | Explicit transition rules | Implicit in conditions |
 
-v3 `ontology/artifacts.md` has 5 types. v2 defined 37+:
+---
 
-**Migrated:** Brief, CanonEntry, GatecheckReport, HookCard, Scene
+### 12.4 Playbooks (00-north-star/PLAYBOOKS)
 
-**Missing:**
+#### 12.4.1 Missing Playbooks (14+)
 
-- Act, Beat, Chapter, Character, Choice, Dialogue, Draft, Entity, Event
-- Fact, Item, Location, Metadata, Moment, PlotPoint, Prose
-- Relationship, Timeline, World, Texture, TU, View, Codex
-- Section, Sequence, Transition, Gate, Checkpoint, Milestone
-- Arc, Thread, Theme, Motif, Symbol, Setting, Era, Region
+| Playbook | Purpose |
+|----------|---------|
+| `new_story.md` | Starting a new story project |
+| `add_character.md` | Character creation workflow |
+| `branch_narrative.md` | Adding choice branches |
+| `resolve_contradiction.md` | Fixing canon conflicts |
+| `emergency_retcon.md` | Major canon corrections |
+| `gate_failure.md` | Handling gatecheck failures |
+| `role_stuck.md` | Unblocking stuck roles |
+| `player_feedback.md` | Incorporating player input |
+| `publish_release.md` | Publishing workflow |
+| `hot_to_cold.md` | Promotion process |
+| `rollback.md` | Reverting changes |
+| `debug_state.md` | State inspection |
+| `performance_tune.md` | Optimization |
+| `onboard_contributor.md` | New contributor guide |
 
-#### Glossary/Dictionary (47 → 2 files)
+---
 
-v2 had extensive terminology:
+### 12.5 Roles (01-roles)
 
-- `02-dictionary/GLOSSARY.md` — Master term definitions
-- `02-dictionary/ACRONYMS.md` — Abbreviation reference
-- `02-dictionary/TAXONOMY/` — Classification hierarchies
+#### 12.5.1 Removed Roles (4 roles)
 
-v3 has `ontology/artifacts.md` and `ontology/taxonomy.md` only.
+These v2 roles have no v3 equivalent:
 
-### 12.4 Gap Resolution Strategy
+| Role | v2 Purpose | v3 Status |
+|------|------------|-----------|
+| **Translator** | Cross-format conversion | Absorbed into Publisher |
+| **Researcher** | External fact lookup | Absorbed into Lorekeeper |
+| **Illustrator** | Visual asset creation | Absorbed into Creative Director |
+| **Audio Producer** | Sound design | Absorbed into Creative Director |
+
+#### 12.5.2 Missing Role Documentation Types
+
+For each of the 8 v3 roles, these v2 documents are missing:
+
+| Document Type | v2 Location | Content | Gap Impact |
+|---------------|-------------|---------|------------|
+| **Brief** | `01-roles/briefs/*.md` | 1-page role summary | 87% content loss |
+| **Charter** | `01-roles/charters/*.md` | Full role specification | 100% missing |
+| **Interface** | `01-roles/interfaces/*.md` | API contract | 100% missing |
+| **Checklist** | `01-roles/checklists/*.md` | Task verification | 100% missing |
+
+#### 12.5.3 Depth Reduction in Existing Roles
+
+**Example: Plotwright**
+
+v2 Charter (187 lines) vs v3 `plotwright.md` (103 lines) — **70% depth reduction**
+
+| Section | v2 Charter | v3 Role |
+|---------|------------|---------|
+| Scope Definition | ✅ Detailed | ❌ Missing |
+| Inputs/Outputs | ✅ Explicit list | ❌ Missing |
+| Loop Participation | ✅ Per-loop behavior | ❌ Missing |
+| Hook Policy | ✅ Detailed rules | ❌ Missing |
+| Consultation Rules | ✅ When to consult whom | ❌ Missing |
+| Anti-patterns | ✅ What to avoid | ❌ Missing |
+| Example Dialogues | ✅ Sample interactions | ❌ Missing |
+| Escalation Triggers | ✅ When to escalate | ❌ Missing |
+| Dormancy Signals | ✅ Sleep/wake conditions | ❌ Missing |
+| Pair Guide | ✅ Working with other roles | ❌ Missing |
+
+#### 12.5.4 Missing Cross-Role Documentation
+
+| Document | Purpose | v3 Status |
+|----------|---------|-----------|
+| **RACI Matrix** | Role responsibility assignment | Missing |
+| **Escalation Rules** | When each role escalates | Missing |
+| **Pair Guides** | Role collaboration patterns | Missing |
+| **Dormancy Signals** | Role sleep/wake conditions | Missing |
+
+---
+
+### 12.6 Dictionary (02-dictionary)
+
+#### 12.6.1 Missing Artifact Types (35 of 40)
+
+**Migrated to v3 (5):** Brief, CanonEntry, GatecheckReport, HookCard, Scene
+
+**Missing from v3 (35):**
+
+| Category | Missing Artifacts |
+|----------|-------------------|
+| **Structural** | Act, Beat, Chapter, Section, Sequence |
+| **Narrative** | Choice, Dialogue, PlotPoint, Prose, Moment |
+| **Entity** | Character, Entity, Item, Location, Relationship |
+| **World** | World, Setting, Era, Region, Timeline |
+| **Thematic** | Arc, Thread, Theme, Motif, Symbol |
+| **Technical** | Draft, Event, Fact, Metadata, Texture, TU |
+| **Process** | Gate, Checkpoint, Milestone, Transition, View |
+| **Reference** | Codex |
+
+#### 12.6.2 Field Depth Reduction in Existing Artifacts
+
+| Artifact | v2 Fields | v3 Fields | Reduction |
+|----------|-----------|-----------|-----------|
+| HookCard | 15 fields | 8 fields | 47% |
+| Scene | 20 fields | 10 fields | 50% |
+| Brief | 12 fields | 6 fields | 50% |
+| CanonEntry | 10 fields | 5 fields | 50% |
+| GatecheckReport | 18 fields | 10 fields | 44% |
+
+#### 12.6.3 Missing Glossary Content
+
+| Document | v2 Terms | v3 Terms | Gap |
+|----------|----------|----------|-----|
+| **GLOSSARY.md** | 200+ terms | ~20 terms | 90% |
+| **ACRONYMS.md** | 50+ entries | 0 | 100% |
+| **TAXONOMY.md** | 30+ hierarchies | 2 | 93% |
+
+#### 12.6.4 Missing Conventions
+
+| Convention | Purpose | v3 Status |
+|------------|---------|-----------|
+| `CHOICE_INTEGRITY.md` | Choice design rules | Missing |
+| `FIELD_REGISTRY.md` | Standard field definitions | Missing |
+| `NAMING_CONVENTIONS.md` | ID/name patterns | Missing |
+| `VERSIONING.md` | Artifact versioning rules | Missing |
+
+---
+
+### 12.7 Protocol (04-protocol)
+
+#### 12.7.1 Missing Envelope Specification (BLOCKER)
+
+v2 `ENVELOPE.md` defined the message wrapper structure:
+
+| Component | Purpose | v3 Status |
+|-----------|---------|-----------|
+| **Header Schema** | Routing metadata | ❌ Missing |
+| **Payload Schema** | Content structure | ❌ Missing |
+| **Trace Fields** | Debugging/audit | ❌ Missing |
+| **Priority Levels** | Message urgency | ❌ Missing |
+| **TTL/Expiry** | Message lifetime | ❌ Missing |
+
+**Impact:** Without envelope spec, roles cannot structure inter-role communication consistently.
+
+#### 12.7.2 Intent Depth Reduction (50%)
+
+**v2 `INTENTS.md` (1228 lines) vs v3 `intents.md` (348 lines)**
+
+| Component | v2 | v3 |
+|-----------|----|----|
+| Intent Count | 30+ | ~15 |
+| Envelope Schema | ✅ JSON examples | ❌ Missing |
+| Authorization Matrix | ✅ Role × Intent | ❌ Missing |
+| Error Taxonomy | ✅ Detailed error types | ⚠️ Partial (6 types) |
+| Payload Examples | ✅ Full JSON | ❌ Missing |
+| Validation Rules | ✅ Per-intent rules | ❌ Missing |
+
+**Missing v2 Intents:**
+
+- `ping`, `pong`, `heartbeat` (health check)
+- `claim`, `release` (artifact locking)
+- `subscribe`, `unsubscribe` (event watching)
+- `snapshot`, `restore` (state management)
+- `retry`, `timeout`, `cancel` (execution control)
+- `merge_request`, `merge_approve` (cold store)
+- `hook_propose`, `hook_accept`, `hook_reject` (hook lifecycle)
+- `view_render`, `view_stale` (view lifecycle)
+
+#### 12.7.3 Missing Flow Definitions (100%)
+
+v2 had `FLOWS/` directory with end-to-end message choreography:
+
+| Flow | Purpose | Messages Defined |
+|------|---------|------------------|
+| `story_spark_flow.md` | Story creation | 15 message types |
+| `hook_harvest_flow.md` | Hook extraction | 12 message types |
+| `scene_weave_flow.md` | Scene composition | 18 message types |
+| `canon_commit_flow.md` | Cold promotion | 10 message types |
+| `quality_gate_flow.md` | Gatecheck process | 8 message types |
+| *(10 more flows...)* | | |
+
+v3 has **no flow definitions**.
+
+#### 12.7.4 Lifecycle Gap (80%)
+
+**v2 Lifecycles (5) vs v3 Lifecycles (1 partial)**
+
+| Lifecycle | v2 States | v3 Status |
+|-----------|-----------|-----------|
+| **Artifact** | 6 states, 12 transitions | ⚠️ Partial (artifact.md exists but missing transitions) |
+| **Hook** | 5 states, 8 transitions | ❌ Missing (hooks.md) |
+| **Gate** | 4 states, 6 transitions | ❌ Missing (gate.md) |
+| **TU (Texture Unit)** | 5 states, 10 transitions | ❌ Missing (tu.md) |
+| **View** | 4 states, 5 transitions | ❌ Missing (view.md) |
+
+#### 12.7.5 Missing Protocol Components
+
+| Component | Purpose | v3 Status |
+|-----------|---------|-----------|
+| **Authorization Matrix** | Who can send which intents | Missing |
+| **PN Safety Invariant** | Player-never-sees-spoilers rule | Not documented |
+| **Routing Matrix** | Intent → target role mapping | Missing |
+| **Error Handling** | Recovery procedures | Partial |
+
+---
+
+### 12.8 YAML Definitions (05-definitions)
+
+#### 12.8.1 Missing Loop Definitions (92%)
+
+v2 had YAML definitions for all 13 loops. v3 has 1.
+
+| Loop | v2 YAML | v3 Status |
+|------|---------|-----------|
+| `story_spark.yaml` | ✅ | ⚠️ Partial (MyST only) |
+| `hook_harvest.yaml` | ✅ | ❌ Missing |
+| `scene_weave.yaml` | ✅ | ❌ Missing |
+| *(10 more...)* | ✅ | ❌ Missing |
+
+#### 12.8.2 Missing Definition Components
+
+| Component | v2 | v3 |
+|-----------|----|----|
+| **capabilities.yaml** | Role capability matrix | Missing |
+| **protocol.yaml** | Routing rules | Missing |
+| **quality_checks.yaml** | Validation logic | Missing |
+| **transitions.yaml** | State machine rules | Missing |
+
+#### 12.8.3 Role Definition Depth
+
+v2 role YAML definitions included:
+
+| Component | v2 | v3 |
+|-----------|----|----|
+| Capabilities | ✅ Detailed | ⚠️ Reduced |
+| Constraints | ✅ 10-15 per role | ⚠️ 3-5 per role |
+| Loop Participation | ✅ Per-loop config | ❌ Missing |
+| Escalation Rules | ✅ Explicit | ❌ Missing |
+| Example Prompts | ✅ Multiple examples | ❌ Missing |
+
+---
+
+### 12.9 Runtime Specification (06-runtime)
+
+#### 12.9.1 Missing Runtime Specs
+
+v2 `06-runtime/` had specifications for:
+
+| Spec | Purpose | v3 Status |
+|------|---------|-----------|
+| **ARCHITECTURE.md** | Runtime component overview | ❌ Missing (runtime section in main ARCHITECTURE.md is implementation, not spec) |
+| **ORCHESTRATOR.md** | Orchestrator interface spec | ❌ Missing |
+| **CLI.md** | CLI command spec | ❌ Missing |
+| **SHOWRUNNER_INTERFACE.md** | SR tool contract | ❌ Missing |
+| **LLM_ADAPTER.md** | Provider abstraction spec | ❌ Missing |
+| **TOOL_REGISTRY.md** | Tool definition spec | ❌ Missing |
+| **STATE_PERSISTENCE.md** | Checkpoint/restore spec | ❌ Missing |
+| **LOGGING.md** | Observability spec | ❌ Missing |
+
+**Note:** v3 has runtime *implementation* (`runtime/*.py`) but no *specification* documents.
+
+---
+
+### 12.10 Quality Bar Depth Reduction
+
+v3 `quality_bars.md` is reasonably well-migrated but missing:
+
+| Component | v2 | v3 |
+|-----------|----|----|
+| Exception Handling | ✅ Waiver process | ❌ Missing |
+| Anti-patterns | ✅ Common mistakes | ❌ Missing |
+| Specific Failure Examples | ✅ Real examples | ⚠️ Generic only |
+| Remediation Playbooks | ✅ Step-by-step | ⚠️ Brief notes only |
+| Bar Interaction Rules | ✅ Precedence | ❌ Missing |
+
+---
+
+### 12.11 Nuanced Depth Gaps (Documents Exist But Are Insufficient)
+
+These v3 documents exist but are significantly less informative than v2:
+
+| Document | v2 Lines | v3 Lines | Information Loss |
+|----------|----------|----------|------------------|
+| `loops/story_spark.md` | 161 | 176 | ~80% (missing procedures, criteria, RACI) |
+| `roles/plotwright.md` | 187 | 103 | ~70% (missing scope, anti-patterns, examples) |
+| `roles/showrunner.md` | 220 | 115 | ~65% (missing decision matrix, escalation) |
+| `roles/lorekeeper.md` | 195 | 98 | ~70% (missing query patterns, contradiction rules) |
+| `roles/gatekeeper.md` | 180 | 95 | ~65% (missing waiver process, bar precedence) |
+| `protocol/intents.md` | 1228 | 348 | ~70% (missing envelope, auth matrix, examples) |
+| `ontology/artifacts.md` | 800+ | 200 | ~75% (35 of 40 types missing) |
+
+---
+
+### 12.12 Gap Resolution Strategy (Unchanged)
 
 **Phase A: Protocol Foundation (Unblocks everything)**
 
-1. Create `domain/protocol/ENVELOPE.md` with `{envelope-spec}` directive
-2. Create `domain/protocol/INTENTS.md` with all `{intent-type}` directives
-3. Create `domain/protocol/lifecycles/hook.md`, `tu.md`, `gate.md`
-4. Update SR prompt to reference protocol vocabulary
+1. Create `domain/protocol/envelope.md` with `{envelope-spec}` directive
+2. Expand `domain/protocol/intents.md` with remaining 15+ intents
+3. Create `domain/protocol/lifecycles/hook.md`, `tu.md`, `gate.md`, `view.md`
+4. Add authorization matrix and routing rules
 
-**Phase B: Loop Skeleton**
+**Phase B: Loop Migration**
 
-1. Migrate loop files with basic `{loop-meta}` and workflow descriptions
-2. Add `{graph-node}` and `{graph-edge}` for SR guidance
-3. Cross-reference intents used by each loop
+1. Migrate 12 remaining loops with full MyST directives
+2. Restore procedural content (triggers, inputs, deliverables, RACI)
+3. Add flow definitions per loop
 
-**Phase C: Quality Infrastructure**
+**Phase C: Role Enrichment**
 
-1. Define `{quality-bar}` directives for all 8 bars
-2. Add check criteria and failure conditions
-3. Wire into Gatekeeper evaluation
+1. Add charter-level content to each role file
+2. Restore anti-patterns, examples, escalation rules
+3. Add consultation guides and pair guides
 
-**Phase D: Role Enrichment**
+**Phase D: Ontology Completion**
 
-1. Add consultation guides to each role file
-2. Expand constraint sets from v2 charters
-3. Include example interactions
+1. Migrate remaining 35 artifact types
+2. Restore full field definitions
+3. Add glossary and conventions
 
-**Phase E: Ontology Completion**
+**Phase E: Principles & Policies**
 
-1. Migrate remaining artifact types in batches
-2. Add `{artifact-field}` definitions for each
-3. Regenerate Pydantic models
+1. Migrate core principle documents
+2. Add playbooks for common scenarios
+3. Document policies and patterns
 
 ---
 
