@@ -398,13 +398,13 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 - [x] Refactor existing `domain/roles/` files to include "Operational Guidelines" headers.
 - [x] Refactor `domain/loops/story_spark.md` to include "Guidance" (Playbook) headers.
 
-### Phase 3: Critical Migration (Executing Priority 1)
+### Phase 3: Critical Migration (Complete) ✓
 
 *Goal: System safety and recovery.*
 
 - [x] Populate `domain/principles/` with Spoiler Hygiene & PN Principles.
 - [x] Populate `domain/playbooks/` with Emergency Retcon & Gate Failure.
-- [ ] Update Gatekeeper quality bars to reference these new principles.
+- [x] Update Gatekeeper quality bars to reference these new principles.
 
 ### Phase 4: Standard Migration (Complete) ✓
 

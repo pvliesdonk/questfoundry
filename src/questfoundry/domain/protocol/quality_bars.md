@@ -25,6 +25,7 @@ id: integrity
 name: "Integrity"
 description: "No contradictions in canon"
 owner: lorekeeper
+principle: "sources_of_truth"
 checks:
 
 - "All facts traceable to sources"
@@ -32,15 +33,18 @@ checks:
 - "Timeline consistency"
 - "Character facts consistent"
 - "Location facts consistent"
+- "Canon hierarchy respected (cold > hot approved > hot draft)"
 failures:
 - "Orphaned references to non-existent entities"
 - "Contradictory statements about same entity"
 - "Timeline paradoxes"
 - "Dead links to removed content"
+- "Hot content treated as authoritative without approval"
 remediation:
 - "Trace contradiction to source"
-- "Determine canonical truth"
+- "Determine canonical truth per Sources of Truth hierarchy"
 - "Update or remove conflicting content"
+- "Escalate unresolvable conflicts to Showrunner"
 :::
 
 :::{quality-bar}
@@ -156,23 +160,36 @@ remediation:
 :::{quality-bar}
 id: presentation
 name: "Presentation"
-description: "Formatting and structure correct"
+description: "Formatting, structure, and spoiler safety"
 owner: publisher
+principle: "spoiler_hygiene"
 checks:
 
 - "Valid markdown/markup"
 - "Consistent heading hierarchy"
 - "Proper list formatting"
 - "Images/media properly linked"
+- "No spoilers on player surfaces"
+- "Gate phrasing is diegetic (no meta-gates)"
+- "No internal identifiers exposed (IDs, codewords, schema fields)"
+- "No determinism details in captions (seeds, models)"
+- "Content sourced from cold_store only"
 failures:
 - "Broken markup syntax"
 - "Inconsistent heading levels"
 - "Malformed lists"
 - "Missing media files"
+- "Twist-revealing statements on surface"
+- "Meta-gate text (e.g., 'Option locked: missing KEY')"
+- "Internal mechanics exposed (rolls, flags, debug info)"
+- "Hot_store content exported without canonization"
 remediation:
 - "Fix syntax errors"
 - "Standardize heading structure"
 - "Verify media paths"
+- "Rephrase gates diegetically per Spoiler Hygiene principle"
+- "Remove internal identifiers; keep in hot_store notes only"
+- "Source all exports from cold_store snapshots"
 :::
 
 :::{quality-bar}
@@ -260,3 +277,9 @@ fields:
 - `domain/roles/gatekeeper.md` — GK role definition
 - `domain/protocol/lifecycles/artifact.md` — Artifact lifecycle
 - `runtime/tools.py` — Gatecheck tool implementations
+
+### Principles
+
+- `domain/principles/sources_of_truth.md` — Canon hierarchy for **integrity** bar
+- `domain/principles/spoiler_hygiene.md` — Spoiler safety for **presentation** bar
+- `domain/principles/pn_principles.md` — Narrator validation context

@@ -115,16 +115,19 @@ You are the final checkpoint before content advances. You apply quality bars mec
 
 The bars you enforce:
 
-| Bar | What It Checks |
-|-----|----------------|
-| **integrity** | No contradictions in canon |
-| **reachability** | All content accessible via valid paths |
-| **nonlinearity** | Multiple valid paths exist |
-| **gateways** | All gates have valid unlock conditions |
-| **style** | Voice and tone consistency |
-| **determinism** | Same inputs produce same outputs |
-| **presentation** | Formatting and structure correct |
-| **accessibility** | Content usable by all players |
+| Bar | What It Checks | Principle |
+|-----|----------------|-----------|
+| **integrity** | No contradictions in canon | `sources_of_truth` |
+| **reachability** | All content accessible via valid paths | — |
+| **nonlinearity** | Multiple valid paths exist | — |
+| **gateways** | All gates have valid unlock conditions | — |
+| **style** | Voice and tone consistency | — |
+| **determinism** | Same inputs produce same outputs | — |
+| **presentation** | Formatting, structure, and spoiler safety | `spoiler_hygiene` |
+| **accessibility** | Content usable by all players | — |
+
+When checking **integrity**, consult `domain/principles/sources_of_truth.md` for canon hierarchy.
+When checking **presentation**, consult `domain/principles/spoiler_hygiene.md` for spoiler checks.
 
 ## Validation Process
 
