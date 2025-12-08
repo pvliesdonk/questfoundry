@@ -596,9 +596,90 @@ class ToolExecutor:
 
         except Exception as e:
             logger.error(f"Tool '{tool_name}' execution failed: {e}")
-            error_result = {
+            error_result: dict[str, Any] = {
                 "success": False,
                 "error": str(e),
-                "hint": "Check tool arguments and try again. Use consult_schema for field requirements.",
             }
+
+            # Provide "did you mean" hints for parameter name errors
+            hint = self._get_parameter_hint(tool, e)
+            error_result["hint"] = hint
+
             return json.dumps(error_result), False
+
+    def _get_parameter_hint(self, tool: BaseTool, error: Exception) -> str:
+        """Generate a helpful hint for tool execution errors.
+
+        For parameter name errors (TypeError with 'unexpected keyword argument'),
+        suggests the correct parameter name if a similar one exists.
+        """
+        error_str = str(error)
+        default_hint = "Check tool arguments and try again. Use consult_schema for field requirements."
+
+        # Check for "unexpected keyword argument" TypeError
+        if not isinstance(error, TypeError):
+            return default_hint
+
+        import re
+
+        match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
+        if not match:
+            return default_hint
+
+        wrong_param = match.group(1)
+
+        # Get the tool's actual parameters from its schema
+        try:
+            schema = tool.get_input_schema()
+            actual_params = list(schema.model_fields.keys()) if hasattr(schema, "model_fields") else []
+        except Exception:
+            actual_params = []
+
+        if not actual_params:
+            return f"Unknown parameter '{wrong_param}'. {default_hint}"
+
+        # Find similar parameter names
+        suggestions = self._find_similar_params(wrong_param, actual_params)
+
+        if suggestions:
+            suggestion_str = ", ".join(f"'{p}'" for p in suggestions)
+            return (
+                f"Unknown parameter '{wrong_param}'. "
+                f"Did you mean {suggestion_str}? "
+                f"Available parameters: {', '.join(actual_params)}"
+            )
+        else:
+            return (
+                f"Unknown parameter '{wrong_param}'. "
+                f"Available parameters: {', '.join(actual_params)}"
+            )
+
+    def _find_similar_params(self, wrong: str, actual: list[str]) -> list[str]:
+        """Find parameters similar to the wrong one.
+
+        Uses suffix/prefix matching and common word matching for suggestions.
+        """
+        suggestions = []
+        wrong_lower = wrong.lower()
+        wrong_parts = set(wrong_lower.replace("_", " ").split())
+
+        for param in actual:
+            param_lower = param.lower()
+            param_parts = set(param_lower.replace("_", " ").split())
+
+            # Check for common words (e.g., "artifact" in both "target_artifact" and "artifact_id")
+            common_words = wrong_parts & param_parts
+            if common_words:
+                suggestions.append(param)
+                continue
+
+            # Check for suffix match (e.g., "id" matches "artifact_id")
+            if wrong_lower.endswith(param_lower) or param_lower.endswith(wrong_lower):
+                suggestions.append(param)
+                continue
+
+            # Check for prefix match
+            if wrong_lower.startswith(param_lower) or param_lower.startswith(wrong_lower):
+                suggestions.append(param)
+
+        return suggestions

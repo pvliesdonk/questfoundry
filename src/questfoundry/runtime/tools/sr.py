@@ -39,16 +39,21 @@ class DelegateTo(BaseTool):
     After delegation, evaluate the result and decide:
     - Delegate to another role
     - Terminate if work is complete
+
+    IMPORTANT: When delegating validation or follow-up work, include the
+    artifact IDs from previous delegation results in the `artifacts` parameter.
+    This ensures the role knows exactly which artifacts to work with.
     """
 
     name: str = "delegate_to"
     description: str = (
         "Delegate a task to a specialist role. "
         "The role executes autonomously and returns a result summary. "
-        "Inputs: role (role_id), task (description of work to do)"
+        "Inputs: role (role_id), task (description of work), "
+        "artifacts (optional list of artifact IDs from previous delegations to pass to the role)"
     )
 
-    def _run(self, role: str, task: str) -> str:
+    def _run(self, role: str, task: str, artifacts: list[str] | None = None) -> str:
         """Validate delegation request.
 
         Note: Actual delegation is handled by the orchestrator.
@@ -101,13 +106,19 @@ class DelegateTo(BaseTool):
 
         # Return delegation request for orchestrator to handle
         # The orchestrator will intercept this and execute the role
+        delegation_request: dict[str, Any] = {
+            "role": role_id,
+            "task": task.strip(),
+        }
+
+        # Include artifact IDs if provided
+        if artifacts:
+            delegation_request["artifacts"] = artifacts
+
         return json.dumps(
             {
                 "success": True,
-                "delegation_request": {
-                    "role": role_id,
-                    "task": task.strip(),
-                },
+                "delegation_request": delegation_request,
                 "note": "Delegation will be executed by orchestrator.",
             }
         )

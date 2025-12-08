@@ -595,6 +595,104 @@ class PromoteToCanon(BaseTool):
         )
 
 
+class ListHotStoreKeys(BaseTool):
+    """List all keys in hot_store for artifact discovery.
+
+    Use this to discover what artifacts exist in hot_store before
+    reading or working with them. Useful when you need to know
+    what artifacts have been created by previous roles.
+    """
+
+    name: str = "list_hot_store_keys"
+    description: str = (
+        "List all artifact keys in hot_store. "
+        "Use this to discover what artifacts exist. "
+        "Returns a list of keys and their types."
+    )
+
+    # State is injected by executor
+    state: dict[str, Any] = Field(default_factory=dict)
+
+    def _run(self) -> str:
+        """List all keys in hot_store."""
+        hot_store = self.state.get("hot_store", {})
+
+        if not hot_store:
+            return json.dumps(
+                {
+                    "success": True,
+                    "keys": [],
+                    "message": "hot_store is empty",
+                }
+            )
+
+        # Build key info with types
+        key_info = []
+        for key, value in hot_store.items():
+            info = {"key": key}
+            if hasattr(value, "model_dump"):
+                # Pydantic model
+                info["type"] = type(value).__name__
+            elif isinstance(value, dict):
+                info["type"] = value.get("type", "dict")
+            elif isinstance(value, list):
+                info["type"] = f"list[{len(value)} items]"
+            else:
+                info["type"] = type(value).__name__
+            key_info.append(info)
+
+        return json.dumps(
+            {
+                "success": True,
+                "keys": key_info,
+                "count": len(key_info),
+            }
+        )
+
+
+class ListColdStoreKeys(BaseTool):
+    """List all sections and snapshots in cold_store.
+
+    Use this to discover what canon content exists in cold_store
+    before reading specific sections. Returns sections (anchors)
+    and available snapshots.
+    """
+
+    name: str = "list_cold_store_keys"
+    description: str = (
+        "List all sections and snapshots in cold_store. "
+        "Use this to discover what canon content exists. "
+        "Returns section anchors and snapshot IDs."
+    )
+
+    # ColdStore is injected by executor
+    cold_store: Any = Field(default=None)
+
+    def _run(self) -> str:
+        """List all sections and snapshots in cold_store."""
+        if self.cold_store is None:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Cold store not available",
+                    "hint": "Cold store may not be initialized for this session.",
+                }
+            )
+
+        sections = self.cold_store.list_sections()
+        snapshots = self.cold_store.list_snapshots()
+
+        return json.dumps(
+            {
+                "success": True,
+                "sections": sections[:50],  # Limit for readability
+                "section_count": len(sections),
+                "snapshots": snapshots[:10],
+                "snapshot_count": len(snapshots),
+            }
+        )
+
+
 # Factory functions for Cold Store tools
 
 

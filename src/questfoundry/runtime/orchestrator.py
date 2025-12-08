@@ -54,6 +54,7 @@ from questfoundry.runtime.tools.consult import (
     ConsultRoleCharter,
     ConsultSchema,
 )
+from questfoundry.runtime.tools.role import ListColdStoreKeys, ListHotStoreKeys
 from questfoundry.runtime.tools.sr import DelegateTo, ReadArtifact, Terminate, WriteArtifact
 from questfoundry.runtime.tracing import TracedSRTurn, configure_tracing, trace_orchestrator_run
 
@@ -91,12 +92,15 @@ You coordinate creative work by delegating to specialist roles. You don't do det
 ## Your Tools
 
 ### Orchestration Tools
-- **delegate_to(role, task)**: Assign a task to a specialist role. Returns DelegationResult.
+- **delegate_to(role, task, artifacts)**: Assign a task to a specialist role. Returns DelegationResult.
+  - IMPORTANT: Use the `artifacts` parameter to pass artifact IDs from previous delegations to the next role!
 - **terminate(reason)**: End the workflow when all work is complete.
 
 ### State Tools
 - **read_artifact(key)**: Read artifacts from hot_store or cold_store.
 - **write_artifact(key, value)**: Create/update artifacts in hot_store.
+- **list_hot_store_keys()**: List all artifact keys in hot_store.
+- **list_cold_store_keys()**: List all sections/snapshots in cold_store.
 
 ### Knowledge Tools (CONSULT BEFORE ACTING)
 - **consult_playbook(query)**: Get workflow guidance from loop definitions. Use this FIRST to understand recommended workflow steps.
@@ -130,14 +134,26 @@ The playbook contains valuable guidance about:
 **For each delegation:**
 1. Be clear and specific about goals
 2. Include relevant context from prior delegations
-3. Example: `delegate_to("plotwright", "Design a 3-act story topology for a mystery adventure...")`
+3. **Pass artifact IDs** from previous delegations via the `artifacts` parameter
+4. Example: `delegate_to("plotwright", "Design a 3-act story topology for a mystery adventure...")`
 
 **After receiving DelegationResult:**
 1. Check status: completed, blocked, needs_review, or error
-2. Review artifacts created/modified
+2. **Note the artifact IDs** in the result - you'll need these for the next delegation!
 3. Consider the role's recommendation for next steps
 4. Consult playbook if unsure what to do next
-5. Either delegate to next role OR terminate if complete
+5. Either delegate to next role (passing artifact IDs!) OR terminate if complete
+
+**CRITICAL: Artifact Handoff**
+When delegating to a role that needs to work with artifacts from a previous delegation:
+```
+# Example: Gatekeeper needs to validate Plotwright's work
+delegate_to(
+    role="gatekeeper",
+    task="Validate the story topology",
+    artifacts=["scene.Act I.Scene 1", "scene.Act I.Scene 2"]  # IDs from Plotwright's result
+)
+```
 
 **Before promoting content to canon:**
 1. Delegate to gatekeeper to validate quality bars
@@ -156,7 +172,7 @@ The playbook contains valuable guidance about:
 """
 
 
-def _build_sr_tools(state: StudioState) -> list[BaseTool]:
+def _build_sr_tools(state: StudioState, cold_store: Any = None) -> list[BaseTool]:
     """Build SR's tool list."""
     tools: list[BaseTool] = []
 
@@ -179,6 +195,15 @@ def _build_sr_tools(state: StudioState) -> list[BaseTool]:
     write_tool = WriteArtifact()
     write_tool.state = state_dict
     tools.append(write_tool)
+
+    # Discovery tools
+    list_hot_tool = ListHotStoreKeys()
+    list_hot_tool.state = state_dict
+    tools.append(list_hot_tool)
+
+    list_cold_tool = ListColdStoreKeys()
+    list_cold_tool.cold_store = cold_store
+    tools.append(list_cold_tool)
 
     return tools
 
@@ -267,7 +292,7 @@ class Orchestrator:
         )
 
         # Build SR tools and prompt
-        sr_tools = _build_sr_tools(state)
+        sr_tools = _build_sr_tools(state, self.cold_store)
         sr_prompt = _build_sr_system_prompt(self.roles)
 
         # Create SR executor
@@ -340,6 +365,12 @@ class Orchestrator:
             # Execute delegation
             role_id = delegation_request["role"]
             task = delegation_request["task"]
+            artifacts = delegation_request.get("artifacts", [])
+
+            # If SR specified artifacts, include them in the task for the role
+            if artifacts:
+                artifact_list = ", ".join(artifacts)
+                task = f"{task}\n\n**Artifacts to work with**: {artifact_list}"
 
             logger.info(f"Delegating to {role_id}: {task[:100]}...")
             delegation_count += 1

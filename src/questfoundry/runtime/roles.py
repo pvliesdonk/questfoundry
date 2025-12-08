@@ -34,6 +34,8 @@ from questfoundry.runtime.tools.gatekeeper import (
     EvaluateStyle,
 )
 from questfoundry.runtime.tools.role import (
+    ListColdStoreKeys,
+    ListHotStoreKeys,
     PromoteToCanon,
     ReadColdSot,
     ReadHotSot,
@@ -91,7 +93,9 @@ DO NOT just describe what you would check - actually CHECK IT by calling evaluat
 
 ### State Tools
 - **read_hot_sot(key)**: Read artifacts to validate from hot_store
+- **list_hot_store_keys()**: List all keys in hot_store (use to discover available artifacts)
 - **read_cold_sot(key)**: Read from cold_store for comparison
+- **list_cold_store_keys()**: List all sections/snapshots in cold_store
 
 ### Knowledge Tools
 - **consult_schema(artifact_type)**: Look up artifact field requirements
@@ -239,7 +243,9 @@ You MUST use tools to accomplish tasks. Do not describe what you would do - call
 ### State Tools
 - **write_hot_sot(key, value)**: Write artifact to hot_store (key = artifact type like "scene", "brief")
 - **read_hot_sot(key)**: Read from hot_store
+- **list_hot_store_keys()**: List all keys in hot_store (use to discover available artifacts)
 - **read_cold_sot(key)**: Read from cold_store (canon)
+- **list_cold_store_keys()**: List all sections/snapshots in cold_store
 
 ### Knowledge Tools (use these to look up details)
 - **consult_schema(artifact_type)**: Get required/optional fields for an artifact type
@@ -291,7 +297,7 @@ def _build_role_tools(
     # Cast StudioState to dict[str, Any] for Pydantic field assignment
     state_dict = cast(dict[str, Any], state)
 
-    # Hot store tools (read/write)
+    # Hot store tools (read/write/list)
     read_hot_tool = ReadHotSot()
     read_hot_tool.state = state_dict
     tools.append(read_hot_tool)
@@ -301,10 +307,18 @@ def _build_role_tools(
     write_hot_tool.role_id = role.id
     tools.append(write_hot_tool)
 
-    # Cold store tools (read for ALL roles)
+    list_hot_tool = ListHotStoreKeys()
+    list_hot_tool.state = state_dict
+    tools.append(list_hot_tool)
+
+    # Cold store tools (read/list for ALL roles)
     read_cold_tool = ReadColdSot()
     read_cold_tool.cold_store = cold_store
     tools.append(read_cold_tool)
+
+    list_cold_tool = ListColdStoreKeys()
+    list_cold_tool.cold_store = cold_store
+    tools.append(list_cold_tool)
 
     # Gatekeeper ONLY: quality bar evaluation tools + promote_to_canon
     if role.id.lower() == "gatekeeper":
