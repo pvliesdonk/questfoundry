@@ -8,7 +8,7 @@ Usage
 ::
 
     qf ask "Create a mystery story"
-    qf ask "Design a story topology" --trace
+    qf ask "Design a story topology" -vv
     qf config show       # Show current configuration
     qf config providers  # Check provider status
     qf doctor            # Check system status
@@ -17,8 +17,10 @@ Usage
 from __future__ import annotations
 
 import asyncio
-import logging
-from typing import Any
+import os
+from enum import Enum
+from pathlib import Path
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -28,11 +30,26 @@ from rich.table import Table
 from questfoundry.runtime.cli.config_cmd import config_app
 from questfoundry.runtime.config import get_settings
 
+# Help panel names for option categorization
+PANEL_LLM = "LLM Options"
+PANEL_OUTPUT = "Output & Logging"
+PANEL_RUNTIME = "Runtime Options"
+
+
+class ProviderStatus(str, Enum):
+    """Provider availability status."""
+
+    UNAVAILABLE = "unavailable"  # No API key / not configured
+    NOT_READY = "not_ready"  # Configured but connectivity failed
+    READY = "ready"  # Configured and connected
+
+
 # Create Typer app
 app = typer.Typer(
     name="qf",
     help="QuestFoundry runtime - SR-orchestrated creative fiction engine",
     add_completion=True,
+    rich_markup_mode="rich",
 )
 
 # Register config subcommand
@@ -42,14 +59,9 @@ app.add_typer(config_app, name="config")
 console = Console()
 
 
-def _setup_logging(debug: bool = False) -> None:
-    """Configure logging based on settings and debug flag."""
-    settings = get_settings()
-    level = "DEBUG" if debug else settings.logging.level
-    logging.basicConfig(
-        level=getattr(logging, level),
-        format="%(levelname)s: %(message)s",
-    )
+def _verbose_callback(value: int) -> int:
+    """Callback for verbose flag counting."""
+    return value
 
 
 def _run_async(coro: Any) -> Any:
@@ -59,18 +71,63 @@ def _run_async(coro: Any) -> Any:
 
 @app.command()
 def ask(
-    message: str = typer.Argument(..., help="Your request in natural language"),
-    trace: bool = typer.Option(False, "--trace", "-t", help="Show detailed execution trace"),
-    provider: str | None = typer.Option(
-        None, "--provider", "-p", help="LLM provider: google, ollama, openai"
-    ),
-    model: str | None = typer.Option(None, "--model", "-m", help="Model name (provider-specific)"),
-    max_delegations: int | None = typer.Option(
-        None, "--max-delegations", "-d", help="Maximum delegations before termination"
-    ),
-    project: str | None = typer.Option(
-        None, "--project", help="Project path for cold store (.qfproj file)"
-    ),
+    message: Annotated[str, typer.Argument(help="Your request in natural language")],
+    # LLM Options
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider",
+            "-p",
+            help="LLM provider: google, ollama, openai",
+            rich_help_panel=PANEL_LLM,
+        ),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="Model name (provider-specific)",
+            rich_help_panel=PANEL_LLM,
+        ),
+    ] = None,
+    # Output & Logging
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity (-v=INFO, -vv=DEBUG, -vvv=TRACE)",
+            rich_help_panel=PANEL_OUTPUT,
+        ),
+    ] = 0,
+    log_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--log-dir",
+            help="Directory for structured JSONL logs",
+            rich_help_panel=PANEL_OUTPUT,
+        ),
+    ] = None,
+    # Runtime Options
+    max_delegations: Annotated[
+        int | None,
+        typer.Option(
+            "--max-delegations",
+            "-d",
+            help="Maximum delegations before termination",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            help="Project path for cold store (.qfproj file)",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = None,
 ) -> None:
     """Talk to the studio in natural language.
 
@@ -87,14 +144,24 @@ def ask(
     4. questfoundry.yaml config file
     5. Built-in defaults
 
-    Examples:
+    [bold]Examples:[/bold]
+
         qf ask "Create a mystery story about a haunted lighthouse"
-        qf ask "Design a 3-act story structure" --trace
+
+        qf ask "Design a 3-act story structure" -vv
+
         qf ask "Create a story" --provider google --model gemini-2.5-pro
-        qf ask "Create a story" --provider ollama --model qwen3:8b
+
+        qf ask "Create a story" -vvv --log-dir ./logs
     """
+    from questfoundry.runtime.logging import setup_logging
+
     try:
-        _setup_logging(debug=trace)
+        # Set up logging based on verbosity
+        # Default to INFO (1) if no -v flags
+        effective_verbosity = verbose if verbose > 0 else 1
+        setup_logging(verbosity=effective_verbosity, log_dir=log_dir)
+
         settings = get_settings()
 
         # Override settings with CLI arguments
@@ -105,12 +172,12 @@ def ask(
 
         effective_max_delegations = max_delegations or settings.runtime.max_delegations
 
-        if trace:
-            logging.getLogger("questfoundry").setLevel(logging.DEBUG)
+        if verbose >= 2:
             console.print(
                 Panel(
-                    "[cyan bold]Trace Mode[/cyan bold]\n\n"
-                    "Detailed execution trace will be displayed.",
+                    "[cyan bold]Debug Mode[/cyan bold]\n\n"
+                    f"Verbosity level: {verbose}\n"
+                    + (f"Log directory: {log_dir}" if log_dir else "No file logging"),
                     style="cyan",
                     border_style="cyan",
                 )
@@ -139,32 +206,16 @@ def ask(
         console.print(f"[dim]Provider: {effective_provider}[/dim]")
         console.print(f"[dim]Model: {effective_model}[/dim]")
 
-        if effective_provider == "ollama":
-            from questfoundry.runtime.providers import check_ollama_available
+        # Validate provider is ready
+        status, message_text = _check_provider_status(effective_provider, settings)
+        if status == ProviderStatus.UNAVAILABLE:
+            console.print(f"[red]Error: {message_text}[/red]")
+            raise typer.Exit(1)
+        if status == ProviderStatus.NOT_READY:
+            console.print(f"[red]Error: {message_text}[/red]")
+            raise typer.Exit(1)
 
-            if not check_ollama_available(settings.ollama.host):
-                console.print(f"[red]Error: Ollama not available at {settings.ollama.host}[/red]")
-                console.print("[dim]Start Ollama with: ollama serve[/dim]")
-                raise typer.Exit(1)
-            console.print("[green]+ Connected to Ollama[/green]")
-
-        elif effective_provider == "google":
-            from questfoundry.runtime.providers import check_google_available
-
-            if not check_google_available():
-                console.print("[red]Error: GOOGLE_API_KEY not set[/red]")
-                console.print("[dim]Set with: export GOOGLE_API_KEY='your-key'[/dim]")
-                raise typer.Exit(1)
-            console.print("[green]+ Google AI Studio configured[/green]")
-
-        elif effective_provider == "openai":
-            import os
-
-            if not os.getenv("OPENAI_API_KEY"):
-                console.print("[red]Error: OPENAI_API_KEY not set[/red]")
-                console.print("[dim]Set with: export OPENAI_API_KEY='your-key'[/dim]")
-                raise typer.Exit(1)
-            console.print("[green]+ OpenAI configured[/green]")
+        console.print(f"[green]+ {message_text}[/green]")
 
         # Create LLM from configuration
         llm = create_llm_from_config(settings)
@@ -198,13 +249,74 @@ def ask(
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user.[/yellow]")
         raise typer.Exit(130) from None
+    except typer.Exit:
+        raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        if trace:
+        if verbose >= 2:
             import traceback
 
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
         raise typer.Exit(1) from e
+
+
+def _check_provider_status(
+    provider: str, settings: Any
+) -> tuple[ProviderStatus, str]:
+    """Check provider availability with three-state logic.
+
+    Returns
+    -------
+    tuple[ProviderStatus, str]
+        Status enum and human-readable message.
+    """
+    if provider == "ollama":
+        # Check if Ollama host is explicitly configured
+        ollama_host = settings.ollama.host
+        env_host = os.environ.get("OLLAMA_HOST") or os.environ.get("QF_OLLAMA__HOST")
+
+        # If using default localhost and no explicit OLLAMA_HOST env var, Ollama is unavailable
+        if (
+            not env_host
+            and ollama_host == "http://localhost:11434"
+            and not os.environ.get("OLLAMA_HOST")
+        ):
+            return (
+                ProviderStatus.UNAVAILABLE,
+                "Ollama not configured. Set OLLAMA_HOST or QF_OLLAMA__HOST environment variable.",
+            )
+
+        # Have config, check connectivity
+        from questfoundry.runtime.providers import check_ollama_available
+
+        if check_ollama_available(ollama_host):
+            return ProviderStatus.READY, f"Connected to Ollama at {ollama_host}"
+        return (
+            ProviderStatus.NOT_READY,
+            f"Ollama not responding at {ollama_host}. Is it running?",
+        )
+
+    elif provider == "google":
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            return (
+                ProviderStatus.UNAVAILABLE,
+                "GOOGLE_API_KEY not set. Export it or add to .env file.",
+            )
+        # Google doesn't have a cheap connectivity test, assume ready if key present
+        return ProviderStatus.READY, "Google AI Studio configured"
+
+    elif provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return (
+                ProviderStatus.UNAVAILABLE,
+                "OPENAI_API_KEY not set. Export it or add to .env file.",
+            )
+        # OpenAI doesn't have a cheap connectivity test, assume ready if key present
+        return ProviderStatus.READY, "OpenAI configured"
+
+    return ProviderStatus.UNAVAILABLE, f"Unknown provider: {provider}"
 
 
 def _display_results(state: dict[str, Any]) -> None:
@@ -279,7 +391,18 @@ def _display_results(state: dict[str, Any]) -> None:
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity",
+            rich_help_panel=PANEL_OUTPUT,
+        ),
+    ] = 0,
+) -> None:
     """Check system status and configuration.
 
     Verifies:
@@ -287,15 +410,12 @@ def doctor() -> None:
     - Configuration
     - Role definitions
     - Generated models
+
+    Provider States:
+    - [green]ready[/green]: Configured and connected
+    - [yellow]not ready[/yellow]: Configured but connectivity failed
+    - [dim]unavailable[/dim]: Not configured
     """
-    import os
-
-    from questfoundry.runtime.providers import (
-        check_google_available,
-        check_ollama_available,
-        list_ollama_models,
-    )
-
     settings = get_settings()
 
     console.print("[bold]QuestFoundry Doctor[/bold]\n")
@@ -307,52 +427,71 @@ def doctor() -> None:
     console.print(f"  Temperature: {settings.llm.temperature}")
     console.print()
 
+    # Provider status table
+    table = Table(title="Provider Status")
+    table.add_column("Provider", style="bold")
+    table.add_column("Status")
+    table.add_column("Details")
+
     # Check Ollama
-    console.print("[bold]Checking Ollama...[/bold]")
-    if check_ollama_available(settings.ollama.host):
-        console.print(f"  [green]+ Available at {settings.ollama.host}[/green]")
+    ollama_status, ollama_msg = _check_provider_status("ollama", settings)
+    if ollama_status == ProviderStatus.READY:
+        status_str = "[green]ready[/green]"
+        # Get model count if ready
+        from questfoundry.runtime.providers import list_ollama_models
+
         models = list_ollama_models(settings.ollama.host)
-        if models:
-            console.print(f"  [green]+ {len(models)} models available[/green]")
-            for m in models[:3]:
-                console.print(f"    - {m}")
+        details = f"{len(models)} models available"
+        if verbose >= 1 and models:
+            details += f"\n    {', '.join(models[:3])}"
             if len(models) > 3:
-                console.print(f"    [dim]... and {len(models) - 3} more[/dim]")
-        else:
-            console.print("  [yellow]! No models found[/yellow]")
+                details += f" (+{len(models) - 3} more)"
+    elif ollama_status == ProviderStatus.NOT_READY:
+        status_str = "[yellow]not ready[/yellow]"
+        details = ollama_msg
     else:
-        console.print(f"  [red]- Not available at {settings.ollama.host}[/red]")
-        console.print("    [dim]Start with: ollama serve[/dim]")
+        status_str = "[dim]unavailable[/dim]"
+        details = ollama_msg if verbose >= 1 else "Not configured"
+    table.add_row("Ollama", status_str, details)
 
     # Check Google
-    console.print()
-    console.print("[bold]Checking Google AI Studio...[/bold]")
-    if check_google_available():
-        console.print("  [green]+ GOOGLE_API_KEY configured[/green]")
-        console.print(f"  [green]+ Default model: {settings.google.model}[/green]")
+    google_status, google_msg = _check_provider_status("google", settings)
+    if google_status == ProviderStatus.READY:
+        status_str = "[green]ready[/green]"
+        details = f"Model: {settings.google.model}"
+    elif google_status == ProviderStatus.NOT_READY:
+        status_str = "[yellow]not ready[/yellow]"
+        details = google_msg
     else:
-        console.print("  [yellow]- GOOGLE_API_KEY not set[/yellow]")
-        console.print("    [dim]Set with: export GOOGLE_API_KEY='your-key'[/dim]")
+        status_str = "[dim]unavailable[/dim]"
+        details = google_msg if verbose >= 1 else "GOOGLE_API_KEY not set"
+    table.add_row("Google AI", status_str, details)
 
     # Check OpenAI
-    console.print()
-    console.print("[bold]Checking OpenAI...[/bold]")
-    if os.getenv("OPENAI_API_KEY"):
-        console.print("  [green]+ OPENAI_API_KEY configured[/green]")
-        console.print(f"  [green]+ Default model: {settings.openai.model}[/green]")
+    openai_status, openai_msg = _check_provider_status("openai", settings)
+    if openai_status == ProviderStatus.READY:
+        status_str = "[green]ready[/green]"
+        details = f"Model: {settings.openai.model}"
+    elif openai_status == ProviderStatus.NOT_READY:
+        status_str = "[yellow]not ready[/yellow]"
+        details = openai_msg
     else:
-        console.print("  [yellow]- OPENAI_API_KEY not set[/yellow]")
-        console.print("    [dim]Set with: export OPENAI_API_KEY='your-key'[/dim]")
+        status_str = "[dim]unavailable[/dim]"
+        details = openai_msg if verbose >= 1 else "OPENAI_API_KEY not set"
+    table.add_row("OpenAI", status_str, details)
+
+    console.print(table)
+    console.print()
 
     # Check roles
-    console.print()
     console.print("[bold]Checking roles...[/bold]")
     try:
         from questfoundry.generated.roles import ALL_ROLES
 
         console.print(f"  [green]+ {len(ALL_ROLES)} roles loaded[/green]")
-        for role_id, role in ALL_ROLES.items():
-            console.print(f"    - {role.abbr}: {role_id} ({role.archetype})")
+        if verbose >= 1:
+            for role_id, role in ALL_ROLES.items():
+                console.print(f"    - {role.abbr}: {role_id} ({role.archetype})")
     except ImportError as e:
         console.print(f"  [red]- Could not load roles: {e}[/red]")
 
@@ -370,8 +509,9 @@ def doctor() -> None:
 
         models_list = [Brief, CanonEntry, HookCard, Scene, GatecheckReport]
         console.print(f"  [green]+ {len(models_list)} artifact models available[/green]")
-        for m in models_list:
-            console.print(f"    - {m.__name__}")
+        if verbose >= 1:
+            for m in models_list:
+                console.print(f"    - {m.__name__}")
     except ImportError as e:
         console.print(f"  [red]- Could not load models: {e}[/red]")
 
@@ -379,7 +519,18 @@ def doctor() -> None:
 
 
 @app.command()
-def roles() -> None:
+def roles(
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Show more details",
+            rich_help_panel=PANEL_OUTPUT,
+        ),
+    ] = 0,
+) -> None:
     """List available specialist roles."""
     try:
         from questfoundry.generated.roles import ALL_ROLES
@@ -389,9 +540,14 @@ def roles() -> None:
         table.add_column("Role ID", style="bold")
         table.add_column("Archetype")
         table.add_column("Mandate", max_width=50)
+        if verbose >= 1:
+            table.add_column("Agency")
 
         for role_id, role in ALL_ROLES.items():
-            table.add_row(role.abbr, role_id, role.archetype, role.mandate)
+            row = [role.abbr, role_id, role.archetype, role.mandate]
+            if verbose >= 1:
+                row.append(str(role.agency.value) if hasattr(role.agency, "value") else str(role.agency))
+            table.add_row(*row)
 
         console.print(table)
     except ImportError as e:
