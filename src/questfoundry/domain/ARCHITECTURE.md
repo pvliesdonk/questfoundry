@@ -892,6 +892,38 @@ When writing v3 domain files, consult:
 - canon_commit, character_arc, timeline_build, world_expand
 - plot_refine, quality_gate
 
+### Phase 8: Advanced Role Configuration (Roadmap)
+
+Future enhancements for role-specific LLM configuration:
+
+- [ ] Different model temperatures per role (e.g., lower for GK, higher for NR)
+- [ ] Different models per role (e.g., GPT-4o for SR, GPT-4o-mini for specialists)
+- [ ] Different providers per role (e.g., OpenAI for SR, Ollama for specialists)
+
+**Proposed Configuration Schema:**
+
+```yaml
+roles:
+  showrunner:
+    provider: openai
+    model: gpt-4o
+    temperature: 0.3
+  narrator:
+    provider: ollama
+    model: qwen3:8b
+    temperature: 0.9
+  gatekeeper:
+    provider: google
+    model: gemini-2.0-flash
+    temperature: 0.1
+```
+
+This allows:
+
+- Cost optimization (expensive models for orchestration, cheap for validation)
+- Creative variation (high temperature for narrative, low for quality checks)
+- Provider redundancy (fallback across providers)
+
 ### Status Summary
 
 | Component | Status | Notes |
@@ -901,9 +933,11 @@ When writing v3 domain files, consult:
 | Tool Calling | ✅ Complete | Ollama, Google, OpenAI |
 | Artifacts | 🟡 Partial | 5/20+ migrated |
 | Loops | 🟡 Partial | 1/12 migrated |
-| CLI | ✅ Complete | `qf ask/doctor/config/roles` |
+| CLI | ✅ Complete | `qf ask/doctor/config/roles` with -v flags |
+| Logging | ✅ Complete | Rich console + structured JSONL |
 | Tests | ✅ Complete | Integration + unit tests |
 | Persistence | ⬜ Not Started | Checkpointing deferred |
+| Role Config | ⬜ Roadmap | Per-role model/provider/temp |
 
 ---
 
