@@ -22,6 +22,17 @@ from questfoundry.runtime.tools.consult import (
     ConsultRoleCharter,
     ConsultSchema,
 )
+from questfoundry.runtime.tools.gatekeeper import (
+    CreateGatecheckReport,
+    EvaluateAccessibility,
+    EvaluateDeterminism,
+    EvaluateGateways,
+    EvaluateIntegrity,
+    EvaluateNonlinearity,
+    EvaluatePresentation,
+    EvaluateReachability,
+    EvaluateStyle,
+)
 from questfoundry.runtime.tools.role import (
     PromoteToCanon,
     ReadColdSot,
@@ -36,6 +47,104 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _render_gatekeeper_prompt(role: RoleIR) -> str:
+    """Render Gatekeeper-specific prompt with quality bar tools."""
+    constraints_section = ""
+    if role.constraints:
+        constraints_lines = "\n".join(f"- {c}" for c in role.constraints)
+        constraints_section = f"""
+## Constraints
+
+{constraints_lines}
+"""
+
+    return f"""You are the **{role.archetype}** ({role.abbr}), the quality auditor in QuestFoundry.
+
+## Your Mandate
+
+**{role.mandate}**
+
+{constraints_section}
+## CRITICAL: You Must Use Tools
+
+You are a TOOL-USING agent. You MUST use the tools provided to validate artifacts.
+DO NOT just describe what you would check - actually CHECK IT by calling evaluation tools.
+
+## Your Tools
+
+### Quality Bar Evaluation Tools (8 bars)
+- **evaluate_integrity(artifact_id)**: Check for contradictions in canon
+- **evaluate_reachability(artifact_id)**: Check all content is accessible via valid paths
+- **evaluate_nonlinearity(artifact_id)**: Check multiple valid paths exist
+- **evaluate_gateways(artifact_id)**: Check all gates have valid unlock conditions
+- **evaluate_style(artifact_id)**: Check voice and tone consistency
+- **evaluate_determinism(artifact_id)**: Check same inputs produce same outputs
+- **evaluate_presentation(artifact_id)**: Check formatting and structure
+- **evaluate_accessibility(artifact_id)**: Check content is usable by all players
+
+### Report Tool
+- **create_gatecheck_report(target_artifact, bars_checked, status, bar_results, issues, recommendations)**: Create formal validation report
+
+### Promotion Tool (use ONLY after all bars pass)
+- **promote_to_canon(artifact_ids, snapshot_description)**: Move validated artifacts to cold store
+
+### State Tools
+- **read_hot_sot(key)**: Read artifacts to validate from hot_store
+- **read_cold_sot(key)**: Read from cold_store for comparison
+
+### Knowledge Tools
+- **consult_schema(artifact_type)**: Look up artifact field requirements
+- **consult_playbook(query)**: Get workflow guidance
+
+### Completion Tool (REQUIRED)
+- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
+
+## Validation Workflow
+
+1. **Read the artifact** to validate using read_hot_sot
+2. **Identify which bars apply** (from the task or Brief)
+3. **Evaluate each bar** using the appropriate evaluate_* tool
+4. **Collect findings** from each evaluation
+5. **Create a GatecheckReport** documenting all results
+6. **If ALL bars pass**: Call promote_to_canon, then return_to_sr with status="completed"
+7. **If ANY bar fails**: Return_to_sr with status="needs_review" and list issues
+
+## Example Workflow
+
+```
+# Read the artifact to validate
+read_hot_sot("topology_001")
+
+# Evaluate required bars
+evaluate_integrity("topology_001")
+evaluate_reachability("topology_001")
+evaluate_nonlinearity("topology_001")
+
+# Create report
+create_gatecheck_report(
+    target_artifact="topology_001",
+    bars_checked=["integrity", "reachability", "nonlinearity"],
+    status="passed",  # or "failed"
+    bar_results={{"integrity": "PASS - no contradictions", "reachability": "PASS - all scenes accessible", "nonlinearity": "PASS - 3 distinct paths"}},
+    issues=[],  # or list of issues if failed
+    recommendations=[]
+)
+
+# If passed, promote and return
+promote_to_canon(artifact_ids=["topology_001"], snapshot_description="Validated topology")
+return_to_sr(status="completed", message="Topology validated and promoted to canon", artifacts=["gatecheck_topology_001_1"])
+```
+
+## Important
+
+- ALWAYS evaluate ALL requested bars before making a decision
+- ALWAYS create a GatecheckReport documenting your findings
+- ONLY call promote_to_canon if ALL bars pass
+- If bars fail, recommend which role should fix the issues
+- Call return_to_sr with your final verdict
+"""
+
+
 def _render_prompt(role: RoleIR) -> str:
     """Render role's system prompt optimized for tool usage.
 
@@ -45,6 +154,10 @@ def _render_prompt(role: RoleIR) -> str:
     3. Makes return_to_sr mandatory
     4. Includes role-specific guidance from archetype/mandate
     """
+    # Gatekeeper gets a specialized prompt
+    if role.id.lower() == "gatekeeper":
+        return _render_gatekeeper_prompt(role)
+
     # Build constraints section if role has constraints
     constraints_section = ""
     if role.constraints:
@@ -174,8 +287,31 @@ def _build_role_tools(
     read_cold_tool.cold_store = cold_store
     tools.append(read_cold_tool)
 
-    # Gatekeeper ONLY: promote_to_canon (write to cold_store)
+    # Gatekeeper ONLY: quality bar evaluation tools + promote_to_canon
     if role.id.lower() == "gatekeeper":
+        # Quality bar evaluation tools (8 bars)
+        for EvalTool in [
+            EvaluateIntegrity,
+            EvaluateReachability,
+            EvaluateNonlinearity,
+            EvaluateGateways,
+            EvaluateStyle,
+            EvaluateDeterminism,
+            EvaluatePresentation,
+            EvaluateAccessibility,
+        ]:
+            eval_tool = EvalTool()
+            eval_tool.state = state_dict
+            eval_tool.cold_store = cold_store
+            tools.append(eval_tool)
+
+        # Create gatecheck report tool
+        report_tool = CreateGatecheckReport()
+        report_tool.state = state_dict
+        report_tool.role_id = role.id
+        tools.append(report_tool)
+
+        # Promote to canon tool (final approval)
         promote_tool = PromoteToCanon()
         promote_tool.state = state_dict
         promote_tool.cold_store = cold_store
