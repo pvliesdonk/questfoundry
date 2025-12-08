@@ -5,9 +5,13 @@ The Showrunner role coordinates; roles return results via delegation pattern.
 
 Usage
 -----
+::
+
     qf ask "Create a mystery story"
     qf ask "Design a story topology" --trace
-    qf doctor  # Check system status
+    qf config show       # Show current configuration
+    qf config providers  # Check provider status
+    qf doctor            # Check system status
 """
 
 from __future__ import annotations
@@ -21,6 +25,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from questfoundry.runtime.cli.config_cmd import config_app
+from questfoundry.runtime.config import get_settings
+
 # Create Typer app
 app = typer.Typer(
     name="qf",
@@ -28,15 +35,21 @@ app = typer.Typer(
     add_completion=True,
 )
 
+# Register config subcommand
+app.add_typer(config_app, name="config")
+
 # Create Rich console for formatted output
 console = Console()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(levelname)s: %(message)s",
-)
-logger = logging.getLogger(__name__)
+
+def _setup_logging(debug: bool = False) -> None:
+    """Configure logging based on settings and debug flag."""
+    settings = get_settings()
+    level = "DEBUG" if debug else settings.logging.level
+    logging.basicConfig(
+        level=getattr(logging, level),
+        format="%(levelname)s: %(message)s",
+    )
 
 
 def _run_async(coro: Any) -> Any:
@@ -47,17 +60,16 @@ def _run_async(coro: Any) -> Any:
 @app.command()
 def ask(
     message: str = typer.Argument(..., help="Your request in natural language"),
-    trace: bool = typer.Option(
-        False, "--trace", "-t", help="Show detailed execution trace"
+    trace: bool = typer.Option(False, "--trace", "-t", help="Show detailed execution trace"),
+    provider: str | None = typer.Option(
+        None, "--provider", "-p", help="LLM provider: google, ollama, openai"
     ),
-    model: str = typer.Option(
-        "qwen3:8b", "--model", "-m", help="Ollama model to use"
+    model: str | None = typer.Option(None, "--model", "-m", help="Model name (provider-specific)"),
+    max_delegations: int | None = typer.Option(
+        None, "--max-delegations", "-d", help="Maximum delegations before termination"
     ),
-    base_url: str = typer.Option(
-        "http://localhost:11434", "--base-url", "-b", help="Ollama server URL"
-    ),
-    max_delegations: int = typer.Option(
-        20, "--max-delegations", "-d", help="Maximum delegations before termination"
+    project: str | None = typer.Option(
+        None, "--project", help="Project path for cold store (.qfproj file)"
     ),
 ) -> None:
     """Talk to the studio in natural language.
@@ -68,13 +80,31 @@ def ask(
     - Roles execute and return results
     - SR decides next steps or terminates
 
+    Configuration is loaded from:
+    1. CLI arguments (highest priority)
+    2. Environment variables (QF_* prefix)
+    3. .env file
+    4. questfoundry.yaml config file
+    5. Built-in defaults
+
     Examples:
         qf ask "Create a mystery story about a haunted lighthouse"
         qf ask "Design a 3-act story structure" --trace
-        qf ask "Create a story" --model llama3.1:8b
+        qf ask "Create a story" --provider google --model gemini-2.5-pro
+        qf ask "Create a story" --provider ollama --model qwen3:8b
     """
     try:
-        # Set logging level based on trace flag
+        _setup_logging(debug=trace)
+        settings = get_settings()
+
+        # Override settings with CLI arguments
+        if provider:
+            settings.llm.provider = provider  # type: ignore[assignment]
+        if model:
+            settings.llm.model = model
+
+        effective_max_delegations = max_delegations or settings.runtime.max_delegations
+
         if trace:
             logging.getLogger("questfoundry").setLevel(logging.DEBUG)
             console.print(
@@ -100,25 +130,59 @@ def ask(
         # Import runtime components
         from questfoundry.generated.roles import ALL_ROLES
         from questfoundry.runtime.orchestrator import Orchestrator
-        from questfoundry.runtime.providers.ollama import create_ollama_llm
+        from questfoundry.runtime.providers import create_llm_from_config
 
-        # Check Ollama availability
-        console.print("[dim]Checking Ollama connection...[/dim]")
-        from questfoundry.runtime.providers.ollama import check_ollama_available
+        # Check provider availability
+        effective_provider = settings.llm.provider
+        effective_model = settings.get_llm_model()
 
-        if not check_ollama_available(base_url):
-            console.print(f"[red]Error: Ollama not available at {base_url}[/red]")
-            console.print("[dim]Start Ollama with: ollama serve[/dim]")
-            raise typer.Exit(1)
-        console.print(f"[green]✓ Connected to Ollama at {base_url}[/green]")
+        console.print(f"[dim]Provider: {effective_provider}[/dim]")
+        console.print(f"[dim]Model: {effective_model}[/dim]")
 
-        # Create LLM and orchestrator
-        console.print(f"[dim]Using model: {model}[/dim]")
-        llm = create_ollama_llm(model=model, base_url=base_url)
+        if effective_provider == "ollama":
+            from questfoundry.runtime.providers import check_ollama_available
+
+            if not check_ollama_available(settings.ollama.host):
+                console.print(f"[red]Error: Ollama not available at {settings.ollama.host}[/red]")
+                console.print("[dim]Start Ollama with: ollama serve[/dim]")
+                raise typer.Exit(1)
+            console.print("[green]+ Connected to Ollama[/green]")
+
+        elif effective_provider == "google":
+            from questfoundry.runtime.providers import check_google_available
+
+            if not check_google_available():
+                console.print("[red]Error: GOOGLE_API_KEY not set[/red]")
+                console.print("[dim]Set with: export GOOGLE_API_KEY='your-key'[/dim]")
+                raise typer.Exit(1)
+            console.print("[green]+ Google AI Studio configured[/green]")
+
+        elif effective_provider == "openai":
+            import os
+
+            if not os.getenv("OPENAI_API_KEY"):
+                console.print("[red]Error: OPENAI_API_KEY not set[/red]")
+                console.print("[dim]Set with: export OPENAI_API_KEY='your-key'[/dim]")
+                raise typer.Exit(1)
+            console.print("[green]+ OpenAI configured[/green]")
+
+        # Create LLM from configuration
+        llm = create_llm_from_config(settings)
+
+        # Set up cold store if project specified
+        cold_store = None
+        if project:
+            from questfoundry.runtime.cold_store import get_cold_store
+
+            cold_store = get_cold_store(project)
+            console.print(f"[green]+ Cold store: {project}[/green]")
+
+        # Create orchestrator
         orchestrator = Orchestrator(
             roles=ALL_ROLES,
             llm=llm,
-            max_delegations=max_delegations,
+            max_delegations=effective_max_delegations,
+            cold_store=cold_store,
         )
 
         # Run the workflow
@@ -219,38 +283,66 @@ def doctor() -> None:
     """Check system status and configuration.
 
     Verifies:
-    - Ollama availability
-    - Available models
+    - Provider availability (Ollama, Google, OpenAI)
+    - Configuration
     - Role definitions
     - Generated models
     """
+    import os
+
+    from questfoundry.runtime.providers import (
+        check_google_available,
+        check_ollama_available,
+        list_ollama_models,
+    )
+
+    settings = get_settings()
+
     console.print("[bold]QuestFoundry Doctor[/bold]\n")
+
+    # Show active configuration
+    console.print("[bold]Configuration:[/bold]")
+    console.print(f"  Provider: [cyan]{settings.llm.provider}[/cyan]")
+    console.print(f"  Model: [cyan]{settings.get_llm_model()}[/cyan]")
+    console.print(f"  Temperature: {settings.llm.temperature}")
+    console.print()
 
     # Check Ollama
     console.print("[bold]Checking Ollama...[/bold]")
-    try:
-        from questfoundry.runtime.providers.ollama import (
-            DEFAULT_BASE_URL,
-            check_ollama_available,
-            list_ollama_models,
-        )
-
-        if check_ollama_available(DEFAULT_BASE_URL):
-            console.print(f"  [green]✓ Ollama available at {DEFAULT_BASE_URL}[/green]")
-            models = list_ollama_models(DEFAULT_BASE_URL)
-            if models:
-                console.print(f"  [green]✓ {len(models)} models available[/green]")
-                for model in models[:5]:
-                    console.print(f"    - {model}")
-                if len(models) > 5:
-                    console.print(f"    [dim]... and {len(models) - 5} more[/dim]")
-            else:
-                console.print("  [yellow]⚠ No models found[/yellow]")
+    if check_ollama_available(settings.ollama.host):
+        console.print(f"  [green]+ Available at {settings.ollama.host}[/green]")
+        models = list_ollama_models(settings.ollama.host)
+        if models:
+            console.print(f"  [green]+ {len(models)} models available[/green]")
+            for m in models[:3]:
+                console.print(f"    - {m}")
+            if len(models) > 3:
+                console.print(f"    [dim]... and {len(models) - 3} more[/dim]")
         else:
-            console.print(f"  [red]✗ Ollama not available at {DEFAULT_BASE_URL}[/red]")
-            console.print("    [dim]Start with: ollama serve[/dim]")
-    except Exception as e:
-        console.print(f"  [red]✗ Error checking Ollama: {e}[/red]")
+            console.print("  [yellow]! No models found[/yellow]")
+    else:
+        console.print(f"  [red]- Not available at {settings.ollama.host}[/red]")
+        console.print("    [dim]Start with: ollama serve[/dim]")
+
+    # Check Google
+    console.print()
+    console.print("[bold]Checking Google AI Studio...[/bold]")
+    if check_google_available():
+        console.print("  [green]+ GOOGLE_API_KEY configured[/green]")
+        console.print(f"  [green]+ Default model: {settings.google.model}[/green]")
+    else:
+        console.print("  [yellow]- GOOGLE_API_KEY not set[/yellow]")
+        console.print("    [dim]Set with: export GOOGLE_API_KEY='your-key'[/dim]")
+
+    # Check OpenAI
+    console.print()
+    console.print("[bold]Checking OpenAI...[/bold]")
+    if os.getenv("OPENAI_API_KEY"):
+        console.print("  [green]+ OPENAI_API_KEY configured[/green]")
+        console.print(f"  [green]+ Default model: {settings.openai.model}[/green]")
+    else:
+        console.print("  [yellow]- OPENAI_API_KEY not set[/yellow]")
+        console.print("    [dim]Set with: export OPENAI_API_KEY='your-key'[/dim]")
 
     # Check roles
     console.print()
@@ -258,11 +350,11 @@ def doctor() -> None:
     try:
         from questfoundry.generated.roles import ALL_ROLES
 
-        console.print(f"  [green]✓ {len(ALL_ROLES)} roles loaded[/green]")
+        console.print(f"  [green]+ {len(ALL_ROLES)} roles loaded[/green]")
         for role_id, role in ALL_ROLES.items():
             console.print(f"    - {role.abbr}: {role_id} ({role.archetype})")
     except ImportError as e:
-        console.print(f"  [red]✗ Could not load roles: {e}[/red]")
+        console.print(f"  [red]- Could not load roles: {e}[/red]")
 
     # Check generated models
     console.print()
@@ -276,12 +368,12 @@ def doctor() -> None:
             Scene,
         )
 
-        models = [Brief, CanonEntry, HookCard, Scene, GatecheckReport]
-        console.print(f"  [green]✓ {len(models)} artifact models available[/green]")
-        for model in models:
-            console.print(f"    - {model.__name__}")
+        models_list = [Brief, CanonEntry, HookCard, Scene, GatecheckReport]
+        console.print(f"  [green]+ {len(models_list)} artifact models available[/green]")
+        for m in models_list:
+            console.print(f"    - {m.__name__}")
     except ImportError as e:
-        console.print(f"  [red]✗ Could not load models: {e}[/red]")
+        console.print(f"  [red]- Could not load models: {e}[/red]")
 
     console.print()
 
@@ -305,6 +397,24 @@ def roles() -> None:
     except ImportError as e:
         console.print(f"[red]Error loading roles: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+@app.command()
+def version() -> None:
+    """Show version information."""
+    settings = get_settings()
+
+    console.print("[bold]QuestFoundry Runtime[/bold]")
+    console.print("Version: 3.0.0-alpha.1")
+    console.print("Architecture: SR-Orchestrated Hub-and-Spoke")
+    console.print()
+    console.print(f"Provider: {settings.llm.provider}")
+    console.print(f"Model: {settings.get_llm_model()}")
+    console.print()
+    console.print("Usage:")
+    console.print('  qf ask "your request in natural language"')
+    console.print("  qf config show     # Show configuration")
+    console.print("  qf doctor          # Check system status")
 
 
 def main() -> None:
