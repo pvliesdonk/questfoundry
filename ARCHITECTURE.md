@@ -421,6 +421,15 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 - [x] Add remaining asset artifacts.
 - [x] Create glossary.md with essential terms.
 
+### Phase 6: Runtime Polish
+
+*Goal: Production-ready runtime.*
+
+- [ ] Streaming LLM output
+- [ ] State persistence/checkpointing
+- [ ] CLI `qf run` integration
+- [ ] End-to-end multi-role delegation tests
+
 ---
 
 ## Appendix A: File Naming Conventions
