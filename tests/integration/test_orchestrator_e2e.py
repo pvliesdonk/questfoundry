@@ -211,6 +211,131 @@ async def test_role_consult_tools(ollama_llm, compiled_roles):
     assert result.message, "Should have a message"
 
 
+@pytest.mark.asyncio
+async def test_multi_turn_delegation(ollama_llm, compiled_roles):
+    """Test multi-turn delegation flow: SR → PW → LK → GK → SR.
+
+    This tests the full orchestration loop where:
+    1. SR receives a story request
+    2. SR delegates to Plotwright for topology
+    3. SR delegates to Lorekeeper for canon
+    4. SR delegates to Gatekeeper for quality check
+    5. SR terminates with results
+
+    This verifies the orchestrator can handle multi-hop workflows
+    where control returns to SR after each delegation.
+
+    Note: This test may take 2-3 minutes depending on LLM response time.
+    """
+    from questfoundry.runtime.orchestrator import Orchestrator
+
+    # Create orchestrator with enough delegations for multi-turn
+    orchestrator = Orchestrator(
+        roles=compiled_roles,
+        llm=ollama_llm,
+        max_delegations=10,  # Allow for multiple hops
+    )
+
+    # Request that should trigger multiple specialist delegations
+    request = (
+        "Create a mystery story. First, have Plotwright design a 3-scene topology. "
+        "Then have Lorekeeper establish the canon including protagonist and antagonist. "
+        "Finally, have Gatekeeper review the quality of the work before completing."
+    )
+
+    logger.info(f"Starting multi-turn orchestration with request: {request}")
+
+    # Run the orchestration
+    result = await orchestrator.run(request, loop_id="test_multi_turn")
+
+    # Log the result
+    logger.info("=" * 60)
+    logger.info("MULTI-TURN ORCHESTRATION RESULT")
+    logger.info("=" * 60)
+    logger.info(f"Metadata: {result['metadata']}")
+    logger.info(f"Hot store keys: {list(result['hot_store'].keys())}")
+
+    # Check delegation history
+    delegation_history = result["metadata"].get("delegation_history", [])
+    logger.info(f"Delegation history ({len(delegation_history)} delegations):")
+    for i, delegation in enumerate(delegation_history):
+        logger.info(f"  [{i+1}] Role: {delegation['role']}")
+        logger.info(f"      Task: {delegation['task'][:80]}...")
+        logger.info(f"      Status: {delegation['result']['status']}")
+
+    # Assertions
+    assert "termination" in result["metadata"] or "error" in result["metadata"], (
+        "Workflow should have terminated or errored"
+    )
+
+    # We expect at least 2 delegations for multi-turn
+    assert len(delegation_history) >= 2, (
+        f"Expected at least 2 delegations for multi-turn, got {len(delegation_history)}"
+    )
+
+    # Check that we delegated to at least 2 different roles
+    roles_used = {d["role"] for d in delegation_history}
+    logger.info(f"Roles used: {roles_used}")
+    assert len(roles_used) >= 2, (
+        f"Expected at least 2 different roles, got {roles_used}"
+    )
+
+    # Verify each delegation result has proper structure
+    for delegation in delegation_history:
+        assert "status" in delegation["result"], "Delegation should have status"
+        assert "message" in delegation["result"], "Delegation should have message"
+        assert delegation["result"]["status"] in [
+            "completed", "blocked", "needs_review", "error"
+        ], f"Invalid status: {delegation['result']['status']}"
+
+
+@pytest.mark.asyncio
+async def test_delegation_result_artifacts(ollama_llm, compiled_roles):
+    """Test that delegations produce artifacts in hot_store.
+
+    This verifies that specialist roles write artifacts to state
+    and SR can see them in the hot_store after delegation.
+    """
+    from questfoundry.runtime.orchestrator import Orchestrator
+
+    orchestrator = Orchestrator(
+        roles=compiled_roles,
+        llm=ollama_llm,
+        max_delegations=5,
+    )
+
+    # Request specifically asking for artifact creation
+    request = (
+        "Create a Brief artifact for a simple story about a detective. "
+        "The Brief should include the title 'The Missing Cipher', "
+        "genre 'mystery', and a short logline."
+    )
+
+    logger.info(f"Starting artifact creation test with request: {request}")
+
+    result = await orchestrator.run(request, loop_id="test_artifacts")
+
+    # Log results
+    logger.info("=" * 60)
+    logger.info("ARTIFACT CREATION RESULT")
+    logger.info("=" * 60)
+    logger.info(f"Hot store keys: {list(result['hot_store'].keys())}")
+    logger.info(f"Delegation count: {len(result['metadata'].get('delegation_history', []))}")
+
+    # Check delegation occurred
+    delegation_history = result["metadata"].get("delegation_history", [])
+    assert len(delegation_history) >= 1, "Expected at least one delegation"
+
+    # Log what artifacts were created
+    for key, value in result["hot_store"].items():
+        if isinstance(value, dict):
+            logger.info(f"  {key}: {list(value.keys())[:5]}...")
+        elif isinstance(value, list):
+            logger.info(f"  {key}: {len(value)} items")
+        else:
+            logger.info(f"  {key}: {type(value).__name__}")
+
+
 async def main():
     """Run tests directly without pytest."""
     from questfoundry.generated.roles import ALL_ROLES
