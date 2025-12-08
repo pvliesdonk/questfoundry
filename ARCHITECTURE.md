@@ -330,17 +330,17 @@ This section tracks the migration of v2 content into the v3 Hybrid structure. It
 **1. Principles (New Directory)**
 Create `domain/principles/` and migrate:
 
-- [ ] `SPOILER_HYGIENE.md` (Gatekeeper requires this to audit safety)
-- [ ] `PN_PRINCIPLES.md` (Narrator requires this to run the game)
-- [ ] `SOURCES_OF_TRUTH.md` (Defines what "Canon" actually means)
+- [x] `SPOILER_HYGIENE.md` (Gatekeeper requires this to audit safety)
+- [x] `PN_PRINCIPLES.md` (Narrator requires this to run the game)
+- [x] `SOURCES_OF_TRUTH.md` (Defines what "Canon" actually means)
 
 **2. Operational Playbooks (New Directory)**
 Create `domain/playbooks/` for meta-processes:
 
-- [ ] `gate_failure.md` (How SR recovers when blocked by GK)
-- [ ] `emergency_retcon.md` (How to rewrite cold canon safely)
-- [ ] `role_stuck.md` (Agent reset procedure)
-- [ ] `world_genesis.md` (Project setup)
+- [x] `gate_failure.md` (How SR recovers when blocked by GK)
+- [x] `emergency_retcon.md` (How to rewrite cold canon safely)
+- [x] `role_stuck.md` (Agent reset procedure)
+- [x] `world_genesis.md` (Project setup)
 
 ### 12.3 Priority 2: High (Backlog - Standard Content)
 
@@ -402,8 +402,8 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 
 *Goal: System safety and recovery.*
 
-- [ ] Populate `domain/principles/` with Spoiler Hygiene & PN Principles.
-- [ ] Populate `domain/playbooks/` with Emergency Retcon & Gate Failure.
+- [x] Populate `domain/principles/` with Spoiler Hygiene & PN Principles.
+- [x] Populate `domain/playbooks/` with Emergency Retcon & Gate Failure.
 - [ ] Update Gatekeeper quality bars to reference these new principles.
 
 ### Phase 4: Standard Migration (Executing Priority 2)
