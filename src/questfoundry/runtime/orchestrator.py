@@ -55,6 +55,7 @@ from questfoundry.runtime.tools.consult import (
     ConsultSchema,
 )
 from questfoundry.runtime.tools.sr import DelegateTo, ReadArtifact, Terminate, WriteArtifact
+from questfoundry.runtime.tracing import TracedSRTurn, configure_tracing, trace_orchestrator_run
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +224,7 @@ class Orchestrator:
         self.max_delegations = max_delegations
         self.cold_store = cold_store
 
+    @trace_orchestrator_run
     async def run(
         self,
         request: str,
@@ -242,6 +244,9 @@ class Orchestrator:
         StudioState
             Final state after workflow completion.
         """
+        # Configure tracing (sets project name if not set)
+        configure_tracing()
+
         # Create initial state
         state = create_initial_state(loop_id, request)
 
@@ -263,18 +268,21 @@ class Orchestrator:
             stop_tools=["delegate_to"],  # Stop when SR delegates so we can execute it
         )
 
-        # Track delegations
+        # Track delegations and turns
         delegation_count = 0
+        sr_turn = 0
         delegation_history: list[dict[str, Any]] = []
 
         # Initial prompt to SR
         sr_prompt_msg = f"New request: {request}"
 
         while delegation_count < self.max_delegations:
-            logger.info(f"SR iteration, delegations so far: {delegation_count}")
+            sr_turn += 1
+            logger.info(f"SR turn {sr_turn}, delegations so far: {delegation_count}")
 
-            # Run SR until it calls delegate_to or terminate
-            sr_result = await sr_executor.run(sr_prompt_msg)
+            # Run SR until it calls delegate_to or terminate (traced)
+            async with TracedSRTurn(turn=sr_turn, delegation_count=delegation_count, prompt=sr_prompt_msg):
+                sr_result = await sr_executor.run(sr_prompt_msg)
 
             if not sr_result.success:
                 # SR execution failed

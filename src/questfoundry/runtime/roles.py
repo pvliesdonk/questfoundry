@@ -40,6 +40,7 @@ from questfoundry.runtime.tools.role import (
     ReturnToSR,
     WriteHotSot,
 )
+from questfoundry.runtime.tracing import trace_role_execution
 
 if TYPE_CHECKING:
     from questfoundry.runtime.cold_store import ColdStore
@@ -381,6 +382,7 @@ class RoleAgent:
             system_prompt=self.system_prompt,
         )
 
+    @trace_role_execution
     async def execute(self, task: str) -> DelegationResult:
         """Execute a task and return result to SR.
 
