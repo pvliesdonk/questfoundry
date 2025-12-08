@@ -254,8 +254,15 @@ class Orchestrator:
         # Create initial state
         state = create_initial_state(loop_id, request)
 
-        # Create role agent pool with cold_store access
-        role_pool = RoleAgentPool(self.roles, self.llm, state, self.cold_store)
+        # Create role agent pool with cold_store access and streaming
+        role_pool = RoleAgentPool(
+            self.roles,
+            self.llm,
+            state,
+            self.cold_store,
+            stream=self.stream,
+            callbacks=self.callbacks,
+        )
 
         # Build SR tools and prompt
         sr_tools = _build_sr_tools(state)
@@ -345,8 +352,12 @@ class Orchestrator:
                 )
                 continue
 
-            # Execute role
+            # Execute role (update callbacks to show current role)
+            if self.callbacks and hasattr(self.callbacks, "set_role"):
+                self.callbacks.set_role(role_id.upper())
             delegation_result = await agent.execute(task)
+            if self.callbacks and hasattr(self.callbacks, "set_role"):
+                self.callbacks.set_role("SR")
 
             # Record in history
             delegation_history.append(

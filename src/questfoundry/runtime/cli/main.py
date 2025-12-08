@@ -66,31 +66,61 @@ console = Console()
 
 
 class StreamingCallbacks:
-    """Callbacks for streaming LLM output to the console."""
+    """Callbacks for streaming LLM output to the console.
 
-    def __init__(self, console: Console, live: Live | None = None):
+    Parameters
+    ----------
+    console : Console
+        Rich console for output.
+    live : Live | None
+        Rich Live context for real-time updates.
+    verbose : bool
+        If True, show full tool inputs/outputs. If False, show minimal info.
+    """
+
+    def __init__(
+        self, console: Console, live: Live | None = None, verbose: bool = False
+    ):
         self.console = console
         self.live = live
+        self.verbose = verbose
         self._buffer = ""
         self._current_text = Text()
+        self._current_role = "SR"  # Track which agent is running
+
+    def set_role(self, role: str) -> None:
+        """Set the current role for display purposes."""
+        self._current_role = role
 
     def on_llm_start(self, iteration: int) -> None:
         """Called when LLM inference begins."""
         if self.live:
             self._buffer = ""
             self._current_text = Text()
-            self._current_text.append(f"[dim]Turn {iteration}:[/dim] ", style="dim")
+            self._current_text.append(f"Turn {iteration}: ", style="dim")
 
     def on_llm_token(self, token: str) -> None:
         """Called for each streamed token."""
         if self.live:
             self._buffer += token
             self._current_text.append(token)
-            self.live.update(Panel(self._current_text, title="SR Thinking", border_style="cyan"))
+            title = f"{self._current_role} Thinking"
+            self.live.update(
+                Panel(self._current_text, title=title, border_style="cyan")
+            )
 
-    def on_llm_end(self, iteration: int, has_tool_calls: bool) -> None:
+    def on_llm_end(self, _iteration: int, _has_tool_calls: bool) -> None:
         """Called when LLM inference completes."""
-        pass
+        if self.live and self.verbose and self._buffer:
+            # Print the full LLM response before moving on
+            self.console.print()
+            self.console.print(
+                Panel(
+                    self._buffer[:2000] + ("..." if len(self._buffer) > 2000 else ""),
+                    title=f"[cyan]{self._current_role} Response[/cyan]",
+                    border_style="dim cyan",
+                )
+            )
 
     def on_tool_start(self, tool_name: str, args: dict[str, Any]) -> None:
         """Called before tool execution."""
@@ -98,23 +128,55 @@ class StreamingCallbacks:
             self._current_text = Text()
             self._current_text.append("→ ", style="yellow")
             self._current_text.append(tool_name, style="yellow bold")
-            if args:
-                # Show first arg as preview
+
+            if self.verbose and args:
+                # Show full arguments formatted
+                self._current_text.append("\n\n", style="")
+                for key, value in args.items():
+                    self._current_text.append(f"  {key}: ", style="bold")
+                    value_str = str(value)
+                    if len(value_str) > 200:
+                        value_str = value_str[:200] + "..."
+                    self._current_text.append(f"{value_str}\n", style="dim")
+            elif args:
+                # Minimal: show first arg as preview
                 preview = str(list(args.values())[0])[:50]
                 self._current_text.append(f" {preview}...", style="dim")
-            self.live.update(Panel(self._current_text, title="Tool Call", border_style="yellow"))
+
+            self.live.update(
+                Panel(self._current_text, title="Tool Call", border_style="yellow")
+            )
 
     def on_tool_end(self, tool_name: str, result: str, success: bool) -> None:
         """Called after tool execution."""
-        pass
+        if self.live and self.verbose:
+            # Show tool result
+            status = "[green]✓[/green]" if success else "[red]✗[/red]"
+            result_preview = result[:500] if len(result) <= 500 else result[:500] + "..."
+
+            self._current_text = Text()
+            self._current_text.append(f"{status} ", style="")
+            self._current_text.append(tool_name, style="bold")
+            self._current_text.append("\n\n", style="")
+            self._current_text.append(result_preview, style="dim")
+
+            self.live.update(
+                Panel(
+                    self._current_text,
+                    title="Tool Result",
+                    border_style="green" if success else "red",
+                )
+            )
 
     def on_error(self, error: str) -> None:
         """Called when an error occurs."""
         self.console.print(f"[red]Error: {error}[/red]")
 
-    def on_done(self, tool_name: str, result: dict[str, Any]) -> None:
+    def on_done(self, tool_name: str, _result: dict[str, Any]) -> None:
         """Called when execution completes."""
-        pass
+        if self.verbose:
+            self.console.print()
+            self.console.print(f"[green]✓ {tool_name} completed[/green]")
 
 
 def _verbose_callback(value: int) -> int:
@@ -296,11 +358,14 @@ def ask(
             console.print(f"[green]+ Cold store: {project}[/green]")
 
         # Set up streaming callbacks if requested
+        # verbose >= 2 (-vv) enables detailed streaming output
         callbacks = None
         live_context = None
         if stream:
             live_context = Live(console=console, refresh_per_second=10)
-            callbacks = StreamingCallbacks(console, live_context)
+            callbacks = StreamingCallbacks(
+                console, live_context, verbose=(verbose >= 2)
+            )
 
         # Create orchestrator
         orchestrator = Orchestrator(

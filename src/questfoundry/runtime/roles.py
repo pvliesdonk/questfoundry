@@ -382,11 +382,15 @@ class RoleAgent:
         llm: BaseChatModel,
         state: StudioState,
         cold_store: ColdStore | None = None,
+        stream: bool = False,
+        callbacks: Any = None,
     ):
         self.role = role
         self.llm = llm
         self.state = state
         self.cold_store = cold_store
+        self.stream = stream
+        self.callbacks = callbacks
 
         # Build tools and prompt (cold_store passed for all roles)
         self.tools = _build_role_tools(role, state, cold_store)
@@ -398,6 +402,8 @@ class RoleAgent:
             tools=self.tools,
             done_tool_name="return_to_sr",
             system_prompt=self.system_prompt,
+            stream=stream,
+            callbacks=callbacks,
         )
 
     @trace_role_execution
@@ -465,6 +471,10 @@ class RoleAgentPool:
         Shared state.
     cold_store : ColdStore | None, optional
         SQLite-based Cold Store for persistent canon. Defaults to None.
+    stream : bool
+        Whether to enable streaming for role agents.
+    callbacks : Any
+        Streaming callbacks for progress updates.
     """
 
     def __init__(
@@ -473,11 +483,15 @@ class RoleAgentPool:
         llm: BaseChatModel,
         state: StudioState,
         cold_store: ColdStore | None = None,
+        stream: bool = False,
+        callbacks: Any = None,
     ):
         self.roles = roles
         self.llm = llm
         self.state = state
         self.cold_store = cold_store
+        self.stream = stream
+        self.callbacks = callbacks
         self._agents: dict[str, RoleAgent] = {}
 
     def get_agent(self, role_id: str) -> RoleAgent | None:
@@ -503,6 +517,8 @@ class RoleAgentPool:
                 llm=self.llm,
                 state=self.state,
                 cold_store=self.cold_store,
+                stream=self.stream,
+                callbacks=self.callbacks,
             )
 
         return self._agents[role_id]
