@@ -24,9 +24,15 @@ src/questfoundry/
 └── runtime/        # LangGraph engine
 ```
 
+## Architecture Reference
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full v3 design.
+
+**Maintenance task:** Keep ARCHITECTURE.md up-to-date when making architectural changes.
+
 ## Before You Work
 
-1. Read `src/questfoundry/domain/ARCHITECTURE.md` for the full v3 design
+1. Read `ARCHITECTURE.md` for the full v3 design
 2. Check `_archive/` for v2 reference material if needed
 3. Never edit files in `generated/`
 
@@ -83,4 +89,4 @@ Domain files use custom directives. Key types:
 - `{artifact-type}`, `{artifact-field}`, `{enum-type}`
 - `{intent-type}`, `{routing-rule}`, `{quality-bar}`
 
-See `ARCHITECTURE.md` for full directive vocabulary.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for full directive vocabulary.

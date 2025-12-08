@@ -38,9 +38,15 @@ src/questfoundry/
 - **Cold**: Player-facing, canon (cold_store)
 - **Rule**: Never leak Hot details into Cold
 
+## Architecture Reference
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full v3 design.
+
+**Maintenance task:** Keep ARCHITECTURE.md up-to-date when making architectural changes.
+
 ## Non-Negotiables
 
-- Read `src/questfoundry/domain/ARCHITECTURE.md` before making significant changes
+- Read `ARCHITECTURE.md` before making significant changes
 - Use repo-standard tooling: `uv` for Python workflows, `pre-commit`
 - Run `pre-commit run --all-files` before handing work back
 - No "fluff" files: create only files with a clear, maintained purpose
