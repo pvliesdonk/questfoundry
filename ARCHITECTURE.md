@@ -12,10 +12,17 @@ QuestFoundry v3 replaces the layered specification model (L0-L5) with an **Integ
 ### Core Principle
 
 ```
-MyST Source → Compiler → Generated Code → Runtime
-     ↑                                        |
-     └────────── Single Source of Truth ──────┘
+MyST Source ─┬─(Compile)─→ Generated Code (Strict Constraints)
+             │                       ↓
+             └─(Ingest)──→ Agent Runtime (Context & Heuristics)
+                                     │
+                        Single Source of Truth
 ```
+
+MyST files serve **two runtime purposes**:
+
+1. **Compiled** → Python code (role configs, artifact models, enums)
+2. **Ingested** → Agent context (decision heuristics, anti-patterns, prose)
 
 ### Key Changes from v2
 
@@ -66,8 +73,10 @@ This differs from static graph approaches (LangGraph, etc.) where edges are pred
 ```
 src/questfoundry/
 ├── domain/                 # MyST Source of Truth
-│   ├── roles/              # 8 role definitions
-│   ├── loops/              # Workflow guidance (heuristics for SR)
+│   ├── roles/              # 8 role definitions (Hybrid: Config + Handbook)
+│   ├── loops/              # Workflow guidance (Heuristics for SR)
+│   ├── principles/         # Core constraints (Spoiler Hygiene, PN Safety)
+│   ├── playbooks/          # Standard Operating Procedures (Recovery, etc.)
 │   ├── ontology/           # Data structures
 │   └── protocol/           # Communication rules
 │
@@ -230,11 +239,16 @@ All domain knowledge is encoded in MyST files using custom directives.
 
 ### 6.1 Role Directives (`domain/roles/*.md`)
 
-#### `{role-meta}`
+Role files are **Hybrid Documents**. They contain MyST directives for the runtime (compiled to code) interleaved with prose for the Agent's system prompt (RAG/Context) and human operators.
 
-Role identity and classification.
+#### Hybrid Structure Pattern
 
 ```markdown
+# Showrunner
+
+> **Mandate:** Manage by Exception. The Showrunner acts as the product owner,
+> orchestrating work across specialist roles without doing domain work directly.
+
 :::{role-meta}
 id: showrunner
 abbr: SR
@@ -242,49 +256,49 @@ archetype: Product Owner
 agency: high
 mandate: "Manage by Exception"
 :::
-```
 
-**Fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | yes | Unique role identifier |
-| `abbr` | string | yes | 2-letter abbreviation |
-| `archetype` | string | yes | Human-readable role type |
-| `agency` | enum | yes | `high`, `medium`, `low`, `zero` |
-| `mandate` | string | yes | One-line mission statement |
+## Operational Guidelines (Human & Agent Context)
 
-#### `{role-tools}`
+**Decision Heuristics:**
+- If a loop is stuck > 2 turns, intervene directly.
+- Prefer `delegate_to` over doing work yourself.
+- When in doubt, ask Gatekeeper for a quality check.
 
-Tools available to this role.
+**Anti-Patterns:**
+- Micro-managing prose (leave that to Scene Smith).
+- Modifying `cold_store` without a Gatecheck.
+- Delegating to multiple roles in parallel (causes conflicts).
 
-```markdown
+**Wake Signals:**
+- New user request arrives
+- Delegation returns with `status: blocked`
+- Gatecheck fails
+
+**Escalation Triggers:**
+- Canon contradiction detected (escalate to Lorekeeper)
+- Quality bar failure (escalate to Gatekeeper)
+
+## Configuration
+
 :::{role-tools}
-- read_state: "Read from hot_store or cold_store"
-- write_state: "Write to hot_store"
-- post_intent: "Declare work status"
-- query_lore: "Search canon for facts"
+- delegate_to: "Delegate work to a specialist role"
+- read_artifact: "Read an artifact from store"
+- write_artifact: "Write an artifact to hot store"
+- request_gatecheck: "Request quality validation"
+- merge_to_cold: "Promote artifacts to cold store"
+- terminate: "End the session"
 :::
-```
 
-#### `{role-constraints}`
-
-Hard rules the role must follow.
-
-```markdown
 :::{role-constraints}
-- MUST NOT modify cold_store directly
-- MUST post intent after completing work
-- SHOULD escalate if blocked > 2 iterations
+- MUST NOT modify cold_store directly (use merge_to_cold)
+- MUST delegate domain-specific work to specialist roles
+- SHOULD wake only the roles needed for current work
 :::
-```
 
-#### `{role-prompt}`
-
-The system prompt template for this role.
-
-```markdown
 :::{role-prompt}
 You are the {{ role.archetype }}, responsible for {{ role.mandate }}.
+
+Refer to "Operational Guidelines" above for decision heuristics and anti-patterns.
 
 ## Your Tools
 {% for tool in role.tools %}
@@ -297,6 +311,33 @@ You are the {{ role.archetype }}, responsible for {{ role.mandate }}.
 {% endfor %}
 :::
 ```
+
+#### Directive Reference
+
+##### `{role-meta}`
+
+Role identity and classification.
+
+**Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | yes | Unique role identifier |
+| `abbr` | string | yes | 2-letter abbreviation |
+| `archetype` | string | yes | Human-readable role type |
+| `agency` | enum | yes | `high`, `medium`, `low`, `zero` |
+| `mandate` | string | yes | One-line mission statement |
+
+##### `{role-tools}`
+
+Tools available to this role. List of `name: description` pairs.
+
+##### `{role-constraints}`
+
+Hard rules the role must follow. Use RFC 2119 keywords (MUST, SHOULD, MAY).
+
+##### `{role-prompt}`
+
+The system prompt template. Supports Jinja2 templating for dynamic content.
 
 ---
 
@@ -499,7 +540,7 @@ priority: 100
 
 #### `{quality-bar}`
 
-Define a quality bar.
+Define a quality bar and its exception handling.
 
 ```markdown
 :::{quality-bar}
@@ -513,8 +554,20 @@ checks:
 failures:
   - "Orphaned references"
   - "Contradictory statements"
+waiver_policy: "Allowed only for Retcons approved by SR"
 :::
 ```
+
+**Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | yes | Unique bar identifier |
+| `name` | string | yes | Human-readable name |
+| `description` | string | yes | What this bar validates |
+| `checks` | list | yes | Conditions that must pass |
+| `failures` | list | yes | Known failure modes |
+| `waiver_policy` | string | no | When exceptions are allowed |
 
 ---
 
@@ -849,7 +902,7 @@ This section documents the migration status from `_archive/spec/` (v2) to v3. It
 | **Protocol Flows** | 13 flows | SR dynamic routing | ✅ INTENTIONAL | SR handles routing |
 | **Role Consolidation** | 15 charters | 8 role files | ✅ INTENTIONAL | Consolidated 15→8 |
 | **Role Briefs/Interfaces** | 30 docs | MyST directives | ✅ INTENTIONAL | Encoded in role files |
-| **Role Depth** | Detailed prose | 70% reduced | 🔴 CRITICAL | Recover content for human docs + RAG |
+| **Role Depth** | Detailed prose | Hybrid pattern (§6.1) | 🟢 MITIGATED | Migrate v2 content into Hybrid files |
 | **Principles** | 10+ docs | 0 | 🔴 CRITICAL | Migrate 4 priority docs |
 | **Playbooks** | 14+ playbooks | 0 | 🔴 CRITICAL | Migrate 3 priority docs |
 | **Quality Bars** | Detailed | Summary only | 🔴 CRITICAL | Add waiver process |
@@ -923,28 +976,29 @@ v2 had 15 roles with separate charter/brief/interface documents. v3 consolidates
 - Researcher → Lorekeeper
 - Illustrator, Audio Producer → Creative Director
 
-#### 12.3.5 Depth Reduction (NOT Intentional — Needs Addressing)
+#### 12.3.5 Depth Reduction (Mitigated via Hybrid Structure)
 
-v3 role files are ~70% smaller than v2 charters. **This is a real gap**, not an acceptable simplification.
+v3 role files were ~70% smaller than v2 charters. This gap is now **mitigated** by defining the Hybrid Document pattern (see §6.1).
 
-**Why depth matters:** MyST domain files serve **dual purposes**:
+**Solution:** v3 Role files adopt a "Hybrid" format:
 
-1. **Machine-consumable** — Compiled to code for agents
-2. **Human-readable documentation** — For human-run studio operators
+- **Directives** — Compiled to Python configuration (Identity, Tools, Constraints)
+- **Prose sections** — Ingested as "System Knowledge" for the Agent's context window
 
-The v3 format (MyST with directives) is correct. The **content reduction** is the problem — studio operators need the prose depth that v2 charters provided.
-
-**Content to recover from v2 charters:**
+**Content to migrate from v2 charters:**
 
 - Anti-patterns and example dialogues
-- Escalation triggers and dormancy signals
-- RACI matrices for loop participation
+- Escalation triggers and wake signals
+- Decision heuristics
 - Consultation rules and pair guides
 - Failure modes and error handling guidance
 
-**Additional benefit:** This content can serve agents via RAG (Retrieval-Augmented Generation) for context-aware decision making.
+**Why this works:** MyST files serve dual purposes:
 
-**Status:** Should move to Critical priority for Phase 3 role enrichment
+1. **Machine-consumable** — Compiled to code for runtime
+2. **Human-readable** — Documentation for studio operators + Agent context via RAG
+
+**Status:** Architecture defined (§6.1). Implementation requires migrating v2 content into Hybrid role files.
 
 ---
 
@@ -1108,12 +1162,12 @@ v2 charters included content not in v3 roles:
 
 **Phase 1: Critical Gaps** (immediate value)
 
-1. Create `domain/principles/` with 4 priority docs
-2. Create `domain/playbooks/` with 3 priority playbooks
-3. Add waiver process section to `quality_bars.md`
-4. **Recover role depth** — enrich role files with v2 charter prose (anti-patterns, escalation triggers, failure modes)
+1. Create `domain/principles/` with 4 priority docs (SPOILER_HYGIENE, PN_PRINCIPLES, etc.)
+2. Create `domain/playbooks/` with 3 priority playbooks (new_story, gate_failure, hot_to_cold)
+3. Add `waiver_policy` field to quality bars in `protocol/quality_bars.md`
+4. Migrate v2 charter content into Hybrid role files (anti-patterns, wake signals, heuristics)
 
-**Why role depth is Phase 1:** MyST domain files serve dual purposes (machine config + human documentation). Human operators need the prose depth. Content also enables RAG for agent context.
+**Why content migration is Phase 1:** MyST files serve dual purposes (§1). Agents need decision heuristics in their context. Human operators need the prose depth. Architecture is defined (§6.1); implementation is the remaining work.
 
 **Phase 2: Backlog** (when needed)
 
@@ -1194,7 +1248,21 @@ v2 charters included content not in v3 roles:
 - [ ] State persistence/checkpointing
 - [ ] Anthropic provider (Claude)
 
-### Phase 7: Loop Migration (Remaining Work)
+### Phase 7: Content Migration (Critical)
+
+- [ ] Create `domain/principles/` directory
+- [ ] Migrate `SPOILER_HYGIENE.md` (Critical for Gatekeeper)
+- [ ] Migrate `PN_PRINCIPLES.md` (Critical for Narrator)
+- [ ] Migrate `EVERGREEN_MANUSCRIPT.md` (Views/export model)
+- [ ] Migrate `SOURCES_OF_TRUTH.md` (Canon authority)
+- [ ] Create `domain/playbooks/` directory
+- [ ] Migrate `new_story.md` playbook (maps to story_spark)
+- [ ] Migrate `gate_failure.md` playbook
+- [ ] Migrate `hot_to_cold.md` playbook
+- [ ] Update `domain/roles/*.md` with Hybrid content (prose + directives)
+- [ ] Add `waiver_policy` to quality bars
+
+### Phase 8: Loop Migration (Remaining Work)
 
 **Migrated Loops (1/12):**
 
@@ -1206,7 +1274,7 @@ v2 charters included content not in v3 roles:
 - canon_commit, character_arc, timeline_build, world_expand
 - plot_refine, quality_gate
 
-### Phase 8: Advanced Role Configuration (Roadmap)
+### Phase 9: Advanced Role Configuration (Roadmap)
 
 Future enhancements for role-specific LLM configuration:
 
