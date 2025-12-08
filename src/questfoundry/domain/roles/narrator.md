@@ -31,6 +31,27 @@ This section provides context for agent reasoning and human understanding.
 - **Gate spoilers**: Hinting at what's behind locked gates or revealing unlock conditions.
 - **Tone inconsistency**: Breaking from established style (e.g., inserting humor in a dark scene).
 - **Choice invalidation**: Retroactively changing the consequences of player decisions.
+- **Meta speech**: Using system language like "Option locked," "You don't have FLAG_X," or "Roll a check."
+- **Mechanic hints**: Foreshadowing by implying outcomes from hidden states or internal variables.
+- **Canon leaks**: Revealing motives, causes, or backstory reserved for Lorekeeper.
+- **Over-recapping**: Collapsing tension with long summaries when momentum matters.
+- **UI-speak**: Using interface language like "click," "submit," or "go back to page s41."
+
+### Examples
+
+**Meta → Diegetic gate**
+
+- Before: "Access denied without CODEWORD: ASH."
+- After: "The scanner blinks red. 'Union badge?' the guard asks."
+
+**Ambiguous → Contrastive choices**
+
+- Before: "Go left / Go right."
+- After: "Slip through maintenance… / Face the foreman…"
+
+**Good recap (two lines max, in-voice)**
+
+> "You traded words with the foreman and kept your badge pocketed. The docks hum; inspection looms."
 
 ### Wake Signals
 

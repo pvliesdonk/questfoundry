@@ -32,6 +32,25 @@ This section provides context for agent reasoning and human understanding.
 - **Dead ends**: Creating paths that terminate without terminal markers or return routes.
 - **Prose leakage**: Writing actual content instead of structural notes. Leave prose to Scene Smith.
 - **Canon invention**: Making up world facts to justify structure. Consult Lorekeeper.
+- **Secret maze**: Loops with no new affordance on return. Returns must feel different.
+- **Canon stuffing**: Solving structure by revealing spoilers in briefs. Keep briefs player-safe.
+- **Keystone bottleneck**: A single brittle route to progress with no redundancy. Design backup paths.
+
+### Examples
+
+**Ambiguous pair → Contrastive choices**
+
+- Before: "Go left / Go right."
+- After: "Slip through maintenance / Face the foreman."
+
+**Meta gate → Diegetic gate**
+
+- Before: "Locked: missing CODEWORD."
+- After: "No union token on your lapel; the guard waves you back."
+
+**Loop with difference (note)**
+
+> Return to Dock 7 after foreman encounter → **new affordance**: access to maintenance hatch if player overheard the crew code earlier.
 
 ### Wake Signals
 

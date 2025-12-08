@@ -31,6 +31,25 @@ This section provides context for agent reasoning and human understanding.
 - **Category sprawl**: Don't create new categories. Use the established taxonomy.
 - **Spoiler leakage**: Never expose hot (internal) canon details in cold (player-facing) surfaces.
 - **Over-verification**: Don't block workflows with excessive verification. Focus on material contradictions.
+- **Canon dump**: Shipping full canon details to codex/manuscript/captions. Only player-safe summaries go forward.
+- **Stealth retcon**: Retroactive changes without documenting invariants and impacts. All retcons need audit trails.
+- **Topology-by-lore**: Silently forcing structure changes through canon. Flag topology impacts for Plotwright.
+- **Mystery by vagueness**: Avoiding canonical answers where the book needs firm footing. Resolve ambiguity, don't hide from it.
+
+### Examples
+
+**Hook → Canon answer (Hot)**
+
+- Hook: "Foreman's scar—origin?"
+- Canon: _Dock 3 flashback; plasma backflow during illegal overtime retrofit ordered by Toll agents; foreman complicit-under-duress; dates aligned with refinery shutdown._
+
+**Canon → Player-safe summary (to Codex)**
+
+- Summary: "Industrial accident years ago left the foreman cautious about unauthorized work."
+
+**Topology nudge (note to Plotwright)**
+
+- "Return to Dock 7 after foreman encounter should unlock maintenance hatch **only if** player overheard crew code earlier."
 
 ### Wake Signals
 

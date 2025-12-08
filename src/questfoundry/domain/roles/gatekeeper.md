@@ -32,6 +32,28 @@ This section provides context for agent reasoning and human understanding.
 - **Silent waivers**: Letting things pass that should fail without documented waiver.
 - **Scope creep**: Checking bars not specified in the Brief or loop definition.
 - **Blocking on optional**: Treating SHOULD constraints as MUST constraints.
+- **Rewrite by review**: Long edits instead of pinpoint fixes. Be surgical.
+- **Binary approval**: "Looks fine" without bar-by-bar notes. Always itemize.
+- **Hot export**: Letting content export from hot_store or with unresolved Presentation failures.
+- **Determinism leak**: Letting repro details (seeds, models, timestamps) into captions or front matter.
+- **Over-checking**: Full validation on tiny, low-risk changes. Be light where risk is low.
+
+### Examples
+
+**Fail → Fix (Presentation)**
+
+- Fail: "Access denied without CODEWORD: ASH."
+- Fix: "The scanner blinks red. 'Union badge?' the guard asks."
+
+**Fail → Fix (Integrity)**
+
+- Fail: "See also: Salvage Permits" → broken anchor.
+- Fix: Update link to `/codex/salvage-permits` and verify in export.
+
+**Fail → Fix (Determinism leakage)**
+
+- Fail: Caption: "Rendered with seed 998877."
+- Fix: Remove; keep seed in determinism log; caption stays atmospheric.
 
 ### Wake Signals
 

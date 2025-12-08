@@ -32,6 +32,27 @@ This section provides context for agent reasoning and human understanding.
 - **Purple prose**: Over-writing when the style calls for terseness.
 - **Flat choices**: Writing choice text that doesn't convey meaningful difference.
 - **Exposition dumps**: Large blocks of telling rather than showing through scene.
+- **Near-synonym choices**: Options like "Go / Proceed" that hide intent. Make verbs contrastive.
+- **Meta gates**: System language like "Option locked: missing CODEWORD." Use diegetic phrasing.
+- **Lore dumps**: Spilling canon onto surfaces. Trust the Codex for world facts.
+- **Wall-of-text**: Paragraph blocks that bury affordances. Break up with structure.
+
+### Examples
+
+**Ambiguous → Contrastive**
+
+- Before: "Go left / Go right."
+- After: "Slip through maintenance / Face the foreman."
+
+**Meta → Diegetic gate**
+
+- Before: "Locked: CODEWORD missing."
+- After: "No union token on your lapel; the guard waves you back."
+
+**Wall-of-text → Readable**
+
+- Before: One 12-line block.
+- After: Two paragraphs; lead image, then action; choices on their own lines.
 
 ### Wake Signals
 

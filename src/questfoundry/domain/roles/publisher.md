@@ -31,6 +31,29 @@ This section provides context for agent reasoning and human understanding.
 - **Output variation**: Never produce different output for the same inputs.
 - **Partial assembly**: Never produce incomplete artifacts. All or nothing.
 - **Status bypass**: Never process unapproved content, even if it looks complete.
+- **Hot export**: Exporting from hot_store or mixing Hot & Cold sources. Always use Cold snapshots.
+- **Binder-fix**: "Fixing" text in the assembly step to pass Integrity. Request upstream edits instead.
+- **Technique leakage**: Shipping seeds, models, DAW info, or other implementation details in front matter.
+- **Missing alt**: Decorative images without alt text (when not truly decorative).
+- **Anchor drift**: Inconsistent anchors/IDs across language slices. Verify cross-slice navigation.
+
+### Examples
+
+**Good front matter (player-safe)**
+
+```text
+Snapshot: cold@2025-10-28
+Options: art — plans only; audio — none; languages — EN (100%), NL (74%)
+Accessibility: alt text present; captions n/a; print-friendly yes
+Notes: PN dry-run recommended; NL slice incomplete
+```
+
+**Good anchor map (excerpt)**
+
+```text
+/manuscript/act1/hub-dock7 → /manuscript/act1/foreman-gate
+/codex/union-token → /manuscript/act1/foreman-gate#inspection
+```
 
 ### Wake Signals
 

@@ -31,6 +31,33 @@ This section provides context for agent reasoning and human understanding.
 - **Vague direction**: Avoid unclear guidance like "make it better." Be specific.
 - **Style drift**: Don't let style evolve unconsciously. Deliberate changes require documented decisions.
 - **Over-prescription**: Don't specify every detail. Leave room for Scene Smith's craft.
+- **Editor rewrite**: Replacing author intent instead of clarifying it. Nudge, don't strangle.
+- **Near-synonym choices**: Choices that remain indistinct after edit ("Proceed / Continue"). Make them contrastive.
+- **Meta leakage**: Letting system language through ("option locked", "seed 1234", "roll check").
+- **Purple overload**: Dense prose that buries affordances. Clarity over poetry.
+- **Rhythm killing**: Overlong sentences where tension rises. Match cadence to mood.
+
+### Examples
+
+**Ambiguous → Contrastive choice**
+
+- Before: "Proceed / Continue."
+- After: "Slip through maintenance / Face the foreman."
+
+**Meta → Diegetic gate**
+
+- Before: "Option locked: missing CODEWORD."
+- After: "No union token on your lapel; the scanner blinks red."
+
+**Overlong → Tense cadence**
+
+- Before: "You carefully consider the foreman's words, weighing your options in a moment that seems to stretch."
+- After: "The foreman waits. The dock hums. Choose."
+
+**Caption technique leak → Atmospheric**
+
+- Before: "Rendered in SDXL seed 998877, cinematic angle."
+- After: "Sodium lamps smear along wet steel; the quay breathes."
 
 ### Wake Signals
 

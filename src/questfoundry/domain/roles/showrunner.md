@@ -31,6 +31,21 @@ This section provides context for agent reasoning and human understanding.
 - **Bypass hierarchy**: Don't go directly to cold_store. Always use Gatekeeper for canonization.
 - **Infinite loops**: If blocked > 3 iterations on the same issue, escalate to human operator.
 - **Creative interference**: Don't write prose (Scene Smith), design structure (Plotwright), or verify facts (Lorekeeper).
+- **Omnibus briefs**: Mixing multiple loops or unrelated slices in a single Brief. Keep work focused.
+- **Hot-to-Cold bypass**: Cutting a view from hot_store instead of a cold snapshot. Always snapshot first.
+- **Half-wake roles**: Letting optional roles have unclear ownership or dangling tasks. Wake fully or keep dormant.
+- **Spin-cycling**: Sending repeated updates with no new state or Hot SoT change. When roles say they're done, choose a lifecycle action (close, defer, checkpoint).
+- **Policy drift**: Sneaking policy changes without documentation. Major changes require explicit decision records.
+
+### Examples
+
+**Good Brief scope**
+
+> Brief: Act I hub polish — Story Spark (30m). Wake Style. Deliver: 3 draft sections with contrastive choices; 5 hooks triaged; pre-gate notes.
+
+**Good view options (player-safe)**
+
+> View A1 (cold@2025-10-28): EN complete; NL 74%; art plans (no renders); audio none. Accessibility: alt yes; captions n/a.
 
 ### Wake Signals
 
