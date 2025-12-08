@@ -430,7 +430,12 @@ class ToolExecutor:
                 tool_args = tool_call.get("args", {})
                 tool_id = tool_call.get("id", f"call-{iteration}")
 
-                logger.info(f"Executing tool: {tool_name}")
+                # Use debug when streaming to avoid duplicate output
+                # (StreamingCallbacks handles visible output in streaming mode)
+                if self.callbacks:
+                    logger.debug(f"Executing tool: {tool_name}")
+                else:
+                    logger.info(f"Executing tool: {tool_name}")
                 logger.debug(f"Tool args: {tool_args}")
 
                 # Execute tool
@@ -507,7 +512,10 @@ class ToolExecutor:
                 )
 
             if found_done:
-                logger.info(f"Done tool '{self.done_tool_name}' called, execution complete")
+                if self.callbacks:
+                    logger.debug(f"Done tool '{self.done_tool_name}' called, execution complete")
+                else:
+                    logger.info(f"Done tool '{self.done_tool_name}' called, execution complete")
                 stop_tool_name = (done_result or {}).get("_stop_tool", self.done_tool_name)
                 self._emit("on_done", stop_tool_name, done_result or {})
                 return ExecutorResult(

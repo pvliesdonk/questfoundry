@@ -96,7 +96,8 @@ class StreamingCallbacks:
         """Called before tool execution."""
         if self.live:
             self._current_text = Text()
-            self._current_text.append(f"[yellow]→ {tool_name}[/yellow]", style="yellow")
+            self._current_text.append("→ ", style="yellow")
+            self._current_text.append(tool_name, style="yellow bold")
             if args:
                 # Show first arg as preview
                 preview = str(list(args.values())[0])[:50]
