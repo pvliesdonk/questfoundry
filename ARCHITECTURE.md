@@ -74,9 +74,9 @@ This differs from static graph approaches (LangGraph, etc.) where edges are pred
 src/questfoundry/
 ├── domain/                 # MyST Source of Truth
 │   ├── roles/              # 8 role definitions (Hybrid: Config + Handbook)
-│   ├── loops/              # Workflow guidance (Heuristics for SR)
+│   ├── loops/              # Content workflows (Hybrid: Graph + Guidance)
+│   ├── playbooks/          # Operational procedures (Recovery, Setup, Git Ops)
 │   ├── principles/         # Core constraints (Spoiler Hygiene, PN Safety)
-│   ├── playbooks/          # Standard Operating Procedures (Recovery, etc.)
 │   ├── ontology/           # Data structures
 │   └── protocol/           # Communication rules
 │
@@ -95,6 +95,18 @@ src/questfoundry/
     ├── roles.py            # Role agent execution
     └── providers/          # LLM SDK wrappers
 ```
+
+### Loop vs Playbook Distinction
+
+> **Rule:** If it generates Content Artifacts (Scene, Lore, Hook), it is a **Loop**.
+> If it manages Studio Operations (Recovery, Setup, Git Ops), it is a **Playbook**.
+
+| Type | Purpose | Examples |
+|------|---------|----------|
+| **Loops** | Content workflows that produce artifacts | story_spark, hook_harvest, scene_weave, canon_commit |
+| **Playbooks** | Operational procedures for recovery/setup | emergency_retcon, gate_failure, role_stuck, hot_to_cold |
+
+Loops absorb the "checklist" content that was in v2 playbooks — see §6.2 for the Hybrid Loop pattern.
 
 ---
 
@@ -343,11 +355,16 @@ The system prompt template. Supports Jinja2 templating for dynamic content.
 
 ### 6.2 Loop Directives (`domain/loops/*.md`)
 
-#### `{loop-meta}`
+Loop files are **Hybrid Documents** (like Roles). They contain MyST directives for the execution graph interleaved with guidance prose that SR uses for decision-making. This consolidates the v2 "Loop + Playbook" pattern into a single source of truth.
 
-Loop identity and trigger conditions.
+#### Hybrid Loop Pattern
 
 ```markdown
+# Story Spark Loop
+
+> **Goal:** Create meaningful nonlinearity from a story seed.
+> **Outcome:** Draft topology with scenes, choices, and quality gates.
+
 :::{loop-meta}
 id: story_spark
 name: "Story Spark"
@@ -355,9 +372,70 @@ trigger: user_request
 entry_point: showrunner
 exit_point: gatekeeper
 :::
+
+## Guidance (Formerly Playbook Checklist)
+
+**When to trigger:**
+- New chapter/story request from user
+- Fix reachability issues flagged by Gatekeeper
+- Expand existing hub with new branches
+
+**Success criteria:**
+- At least 2 meaningful choices per scene
+- No dead-end paths without terminal markers
+- All choices have consequence text
+
+**Common failure modes:**
+- Single linear path (lacks nonlinearity)
+- Orphaned scenes with no incoming edges
+- Choices that don't affect downstream content
+
+## Execution Graph
+
+:::{graph-node}
+id: plotwright
+role: plotwright
+timeout: 300
+max_iterations: 5
+:::
+
+:::{graph-node}
+id: scene_smith
+role: scene_smith
+timeout: 600
+max_iterations: 10
+:::
+
+:::{graph-edge}
+source: plotwright
+target: scene_smith
+condition: "intent.status == 'topology_complete'"
+:::
+
+:::{graph-edge}
+source: scene_smith
+target: gatekeeper
+condition: "intent.status == 'scenes_drafted'"
+:::
+
+## Quality Gates
+
+:::{quality-gate}
+before: scene_smith
+role: gatekeeper
+bars: [reachability, nonlinearity]
+blocking: true
+:::
 ```
 
+#### Directive Reference
+
+##### `{loop-meta}`
+
+Loop identity and trigger conditions.
+
 **Fields:**
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | yes | Unique loop identifier |
@@ -366,20 +444,12 @@ exit_point: gatekeeper
 | `entry_point` | string | yes | First role to activate |
 | `exit_point` | string | no | Final role (defaults to entry) |
 
-#### `{graph-node}`
+##### `{graph-node}`
 
 A node in the workflow graph.
 
-```markdown
-:::{graph-node}
-id: plotwright
-role: plotwright
-timeout: 300
-max_iterations: 5
-:::
-```
-
 **Fields:**
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | yes | Node identifier |
@@ -387,19 +457,12 @@ max_iterations: 5
 | `timeout` | int | no | Max seconds (default: 300) |
 | `max_iterations` | int | no | Max LLM calls (default: 10) |
 
-#### `{graph-edge}`
+##### `{graph-edge}`
 
 A transition between nodes.
 
-```markdown
-:::{graph-edge}
-source: plotwright
-target: scene_smith
-condition: "intent.status == 'topology_complete'"
-:::
-```
-
 **Fields:**
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `source` | string | yes | Source node ID |
@@ -903,10 +966,9 @@ This section documents the migration status from `_archive/spec/` (v2) to v3. It
 | **Role Consolidation** | 15 charters | 8 role files | ✅ INTENTIONAL | Consolidated 15→8 |
 | **Role Briefs/Interfaces** | 30 docs | MyST directives | ✅ INTENTIONAL | Encoded in role files |
 | **Role Depth** | Detailed prose | Hybrid pattern (§6.1) | 🟢 MITIGATED | Migrate v2 content into Hybrid files |
+| **Loops + Playbooks** | 13 loops + 14 playbooks | Hybrid Loops (§6.2) | 🟢 MITIGATED | Content workflows → Loops; Ops → Playbooks |
 | **Principles** | 10+ docs | 0 | 🔴 CRITICAL | Migrate 4 priority docs |
-| **Playbooks** | 14+ playbooks | 0 | 🔴 CRITICAL | Migrate 3 priority docs |
 | **Quality Bars** | Detailed | Summary only | 🔴 CRITICAL | Add waiver process |
-| **Loops** | 13 loops | 1 loop | 🟡 BACKLOG | Migrate 4 priority |
 | **Artifacts** | 40+ types | 7 types | 🟡 BACKLOG | Add 4 priority types |
 | **Lifecycles** | 5 lifecycles | 1 partial | 🟡 BACKLOG | Add hook lifecycle |
 | **Glossary** | 200+ terms | ~20 terms | 🟡 BACKLOG | Lightweight version |
@@ -1022,21 +1084,26 @@ v3 role files were ~70% smaller than v2 charters. This gap is now **mitigated** 
 - PATTERNS/ and ANTI-PATTERNS/ directories
 - POLICIES/ (HOOK, GATE, ESCALATION, DORMANCY)
 
-#### 12.4.2 Playbooks
+#### 12.4.2 Loops + Playbooks (Consolidated)
 
-**Priority playbooks to migrate** (create `domain/playbooks/`):
+**Architecture decision:** "Loops Eat Playbooks" for content workflows (see §2, §6.2).
 
-| Playbook | Why Critical |
-|----------|--------------|
-| **new_story.md** | Maps to story_spark loop — SR needs workflow guidance |
-| **gate_failure.md** | Error handling for gatechecks |
-| **hot_to_cold.md** | Promotion process — core workflow |
+| v2 Content | v3 Destination | Rationale |
+|------------|----------------|-----------|
+| new_story playbook | → `story_spark` loop | Content workflow → Hybrid Loop |
+| gate_failure playbook | → `domain/playbooks/` | Operational recovery → Playbook |
+| hot_to_cold playbook | → `canon_commit` loop | Content workflow → Hybrid Loop |
+| emergency_retcon | → `domain/playbooks/` | Operational recovery → Playbook |
+| role_stuck | → `domain/playbooks/` | Operational recovery → Playbook |
 
-**Other playbooks** (lower priority):
+**Content workflows (become Hybrid Loops):**
 
-- add_character, branch_narrative, resolve_contradiction, emergency_retcon
-- role_stuck, player_feedback, publish_release, rollback
-- debug_state, performance_tune, onboard_contributor
+- story_spark, hook_harvest, scene_weave, canon_commit
+- lore_deepening, codex_expansion, style_tune_up
+
+**Operational procedures (remain as Playbooks):**
+
+- gate_failure, emergency_retcon, role_stuck, world_genesis
 
 #### 12.4.3 Quality Bar Detail
 
@@ -1053,23 +1120,25 @@ v3 `quality_bars.md` covers the 8 bars but is missing:
 
 ### 12.5 Backlog (Important but Not Blocking)
 
-#### 12.5.1 Loops (12 of 13 Missing)
+#### 12.5.1 Hybrid Loops (Content Workflows)
 
-**Priority loops to migrate:**
+**Architecture:** Loops now absorb playbook "checklist" content (see §6.2). Each loop is a Hybrid Document with graph + guidance.
 
-| Loop ID | Purpose | Why Priority |
-|---------|---------|--------------|
-| `canon_commit` | Stabilize hot → cold | Core workflow |
-| `quality_gate` | Run quality bar checks | GK tools exist |
-| `hook_harvest` | Extract change hooks during play | Essential for sessions |
-| `scene_weave` | Compose scenes from beats | Content creation |
+**Priority loops to migrate as Hybrid Documents:**
+
+| Loop ID | Absorbs Playbook | Purpose |
+|---------|------------------|---------|
+| `canon_commit` | hot_to_cold | Stabilize hot → cold |
+| `hook_harvest` | — | Extract change hooks during play |
+| `scene_weave` | — | Compose scenes from beats |
+| `quality_gate` | — | Run quality bar checks |
 
 **Other loops** (defer until needed):
 
 - choice_tree, lore_sync, draft_review, character_arc
-- timeline_build, world_expand, plot_refine, texture_finish
+- timeline_build, world_expand, plot_refine, texture_finish, lore_deepening
 
-**Note:** v3 loops are "guidance for SR" not executable graphs. SR can improvise without formal loop definitions. story_spark exists as the template.
+**Note:** v3 loops are "guidance for SR" not executable graphs. story_spark (§6.2) is the Hybrid template.
 
 #### 12.5.2 Artifacts (35 of 40 Missing)
 
@@ -1163,24 +1232,23 @@ v2 charters included content not in v3 roles:
 **Phase 1: Critical Gaps** (immediate value)
 
 1. Create `domain/principles/` with 4 priority docs (SPOILER_HYGIENE, PN_PRINCIPLES, etc.)
-2. Create `domain/playbooks/` with 3 priority playbooks (new_story, gate_failure, hot_to_cold)
+2. Create `domain/playbooks/` with 4 operational procedures (gate_failure, emergency_retcon, role_stuck, world_genesis)
 3. Add `waiver_policy` field to quality bars in `protocol/quality_bars.md`
 4. Migrate v2 charter content into Hybrid role files (anti-patterns, wake signals, heuristics)
 
-**Why content migration is Phase 1:** MyST files serve dual purposes (§1). Agents need decision heuristics in their context. Human operators need the prose depth. Architecture is defined (§6.1); implementation is the remaining work.
+**Why content migration is Phase 1:** MyST files serve dual purposes (§1). Agents need decision heuristics in context. Human operators need prose depth.
 
 **Phase 2: Backlog** (when needed)
 
-1. Migrate 4 priority loops (canon_commit, quality_gate, hook_harvest, scene_weave)
+1. Migrate 4 priority Hybrid Loops (canon_commit, hook_harvest, scene_weave, quality_gate) — absorbing playbook checklists
 2. Add 4 priority artifacts (Character, Location, PlotPoint, Timeline)
 3. Add hook lifecycle
 4. Create lightweight glossary
 
 **Phase 3: Enrichment** (polish)
 
-1. Add RACI matrices to loops
-2. Expand artifact field definitions
-3. Migrate remaining useful v2 content as needed
+1. Expand artifact field definitions
+2. Migrate remaining useful v2 content as needed
 
 **No longer blockers:**
 
@@ -1250,29 +1318,44 @@ v2 charters included content not in v3 roles:
 
 ### Phase 7: Content Migration (Critical)
 
+**Principles:**
+
 - [ ] Create `domain/principles/` directory
 - [ ] Migrate `SPOILER_HYGIENE.md` (Critical for Gatekeeper)
 - [ ] Migrate `PN_PRINCIPLES.md` (Critical for Narrator)
 - [ ] Migrate `EVERGREEN_MANUSCRIPT.md` (Views/export model)
 - [ ] Migrate `SOURCES_OF_TRUTH.md` (Canon authority)
+
+**Playbooks (Operational procedures only — content workflows → Loops):**
+
 - [ ] Create `domain/playbooks/` directory
-- [ ] Migrate `new_story.md` playbook (maps to story_spark)
-- [ ] Migrate `gate_failure.md` playbook
-- [ ] Migrate `hot_to_cold.md` playbook
+- [ ] Migrate `gate_failure.md` (Recovery procedure)
+- [ ] Migrate `emergency_retcon.md` (Canon correction)
+- [ ] Migrate `role_stuck.md` (Agent recovery)
+- [ ] Migrate `world_genesis.md` (Project setup)
+
+**Hybrid Content:**
+
 - [ ] Update `domain/roles/*.md` with Hybrid content (prose + directives)
 - [ ] Add `waiver_policy` to quality bars
 
-### Phase 8: Loop Migration (Remaining Work)
+### Phase 8: Hybrid Loop Migration (Content Workflows)
+
+**Note:** Loops now absorb playbook "checklist" content. See §6.2 for Hybrid Loop pattern.
 
 **Migrated Loops (1/12):**
 
-- story_spark
+- story_spark (template for Hybrid pattern)
+
+**Priority Loops (absorb playbooks):**
+
+- canon_commit (absorbs hot_to_cold playbook)
+- hook_harvest, scene_weave, quality_gate
 
 **Remaining Loops:**
 
-- hook_harvest, scene_weave, choice_tree, lore_sync, draft_review
-- canon_commit, character_arc, timeline_build, world_expand
-- plot_refine, quality_gate
+- choice_tree, lore_sync, draft_review, character_arc
+- timeline_build, world_expand, plot_refine, lore_deepening
 
 ### Phase 9: Advanced Role Configuration (Roadmap)
 
@@ -1360,9 +1443,15 @@ This allows:
 |-----------|---------|---------|
 | `domain/roles/` | `{role_id}.md` | `showrunner.md` |
 | `domain/loops/` | `{loop_id}.md` | `story_spark.md` |
+| `domain/playbooks/` | `{procedure}.md` | `gate_failure.md`, `hot_to_cold.md` |
+| `domain/principles/` | `{topic}.md` | `spoiler_hygiene.md`, `evergreen.md` |
 | `domain/ontology/` | `{concept}.md` | `artifacts.md`, `taxonomy.md` |
 | `domain/protocol/` | `{aspect}.md` | `intents.md`, `routing.md` |
 | `generated/models/` | `{category}.py` | `artifacts.py`, `enums.py` |
 | `generated/roles/` | `{role_id}.py` | `showrunner.py` |
 
-Note: Loop definitions are NOT compiled to `generated/graphs/`. They serve as documentation and guidance only.
+**Notes:**
+
+- Loop definitions are NOT compiled to `generated/graphs/`. They serve as Hybrid Documents (guidance + graph metadata).
+- Playbooks are operational procedures, not compiled. They are ingested as agent context.
+- Principles are reference documents, not compiled. They define policy and philosophy.
