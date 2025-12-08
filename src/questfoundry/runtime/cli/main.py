@@ -23,12 +23,16 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from questfoundry.runtime.cli.config_cmd import config_app
 from questfoundry.runtime.config import get_settings
+
+# Load .env file early (before any env var access in functions)
+load_dotenv()
 
 # Help panel names for option categorization
 PANEL_LLM = "LLM Options"

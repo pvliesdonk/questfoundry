@@ -4,6 +4,11 @@
 .vscode/
 nul
 
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
 # Debug/trace files
 *.log
 trace.log
