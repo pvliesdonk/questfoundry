@@ -443,6 +443,21 @@ class ToolExecutor:
                 observation, success = await self._execute_tool(tool_name, tool_args)
                 self._emit("on_tool_end", tool_name, observation, success)
 
+                # Log tool errors/warnings at appropriate level
+                if not success:
+                    logger.warning(f"Tool '{tool_name}' failed: {observation[:200]}")
+                else:
+                    # Check for semantic errors in successful tool calls (e.g., status='error')
+                    try:
+                        parsed_obs = json.loads(observation)
+                        if parsed_obs.get("status") == "error":
+                            logger.warning(
+                                f"Tool '{tool_name}' returned error status: "
+                                f"{parsed_obs.get('message', observation)[:200]}"
+                            )
+                    except (json.JSONDecodeError, TypeError):
+                        pass  # Not JSON or not a dict, ignore
+
                 # Record result
                 result_entry = {
                     "tool": tool_name,

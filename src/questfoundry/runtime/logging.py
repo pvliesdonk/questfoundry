@@ -158,11 +158,13 @@ def setup_logging(
         force=force,
     )
 
-    # Reduce noise from verbose libraries unless at trace level (-vvv)
+    # Always suppress httpx/httpcore trace noise - not useful for debugging QF
+    for always_quiet in ["httpx", "httpcore"]:
+        logging.getLogger(always_quiet).setLevel(logging.WARNING)
+
+    # Reduce noise from other verbose libraries unless at trace level (-vvv)
     if verbosity < 3:
         for noisy in [
-            "httpx",
-            "httpcore",
             "openai",
             "anthropic",
             "urllib3",
