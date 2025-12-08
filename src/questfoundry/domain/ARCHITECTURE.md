@@ -832,11 +832,20 @@ When writing v3 domain files, consult:
 - [x] `StudioState` implementation
 - [x] Compiler IR models
 
-### Phase 2: Ontology ✓
+### Phase 2: Ontology (Partial)
 
 - [x] `domain/ontology/artifacts.md` (HookCard, Brief, Scene, etc.)
 - [x] `domain/ontology/taxonomy.md` (enums)
 - [x] Compiler: ontology → Pydantic models
+
+**Migrated Artifacts (5/20+):**
+
+- Brief, CanonEntry, GatecheckReport, HookCard, Scene
+
+**Remaining Artifacts:**
+
+- Act, Beat, Chapter, Character, Choice, Dialogue, Draft, Entity, Event, Fact
+- Item, Location, Metadata, Moment, PlotPoint, Prose, Relationship, Timeline, World
 
 ### Phase 3: Roles ✓
 
@@ -844,27 +853,57 @@ When writing v3 domain files, consult:
 - [x] Compiler: roles → RoleIR configurations
 - [x] `domain/loops/story_spark.md` (as guidance documentation)
 
-### Phase 4: Orchestrator (Current)
+### Phase 4: Orchestrator ✓
 
-- [ ] `runtime/orchestrator.py` — SR-centric handoff engine
-- [ ] `runtime/roles.py` — Role agent execution
-- [ ] SR tools: `delegate_to`, `read_artifact`, `write_artifact`, etc.
-- [ ] DelegationResult model
-- [ ] End-to-end test with SR delegating to one role
+- [x] `runtime/orchestrator.py` — SR-centric handoff engine
+- [x] `runtime/roles.py` — Role agent execution
+- [x] `runtime/executor.py` — ToolExecutor with bind_tools
+- [x] SR tools: `delegate_to`, `read_artifact`, `write_artifact`, etc.
+- [x] DelegationResult model
+- [x] End-to-end test with SR delegating to one role
 
-### Phase 5: Full Integration
+### Phase 5: Full Integration ✓
 
-- [ ] All role tools implemented
-- [ ] Gatekeeper quality bar evaluation
-- [ ] Hot → Cold merge flow
-- [ ] Multi-turn delegation test (SR → PW → LK → GK → SR)
+- [x] All role tools implemented (consult_*, read/write_hot_store)
+- [x] Gatekeeper quality bar evaluation (8 evaluation tools)
+- [x] Cold Store implementation (`runtime/cold_store.py`)
+- [x] Configuration system (`runtime/config.py` with pydantic-settings)
+- [x] Multi-turn delegation test (SR → PW → LK → GK → SR)
 
-### Phase 6: Polish
+### Phase 6: Polish (Current)
 
-- [ ] CLI integration (`qf run`)
-- [ ] OpenAI/Anthropic providers
-- [ ] Streaming output
+- [x] CLI integration (`qf ask`, `qf doctor`, `qf config`, `qf roles`)
+- [x] Ollama provider with native tool calling
+- [x] Google AI Studio provider (Gemini)
+- [x] OpenAI provider (GPT-4o with tool calling)
+- [x] ExecutorCallbacks for streaming progress output
 - [ ] State persistence/checkpointing
+- [ ] Anthropic provider (Claude)
+
+### Phase 7: Loop Migration (Remaining Work)
+
+**Migrated Loops (1/12):**
+
+- story_spark
+
+**Remaining Loops:**
+
+- hook_harvest, scene_weave, choice_tree, lore_sync, draft_review
+- canon_commit, character_arc, timeline_build, world_expand
+- plot_refine, quality_gate
+
+### Status Summary
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Orchestrator | ✅ Complete | SR-centric handoff working |
+| Role Agents | ✅ Complete | All 8 roles executable |
+| Tool Calling | ✅ Complete | Ollama, Google, OpenAI |
+| Artifacts | 🟡 Partial | 5/20+ migrated |
+| Loops | 🟡 Partial | 1/12 migrated |
+| CLI | ✅ Complete | `qf ask/doctor/config/roles` |
+| Tests | ✅ Complete | Integration + unit tests |
+| Persistence | ⬜ Not Started | Checkpointing deferred |
 
 ---
 
