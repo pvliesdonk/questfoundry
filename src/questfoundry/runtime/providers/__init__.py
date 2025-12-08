@@ -30,6 +30,10 @@ __all__ = [
     "create_google_llm",
     "check_google_available",
     "list_google_models",
+    # OpenAI
+    "create_openai_llm",
+    "check_openai_available",
+    "list_openai_models",
     # Factory
     "create_llm_from_config",
 ]
@@ -73,6 +77,45 @@ def list_google_models() -> list[str]:
     )
 
     return _list_google_models()
+
+
+def create_openai_llm(
+    model: str = "gpt-4o",
+    api_key: str | None = None,
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    **kwargs: Any,
+) -> BaseChatModel:
+    """Create an OpenAI LLM. See providers.openai for details."""
+    from questfoundry.runtime.providers.openai import (
+        create_openai_llm as _create_openai_llm,
+    )
+
+    return _create_openai_llm(
+        model=model,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        **kwargs,
+    )
+
+
+def check_openai_available(api_key: str | None = None) -> bool:
+    """Check if OpenAI API is available."""
+    from questfoundry.runtime.providers.openai import (
+        check_openai_available as _check_openai_available,
+    )
+
+    return _check_openai_available(api_key)
+
+
+def list_openai_models() -> list[dict[str, Any]]:
+    """List available OpenAI models."""
+    from questfoundry.runtime.providers.openai import (
+        list_openai_models as _list_openai_models,
+    )
+
+    return _list_openai_models()
 
 
 def create_llm_from_config(settings: QuestFoundrySettings | None = None) -> BaseChatModel:
