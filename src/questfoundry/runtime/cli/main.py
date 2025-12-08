@@ -145,11 +145,13 @@ class StreamingCallbacks:
         """Called after tool execution."""
         if self.live and self.verbose:
             # Show tool result
-            status = "[green]✓[/green]" if success else "[red]✗[/red]"
             result_preview = result[:500] if len(result) <= 500 else result[:500] + "..."
 
             self._current_text = Text()
-            self._current_text.append(f"{status} ", style="")
+            if success:
+                self._current_text.append("✓ ", style="green")
+            else:
+                self._current_text.append("✗ ", style="red")
             self._current_text.append(tool_name, style="bold")
             self._current_text.append("\n\n", style="")
             self._current_text.append(result_preview, style="dim")
@@ -168,9 +170,8 @@ class StreamingCallbacks:
 
     def on_done(self, tool_name: str, _result: dict[str, Any]) -> None:
         """Called when execution completes."""
-        if self.verbose:
-            self.console.print()
-            self.console.print(f"[green]✓ {tool_name} completed[/green]")
+        # Panel already shows the result via on_tool_end, no duplicate print needed
+        pass
 
 
 def _verbose_callback(value: int) -> int:
@@ -282,9 +283,15 @@ def ask(
 
     try:
         # Set up logging based on verbosity
-        # With --stream: default to WARNING (0) to avoid log/panel overlap
+        # With --stream and no -v: suppress log output entirely (errors only)
+        # With --stream and -v: use requested verbosity
         # Without --stream: default to INFO (1) for useful output
-        effective_verbosity = verbose if (stream or verbose > 0) else 1
+        if stream and verbose == 0:
+            effective_verbosity = -1  # ERROR only - let panels do the work
+        elif verbose > 0:
+            effective_verbosity = verbose
+        else:
+            effective_verbosity = 1  # INFO by default
 
         # Derive log directory from project path when --log is enabled
         log_dir: Path | None = None

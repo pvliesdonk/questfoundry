@@ -109,6 +109,7 @@ def setup_logging(
     ----------
     verbosity : int
         Verbosity level:
+        - <0: ERROR only (streaming mode)
         - 0: WARNING only (quiet)
         - 1: INFO (normal, default)
         - 2: DEBUG (verbose)
@@ -122,7 +123,9 @@ def setup_logging(
         Override existing logging configuration.
     """
     # Map verbosity to log level
-    if verbosity <= 0:
+    if verbosity < 0:
+        level = logging.ERROR  # Streaming mode: suppress even WARNING
+    elif verbosity == 0:
         level = logging.WARNING
     elif verbosity == 1:
         level = logging.INFO
