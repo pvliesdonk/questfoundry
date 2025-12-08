@@ -17,7 +17,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
@@ -29,6 +29,38 @@ from langchain_core.messages import (
 from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
+
+
+class ExecutorCallbacks(Protocol):
+    """Protocol for executor event callbacks.
+
+    Implement these methods to receive progress updates during execution.
+    All methods are optional - unimplemented methods are skipped.
+    """
+
+    def on_llm_start(self, iteration: int) -> None:
+        """Called when LLM inference begins."""
+        ...
+
+    def on_llm_end(self, iteration: int, has_tool_calls: bool) -> None:
+        """Called when LLM inference completes."""
+        ...
+
+    def on_tool_start(self, tool_name: str, args: dict[str, Any]) -> None:
+        """Called before tool execution."""
+        ...
+
+    def on_tool_end(self, tool_name: str, result: str, success: bool) -> None:
+        """Called after tool execution."""
+        ...
+
+    def on_error(self, error: str) -> None:
+        """Called when an error occurs."""
+        ...
+
+    def on_done(self, tool_name: str, result: dict[str, Any]) -> None:
+        """Called when execution completes via done tool."""
+        ...
 
 # Tools that consult compiled resources for guidance.
 # Successful calls are tracked so policy guards can verify prerequisites.
@@ -149,6 +181,7 @@ class ToolExecutor:
         max_failures: int = 3,
         on_tool_call: Callable[[str, dict[str, Any], Any], None] | None = None,
         stop_tools: list[str] | None = None,
+        callbacks: ExecutorCallbacks | None = None,
     ):
         self.llm = llm
         self.tools = tools
@@ -157,6 +190,7 @@ class ToolExecutor:
         self.max_iterations = max_iterations
         self.max_failures = max_failures
         self.on_tool_call = on_tool_call
+        self.callbacks = callbacks
 
         # Tools that stop execution when called successfully
         # Includes done_tool plus any additional stop tools
@@ -176,6 +210,20 @@ class ToolExecutor:
     def reset(self) -> None:
         """Reset conversation history for a fresh run."""
         self.messages = [SystemMessage(content=self.system_prompt)]
+
+    def _emit(self, event: str, *args: Any, **kwargs: Any) -> None:
+        """Safely emit a callback event.
+
+        Callbacks are optional - if not set or method not implemented, silently skip.
+        """
+        if self.callbacks is None:
+            return
+        handler = getattr(self.callbacks, event, None)
+        if handler is not None:
+            try:
+                handler(*args, **kwargs)
+            except Exception as e:
+                logger.warning(f"Callback {event} failed: {e}")
 
     async def run(self, user_prompt: str) -> ExecutorResult:
         """Run the tool execution loop until done tool is called.
@@ -201,10 +249,12 @@ class ToolExecutor:
             logger.debug(f"Iteration {iteration}, failures: {failure_count}")
 
             # Invoke LLM
+            self._emit("on_llm_start", iteration)
             try:
                 response = await self.llm_with_tools.ainvoke(self.messages)
             except Exception as e:
                 logger.error(f"LLM invocation failed: {e}")
+                self._emit("on_error", f"LLM invocation failed: {e}")
                 failure_count += 1
                 if failure_count >= self.max_failures:
                     return ExecutorResult(
@@ -222,6 +272,7 @@ class ToolExecutor:
 
             # Extract tool calls
             tool_calls = getattr(response, "tool_calls", None) or []
+            self._emit("on_llm_end", iteration, bool(tool_calls))
 
             if not tool_calls:
                 # No tool calls - nudge LLM to use tools
@@ -241,9 +292,11 @@ class ToolExecutor:
                 self.messages.append(guidance)
 
                 if failure_count >= self.max_failures:
+                    error_msg = f"No tool calls after {failure_count} consecutive attempts"
+                    self._emit("on_error", error_msg)
                     return ExecutorResult(
                         success=False,
-                        error=f"No tool calls after {failure_count} consecutive attempts",
+                        error=error_msg,
                         tool_results=tool_results,
                         iterations=iteration,
                         failure_count=failure_count,
@@ -265,7 +318,9 @@ class ToolExecutor:
                 logger.debug(f"Tool args: {tool_args}")
 
                 # Execute tool
+                self._emit("on_tool_start", tool_name, tool_args)
                 observation, success = await self._execute_tool(tool_name, tool_args)
+                self._emit("on_tool_end", tool_name, observation, success)
 
                 # Record result
                 result_entry = {
@@ -278,7 +333,7 @@ class ToolExecutor:
                 }
                 tool_results.append(result_entry)
 
-                # Callback for logging/tracing
+                # Legacy callback for logging/tracing (deprecated, use callbacks instead)
                 if self.on_tool_call:
                     try:
                         self.on_tool_call(tool_name, tool_args, observation)
@@ -324,9 +379,11 @@ class ToolExecutor:
 
             # Check termination conditions
             if failure_count >= self.max_failures:
+                error_msg = f"Max failures ({self.max_failures}) reached"
+                self._emit("on_error", error_msg)
                 return ExecutorResult(
                     success=False,
-                    error=f"Max failures ({self.max_failures}) reached",
+                    error=error_msg,
                     tool_results=tool_results,
                     iterations=iteration,
                     failure_count=failure_count,
@@ -335,6 +392,8 @@ class ToolExecutor:
 
             if found_done:
                 logger.info(f"Done tool '{self.done_tool_name}' called, execution complete")
+                stop_tool_name = (done_result or {}).get("_stop_tool", self.done_tool_name)
+                self._emit("on_done", stop_tool_name, done_result or {})
                 return ExecutorResult(
                     success=True,
                     done_tool_result=done_result,
@@ -345,9 +404,11 @@ class ToolExecutor:
                 )
 
         # Max iterations reached
+        error_msg = f"Max iterations ({self.max_iterations}) reached without calling {self.done_tool_name}"
+        self._emit("on_error", error_msg)
         return ExecutorResult(
             success=False,
-            error=f"Max iterations ({self.max_iterations}) reached without calling {self.done_tool_name}",
+            error=error_msg,
             tool_results=tool_results,
             iterations=self.max_iterations,
             failure_count=failure_count,
