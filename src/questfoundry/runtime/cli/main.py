@@ -25,8 +25,10 @@ from typing import Annotated, Any
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from questfoundry.runtime.cli.config_cmd import config_app
 from questfoundry.runtime.config import get_settings
@@ -61,6 +63,57 @@ app.add_typer(config_app, name="config")
 
 # Create Rich console for formatted output
 console = Console()
+
+
+class StreamingCallbacks:
+    """Callbacks for streaming LLM output to the console."""
+
+    def __init__(self, console: Console, live: Live | None = None):
+        self.console = console
+        self.live = live
+        self._buffer = ""
+        self._current_text = Text()
+
+    def on_llm_start(self, iteration: int) -> None:
+        """Called when LLM inference begins."""
+        if self.live:
+            self._buffer = ""
+            self._current_text = Text()
+            self._current_text.append(f"[dim]Turn {iteration}:[/dim] ", style="dim")
+
+    def on_llm_token(self, token: str) -> None:
+        """Called for each streamed token."""
+        if self.live:
+            self._buffer += token
+            self._current_text.append(token)
+            self.live.update(Panel(self._current_text, title="SR Thinking", border_style="cyan"))
+
+    def on_llm_end(self, iteration: int, has_tool_calls: bool) -> None:
+        """Called when LLM inference completes."""
+        pass
+
+    def on_tool_start(self, tool_name: str, args: dict[str, Any]) -> None:
+        """Called before tool execution."""
+        if self.live:
+            self._current_text = Text()
+            self._current_text.append(f"[yellow]→ {tool_name}[/yellow]", style="yellow")
+            if args:
+                # Show first arg as preview
+                preview = str(list(args.values())[0])[:50]
+                self._current_text.append(f" {preview}...", style="dim")
+            self.live.update(Panel(self._current_text, title="Tool Call", border_style="yellow"))
+
+    def on_tool_end(self, tool_name: str, result: str, success: bool) -> None:
+        """Called after tool execution."""
+        pass
+
+    def on_error(self, error: str) -> None:
+        """Called when an error occurs."""
+        self.console.print(f"[red]Error: {error}[/red]")
+
+    def on_done(self, tool_name: str, result: dict[str, Any]) -> None:
+        """Called when execution completes."""
+        pass
 
 
 def _verbose_callback(value: int) -> int:
@@ -106,6 +159,15 @@ def ask(
             rich_help_panel=PANEL_OUTPUT,
         ),
     ] = 0,
+    stream: Annotated[
+        bool,
+        typer.Option(
+            "--stream",
+            "-s",
+            help="Stream LLM output in real-time",
+            rich_help_panel=PANEL_OUTPUT,
+        ),
+    ] = False,
     log_dir: Annotated[
         Path | None,
         typer.Option(
@@ -232,12 +294,21 @@ def ask(
             cold_store = get_cold_store(project)
             console.print(f"[green]+ Cold store: {project}[/green]")
 
+        # Set up streaming callbacks if requested
+        callbacks = None
+        live_context = None
+        if stream:
+            live_context = Live(console=console, refresh_per_second=10)
+            callbacks = StreamingCallbacks(console, live_context)
+
         # Create orchestrator
         orchestrator = Orchestrator(
             roles=ALL_ROLES,
             llm=llm,
             max_delegations=effective_max_delegations,
             cold_store=cold_store,
+            stream=stream,
+            callbacks=callbacks,
         )
 
         # Run the workflow
@@ -245,7 +316,11 @@ def ask(
         console.print("[bold]Running workflow...[/bold]")
         console.print()
 
-        final_state = _run_async(orchestrator.run(message))
+        if stream and live_context:
+            with live_context:
+                final_state = _run_async(orchestrator.run(message))
+        else:
+            final_state = _run_async(orchestrator.run(message))
 
         # Display results
         _display_results(final_state)

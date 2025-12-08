@@ -218,11 +218,15 @@ class Orchestrator:
         llm: BaseChatModel,
         max_delegations: int = 50,
         cold_store: ColdStore | None = None,
+        stream: bool = False,
+        callbacks: Any = None,
     ):
         self.roles = roles
         self.llm = llm
         self.max_delegations = max_delegations
         self.cold_store = cold_store
+        self.stream = stream
+        self.callbacks = callbacks
 
     @trace_orchestrator_run
     async def run(
@@ -266,6 +270,8 @@ class Orchestrator:
             done_tool_name="terminate",
             system_prompt=sr_prompt,
             stop_tools=["delegate_to"],  # Stop when SR delegates so we can execute it
+            stream=self.stream,
+            callbacks=self.callbacks,
         )
 
         # Track delegations and turns

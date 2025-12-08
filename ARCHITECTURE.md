@@ -425,10 +425,10 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 
 *Goal: Production-ready runtime.*
 
-- [ ] Streaming LLM output
+- [x] Streaming LLM output
 - [ ] State persistence/checkpointing
-- [ ] CLI `qf run` integration
-- [ ] End-to-end multi-role delegation tests
+- [x] CLI `qf ask` integration
+- [x] End-to-end multi-role delegation tests
 
 ---
 

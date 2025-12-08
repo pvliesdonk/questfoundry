@@ -47,6 +47,10 @@ class ExecutorCallbacks(Protocol):
         """Called when LLM inference completes."""
         ...
 
+    def on_llm_token(self, token: str) -> None:
+        """Called for each token during streaming."""
+        ...
+
     def on_tool_start(self, tool_name: str, args: dict[str, Any]) -> None:
         """Called before tool execution."""
         ...
@@ -183,6 +187,7 @@ class ToolExecutor:
         on_tool_call: Callable[[str, dict[str, Any], Any], None] | None = None,
         stop_tools: list[str] | None = None,
         callbacks: ExecutorCallbacks | None = None,
+        stream: bool = False,
     ):
         self.llm = llm
         self.tools = tools
@@ -192,6 +197,7 @@ class ToolExecutor:
         self.max_failures = max_failures
         self.on_tool_call = on_tool_call
         self.callbacks = callbacks
+        self.stream = stream
 
         # Tools that stop execution when called successfully
         # Includes done_tool plus any additional stop tools
@@ -211,6 +217,51 @@ class ToolExecutor:
     def reset(self) -> None:
         """Reset conversation history for a fresh run."""
         self.messages = [SystemMessage(content=self.system_prompt)]
+
+    async def _invoke_llm(self) -> BaseMessage:
+        """Invoke LLM with optional streaming.
+
+        When streaming is enabled, emits on_llm_token callbacks for each chunk
+        and accumulates the full response.
+
+        Returns
+        -------
+        BaseMessage
+            The complete LLM response.
+        """
+        if not self.stream:
+            # Standard non-streaming invoke
+            return await self.llm_with_tools.ainvoke(self.messages)
+
+        # Streaming: accumulate chunks and emit tokens
+        from langchain_core.messages import AIMessage, AIMessageChunk
+
+        chunks: list[AIMessageChunk] = []
+        async for chunk in self.llm_with_tools.astream(self.messages):
+            if isinstance(chunk, AIMessageChunk):
+                chunks.append(chunk)
+                # Emit token callback for content
+                if chunk.content:
+                    self._emit("on_llm_token", chunk.content)
+
+        # Concatenate all chunks into final message
+        if not chunks:
+            # Empty response - return empty AI message
+            return AIMessage(content="")
+
+        # Use LangChain's built-in chunk concatenation
+        # AIMessageChunk.__add__ returns AIMessageChunk
+        result = chunks[0]
+        for chunk in chunks[1:]:
+            result = result + chunk
+
+        # Convert final chunk to AIMessage for consistent return type
+        return AIMessage(
+            content=result.content,
+            additional_kwargs=result.additional_kwargs,
+            response_metadata=getattr(result, "response_metadata", {}),
+            tool_calls=getattr(result, "tool_calls", []),
+        )
 
     def _emit(self, event: str, *args: Any, **kwargs: Any) -> None:
         """Safely emit a callback event.
@@ -311,7 +362,7 @@ class ToolExecutor:
 
             start_time = time.perf_counter()
             try:
-                response = await self.llm_with_tools.ainvoke(self.messages)
+                response = await self._invoke_llm()
             except Exception as e:
                 logger.error(f"LLM invocation failed: {e}")
                 self._emit("on_error", f"LLM invocation failed: {e}")
