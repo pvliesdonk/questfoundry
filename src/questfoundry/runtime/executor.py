@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -225,6 +226,60 @@ class ToolExecutor:
             except Exception as e:
                 logger.warning(f"Callback {event} failed: {e}")
 
+    def _log_llm_request(self, iteration: int) -> None:
+        """Log LLM request to structured logs."""
+        try:
+            from questfoundry.runtime.logging import (
+                is_structured_logging_configured,
+                log_llm_request,
+            )
+
+            if not is_structured_logging_configured():
+                return
+
+            # Convert messages to dicts for logging
+            messages_for_log = []
+            for msg in self.messages:
+                msg_dict = {
+                    "role": getattr(msg, "type", "unknown"),
+                    "content": getattr(msg, "content", ""),
+                }
+                messages_for_log.append(msg_dict)
+
+            log_llm_request(
+                messages=messages_for_log,
+                iteration=iteration,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log LLM request: {e}")
+
+    def _log_llm_response(self, response: BaseMessage, iteration: int, duration_ms: float) -> None:
+        """Log LLM response to structured logs."""
+        try:
+            from questfoundry.runtime.logging import (
+                is_structured_logging_configured,
+                log_llm_response,
+            )
+
+            if not is_structured_logging_configured():
+                return
+
+            # Extract tool calls if present
+            tool_calls = getattr(response, "tool_calls", None) or []
+            tool_calls_for_log = [
+                {"name": tc.get("name", ""), "args": tc.get("args", {})}
+                for tc in tool_calls
+            ]
+
+            log_llm_response(
+                content=getattr(response, "content", None),
+                tool_calls=tool_calls_for_log if tool_calls_for_log else None,
+                iteration=iteration,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log LLM response: {e}")
+
     async def run(self, user_prompt: str) -> ExecutorResult:
         """Run the tool execution loop until done tool is called.
 
@@ -250,6 +305,11 @@ class ToolExecutor:
 
             # Invoke LLM
             self._emit("on_llm_start", iteration)
+
+            # Log LLM request to structured logs
+            self._log_llm_request(iteration)
+
+            start_time = time.perf_counter()
             try:
                 response = await self.llm_with_tools.ainvoke(self.messages)
             except Exception as e:
@@ -267,8 +327,13 @@ class ToolExecutor:
                     )
                 continue
 
+            duration_ms = (time.perf_counter() - start_time) * 1000
+
             # Add AI response to history
             self.messages.append(response)
+
+            # Log LLM response to structured logs
+            self._log_llm_response(response, iteration, duration_ms)
 
             # Extract tool calls
             tool_calls = getattr(response, "tool_calls", None) or []

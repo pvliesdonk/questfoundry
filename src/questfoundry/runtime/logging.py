@@ -26,7 +26,7 @@ import sys
 from datetime import UTC, datetime
 from enum import IntEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -40,6 +40,10 @@ __all__ = [
     "setup_logging",
     "get_logger",
     "configure_structured_logging",
+    "get_llm_logger",
+    "get_tools_logger",
+    "log_llm_request",
+    "log_llm_response",
 ]
 
 
@@ -154,9 +158,21 @@ def setup_logging(
         force=force,
     )
 
-    # Reduce noise from verbose libraries
-    for noisy in ["httpx", "httpcore", "openai", "anthropic", "urllib3", "langchain"]:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    # Reduce noise from verbose libraries unless at trace level (-vvv)
+    if verbosity < 3:
+        for noisy in [
+            "httpx",
+            "httpcore",
+            "openai",
+            "anthropic",
+            "urllib3",
+            "langchain",
+            "langchain_core",
+            "langchain_google_genai",
+            "langchain_openai",
+            "langchain_ollama",
+        ]:
+            logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Set up structured file logging if requested
     if log_dir:
@@ -187,6 +203,7 @@ def configure_structured_logging(log_dir: Path) -> None:
         "qf.tools": "tools.jsonl",
         "qf.state": "state.jsonl",
         "qf.delegations": "delegations.jsonl",
+        "qf.llm": "llm.jsonl",  # LLM prompts and responses
     }
 
     for name, filename in domains.items():
@@ -243,3 +260,114 @@ def reset_logging() -> None:
 
     _log_dir = None
     _structured_configured = False
+
+
+# Domain-specific logger accessors
+_llm_logger: logging.Logger | None = None
+_tools_logger: logging.Logger | None = None
+
+
+def get_llm_logger() -> logging.Logger:
+    """Get the LLM communication logger for prompts/responses."""
+    global _llm_logger
+    if _llm_logger is None:
+        _llm_logger = logging.getLogger("qf.llm")
+    return _llm_logger
+
+
+def get_tools_logger() -> logging.Logger:
+    """Get the tools logger for tool invocations."""
+    global _tools_logger
+    if _tools_logger is None:
+        _tools_logger = logging.getLogger("qf.tools")
+    return _tools_logger
+
+
+def log_llm_request(
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    role: str | None = None,
+    iteration: int | None = None,
+) -> None:
+    """Log an LLM request (prompt) to structured logs.
+
+    Parameters
+    ----------
+    messages : list[dict[str, Any]]
+        The messages being sent to the LLM.
+    model : str | None
+        The model being used.
+    role : str | None
+        The role making the request.
+    iteration : int | None
+        The iteration number in the execution loop.
+    """
+    logger = get_llm_logger()
+    # Format messages for logging (truncate long content)
+    formatted_messages = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str) and len(content) > 2000:
+            content = content[:2000] + "... [truncated]"
+        formatted_messages.append({
+            "role": msg.get("role", msg.get("type", "unknown")),
+            "content": content,
+        })
+
+    logger.info(
+        "llm_request",
+        extra={
+            "event": "llm_request",
+            "model": model,
+            "role": role,
+            "iteration": iteration,
+            "message_count": len(messages),
+            "messages": formatted_messages,
+        },
+    )
+
+
+def log_llm_response(
+    content: str | None = None,
+    tool_calls: list[dict[str, Any]] | None = None,
+    model: str | None = None,
+    role: str | None = None,
+    iteration: int | None = None,
+    duration_ms: float | None = None,
+) -> None:
+    """Log an LLM response to structured logs.
+
+    Parameters
+    ----------
+    content : str | None
+        The text content of the response.
+    tool_calls : list[dict[str, Any]] | None
+        Tool calls made by the LLM.
+    model : str | None
+        The model that responded.
+    role : str | None
+        The role that received the response.
+    iteration : int | None
+        The iteration number in the execution loop.
+    duration_ms : float | None
+        Response time in milliseconds.
+    """
+    logger = get_llm_logger()
+    # Truncate long content
+    truncated_content = content
+    if content and len(content) > 2000:
+        truncated_content = content[:2000] + "... [truncated]"
+
+    logger.info(
+        "llm_response",
+        extra={
+            "event": "llm_response",
+            "model": model,
+            "role": role,
+            "iteration": iteration,
+            "duration_ms": duration_ms,
+            "content": truncated_content,
+            "tool_calls": tool_calls,
+            "has_tool_calls": bool(tool_calls),
+        },
+    )
