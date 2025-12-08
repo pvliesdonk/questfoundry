@@ -213,14 +213,15 @@ def configure_structured_logging(log_dir: Path) -> None:
         logger.setLevel(logging.DEBUG)
         logger.handlers.clear()
 
-        handler = logging.FileHandler(log_dir / filename, encoding="utf-8")
+        # mode='a' ensures logs are appended, not overwritten
+        handler = logging.FileHandler(log_dir / filename, mode="a", encoding="utf-8")
         handler.setFormatter(_JsonlFormatter())
         logger.addHandler(handler)
         logger.propagate = False
         _file_handlers.append(handler)
 
-    # Catch-all debug.jsonl for all questfoundry messages
-    debug_handler = logging.FileHandler(log_dir / "debug.jsonl", encoding="utf-8")
+    # Catch-all debug.jsonl for all questfoundry messages (append mode)
+    debug_handler = logging.FileHandler(log_dir / "debug.jsonl", mode="a", encoding="utf-8")
     debug_handler.setLevel(logging.DEBUG)
     debug_handler.setFormatter(_JsonlFormatter())
 

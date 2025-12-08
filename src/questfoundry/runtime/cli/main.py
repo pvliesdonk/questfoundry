@@ -231,14 +231,15 @@ def ask(
             rich_help_panel=PANEL_OUTPUT,
         ),
     ] = False,
-    log_dir: Annotated[
-        Path | None,
+    log: Annotated[
+        bool,
         typer.Option(
-            "--log-dir",
-            help="Directory for structured JSONL logs",
+            "--log",
+            "-l",
+            help="Enable structured JSONL logs in {project}/logs/ (requires --project)",
             rich_help_panel=PANEL_OUTPUT,
         ),
-    ] = None,
+    ] = False,
     # Runtime Options
     max_delegations: Annotated[
         int | None,
@@ -281,7 +282,7 @@ def ask(
 
         qf ask "Create a story" --provider google --model gemini-2.5-pro
 
-        qf ask "Create a story" -vvv --log-dir ./logs
+        qf ask "Create a story" --project myproject -vvv --log
     """
     from questfoundry.runtime.logging import setup_logging
 
@@ -289,6 +290,19 @@ def ask(
         # Set up logging based on verbosity
         # Default to INFO (1) if no -v flags
         effective_verbosity = verbose if verbose > 0 else 1
+
+        # Derive log directory from project path when --log is enabled
+        log_dir: Path | None = None
+        if log and project:
+            # Place logs in {project_dir}/logs/
+            project_path = Path(project)
+            if project_path.is_file():
+                log_dir = project_path.parent / "logs"
+            else:
+                log_dir = project_path / "logs"
+        elif log and not project:
+            console.print("[yellow]Warning: --log requires --project to be set[/yellow]")
+
         setup_logging(verbosity=effective_verbosity, log_dir=log_dir)
 
         settings = get_settings()
