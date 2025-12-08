@@ -368,15 +368,15 @@ Migrate essential missing artifacts to `domain/ontology/artifacts.md`:
 
 **5. Role Enrichment**
 
-- [ ] Manually port "Anti-patterns" and "Example Dialogues" from v2 Charters to v3 Role files.
+- [x] Manually port "Anti-patterns" and "Example Dialogues" from v2 Charters to v3 Role files.
 
 **6. Remaining Artifacts**
 
-- [ ] `Shotlist`, `AudioPlan`, `TranslationPack` (Asset production types)
+- [x] `Shotlist`, `AudioPlan`, `TranslationPack` (Asset production types)
 
 **7. Glossary**
 
-- [ ] Create `domain/ontology/glossary.md` (Lightweight version of v2 glossary).
+- [x] Create `domain/ontology/glossary.md` (Lightweight version of v2 glossary).
 
 ---
 
@@ -413,12 +413,13 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 - [x] Migrate `hook_harvest`, `lore_deepening`, `canon_commit`, `scene_weave`, and `codex_expansion` loops.
 - [x] Add Entity, Structural, and World artifacts to Ontology.
 
-### Phase 5: Enrichment (Executing Priority 3)
+### Phase 5: Enrichment (Complete) ✓
 
 *Goal: Agent intelligence and polish.*
 
-- [ ] Deep-dive copy/paste of v2 Charter prose into v3 Role files.
-- [ ] Add remaining asset artifacts.
+- [x] Deep-dive copy/paste of v2 Charter prose into v3 Role files.
+- [x] Add remaining asset artifacts.
+- [x] Create glossary.md with essential terms.
 
 ---
 
