@@ -1194,3 +1194,290 @@ type: list[str]
 required: false
 description: "Categorization tags for filtering and search"
 :::
+
+---
+
+## Shotlist
+
+A shotlist defines visual asset requirements for a scene or section.
+Shotlists guide art production without dictating implementation details.
+
+:::{artifact-type}
+id: shotlist
+name: "Shotlist"
+store: hot
+lifecycle: [draft, approved, deferred, completed]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: shotlist
+name: title
+type: str
+required: true
+description: "Identifier for this shotlist (e.g., 'Act I Hub Visuals')"
+:::
+
+:::{artifact-field}
+artifact: shotlist
+name: section_id
+type: str
+required: true
+description: "Section or scene this shotlist covers"
+:::
+
+:::{artifact-field}
+artifact: shotlist
+name: shots
+type: list[dict]
+required: true
+description: "List of shot definitions with subject, mood, and purpose"
+:::
+
+:::{artifact-field}
+artifact: shotlist
+name: status
+type: str
+required: false
+description: "Current lifecycle status"
+:::
+
+:::{artifact-field}
+artifact: shotlist
+name: art_direction_notes
+type: str
+required: false
+description: "Overall visual guidance from Creative Director"
+:::
+
+:::{artifact-field}
+artifact: shotlist
+name: priority
+type: str
+required: false
+description: "Production priority (critical, standard, nice-to-have)"
+:::
+
+:::{artifact-field}
+artifact: shotlist
+name: deferred_reason
+type: str
+required: false
+description: "If deferred, why (e.g., 'pending budget', 'art-only release')"
+:::
+
+### Shot Definition
+
+Each shot in the `shots` list should contain:
+
+- **subject**: What's depicted (character, location, moment)
+- **mood**: Emotional tone (tense, warm, mysterious)
+- **purpose**: Narrative function (establish setting, reveal character)
+- **composition_hints**: Optional framing suggestions (close-up, wide)
+- **references**: Optional links to similar images or style guides
+
+**Note:** Never include technique (seeds, models, tools) in player-facing exports.
+
+---
+
+## AudioPlan
+
+An audio plan defines sound requirements for scenes or sections.
+Plans guide audio production without leaking technical details.
+
+:::{artifact-type}
+id: audio_plan
+name: "Audio Plan"
+store: hot
+lifecycle: [draft, approved, deferred, completed]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: audio_plan
+name: title
+type: str
+required: true
+description: "Identifier for this audio plan"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: section_id
+type: str
+required: true
+description: "Section or scene this audio plan covers"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: ambient
+type: str
+required: false
+description: "Background atmosphere (e.g., 'dock machinery, distant water')"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: music_cues
+type: list[dict]
+required: false
+description: "Music moments with mood, timing, and transition notes"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: sfx_cues
+type: list[dict]
+required: false
+description: "Sound effect requirements with trigger and description"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: voice_notes
+type: str
+required: false
+description: "VO/narration guidance (tone, pacing, delivery)"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: status
+type: str
+required: false
+description: "Current lifecycle status"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: priority
+type: str
+required: false
+description: "Production priority (critical, standard, nice-to-have)"
+:::
+
+:::{artifact-field}
+artifact: audio_plan
+name: deferred_reason
+type: str
+required: false
+description: "If deferred, why"
+:::
+
+### Music Cue Definition
+
+Each music cue in the `music_cues` list should contain:
+
+- **moment**: When it triggers (scene start, choice reveal, climax)
+- **mood**: Emotional quality (tense, triumphant, melancholic)
+- **transition**: How it enters/exits (fade, hard cut, crossfade)
+- **duration_hint**: Approximate length (brief, extended, looping)
+
+**Note:** Never include DAW/plugin names, sample libraries, or MIDI data in player-facing exports.
+
+---
+
+## TranslationPack
+
+A translation pack tracks localization status for a content slice.
+Packs coordinate translator work and coverage reporting.
+
+:::{artifact-type}
+id: translation_pack
+name: "Translation Pack"
+store: hot
+lifecycle: [draft, in_progress, review, complete]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: translation_pack
+name: title
+type: str
+required: true
+description: "Identifier for this translation pack"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: source_language
+type: str
+required: true
+description: "Language code of source content (e.g., 'en')"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: target_language
+type: str
+required: true
+description: "Language code of translation target (e.g., 'nl', 'de')"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: scope
+type: list[str]
+required: true
+description: "Section or artifact IDs included in this pack"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: status
+type: str
+required: false
+description: "Current lifecycle status"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: coverage_percent
+type: int
+required: false
+description: "Percentage of scope that's translated (0-100)"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: translator
+type: str
+required: false
+description: "Assigned translator or team"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: register_notes
+type: str
+required: false
+description: "Voice/formality guidance for this language"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: glossary_terms
+type: list[str]
+required: false
+description: "Key terms that must be translated consistently"
+:::
+
+:::{artifact-field}
+artifact: translation_pack
+name: blockers
+type: list[str]
+required: false
+description: "Issues preventing progress (missing context, ambiguous source)"
+:::
+
+### Coverage Labels (for Views)
+
+When reporting translation coverage in exports:
+
+- **complete**: 100% translated and reviewed
+- **partial**: Specify percentage (e.g., "NL 74%")
+- **deferred**: Translation not yet started for this language
