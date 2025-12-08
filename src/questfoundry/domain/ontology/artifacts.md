@@ -458,3 +458,739 @@ type: str
 required: false
 description: "Role ID that performed the check"
 :::
+
+---
+
+## Character
+
+A character is a named entity with agency in the story world.
+Characters can be protagonists, antagonists, or supporting cast.
+
+:::{artifact-type}
+id: character
+name: "Character"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: character
+name: name
+type: str
+required: true
+description: "The character's primary name"
+:::
+
+:::{artifact-field}
+artifact: character
+name: description
+type: str
+required: true
+description: "Physical and personality description"
+:::
+
+:::{artifact-field}
+artifact: character
+name: role_in_story
+type: str
+required: false
+description: "Narrative function (protagonist, antagonist, mentor, etc.)"
+:::
+
+:::{artifact-field}
+artifact: character
+name: faction
+type: str
+required: false
+description: "Primary faction or group affiliation"
+:::
+
+:::{artifact-field}
+artifact: character
+name: relationships
+type: list[str]
+required: false
+description: "IDs of related Relationship artifacts"
+:::
+
+:::{artifact-field}
+artifact: character
+name: first_appearance
+type: str
+required: false
+description: "Scene or chapter where character is introduced"
+:::
+
+:::{artifact-field}
+artifact: character
+name: tags
+type: list[str]
+required: false
+description: "Categorization tags (mortal, immortal, recurring, etc.)"
+:::
+
+---
+
+## Location
+
+A location is a place in the story world where scenes can occur.
+Locations provide setting and atmosphere for narrative events.
+
+:::{artifact-type}
+id: location
+name: "Location"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: location
+name: name
+type: str
+required: true
+description: "The location's primary name"
+:::
+
+:::{artifact-field}
+artifact: location
+name: description
+type: str
+required: true
+description: "Physical and atmospheric description"
+:::
+
+:::{artifact-field}
+artifact: location
+name: region
+type: str
+required: false
+description: "Parent region or area this location belongs to"
+:::
+
+:::{artifact-field}
+artifact: location
+name: location_type
+type: str
+required: false
+description: "Category (city, wilderness, dungeon, etc.)"
+:::
+
+:::{artifact-field}
+artifact: location
+name: connected_to
+type: list[str]
+required: false
+description: "IDs of adjacent or connected locations"
+:::
+
+:::{artifact-field}
+artifact: location
+name: notable_features
+type: list[str]
+required: false
+description: "Distinctive elements (landmarks, hazards, resources)"
+:::
+
+:::{artifact-field}
+artifact: location
+name: tags
+type: list[str]
+required: false
+description: "Categorization tags (safe, dangerous, hub, etc.)"
+:::
+
+---
+
+## Item
+
+An item is an object of significance in the story world.
+Items can be quest objects, equipment, or narrative MacGuffins.
+
+:::{artifact-type}
+id: item
+name: "Item"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: item
+name: name
+type: str
+required: true
+description: "The item's primary name"
+:::
+
+:::{artifact-field}
+artifact: item
+name: description
+type: str
+required: true
+description: "Physical description and properties"
+:::
+
+:::{artifact-field}
+artifact: item
+name: item_type
+type: str
+required: false
+description: "Category (weapon, artifact, key, consumable, etc.)"
+:::
+
+:::{artifact-field}
+artifact: item
+name: significance
+type: str
+required: false
+description: "Narrative importance (quest item, MacGuffin, collectible)"
+:::
+
+:::{artifact-field}
+artifact: item
+name: owner
+type: str
+required: false
+description: "Character ID of current or original owner"
+:::
+
+:::{artifact-field}
+artifact: item
+name: location
+type: str
+required: false
+description: "Location ID where item can be found"
+:::
+
+:::{artifact-field}
+artifact: item
+name: tags
+type: list[str]
+required: false
+description: "Categorization tags (magical, mundane, unique, etc.)"
+:::
+
+---
+
+## Relationship
+
+A relationship defines a connection between two entities.
+Relationships track alliances, rivalries, and other dynamics.
+
+:::{artifact-type}
+id: relationship
+name: "Relationship"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: relationship
+name: source_entity
+type: str
+required: true
+description: "ID of the first entity in the relationship"
+:::
+
+:::{artifact-field}
+artifact: relationship
+name: target_entity
+type: str
+required: true
+description: "ID of the second entity in the relationship"
+:::
+
+:::{artifact-field}
+artifact: relationship
+name: relationship_type
+type: str
+required: true
+description: "Nature of connection (ally, enemy, family, mentor, etc.)"
+:::
+
+:::{artifact-field}
+artifact: relationship
+name: description
+type: str
+required: false
+description: "Details about the relationship"
+:::
+
+:::{artifact-field}
+artifact: relationship
+name: strength
+type: str
+required: false
+description: "Intensity (strong, moderate, weak, complicated)"
+:::
+
+:::{artifact-field}
+artifact: relationship
+name: is_mutual
+type: bool
+required: false
+description: "Whether the relationship is bidirectional"
+:::
+
+:::{artifact-field}
+artifact: relationship
+name: tags
+type: list[str]
+required: false
+description: "Categorization tags (public, secret, evolving, etc.)"
+:::
+
+---
+
+## Act
+
+An act is a major structural division of the story.
+Acts group chapters and represent significant narrative phases.
+
+:::{artifact-type}
+id: act
+name: "Act"
+store: cold
+lifecycle: [draft, review, final]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: act
+name: title
+type: str
+required: true
+description: "The act's title or number"
+:::
+
+:::{artifact-field}
+artifact: act
+name: description
+type: str
+required: false
+description: "Summary of the act's narrative purpose"
+:::
+
+:::{artifact-field}
+artifact: act
+name: sequence
+type: int
+required: true
+description: "Order within the story"
+:::
+
+:::{artifact-field}
+artifact: act
+name: chapters
+type: list[str]
+required: false
+description: "IDs of chapters in this act"
+:::
+
+:::{artifact-field}
+artifact: act
+name: themes
+type: list[str]
+required: false
+description: "Thematic elements explored in this act"
+:::
+
+---
+
+## Chapter
+
+A chapter is a major content division containing multiple scenes.
+Chapters organize scenes into coherent narrative segments.
+
+:::{artifact-type}
+id: chapter
+name: "Chapter"
+store: cold
+lifecycle: [draft, review, final]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: chapter
+name: title
+type: str
+required: true
+description: "The chapter's title"
+:::
+
+:::{artifact-field}
+artifact: chapter
+name: act_id
+type: str
+required: false
+description: "Parent act this chapter belongs to"
+:::
+
+:::{artifact-field}
+artifact: chapter
+name: sequence
+type: int
+required: true
+description: "Order within the act"
+:::
+
+:::{artifact-field}
+artifact: chapter
+name: scenes
+type: list[str]
+required: false
+description: "IDs of scenes in this chapter"
+:::
+
+:::{artifact-field}
+artifact: chapter
+name: summary
+type: str
+required: false
+description: "Brief summary of chapter events"
+:::
+
+:::{artifact-field}
+artifact: chapter
+name: status
+type: str
+required: false
+description: "Current lifecycle status"
+:::
+
+---
+
+## Sequence
+
+A sequence is a group of related beats within a scene.
+Sequences organize micro-level narrative flow.
+
+:::{artifact-type}
+id: sequence
+name: "Sequence"
+store: hot
+lifecycle: [draft, review, final]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: sequence
+name: title
+type: str
+required: true
+description: "The sequence's identifier"
+:::
+
+:::{artifact-field}
+artifact: sequence
+name: scene_id
+type: str
+required: true
+description: "Parent scene this sequence belongs to"
+:::
+
+:::{artifact-field}
+artifact: sequence
+name: order
+type: int
+required: true
+description: "Order within the scene"
+:::
+
+:::{artifact-field}
+artifact: sequence
+name: beats
+type: list[str]
+required: false
+description: "IDs of beats in this sequence"
+:::
+
+:::{artifact-field}
+artifact: sequence
+name: purpose
+type: str
+required: false
+description: "Narrative function of this sequence"
+:::
+
+---
+
+## Beat
+
+A beat is the smallest unit of narrative action.
+Beats represent individual story moments within a sequence.
+
+:::{artifact-type}
+id: beat
+name: "Beat"
+store: hot
+lifecycle: [draft, review, final]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: beat
+name: description
+type: str
+required: true
+description: "What happens in this beat"
+:::
+
+:::{artifact-field}
+artifact: beat
+name: sequence_id
+type: str
+required: true
+description: "Parent sequence this beat belongs to"
+:::
+
+:::{artifact-field}
+artifact: beat
+name: order
+type: int
+required: true
+description: "Order within the sequence"
+:::
+
+:::{artifact-field}
+artifact: beat
+name: beat_type
+type: str
+required: false
+description: "Category (action, dialogue, revelation, choice, etc.)"
+:::
+
+:::{artifact-field}
+artifact: beat
+name: characters
+type: list[str]
+required: false
+description: "Character IDs involved in this beat"
+:::
+
+:::{artifact-field}
+artifact: beat
+name: state_effects
+type: list[str]
+required: false
+description: "State changes triggered by this beat"
+:::
+
+---
+
+## Timeline
+
+A timeline organizes events chronologically within the story world.
+Timelines provide temporal structure for worldbuilding and canon.
+
+:::{artifact-type}
+id: timeline
+name: "Timeline"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: timeline
+name: name
+type: str
+required: true
+description: "The timeline's identifier (e.g., 'Main', 'Pre-History')"
+:::
+
+:::{artifact-field}
+artifact: timeline
+name: description
+type: str
+required: false
+description: "What period or scope this timeline covers"
+:::
+
+:::{artifact-field}
+artifact: timeline
+name: reference_point
+type: str
+required: false
+description: "The T0 or anchor point for relative dates"
+:::
+
+:::{artifact-field}
+artifact: timeline
+name: events
+type: list[str]
+required: false
+description: "IDs of events in this timeline"
+:::
+
+:::{artifact-field}
+artifact: timeline
+name: scale
+type: str
+required: false
+description: "Time scale (years, decades, centuries, etc.)"
+:::
+
+---
+
+## Event
+
+An event is a significant occurrence in the story world's history.
+Events anchor the timeline and provide causal links.
+
+:::{artifact-type}
+id: event
+name: "Event"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: event
+name: title
+type: str
+required: true
+description: "The event's name"
+:::
+
+:::{artifact-field}
+artifact: event
+name: description
+type: str
+required: true
+description: "What happened during this event"
+:::
+
+:::{artifact-field}
+artifact: event
+name: timeline_id
+type: str
+required: false
+description: "Timeline this event belongs to"
+:::
+
+:::{artifact-field}
+artifact: event
+name: when
+type: str
+required: true
+description: "When the event occurred (relative or absolute)"
+:::
+
+:::{artifact-field}
+artifact: event
+name: participants
+type: list[str]
+required: false
+description: "Character or faction IDs involved"
+:::
+
+:::{artifact-field}
+artifact: event
+name: location
+type: str
+required: false
+description: "Location ID where event occurred"
+:::
+
+:::{artifact-field}
+artifact: event
+name: consequences
+type: list[str]
+required: false
+description: "Event IDs that resulted from this event"
+:::
+
+:::{artifact-field}
+artifact: event
+name: spoiler_level
+type: str
+required: false
+description: "hot (internal) or cold (player-safe)"
+:::
+
+---
+
+## Fact
+
+A fact is an atomic piece of verified world knowledge.
+Facts are the building blocks of canon entries.
+
+:::{artifact-type}
+id: fact
+name: "Fact"
+store: cold
+lifecycle: [draft, verified, canon]
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: fact
+name: statement
+type: str
+required: true
+description: "The factual assertion"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: category
+type: str
+required: false
+description: "Type of fact (geography, history, magic, politics, etc.)"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: source
+type: str
+required: false
+description: "Where this fact originated"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: confidence
+type: str
+required: false
+description: "Certainty level (canon, provisional, disputed)"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: related_entities
+type: list[str]
+required: false
+description: "Character, Location, or Item IDs this fact concerns"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: spoiler_level
+type: str
+required: false
+description: "hot (internal) or cold (player-safe)"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: tags
+type: list[str]
+required: false
+description: "Categorization tags for filtering and search"
+:::

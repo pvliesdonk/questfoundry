@@ -349,18 +349,18 @@ Create `domain/playbooks/` for meta-processes:
 **3. Remaining Content Loops (Consolidated)**
 Migrate remaining v2 Loops + Playbook checklists into `domain/loops/`:
 
-- [ ] `hook_harvest.md` (Triage process)
-- [ ] `lore_deepening.md` (Canon generation)
-- [ ] `canon_commit.md` (The "Hot to Cold" merge process)
-- [ ] `scene_weave.md` (Drafting prose)
-- [ ] `codex_expansion.md` (Encyclopedia generation)
+- [x] `hook_harvest.md` (Triage process)
+- [x] `lore_deepening.md` (Canon generation)
+- [x] `canon_commit.md` (The "Hot to Cold" merge process)
+- [x] `scene_weave.md` (Drafting prose)
+- [x] `codex_expansion.md` (Encyclopedia generation)
 
 **4. Core Artifacts (Ontology)**
 Migrate essential missing artifacts to `domain/ontology/artifacts.md`:
 
-- [ ] **Entities:** `Character`, `Location`, `Item`, `Relationship`
-- [ ] **Structural:** `Act`, `Chapter`, `Sequence`, `Beat`
-- [ ] **World:** `Timeline`, `Event`, `Fact`
+- [x] **Entities:** `Character`, `Location`, `Item`, `Relationship`
+- [x] **Structural:** `Act`, `Chapter`, `Sequence`, `Beat`
+- [x] **World:** `Timeline`, `Event`, `Fact`
 
 ### 12.4 Priority 3: Medium (Enrichment)
 
@@ -406,12 +406,12 @@ This section maps the priorities from Chapter 12 into a chronological execution 
 - [x] Populate `domain/playbooks/` with Emergency Retcon & Gate Failure.
 - [ ] Update Gatekeeper quality bars to reference these new principles.
 
-### Phase 4: Standard Migration (Executing Priority 2)
+### Phase 4: Standard Migration (Complete) ✓
 
 *Goal: Full content production capabilities.*
 
-- [ ] Migrate `hook_harvest`, `lore_deepening`, and `canon_commit` loops.
-- [ ] Add `Character`, `Location`, and `Timeline` artifacts to Ontology.
+- [x] Migrate `hook_harvest`, `lore_deepening`, `canon_commit`, `scene_weave`, and `codex_expansion` loops.
+- [x] Add Entity, Structural, and World artifacts to Ontology.
 
 ### Phase 5: Enrichment (Executing Priority 3)
 
