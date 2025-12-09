@@ -26,7 +26,10 @@ trace.log
 **/tools.jsonl
 **/state.jsonl
 **/delegations.jsonl
-logs/
+**/logs/
+
+# Project directories
+**/project_*/
 
 # Python
 *.pyc
