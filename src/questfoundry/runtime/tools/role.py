@@ -573,17 +573,33 @@ class PromoteToCanon(BaseTool):
             )
 
             # Convert to prose/string for cold section
+            # NEVER fall back to JSON - require actual prose content
             if isinstance(content_data, dict):
-                # Try to get prose content
-                content = content_data.get(
-                    "content",
-                    content_data.get(
-                        "prose",
-                        content_data.get("text", json.dumps(content_data, indent=2)),
-                    ),
+                # Try to get prose content from known fields
+                content = (
+                    content_data.get("content")
+                    or content_data.get("prose")
+                    or content_data.get("text")
                 )
+                if not content:
+                    # Artifact has no prose - reject it
+                    available_fields = list(content_data.keys())
+                    errors.append(
+                        f"Artifact '{artifact_id}' has no prose content. "
+                        f"Expected 'content', 'prose', or 'text' field. "
+                        f"Found fields: {available_fields}. "
+                        f"This looks like structural metadata, not player-readable prose."
+                    )
+                    continue
             else:
                 content = str(content_data)
+                if len(content) < 50:
+                    # Too short to be meaningful prose
+                    errors.append(
+                        f"Artifact '{artifact_id}' content too short ({len(content)} chars). "
+                        f"Cold store is for player-readable prose, not metadata."
+                    )
+                    continue
 
             # Add to cold_store using new API
             try:
