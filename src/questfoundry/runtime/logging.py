@@ -44,6 +44,9 @@ __all__ = [
     "get_tools_logger",
     "log_llm_request",
     "log_llm_response",
+    "log_role_session_start",
+    "log_role_session_end",
+    "log_tool_execution",
 ]
 
 
@@ -77,7 +80,40 @@ _file_handlers: list[logging.FileHandler] = []
 
 
 class _JsonlFormatter(logging.Formatter):
-    """Format log records as JSONL for structured logging."""
+    """Format log records as JSONL for structured logging.
+
+    Captures all extra fields passed via logger.info(..., extra={...}).
+    This enables VCR-style replay testing by recording full LLM interactions.
+    """
+
+    # Fields to capture for VCR replay and debugging
+    VCR_FIELDS = frozenset({
+        # LLM interaction fields (from log_llm_request/response)
+        "event",
+        "model",
+        "role",
+        "iteration",
+        "messages",
+        "message_count",
+        "content",
+        "tool_calls",
+        "has_tool_calls",
+        "duration_ms",
+        # Tool execution fields
+        "tool",
+        "args",
+        "result",
+        "success",
+        # State fields
+        "artifact",
+        "key",
+        "value",
+        # Session markers
+        "session_id",
+        "task",
+        "system_prompt",
+        "hot_store_snapshot",
+    })
 
     def format(self, record: logging.LogRecord) -> str:
         data = {
@@ -91,8 +127,8 @@ class _JsonlFormatter(logging.Formatter):
         }
         if record.exc_info:
             data["exception"] = self.formatException(record.exc_info)
-        # Include extra fields if present
-        for key in ["tool", "args", "result", "role", "artifact", "duration_ms"]:
+        # Include all VCR-relevant extra fields
+        for key in self.VCR_FIELDS:
             if hasattr(record, key):
                 data[key] = getattr(record, key)
         return json.dumps(data, default=str)
@@ -375,5 +411,127 @@ def log_llm_response(
             "content": truncated_content,
             "tool_calls": tool_calls,
             "has_tool_calls": bool(tool_calls),
+        },
+    )
+
+
+def log_role_session_start(
+    role_id: str,
+    task: str,
+    system_prompt: str,
+    hot_store: dict[str, Any] | None = None,
+    session_id: str | None = None,
+) -> None:
+    """Log the start of a role execution session for VCR recording.
+
+    Parameters
+    ----------
+    role_id : str
+        The role being executed (e.g., 'gatekeeper').
+    task : str
+        The task delegated to the role.
+    system_prompt : str
+        The rendered system prompt for the role.
+    hot_store : dict[str, Any] | None
+        Snapshot of hot_store at session start.
+    session_id : str | None
+        Unique session identifier for correlation.
+    """
+    logger = get_llm_logger()
+    # Truncate system prompt if very long
+    truncated_prompt = system_prompt
+    if len(system_prompt) > 5000:
+        truncated_prompt = system_prompt[:5000] + "... [truncated]"
+
+    logger.info(
+        "role_session_start",
+        extra={
+            "event": "role_session_start",
+            "role": role_id,
+            "task": task,
+            "system_prompt": truncated_prompt,
+            "hot_store_snapshot": hot_store,
+            "session_id": session_id,
+        },
+    )
+
+
+def log_role_session_end(
+    role_id: str,
+    status: str,
+    hot_store: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    duration_ms: float | None = None,
+) -> None:
+    """Log the end of a role execution session for VCR recording.
+
+    Parameters
+    ----------
+    role_id : str
+        The role that executed.
+    status : str
+        Final status (completed, error, blocked, etc.).
+    hot_store : dict[str, Any] | None
+        Snapshot of hot_store at session end.
+    session_id : str | None
+        Session identifier for correlation.
+    duration_ms : float | None
+        Total session duration in milliseconds.
+    """
+    logger = get_llm_logger()
+    logger.info(
+        "role_session_end",
+        extra={
+            "event": "role_session_end",
+            "role": role_id,
+            "status": status,
+            "hot_store_snapshot": hot_store,
+            "session_id": session_id,
+            "duration_ms": duration_ms,
+        },
+    )
+
+
+def log_tool_execution(
+    tool_name: str,
+    args: dict[str, Any],
+    result: Any,
+    success: bool,
+    role: str | None = None,
+    duration_ms: float | None = None,
+) -> None:
+    """Log a tool execution for VCR recording.
+
+    Parameters
+    ----------
+    tool_name : str
+        Name of the tool executed.
+    args : dict[str, Any]
+        Arguments passed to the tool.
+    result : Any
+        Result returned by the tool.
+    success : bool
+        Whether the tool executed successfully.
+    role : str | None
+        The role that called the tool.
+    duration_ms : float | None
+        Execution time in milliseconds.
+    """
+    logger = get_llm_logger()
+    # Truncate large results
+    result_str = str(result)
+    if len(result_str) > 2000:
+        result_str = result_str[:2000] + "... [truncated]"
+
+    logger.info(
+        "tool_execution",
+        extra={
+            "event": "tool_execution",
+            "tool": tool_name,
+            "args": args,
+            "result": result_str,
+            "success": success,
+            "role": role,
+            "duration_ms": duration_ms,
         },
     )

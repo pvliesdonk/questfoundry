@@ -9,6 +9,8 @@ Each role runs as an independent agent that:
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.language_models import BaseChatModel
@@ -16,6 +18,7 @@ from langchain_core.tools import BaseTool
 
 from questfoundry.compiler.models import RoleIR
 from questfoundry.runtime.executor import ToolExecutor
+from questfoundry.runtime.logging import log_role_session_end, log_role_session_start
 from questfoundry.runtime.state import DelegationResult, StudioState
 from questfoundry.runtime.tools.consult import (
     ConsultPlaybook,
@@ -436,12 +439,37 @@ class RoleAgent:
         """
         logger.info(f"[{self.role.id}] Starting task: {task[:100]}...")
 
+        # Generate session ID for VCR correlation
+        session_id = str(uuid.uuid4())[:8]
+        start_time = time.perf_counter()
+
+        # Log session start for VCR recording
+        log_role_session_start(
+            role_id=self.role.id,
+            task=task,
+            system_prompt=self.system_prompt,
+            hot_store=dict(self.state.get("hot_store", {})),
+            session_id=session_id,
+        )
+
         # Run executor until return_to_sr is called
         result = await self.executor.run(task)
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
 
         if not result.success:
             # Execution failed (max iterations, max failures, etc.)
             logger.error(f"[{self.role.id}] Execution failed: {result.error}")
+
+            # Log session end for VCR
+            log_role_session_end(
+                role_id=self.role.id,
+                status="error",
+                hot_store=dict(self.state.get("hot_store", {})),
+                session_id=session_id,
+                duration_ms=duration_ms,
+            )
+
             return DelegationResult(
                 role_id=self.role.id,
                 status="error",
@@ -456,9 +484,20 @@ class RoleAgent:
         # Handle both direct result and nested delegation_result
         dr = done_result.get("delegation_result", done_result)
 
+        status = dr.get("status", "completed")
+
+        # Log session end for VCR
+        log_role_session_end(
+            role_id=self.role.id,
+            status=status,
+            hot_store=dict(self.state.get("hot_store", {})),
+            session_id=session_id,
+            duration_ms=duration_ms,
+        )
+
         return DelegationResult(
             role_id=dr.get("role_id", self.role.id),
-            status=dr.get("status", "completed"),
+            status=status,
             message=dr.get("message", "Task completed."),
             artifacts=dr.get("artifacts", []),
             recommendation=dr.get("recommendation"),
