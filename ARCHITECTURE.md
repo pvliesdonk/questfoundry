@@ -517,6 +517,14 @@ This section maps the priorities from Chapter 13 into a chronological execution 
 - [x] CLI `qf ask` integration
 - [x] End-to-end multi-role delegation tests
 
+### Known Technical Debt
+
+**SR Prompt in Runtime (orchestrator.py)**
+
+The Showrunner's prompt is currently hardcoded in `runtime/orchestrator.py` (`_build_sr_system_prompt()`). This violates the domain-first principle - the workflow guidance (GK→LK promotion flow) should be in `domain/roles/showrunner.md` and compiled/loaded from there.
+
+*TODO:* Refactor to load SR prompt from domain layer, similar to how other role prompts are handled via `_render_prompt()` in `runtime/roles.py`.
+
 ---
 
 ## Appendix A: File Naming Conventions
