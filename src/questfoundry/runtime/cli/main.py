@@ -253,6 +253,22 @@ def ask(
             rich_help_panel=PANEL_RUNTIME,
         ),
     ] = None,
+    resume: Annotated[
+        str | None,
+        typer.Option(
+            "--resume",
+            help="Resume from latest checkpoint of run ID (e.g., run-2025-12-09-001)",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = None,
+    from_checkpoint: Annotated[
+        int | None,
+        typer.Option(
+            "--from-checkpoint",
+            help="Resume from specific checkpoint ID",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = None,
 ) -> None:
     """Talk to the studio in natural language.
 
@@ -278,10 +294,19 @@ def ask(
         qf ask "Create a story" --provider google --model gemini-2.5-pro
 
         qf ask "Create a story" --project myproject -vvv --log
+
+        qf ask "Continue the story" --project myproject --resume run-2025-12-09-001
+
+        qf ask "Continue" --project myproject --from-checkpoint 5
     """
     from questfoundry.runtime.logging import setup_logging
 
     try:
+        # Validate resume options require project
+        if (resume or from_checkpoint) and not project:
+            console.print("[red]Error: --resume and --from-checkpoint require --project[/red]")
+            raise typer.Exit(1)
+
         # Set up logging based on verbosity
         # With --stream and no -v: suppress log output entirely (errors only)
         # With --stream and -v: use requested verbosity
@@ -365,13 +390,27 @@ def ask(
         # Create LLM from configuration
         llm = create_llm_from_config(settings)
 
-        # Set up cold store if project specified
+        # Set up cold store and checkpoint store if project specified
         cold_store = None
+        checkpoint_store = None
         if project:
+            from questfoundry.runtime.checkpoint import CheckpointStore
             from questfoundry.runtime.stores import get_cold_store
 
             cold_store = get_cold_store(project)
             console.print(f"[green]+ Cold store: {project}[/green]")
+
+            # Set up checkpoint store (always enabled when project is specified)
+            project_path = Path(project)
+            checkpoint_dir = project_path.parent if project_path.is_file() else project_path
+            checkpoint_store = CheckpointStore(checkpoint_dir)
+            console.print(f"[green]+ Checkpoints: {checkpoint_dir / 'checkpoints.db'}[/green]")
+
+            # Show resume info if applicable
+            if resume:
+                console.print(f"[cyan]Resuming from run: {resume}[/cyan]")
+            elif from_checkpoint:
+                console.print(f"[cyan]Resuming from checkpoint: {from_checkpoint}[/cyan]")
 
         # Set up streaming callbacks if requested
         # verbose >= 2 (-vv) enables detailed streaming output
@@ -389,6 +428,7 @@ def ask(
             llm=llm,
             max_delegations=effective_max_delegations,
             cold_store=cold_store,
+            checkpoint_store=checkpoint_store,
             stream=stream,
             callbacks=callbacks,
         )
@@ -400,9 +440,21 @@ def ask(
 
         if stream and live_context:
             with live_context:
-                final_state = _run_async(orchestrator.run(message))
+                final_state = _run_async(
+                    orchestrator.run(
+                        message,
+                        resume_run_id=resume,
+                        resume_checkpoint_id=from_checkpoint,
+                    )
+                )
         else:
-            final_state = _run_async(orchestrator.run(message))
+            final_state = _run_async(
+                orchestrator.run(
+                    message,
+                    resume_run_id=resume,
+                    resume_checkpoint_id=from_checkpoint,
+                )
+            )
 
         # Display results
         _display_results(final_state)
@@ -547,7 +599,10 @@ def _display_results(state: dict[str, Any]) -> None:
 
     # Summary
     total = metadata.get("total_delegations", len(history))
+    run_id = metadata.get("run_id")
     console.print()
+    if run_id:
+        console.print(f"[dim]Run: {run_id}[/dim]")
     console.print(f"[dim]Total delegations: {total}[/dim]")
 
 

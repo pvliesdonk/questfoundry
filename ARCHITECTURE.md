@@ -730,7 +730,7 @@ This section maps the priorities from Chapter 13 into a chronological execution 
 *Goal: Production-ready runtime.*
 
 - [x] Streaming LLM output
-- [ ] State persistence/checkpointing
+- [x] State persistence/checkpointing
 - [x] CLI `qf ask` integration
 - [x] End-to-end multi-role delegation tests
 
@@ -841,6 +841,64 @@ curl -s https://api.openai.com/v1/chat/completions \
 2. **Regression Testing** — Compare outputs before/after prompt changes
 3. **Cost Optimization** — Test prompt changes against recorded sessions offline
 4. **Unit Testing** — Mock LLM responses for deterministic role tests
+
+---
+
+## 16. Checkpointing
+
+QuestFoundry supports per-delegation checkpointing for workflow state persistence.
+
+### Storage
+
+Checkpoints are stored in SQLite at `{project}/checkpoints.db`. Delete this file to clear all checkpoints.
+
+```
+project_1/
+├── project.qfdb           # Cold store
+├── checkpoints.db         # Checkpoint store
+└── logs/                  # Debug logs (--log flag)
+```
+
+### Run Identification
+
+Each workflow execution is assigned a unique run ID: `run-YYYY-MM-DD-NNN`
+
+Example: `run-2025-12-09-001`, `run-2025-12-09-002`
+
+### Checkpoint Granularity
+
+Checkpoints are saved after each delegation completes. Each checkpoint captures:
+
+- **hot_store** — Full state dictionary
+- **sr_messages** — Showrunner's conversation history
+- **role_messages** — Last delegated role's conversation history
+- **delegation_history** — List of all completed delegations
+- **sr_turn** — Current turn number
+
+### CLI Usage
+
+```bash
+# New run (checkpoints auto-saved when --project is specified)
+qf ask "Create a story" --project myproject
+
+# Resume from latest checkpoint of a run
+qf ask "Continue" --project myproject --resume run-2025-12-09-001
+
+# Resume from specific checkpoint ID
+qf ask "Continue" --project myproject --from-checkpoint 5
+```
+
+### Use Cases
+
+1. **Development Iteration** — Restart from a known checkpoint after modifying prompts
+2. **Recovery** — Resume after crash/timeout without losing progress
+3. **Debugging** — Inspect state at specific points in workflow execution
+
+### Implementation Files
+
+- `runtime/checkpoint.py` — `CheckpointStore` class and data models
+- `runtime/orchestrator.py` — Checkpoint save/load integration
+- `runtime/cli/main.py` — `--resume` and `--from-checkpoint` flags
 
 ---
 

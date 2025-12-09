@@ -46,6 +46,7 @@ from questfoundry.compiler.models import RoleIR
 
 if TYPE_CHECKING:
     from questfoundry.runtime.stores import ColdStore
+from questfoundry.runtime.checkpoint import Checkpoint, CheckpointStore
 from questfoundry.runtime.executor import ToolExecutor
 from questfoundry.runtime.prompts import build_sr_prompt
 from questfoundry.runtime.roles import RoleAgentPool
@@ -120,17 +121,30 @@ class Orchestrator:
     cold_store : ColdStore | None, optional
         SQLite-based Cold Store for persistent canon. If None, roles won't
         have access to cold_store tools. Defaults to None.
+    checkpoint_store : CheckpointStore | None, optional
+        Checkpoint store for workflow state persistence. If None, checkpointing
+        is disabled. Defaults to None.
 
     Examples
     --------
     Run a complete workflow::
 
         from questfoundry.runtime import get_cold_store
+        from questfoundry.runtime.checkpoint import CheckpointStore
 
         cold = get_cold_store("project.qfproj")
-        orchestrator = Orchestrator(roles, llm, cold_store=cold)
+        checkpoints = CheckpointStore(Path("project_1"))
+        orchestrator = Orchestrator(roles, llm, cold_store=cold, checkpoint_store=checkpoints)
         result = await orchestrator.run("Create a mystery story")
         print(f"Completed: {result.metadata}")
+
+    Resume from checkpoint::
+
+        # Resume from latest checkpoint
+        result = await orchestrator.run("Create a mystery story", resume_run_id="run-2025-12-09-001")
+
+        # Or resume from specific checkpoint
+        result = await orchestrator.run("Create a mystery story", resume_checkpoint_id=5)
     """
 
     def __init__(
@@ -139,6 +153,7 @@ class Orchestrator:
         llm: BaseChatModel,
         max_delegations: int = 50,
         cold_store: ColdStore | None = None,
+        checkpoint_store: CheckpointStore | None = None,
         stream: bool = False,
         callbacks: Any = None,
     ):
@@ -146,6 +161,7 @@ class Orchestrator:
         self.llm = llm
         self.max_delegations = max_delegations
         self.cold_store = cold_store
+        self.checkpoint_store = checkpoint_store
         self.stream = stream
         self.callbacks = callbacks
 
@@ -154,6 +170,8 @@ class Orchestrator:
         self,
         request: str,
         loop_id: str = "default",
+        resume_run_id: str | None = None,
+        resume_checkpoint_id: int | None = None,
     ) -> StudioState:
         """Execute a complete workflow for the given request.
 
@@ -163,6 +181,11 @@ class Orchestrator:
             The user's request to process.
         loop_id : str
             Loop identifier for state tracking.
+        resume_run_id : str | None
+            If provided, resume from the latest checkpoint of this run.
+        resume_checkpoint_id : int | None
+            If provided, resume from this specific checkpoint ID.
+            Takes precedence over resume_run_id.
 
         Returns
         -------
@@ -172,8 +195,54 @@ class Orchestrator:
         # Configure tracing (sets project name if not set)
         configure_tracing()
 
-        # Create initial state
-        state = create_initial_state(loop_id, request)
+        # Determine if we're resuming from checkpoint
+        checkpoint: Checkpoint | None = None
+        run_id: str | None = None
+
+        if resume_checkpoint_id is not None and self.checkpoint_store:
+            checkpoint = self.checkpoint_store.get_checkpoint(resume_checkpoint_id)
+            if checkpoint is None:
+                raise ValueError(f"Checkpoint {resume_checkpoint_id} not found")
+            run_id = checkpoint.run_id
+            logger.info(f"Resuming from checkpoint {resume_checkpoint_id} (run {run_id})")
+        elif resume_run_id is not None and self.checkpoint_store:
+            checkpoint = self.checkpoint_store.get_latest_checkpoint(resume_run_id)
+            if checkpoint is None:
+                raise ValueError(f"No checkpoints found for run {resume_run_id}")
+            run_id = resume_run_id
+            logger.info(f"Resuming from latest checkpoint of run {run_id}")
+
+        # Initialize state - either fresh or from checkpoint
+        if checkpoint is not None:
+            # Restore state from checkpoint
+            state = create_initial_state(loop_id, request)
+            state["hot_store"] = checkpoint.hot_store
+            delegation_history = checkpoint.delegation_history
+            sr_turn = checkpoint.sr_turn
+            delegation_count = len(delegation_history)
+
+            # Build resume prompt for SR
+            sr_prompt_msg = self._build_resume_prompt(request, checkpoint, delegation_history)
+            logger.info(
+                f"Restored state: turn={sr_turn}, delegations={delegation_count}, "
+                f"hot_store keys={list(state['hot_store'].keys())}"
+            )
+        else:
+            # Fresh start
+            state = create_initial_state(loop_id, request)
+            delegation_history = []
+            sr_turn = 0
+            delegation_count = 0
+            sr_prompt_msg = f"New request: {request}"
+
+            # Start new run if checkpointing is enabled
+            if self.checkpoint_store:
+                run_id = self.checkpoint_store.start_run(request, loop_id)
+                logger.info(f"Started new run: {run_id}")
+
+        # Store run_id in metadata for reference
+        if run_id:
+            state["metadata"]["run_id"] = run_id
 
         # Create role agent pool with cold_store access
         # NOTE: Roles don't get streaming callbacks - only SR uses the Live panel
@@ -204,14 +273,6 @@ class Orchestrator:
             callbacks=self.callbacks,
         )
 
-        # Track delegations and turns
-        delegation_count = 0
-        sr_turn = 0
-        delegation_history: list[dict[str, Any]] = []
-
-        # Initial prompt to SR
-        sr_prompt_msg = f"New request: {request}"
-
         while delegation_count < self.max_delegations:
             sr_turn += 1
             logger.info(f"SR turn {sr_turn}, delegations so far: {delegation_count}")
@@ -225,6 +286,11 @@ class Orchestrator:
                 logger.error(f"SR execution failed: {sr_result.error}")
                 state["metadata"]["error"] = sr_result.error
                 state["metadata"]["delegation_history"] = delegation_history
+
+                # Mark run as failed
+                if self.checkpoint_store and run_id:
+                    self.checkpoint_store.complete_run(run_id, status="failed")
+
                 return state
 
             # Check done_tool_result for what stopped execution
@@ -239,6 +305,11 @@ class Orchestrator:
                 state["metadata"]["termination"] = term
                 state["metadata"]["delegation_history"] = delegation_history
                 state["metadata"]["total_delegations"] = delegation_count
+
+                # Mark run as completed
+                if self.checkpoint_store and run_id:
+                    self.checkpoint_store.complete_run(run_id, status="completed")
+
                 return state
 
             # Check for delegation request (either from stop_tool or tool_results)
@@ -293,6 +364,25 @@ class Orchestrator:
                 }
             )
 
+            # Save checkpoint after each delegation
+            if self.checkpoint_store and run_id:
+                # Convert messages to dict format for JSON serialization
+                sr_msgs = [m.model_dump() for m in sr_executor.messages]
+                role_msgs = None
+                if hasattr(agent, "messages") and agent.messages:
+                    role_msgs = [m.model_dump() for m in agent.messages]
+
+                checkpoint_id = self.checkpoint_store.save_checkpoint(
+                    run_id=run_id,
+                    sr_turn=sr_turn,
+                    hot_store=dict(state["hot_store"]),
+                    sr_messages=sr_msgs,
+                    delegation_history=delegation_history,
+                    role_id=role_id,
+                    role_messages=role_msgs,
+                )
+                logger.info(f"Checkpoint {checkpoint_id}: {role_id} completed (turn {sr_turn})")
+
             # Format result for SR
             sr_prompt_msg = self._format_delegation_result(delegation_result)
 
@@ -300,7 +390,54 @@ class Orchestrator:
         logger.warning(f"Max delegations ({self.max_delegations}) reached")
         state["metadata"]["error"] = f"Max delegations ({self.max_delegations}) reached"
         state["metadata"]["delegation_history"] = delegation_history
+
+        # Mark run as failed
+        if self.checkpoint_store and run_id:
+            self.checkpoint_store.complete_run(run_id, status="failed")
+
         return state
+
+    def _build_resume_prompt(
+        self,
+        request: str,
+        checkpoint: Checkpoint,
+        delegation_history: list[dict[str, Any]],
+    ) -> str:
+        """Build a prompt for SR when resuming from checkpoint.
+
+        Summarizes previous work so SR can continue intelligently.
+        """
+        lines = [
+            f"**RESUMING WORKFLOW** (from checkpoint {checkpoint.id})",
+            "",
+            f"**Original Request**: {request}",
+            "",
+            f"**Previous Progress**: {len(delegation_history)} delegation(s) completed",
+            "",
+        ]
+
+        # Summarize recent delegations (last 3)
+        if delegation_history:
+            lines.append("**Recent Work**:")
+            for d in delegation_history[-3:]:
+                result = d.get("result", {})
+                status = result.get("status", "?")
+                role = d.get("role", "?")
+                msg = result.get("message", "")[:100]
+                lines.append(f"- {role}: [{status}] {msg}...")
+            lines.append("")
+
+        # Hot store summary
+        if checkpoint.hot_store:
+            lines.append(f"**Hot Store**: {list(checkpoint.hot_store.keys())}")
+            lines.append("")
+
+        lines.append(
+            "Continue from where the previous run left off. "
+            "Review the hot_store artifacts and decide what to do next."
+        )
+
+        return "\n".join(lines)
 
     def _find_delegation_request(self, tool_results: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Find a delegation request in tool results."""
