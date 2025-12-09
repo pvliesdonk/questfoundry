@@ -358,7 +358,48 @@ Located in `runtime/roles.py`:
 
 ## 9. Runtime Architecture
 
-*(Unchanged: SR-centric Orchestrator, LangGraph State, Tool Execution)*
+### 9.1 Core Components
+
+- **Orchestrator:** SR-centric delegation hub using LangGraph
+- **State:** `StudioState` TypedDict with hot_store, cold_store, messages
+- **Tools:** Role-specific tool classes with state injection
+
+### 9.2 Tool Response Pattern
+
+> **Rule:** Tools must return clear verdicts, not guidance for the LLM to interpret.
+
+When tools return ambiguous responses (criteria lists, instructions asking the LLM to "analyze"), the LLM retries repeatedly hoping for a definitive answer. This causes infinite loops.
+
+**Anti-Pattern (causes retry loops):**
+
+```json
+{
+  "bar": "style",
+  "artifact_content": {...},
+  "evaluation_criteria": ["Check voice", "Verify tone"],
+  "instruction": "Analyze and determine if it passes."
+}
+```
+
+**Correct Pattern:**
+
+```json
+{
+  "bar": "style",
+  "artifact_id": "scene_001",
+  "passed": true,
+  "issues": [],
+  "notes": "Style evaluation passed - voice consistent.",
+  "next_step": "Record result and proceed to create_gatecheck_report."
+}
+```
+
+**Key requirements:**
+
+1. **Always return a verdict:** `passed`, `failed`, `error`, or similar boolean/enum
+2. **List specific issues:** Empty list = no issues (not "check yourself")
+3. **Provide next_step:** Tell the LLM what to do with this result
+4. **Never delegate interpretation:** The tool does the work, not the caller
 
 ---
 

@@ -13,7 +13,7 @@ Quality Bars (8 total):
 - presentation: Formatting and structure correct
 - accessibility: Content usable by all players
 
-Tool Response Pattern (see domain/principles/tool_responses.md):
+Tool Response Pattern (see ARCHITECTURE.md Section 9.2):
 All evaluate_* tools return clear verdicts, not guidance. This prevents
 LLM retry loops where the model keeps calling the same tool hoping for
 a definitive answer.
