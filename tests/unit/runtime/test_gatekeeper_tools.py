@@ -53,79 +53,86 @@ class TestEvaluationTools:
         assert "not found" in result["issues"][0]
 
     def test_evaluate_integrity_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate integrity returns criteria for valid artifact."""
+        """Evaluate integrity returns pass/fail for valid artifact."""
         tool = EvaluateIntegrity()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "integrity"
         assert result["artifact_id"] == "topology_001"
-        assert "artifact_content" in result
-        assert "evaluation_criteria" in result
-        assert len(result["evaluation_criteria"]) > 0
+        assert "passed" in result
+        assert "issues" in result
+        assert "notes" in result
 
     def test_evaluate_reachability_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate reachability returns criteria for valid artifact."""
+        """Evaluate reachability returns pass/fail for valid artifact."""
         tool = EvaluateReachability()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "reachability"
-        assert any("reach" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_evaluate_nonlinearity_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate nonlinearity returns criteria for valid artifact."""
+        """Evaluate nonlinearity returns pass/fail for valid artifact."""
         tool = EvaluateNonlinearity()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "nonlinearity"
-        assert any("path" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_evaluate_gateways_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate gateways returns criteria for valid artifact."""
+        """Evaluate gateways returns pass/fail for valid artifact."""
         tool = EvaluateGateways()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "gateways"
-        assert any("gate" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_evaluate_style_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate style returns criteria for valid artifact."""
+        """Evaluate style returns pass/fail for valid artifact."""
         tool = EvaluateStyle()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "style"
-        assert any("voice" in c.lower() or "tone" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_evaluate_determinism_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate determinism returns criteria for valid artifact."""
+        """Evaluate determinism returns pass/fail for valid artifact."""
         tool = EvaluateDeterminism()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "determinism"
-        assert any("consistent" in c.lower() or "same" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_evaluate_presentation_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate presentation returns criteria for valid artifact."""
+        """Evaluate presentation returns pass/fail for valid artifact."""
         tool = EvaluatePresentation()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "presentation"
-        assert any("format" in c.lower() or "structure" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_evaluate_accessibility_with_artifact(self, state_with_artifact: dict) -> None:
-        """Evaluate accessibility returns criteria for valid artifact."""
+        """Evaluate accessibility returns pass/fail for valid artifact."""
         tool = EvaluateAccessibility()
         tool.state = state_with_artifact
 
         result = json.loads(tool._run("topology_001"))
         assert result["bar"] == "accessibility"
-        assert any("warning" in c.lower() or "alt text" in c.lower() for c in result["evaluation_criteria"])
+        assert result["passed"] is True
+        assert isinstance(result["issues"], list)
 
     def test_no_state_returns_error(self) -> None:
         """Tools return error when no state is set."""
