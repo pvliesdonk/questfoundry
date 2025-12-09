@@ -734,6 +734,34 @@ This section maps the priorities from Chapter 13 into a chronological execution 
 - [x] CLI `qf ask` integration
 - [x] End-to-end multi-role delegation tests
 
+### Current Status: Story Spark Loop ✓
+
+**Milestone (2025-12-09):** First successful end-to-end Story Spark execution with cold_store promotion.
+
+The workflow now correctly chains:
+
+```
+Plotwright → Gatekeeper → Lorekeeper → cold_store snapshot
+```
+
+Verified: `qf ask` creates content, validates it, and promotes to canon.
+
+### Next Step: Lore Deepening Loop
+
+**Goal:** Enable continuation of existing stories by reading from cold_store, enriching through the loop, and writing back.
+
+**Critical capability gap:** The current workflow starts fresh each time. For lore deepening, we need:
+
+1. **Read from cold** — Load existing canon as context for continuation
+2. **Process through loop** — Run lore_deepening workflow (already defined in `domain/loops/`)
+3. **Write back to cold** — Merge new content with existing canon
+
+**Domain knowledge review needed:**
+
+- How does `read_cold_sot` present existing content to roles?
+- How do roles distinguish "continuing" vs "creating from scratch"?
+- What's the merge strategy when new content overlaps with existing canon?
+
 ### Known Technical Debt
 
 **SR Prompt in Runtime (orchestrator.py)**
