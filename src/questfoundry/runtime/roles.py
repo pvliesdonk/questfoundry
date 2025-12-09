@@ -19,6 +19,7 @@ from langchain_core.tools import BaseTool
 from questfoundry.compiler.models import RoleIR
 from questfoundry.runtime.executor import ToolExecutor
 from questfoundry.runtime.logging import log_role_session_end, log_role_session_start
+from questfoundry.runtime.prompts import build_role_prompt
 from questfoundry.runtime.state import DelegationResult, StudioState
 from questfoundry.runtime.tools.consult import (
     ConsultPlaybook,
@@ -53,217 +54,119 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _render_gatekeeper_prompt(role: RoleIR) -> str:
-    """Render Gatekeeper-specific prompt with quality bar tools."""
-    constraints_section = ""
-    if role.constraints:
-        constraints_lines = "\n".join(f"- {c}" for c in role.constraints)
-        constraints_section = f"""
-## Constraints
+# =============================================================================
+# Runtime Tool Appendix (actual tool names for LLM execution)
+# =============================================================================
 
-{constraints_lines}
+COMMON_RUNTIME_TOOLS = """
+## Runtime Tools
+
+These are the actual tool names you must use:
+
+### State Tools
+- **write_hot_sot(key, value)**: Write artifact to hot_store
+- **read_hot_sot(key)**: Read from hot_store
+- **list_hot_store_keys()**: List available artifacts in hot_store
+- **read_cold_sot(key)**: Read from cold_store (canon)
+- **list_cold_store_keys()**: List sections/snapshots in cold_store
+
+### Knowledge Tools
+- **consult_schema(artifact_type)**: Get required/optional fields for artifact type
+- **consult_playbook(query)**: Get workflow guidance
+- **consult_role_charter(role_id)**: Learn about another role's capabilities
+
+### Completion (REQUIRED)
+- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
+  - status: "completed" | "blocked" | "needs_review" | "error"
+  - artifacts: list of keys you created/modified in hot_store
+
+**IMPORTANT**: You MUST call return_to_sr when done. Do not just describe what you would do.
 """
 
-    return f"""You are the **{role.archetype}** ({role.abbr}), the quality auditor in QuestFoundry.
+GATEKEEPER_RUNTIME_TOOLS = """
+## Runtime Tools
 
-## Your Mandate
-
-**{role.mandate}**
-
-{constraints_section}
-## CRITICAL: You Must Use Tools
-
-You are a TOOL-USING agent. You MUST use the tools provided to validate artifacts.
-DO NOT just describe what you would check - actually CHECK IT by calling evaluation tools.
-
-## Your Tools
+These are the actual tool names you must use:
 
 ### Quality Bar Evaluation Tools (8 bars)
 - **evaluate_integrity(artifact_id)**: Check for contradictions in canon
-- **evaluate_reachability(artifact_id)**: Check all content is accessible via valid paths
+- **evaluate_reachability(artifact_id)**: Check all content is accessible
 - **evaluate_nonlinearity(artifact_id)**: Check multiple valid paths exist
-- **evaluate_gateways(artifact_id)**: Check all gates have valid unlock conditions
+- **evaluate_gateways(artifact_id)**: Check gates have valid unlock conditions
 - **evaluate_style(artifact_id)**: Check voice and tone consistency
 - **evaluate_determinism(artifact_id)**: Check same inputs produce same outputs
 - **evaluate_presentation(artifact_id)**: Check formatting and structure
-- **evaluate_accessibility(artifact_id)**: Check content is usable by all players
+- **evaluate_accessibility(artifact_id)**: Check content is usable by all
 
 ### Report Tool
 - **create_gatecheck_report(target_artifact, bars_checked, status, bar_results, issues, recommendations)**: Create formal validation report
 
 ### State Tools
-- **read_hot_sot(key)**: Read artifacts to validate from hot_store
-- **list_hot_store_keys()**: List all keys in hot_store (use to discover available artifacts)
+- **read_hot_sot(key)**: Read artifacts to validate
+- **list_hot_store_keys()**: List available artifacts
 - **read_cold_sot(key)**: Read from cold_store for comparison
-- **list_cold_store_keys()**: List all sections/snapshots in cold_store
+- **list_cold_store_keys()**: List sections/snapshots in cold_store
 
 ### Knowledge Tools
-- **consult_schema(artifact_type)**: Look up artifact field requirements
-- **consult_playbook(query)**: Get workflow guidance
+- **consult_schema(artifact_type)**: Look up artifact requirements
 
-### Completion Tool (REQUIRED)
+### Completion (REQUIRED)
 - **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
 
-## Validation Workflow
-
-1. **Read the artifact** to validate using read_hot_sot
-2. **Identify which bars apply** (from the task or Brief)
-3. **Evaluate each bar** using the appropriate evaluate_* tool
-4. **Collect findings** from each evaluation
-5. **Create a GatecheckReport** documenting all results
-6. **If ALL bars pass**: return_to_sr with status="completed" (SR will authorize promotion via LK)
-7. **If ANY bar fails**: return_to_sr with status="needs_review" and list issues
-
-## Example Workflow
-
-```
-# Read the artifact to validate
-read_hot_sot("topology_001")
-
-# Evaluate required bars
-evaluate_integrity("topology_001")
-evaluate_reachability("topology_001")
-evaluate_nonlinearity("topology_001")
-
-# Create report
-create_gatecheck_report(
-    target_artifact="topology_001",
-    bars_checked=["integrity", "reachability", "nonlinearity"],
-    status="passed",  # or "failed"
-    bar_results={{"integrity": "PASS - no contradictions", "reachability": "PASS - all scenes accessible", "nonlinearity": "PASS - 3 distinct paths"}},
-    issues=[],  # or list of issues if failed
-    recommendations=[]
-)
-
-# Return to SR with validation result (SR will authorize LK to promote if passed)
-return_to_sr(status="completed", message="Topology validated - all bars passed", artifacts=["gatecheck_topology_001_1"])
-```
-
-## Important
-
-- ALWAYS evaluate ALL requested bars before making a decision
-- ALWAYS create a GatecheckReport documenting your findings
-- Your role is ADVISORY: you validate and report, SR authorizes, LK promotes
-- If bars fail, recommend which role should fix the issues
-- Call return_to_sr with your final verdict
+**IMPORTANT**: You MUST call return_to_sr when done. Do not just describe what you would do.
 """
 
+LOREKEEPER_RUNTIME_TOOLS = """
+## Runtime Tools
 
-def _get_artifact_menu() -> str:
-    """Get menu of available artifact types for prompts."""
-    # These are the compiled artifact types from domain/ontology/artifacts.md
-    # Format: type_id -> brief description
-    artifacts = {
-        "brief": "Work order from SR to specialist role",
-        "scene": "Narrative unit with content, gates, choices",
-        "hook_card": "Story hook that captures change/event",
-        "canon_entry": "Validated fact in cold store",
-        "gatecheck_report": "Quality validation results (Gatekeeper only)",
-    }
-    lines = ["## Available Artifact Types", ""]
-    for artifact_id, desc in artifacts.items():
-        lines.append(f"- **{artifact_id}**: {desc}")
-    lines.append("")
-    lines.append("Use `consult_schema(artifact_type)` to see required/optional fields.")
-    return "\n".join(lines)
+These are the actual tool names you must use:
 
+### Canon Promotion Tool (Lorekeeper exclusive)
+- **promote_to_canon(artifact_key, section_id)**: Promote validated artifact from hot_store to cold_store
 
-# Role -> primary artifact types mapping
-# This tells each role what artifact types they typically create
-ROLE_PRIMARY_ARTIFACTS: dict[str, list[str]] = {
-    "showrunner": ["brief"],
-    "plotwright": ["scene"],  # Creates scene topology/structure
-    "scene_smith": ["scene"],  # Fills scene content/prose
-    "lorekeeper": ["canon_entry"],
-    "creative_director": ["scene"],  # Style guidance on scenes
-    "narrator": ["scene"],  # Runtime scene delivery
-    "publisher": [],  # Assembles, doesn't create artifacts
-    "gatekeeper": ["gatecheck_report"],
-}
+### State Tools
+- **write_hot_sot(key, value)**: Write artifact to hot_store
+- **read_hot_sot(key)**: Read from hot_store
+- **list_hot_store_keys()**: List available artifacts
+- **read_cold_sot(key)**: Read from cold_store
+- **list_cold_store_keys()**: List sections/snapshots in cold_store
 
+### Knowledge Tools
+- **consult_schema(artifact_type)**: Get artifact requirements
+- **consult_playbook(query)**: Get workflow guidance
 
-def _get_role_artifact_hint(role_id: str) -> str:
-    """Get hint about which artifact types this role should create."""
-    artifacts = ROLE_PRIMARY_ARTIFACTS.get(role_id.lower(), [])
-    if not artifacts:
-        return ""
+### Completion (REQUIRED)
+- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
 
-    artifact_list = ", ".join(f"`{a}`" for a in artifacts)
-    consult_calls = ", ".join(f'`consult_schema("{a}")`' for a in artifacts)
-
-    return f"""## Your Primary Artifact Types
-
-You typically create: {artifact_list}
-
-**FIRST STEP**: Call {consult_calls} to see required fields before writing.
+**IMPORTANT**: You MUST call return_to_sr when done. Do not just describe what you would do.
 """
 
 
 def _render_prompt(role: RoleIR) -> str:
-    """Render role's system prompt using menu+consult pattern.
+    """Render role's system prompt: domain template + runtime tools.
 
-    The prompt is minimal - just enough for the agent to know:
-    1. Who it is (archetype, mandate)
-    2. What tools are available
-    3. What artifact types exist (menu)
-    4. How to look up details (consult_* tools)
+    Architecture:
+    1. Domain template from build_role_prompt() - identity, mandate, constraints, process
+    2. Runtime tool appendix - actual tool names for LLM execution
 
-    Agents use consult_schema, consult_playbook, consult_role_charter
-    to get detailed information when needed.
+    The domain template comes from the {role-prompt} directive in MyST files.
+    The runtime appendix provides the actual tool names the LLM needs to call.
     """
-    # Gatekeeper gets a specialized prompt
-    if role.id.lower() == "gatekeeper":
-        return _render_gatekeeper_prompt(role)
+    # Get domain prompt (renders {role-prompt} Jinja2 template)
+    domain_prompt = build_role_prompt(role)
 
-    # Build constraints section if role has constraints
-    constraints_section = ""
-    if role.constraints:
-        constraints_lines = "\n".join(f"- {c}" for c in role.constraints)
-        constraints_section = f"""
-## Constraints
+    # Select runtime tools appendix based on role
+    role_id = role.id.lower()
+    if role_id == "gatekeeper":
+        runtime_tools = GATEKEEPER_RUNTIME_TOOLS
+    elif role_id == "lorekeeper":
+        runtime_tools = LOREKEEPER_RUNTIME_TOOLS
+    else:
+        runtime_tools = COMMON_RUNTIME_TOOLS
 
-{constraints_lines}
-"""
+    return f"""{domain_prompt}
 
-    artifact_menu = _get_artifact_menu()
-    role_artifact_hint = _get_role_artifact_hint(role.id)
-
-    return f"""You are the **{role.archetype}** ({role.abbr}), a specialist role in QuestFoundry.
-
-## Your Mandate
-
-**{role.mandate}**
-
-{constraints_section}{role_artifact_hint}
-## Tools
-
-You MUST use tools to accomplish tasks. Do not describe what you would do - call tools.
-
-### State Tools
-- **write_hot_sot(key, value)**: Write artifact to hot_store (key = artifact type like "scene", "brief")
-- **read_hot_sot(key)**: Read from hot_store
-- **list_hot_store_keys()**: List all keys in hot_store (use to discover available artifacts)
-- **read_cold_sot(key)**: Read from cold_store (canon)
-- **list_cold_store_keys()**: List all sections/snapshots in cold_store
-
-### Knowledge Tools (use these to look up details)
-- **consult_schema(artifact_type)**: Get required/optional fields for an artifact type
-- **consult_playbook(loop_id)**: Get workflow guidance
-- **consult_role_charter(role_id)**: Learn about a role's capabilities
-
-### Completion (REQUIRED)
-- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
-  - status: "completed" | "blocked" | "needs_review" | "error"
-  - artifacts: list of keys you created/modified
-
-{artifact_menu}
-
-## Workflow
-
-1. Read task from Showrunner delegation
-2. Call `consult_schema(artifact_type)` to learn required fields BEFORE creating artifacts
-3. Use `write_hot_sot` to save work
-4. Call `return_to_sr` when done - THIS IS MANDATORY
+{runtime_tools}
 """
 
 

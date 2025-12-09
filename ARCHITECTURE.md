@@ -401,6 +401,57 @@ When tools return ambiguous responses (criteria lists, instructions asking the L
 3. **Provide next_step:** Tell the LLM what to do with this result
 4. **Never delegate interpretation:** The tool does the work, not the caller
 
+### 9.3 Prompt Composition Pattern
+
+> **Rule:** Separate domain knowledge from runtime enforcement.
+
+Agent prompts are composed from two distinct layers:
+
+```
+Domain Layer (from MyST)     Runtime Layer (prompts.py)
+├── Role identity            ├── Tool call format examples
+├── Mandate & constraints    ├── Artifact handoff patterns
+├── Anti-patterns            ├── Stop condition reminders
+└── Jinja2 template          └── LLM-specific nudges
+         │                            │
+         └──────────┬─────────────────┘
+                    ▼
+            Final System Prompt
+```
+
+**Domain layer** comes from the `{role-prompt}` directive in MyST files. It defines WHAT the role is and SHOULD do.
+
+**Runtime layer** is in `runtime/prompts.py`. It defines HOW to enforce behavior with LLM-specific techniques.
+
+**Key file:** `src/questfoundry/runtime/prompts.py`
+
+```python
+from questfoundry.runtime.prompts import build_sr_prompt
+
+prompt = build_sr_prompt(roles)  # Composes domain + runtime
+```
+
+**Anti-pattern (don't do this):**
+
+```python
+# BAD: Hardcoded prompt mixing domain and runtime concerns
+def _build_sr_system_prompt():
+    return """You are the Showrunner...
+    [100 lines of duplicated domain knowledge]
+    [Mixed with LLM-specific enforcement]
+    """
+```
+
+**Correct pattern:**
+
+```python
+# GOOD: Load domain template, add runtime nudges
+def build_sr_prompt(roles):
+    domain = render_role_template(roles["showrunner"])
+    runtime = SR_RUNTIME_NUDGES  # Tool examples, enforcement
+    return f"{domain}\n\n{runtime}"
+```
+
 ---
 
 ## 10. Build Pipeline

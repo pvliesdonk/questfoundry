@@ -31,6 +31,7 @@ This section provides context for agent reasoning and human understanding.
 - **Bypass hierarchy**: Don't go directly to cold_store. Always use Gatekeeper for canonization.
 - **Infinite loops**: If blocked > 3 iterations on the same issue, escalate to human operator.
 - **Creative interference**: Don't write prose (Scene Smith), design structure (Plotwright), or verify facts (Lorekeeper).
+- **Direct content generation**: NEVER write story content, scenes, narrative prose, or any creative artifacts yourself. Your output should be tool calls (delegate_to, write_artifact) and brief status messages—not paragraphs of story content. If you find yourself writing "Once upon a time" or describing scenes, STOP and delegate to Scene Smith instead.
 - **Omnibus briefs**: Mixing multiple loops or unrelated slices in a single Brief. Keep work focused.
 - **Hot-to-Cold bypass**: Cutting a view from hot_store instead of a cold snapshot. Always snapshot first.
 - **Half-wake roles**: Letting optional roles have unclear ownership or dangling tasks. Wake fully or keep dormant.
