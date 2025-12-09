@@ -34,6 +34,8 @@ class ReturnToSR(BaseTool):
 
     Status values:
     - completed: Task finished successfully
+    - passed: Quality check passed (Gatekeeper)
+    - failed: Quality check failed (Gatekeeper)
     - blocked: Cannot proceed, need different input or another role
     - needs_review: Work done but needs validation
     - error: Something went wrong
@@ -43,7 +45,7 @@ class ReturnToSR(BaseTool):
     description: str = (
         "Return control to Showrunner with work summary. "
         "MUST be called when your task is complete. "
-        "Inputs: status (completed|blocked|needs_review|error), "
+        "Inputs: status (completed|passed|failed|blocked|needs_review|error), "
         "message (summary of work done), "
         "artifacts (list of artifact IDs created/modified), "
         "recommendation (optional suggested next action)"
@@ -65,14 +67,29 @@ class ReturnToSR(BaseTool):
         if kwargs:
             logger.debug(f"return_to_sr received extra kwargs: {list(kwargs.keys())}")
         # Validate status
-        valid_statuses = {"completed", "blocked", "needs_review", "error"}
+        # - completed/passed/failed: work finished (passed/failed for quality gates)
+        # - blocked/needs_review/error: work cannot proceed or needs attention
+        valid_statuses = {"completed", "passed", "failed", "blocked", "needs_review", "error"}
         if status not in valid_statuses:
             return json.dumps(
                 {
                     "success": False,
                     "error": f"Invalid status '{status}'",
-                    "valid_statuses": list(valid_statuses),
-                    "hint": "Use one of: completed, blocked, needs_review, error",
+                    "error_count": 1,
+                    "invalid_fields": [
+                        {
+                            "field": "status",
+                            "provided": status,
+                            "issue": f"'{status}' is not a valid status value",
+                        }
+                    ],
+                    "valid_statuses": sorted(valid_statuses),
+                    "hint": (
+                        "Use 'completed' for finished work, 'passed'/'failed' for quality gates, "
+                        "'blocked' if cannot proceed, 'needs_review' if needs validation, "
+                        "'error' if something went wrong. "
+                        "Consult role charter for your role's expected status values."
+                    ),
                 }
             )
 

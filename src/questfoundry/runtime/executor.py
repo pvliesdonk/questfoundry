@@ -75,6 +75,7 @@ CONSULT_TOOL_NAMES: frozenset[str] = frozenset(
         "consult_role_charter",
         "consult_schema",
         "consult_glossary",
+        "consult_tool",
     }
 )
 
@@ -495,17 +496,37 @@ class ToolExecutor:
                     continue
 
                 # Check if this was a stop tool (done tool or other stop tools)
+                # IMPORTANT: Only treat as "done" if the tool actually succeeded.
+                # If validation fails (success=False), continue the loop so the LLM
+                # gets the error feedback and can retry with corrected values.
+                # This is the "validate-with-feedback" pattern from v2.
                 if tool_name in self.stop_tool_names:
-                    found_done = True
-                    # Parse the observation as the done result
+                    # Parse the observation to check success
                     try:
                         parsed = json.loads(observation)
-                        # Only treat as done if the tool succeeded
+                        # Only terminate if the tool actually succeeded
                         if parsed.get("success", True):
+                            found_done = True
                             done_result = parsed
                             done_result["_stop_tool"] = tool_name
+                        else:
+                            # Validation failed - log and continue loop
+                            # The ToolMessage with error is already appended above,
+                            # so LLM will see the feedback and can retry
+                            logger.info(
+                                f"Stop tool '{tool_name}' validation failed, "
+                                f"continuing loop for retry. Error: {parsed.get('error', 'unknown')}"
+                            )
+                            # Mark as failed so failure_count increments
+                            any_failed = True
                     except json.JSONDecodeError:
-                        done_result = {"raw": observation, "_stop_tool": tool_name}
+                        # Non-JSON response from stop tool is a bug - treat as error
+                        # Feed back to LLM so it can see something went wrong
+                        logger.error(
+                            f"Stop tool '{tool_name}' returned non-JSON response: "
+                            f"{observation[:200]}..."
+                        )
+                        any_failed = True
 
             # Update failure count
             if any_failed:
