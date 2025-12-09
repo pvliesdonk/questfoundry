@@ -91,8 +91,8 @@ def map_type(field_type: str, enums: Mapping[str, EnumTypeIR]) -> str:
     >>> map_type("HookType", {"HookType": ...})
     'HookType'
     """
-    # Primitives
-    primitives = {"str", "string", "int", "float", "bool", "Any"}
+    # Primitives (including stdlib types)
+    primitives = {"str", "string", "int", "float", "bool", "Any", "datetime", "date", "time"}
     if field_type in primitives:
         return "str" if field_type == "string" else field_type
 
@@ -104,8 +104,9 @@ def map_type(field_type: str, enums: Mapping[str, EnumTypeIR]) -> str:
     if field_type in enums:
         return field_type
 
-    # Unknown type - return as-is with a comment
-    return f"{field_type}  # Unknown type"
+    # Unknown type - return as-is without breaking syntax
+    # The type will be resolved at runtime if it's a forward reference
+    return field_type
 
 
 def python_safe_name(name: str) -> str:

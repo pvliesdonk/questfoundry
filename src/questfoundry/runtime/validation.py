@@ -45,16 +45,31 @@ def _get_artifact_models() -> dict[str, type[BaseModel]]:
 
     try:
         from questfoundry.generated.models import (
+            Act,
+            AudioPlan,
+            Beat,
             Brief,
             CanonEntry,
+            Chapter,
+            Character,
+            Event,
+            Fact,
             GatecheckReport,
             HookCard,
+            Item,
+            Location,
+            Relationship,
             Scene,
+            Sequence,
+            Shotlist,
+            Timeline,
+            TranslationPack,
         )
 
         # Map various names to models (snake_case, kebab-case, etc.)
         _ARTIFACT_MODELS.update(
             {
+                # Core workflow artifacts
                 "brief": Brief,
                 "briefs": Brief,
                 "canon_entry": CanonEntry,
@@ -67,8 +82,41 @@ def _get_artifact_models() -> dict[str, type[BaseModel]]:
                 "hook-card": HookCard,
                 "hook": HookCard,
                 "hooks": HookCard,
+                # Narrative structure
+                "act": Act,
+                "acts": Act,
+                "chapter": Chapter,
+                "chapters": Chapter,
                 "scene": Scene,
                 "scenes": Scene,
+                "sequence": Sequence,
+                "sequences": Sequence,
+                "beat": Beat,
+                "beats": Beat,
+                # World building
+                "character": Character,
+                "characters": Character,
+                "location": Location,
+                "locations": Location,
+                "item": Item,
+                "items": Item,
+                "relationship": Relationship,
+                "relationships": Relationship,
+                "event": Event,
+                "events": Event,
+                "fact": Fact,
+                "facts": Fact,
+                "timeline": Timeline,
+                "timelines": Timeline,
+                # Production artifacts
+                "shotlist": Shotlist,
+                "shotlists": Shotlist,
+                "audio_plan": AudioPlan,
+                "audio-plan": AudioPlan,
+                "audio_plans": AudioPlan,
+                "translation_pack": TranslationPack,
+                "translation-pack": TranslationPack,
+                "translation_packs": TranslationPack,
             }
         )
         logger.debug(f"Loaded {len(_ARTIFACT_MODELS)} artifact model mappings")

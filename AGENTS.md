@@ -50,7 +50,37 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full v3 design.
 - Use repo-standard tooling: `uv` for Python workflows, `pre-commit`
 - Run `pre-commit run --all-files` before handing work back
 - No "fluff" files: create only files with a clear, maintained purpose
-- Do not edit files in `generated/`—run `qf compile` instead
+
+### CRITICAL: Domain Changes MUST Use the Compiler
+
+> **WARNING:** Direct edits to `generated/` files cause regressions that are difficult to debug.
+> Previous sessions have made this mistake repeatedly. DO NOT repeat it.
+
+1. **NEVER edit files in `generated/`** — This includes:
+   - `generated/roles/*.py`
+   - `generated/models/*.py`
+   - `generated/loops/*.py`
+
+2. **Domain changes require this workflow:**
+
+   ```bash
+   # 1. Edit the source file in domain/
+   vim src/questfoundry/domain/roles/plotwright.md
+
+   # 2. Regenerate via compiler
+   qf compile
+
+   # 3. Verify the generated output
+   git diff src/questfoundry/generated/
+   ```
+
+3. **If you find a bug in generated code:**
+   - Find the corresponding source in `domain/`
+   - Fix the source file OR fix the compiler in `compiler/`
+   - Run `qf compile` to regenerate
+   - NEVER fix generated files directly
+
+4. **The compiler exists and works** — It is not stubbed. Use it.
 
 ## Workflows
 
@@ -85,5 +115,6 @@ qf validate                  # Check without generating
 - Requirements are satisfied with minimal necessary change
 - Hot/Cold boundaries respected
 - Formatting/lint/type/tests pass with repo tools
-- Generated code regenerated if domain changed
+- Generated code regenerated if domain changed (via `qf compile`, NOT manual edits)
+- No direct edits to `generated/` directory (verify with `git diff --name-only | grep generated`)
 - Notes/assumptions and validation steps are captured when relevant

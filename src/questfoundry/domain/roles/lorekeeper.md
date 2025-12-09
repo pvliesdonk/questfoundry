@@ -76,13 +76,16 @@ Escalate to Showrunner when:
 
 :::{role-tools}
 
-- read_state: "Read artifacts from hot_store or cold_store"
-- write_state: "Write artifacts to hot_store"
-- post_intent: "Declare work status and route to next role"
-- query_lore: "Search canon entries by keyword or category"
-- create_canon_entry: "Create a new CanonEntry artifact"
-- verify_consistency: "Check proposed content against existing canon"
+- read_hot_sot: "Read artifacts from hot_store (mutable draft storage)"
+- write_hot_sot: "Write artifacts to hot_store"
+- list_hot_store_keys: "List all artifact keys in hot_store"
+- read_cold_sot: "Read from cold_store (canon) for reference"
+- list_cold_store_keys: "List all sections/snapshots in cold_store"
+- consult_playbook: "Get workflow guidance from loop definitions"
+- consult_role_charter: "Look up a role's capabilities and constraints"
+- consult_schema: "Look up artifact schema requirements"
 - promote_to_canon: "Move verified artifact from hot to cold store (after SR authorization)"
+- return_to_sr: "Return control to Showrunner with work summary. MUST call when done."
 :::
 
 ### Constraints

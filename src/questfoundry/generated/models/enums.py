@@ -19,6 +19,23 @@ class Agency(StrEnum):
     """Purely deterministic; crashes on ambiguity"""
 
 
+class AssetType(StrEnum):
+    """Classification of external binary assets"""
+
+    PLATE = "plate"
+    """Illustration for a section"""
+    COVER = "cover"
+    """Book cover image"""
+    ICON = "icon"
+    """Small graphic (character portrait, item icon)"""
+    AUDIO = "audio"
+    """Sound file (ambient, music, SFX)"""
+    FONT = "font"
+    """Custom typography file"""
+    ORNAMENT = "ornament"
+    """Decorative element (divider, flourish)"""
+
+
 class GateType(StrEnum):
     """In-world condition type controlling access"""
 

@@ -48,12 +48,33 @@ uv run pytest                # Test
 uv run ruff format src/      # Format
 ```
 
-### Domain Changes
+### Domain Changes (CRITICAL)
+
+> **WARNING:** NEVER edit files in `generated/`. This causes regressions.
+> Previous sessions have made this mistake repeatedly. Use the compiler.
 
 ```bash
-# Edit MyST files in src/questfoundry/domain/
-qf compile                   # Regenerate generated/
+# 1. Edit source file in domain/
+vim src/questfoundry/domain/roles/plotwright.md
+
+# 2. Regenerate via compiler (REQUIRED)
+qf compile
+
+# 3. Verify changes
+git diff src/questfoundry/generated/
 ```
+
+**Source → Generated mapping:**
+
+- `domain/roles/*.md` → `generated/roles/*.py`
+- `domain/ontology/artifacts.md` → `generated/models/artifacts.py`
+- `domain/ontology/enums.md` → `generated/models/enums.py`
+
+**If you find a bug in generated code:**
+
+1. Fix source in `domain/` OR fix compiler in `compiler/`
+2. Run `qf compile`
+3. NEVER fix `generated/` directly
 
 ## Commits
 

@@ -79,10 +79,22 @@ Escalate to Showrunner when:
 
 :::{role-tools}
 
-- read_state: "Read artifacts from hot_store or cold_store"
-- write_state: "Write artifacts to hot_store"
-- post_intent: "Declare work status and route to next role"
-- create_gatecheck: "Create a GatecheckReport artifact"
+- read_hot_sot: "Read artifacts from hot_store (mutable draft storage)"
+- write_hot_sot: "Write artifacts to hot_store"
+- list_hot_store_keys: "List all artifact keys in hot_store"
+- read_cold_sot: "Read from cold_store (canon) for reference"
+- list_cold_store_keys: "List all sections/snapshots in cold_store"
+- evaluate_integrity: "Check for canon contradictions"
+- evaluate_reachability: "Check that all scenes are reachable"
+- evaluate_nonlinearity: "Check that multiple paths exist"
+- evaluate_gateways: "Check that gates have valid unlock conditions"
+- evaluate_style: "Check style consistency"
+- evaluate_determinism: "Check for non-deterministic behavior"
+- evaluate_presentation: "Check presentation quality"
+- evaluate_accessibility: "Check accessibility compliance"
+- create_gatecheck_report: "Create a GatecheckReport artifact summarizing validation"
+- consult_schema: "Look up artifact schema requirements"
+- return_to_sr: "Return control to Showrunner with work summary. MUST call when done."
 :::
 
 ### Constraints

@@ -17,7 +17,223 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from questfoundry.generated.models.enums import HookStatus, HookType, LoopType, QualityBar
+from questfoundry.generated.models.enums import AssetType, HookStatus, HookType, LoopType, QualityBar
+
+
+class Act(BaseModel):
+    """Act.
+
+    Store: cold
+    Lifecycle: draft → review → final
+
+    Attributes
+    ----------
+    title : str
+        The act's title or number
+    sequence : int
+        Order within the story
+    description : str | None
+        Summary of the act's narrative purpose (optional)
+    chapters : list[str] | None
+        IDs of chapters in this act (optional)
+    themes : list[str] | None
+        Thematic elements explored in this act (optional)
+
+    Examples
+    --------
+    Create a Act::
+
+        from questfoundry.generated.models import Act
+
+        item = Act(
+            title="example_title",
+            sequence=1,
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Act",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'sequence': 1,
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "review", "final"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="The act's title or number", examples=["example_title"],
+    )
+    sequence: int = Field(
+        ..., title="Sequence", description="Order within the story", examples=[1],
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Summary of the act's narrative purpose", examples=["example_description"],
+    )
+    chapters: list[str] | None = Field(
+        default=None, title="Chapters", description="IDs of chapters in this act", examples=[["item1", "item2"]],
+    )
+    themes: list[str] | None = Field(
+        default=None, title="Themes", description="Thematic elements explored in this act", examples=[["item1", "item2"]],
+    )
+
+
+class AudioPlan(BaseModel):
+    """Audio Plan.
+
+    Store: hot
+    Lifecycle: draft → approved → deferred → completed
+
+    Attributes
+    ----------
+    title : str
+        Identifier for this audio plan
+    section_id : str
+        Section or scene this audio plan covers
+    ambient : str | None
+        Background atmosphere (e.g., 'dock machinery, distant water') (optional)
+    music_cues : list[dict] | None
+        Music moments with mood, timing, and transition notes (optional)
+    sfx_cues : list[dict] | None
+        Sound effect requirements with trigger and description (optional)
+    voice_notes : str | None
+        VO/narration guidance (tone, pacing, delivery) (optional)
+    status : str | None
+        Current lifecycle status (optional)
+    priority : str | None
+        Production priority (critical, standard, nice-to-have) (optional)
+    deferred_reason : str | None
+        If deferred, why (optional)
+
+    Examples
+    --------
+    Create a Audio Plan::
+
+        from questfoundry.generated.models import AudioPlan
+
+        item = AudioPlan(
+            title="example_title",
+            section_id="example_section_id",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Audio Plan",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'section_id': 'example_section_id',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "approved", "deferred", "completed"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="Identifier for this audio plan", examples=["example_title"],
+    )
+    section_id: str = Field(
+        ..., title="Section Id", description="Section or scene this audio plan covers", examples=["example_section_id"],
+    )
+    ambient: str | None = Field(
+        default=None, title="Ambient", description="Background atmosphere (e.g., 'dock machinery, distant water')", examples=["example_ambient"],
+    )
+    music_cues: list[dict] | None = Field(
+        default=None, title="Music Cues", description="Music moments with mood, timing, and transition notes", examples=[[]],
+    )
+    sfx_cues: list[dict] | None = Field(
+        default=None, title="Sfx Cues", description="Sound effect requirements with trigger and description", examples=[[]],
+    )
+    voice_notes: str | None = Field(
+        default=None, title="Voice Notes", description="VO/narration guidance (tone, pacing, delivery)", examples=["example_voice_notes"],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status", examples=["example_status"],
+    )
+    priority: str | None = Field(
+        default=None, title="Priority", description="Production priority (critical, standard, nice-to-have)", examples=["example_priority"],
+    )
+    deferred_reason: str | None = Field(
+        default=None, title="Deferred Reason", description="If deferred, why", examples=["example_deferred_reason"],
+    )
+
+
+class Beat(BaseModel):
+    """Beat.
+
+    Store: hot
+    Lifecycle: draft → review → final
+
+    Attributes
+    ----------
+    description : str
+        What happens in this beat
+    sequence_id : str
+        Parent sequence this beat belongs to
+    order : int
+        Order within the sequence
+    beat_type : str | None
+        Category (action, dialogue, revelation, choice, etc.) (optional)
+    characters : list[str] | None
+        Character IDs involved in this beat (optional)
+    state_effects : list[str] | None
+        State changes triggered by this beat (optional)
+
+    Examples
+    --------
+    Create a Beat::
+
+        from questfoundry.generated.models import Beat
+
+        item = Beat(
+            description="example_description",
+            sequence_id="example_sequence_id",
+            order=1,
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Beat",
+        json_schema_extra={
+            'examples': [
+                {
+                    'description': 'example_description',
+                    'sequence_id': 'example_sequence_id',
+                    'order': 1,
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "review", "final"]
+    """Valid lifecycle states for this artifact type."""
+
+    description: str = Field(
+        ..., title="Description", description="What happens in this beat", examples=["example_description"],
+    )
+    sequence_id: str = Field(
+        ..., title="Sequence Id", description="Parent sequence this beat belongs to", examples=["example_sequence_id"],
+    )
+    order: int = Field(
+        ..., title="Order", description="Order within the sequence", examples=[1],
+    )
+    beat_type: str | None = Field(
+        default=None, title="Beat Type", description="Category (action, dialogue, revelation, choice, etc.)", examples=["example_beat_type"],
+    )
+    characters: list[str] | None = Field(
+        default=None, title="Characters", description="Character IDs involved in this beat", examples=[["item1", "item2"]],
+    )
+    state_effects: list[str] | None = Field(
+        default=None, title="State Effects", description="State changes triggered by this beat", examples=[["item1", "item2"]],
+    )
 
 
 class Brief(BaseModel):
@@ -71,11 +287,11 @@ class Brief(BaseModel):
     model_config = ConfigDict(
         title="Brief",
         json_schema_extra={
-            "examples": [
+            'examples': [
                 {
-                    "title": "example_title",
-                    "loop_type": "story_spark",
-                    "scope": "example_scope",
+                    'title': 'example_title',
+                    'loop_type': 'story_spark',
+                    'scope': 'example_scope',
                 },
             ],
         },
@@ -85,82 +301,43 @@ class Brief(BaseModel):
     """Valid lifecycle states for this artifact type."""
 
     title: str = Field(
-        ...,
-        title="Title",
-        description="Short title describing the work unit",
-        examples=["example_title"],
+        ..., title="Title", description="Short title describing the work unit", examples=["example_title"],
     )
     loop_type: LoopType = Field(
-        ...,
-        title="Loop Type",
-        description="Which workflow loop this brief belongs to",
-        examples=["story_spark"],
+        ..., title="Loop Type", description="Which workflow loop this brief belongs to", examples=["story_spark"],
     )
     scope: str = Field(
-        ...,
-        title="Scope",
-        description="Description of what's in scope for this work",
-        examples=["example_scope"],
+        ..., title="Scope", description="Description of what's in scope for this work", examples=["example_scope"],
     )
     status: str | None = Field(
-        default=None,
-        title="Status",
-        description="Current status (defaults to 'draft')",
-        examples=["example_status"],
+        default=None, title="Status", description="Current status (defaults to 'draft')", examples=["example_status"],
     )
     owner: str | None = Field(
-        default=None,
-        title="Owner",
-        description="Role ID accountable for this brief",
-        examples=["example_owner"],
+        default=None, title="Owner", description="Role ID accountable for this brief", examples=["example_owner"],
     )
     active_roles: list[str] | None = Field(
-        default=None,
-        title="Active Roles",
-        description="Role IDs that will work on this brief",
-        examples=[["item1", "item2"]],
+        default=None, title="Active Roles", description="Role IDs that will work on this brief", examples=[["item1", "item2"]],
     )
     dormant_roles: list[str] | None = Field(
-        default=None,
-        title="Dormant Roles",
-        description="Role IDs explicitly not participating",
-        examples=[["item1", "item2"]],
+        default=None, title="Dormant Roles", description="Role IDs explicitly not participating", examples=[["item1", "item2"]],
     )
     press_bars: list[QualityBar] | None = Field(
-        default=None,
-        title="Press Bars",
-        description="Quality bars this brief aims to satisfy",
-        examples=[["integrity"]],
+        default=None, title="Press Bars", description="Quality bars this brief aims to satisfy", examples=[["integrity"]],
     )
     monitor_bars: list[QualityBar] | None = Field(
-        default=None,
-        title="Monitor Bars",
-        description="Quality bars to watch but not gate on",
-        examples=[["integrity"]],
+        default=None, title="Monitor Bars", description="Quality bars to watch but not gate on", examples=[["integrity"]],
     )
     inputs: list[str] | None = Field(
-        default=None,
-        title="Inputs",
-        description="Prerequisite artifact IDs",
-        examples=[["item1", "item2"]],
+        default=None, title="Inputs", description="Prerequisite artifact IDs", examples=[["item1", "item2"]],
     )
     deliverables: list[str] | None = Field(
-        default=None,
-        title="Deliverables",
-        description="Expected output artifact descriptions",
-        examples=[["item1", "item2"]],
+        default=None, title="Deliverables", description="Expected output artifact descriptions", examples=[["item1", "item2"]],
     )
     exit_criteria: str | None = Field(
-        default=None,
-        title="Exit Criteria",
-        description="What 'done' looks like for this brief",
-        examples=["example_exit_criteria"],
+        default=None, title="Exit Criteria", description="What 'done' looks like for this brief", examples=["example_exit_criteria"],
     )
     related_hooks: list[str] | None = Field(
-        default=None,
-        title="Related Hooks",
-        description="Hook card IDs this brief addresses",
-        examples=[["item1", "item2"]],
+        default=None, title="Related Hooks", description="Hook card IDs this brief addresses", examples=[["item1", "item2"]],
     )
 
 
@@ -202,10 +379,10 @@ class CanonEntry(BaseModel):
     model_config = ConfigDict(
         title="Canon Entry",
         json_schema_extra={
-            "examples": [
+            'examples': [
                 {
-                    "title": "example_title",
-                    "content": "example_content",
+                    'title': 'example_title',
+                    'content': 'example_content',
                 },
             ],
         },
@@ -215,46 +392,604 @@ class CanonEntry(BaseModel):
     """Valid lifecycle states for this artifact type."""
 
     title: str = Field(
-        ...,
-        title="Title",
-        description="The canon fact or concept name",
-        examples=["example_title"],
+        ..., title="Title", description="The canon fact or concept name", examples=["example_title"],
     )
     content: str = Field(
-        ...,
-        title="Content",
-        description="The verified canonical information",
-        examples=["example_content"],
+        ..., title="Content", description="The verified canonical information", examples=["example_content"],
     )
     category: str | None = Field(
-        default=None,
-        title="Category",
-        description="Classification (character, location, event, rule, etc.)",
-        examples=["example_category"],
+        default=None, title="Category", description="Classification (character, location, event, rule, etc.)", examples=["example_category"],
     )
     status: str | None = Field(
-        default=None,
-        title="Status",
-        description="Current verification status",
-        examples=["example_status"],
+        default=None, title="Status", description="Current verification status", examples=["example_status"],
     )
     source: str | None = Field(
-        default=None,
-        title="Source",
-        description="Where this canon originated",
-        examples=["example_source"],
+        default=None, title="Source", description="Where this canon originated", examples=["example_source"],
     )
     related_entries: list[str] | None = Field(
-        default=None,
-        title="Related Entries",
-        description="IDs of related canon entries",
-        examples=[["item1", "item2"]],
+        default=None, title="Related Entries", description="IDs of related canon entries", examples=[["item1", "item2"]],
     )
     spoiler_level: str | None = Field(
-        default=None,
-        title="Spoiler Level",
-        description="hot (internal) or cold (player-safe)",
-        examples=["example_spoiler_level"],
+        default=None, title="Spoiler Level", description="hot (internal) or cold (player-safe)", examples=["example_spoiler_level"],
+    )
+
+
+class Chapter(BaseModel):
+    """Chapter.
+
+    Store: cold
+    Lifecycle: draft → review → final
+
+    Attributes
+    ----------
+    title : str
+        The chapter's title
+    sequence : int
+        Order within the act
+    act_id : str | None
+        Parent act this chapter belongs to (optional)
+    scenes : list[str] | None
+        IDs of scenes in this chapter (optional)
+    summary : str | None
+        Brief summary of chapter events (optional)
+    status : str | None
+        Current lifecycle status (optional)
+
+    Examples
+    --------
+    Create a Chapter::
+
+        from questfoundry.generated.models import Chapter
+
+        item = Chapter(
+            title="example_title",
+            sequence=1,
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Chapter",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'sequence': 1,
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "review", "final"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="The chapter's title", examples=["example_title"],
+    )
+    sequence: int = Field(
+        ..., title="Sequence", description="Order within the act", examples=[1],
+    )
+    act_id: str | None = Field(
+        default=None, title="Act Id", description="Parent act this chapter belongs to", examples=["example_act_id"],
+    )
+    scenes: list[str] | None = Field(
+        default=None, title="Scenes", description="IDs of scenes in this chapter", examples=[["item1", "item2"]],
+    )
+    summary: str | None = Field(
+        default=None, title="Summary", description="Brief summary of chapter events", examples=["example_summary"],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status", examples=["example_status"],
+    )
+
+
+class Character(BaseModel):
+    """Character.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    name : str
+        The character's primary name
+    description : str
+        Physical and personality description
+    role_in_story : str | None
+        Narrative function (protagonist, antagonist, mentor, etc.) (optional)
+    faction : str | None
+        Primary faction or group affiliation (optional)
+    relationships : list[str] | None
+        IDs of related Relationship artifacts (optional)
+    first_appearance : str | None
+        Scene or chapter where character is introduced (optional)
+    tags : list[str] | None
+        Categorization tags (mortal, immortal, recurring, etc.) (optional)
+
+    Examples
+    --------
+    Create a Character::
+
+        from questfoundry.generated.models import Character
+
+        item = Character(
+            name="example_name",
+            description="example_description",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Character",
+        json_schema_extra={
+            'examples': [
+                {
+                    'name': 'example_name',
+                    'description': 'example_description',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    name: str = Field(
+        ..., title="Name", description="The character's primary name", examples=["example_name"],
+    )
+    description: str = Field(
+        ..., title="Description", description="Physical and personality description", examples=["example_description"],
+    )
+    role_in_story: str | None = Field(
+        default=None, title="Role In Story", description="Narrative function (protagonist, antagonist, mentor, etc.)", examples=["example_role_in_story"],
+    )
+    faction: str | None = Field(
+        default=None, title="Faction", description="Primary faction or group affiliation", examples=["example_faction"],
+    )
+    relationships: list[str] | None = Field(
+        default=None, title="Relationships", description="IDs of related Relationship artifacts", examples=[["item1", "item2"]],
+    )
+    first_appearance: str | None = Field(
+        default=None, title="First Appearance", description="Scene or chapter where character is introduced", examples=["example_first_appearance"],
+    )
+    tags: list[str] | None = Field(
+        default=None, title="Tags", description="Categorization tags (mortal, immortal, recurring, etc.)", examples=[["item1", "item2"]],
+    )
+
+
+class ColdAsset(BaseModel):
+    """Cold Asset.
+
+    Store: cold
+
+    Attributes
+    ----------
+    anchor : str
+        Section anchor this asset belongs to (or 'cover', 'logo')
+    asset_type : AssetType
+        Type of asset (plate, cover, audio, font)
+    filename : str
+        Filename in assets directory
+    file_hash : str
+        SHA-256 hash of file contents
+    file_size : int
+        File size in bytes
+    mime_type : str
+        MIME type (e.g., 'image/png', 'audio/mpeg')
+    approved_by : str
+        Role ID that approved this asset (e.g., 'gatekeeper')
+    approved_at : datetime
+        When the asset was approved
+    provenance : AssetProvenance | None
+        Creation metadata for reproducibility (optional)
+
+    Examples
+    --------
+    Create a Cold Asset::
+
+        from questfoundry.generated.models import ColdAsset
+
+        item = ColdAsset(
+            anchor="example_anchor",
+            asset_type="plate",
+            filename="example_filename",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'anchor': 'example_anchor',
+                    'asset_type': 'plate',
+                    'filename': 'example_filename',
+                    'file_hash': 'example_file_hash',
+                    'file_size': 1,
+                    'mime_type': 'example_mime_type',
+                    'approved_by': 'example_approved_by',
+                },
+            ],
+        },
+    )
+
+    anchor: str = Field(
+        ..., title="Anchor", description="Section anchor this asset belongs to (or 'cover', 'logo')", examples=["example_anchor"],
+    )
+    asset_type: AssetType = Field(
+        ..., title="Asset Type", description="Type of asset (plate, cover, audio, font)", examples=["plate"],
+    )
+    filename: str = Field(
+        ..., title="Filename", description="Filename in assets directory", examples=["example_filename"],
+    )
+    file_hash: str = Field(
+        ..., title="File Hash", description="SHA-256 hash of file contents", examples=["example_file_hash"],
+    )
+    file_size: int = Field(
+        ..., title="File Size", description="File size in bytes", examples=[1],
+    )
+    mime_type: str = Field(
+        ..., title="Mime Type", description="MIME type (e.g., 'image/png', 'audio/mpeg')", examples=["example_mime_type"],
+    )
+    approved_by: str = Field(
+        ..., title="Approved By", description="Role ID that approved this asset (e.g., 'gatekeeper')", examples=["example_approved_by"],
+    )
+    approved_at: datetime = Field(
+        ..., title="Approved At", description="When the asset was approved",
+    )
+    provenance: AssetProvenance | None = Field(
+        default=None, title="Provenance", description="Creation metadata for reproducibility",
+    )
+
+
+class ColdBook(BaseModel):
+    """Cold Book.
+
+    Store: cold
+
+    Attributes
+    ----------
+    title : str
+        Book title
+    language : str
+        ISO 639-1 language code (e.g., 'en', 'nl')
+    start_anchor : str
+        Anchor of the first section (entry point)
+    subtitle : str | None
+        Book subtitle (optional)
+    author : str | None
+        Author name (optional)
+
+    Examples
+    --------
+    Create a Cold Book::
+
+        from questfoundry.generated.models import ColdBook
+
+        item = ColdBook(
+            title="example_title",
+            language="example_language",
+            start_anchor="example_start_anchor",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'language': 'example_language',
+                    'start_anchor': 'example_start_anchor',
+                },
+            ],
+        },
+    )
+
+    title: str = Field(
+        ..., title="Title", description="Book title", examples=["example_title"],
+    )
+    language: str = Field(
+        ..., title="Language", description="ISO 639-1 language code (e.g., 'en', 'nl')", examples=["example_language"],
+    )
+    start_anchor: str = Field(
+        ..., title="Start Anchor", description="Anchor of the first section (entry point)", examples=["example_start_anchor"],
+    )
+    subtitle: str | None = Field(
+        default=None, title="Subtitle", description="Book subtitle", examples=["example_subtitle"],
+    )
+    author: str | None = Field(
+        default=None, title="Author", description="Author name", examples=["example_author"],
+    )
+
+
+class ColdSection(BaseModel):
+    """Cold Section.
+
+    Store: cold
+
+    Attributes
+    ----------
+    id : int
+        Auto-increment primary key (stable across anchor renames)
+    anchor : str
+        Unique identifier for navigation (e.g., 'scene_001', 'hub_market'). Can be renamed without breaking references.
+    title : str
+        Player-visible section title
+    content : str
+        Prose content as structured data. Publisher transforms this to markdown/HTML for export.
+    order : int
+        Display order in book (1-indexed)
+    content_hash : str
+        SHA-256 hash of content for integrity validation
+    requires_gate : bool | None
+        Whether this section has access conditions (optional)
+    source_brief_id : str | None
+        ID of the Brief that produced this section (lineage) (optional)
+
+    Examples
+    --------
+    Create a Cold Section::
+
+        from questfoundry.generated.models import ColdSection
+
+        item = ColdSection(
+            id=1,
+            anchor="example_anchor",
+            title="example_title",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'id': 1,
+                    'anchor': 'example_anchor',
+                    'title': 'example_title',
+                    'content': 'example_content',
+                    'order': 1,
+                    'content_hash': 'example_content_hash',
+                },
+            ],
+        },
+    )
+
+    id: int = Field(
+        ..., title="Id", description="Auto-increment primary key (stable across anchor renames)", examples=[1],
+    )
+    anchor: str = Field(
+        ..., title="Anchor", description="Unique identifier for navigation (e.g., 'scene_001', 'hub_market'). Can be renamed without breaking references.", examples=["example_anchor"],
+    )
+    title: str = Field(
+        ..., title="Title", description="Player-visible section title", examples=["example_title"],
+    )
+    content: str = Field(
+        ..., title="Content", description="Prose content as structured data. Publisher transforms this to markdown/HTML for export.", examples=["example_content"],
+    )
+    order: int = Field(
+        ..., title="Order", description="Display order in book (1-indexed)", examples=[1],
+    )
+    content_hash: str = Field(
+        ..., title="Content Hash", description="SHA-256 hash of content for integrity validation", examples=["example_content_hash"],
+    )
+    requires_gate: bool | None = Field(
+        default=None, title="Requires Gate", description="Whether this section has access conditions", examples=[True],
+    )
+    source_brief_id: str | None = Field(
+        default=None, title="Source Brief Id", description="ID of the Brief that produced this section (lineage)", examples=["example_source_brief_id"],
+    )
+
+
+class ColdSnapshot(BaseModel):
+    """Cold Snapshot.
+
+    Store: cold
+
+    Attributes
+    ----------
+    snapshot_id : str
+        Unique identifier (e.g., 'cold-2025-12-08-001')
+    created_at : datetime
+        When the snapshot was created
+    manifest_hash : str
+        SHA-256 hash of the manifest (all section + asset hashes)
+    section_count : int
+        Number of sections in this snapshot
+    asset_count : int
+        Number of assets in this snapshot
+    description : str | None
+        Human-readable description of this snapshot (optional)
+
+    Examples
+    --------
+    Create a Cold Snapshot::
+
+        from questfoundry.generated.models import ColdSnapshot
+
+        item = ColdSnapshot(
+            snapshot_id="example_snapshot_id",
+            manifest_hash="example_manifest_hash",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'snapshot_id': 'example_snapshot_id',
+                    'manifest_hash': 'example_manifest_hash',
+                    'section_count': 1,
+                    'asset_count': 1,
+                },
+            ],
+        },
+    )
+
+    snapshot_id: str = Field(
+        ..., title="Snapshot Id", description="Unique identifier (e.g., 'cold-2025-12-08-001')", examples=["example_snapshot_id"],
+    )
+    created_at: datetime = Field(
+        ..., title="Created At", description="When the snapshot was created",
+    )
+    manifest_hash: str = Field(
+        ..., title="Manifest Hash", description="SHA-256 hash of the manifest (all section + asset hashes)", examples=["example_manifest_hash"],
+    )
+    section_count: int = Field(
+        ..., title="Section Count", description="Number of sections in this snapshot", examples=[1],
+    )
+    asset_count: int = Field(
+        ..., title="Asset Count", description="Number of assets in this snapshot", examples=[1],
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Human-readable description of this snapshot", examples=["example_description"],
+    )
+
+
+class Event(BaseModel):
+    """Event.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    title : str
+        The event's name
+    description : str
+        What happened during this event
+    when : str
+        When the event occurred (relative or absolute)
+    timeline_id : str | None
+        Timeline this event belongs to (optional)
+    participants : list[str] | None
+        Character or faction IDs involved (optional)
+    location : str | None
+        Location ID where event occurred (optional)
+    consequences : list[str] | None
+        Event IDs that resulted from this event (optional)
+    spoiler_level : str | None
+        hot (internal) or cold (player-safe) (optional)
+
+    Examples
+    --------
+    Create a Event::
+
+        from questfoundry.generated.models import Event
+
+        item = Event(
+            title="example_title",
+            description="example_description",
+            when="example_when",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Event",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'description': 'example_description',
+                    'when': 'example_when',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="The event's name", examples=["example_title"],
+    )
+    description: str = Field(
+        ..., title="Description", description="What happened during this event", examples=["example_description"],
+    )
+    when: str = Field(
+        ..., title="When", description="When the event occurred (relative or absolute)", examples=["example_when"],
+    )
+    timeline_id: str | None = Field(
+        default=None, title="Timeline Id", description="Timeline this event belongs to", examples=["example_timeline_id"],
+    )
+    participants: list[str] | None = Field(
+        default=None, title="Participants", description="Character or faction IDs involved", examples=[["item1", "item2"]],
+    )
+    location: str | None = Field(
+        default=None, title="Location", description="Location ID where event occurred", examples=["example_location"],
+    )
+    consequences: list[str] | None = Field(
+        default=None, title="Consequences", description="Event IDs that resulted from this event", examples=[["item1", "item2"]],
+    )
+    spoiler_level: str | None = Field(
+        default=None, title="Spoiler Level", description="hot (internal) or cold (player-safe)", examples=["example_spoiler_level"],
+    )
+
+
+class Fact(BaseModel):
+    """Fact.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    statement : str
+        The factual assertion
+    category : str | None
+        Type of fact (geography, history, magic, politics, etc.) (optional)
+    source : str | None
+        Where this fact originated (optional)
+    confidence : str | None
+        Certainty level (canon, provisional, disputed) (optional)
+    related_entities : list[str] | None
+        Character, Location, or Item IDs this fact concerns (optional)
+    spoiler_level : str | None
+        hot (internal) or cold (player-safe) (optional)
+    tags : list[str] | None
+        Categorization tags for filtering and search (optional)
+
+    Examples
+    --------
+    Create a Fact::
+
+        from questfoundry.generated.models import Fact
+
+        item = Fact(
+            statement="example_statement",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Fact",
+        json_schema_extra={
+            'examples': [
+                {
+                    'statement': 'example_statement',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    statement: str = Field(
+        ..., title="Statement", description="The factual assertion", examples=["example_statement"],
+    )
+    category: str | None = Field(
+        default=None, title="Category", description="Type of fact (geography, history, magic, politics, etc.)", examples=["example_category"],
+    )
+    source: str | None = Field(
+        default=None, title="Source", description="Where this fact originated", examples=["example_source"],
+    )
+    confidence: str | None = Field(
+        default=None, title="Confidence", description="Certainty level (canon, provisional, disputed)", examples=["example_confidence"],
+    )
+    related_entities: list[str] | None = Field(
+        default=None, title="Related Entities", description="Character, Location, or Item IDs this fact concerns", examples=[["item1", "item2"]],
+    )
+    spoiler_level: str | None = Field(
+        default=None, title="Spoiler Level", description="hot (internal) or cold (player-safe)", examples=["example_spoiler_level"],
+    )
+    tags: list[str] | None = Field(
+        default=None, title="Tags", description="Categorization tags for filtering and search", examples=[["item1", "item2"]],
     )
 
 
@@ -298,10 +1033,10 @@ class GatecheckReport(BaseModel):
     model_config = ConfigDict(
         title="Gatecheck Report",
         json_schema_extra={
-            "examples": [
+            'examples': [
                 {
-                    "target_artifact": "example_target_artifact",
-                    "bars_checked": ["integrity"],
+                    'target_artifact': 'example_target_artifact',
+                    'bars_checked': ["integrity"],
                 },
             ],
         },
@@ -311,52 +1046,28 @@ class GatecheckReport(BaseModel):
     """Valid lifecycle states for this artifact type."""
 
     target_artifact: str = Field(
-        ...,
-        title="Target Artifact",
-        description="ID of the artifact being validated",
-        examples=["example_target_artifact"],
+        ..., title="Target Artifact", description="ID of the artifact being validated", examples=["example_target_artifact"],
     )
     bars_checked: list[QualityBar] = Field(
-        ...,
-        title="Bars Checked",
-        description="Quality bars evaluated in this check",
-        examples=[["integrity"]],
+        ..., title="Bars Checked", description="Quality bars evaluated in this check", examples=[["integrity"]],
     )
     status: str | None = Field(
-        default=None,
-        title="Status",
-        description="Overall result (defaults to 'pending')",
-        examples=["example_status"],
+        default=None, title="Status", description="Overall result (defaults to 'pending')", examples=["example_status"],
     )
     bar_results: dict[str, str] | None = Field(
-        default=None,
-        title="Bar Results",
-        description="Per-bar pass/fail status with notes",
-        examples=[{}],
+        default=None, title="Bar Results", description="Per-bar pass/fail status with notes", examples=[{}],
     )
     issues: list[str] | None = Field(
-        default=None,
-        title="Issues",
-        description="Specific issues found during validation",
-        examples=[["item1", "item2"]],
+        default=None, title="Issues", description="Specific issues found during validation", examples=[["item1", "item2"]],
     )
     recommendations: list[str] | None = Field(
-        default=None,
-        title="Recommendations",
-        description="Suggested fixes for failed bars",
-        examples=[["item1", "item2"]],
+        default=None, title="Recommendations", description="Suggested fixes for failed bars", examples=[["item1", "item2"]],
     )
     waiver_reason: str | None = Field(
-        default=None,
-        title="Waiver Reason",
-        description="If waived, why (requires Showrunner approval)",
-        examples=["example_waiver_reason"],
+        default=None, title="Waiver Reason", description="If waived, why (requires Showrunner approval)", examples=["example_waiver_reason"],
     )
     checked_by: str | None = Field(
-        default=None,
-        title="Checked By",
-        description="Role ID that performed the check",
-        examples=["example_checked_by"],
+        default=None, title="Checked By", description="Role ID that performed the check", examples=["example_checked_by"],
     )
 
 
@@ -405,86 +1116,269 @@ class HookCard(BaseModel):
     model_config = ConfigDict(
         title="Hook Card",
         json_schema_extra={
-            "examples": [
+            'examples': [
                 {
-                    "title": "example_title",
-                    "hook_type": "narrative",
-                    "description": "example_description",
+                    'title': 'example_title',
+                    'hook_type': 'narrative',
+                    'description': 'example_description',
                 },
             ],
         },
     )
 
-    LIFECYCLE: ClassVar[list[str]] = [
-        "proposed",
-        "accepted",
-        "in_progress",
-        "resolved",
-        "canonized",
-        "deferred",
-        "rejected",
-    ]
+    LIFECYCLE: ClassVar[list[str]] = ["proposed", "accepted", "in_progress", "resolved", "canonized", "deferred", "rejected"]
     """Valid lifecycle states for this artifact type."""
 
     title: str = Field(
-        ...,
-        title="Title",
-        description="Short, descriptive title for the hook",
-        examples=["example_title"],
+        ..., title="Title", description="Short, descriptive title for the hook", examples=["example_title"],
     )
     hook_type: HookType = Field(
-        ...,
-        title="Hook Type",
-        description="The category of change this hook represents",
-        examples=["narrative"],
+        ..., title="Hook Type", description="The category of change this hook represents", examples=["narrative"],
     )
     description: str = Field(
-        ...,
-        title="Description",
-        description="Detailed explanation of what needs to be done",
-        examples=["example_description"],
+        ..., title="Description", description="Detailed explanation of what needs to be done", examples=["example_description"],
     )
     status: HookStatus | None = Field(
-        default=None,
-        title="Status",
-        description="Current lifecycle status (defaults to 'proposed')",
-        examples=["proposed"],
+        default=None, title="Status", description="Current lifecycle status (defaults to 'proposed')", examples=["proposed"],
     )
     owner: str | None = Field(
-        default=None,
-        title="Owner",
-        description="Role ID responsible for this hook",
-        examples=["example_owner"],
+        default=None, title="Owner", description="Role ID responsible for this hook", examples=["example_owner"],
     )
     priority: int | None = Field(
-        default=None,
-        title="Priority",
-        description="Priority level (1=highest, 5=lowest)",
-        examples=[1],
+        default=None, title="Priority", description="Priority level (1=highest, 5=lowest)", examples=[1],
     )
     source: str | None = Field(
-        default=None,
-        title="Source",
-        description="Where this hook originated (section ID, user input, etc.)",
-        examples=["example_source"],
+        default=None, title="Source", description="Where this hook originated (section ID, user input, etc.)", examples=["example_source"],
     )
     target_artifact: str | None = Field(
-        default=None,
-        title="Target Artifact",
-        description="ID of the artifact this hook will modify",
-        examples=["example_target_artifact"],
+        default=None, title="Target Artifact", description="ID of the artifact this hook will modify", examples=["example_target_artifact"],
     )
     reason: str | None = Field(
-        default=None,
-        title="Reason",
-        description="Reason for deferral or rejection (required for those states)",
-        examples=["example_reason"],
+        default=None, title="Reason", description="Reason for deferral or rejection (required for those states)", examples=["example_reason"],
     )
     tags: list[str] | None = Field(
-        default=None,
-        title="Tags",
-        description="Optional categorization tags",
-        examples=[["item1", "item2"]],
+        default=None, title="Tags", description="Optional categorization tags", examples=[["item1", "item2"]],
+    )
+
+
+class Item(BaseModel):
+    """Item.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    name : str
+        The item's primary name
+    description : str
+        Physical description and properties
+    item_type : str | None
+        Category (weapon, artifact, key, consumable, etc.) (optional)
+    significance : str | None
+        Narrative importance (quest item, MacGuffin, collectible) (optional)
+    owner : str | None
+        Character ID of current or original owner (optional)
+    location : str | None
+        Location ID where item can be found (optional)
+    tags : list[str] | None
+        Categorization tags (magical, mundane, unique, etc.) (optional)
+
+    Examples
+    --------
+    Create a Item::
+
+        from questfoundry.generated.models import Item
+
+        item = Item(
+            name="example_name",
+            description="example_description",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Item",
+        json_schema_extra={
+            'examples': [
+                {
+                    'name': 'example_name',
+                    'description': 'example_description',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    name: str = Field(
+        ..., title="Name", description="The item's primary name", examples=["example_name"],
+    )
+    description: str = Field(
+        ..., title="Description", description="Physical description and properties", examples=["example_description"],
+    )
+    item_type: str | None = Field(
+        default=None, title="Item Type", description="Category (weapon, artifact, key, consumable, etc.)", examples=["example_item_type"],
+    )
+    significance: str | None = Field(
+        default=None, title="Significance", description="Narrative importance (quest item, MacGuffin, collectible)", examples=["example_significance"],
+    )
+    owner: str | None = Field(
+        default=None, title="Owner", description="Character ID of current or original owner", examples=["example_owner"],
+    )
+    location: str | None = Field(
+        default=None, title="Location", description="Location ID where item can be found", examples=["example_location"],
+    )
+    tags: list[str] | None = Field(
+        default=None, title="Tags", description="Categorization tags (magical, mundane, unique, etc.)", examples=[["item1", "item2"]],
+    )
+
+
+class Location(BaseModel):
+    """Location.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    name : str
+        The location's primary name
+    description : str
+        Physical and atmospheric description
+    region : str | None
+        Parent region or area this location belongs to (optional)
+    location_type : str | None
+        Category (city, wilderness, dungeon, etc.) (optional)
+    connected_to : list[str] | None
+        IDs of adjacent or connected locations (optional)
+    notable_features : list[str] | None
+        Distinctive elements (landmarks, hazards, resources) (optional)
+    tags : list[str] | None
+        Categorization tags (safe, dangerous, hub, etc.) (optional)
+
+    Examples
+    --------
+    Create a Location::
+
+        from questfoundry.generated.models import Location
+
+        item = Location(
+            name="example_name",
+            description="example_description",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Location",
+        json_schema_extra={
+            'examples': [
+                {
+                    'name': 'example_name',
+                    'description': 'example_description',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    name: str = Field(
+        ..., title="Name", description="The location's primary name", examples=["example_name"],
+    )
+    description: str = Field(
+        ..., title="Description", description="Physical and atmospheric description", examples=["example_description"],
+    )
+    region: str | None = Field(
+        default=None, title="Region", description="Parent region or area this location belongs to", examples=["example_region"],
+    )
+    location_type: str | None = Field(
+        default=None, title="Location Type", description="Category (city, wilderness, dungeon, etc.)", examples=["example_location_type"],
+    )
+    connected_to: list[str] | None = Field(
+        default=None, title="Connected To", description="IDs of adjacent or connected locations", examples=[["item1", "item2"]],
+    )
+    notable_features: list[str] | None = Field(
+        default=None, title="Notable Features", description="Distinctive elements (landmarks, hazards, resources)", examples=[["item1", "item2"]],
+    )
+    tags: list[str] | None = Field(
+        default=None, title="Tags", description="Categorization tags (safe, dangerous, hub, etc.)", examples=[["item1", "item2"]],
+    )
+
+
+class Relationship(BaseModel):
+    """Relationship.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    source_entity : str
+        ID of the first entity in the relationship
+    target_entity : str
+        ID of the second entity in the relationship
+    relationship_type : str
+        Nature of connection (ally, enemy, family, mentor, etc.)
+    description : str | None
+        Details about the relationship (optional)
+    strength : str | None
+        Intensity (strong, moderate, weak, complicated) (optional)
+    is_mutual : bool | None
+        Whether the relationship is bidirectional (optional)
+    tags : list[str] | None
+        Categorization tags (public, secret, evolving, etc.) (optional)
+
+    Examples
+    --------
+    Create a Relationship::
+
+        from questfoundry.generated.models import Relationship
+
+        item = Relationship(
+            source_entity="example_source_entity",
+            target_entity="example_target_entity",
+            relationship_type="example_relationship_type",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Relationship",
+        json_schema_extra={
+            'examples': [
+                {
+                    'source_entity': 'example_source_entity',
+                    'target_entity': 'example_target_entity',
+                    'relationship_type': 'example_relationship_type',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    source_entity: str = Field(
+        ..., title="Source Entity", description="ID of the first entity in the relationship", examples=["example_source_entity"],
+    )
+    target_entity: str = Field(
+        ..., title="Target Entity", description="ID of the second entity in the relationship", examples=["example_target_entity"],
+    )
+    relationship_type: str = Field(
+        ..., title="Relationship Type", description="Nature of connection (ally, enemy, family, mentor, etc.)", examples=["example_relationship_type"],
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Details about the relationship", examples=["example_description"],
+    )
+    strength: str | None = Field(
+        default=None, title="Strength", description="Intensity (strong, moderate, weak, complicated)", examples=["example_strength"],
+    )
+    is_mutual: bool | None = Field(
+        default=None, title="Is Mutual", description="Whether the relationship is bidirectional", examples=[True],
+    )
+    tags: list[str] | None = Field(
+        default=None, title="Tags", description="Categorization tags (public, secret, evolving, etc.)", examples=[["item1", "item2"]],
     )
 
 
@@ -531,11 +1425,11 @@ class Scene(BaseModel):
     model_config = ConfigDict(
         title="Scene",
         json_schema_extra={
-            "examples": [
+            'examples': [
                 {
-                    "title": "example_title",
-                    "section_id": "example_section_id",
-                    "content": "example_content",
+                    'title': 'example_title',
+                    'section_id': 'example_section_id',
+                    'content': 'example_content',
                 },
             ],
         },
@@ -545,56 +1439,321 @@ class Scene(BaseModel):
     """Valid lifecycle states for this artifact type."""
 
     title: str = Field(
-        ...,
-        title="Title",
-        description="Scene title or identifier",
-        examples=["example_title"],
+        ..., title="Title", description="Scene title or identifier", examples=["example_title"],
     )
     section_id: str = Field(
-        ...,
-        title="Section Id",
-        description="Parent section this scene belongs to",
-        examples=["example_section_id"],
+        ..., title="Section Id", description="Parent section this scene belongs to", examples=["example_section_id"],
     )
     content: str = Field(
-        ...,
-        title="Content",
-        description="The scene prose content",
-        examples=["example_content"],
+        ..., title="Content", description="The scene prose content", examples=["example_content"],
     )
     status: str | None = Field(
-        default=None,
-        title="Status",
-        description="Current lifecycle status (defaults to 'draft')",
-        examples=["example_status"],
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
     sequence: int | None = Field(
-        default=None,
-        title="Sequence",
-        description="Order within the section",
-        examples=[1],
+        default=None, title="Sequence", description="Order within the section", examples=[1],
     )
     gates: list[str] | None = Field(
-        default=None,
-        title="Gates",
-        description="Gate conditions that control access to this scene",
-        examples=[["item1", "item2"]],
+        default=None, title="Gates", description="Gate conditions that control access to this scene", examples=[["item1", "item2"]],
     )
     choices: list[str] | None = Field(
-        default=None,
-        title="Choices",
-        description="Available choices/exits from this scene",
-        examples=[["item1", "item2"]],
+        default=None, title="Choices", description="Available choices/exits from this scene", examples=[["item1", "item2"]],
     )
     canon_refs: list[str] | None = Field(
-        default=None,
-        title="Canon Refs",
-        description="Canon entries referenced in this scene",
-        examples=[["item1", "item2"]],
+        default=None, title="Canon Refs", description="Canon entries referenced in this scene", examples=[["item1", "item2"]],
     )
     style_notes: str | None = Field(
-        default=None,
-        title="Style Notes",
-        description="Voice/register guidance for this scene",
-        examples=["example_style_notes"],
+        default=None, title="Style Notes", description="Voice/register guidance for this scene", examples=["example_style_notes"],
+    )
+
+
+class Sequence(BaseModel):
+    """Sequence.
+
+    Store: hot
+    Lifecycle: draft → review → final
+
+    Attributes
+    ----------
+    title : str
+        The sequence's identifier
+    scene_id : str
+        Parent scene this sequence belongs to
+    order : int
+        Order within the scene
+    beats : list[str] | None
+        IDs of beats in this sequence (optional)
+    purpose : str | None
+        Narrative function of this sequence (optional)
+
+    Examples
+    --------
+    Create a Sequence::
+
+        from questfoundry.generated.models import Sequence
+
+        item = Sequence(
+            title="example_title",
+            scene_id="example_scene_id",
+            order=1,
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Sequence",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'scene_id': 'example_scene_id',
+                    'order': 1,
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "review", "final"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="The sequence's identifier", examples=["example_title"],
+    )
+    scene_id: str = Field(
+        ..., title="Scene Id", description="Parent scene this sequence belongs to", examples=["example_scene_id"],
+    )
+    order: int = Field(
+        ..., title="Order", description="Order within the scene", examples=[1],
+    )
+    beats: list[str] | None = Field(
+        default=None, title="Beats", description="IDs of beats in this sequence", examples=[["item1", "item2"]],
+    )
+    purpose: str | None = Field(
+        default=None, title="Purpose", description="Narrative function of this sequence", examples=["example_purpose"],
+    )
+
+
+class Shotlist(BaseModel):
+    """Shotlist.
+
+    Store: hot
+    Lifecycle: draft → approved → deferred → completed
+
+    Attributes
+    ----------
+    title : str
+        Identifier for this shotlist (e.g., 'Act I Hub Visuals')
+    section_id : str
+        Section or scene this shotlist covers
+    shots : list[dict]
+        List of shot definitions with subject, mood, and purpose
+    status : str | None
+        Current lifecycle status (optional)
+    art_direction_notes : str | None
+        Overall visual guidance from Creative Director (optional)
+    priority : str | None
+        Production priority (critical, standard, nice-to-have) (optional)
+    deferred_reason : str | None
+        If deferred, why (e.g., 'pending budget', 'art-only release') (optional)
+
+    Examples
+    --------
+    Create a Shotlist::
+
+        from questfoundry.generated.models import Shotlist
+
+        item = Shotlist(
+            title="example_title",
+            section_id="example_section_id",
+            shots=[],
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Shotlist",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'section_id': 'example_section_id',
+                    'shots': [],
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "approved", "deferred", "completed"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="Identifier for this shotlist (e.g., 'Act I Hub Visuals')", examples=["example_title"],
+    )
+    section_id: str = Field(
+        ..., title="Section Id", description="Section or scene this shotlist covers", examples=["example_section_id"],
+    )
+    shots: list[dict] = Field(
+        ..., title="Shots", description="List of shot definitions with subject, mood, and purpose", examples=[[]],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status", examples=["example_status"],
+    )
+    art_direction_notes: str | None = Field(
+        default=None, title="Art Direction Notes", description="Overall visual guidance from Creative Director", examples=["example_art_direction_notes"],
+    )
+    priority: str | None = Field(
+        default=None, title="Priority", description="Production priority (critical, standard, nice-to-have)", examples=["example_priority"],
+    )
+    deferred_reason: str | None = Field(
+        default=None, title="Deferred Reason", description="If deferred, why (e.g., 'pending budget', 'art-only release')", examples=["example_deferred_reason"],
+    )
+
+
+class Timeline(BaseModel):
+    """Timeline.
+
+    Store: cold
+    Lifecycle: draft → verified → canon
+
+    Attributes
+    ----------
+    name : str
+        The timeline's identifier (e.g., 'Main', 'Pre-History')
+    description : str | None
+        What period or scope this timeline covers (optional)
+    reference_point : str | None
+        The T0 or anchor point for relative dates (optional)
+    events : list[str] | None
+        IDs of events in this timeline (optional)
+    scale : str | None
+        Time scale (years, decades, centuries, etc.) (optional)
+
+    Examples
+    --------
+    Create a Timeline::
+
+        from questfoundry.generated.models import Timeline
+
+        item = Timeline(
+            name="example_name",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Timeline",
+        json_schema_extra={
+            'examples': [
+                {
+                    'name': 'example_name',
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "verified", "canon"]
+    """Valid lifecycle states for this artifact type."""
+
+    name: str = Field(
+        ..., title="Name", description="The timeline's identifier (e.g., 'Main', 'Pre-History')", examples=["example_name"],
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="What period or scope this timeline covers", examples=["example_description"],
+    )
+    reference_point: str | None = Field(
+        default=None, title="Reference Point", description="The T0 or anchor point for relative dates", examples=["example_reference_point"],
+    )
+    events: list[str] | None = Field(
+        default=None, title="Events", description="IDs of events in this timeline", examples=[["item1", "item2"]],
+    )
+    scale: str | None = Field(
+        default=None, title="Scale", description="Time scale (years, decades, centuries, etc.)", examples=["example_scale"],
+    )
+
+
+class TranslationPack(BaseModel):
+    """Translation Pack.
+
+    Store: hot
+    Lifecycle: draft → in_progress → review → complete
+
+    Attributes
+    ----------
+    title : str
+        Identifier for this translation pack
+    source_language : str
+        Language code of source content (e.g., 'en')
+    target_language : str
+        Language code of translation target (e.g., 'nl', 'de')
+    scope : list[str]
+        Section or artifact IDs included in this pack
+    status : str | None
+        Current lifecycle status (optional)
+    coverage_percent : int | None
+        Percentage of scope that's translated (0-100) (optional)
+    translator : str | None
+        Assigned translator or team (optional)
+    register_notes : str | None
+        Voice/formality guidance for this language (optional)
+    glossary_terms : list[str] | None
+        Key terms that must be translated consistently (optional)
+    blockers : list[str] | None
+        Issues preventing progress (missing context, ambiguous source) (optional)
+
+    Examples
+    --------
+    Create a Translation Pack::
+
+        from questfoundry.generated.models import TranslationPack
+
+        item = TranslationPack(
+            title="example_title",
+            source_language="example_source_language",
+            target_language="example_target_language",
+        )
+    """
+
+    model_config = ConfigDict(
+        title="Translation Pack",
+        json_schema_extra={
+            'examples': [
+                {
+                    'title': 'example_title',
+                    'source_language': 'example_source_language',
+                    'target_language': 'example_target_language',
+                    'scope': ["item1", "item2"],
+                },
+            ],
+        },
+    )
+
+    LIFECYCLE: ClassVar[list[str]] = ["draft", "in_progress", "review", "complete"]
+    """Valid lifecycle states for this artifact type."""
+
+    title: str = Field(
+        ..., title="Title", description="Identifier for this translation pack", examples=["example_title"],
+    )
+    source_language: str = Field(
+        ..., title="Source Language", description="Language code of source content (e.g., 'en')", examples=["example_source_language"],
+    )
+    target_language: str = Field(
+        ..., title="Target Language", description="Language code of translation target (e.g., 'nl', 'de')", examples=["example_target_language"],
+    )
+    scope: list[str] = Field(
+        ..., title="Scope", description="Section or artifact IDs included in this pack", examples=[["item1", "item2"]],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status", examples=["example_status"],
+    )
+    coverage_percent: int | None = Field(
+        default=None, title="Coverage Percent", description="Percentage of scope that's translated (0-100)", examples=[1],
+    )
+    translator: str | None = Field(
+        default=None, title="Translator", description="Assigned translator or team", examples=["example_translator"],
+    )
+    register_notes: str | None = Field(
+        default=None, title="Register Notes", description="Voice/formality guidance for this language", examples=["example_register_notes"],
+    )
+    glossary_terms: list[str] | None = Field(
+        default=None, title="Glossary Terms", description="Key terms that must be translated consistently", examples=[["item1", "item2"]],
+    )
+    blockers: list[str] | None = Field(
+        default=None, title="Blockers", description="Issues preventing progress (missing context, ambiguous source)", examples=[["item1", "item2"]],
     )

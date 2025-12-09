@@ -79,11 +79,15 @@ Escalate to appropriate role when:
 
 :::{role-tools}
 
-- read_state: "Read artifacts from hot_store or cold_store"
-- write_state: "Write artifacts to hot_store"
-- post_intent: "Declare work status and route to next role"
-- query_lore: "Search canon for relevant details"
-- update_scene_content: "Fill in prose content for a Scene artifact"
+- read_hot_sot: "Read artifacts from hot_store (mutable draft storage)"
+- write_hot_sot: "Write artifacts to hot_store. MUST call this to persist your work!"
+- list_hot_store_keys: "List all artifact keys in hot_store"
+- read_cold_sot: "Read from cold_store (canon) for reference"
+- list_cold_store_keys: "List all sections/snapshots in cold_store"
+- consult_playbook: "Get workflow guidance from loop definitions"
+- consult_role_charter: "Look up a role's capabilities and constraints"
+- consult_schema: "Look up artifact schema requirements"
+- return_to_sr: "Return control to Showrunner with work summary. MUST call when done."
 :::
 
 ### Constraints
@@ -94,6 +98,7 @@ Escalate to appropriate role when:
 - MUST follow style_notes provided in Scene artifacts
 - MUST stay consistent with established canon
 - MUST NOT introduce new canon facts (flag for Lorekeeper)
+- MUST write prose artifacts to hot_store using write_hot_sot before calling return_to_sr
 - SHOULD vary sentence structure for readability
 - SHOULD match tone to section context
 :::

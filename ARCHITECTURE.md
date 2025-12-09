@@ -267,6 +267,45 @@ The compiler extracts directives to generate:
 
 The **Prose** sections are not compiled but are indexed for the Agent's RAG/Context system.
 
+### CRITICAL: The Compiler Workflow
+
+> **WARNING:** Files in `generated/` are AUTO-GENERATED. Direct edits to these files
+> cause regressions that are difficult to debug. This mistake has been made repeatedly.
+
+**The correct workflow for domain changes:**
+
+```bash
+# 1. Identify the source file
+#    generated/roles/plotwright.py → domain/roles/plotwright.md
+#    generated/models/artifacts.py → domain/ontology/artifacts.md
+
+# 2. Edit the source (MyST) file
+vim src/questfoundry/domain/roles/plotwright.md
+
+# 3. Regenerate via compiler
+qf compile
+
+# 4. Review and commit both source AND generated
+git add src/questfoundry/domain/ src/questfoundry/generated/
+git commit -m "fix(domain): update plotwright role"
+```
+
+**If you find a bug in generated code:**
+
+1. **DO NOT** fix the generated file directly
+2. Find the source file in `domain/` or fix the compiler in `compiler/`
+3. Run `qf compile` to regenerate
+4. Verify the fix appears in the generated output
+
+**Source → Generated mapping:**
+
+| Source Location | Generated Output |
+|-----------------|------------------|
+| `domain/roles/*.md` | `generated/roles/*.py` |
+| `domain/ontology/artifacts.md` | `generated/models/artifacts.py` |
+| `domain/ontology/enums.md` | `generated/models/enums.py` |
+| `domain/loops/*.md` | `generated/loops/*.py` |
+
 ---
 
 ## 8. Agent Prompt Pattern: Menu + Consult
