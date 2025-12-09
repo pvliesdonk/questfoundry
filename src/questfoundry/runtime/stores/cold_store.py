@@ -373,9 +373,14 @@ class ColdStore:
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        """Get a database connection with row factory."""
+        """Get a database connection with row factory.
+
+        Note: check_same_thread=False allows the connection to be used from
+        multiple threads (required since LangGraph may run tools in different
+        threads). This is safe as writes are serialized by the orchestrator.
+        """
         if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path)
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
         yield self._conn
 
