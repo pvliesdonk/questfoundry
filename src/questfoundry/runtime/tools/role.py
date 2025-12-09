@@ -452,10 +452,10 @@ class ReadColdSot(BaseTool):
 
 
 class PromoteToCanon(BaseTool):
-    """Promote artifacts from hot_store to cold_store (Gatekeeper only).
+    """Promote artifacts from hot_store to cold_store.
 
     This tool is the ONLY mechanism for writing to cold_store.
-    It should only be used AFTER all quality bars have passed.
+    It should only be used AFTER Gatekeeper has validated quality bars.
 
     The promotion:
     1. Reads artifact(s) from hot_store
@@ -463,14 +463,15 @@ class PromoteToCanon(BaseTool):
     3. Writes to cold_store as immutable section
     4. Optionally creates a snapshot
 
-    IMPORTANT: This tool is restricted to Gatekeeper role.
+    IMPORTANT: This tool is restricted to Lorekeeper role only.
+    Workflow: Gatekeeper validates → SR delegates to Lorekeeper → Lorekeeper promotes.
     Other roles attempting to use it will receive an error.
     """
 
     name: str = "promote_to_canon"
     description: str = (
-        "Promote hot_store artifacts to cold_store (GATEKEEPER ONLY). "
-        "Use ONLY after all quality bars pass. "
+        "Promote hot_store artifacts to cold_store (LOREKEEPER ONLY). "
+        "Use ONLY after Gatekeeper validates quality bars. "
         "Inputs: artifact_ids (list of hot_store keys to promote), "
         "create_snapshot (bool, whether to create snapshot after promotion), "
         "snapshot_description (optional description for snapshot)"
@@ -493,14 +494,16 @@ class PromoteToCanon(BaseTool):
         if kwargs:
             logger.debug(f"promote_to_canon received extra kwargs: {list(kwargs.keys())}")
 
-        # CRITICAL: Only Gatekeeper can promote to canon
-        if self.role_id.lower() != "gatekeeper":
+        # Only Lorekeeper can promote to canon
+        # - Gatekeeper validates/approves, then SR delegates to Lorekeeper for promotion
+        # - Lorekeeper is the canonical "Librarian" who maintains the truth
+        if self.role_id.lower() != "lorekeeper":
             return json.dumps(
                 {
                     "success": False,
                     "error": f"Role '{self.role_id}' cannot promote to canon",
-                    "hint": "Only Gatekeeper can write to cold_store. "
-                    "Request Gatekeeper to perform promotion after quality check.",
+                    "hint": "Only Lorekeeper can write to cold_store. "
+                    "After Gatekeeper validates, delegate to Lorekeeper to promote.",
                 }
             )
 
@@ -710,8 +713,9 @@ def promote_to_canon(
 ) -> PromoteToCanon:
     """Create PromoteToCanon tool with injected state and cold_store.
 
-    Note: Only Gatekeeper should be given this tool. The tool itself
-    also validates role_id as a safety check.
+    Note: Only Lorekeeper should be given this tool.
+    The tool itself also validates role_id as a safety check.
+    Workflow: GK validates → SR delegates to LK → LK promotes.
     """
     tool = PromoteToCanon()
     tool.state = state

@@ -148,10 +148,28 @@ class ResourceLoader:
                 logger.error(f"Failed to load loop {loop_id}: {e}")
                 return None
 
-        # For now, loops are only in compiler memory as LoopIR
-        # We can add JSON export in the compiler if needed
-        logger.debug(f"Loop '{loop_id}' not found in generated/ (loops are guidance-only)")
+        # Try importing from generated.loops module
+        try:
+            from questfoundry.generated import loops as loops_module
+
+            if hasattr(loops_module, "ALL_LOOPS"):
+                loops_dict = loops_module.ALL_LOOPS
+                if loop_id in loops_dict:
+                    loop_ir = loops_dict[loop_id]
+                    return self._loop_ir_to_dict(loop_ir)
+        except ImportError:
+            pass
+
+        logger.debug(f"Loop '{loop_id}' not found")
         return None
+
+    def _loop_ir_to_dict(self, loop_ir: Any) -> dict[str, Any]:
+        """Convert LoopIR object to dict for consistency."""
+        if hasattr(loop_ir, "model_dump"):
+            return cast(dict[str, Any], loop_ir.model_dump())
+        if hasattr(loop_ir, "__dict__"):
+            return dict(loop_ir.__dict__)
+        return {"raw": str(loop_ir)}
 
     def load_schema(self, artifact_type: str) -> dict[str, Any] | None:
         """Load a JSON schema for an artifact type.
@@ -182,8 +200,21 @@ class ResourceLoader:
                 logger.error(f"Failed to load schema {artifact_type}: {e}")
                 return None
 
-        # Try models directory for Pydantic-generated schemas
-        # (if we export JSON schemas from generated models)
+        # Try extracting from Pydantic models
+        try:
+            from questfoundry.generated import models as models_module
+
+            # Convert artifact_type to PascalCase class name
+            # e.g., "hook_card" -> "HookCard", "act" -> "Act"
+            class_name = "".join(word.capitalize() for word in artifact_type.split("_"))
+
+            if hasattr(models_module, class_name):
+                model_class = getattr(models_module, class_name)
+                if hasattr(model_class, "model_json_schema"):
+                    return cast(dict[str, Any], model_class.model_json_schema())
+        except ImportError:
+            pass
+
         logger.warning(f"Schema '{artifact_type}' not found")
         return None
 

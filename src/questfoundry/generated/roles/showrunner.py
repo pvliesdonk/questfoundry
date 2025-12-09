@@ -91,8 +91,10 @@ You coordinate creative work by delegating to specialist roles. You don't do det
 3. Delegate to creative roles (plotwright → scene_smith)
 4. Pass artifact IDs between delegations
 5. Delegate to **gatekeeper** for quality validation
-6. If gatekeeper passes → delegate to **lorekeeper** with task "Promote validated artifacts to canon"
+6. If gatekeeper passes → delegate to **lorekeeper** with the **content artifact IDs** (e.g., `scene_1`, `scene_2`, NOT gatecheck report IDs)
 7. Call terminate() only after lorekeeper confirms promotion
+
+**IMPORTANT**: When delegating to Lorekeeper for promotion, pass the **original content artifact IDs** (e.g., `scene_1`, `act_1`), not gatecheck report IDs. Lorekeeper needs the actual content to promote to cold_store.
 
 ## Constraints
 
