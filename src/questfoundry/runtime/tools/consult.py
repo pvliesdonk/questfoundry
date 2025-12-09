@@ -264,7 +264,7 @@ class ConsultSchema(BaseTool):
     description: str = (
         "Look up artifact schema definition to understand required/optional fields, "
         "types, and validation patterns. "
-        "Input: artifact_type (e.g., 'hook_card', 'section_draft')"
+        "Input: artifact_type (e.g., 'hook_card', 'scene', 'act', 'chapter')"
     )
 
     def _run(self, artifact_type: str) -> str:

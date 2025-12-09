@@ -159,7 +159,7 @@ class ResourceLoader:
         Parameters
         ----------
         artifact_type : str
-            Artifact type (e.g., "hook_card", "section_draft").
+            Artifact type (e.g., "hook_card", "scene", "act").
 
         Returns
         -------
