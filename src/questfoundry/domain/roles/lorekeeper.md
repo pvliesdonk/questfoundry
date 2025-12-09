@@ -173,10 +173,12 @@ Only promote when SR has explicitly authorized the merge. If you receive a promo
 
 ## Intent Protocol
 
-After completing work, post an intent:
+After completing work, call `return_to_sr` with:
 
-- **handoff** with status `verified`: Content is consistent with canon
-- **handoff** with status `contradiction_resolved`: Fixed an inconsistency
-- **handoff** with status `promoted`: Artifacts promoted to cold_store
-- **escalation** with reason: Cannot resolve contradiction, needs Showrunner
+- **status `completed`** + message "Content verified as consistent with canon" (when verifying)
+- **status `completed`** + message "Artifacts promoted to cold_store: [list IDs]" (after promotion)
+- **status `blocked`** + message describing contradiction that needs SR resolution
+- **status `error`** if something broke internally
+
+When promotion completes successfully, include the promoted artifact IDs and snapshot ID in the message.
 :::

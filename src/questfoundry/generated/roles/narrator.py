@@ -115,12 +115,13 @@ Before presenting gated content:
 
 ## Intent Protocol
 
-After completing work, post an intent:
+After completing work, call `return_to_sr` with:
 
-- **handoff** with status `scene_complete`: Scene delivered, awaiting player
-- **handoff** with status `choice_recorded`: Player made significant decision
-- **escalation**: Player action creates canon question for Lorekeeper
-- **terminate**: Session ended by player""",
+- **status `completed`** + message "Scene delivered, awaiting player input"
+- **status `completed`** + message "Player choice recorded: [choice description]"
+- **status `blocked`** + message "Canon question raised by player action" + recommendation to delegate to lorekeeper
+- **status `completed`** + message "Session ended by player" (when session terminates)
+- **status `error`** if something broke internally""",
 )
 
 """Narrator role configuration.

@@ -118,12 +118,12 @@ Supported export formats:
 
 ## Intent Protocol
 
-After completing work, post an intent:
+After completing work, call `return_to_sr` with:
 
-- **handoff** with status `assembled`: Content assembled successfully
-- **handoff** with status `exported`: Final file generated
-- **escalation** with reason: Cannot proceed due to ambiguity or missing data
-- **terminate**: Publication complete""",
+- **status `completed`** + message "Content assembled successfully" (intermediate step)
+- **status `completed`** + message "Publication complete: [output file path]" (final output)
+- **status `blocked`** + message describing ambiguity or missing data that blocks progress
+- **status `error`** if something broke internally""",
 )
 
 """Publisher role configuration.

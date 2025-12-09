@@ -121,12 +121,13 @@ When reviewing prose:
 
 ## Intent Protocol
 
-After completing work, post an intent:
+After completing work, call `return_to_sr` with:
 
-- **handoff** with status `style_defined`: Guidelines set for section
-- **handoff** with status `style_approved`: Prose meets guidelines
-- **handoff** with status `style_revision_needed`: Send back to Scene Smith
-- **escalation**: Style conflict requires Showrunner decision""",
+- **status `completed`** + message "Style guidelines defined for [artifact IDs]"
+- **status `completed`** + message "Prose meets style guidelines" + recommendation for next step
+- **status `completed`** + message "Style revision needed" + recommendation to delegate back to scene_smith
+- **status `blocked`** + message describing style conflict that needs SR decision
+- **status `error`** if something broke internally""",
 )
 
 """CreativeDirector role configuration.

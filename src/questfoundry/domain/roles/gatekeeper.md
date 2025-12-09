@@ -174,10 +174,12 @@ For each artifact:
 
 ## Intent Protocol
 
-After completing work, post an intent:
+After completing work, call `return_to_sr` with:
 
-- **handoff** with status `passed`: All bars satisfied, ready to proceed
-- **handoff** with status `failed`: Issues found, sent back for fixes
-- **handoff** with status `waiver_requested`: Needs Showrunner approval to proceed
-- **escalation**: Cannot determine compliance, needs guidance
+- **status `completed`** + message "All bars passed. Ready for Lorekeeper promotion." + **recommendation "Delegate to lorekeeper with content artifact IDs for cold_store promotion"**
+- **status `completed`** + message describing issues found + recommendation for fixes
+- **status `blocked`** + message "Waiver required" if Showrunner approval needed
+- **status `error`** if something broke internally
+
+**CRITICAL**: When all bars pass, your recommendation MUST explicitly say to delegate to Lorekeeper. Do NOT just say "ready to proceed" - SR needs clear next-step guidance.
 :::

@@ -165,10 +165,12 @@ When writing:
 
 ## Intent Protocol
 
-After completing work, post an intent:
+After completing work, call `return_to_sr` with:
 
-- **handoff** with status `prose_complete`: Scene content written
-- **handoff** with status `needs_lore`: Need canon details from Lorekeeper
-- **handoff** with status `needs_style`: Need guidance from Creative Director
-- **escalation**: Structural issue requires Plotwright revision
+- **status `completed`** + message "Prose complete for [artifact IDs]" + **recommendation "Delegate to gatekeeper for validation"**
+- **status `blocked`** + message "Need canon details from Lorekeeper" + recommendation to delegate to lorekeeper
+- **status `blocked`** + message "Need style guidance from Creative Director" + recommendation to delegate to creative_director
+- **status `error`** if something broke internally
+
+**CRITICAL**: When prose is complete, your recommendation MUST say to delegate to Gatekeeper for validation.
 :::
