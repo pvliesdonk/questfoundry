@@ -527,6 +527,78 @@ The Showrunner's prompt is currently hardcoded in `runtime/orchestrator.py` (`_b
 
 ---
 
+## 15. VCR-Style Testing
+
+QuestFoundry captures structured logs that enable "VCR" (Video Cassette Recorder) style testing — recording LLM interactions for isolated role replay.
+
+### Log Format
+
+When `--log-dir` is specified, `llm.jsonl` captures complete LLM sessions:
+
+```jsonl
+{"event": "role_session_start", "role": "gatekeeper", "task": "Validate story structure", "system_prompt": "...", "session_id": "a1b2c3d4"}
+{"event": "llm_request", "iteration": 1, "messages": [...], "session_id": "a1b2c3d4"}
+{"event": "llm_response", "content": "...", "tool_calls": [...], "duration_ms": 1234}
+{"event": "tool_execution", "tool": "consult_schema", "args": {...}, "result": "..."}
+{"event": "llm_request", "iteration": 2, "messages": [...]}
+{"event": "llm_response", "content": "...", "has_tool_calls": false}
+{"event": "role_session_end", "role": "gatekeeper", "status": "completed", "duration_ms": 5678}
+```
+
+### Extracting a Role Session
+
+Filter by `session_id` to isolate one role's execution:
+
+```bash
+# Extract all events for session a1b2c3d4
+jq 'select(.session_id == "a1b2c3d4")' logs/llm.jsonl
+
+# Get just the first LLM request (system + user message)
+jq 'select(.event == "role_session_start")' logs/llm.jsonl
+```
+
+### Replaying to an LLM (curl example)
+
+Extract the messages from a logged request and replay to Ollama:
+
+```bash
+# 1. Extract the first request's messages
+jq -r 'select(.event == "llm_request" and .iteration == 1) | .messages' logs/llm.jsonl | head -1 > /tmp/messages.json
+
+# 2. Build the Ollama request
+cat <<EOF > /tmp/replay.json
+{
+  "model": "qwen3:32b",
+  "messages": $(cat /tmp/messages.json),
+  "stream": false
+}
+EOF
+
+# 3. Send to Ollama
+curl -s http://localhost:11434/api/chat -d @/tmp/replay.json | jq '.message.content'
+```
+
+For OpenAI-compatible APIs:
+
+```bash
+curl -s https://api.openai.com/v1/chat/completions \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": '"$(cat /tmp/messages.json)"'
+  }' | jq '.choices[0].message.content'
+```
+
+### Use Cases
+
+1. **Debugging** — Replay a failing role session to understand LLM behavior
+2. **Regression Testing** — Compare outputs before/after prompt changes
+3. **Cost Optimization** — Test prompt changes against recorded sessions offline
+4. **Unit Testing** — Mock LLM responses for deterministic role tests
+
+---
+
 ## Appendix A: File Naming Conventions
 
 | Directory | Pattern | Hybrid Content |
