@@ -19,7 +19,8 @@ See Also
 :mod:`questfoundry.compiler.models` : Intermediate representation
 """
 
+from questfoundry.compiler.generators._warning import GENERATED_FILE_WARNING
 from questfoundry.compiler.generators.ontology import generate_models
 from questfoundry.compiler.generators.roles import generate_roles
 
-__all__ = ["generate_models", "generate_roles"]
+__all__ = ["generate_models", "generate_roles", "GENERATED_FILE_WARNING"]
