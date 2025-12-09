@@ -8,6 +8,7 @@ Available tools:
 - consult_role_charter: Look up role responsibilities, tools, constraints
 - consult_playbook: Look up loop/workflow guidance
 - consult_schema: Look up artifact schema definitions
+- consult_tool: Look up tool documentation (parameters, valid values, examples)
 """
 
 from __future__ import annotations
@@ -403,3 +404,161 @@ class ConsultSchema(BaseTool):
             parts.append(f" Length: {', '.join(length_parts)}")
 
         return "".join(parts)
+
+
+class ConsultTool(BaseTool):
+    """Look up tool documentation (parameters, valid values, examples).
+
+    Use this when:
+    - You need to know what parameters a tool accepts
+    - Validation failed and you need to see valid values for an enum
+    - You want to understand what a tool does before calling it
+    """
+
+    name: str = "consult_tool"
+    description: str = (
+        "Look up tool documentation to understand its parameters, types, "
+        "valid enum values, and usage. "
+        "Input: tool_name (e.g., 'return_to_sr', 'write_hot_sot', 'delegate_to')"
+    )
+
+    # Tool registry is injected by executor
+    tool_registry: dict[str, BaseTool] | None = None
+
+    def _run(self, tool_name: str) -> str:
+        """Look up tool documentation."""
+        # Normalize tool_name
+        tool_name = tool_name.lower().replace(" ", "_").replace("-", "_")
+
+        # Try to find tool in registry
+        tool = None
+        if self.tool_registry:
+            tool = self.tool_registry.get(tool_name)
+
+        if tool is None:
+            # List available tools
+            available = sorted(self.tool_registry.keys()) if self.tool_registry else []
+            if available:
+                return (
+                    f"Tool '{tool_name}' not found.\n\n"
+                    f"Available tools: {', '.join(available)}"
+                )
+            return f"Tool '{tool_name}' not found and no tools available."
+
+        return self._format_tool(tool)
+
+    def _format_tool(self, tool: BaseTool) -> str:
+        """Format tool documentation as man page."""
+        lines = [
+            f"# Tool: {tool.name}",
+            "",
+            "## Description",
+            tool.description,
+            "",
+        ]
+
+        # Get input schema
+        try:
+            schema = tool.get_input_schema()
+            if hasattr(schema, "model_fields"):
+                lines.append("## Parameters")
+                lines.append("")
+
+                # Determine required fields
+                required_fields: set[str] = set()
+                if hasattr(schema, "model_json_schema"):
+                    json_schema = schema.model_json_schema()
+                    required_fields = set(json_schema.get("required", []))
+
+                for name, field_info in schema.model_fields.items():
+                    is_required = name in required_fields or field_info.is_required()
+                    lines.append(self._format_param(name, field_info, is_required))
+
+                lines.append("")
+        except Exception as e:
+            logger.debug(f"Could not get schema for {tool.name}: {e}")
+
+        # Add usage hint
+        lines.append("## Hints")
+        lines.append("")
+        lines.append(
+            "- If validation fails, check the error message for valid values."
+        )
+        lines.append(
+            "- Use consult_schema for artifact field requirements."
+        )
+        lines.append(
+            "- Use consult_role_charter to see which tools a role can use."
+        )
+
+        return "\n".join(lines)
+
+    def _format_param(self, name: str, field_info: Any, is_required: bool) -> str:
+        """Format a single parameter."""
+        # Get type annotation
+        type_str = "any"
+        if field_info.annotation is not None:
+            type_str = self._format_type(field_info.annotation)
+
+        # Required marker
+        marker = " **(required)**" if is_required else " (optional)"
+
+        # Description
+        desc = field_info.description or ""
+
+        parts = [f"- **{name}**{marker}: {type_str}"]
+
+        if desc:
+            parts.append(f"\n  {desc}")
+
+        # Default value
+        if not is_required and field_info.default is not None:
+            default_str = repr(field_info.default)
+            if len(default_str) < 50:  # Don't show huge defaults
+                parts.append(f"\n  Default: `{default_str}`")
+
+        # Enum values from Literal type
+        if hasattr(field_info.annotation, "__args__"):
+            origin = getattr(field_info.annotation, "__origin__", None)
+            if origin is not None:
+                origin_name = getattr(origin, "__name__", str(origin))
+                if origin_name == "Literal":
+                    enum_vals = ", ".join(f"`{v}`" for v in field_info.annotation.__args__)
+                    parts.append(f"\n  Valid values: {enum_vals}")
+
+        return "".join(parts)
+
+    def _format_type(self, annotation: Any) -> str:
+        """Format type annotation as readable string."""
+        if annotation is None:
+            return "any"
+
+        # Handle basic types
+        if hasattr(annotation, "__name__"):
+            return str(annotation.__name__)
+
+        # Handle generic types (Optional, List, etc.)
+        origin = getattr(annotation, "__origin__", None)
+        if origin is not None:
+            origin_name = getattr(origin, "__name__", str(origin))
+            args = getattr(annotation, "__args__", ())
+
+            if origin_name == "Union":
+                # Handle Optional (Union[X, None])
+                non_none = [a for a in args if a is not type(None)]
+                if len(non_none) == 1 and len(args) == 2:
+                    return f"{self._format_type(non_none[0])} | None"
+                return " | ".join(self._format_type(a) for a in args)
+
+            if origin_name == "Literal":
+                vals = ", ".join(repr(a) for a in args)
+                return f"Literal[{vals}]"
+
+            if args:
+                args_str = ", ".join(self._format_type(a) for a in args)
+                return f"{origin_name}[{args_str}]"
+
+            return origin_name
+
+        # Fallback
+        return str(annotation)

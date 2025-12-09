@@ -4,6 +4,7 @@ from questfoundry.runtime.tools.consult import (
     ConsultPlaybook,
     ConsultRoleCharter,
     ConsultSchema,
+    ConsultTool,
 )
 from questfoundry.runtime.tools.role import (
     ReadHotSot,
@@ -24,6 +25,7 @@ __all__ = [
     "ConsultPlaybook",
     "ConsultRoleCharter",
     "ConsultSchema",
+    "ConsultTool",
     # SR tools
     "DelegateTo",
     "Terminate",

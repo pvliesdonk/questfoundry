@@ -54,6 +54,7 @@ from questfoundry.runtime.tools.consult import (
     ConsultPlaybook,
     ConsultRoleCharter,
     ConsultSchema,
+    ConsultTool,
 )
 from questfoundry.runtime.tools.role import ListColdStoreKeys, ListHotStoreKeys
 from questfoundry.runtime.tools.sr import DelegateTo, ReadArtifact, Terminate, WriteArtifact
@@ -94,6 +95,11 @@ def _build_sr_tools(state: StudioState, cold_store: Any = None) -> list[BaseTool
     list_cold_tool = ListColdStoreKeys()
     list_cold_tool.cold_store = cold_store
     tools.append(list_cold_tool)
+
+    # ConsultTool needs the tool registry - create it last and inject the registry
+    consult_tool_inst = ConsultTool()
+    consult_tool_inst.tool_registry = {t.name: t for t in tools}
+    tools.append(consult_tool_inst)
 
     return tools
 

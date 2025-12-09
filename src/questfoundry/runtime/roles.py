@@ -25,6 +25,7 @@ from questfoundry.runtime.tools.consult import (
     ConsultPlaybook,
     ConsultRoleCharter,
     ConsultSchema,
+    ConsultTool,
 )
 from questfoundry.runtime.tools.gatekeeper import (
     CreateGatecheckReport,
@@ -228,7 +229,8 @@ def _build_role_tools(
     # Gatekeeper ONLY: quality bar evaluation tools (advisory role)
     if role.id.lower() == "gatekeeper":
         # Quality bar evaluation tools (8 bars)
-        for EvalTool in [
+        # Note: These tools all have state/cold_store Fields from Pydantic
+        gatekeeper_tool_classes = [
             EvaluateIntegrity,
             EvaluateReachability,
             EvaluateNonlinearity,
@@ -237,10 +239,11 @@ def _build_role_tools(
             EvaluateDeterminism,
             EvaluatePresentation,
             EvaluateAccessibility,
-        ]:
-            eval_tool = EvalTool()
-            eval_tool.state = state_dict
-            eval_tool.cold_store = cold_store
+        ]
+        for ToolClass in gatekeeper_tool_classes:
+            eval_tool = ToolClass()  # type: ignore[abstract]
+            eval_tool.state = state_dict  # type: ignore[attr-defined]
+            eval_tool.cold_store = cold_store  # type: ignore[attr-defined]
             tools.append(eval_tool)
 
         # Create gatecheck report tool
@@ -261,6 +264,11 @@ def _build_role_tools(
     return_tool = ReturnToSR()
     return_tool.role_id = role.id
     tools.append(return_tool)
+
+    # ConsultTool needs the tool registry - create it last and inject the registry
+    consult_tool_inst = ConsultTool()
+    consult_tool_inst.tool_registry = {t.name: t for t in tools}
+    tools.append(consult_tool_inst)
 
     return tools
 
