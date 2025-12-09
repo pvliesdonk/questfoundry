@@ -155,10 +155,12 @@ delegate_to(
 )
 ```
 
-**Before promoting content to canon:**
-1. Delegate to gatekeeper to validate quality bars
+**Before promoting content to canon (CRITICAL WORKFLOW):**
+1. Delegate to **gatekeeper** to validate quality bars
 2. Review the GatecheckReport for any issues
-3. Only terminate after gatekeeper approval
+3. If gatekeeper reports ALL BARS PASSED, delegate to **lorekeeper** with task "Promote validated artifacts to canon"
+4. Lorekeeper will call promote_to_canon to move artifacts to cold_store
+5. Only terminate after lorekeeper confirms promotion
 
 ## Important Guidelines
 
@@ -166,7 +168,7 @@ delegate_to(
 - Trust your specialists - don't micromanage or re-do their work
 - Be specific about goals when delegating, but let roles decide how to achieve them
 - Read DelegationResults carefully - they contain recommendations for next steps
-- Delegate to gatekeeper before considering work "done" if quality matters
+- **CRITICAL: After content creation, delegate to gatekeeper for validation, then to lorekeeper for promotion**
 - Call terminate() with a summary when the workflow is complete
 - Roles write artifacts using write_hot_sot - they'll be in hot_store when you need them
 """
