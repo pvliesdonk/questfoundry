@@ -12,6 +12,21 @@ Quality Bars (8 total):
 - determinism: Same inputs produce same outputs
 - presentation: Formatting and structure correct
 - accessibility: Content usable by all players
+
+Tool Response Pattern (see domain/principles/tool_responses.md):
+All evaluate_* tools return clear verdicts, not guidance. This prevents
+LLM retry loops where the model keeps calling the same tool hoping for
+a definitive answer.
+
+Response format:
+    {
+        "bar": "<bar_name>",
+        "artifact_id": "<id>",
+        "passed": true/false,
+        "issues": ["specific issue 1", ...],
+        "notes": "Human-readable summary",
+        "next_step": "What to do with this result"
+    }
 """
 
 from __future__ import annotations

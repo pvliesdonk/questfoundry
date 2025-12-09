@@ -6,11 +6,12 @@ Core constraints and policies that govern QuestFoundry operations.
 
 Principles define foundational rules that all roles must follow. Unlike role-specific guidelines, principles are universal constraints that ensure system safety and consistency.
 
-## Planned Content
+## Content
 
 - `spoiler_hygiene.md` - Hot/Cold separation and player safety
 - `pn_principles.md` - Player-Narrator interaction safety
 - `sources_of_truth.md` - Canon definition and authority
+- `tool_responses.md` - Tool response clarity (prevents LLM retry loops)
 
 ## Usage
 
