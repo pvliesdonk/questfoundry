@@ -491,6 +491,92 @@ def build_sr_prompt(roles):
     return f"{domain}\n\n{runtime}"
 ```
 
+### 9.4 Validate-with-Feedback Pattern
+
+> **Rule:** When tool validation fails, return structured feedback and let the LLM retry.
+
+The executor implements a **validate-with-feedback** pattern for all tool calls. When validation fails:
+
+1. **DO NOT** silently terminate execution
+2. **DO** return a structured error to the LLM with actionable guidance
+3. **DO** continue the execution loop so the LLM can correct its mistake
+
+**Error Response Format:**
+
+```json
+{
+  "success": false,
+  "error": "Brief description of what went wrong",
+  "error_count": 1,
+  "invalid_fields": [
+    {
+      "field": "status",
+      "provided": "pass",
+      "issue": "'pass' is not a valid status value"
+    }
+  ],
+  "valid_statuses": ["completed", "passed", "failed", "blocked", "needs_review", "error"],
+  "hint": "Use 'completed' for finished work, 'passed'/'failed' for quality gates..."
+}
+```
+
+**Key elements:**
+
+| Field | Purpose |
+|-------|---------|
+| `success: false` | Signals validation failure |
+| `error` | Brief description of what went wrong |
+| `error_count` | Number of validation errors |
+| `invalid_fields` | Which fields failed and why (what was provided, what's wrong) |
+| `missing_fields` | Required fields not provided |
+| `valid_*` / `optional_*` | What values ARE valid (so LLM knows what to use) |
+| `hint` | Actionable guidance including which consult tool to use |
+
+**Executor Behavior (executor.py):**
+
+When a "stop tool" (like `return_to_sr` or `terminate`) returns `success: false`:
+
+```python
+# CORRECT: Only terminate when validation succeeds
+if parsed.get("success", True):
+    found_done = True
+    done_result = parsed
+else:
+    # Validation failed - continue loop for retry
+    # ToolMessage with error is already appended
+    any_failed = True  # Increments failure_count
+```
+
+**Anti-Pattern (DO NOT DO):**
+
+```python
+# WRONG: Terminate on any stop tool call
+if tool_name in self.stop_tool_names:
+    found_done = True  # Terminates even on validation failure!
+```
+
+**Why This Matters:**
+
+Without validate-with-feedback, a role that uses an invalid status value (e.g., "pass" instead of "passed") will:
+
+1. Have its error message discarded
+2. Execution terminates with a confusing "completed" status
+3. Subsequent roles are never called
+4. Debugging is difficult because the root cause is hidden
+
+With validate-with-feedback:
+
+1. Error message is fed back to the LLM
+2. LLM sees what went wrong and what values are valid
+3. LLM retries with corrected value
+4. Execution continues normally
+
+**Implementation Files:**
+
+- `runtime/executor.py` — Loop continues when stop tool returns `success: false`
+- `runtime/tools/role.py` — `return_to_sr` returns structured validation errors
+- `runtime/validation.py` — Artifact validation with LLM-friendly feedback
+
 ---
 
 ## 10. Build Pipeline
