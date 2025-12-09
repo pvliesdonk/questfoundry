@@ -18,12 +18,129 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import BaseTool
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 if TYPE_CHECKING:
     from questfoundry.runtime.stores import ColdStore
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Artifact Schema Detection & Validation
+# ============================================================================
+# Maps artifact type name to the field containing promotable content.
+# Only artifacts with store: cold or store: both can be promoted.
+# Content field is used to extract prose for cold_section.content.
+_ARTIFACT_CONTENT_FIELDS: dict[str, str] = {
+    # store: both - has prose
+    "Scene": "content",
+    # store: cold - has prose
+    "CanonEntry": "content",
+    "Character": "description",
+    "Location": "description",
+    "Item": "description",
+    "Event": "description",
+    "Fact": "statement",
+    # store: cold - structural (optional prose)
+    "Act": "description",
+    "Chapter": "summary",
+    "Timeline": "description",
+    "Relationship": "description",
+}
+
+# Artifacts that MUST have their content field populated for cold promotion
+_REQUIRED_CONTENT_TYPES = {"Scene", "CanonEntry", "Character", "Location", "Item", "Event", "Fact"}
+
+
+def _detect_artifact_type(data: dict[str, Any]) -> tuple[str | None, Any | None, list[str]]:
+    """Detect artifact type by validating against known schemas.
+
+    Tries each cold-store-eligible artifact model and returns the first that validates.
+
+    Returns:
+        Tuple of (artifact_type, validated_model, validation_errors).
+        If detection fails, artifact_type and validated_model are None,
+        and validation_errors contains details about why each schema failed.
+    """
+    # Lazy import to avoid circular dependencies
+    from questfoundry.generated.models.artifacts import (
+        Act,
+        CanonEntry,
+        Chapter,
+        Character,
+        Event,
+        Fact,
+        Item,
+        Location,
+        Relationship,
+        Scene,
+        Timeline,
+    )
+
+    # Order by specificity: more constrained schemas first
+    models = [
+        ("Scene", Scene),
+        ("CanonEntry", CanonEntry),
+        ("Character", Character),
+        ("Location", Location),
+        ("Item", Item),
+        ("Event", Event),
+        ("Fact", Fact),
+        ("Act", Act),
+        ("Chapter", Chapter),
+        ("Timeline", Timeline),
+        ("Relationship", Relationship),
+    ]
+
+    validation_errors: list[str] = []
+
+    for type_name, model_class in models:
+        try:
+            validated = model_class(**data)
+            return type_name, validated, []
+        except ValidationError as e:
+            # Record why this schema didn't match
+            errors = "; ".join(err["msg"] for err in e.errors()[:3])  # First 3 errors
+            validation_errors.append(f"{type_name}: {errors}")
+
+    return None, None, validation_errors
+
+
+def _extract_content_for_cold(
+    artifact_type: str,
+    validated_model: Any,
+    artifact_id: str,
+) -> tuple[str | None, str | None]:
+    """Extract the content field value for cold_store promotion.
+
+    Returns:
+        Tuple of (content_value, error_message).
+        If extraction succeeds, error_message is None.
+        If extraction fails, content_value is None and error_message explains why.
+    """
+    content_field = _ARTIFACT_CONTENT_FIELDS.get(artifact_type)
+    if not content_field:
+        return None, f"Artifact type '{artifact_type}' has no content field mapping"
+
+    # Get content from validated model
+    content = getattr(validated_model, content_field, None)
+
+    # Check if this type requires content
+    if artifact_type in _REQUIRED_CONTENT_TYPES and not content:
+        return None, (
+            f"Artifact '{artifact_id}' ({artifact_type}) is missing required "
+            f"'{content_field}' field. Schema requires this field for cold promotion."
+        )
+
+    # For optional content types, allow empty but log
+    if not content:
+        logger.warning(
+            f"Artifact '{artifact_id}' ({artifact_type}) has no '{content_field}' value. "
+            f"Promoting with empty content."
+        )
+        content = ""
+
+    return content, None
 
 
 class ReturnToSR(BaseTool):
@@ -550,56 +667,54 @@ class PromoteToCanon(BaseTool):
 
             artifact = hot_store[artifact_id]
 
-            # Extract content for cold_store
+            # Extract artifact data for validation
             if hasattr(artifact, "model_dump"):
                 artifact_data = artifact.model_dump()
             elif isinstance(artifact, dict):
                 artifact_data = artifact
             else:
-                artifact_data = {"value": artifact}
+                errors.append(
+                    f"Artifact '{artifact_id}' is not a dict or model. "
+                    f"Got type: {type(artifact).__name__}. Cannot validate against schema."
+                )
+                continue
 
-            # Extract player-safe content
-            # For artifacts with 'data' field, use that as content
+            # Handle nested 'data' field (some artifacts wrap content)
             if "data" in artifact_data and isinstance(artifact_data["data"], dict):
                 content_data = artifact_data["data"]
             else:
                 content_data = artifact_data
 
-            # Extract title
+            # Schema-based validation: detect artifact type and validate
+            artifact_type, validated_model, validation_errors = _detect_artifact_type(content_data)
+
+            if artifact_type is None:
+                # Artifact doesn't match any known schema
+                errors.append(
+                    f"Artifact '{artifact_id}' does not match any cold-store-eligible schema. "
+                    f"Validation failures: {'; '.join(validation_errors[:3])}. "
+                    f"Use consult_schema to check artifact requirements."
+                )
+                continue
+
+            # Extract content from the correct field for this artifact type
+            content, extract_error = _extract_content_for_cold(
+                artifact_type, validated_model, artifact_id
+            )
+
+            if extract_error:
+                errors.append(extract_error)
+                continue
+
+            # Extract title (try common fields, fall back to artifact_id)
             title = (
-                content_data.get("title")
-                or artifact_data.get("title")
+                getattr(validated_model, "title", None)
+                or getattr(validated_model, "name", None)
+                or content_data.get("title")
                 or artifact_id
             )
 
-            # Convert to prose/string for cold section
-            # NEVER fall back to JSON - require actual prose content
-            if isinstance(content_data, dict):
-                # Try to get prose content from known fields
-                content = (
-                    content_data.get("content")
-                    or content_data.get("prose")
-                    or content_data.get("text")
-                )
-                if not content:
-                    # Artifact has no prose - reject it
-                    available_fields = list(content_data.keys())
-                    errors.append(
-                        f"Artifact '{artifact_id}' has no prose content. "
-                        f"Expected 'content', 'prose', or 'text' field. "
-                        f"Found fields: {available_fields}. "
-                        f"This looks like structural metadata, not player-readable prose."
-                    )
-                    continue
-            else:
-                content = str(content_data)
-                if len(content) < 50:
-                    # Too short to be meaningful prose
-                    errors.append(
-                        f"Artifact '{artifact_id}' content too short ({len(content)} chars). "
-                        f"Cold store is for player-readable prose, not metadata."
-                    )
-                    continue
+            logger.info(f"Promoting '{artifact_id}' as {artifact_type} with content from validated schema")
 
             # Add to cold_store using new API
             try:

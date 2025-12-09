@@ -81,8 +81,11 @@ class TestLLMConfig:
 class TestOllamaConfig:
     """Tests for OllamaConfig."""
 
-    def test_defaults(self) -> None:
+    def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Default values are set correctly."""
+        # Clear env vars that might override defaults
+        monkeypatch.delenv("OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("QF_OLLAMA_HOST", raising=False)
         config = OllamaConfig()
         assert config.host == "http://localhost:11434"
         assert config.model == "qwen3:8b"
@@ -160,8 +163,11 @@ class TestLoggingConfig:
 class TestQuestFoundrySettings:
     """Tests for main settings class."""
 
-    def test_defaults(self) -> None:
+    def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Default settings are created."""
+        # Clear env vars that might override defaults
+        monkeypatch.delenv("OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("QF_OLLAMA_HOST", raising=False)
         settings = QuestFoundrySettings()
         assert settings.llm.provider == "ollama"
         assert settings.runtime.max_delegations == 50
