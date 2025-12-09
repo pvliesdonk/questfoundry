@@ -68,9 +68,17 @@ def trace_orchestrator_run(
     - Tags: ["orchestrator", "questfoundry"]
     """
     @wraps(func)
-    async def wrapper(self: Any, request: str, loop_id: str = "default") -> Any:
+    async def wrapper(
+        self: Any,
+        request: str,
+        loop_id: str = "default",
+        resume_run_id: str | None = None,
+        resume_checkpoint_id: int | None = None,
+    ) -> Any:
         if not is_tracing_enabled():
-            return await func(self, request, loop_id)
+            return await func(
+                self, request, loop_id, resume_run_id, resume_checkpoint_id
+            )
 
         try:
             from langsmith import traceable
@@ -82,17 +90,27 @@ def trace_orchestrator_run(
                 metadata={
                     "loop_id": loop_id,
                     "request": request[:500],  # Truncate long requests
+                    "resume_run_id": resume_run_id,
+                    "resume_checkpoint_id": resume_checkpoint_id,
                 },
             )
             async def traced_run(
-                orchestrator: Any, req: str, lid: str
+                orchestrator: Any,
+                req: str,
+                lid: str,
+                run_id: str | None,
+                checkpoint_id: int | None,
             ) -> Any:
-                return await func(orchestrator, req, lid)
+                return await func(orchestrator, req, lid, run_id, checkpoint_id)
 
-            return await traced_run(self, request, loop_id)
+            return await traced_run(
+                self, request, loop_id, resume_run_id, resume_checkpoint_id
+            )
         except ImportError:
             logger.debug("langsmith not available, skipping tracing")
-            return await func(self, request, loop_id)
+            return await func(
+                self, request, loop_id, resume_run_id, resume_checkpoint_id
+            )
 
     return wrapper
 
