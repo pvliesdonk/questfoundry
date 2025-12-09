@@ -88,9 +88,6 @@ DO NOT just describe what you would check - actually CHECK IT by calling evaluat
 ### Report Tool
 - **create_gatecheck_report(target_artifact, bars_checked, status, bar_results, issues, recommendations)**: Create formal validation report
 
-### Promotion Tool (use ONLY after all bars pass)
-- **promote_to_canon(artifact_ids, snapshot_description)**: Move validated artifacts to cold store
-
 ### State Tools
 - **read_hot_sot(key)**: Read artifacts to validate from hot_store
 - **list_hot_store_keys()**: List all keys in hot_store (use to discover available artifacts)
@@ -111,8 +108,8 @@ DO NOT just describe what you would check - actually CHECK IT by calling evaluat
 3. **Evaluate each bar** using the appropriate evaluate_* tool
 4. **Collect findings** from each evaluation
 5. **Create a GatecheckReport** documenting all results
-6. **If ALL bars pass**: Call promote_to_canon, then return_to_sr with status="completed"
-7. **If ANY bar fails**: Return_to_sr with status="needs_review" and list issues
+6. **If ALL bars pass**: return_to_sr with status="completed" (SR will authorize promotion via LK)
+7. **If ANY bar fails**: return_to_sr with status="needs_review" and list issues
 
 ## Example Workflow
 
@@ -135,16 +132,15 @@ create_gatecheck_report(
     recommendations=[]
 )
 
-# If passed, promote and return
-promote_to_canon(artifact_ids=["topology_001"], snapshot_description="Validated topology")
-return_to_sr(status="completed", message="Topology validated and promoted to canon", artifacts=["gatecheck_topology_001_1"])
+# Return to SR with validation result (SR will authorize LK to promote if passed)
+return_to_sr(status="completed", message="Topology validated - all bars passed", artifacts=["gatecheck_topology_001_1"])
 ```
 
 ## Important
 
 - ALWAYS evaluate ALL requested bars before making a decision
 - ALWAYS create a GatecheckReport documenting your findings
-- ONLY call promote_to_canon if ALL bars pass
+- Your role is ADVISORY: you validate and report, SR authorizes, LK promotes
 - If bars fail, recommend which role should fix the issues
 - Call return_to_sr with your final verdict
 """
@@ -281,7 +277,10 @@ def _build_role_tools(
     - return_to_sr (the "done" signal)
 
     Gatekeeper ONLY gets:
-    - promote_to_canon (write to cold_store)
+    - Quality bar evaluation tools (advisory role)
+
+    Lorekeeper ONLY gets:
+    - promote_to_canon (executes promotion after SR authorization)
 
     Role-specific tools from the spec are noted in the prompt but
     may map to the same underlying tools with different permissions.
@@ -320,7 +319,7 @@ def _build_role_tools(
     list_cold_tool.cold_store = cold_store
     tools.append(list_cold_tool)
 
-    # Gatekeeper ONLY: quality bar evaluation tools + promote_to_canon
+    # Gatekeeper ONLY: quality bar evaluation tools (advisory role)
     if role.id.lower() == "gatekeeper":
         # Quality bar evaluation tools (8 bars)
         for EvalTool in [
@@ -344,7 +343,8 @@ def _build_role_tools(
         report_tool.role_id = role.id
         tools.append(report_tool)
 
-        # Promote to canon tool (final approval)
+    # Lorekeeper ONLY: promote_to_canon (executes promotion after SR authorization)
+    if role.id.lower() == "lorekeeper":
         promote_tool = PromoteToCanon()
         promote_tool.state = state_dict
         promote_tool.cold_store = cold_store
@@ -366,7 +366,7 @@ class RoleAgent:
     - Maintains its own conversation history across delegations
     - Has access to consult tools + state tools + return_to_sr
     - Has access to cold_store for canon lookup (all roles)
-    - Has access to promote_to_canon (Gatekeeper only)
+    - Has access to promote_to_canon (Lorekeeper only)
     - Executes until it calls return_to_sr
 
     Parameters
