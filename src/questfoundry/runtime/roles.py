@@ -78,8 +78,10 @@ These are the actual tool names you must use:
 
 ### Completion (REQUIRED)
 - **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
-  - status: "completed" | "blocked" | "needs_review" | "error"
+  - status: "completed" | "blocked" | "error"
+  - message: what you did (include success/failure details)
   - artifacts: list of keys you created/modified in hot_store
+  - recommendation: suggested next action (use for review requests, escalations)
 
 **IMPORTANT**: You MUST call return_to_sr when done. Do not just describe what you would do.
 """

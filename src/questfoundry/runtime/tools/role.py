@@ -32,21 +32,18 @@ class ReturnToSR(BaseTool):
     Call this when your assigned task is complete (or cannot proceed).
     You MUST provide a summary of work done for logging and SR decision-making.
 
-    Status values:
-    - completed: Task finished successfully
-    - passed: Quality check passed (Gatekeeper)
-    - failed: Quality check failed (Gatekeeper)
-    - blocked: Cannot proceed, need different input or another role
-    - needs_review: Work done but needs validation
-    - error: Something went wrong
+    Status values (3 simple statuses):
+    - completed: Work finished (success/failure details go in message)
+    - blocked: Cannot proceed (need external input or another role)
+    - error: Something broke internally
     """
 
     name: str = "return_to_sr"
     description: str = (
         "Return control to Showrunner with work summary. "
         "MUST be called when your task is complete. "
-        "Inputs: status (completed|passed|failed|blocked|needs_review|error), "
-        "message (summary of work done), "
+        "Inputs: status (completed|blocked|error), "
+        "message (summary of work done - include success/failure details), "
         "artifacts (list of artifact IDs created/modified), "
         "recommendation (optional suggested next action)"
     )
@@ -66,10 +63,11 @@ class ReturnToSR(BaseTool):
         # Log any unexpected kwargs for debugging
         if kwargs:
             logger.debug(f"return_to_sr received extra kwargs: {list(kwargs.keys())}")
-        # Validate status
-        # - completed/passed/failed: work finished (passed/failed for quality gates)
-        # - blocked/needs_review/error: work cannot proceed or needs attention
-        valid_statuses = {"completed", "passed", "failed", "blocked", "needs_review", "error"}
+        # Validate status (3 simple statuses)
+        # - completed: work done (success or failure details go in message)
+        # - blocked: cannot proceed (missing dependency, need external help)
+        # - error: something broke internally
+        valid_statuses = {"completed", "blocked", "error"}
         if status not in valid_statuses:
             return json.dumps(
                 {
@@ -85,10 +83,10 @@ class ReturnToSR(BaseTool):
                     ],
                     "valid_statuses": sorted(valid_statuses),
                     "hint": (
-                        "Use 'completed' for finished work, 'passed'/'failed' for quality gates, "
-                        "'blocked' if cannot proceed, 'needs_review' if needs validation, "
-                        "'error' if something went wrong. "
-                        "Consult role charter for your role's expected status values."
+                        "Use 'completed' when work is done (success or failure details in message), "
+                        "'blocked' if you cannot proceed and need external help, "
+                        "'error' if something broke. "
+                        "Use 'recommendation' field for suggested next steps."
                     ),
                 }
             )

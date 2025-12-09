@@ -105,30 +105,28 @@ fields:
 :::
 
 :::{intent-type}
-id: result.needs_review
-description: "Role completed work but recommends review"
+id: result.error
+description: "Role encountered an internal error"
 sender: any_role
 receiver: showrunner
 fields:
 
-- status: string  # "needs_review"
-- artifacts: list[string]  # Artifacts needing review
-- concern: string  # What should be reviewed
-- recommendation: string  # Suggested reviewer or action
+- status: string  # "error"
+- error_message: string  # What went wrong
+- artifacts: list[string]  # Partial artifacts if any
+- recommendation: string  # Suggested recovery action
 :::
 
-:::{intent-type}
-id: result.escalate
-description: "Role escalates decision to SR"
-sender: any_role
-receiver: showrunner
-fields:
+```{note}
+**Deprecated Intent Types**
 
-- status: string  # "escalate"
-- decision_needed: string  # What SR must decide
-- options: list[string]  # Available choices
-- recommendation: string  # Role's recommendation
-:::
+The following intent types are deprecated. Use `result.completed` with the `recommendation` field instead:
+
+- `result.needs_review` → Use `result.completed` with recommendation describing review needs
+- `result.escalate` → Use `result.completed` with recommendation describing decision options
+
+The simplified 3-status model (completed/blocked/error) provides cleaner semantics.
+```
 
 ---
 
@@ -323,10 +321,9 @@ fields:
 | `task.delegate` | SR → Role | Delegate work |
 | `task.consult` | SR → Role | Request consultation |
 | `task.evaluate` | SR → GK | Request gatecheck |
-| `result.completed` | Role → SR | Work done |
+| `result.completed` | Role → SR | Work done (use recommendation for review/escalation) |
 | `result.blocked` | Role → SR | Cannot proceed |
-| `result.needs_review` | Role → SR | Needs attention |
-| `result.escalate` | Role → SR | Decision needed |
+| `result.error` | Role → SR | Internal error |
 | `artifact.create` | Role → System | Create artifact |
 | `artifact.update` | Role → System | Update artifact |
 | `artifact.promote` | SR → GK | Request Cold promotion |

@@ -90,10 +90,10 @@ SR receives `DelegationResult`:
 @dataclass
 class DelegationResult:
     role_id: str              # Which role executed
-    status: str               # "completed" | "blocked" | "needs_review"
+    status: str               # "completed" | "blocked" | "error"
     artifacts: list[str]      # IDs of artifacts created/modified
-    message: str              # Summary for SR
-    recommendation: str       # Suggested next action
+    message: str              # Summary for SR (include success/failure details)
+    recommendation: str       # Suggested next action (use for review requests, escalations)
 ```
 
 ### 4. Routing Decision
@@ -193,39 +193,34 @@ Roles receive context in their system prompt:
 
 ---
 
-## Result Status Semantics
+## Result Status Semantics (3 Simple Statuses)
 
 ### `completed`
 
 Role finished work. SR should:
 
 - Check artifacts created
-- Consider role's recommendation
+- Read the message for success/failure details
+- Consider role's recommendation (review requests, escalations)
 - Decide next delegation or termination
+
+**Note**: Use `recommendation` field for cases that previously used `needs_review` or `escalate`.
 
 ### `blocked`
 
-Role cannot proceed. SR should:
+Role cannot proceed due to external dependency. SR should:
 
-- Read blocker reason
+- Read blocker reason in message
 - Delegate to role that can unblock
 - Or ask user for clarification
 
-### `needs_review`
+### `error`
 
-Work done but uncertain. SR should:
+Something broke internally (not a workflow issue). SR should:
 
-- Consider sending to Gatekeeper
-- Or delegating to another role for review
-- May proceed with caution
-
-### `escalate`
-
-Decision beyond role's authority. SR should:
-
-- Read decision options
-- Make strategic choice
-- Continue with delegation
+- Log the error for debugging
+- Retry with different parameters
+- Or escalate to human operator
 
 ---
 
