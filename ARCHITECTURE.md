@@ -533,7 +533,7 @@ QuestFoundry captures structured logs that enable "VCR" (Video Cassette Recorder
 
 ### Log Format
 
-When `--log-dir` is specified, `llm.jsonl` captures complete LLM sessions:
+When `--log` is specified (with `--project`), `{project}/logs/llm.jsonl` captures complete LLM sessions:
 
 ```jsonl
 {"event": "role_session_start", "role": "gatekeeper", "task": "Validate story structure", "system_prompt": "...", "session_id": "a1b2c3d4"}
@@ -551,10 +551,10 @@ Filter by `session_id` to isolate one role's execution:
 
 ```bash
 # Extract all events for session a1b2c3d4
-jq 'select(.session_id == "a1b2c3d4")' logs/llm.jsonl
+jq 'select(.session_id == "a1b2c3d4")' myproject/logs/llm.jsonl
 
 # Get just the first LLM request (system + user message)
-jq 'select(.event == "role_session_start")' logs/llm.jsonl
+jq 'select(.event == "role_session_start")' myproject/logs/llm.jsonl
 ```
 
 ### Replaying to an LLM (curl example)
@@ -563,7 +563,7 @@ Extract the messages from a logged request and replay to Ollama:
 
 ```bash
 # 1. Extract the first request's messages
-jq -r 'select(.event == "llm_request" and .iteration == 1) | .messages' logs/llm.jsonl | head -1 > /tmp/messages.json
+jq -r 'select(.event == "llm_request" and .iteration == 1) | .messages' myproject/logs/llm.jsonl | head -1 > /tmp/messages.json
 
 # 2. Build the Ollama request
 cat <<EOF > /tmp/replay.json
