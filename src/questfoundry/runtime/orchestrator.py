@@ -43,6 +43,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
 from questfoundry.compiler.models import RoleIR
+from questfoundry.generated.roles import DOMAIN_VERSION
 
 if TYPE_CHECKING:
     from questfoundry.runtime.stores import ColdStore
@@ -173,6 +174,7 @@ class Orchestrator:
         loop_id: str = "default",
         resume_run_id: str | None = None,
         resume_checkpoint_id: int | None = None,
+        force_resume: bool = False,
     ) -> StudioState:
         """Execute a complete workflow for the given request.
 
@@ -188,6 +190,8 @@ class Orchestrator:
         resume_checkpoint_id : int | None
             If provided, resume from this specific checkpoint ID.
             Takes precedence over resume_run_id.
+        force_resume : bool
+            If True, bypass domain version mismatch check when resuming.
 
         Returns
         -------
@@ -213,6 +217,10 @@ class Orchestrator:
                 raise ValueError(f"No checkpoints found for run {resume_run_id}")
             run_id = resume_run_id
             logger.info(f"Resuming from latest checkpoint of run {run_id}")
+
+        # Domain version compatibility check
+        if checkpoint is not None:
+            self._check_domain_version_compatibility(checkpoint, force_resume)
 
         # If resuming without a request, retrieve original request from the run
         if request is None and run_id is not None and self.checkpoint_store:
@@ -292,7 +300,9 @@ class Orchestrator:
             logger.info(f"SR turn {sr_turn}, delegations so far: {delegation_count}")
 
             # Run SR until it calls delegate_to or terminate (traced)
-            async with TracedSRTurn(turn=sr_turn, delegation_count=delegation_count, prompt=sr_prompt_msg):
+            async with TracedSRTurn(
+                turn=sr_turn, delegation_count=delegation_count, prompt=sr_prompt_msg
+            ):
                 sr_result = await sr_executor.run(sr_prompt_msg)
 
             if not sr_result.success:
@@ -394,6 +404,7 @@ class Orchestrator:
                     delegation_history=delegation_history,
                     role_id=role_id,
                     role_messages=role_msgs,
+                    domain_version=DOMAIN_VERSION,
                 )
                 logger.info(f"Checkpoint {checkpoint_id}: {role_id} completed (turn {sr_turn})")
 
@@ -489,3 +500,49 @@ class Orchestrator:
         lines.append("What would you like to do next? Delegate to another role or terminate?")
 
         return "\n".join(lines)
+
+    def _check_domain_version_compatibility(
+        self, checkpoint: Checkpoint, force_resume: bool
+    ) -> None:
+        """Check domain version compatibility when resuming from checkpoint.
+
+        Raises
+        ------
+        ValueError
+            If versions mismatch and force_resume is False.
+        """
+        checkpoint_version = checkpoint.domain_version
+        current_version = DOMAIN_VERSION
+
+        # Legacy checkpoint (no version) - warn but allow
+        if checkpoint_version is None:
+            logger.warning(
+                f"Checkpoint {checkpoint.id} is from a legacy version (no domain_version). "
+                f"Current domain version is {current_version}. "
+                "Consider starting a fresh run for best results."
+            )
+            return
+
+        # Versions match - all good
+        if checkpoint_version == current_version:
+            logger.debug(f"Domain version match: {current_version}")
+            return
+
+        # Version mismatch
+        msg = (
+            f"Domain version mismatch: checkpoint was created with version {checkpoint_version}, "
+            f"but current domain version is {current_version}. "
+            "Role behaviors or artifact schemas may have changed."
+        )
+
+        if force_resume:
+            logger.warning(f"{msg} Proceeding anyway (--force-resume).")
+            return
+
+        # Raise error with helpful message
+        raise ValueError(
+            f"{msg}\n\n"
+            "Options:\n"
+            "  1. Start a fresh run without --resume/--from-checkpoint\n"
+            "  2. Use --force-resume to resume anyway (may cause inconsistencies)\n"
+        )

@@ -43,7 +43,7 @@ from questfoundry.generated.models.enums import Visibility
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 # =============================================================================
@@ -75,6 +75,7 @@ class BookMetadata(BaseModel):
     language: str = "en"  # ISO 639-1
     author: str | None = None
     start_anchor: str | None = None
+    domain_version: int | None = None  # Domain spec version used to create this project
 
 
 class AssetProvenance(BaseModel):
@@ -168,7 +169,8 @@ CREATE TABLE IF NOT EXISTS book_metadata (
     subtitle TEXT,
     language TEXT NOT NULL DEFAULT 'en',
     author TEXT,
-    start_section_id INTEGER REFERENCES sections(id)
+    start_section_id INTEGER REFERENCES sections(id),
+    domain_version INTEGER  -- Domain spec version used to create this project
 );
 
 -- Acts (structural organization)
@@ -428,17 +430,35 @@ class ColdStore:
             conn.commit()
 
     def _check_schema_version(self) -> None:
-        """Check schema version compatibility."""
+        """Check schema version compatibility and run migrations if needed."""
         with self._connection() as conn:
             cursor = conn.execute("SELECT version FROM schema_version")
             row = cursor.fetchone()
             if row is None:
                 raise ValueError("Invalid database: missing schema version")
-            if row["version"] > SCHEMA_VERSION:
+            db_version = row["version"]
+            if db_version > SCHEMA_VERSION:
                 raise ValueError(
-                    f"Database schema v{row['version']} is newer than "
+                    f"Database schema v{db_version} is newer than "
                     f"supported v{SCHEMA_VERSION}"
                 )
+            # Run migrations for older databases
+            if db_version < SCHEMA_VERSION:
+                self._migrate_schema(conn, db_version)
+
+    def _migrate_schema(self, conn: sqlite3.Connection, from_version: int) -> None:
+        """Run schema migrations from older versions."""
+        if from_version < 3:
+            # v2 → v3: Add domain_version column to book_metadata
+            logger.info("Migrating database schema from v2 to v3...")
+            conn.execute(
+                "ALTER TABLE book_metadata ADD COLUMN domain_version INTEGER"
+            )
+            conn.execute(
+                "UPDATE schema_version SET version = 3"
+            )
+            conn.commit()
+            logger.info("Database migrated to schema v3")
 
     # =========================================================================
     # Book Metadata
@@ -469,6 +489,7 @@ class ColdStore:
                 language=row["language"],
                 author=row["author"],
                 start_anchor=start_anchor,
+                domain_version=row["domain_version"] if "domain_version" in row.keys() else None,
             )
 
     def set_book_metadata(self, metadata: BookMetadata) -> None:
@@ -489,7 +510,7 @@ class ColdStore:
                 """
                 UPDATE book_metadata SET
                     title = ?, subtitle = ?, language = ?,
-                    author = ?, start_section_id = ?
+                    author = ?, start_section_id = ?, domain_version = ?
                 WHERE id = 1
                 """,
                 (
@@ -498,7 +519,40 @@ class ColdStore:
                     metadata.language,
                     metadata.author,
                     start_section_id,
+                    metadata.domain_version,
                 ),
+            )
+            conn.commit()
+
+    def get_domain_version(self) -> int | None:
+        """Get the domain version used to create this project.
+
+        Returns
+        -------
+        int | None
+            The domain version, or None if not set.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "SELECT domain_version FROM book_metadata WHERE id = 1"
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return row["domain_version"]
+
+    def set_domain_version(self, version: int) -> None:
+        """Set the domain version for this project.
+
+        Parameters
+        ----------
+        version : int
+            The domain spec version.
+        """
+        with self._connection() as conn:
+            conn.execute(
+                "UPDATE book_metadata SET domain_version = ? WHERE id = 1",
+                (version,),
             )
             conn.commit()
 

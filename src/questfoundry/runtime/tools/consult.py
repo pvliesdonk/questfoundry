@@ -145,10 +145,7 @@ class ConsultPlaybook(BaseTool):
         # List available loops
         available = self._list_available_loops()
         if available:
-            return (
-                f"Loop '{loop_id}' not found.\n\n"
-                f"Available loops: {', '.join(sorted(available))}"
-            )
+            return f"Loop '{loop_id}' not found.\n\nAvailable loops: {', '.join(sorted(available))}"
         return f"Loop '{loop_id}' not found and no loops available."
 
     def _get_loop_from_generated(self, loop_id: str) -> dict[str, Any] | None:
@@ -439,10 +436,7 @@ class ConsultTool(BaseTool):
             # List available tools
             available = sorted(self.tool_registry.keys()) if self.tool_registry else []
             if available:
-                return (
-                    f"Tool '{tool_name}' not found.\n\n"
-                    f"Available tools: {', '.join(available)}"
-                )
+                return f"Tool '{tool_name}' not found.\n\nAvailable tools: {', '.join(available)}"
             return f"Tool '{tool_name}' not found and no tools available."
 
         return self._format_tool(tool)
@@ -481,15 +475,9 @@ class ConsultTool(BaseTool):
         # Add usage hint
         lines.append("## Hints")
         lines.append("")
-        lines.append(
-            "- If validation fails, check the error message for valid values."
-        )
-        lines.append(
-            "- Use consult_schema for artifact field requirements."
-        )
-        lines.append(
-            "- Use consult_role_charter to see which tools a role can use."
-        )
+        lines.append("- If validation fails, check the error message for valid values.")
+        lines.append("- Use consult_schema for artifact field requirements.")
+        lines.append("- Use consult_role_charter to see which tools a role can use.")
 
         return "\n".join(lines)
 

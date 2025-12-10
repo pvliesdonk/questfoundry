@@ -10,6 +10,7 @@ abbr: SR
 archetype: Product Owner
 agency: high
 mandate: "Manage by Exception"
+version: 1
 :::
 
 ## Operational Guidelines

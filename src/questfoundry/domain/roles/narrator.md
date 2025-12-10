@@ -10,6 +10,7 @@ abbr: NR
 archetype: Dungeon Master
 agency: high
 mandate: "Run the Game"
+version: 1
 :::
 
 ## Operational Guidelines

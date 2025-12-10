@@ -41,6 +41,7 @@ PUBLISHER = RoleIR(
     archetype="Book Binder",
     agency=Agency.ZERO,
     mandate="Assemble the Artifact",
+    version=1,
     tools=[
         RoleToolIR(name="read_state", description="Read artifacts from hot_store or cold_store"),
         RoleToolIR(name="write_state", description="Write artifacts to hot_store"),

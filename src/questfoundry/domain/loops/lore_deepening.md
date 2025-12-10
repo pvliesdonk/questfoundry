@@ -9,6 +9,7 @@ id: lore_deepening
 name: "Lore Deepening"
 trigger: hooks_accepted
 entry_point: showrunner
+version: 1
 :::
 
 ## Guidance

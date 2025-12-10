@@ -9,6 +9,7 @@ id: canon_commit
 name: "Canon Commit"
 trigger: gatecheck_passed
 entry_point: showrunner
+version: 1
 :::
 
 ## Guidance

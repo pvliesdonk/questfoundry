@@ -10,6 +10,7 @@ abbr: GK
 archetype: Auditor
 agency: low
 mandate: "Enforce Quality Bars"
+version: 1
 :::
 
 ## Operational Guidelines

@@ -67,30 +67,40 @@ class EvaluateIntegrity(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate integrity bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "integrity",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "integrity",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
         # Real implementation would check for contradictions
-        return json.dumps({
-            "bar": "integrity",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Integrity evaluation passed - no contradictions detected.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "integrity",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Integrity evaluation passed - no contradictions detected.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluateReachability(BaseTool):
@@ -113,29 +123,39 @@ class EvaluateReachability(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate reachability bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "reachability",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "reachability",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
-        return json.dumps({
-            "bar": "reachability",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Reachability evaluation passed - all content accessible.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "reachability",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Reachability evaluation passed - all content accessible.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluateNonlinearity(BaseTool):
@@ -158,29 +178,39 @@ class EvaluateNonlinearity(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate nonlinearity bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "nonlinearity",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "nonlinearity",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
-        return json.dumps({
-            "bar": "nonlinearity",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Nonlinearity evaluation passed - meaningful choices detected.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "nonlinearity",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Nonlinearity evaluation passed - meaningful choices detected.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluateGateways(BaseTool):
@@ -203,29 +233,39 @@ class EvaluateGateways(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate gateways bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "gateways",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "gateways",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
-        return json.dumps({
-            "bar": "gateways",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Gateways evaluation passed - all gates have valid unlock conditions.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "gateways",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Gateways evaluation passed - all gates have valid unlock conditions.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluateStyle(BaseTool):
@@ -248,30 +288,40 @@ class EvaluateStyle(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate style bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "style",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "style",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
         # Real implementation would analyze voice/tone consistency
-        return json.dumps({
-            "bar": "style",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Style evaluation passed - voice and tone appear consistent.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "style",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Style evaluation passed - voice and tone appear consistent.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluateDeterminism(BaseTool):
@@ -294,29 +344,39 @@ class EvaluateDeterminism(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate determinism bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "determinism",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "determinism",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
-        return json.dumps({
-            "bar": "determinism",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Determinism evaluation passed - consistent behavior verified.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "determinism",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Determinism evaluation passed - consistent behavior verified.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluatePresentation(BaseTool):
@@ -339,29 +399,39 @@ class EvaluatePresentation(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate presentation bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "presentation",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "presentation",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
-        return json.dumps({
-            "bar": "presentation",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Presentation evaluation passed - formatting and structure correct.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "presentation",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Presentation evaluation passed - formatting and structure correct.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class EvaluateAccessibility(BaseTool):
@@ -384,29 +454,39 @@ class EvaluateAccessibility(BaseTool):
     def _run(self, artifact_id: str) -> str:
         """Evaluate accessibility bar."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         hot_store = self.state.get("hot_store", {})
         artifact = hot_store.get(artifact_id)
 
         if artifact is None:
-            return json.dumps({
-                "bar": "accessibility",
-                "artifact_id": artifact_id,
-                "passed": False,
-                "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
-                "notes": "Cannot evaluate - artifact missing",
-            })
+            return json.dumps(
+                {
+                    "bar": "accessibility",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": [f"Artifact '{artifact_id}' not found in hot_store"],
+                    "notes": "Cannot evaluate - artifact missing",
+                }
+            )
 
         # Auto-pass for now (stub implementation)
-        return json.dumps({
-            "bar": "accessibility",
-            "artifact_id": artifact_id,
-            "passed": True,
-            "issues": [],
-            "notes": "Accessibility evaluation passed - content usable by all players.",
-            "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
-        })
+        return json.dumps(
+            {
+                "bar": "accessibility",
+                "artifact_id": artifact_id,
+                "passed": True,
+                "issues": [],
+                "notes": "Accessibility evaluation passed - content usable by all players.",
+                "next_step": "Record this result and proceed to create_gatecheck_report when all bars are evaluated.",
+            }
+        )
 
 
 class CreateGatecheckReport(BaseTool):
@@ -439,21 +519,38 @@ class CreateGatecheckReport(BaseTool):
     ) -> str:
         """Create a gatecheck report."""
         if not self.state:
-            return json.dumps({"error": "No state available"})
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No state available",
+                    "hint": "State must be injected by executor. This is an internal error.",
+                }
+            )
 
         # Validate bars_checked are valid QualityBar values
         valid_bars = {bar.value for bar in QualityBar}
         invalid_bars = [b for b in bars_checked if b not in valid_bars]
         if invalid_bars:
-            return json.dumps({
-                "error": f"Invalid quality bars: {invalid_bars}. Valid: {sorted(valid_bars)}"
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"Invalid quality bars: {invalid_bars}",
+                    "invalid_fields": [
+                        {
+                            "field": "bars_checked",
+                            "provided": invalid_bars,
+                            "issue": "Values not in QualityBar enum",
+                        }
+                    ],
+                    "valid_bars": sorted(valid_bars),
+                    "hint": f"Use only valid quality bar names: {', '.join(sorted(valid_bars))}",
+                }
+            )
 
         # Generate report ID
-        report_count = len([
-            k for k in self.state.get("hot_store", {})
-            if k.startswith("gatecheck_")
-        ])
+        report_count = len(
+            [k for k in self.state.get("hot_store", {}) if k.startswith("gatecheck_")]
+        )
         report_id = f"gatecheck_{target_artifact}_{report_count + 1}"
 
         # Build report
@@ -477,14 +574,16 @@ class CreateGatecheckReport(BaseTool):
 
         logger.info(f"[{self.role_id}] Created gatecheck report: {report_id} ({status})")
 
-        return json.dumps({
-            "success": True,
-            "report_id": report_id,
-            "status": status,
-            "bars_checked": bars_checked,
-            "issues_count": len(issues or []),
-            "message": f"GatecheckReport '{report_id}' created with status '{status}'",
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "report_id": report_id,
+                "status": status,
+                "bars_checked": bars_checked,
+                "issues_count": len(issues or []),
+                "message": f"GatecheckReport '{report_id}' created with status '{status}'",
+            }
+        )
 
 
 # Export all tools

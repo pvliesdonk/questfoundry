@@ -78,9 +78,7 @@ class StreamingCallbacks:
         If True, show full tool inputs/outputs. If False, show minimal info.
     """
 
-    def __init__(
-        self, console: Console, live: Live | None = None, verbose: bool = False
-    ):
+    def __init__(self, console: Console, live: Live | None = None, verbose: bool = False):
         self.console = console
         self.live = live
         self.verbose = verbose
@@ -99,9 +97,7 @@ class StreamingCallbacks:
         if self.live:
             self._buffer += token
             self._current_text.append(token)
-            self.live.update(
-                Panel(self._current_text, title="SR Thinking", border_style="cyan")
-            )
+            self.live.update(Panel(self._current_text, title="SR Thinking", border_style="cyan"))
 
     def on_llm_end(self, _iteration: int, _has_tool_calls: bool) -> None:
         """Called when LLM inference completes."""
@@ -137,9 +133,7 @@ class StreamingCallbacks:
                 preview = str(list(args.values())[0])[:50]
                 self._current_text.append(f" {preview}...", style="dim")
 
-            self.live.update(
-                Panel(self._current_text, title="Tool Call", border_style="yellow")
-            )
+            self.live.update(Panel(self._current_text, title="Tool Call", border_style="yellow"))
 
     def on_tool_end(self, tool_name: str, result: str, success: bool) -> None:
         """Called after tool execution."""
@@ -272,6 +266,14 @@ def ask(
             rich_help_panel=PANEL_RUNTIME,
         ),
     ] = None,
+    force_resume: Annotated[
+        bool,
+        typer.Option(
+            "--force-resume",
+            help="Force resume even if domain version has changed since checkpoint",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = False,
 ) -> None:
     """Talk to the studio in natural language.
 
@@ -312,7 +314,9 @@ def ask(
 
         # Validate message is required unless resuming
         if not message and not (resume or from_checkpoint):
-            console.print("[red]Error: MESSAGE is required unless using --resume or --from-checkpoint[/red]")
+            console.print(
+                "[red]Error: MESSAGE is required unless using --resume or --from-checkpoint[/red]"
+            )
             raise typer.Exit(1)
 
         # Set up logging based on verbosity
@@ -427,9 +431,7 @@ def ask(
         live_context = None
         if stream:
             live_context = Live(console=console, refresh_per_second=10)
-            callbacks = StreamingCallbacks(
-                console, live_context, verbose=(verbose >= 2)
-            )
+            callbacks = StreamingCallbacks(console, live_context, verbose=(verbose >= 2))
 
         # Create orchestrator
         orchestrator = Orchestrator(
@@ -454,6 +456,7 @@ def ask(
                         message,
                         resume_run_id=resume,
                         resume_checkpoint_id=from_checkpoint,
+                        force_resume=force_resume,
                     )
                 )
         else:
@@ -462,6 +465,7 @@ def ask(
                     message,
                     resume_run_id=resume,
                     resume_checkpoint_id=from_checkpoint,
+                    force_resume=force_resume,
                 )
             )
 
@@ -482,9 +486,7 @@ def ask(
         raise typer.Exit(1) from e
 
 
-def _check_provider_status(
-    provider: str, settings: Any
-) -> tuple[ProviderStatus, str]:
+def _check_provider_status(provider: str, settings: Any) -> tuple[ProviderStatus, str]:
     """Check provider availability with three-state logic.
 
     Returns
@@ -771,7 +773,9 @@ def roles(
         for role_id, role in ALL_ROLES.items():
             row = [role.abbr, role_id, role.archetype, role.mandate]
             if verbose >= 1:
-                row.append(str(role.agency.value) if hasattr(role.agency, "value") else str(role.agency))
+                row.append(
+                    str(role.agency.value) if hasattr(role.agency, "value") else str(role.agency)
+                )
             table.add_row(*row)
 
         console.print(table)

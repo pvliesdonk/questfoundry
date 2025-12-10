@@ -357,12 +357,20 @@ def _extract_roles(roles_by_id: dict[str, list[Directive]]) -> dict[str, RoleIR]
             except ValueError:
                 agency = Agency.MEDIUM
 
+            # Extract version (default to 1)
+            version_str = meta.get("version", "1")
+            try:
+                version = int(version_str)
+            except (ValueError, TypeError):
+                version = 1
+
             roles[meta["id"]] = RoleIR(
                 id=meta["id"],
                 abbr=meta.get("abbr", ""),
                 archetype=meta.get("archetype", ""),
                 agency=agency,
                 mandate=meta.get("mandate", ""),
+                version=version,
                 tools=tools,
                 constraints=constraints,
                 prompt_template=prompt_template,
@@ -496,12 +504,20 @@ def _extract_loops(loops_by_id: dict[str, list[Directive]]) -> dict[str, LoopIR]
 
         # Build the LoopIR if we have meta
         if meta and "id" in meta:
+            # Extract version (default to 1)
+            version_str = meta.get("version", "1")
+            try:
+                version = int(version_str)
+            except (ValueError, TypeError):
+                version = 1
+
             loops[meta["id"]] = LoopIR(
                 id=meta["id"],
                 name=meta.get("name", meta["id"]),
                 trigger=meta.get("trigger", "manual"),
                 entry_point=meta.get("entry_point", ""),
                 exit_point=meta.get("exit_point"),
+                version=version,
                 nodes=nodes,
                 edges=edges,
                 quality_gates=quality_gates,

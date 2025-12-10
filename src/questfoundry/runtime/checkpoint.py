@@ -80,6 +80,7 @@ class Checkpoint:
     role_messages: list[dict[str, Any]] | None
     delegation_history: list[dict[str, Any]]
     created_at: str
+    domain_version: int | None  # Domain version at checkpoint time (None for legacy)
 
 
 _SCHEMA = """
@@ -104,7 +105,8 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     sr_messages TEXT NOT NULL,
     role_messages TEXT,
     delegation_history TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    domain_version INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_checkpoints_run ON checkpoints(run_id);
@@ -135,11 +137,23 @@ class CheckpointStore:
         return self._conn
 
     def _ensure_schema(self) -> None:
-        """Create tables if they don't exist."""
+        """Create tables if they don't exist and run migrations."""
         self.project_path.mkdir(parents=True, exist_ok=True)
         conn = self._get_conn()
         conn.executescript(_SCHEMA)
         conn.commit()
+        self._run_migrations(conn)
+
+    def _run_migrations(self, conn: sqlite3.Connection) -> None:
+        """Run schema migrations for existing databases."""
+        # Check if domain_version column exists
+        cursor = conn.execute("PRAGMA table_info(checkpoints)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        if "domain_version" not in columns:
+            logger.info("Migrating checkpoints: adding domain_version column")
+            conn.execute("ALTER TABLE checkpoints ADD COLUMN domain_version INTEGER")
+            conn.commit()
 
     def close(self) -> None:
         """Close the database connection."""
@@ -273,6 +287,7 @@ class CheckpointStore:
         role_id: str | None = None,
         role_messages: list[dict[str, Any]] | None = None,
         cold_snapshot_ref: str | None = None,
+        domain_version: int | None = None,
     ) -> int:
         """Save a checkpoint after a delegation completes.
 
@@ -294,6 +309,8 @@ class CheckpointStore:
             The role's message history.
         cold_snapshot_ref : str | None
             Reference to cold_store snapshot if one was created.
+        domain_version : int | None
+            The domain version at checkpoint creation time.
 
         Returns
         -------
@@ -306,8 +323,8 @@ class CheckpointStore:
             """
             INSERT INTO checkpoints
             (run_id, sr_turn, role_id, hot_store, cold_snapshot_ref,
-             sr_messages, role_messages, delegation_history, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             sr_messages, role_messages, delegation_history, created_at, domain_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -319,6 +336,7 @@ class CheckpointStore:
                 json.dumps(role_messages, default=str) if role_messages else None,
                 json.dumps(delegation_history, default=str),
                 now,
+                domain_version,
             ),
         )
         conn.commit()
@@ -368,6 +386,10 @@ class CheckpointStore:
 
     def _row_to_checkpoint(self, row: sqlite3.Row) -> Checkpoint:
         """Convert a database row to a Checkpoint."""
+        # Handle legacy checkpoints without domain_version column
+        row_dict = dict(row)
+        domain_version = row_dict.get("domain_version")
+
         return Checkpoint(
             id=row["id"],
             run_id=row["run_id"],
@@ -379,6 +401,7 @@ class CheckpointStore:
             role_messages=json.loads(row["role_messages"]) if row["role_messages"] else None,
             delegation_history=json.loads(row["delegation_history"]),
             created_at=row["created_at"],
+            domain_version=domain_version,
         )
 
     # -------------------------------------------------------------------------

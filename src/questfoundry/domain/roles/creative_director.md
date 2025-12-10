@@ -10,6 +10,7 @@ abbr: CD
 archetype: Visionary
 agency: high
 mandate: "Ensure Sensory Coherence"
+version: 1
 :::
 
 ## Operational Guidelines

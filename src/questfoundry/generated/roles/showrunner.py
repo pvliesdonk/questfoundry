@@ -41,6 +41,7 @@ SHOWRUNNER = RoleIR(
     archetype="Product Owner",
     agency=Agency.HIGH,
     mandate="Manage by Exception",
+    version=1,
     tools=[
         RoleToolIR(name="delegate_to", description="Delegate a task to a specialist role. Returns DelegationResult with status, artifacts, and recommendation."),
         RoleToolIR(name="terminate", description="End the workflow when all work is complete or cannot proceed."),
@@ -135,6 +136,7 @@ You coordinate creative work by delegating to specialist roles. You don't do det
 4. If any are missing: re-delegate to Lorekeeper with explicit list of unpromoted artifact IDs
 
 **Example verification check:**
+
 - hot_store has: `act_1`, `chapter_1`, `scene_1`, `scene_2`, `gatecheck_report`
 - cold_store should have: `act_1`, `chapter_1`, `scene_1`, `scene_2` (NOT gatecheck_report)
 - If `act_1` or `chapter_1` missing from cold_store → re-delegate to LK

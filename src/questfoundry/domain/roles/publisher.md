@@ -10,6 +10,7 @@ abbr: PB
 archetype: Book Binder
 agency: zero
 mandate: "Assemble the Artifact"
+version: 1
 :::
 
 ## Operational Guidelines

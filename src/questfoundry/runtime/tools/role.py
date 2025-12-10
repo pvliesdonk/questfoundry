@@ -261,6 +261,7 @@ class ReadHotSot(BaseTool):
                 {
                     "success": False,
                     "error": "key is required",
+                    "hint": "Provide an artifact ID or dot-path like 'current_tu.title'.",
                 }
             )
 
@@ -295,6 +296,8 @@ class ReadHotSot(BaseTool):
                 "success": False,
                 "error": f"Key '{key}' not found in hot_store",
                 "available_keys": available,
+                "hint": "Use list_hot_store_keys to see all available artifacts, "
+                "or write_hot_sot to create a new artifact.",
             }
         )
 
@@ -348,6 +351,7 @@ class WriteHotSot(BaseTool):
                 {
                     "success": False,
                     "error": "key is required",
+                    "hint": "Provide an artifact ID like 'scene_1' or a category key like 'hooks'.",
                 }
             )
 
@@ -356,6 +360,7 @@ class WriteHotSot(BaseTool):
                 {
                     "success": False,
                     "error": "value is required",
+                    "hint": "Provide a dict with artifact fields. Use consult_schema to see required fields.",
                 }
             )
 
@@ -667,13 +672,15 @@ class PromoteToCanon(BaseTool):
 
         # Helper to return structured error per 9.4 validate-with-feedback pattern
         def _validation_error(artifact_id: str, error: str, invalid_fields: list, hint: str):
-            return json.dumps({
-                "success": False,
-                "error": error,
-                "artifact_id": artifact_id,
-                "invalid_fields": invalid_fields,
-                "hint": hint,
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": error,
+                    "artifact_id": artifact_id,
+                    "invalid_fields": invalid_fields,
+                    "hint": hint,
+                }
+            )
 
         for artifact_id in artifact_ids:
             # Check artifact exists - fail immediately with feedback
@@ -697,8 +704,13 @@ class PromoteToCanon(BaseTool):
                 return _validation_error(
                     artifact_id,
                     f"Artifact '{artifact_id}' has invalid type: {type(artifact).__name__}",
-                    [{"field": "type", "provided": type(artifact).__name__,
-                      "issue": "must be dict"}],
+                    [
+                        {
+                            "field": "type",
+                            "provided": type(artifact).__name__,
+                            "issue": "must be dict",
+                        }
+                    ],
                     "Artifacts must be dicts. Use write_hot_sot with a dict value.",
                 )
 
@@ -712,13 +724,20 @@ class PromoteToCanon(BaseTool):
             artifact_type = detect_artifact_type(artifact_id)
             if artifact_type is None:
                 # Fall back to schema-based detection
-                artifact_type, validated_model, validation_errors = _detect_artifact_type(content_data)
+                artifact_type, validated_model, validation_errors = _detect_artifact_type(
+                    content_data
+                )
                 if artifact_type is None:
                     return _validation_error(
                         artifact_id,
                         f"Cannot determine artifact type for '{artifact_id}'",
-                        [{"field": "artifact_id", "provided": artifact_id,
-                          "issue": f"Key must start with type prefix (e.g., scene_1, act_1). Errors: {'; '.join(validation_errors[:2])}"}],
+                        [
+                            {
+                                "field": "artifact_id",
+                                "provided": artifact_id,
+                                "issue": f"Key must start with type prefix (e.g., scene_1, act_1). Errors: {'; '.join(validation_errors[:2])}",
+                            }
+                        ],
                         "Use artifact keys like 'scene_1', 'act_1', 'chapter_1'. "
                         "Run consult_schema to see required fields for each type.",
                     )
@@ -778,7 +797,9 @@ class PromoteToCanon(BaseTool):
                 or artifact_id
             )
 
-            logger.info(f"Promoting '{artifact_id}' as {artifact_type} with content from validated schema")
+            logger.info(
+                f"Promoting '{artifact_id}' as {artifact_type} with content from validated schema"
+            )
 
             # Extract interactive fiction fields (choices, gates) from the model
             # Handle both Pydantic objects and raw dicts from LLM output
@@ -790,16 +811,10 @@ class PromoteToCanon(BaseTool):
             # Convert to proper types if needed (handles raw dicts from LLM)
             choices = None
             if raw_choices:
-                choices = [
-                    c if isinstance(c, Choice) else Choice(**c)
-                    for c in raw_choices
-                ]
+                choices = [c if isinstance(c, Choice) else Choice(**c) for c in raw_choices]
             gates = None
             if raw_gates:
-                gates = [
-                    g if isinstance(g, Gate) else Gate(**g)
-                    for g in raw_gates
-                ]
+                gates = [g if isinstance(g, Gate) else Gate(**g) for g in raw_gates]
             requires_gate = bool(gates)
 
             # Route to appropriate cold_store method based on artifact type
@@ -809,6 +824,7 @@ class PromoteToCanon(BaseTool):
                 if artifact_type_lower == "act":
                     # Extract Act-specific fields
                     from questfoundry.generated.models.enums import Visibility
+
                     sequence = getattr(validated_model, "sequence", 1)
                     description = getattr(validated_model, "description", None)
                     visibility_val = getattr(validated_model, "visibility", None)
@@ -824,6 +840,7 @@ class PromoteToCanon(BaseTool):
                 elif artifact_type_lower == "chapter":
                     # Extract Chapter-specific fields
                     from questfoundry.generated.models.enums import Visibility
+
                     sequence = getattr(validated_model, "sequence", 1)
                     act_anchor = getattr(validated_model, "act_id", None)
                     summary = getattr(validated_model, "summary", None)

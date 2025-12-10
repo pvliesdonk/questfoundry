@@ -32,6 +32,9 @@
 
 """Generated role configurations from domain/roles/*.md."""
 
+# Aggregate domain version (max of all role versions)
+DOMAIN_VERSION: int = 1
+
 from questfoundry.generated.roles.creative_director import CREATIVEDIRECTOR
 from questfoundry.generated.roles.gatekeeper import GATEKEEPER
 from questfoundry.generated.roles.lorekeeper import LOREKEEPER

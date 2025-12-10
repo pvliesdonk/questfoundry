@@ -41,6 +41,7 @@ SCENESMITH = RoleIR(
     archetype="Writer",
     agency=Agency.MEDIUM,
     mandate="Fill with Prose",
+    version=1,
     tools=[
         RoleToolIR(name="read_hot_sot", description="Read artifacts from hot_store (mutable draft storage)"),
         RoleToolIR(name="write_hot_sot", description="Write artifacts to hot_store. MUST call this to persist your work!"),

@@ -186,6 +186,7 @@ class ReadArtifact(BaseTool):
                 {
                     "success": False,
                     "error": "artifact_id is required",
+                    "hint": "Provide an artifact ID. Use list_hot_store_keys or list_cold_store_keys to see available artifacts.",
                 }
             )
 
@@ -227,6 +228,8 @@ class ReadArtifact(BaseTool):
                 "error": f"Artifact '{artifact_id}' not found",
                 "hot_store_artifacts": hot_ids[:10],
                 "cold_store_artifacts": cold_ids[:10],
+                "hint": "Check the artifact ID spelling. Use list_hot_store_keys "
+                "or list_cold_store_keys to see all available artifacts.",
             }
         )
 
@@ -263,6 +266,7 @@ class WriteArtifact(BaseTool):
                 {
                     "success": False,
                     "error": "artifact_id is required",
+                    "hint": "Provide a unique artifact ID like 'scene_1' or 'act_1'.",
                 }
             )
 
@@ -271,7 +275,8 @@ class WriteArtifact(BaseTool):
                 {
                     "success": False,
                     "error": "artifact_type is required",
-                    "hint": "Use consult_schema to see available artifact types.",
+                    "hint": "Use consult_schema to see available artifact types "
+                    "(scene, act, chapter, etc.).",
                 }
             )
 

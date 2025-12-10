@@ -193,6 +193,8 @@ class RoleIR(BaseModel):
         Autonomy level controlling decision-making authority.
     mandate : str
         Core responsibility in a few words (e.g., "Manage by Exception").
+    version : int
+        Domain version number for checkpoint compatibility. Defaults to 1.
     tools : list[RoleToolIR]
         Tools available to this role. Defaults to empty list.
     constraints : list[str]
@@ -242,6 +244,9 @@ class RoleIR(BaseModel):
 
     mandate: str
     """Core responsibility summary."""
+
+    version: int = 1
+    """Domain version for checkpoint compatibility."""
 
     tools: list[RoleToolIR] = Field(default_factory=list)
     """Tools available to this role."""
@@ -461,6 +466,9 @@ class LoopIR(BaseModel):
     entry_point: str
     """Starting node ID."""
 
+    version: int = 1
+    """Domain version for checkpoint compatibility."""
+
     exit_point: str | None = None
     """Explicit exit node ID, if any."""
 
@@ -660,6 +668,9 @@ class ArtifactTypeIR(BaseModel):
 
     store: StoreType
     """Storage policy."""
+
+    version: int = 1
+    """Domain version for checkpoint compatibility."""
 
     lifecycle: list[str] = Field(default_factory=list)
     """Status progression sequence."""

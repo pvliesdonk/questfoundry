@@ -10,6 +10,7 @@ abbr: SS
 archetype: Writer
 agency: medium
 mandate: "Fill with Prose"
+version: 1
 :::
 
 ## Operational Guidelines

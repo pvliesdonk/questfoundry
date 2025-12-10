@@ -9,6 +9,7 @@ id: hook_harvest
 name: "Hook Harvest"
 trigger: backlog_review
 entry_point: showrunner
+version: 1
 :::
 
 ## Guidance

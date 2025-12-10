@@ -10,6 +10,7 @@ abbr: PW
 archetype: Architect
 agency: medium
 mandate: "Design the Topology"
+version: 1
 :::
 
 ## Operational Guidelines

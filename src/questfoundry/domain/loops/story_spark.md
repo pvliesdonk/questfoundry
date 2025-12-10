@@ -9,6 +9,7 @@ id: story_spark
 name: "Story Spark"
 trigger: user_request
 entry_point: showrunner
+version: 1
 :::
 
 ## Guidance

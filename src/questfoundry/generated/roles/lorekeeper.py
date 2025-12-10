@@ -41,6 +41,7 @@ LOREKEEPER = RoleIR(
     archetype="Librarian",
     agency=Agency.MEDIUM,
     mandate="Maintain the Truth",
+    version=1,
     tools=[
         RoleToolIR(name="read_hot_sot", description="Read artifacts from hot_store (mutable draft storage)"),
         RoleToolIR(name="write_hot_sot", description="Write artifacts to hot_store"),
@@ -124,6 +125,7 @@ Never leak hot information into cold surfaces.
 You are responsible for **executing promotion to cold_store**.
 
 **TRIGGER CONDITION**: You MUST call `promote_to_canon` if ANY of these appear in your task:
+
 - "promote" OR "promotion" OR "canon" OR "cold_store" OR "cold store"
 
 When any of these words appear in your task, you MUST promote artifacts:

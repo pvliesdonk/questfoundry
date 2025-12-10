@@ -9,6 +9,7 @@ id: codex_expansion
 name: "Codex Expansion"
 trigger: canon_available
 entry_point: showrunner
+version: 1
 :::
 
 ## Guidance

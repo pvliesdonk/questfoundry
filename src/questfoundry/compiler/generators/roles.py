@@ -107,6 +107,7 @@ def generate_role_code(role: RoleIR) -> str:
     lines.append(f'    archetype="{_escape_string(role.archetype)}",')
     lines.append(f"    agency=Agency.{role.agency.name},")
     lines.append(f'    mandate="{_escape_string(role.mandate)}",')
+    lines.append(f"    version={role.version},")
 
     # Tools
     if role.tools:
@@ -170,10 +171,16 @@ def generate_roles_init(roles: Mapping[str, RoleIR]) -> str:
     str
         Complete Python module source code.
     """
+    # Compute aggregate domain version (max of all role versions)
+    domain_version = max((r.version for r in roles.values()), default=1)
+
     lines = [
         GENERATED_FILE_WARNING.strip(),
         "",
         '"""Generated role configurations from domain/roles/*.md."""',
+        "",
+        f"# Aggregate domain version (max of all role versions)",
+        f"DOMAIN_VERSION: int = {domain_version}",
         "",
     ]
 

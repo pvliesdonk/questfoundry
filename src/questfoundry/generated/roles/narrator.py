@@ -41,6 +41,7 @@ NARRATOR = RoleIR(
     archetype="Dungeon Master",
     agency=Agency.HIGH,
     mandate="Run the Game",
+    version=1,
     tools=[
         RoleToolIR(name="read_state", description="Read artifacts from hot_store or cold_store"),
         RoleToolIR(name="write_state", description="Write artifacts to hot_store"),

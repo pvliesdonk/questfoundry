@@ -10,6 +10,7 @@ abbr: LK
 archetype: Librarian
 agency: medium
 mandate: "Maintain the Truth"
+version: 1
 :::
 
 ## Operational Guidelines

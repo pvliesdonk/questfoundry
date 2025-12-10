@@ -9,6 +9,7 @@ id: scene_weave
 name: "Scene Weave"
 trigger: topology_ready
 entry_point: showrunner
+version: 1
 :::
 
 ## Guidance
