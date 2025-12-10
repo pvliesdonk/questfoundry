@@ -1,20 +1,31 @@
 # QuestFoundry Stores
 
-> **Purpose:** Define the structure of hot_store and cold_store.
+> **Purpose:** Define the structure of hot_store, cold_store, and export views.
 > These are infrastructure definitions, not creative artifacts.
 
 ---
 
 ## Overview
 
-QuestFoundry maintains two complementary stores:
+QuestFoundry maintains a **three-tier storage model**:
 
-| Store | Persistence | Mutability | Contains |
-|-------|-------------|------------|----------|
-| **hot_store** | Ephemeral (memory) | Freely mutable | Working drafts, hooks, WIP |
-| **cold_store** | Persistent (SQLite + files) | Append-only | Canon, player-safe content |
+| Tier | Persistence | Mutability | Contains |
+|------|-------------|------------|----------|
+| **hot_store** | Ephemeral (memory) | Freely mutable | Working drafts, process artifacts |
+| **cold_store** | Persistent (SQLite) | Append-only | All approved canon |
+| **Views/Exports** | Derived | Read-only | Filtered snapshots for specific audiences |
 
-**Rule:** Hot discovers and argues. Cold agrees and ships.
+**Rule:** Hot discovers and argues. Cold stores all approved canon. Views filter for audiences.
+
+### Key Distinction: Storage vs. Export
+
+- **Storage** (hot → cold): Determined by artifact lifecycle. All content artifacts
+  (Scenes, Acts, Chapters, Canon entries) get promoted to cold when approved.
+- **Export** (cold → view): Determined by `visibility` field. Publisher filters
+  cold_store content based on visibility when creating player exports.
+
+**Process artifacts** (Briefs, HookCards, GatecheckReports) never go to cold_store.
+They are work-tracking artifacts, not story content.
 
 ---
 
@@ -26,8 +37,8 @@ The hot_store is an ephemeral, in-memory workspace for active creative work.
 
 - **Lifetime**: Exists only during workflow execution
 - **Persistence**: None by default; checkpointing optional for resume
-- **Contents**: Artifacts in draft/proposed/in_progress states
-- **Spoilers**: Allowed (not player-safe)
+- **Contents**: Working drafts + process artifacts (Briefs, HookCards, etc.)
+- **Process artifacts**: Briefs, HookCards, GatecheckReports stay here permanently
 
 ### Structure
 
@@ -54,20 +65,36 @@ For long-running workflows or crash recovery, hot_store can be serialized:
 
 ## cold_store
 
-The cold_store is the persistent, canonical source of truth for player-safe content.
+The cold_store is the persistent, canonical source of truth for **all approved content**.
 
 ### Characteristics
 
 - **Lifetime**: Permanent (project lifetime)
 - **Persistence**: SQLite database + external asset files
-- **Contents**: Approved, gatekeeper-validated content
-- **Spoilers**: Forbidden (player-safe only)
+- **Contents**: All gatekeeper-approved content artifacts
+- **Visibility**: Per-artifact `visibility` field controls export filtering
+
+### What Goes to Cold Store
+
+All **content artifacts** get promoted when approved:
+
+| Artifact Type | Promoted to Cold | Notes |
+|---------------|------------------|-------|
+| Scene | ✓ | Prose content with choices and gates |
+| Act | ✓ | Structural organization |
+| Chapter | ✓ | Structural organization |
+| CanonEntry | ✓ | World facts and lore |
+| Character | ✓ | Named entities |
+| Location | ✓ | Places in the world |
+| Brief | ✗ | Process artifact (work order) |
+| HookCard | ✗ | Process artifact (change request) |
+| GatecheckReport | ✗ | Process artifact (validation) |
 
 ### Components
 
-The cold_store contains three main components:
+The cold_store contains these main components:
 
-1. **Book** — Story structure and prose content
+1. **Book** — Story structure: Acts, Chapters, Sections (scenes)
 2. **Assets** — Binary files (images, audio, fonts)
 3. **Snapshots** — Point-in-time captures for deterministic builds
 
@@ -128,15 +155,149 @@ description: "Anchor of the first section (entry point)"
 
 ---
 
-## Section
+## Act (Cold)
 
-A section is a unit of player-safe prose content in the cold_store.
+A cold act stores the structural organization of the story at the highest level.
+
+:::{artifact-type}
+id: cold_act
+name: "Cold Act"
+store: cold
+description: "Structural division organizing chapters into narrative phases"
+:::
+
+### Cold Act Fields
+
+:::{artifact-field}
+artifact: cold_act
+name: id
+type: int
+required: true
+description: "Auto-increment primary key"
+:::
+
+:::{artifact-field}
+artifact: cold_act
+name: anchor
+type: str
+required: true
+description: "Unique identifier (e.g., 'act_1', 'act_finale')"
+:::
+
+:::{artifact-field}
+artifact: cold_act
+name: title
+type: str
+required: true
+description: "Act title for display"
+:::
+
+:::{artifact-field}
+artifact: cold_act
+name: sequence
+type: int
+required: true
+description: "Order within the story (1-indexed)"
+:::
+
+:::{artifact-field}
+artifact: cold_act
+name: description
+type: str
+required: false
+description: "Summary of the act's narrative purpose"
+:::
+
+:::{artifact-field}
+artifact: cold_act
+name: visibility
+type: Visibility
+required: false
+description: "Export visibility (defaults to 'public')"
+:::
+
+---
+
+## Chapter (Cold)
+
+A cold chapter stores the organizational grouping of sections.
+
+:::{artifact-type}
+id: cold_chapter
+name: "Cold Chapter"
+store: cold
+description: "Content division containing sections within an act"
+:::
+
+### Cold Chapter Fields
+
+:::{artifact-field}
+artifact: cold_chapter
+name: id
+type: int
+required: true
+description: "Auto-increment primary key"
+:::
+
+:::{artifact-field}
+artifact: cold_chapter
+name: anchor
+type: str
+required: true
+description: "Unique identifier (e.g., 'chapter_1', 'chapter_discovery')"
+:::
+
+:::{artifact-field}
+artifact: cold_chapter
+name: act_id
+type: int
+required: false
+description: "Foreign key to parent act (nullable for single-act stories)"
+:::
+
+:::{artifact-field}
+artifact: cold_chapter
+name: title
+type: str
+required: true
+description: "Chapter title for display"
+:::
+
+:::{artifact-field}
+artifact: cold_chapter
+name: sequence
+type: int
+required: true
+description: "Order within the act (1-indexed)"
+:::
+
+:::{artifact-field}
+artifact: cold_chapter
+name: summary
+type: str
+required: false
+description: "Brief summary of chapter events"
+:::
+
+:::{artifact-field}
+artifact: cold_chapter
+name: visibility
+type: Visibility
+required: false
+description: "Export visibility (defaults to 'public')"
+:::
+
+---
+
+## Section (Cold)
+
+A section is a unit of prose content in the cold_store (promoted from Scene).
 
 :::{artifact-type}
 id: cold_section
 name: "Cold Section"
 store: cold
-description: "A unit of player-safe prose with anchor, title, and content"
+description: "A unit of prose with anchor, title, content, choices, and gates"
 :::
 
 ### Section Fields
@@ -219,6 +380,22 @@ name: gates
 type: list[Gate]
 required: false
 description: "Gate conditions that control access to this section"
+:::
+
+:::{artifact-field}
+artifact: cold_section
+name: chapter_id
+type: int
+required: false
+description: "Foreign key to parent chapter (nullable for standalone sections)"
+:::
+
+:::{artifact-field}
+artifact: cold_section
+name: visibility
+type: Visibility
+required: false
+description: "Export visibility (defaults to 'public'). Publisher filters based on this."
 :::
 
 ---
@@ -447,15 +624,40 @@ book_metadata (
     start_section_id INTEGER REFERENCES sections(id)
 )
 
--- Sections with auto-increment ID
+-- Acts (structural organization)
+acts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    description TEXT,
+    visibility TEXT DEFAULT 'public',  -- public, internal, spoiler
+    created_at TEXT NOT NULL
+)
+
+-- Chapters (content divisions within acts)
+chapters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,
+    act_id INTEGER REFERENCES acts(id),  -- nullable for single-act stories
+    title TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    summary TEXT,
+    visibility TEXT DEFAULT 'public',  -- public, internal, spoiler
+    created_at TEXT NOT NULL
+)
+
+-- Sections with auto-increment ID (prose content)
 sections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     anchor TEXT NOT NULL UNIQUE,  -- can be renamed
+    chapter_id INTEGER REFERENCES chapters(id),  -- nullable for standalone
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,  -- SHA-256
     order_num INTEGER NOT NULL UNIQUE,
     requires_gate INTEGER DEFAULT 0,
+    visibility TEXT DEFAULT 'public',  -- public, internal, spoiler
     source_brief_id TEXT,
     created_at TEXT NOT NULL
 )

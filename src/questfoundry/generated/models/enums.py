@@ -184,3 +184,14 @@ class StoreType(StrEnum):
     """Committed canon - append-only, immutable once written"""
     BOTH = "both"
     """May exist in either store depending on lifecycle"""
+
+
+class Visibility(StrEnum):
+    """Export visibility - controls what Publisher includes in player exports"""
+
+    PUBLIC = "public"
+    """Included in player exports - safe for players to see"""
+    INTERNAL = "internal"
+    """Author reference only - excluded from player exports"""
+    SPOILER = "spoiler"
+    """Contains spoilers - excluded until player reaches unlock point"""

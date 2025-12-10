@@ -89,21 +89,56 @@ src/questfoundry/
 
 ## 4. State Model
 
+### Three-Tier Storage Architecture
+
+QuestFoundry uses a **three-tier storage model**:
+
+| Tier | Persistence | Contains | Mutability |
+|------|-------------|----------|------------|
+| **hot_store** | Memory/checkpoint | Working drafts, process artifacts | Mutable |
+| **cold_store** | SQLite + files | All approved content | Append-only |
+| **Views/Exports** | Derived | Filtered snapshots | Read-only |
+
+**Key Distinction:**
+
+- **Storage** (hot→cold): Determined by artifact type and approval status
+- **Export** (cold→view): Determined by `visibility` field per artifact
+
+All content artifacts (Scenes, Acts, Chapters, Canon) can be promoted to cold_store.
+Publisher filters by `visibility` at export time for spoiler hygiene.
+
 ### StudioState (LangGraph Native)
 
 ```python
 class StudioState(TypedDict):
     hot_store: dict[str, Artifact]      # Working drafts (mutable)
-    cold_store: dict[str, Artifact]     # Committed canon (append-only)
+    cold_store: dict[str, Artifact]     # All approved canon (append-only)
     messages: Annotated[list, add_messages]
     current_role: str
     pending_intents: list[Intent]
 ```
 
+### Cold Store Structure
+
+```
+cold_store/
+├── Acts          # Structural organization
+├── Chapters      # Content divisions (linked to acts)
+├── Sections      # Prose content (linked to chapters)
+├── Assets        # Binary files (metadata in DB, files on disk)
+└── Snapshots     # Point-in-time captures
+```
+
+Each content artifact has a `visibility` field:
+
+- `public` — Included in player exports
+- `internal` — Author reference only
+- `spoiler` — Excluded until player unlocks
+
 ### Stabilization Path
 
 ```
-hot_store (draft) → Gatekeeper approval → cold_store (canon)
+hot_store (draft) → Gatekeeper approval → cold_store (canon) → Publisher → Views
 ```
 
 ---

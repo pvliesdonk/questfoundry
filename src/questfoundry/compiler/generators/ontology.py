@@ -61,7 +61,6 @@ if TYPE_CHECKING:
 
 from questfoundry.compiler.generators._warning import GENERATED_FILE_WARNING
 
-
 # =============================================================================
 # Type Mapping
 # =============================================================================
@@ -667,8 +666,9 @@ def generate_init_code(
     if artifact_classes:
         import_list = ", ".join(artifact_classes)
         lines.append(f"from questfoundry.generated.models.artifacts import {import_list}")
-        # Also import the registry
+        # Also import the registry and cold promotion config
         lines.append("from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY")
+        lines.append("from questfoundry.generated.models.artifacts import COLD_PROMOTION_CONFIG")
 
     # __all__
     all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY", "COLD_PROMOTION_CONFIG"]

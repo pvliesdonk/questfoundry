@@ -1,16 +1,24 @@
-"""ColdStore - Persistent SQLite + files for player-safe canon.
+"""ColdStore - Persistent SQLite + files for all approved canon.
 
-The ColdStore is the canonical source of truth for approved content.
-Content here is player-safe and spoiler-free.
+The ColdStore is the canonical source of truth for all approved content.
+It contains both player-visible and internal content; visibility filtering
+is handled at export time by Publisher.
+
+Three-Tier Storage Model:
+- hot_store: Working drafts, mutable, process artifacts
+- cold_store: All approved content, append-only (this module)
+- Views/Exports: Filtered snapshots for different audiences
 
 Characteristics:
 - Lifetime: Permanent (project lifetime)
 - Persistence: SQLite database + external asset files
-- Contents: Approved, gatekeeper-validated content
-- Spoilers: Forbidden (player-safe only)
+- Contents: All approved, gatekeeper-validated content
+- Visibility: Per-artifact visibility field controls export filtering
 
 Components:
-- Book: Story structure and prose content
+- Book: Story structure metadata
+- Acts/Chapters: Structural hierarchy
+- Sections: Prose content
 - Assets: Binary files (images, audio, fonts)
 - Snapshots: Point-in-time captures for deterministic builds
 """
@@ -30,11 +38,12 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from questfoundry.generated.models.artifacts import Choice, ColdSection, Gate
+from questfoundry.generated.models.artifacts import Choice, ColdAct, ColdChapter, ColdSection, Gate
+from questfoundry.generated.models.enums import Visibility
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 # =============================================================================
@@ -162,10 +171,34 @@ CREATE TABLE IF NOT EXISTS book_metadata (
     start_section_id INTEGER REFERENCES sections(id)
 );
 
+-- Acts (structural organization)
+CREATE TABLE IF NOT EXISTS acts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    description TEXT,
+    visibility TEXT DEFAULT 'public',
+    created_at TEXT NOT NULL
+);
+
+-- Chapters (content divisions within acts)
+CREATE TABLE IF NOT EXISTS chapters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,
+    act_id INTEGER REFERENCES acts(id),
+    title TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    summary TEXT,
+    visibility TEXT DEFAULT 'public',
+    created_at TEXT NOT NULL
+);
+
 -- Sections with auto-increment ID
 CREATE TABLE IF NOT EXISTS sections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     anchor TEXT NOT NULL UNIQUE,
+    chapter_id INTEGER REFERENCES chapters(id),
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
@@ -174,6 +207,7 @@ CREATE TABLE IF NOT EXISTS sections (
     source_brief_id TEXT,
     choices TEXT,  -- JSON array of choice strings for interactive fiction
     gates TEXT,    -- JSON array of gate condition strings
+    visibility TEXT DEFAULT 'public',
     created_at TEXT NOT NULL
 );
 
@@ -217,8 +251,13 @@ CREATE TABLE IF NOT EXISTS snapshot_assets (
 );
 
 -- Indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_acts_anchor ON acts(anchor);
+CREATE INDEX IF NOT EXISTS idx_acts_sequence ON acts(sequence);
+CREATE INDEX IF NOT EXISTS idx_chapters_anchor ON chapters(anchor);
+CREATE INDEX IF NOT EXISTS idx_chapters_act ON chapters(act_id);
 CREATE INDEX IF NOT EXISTS idx_sections_anchor ON sections(anchor);
 CREATE INDEX IF NOT EXISTS idx_sections_order ON sections(order_num);
+CREATE INDEX IF NOT EXISTS idx_sections_chapter ON sections(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_assets_anchor ON assets(anchor);
 CREATE INDEX IF NOT EXISTS idx_snapshots_created ON snapshots(created_at);
 """
@@ -474,10 +513,12 @@ class ColdStore:
         content: str,
         *,
         order: int | None = None,
+        chapter_anchor: str | None = None,
         requires_gate: bool = False,
         source_brief_id: str | None = None,
         choices: list[Choice] | None = None,
         gates: list[Gate] | None = None,
+        visibility: Visibility = Visibility.PUBLIC,
     ) -> ColdSection:
         """Add or update a section.
 
@@ -486,11 +527,13 @@ class ColdStore:
         anchor : str
             Unique identifier for navigation.
         title : str
-            Player-visible section title.
+            Section title.
         content : str
             Prose content.
         order : int | None
             Display order (auto-assigned if None).
+        chapter_anchor : str | None
+            Anchor of the parent chapter.
         requires_gate : bool
             Whether this section has access conditions.
         source_brief_id : str | None
@@ -499,6 +542,8 @@ class ColdStore:
             Available choices/exits for interactive fiction.
         gates : list[Gate] | None
             Gate conditions that control access.
+        visibility : Visibility
+            Export visibility (default: public).
 
         Returns
         -------
@@ -513,6 +558,16 @@ class ColdStore:
         gates_json = json.dumps([g.model_dump() for g in gates]) if gates else None
 
         with self._connection() as conn:
+            # Resolve chapter_anchor to chapter_id
+            chapter_id = None
+            if chapter_anchor:
+                cursor = conn.execute(
+                    "SELECT id FROM chapters WHERE anchor = ?", (chapter_anchor,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    chapter_id = row["id"]
+
             # Check if anchor exists
             cursor = conn.execute(
                 "SELECT id FROM sections WHERE anchor = ?", (anchor,)
@@ -524,12 +579,12 @@ class ColdStore:
                 conn.execute(
                     """
                     UPDATE sections SET
-                        title = ?, content = ?, content_hash = ?,
+                        chapter_id = ?, title = ?, content = ?, content_hash = ?,
                         requires_gate = ?, source_brief_id = ?,
-                        choices = ?, gates = ?
+                        choices = ?, gates = ?, visibility = ?
                     WHERE anchor = ?
                     """,
-                    (title, content, content_hash, requires_gate, source_brief_id, choices_json, gates_json, anchor),
+                    (chapter_id, title, content, content_hash, requires_gate, source_brief_id, choices_json, gates_json, visibility.value, anchor),
                 )
                 section_id = existing["id"]
                 # Get current order
@@ -549,10 +604,10 @@ class ColdStore:
                 cursor = conn.execute(
                     """
                     INSERT INTO sections
-                    (anchor, title, content, content_hash, order_num, requires_gate, source_brief_id, choices, gates, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (anchor, chapter_id, title, content, content_hash, order_num, requires_gate, source_brief_id, choices, gates, visibility, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (anchor, title, content, content_hash, order, requires_gate, source_brief_id, choices_json, gates_json, created_at),
+                    (anchor, chapter_id, title, content, content_hash, order, requires_gate, source_brief_id, choices_json, gates_json, visibility.value, created_at),
                 )
                 section_id = cursor.lastrowid
 
@@ -561,6 +616,7 @@ class ColdStore:
         return ColdSection(
             id=section_id,
             anchor=anchor,
+            chapter_id=chapter_id,
             title=title,
             content=content,
             content_hash=content_hash,
@@ -569,6 +625,7 @@ class ColdStore:
             source_brief_id=source_brief_id,
             choices=choices,
             gates=gates,
+            visibility=visibility,
             created_at=datetime.fromisoformat(created_at),
         )
 
@@ -591,6 +648,7 @@ class ColdStore:
             return ColdSection(
                 id=row["id"],
                 anchor=row["anchor"],
+                chapter_id=row["chapter_id"],
                 title=row["title"],
                 content=row["content"],
                 content_hash=row["content_hash"],
@@ -599,6 +657,7 @@ class ColdStore:
                 source_brief_id=row["source_brief_id"],
                 choices=choices,
                 gates=gates,
+                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
@@ -625,6 +684,7 @@ class ColdStore:
                     ColdSection(
                         id=row["id"],
                         anchor=row["anchor"],
+                        chapter_id=row["chapter_id"],
                         title=row["title"],
                         content=row["content"],
                         content_hash=row["content_hash"],
@@ -633,6 +693,7 @@ class ColdStore:
                         source_brief_id=row["source_brief_id"],
                         choices=choices,
                         gates=gates,
+                        visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
                         created_at=datetime.fromisoformat(row["created_at"]),
                     )
                 )
@@ -677,6 +738,256 @@ class ColdStore:
                 return True
             except sqlite3.IntegrityError:
                 return False
+
+    # =========================================================================
+    # Act Operations
+    # =========================================================================
+
+    def add_act(
+        self,
+        anchor: str,
+        title: str,
+        sequence: int,
+        *,
+        description: str | None = None,
+        visibility: Visibility = Visibility.PUBLIC,
+    ) -> ColdAct:
+        """Add or update an act.
+
+        Parameters
+        ----------
+        anchor : str
+            Unique identifier for the act.
+        title : str
+            Act title.
+        sequence : int
+            Order within the story.
+        description : str | None
+            Summary of the act's narrative purpose.
+        visibility : Visibility
+            Export visibility (default: public).
+
+        Returns
+        -------
+        ColdAct
+            The created/updated act.
+        """
+        created_at = _now_iso()
+
+        with self._connection() as conn:
+            # Check if anchor exists
+            cursor = conn.execute(
+                "SELECT id FROM acts WHERE anchor = ?", (anchor,)
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existing act
+                conn.execute(
+                    """
+                    UPDATE acts SET
+                        title = ?, sequence = ?, description = ?, visibility = ?
+                    WHERE anchor = ?
+                    """,
+                    (title, sequence, description, visibility.value, anchor),
+                )
+                act_id = existing["id"]
+            else:
+                # Insert new act
+                cursor = conn.execute(
+                    """
+                    INSERT INTO acts
+                    (anchor, title, sequence, description, visibility, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (anchor, title, sequence, description, visibility.value, created_at),
+                )
+                act_id = cursor.lastrowid
+
+            conn.commit()
+
+        return ColdAct(
+            id=act_id,
+            anchor=anchor,
+            title=title,
+            sequence=sequence,
+            description=description,
+            visibility=visibility,
+        )
+
+    def get_act(self, anchor: str) -> ColdAct | None:
+        """Get an act by anchor."""
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM acts WHERE anchor = ?", (anchor,)
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            return ColdAct(
+                id=row["id"],
+                anchor=row["anchor"],
+                title=row["title"],
+                sequence=row["sequence"],
+                description=row["description"],
+                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+            )
+
+    def list_acts(self) -> list[ColdAct]:
+        """List all acts in sequence order."""
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT * FROM acts ORDER BY sequence")
+            return [
+                ColdAct(
+                    id=row["id"],
+                    anchor=row["anchor"],
+                    title=row["title"],
+                    sequence=row["sequence"],
+                    description=row["description"],
+                    visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                )
+                for row in cursor.fetchall()
+            ]
+
+    # =========================================================================
+    # Chapter Operations
+    # =========================================================================
+
+    def add_chapter(
+        self,
+        anchor: str,
+        title: str,
+        sequence: int,
+        *,
+        act_anchor: str | None = None,
+        summary: str | None = None,
+        visibility: Visibility = Visibility.PUBLIC,
+    ) -> ColdChapter:
+        """Add or update a chapter.
+
+        Parameters
+        ----------
+        anchor : str
+            Unique identifier for the chapter.
+        title : str
+            Chapter title.
+        sequence : int
+            Order within the act.
+        act_anchor : str | None
+            Anchor of the parent act.
+        summary : str | None
+            Chapter summary.
+        visibility : Visibility
+            Export visibility (default: public).
+
+        Returns
+        -------
+        ColdChapter
+            The created/updated chapter.
+        """
+        created_at = _now_iso()
+
+        with self._connection() as conn:
+            # Resolve act_anchor to act_id
+            act_id = None
+            if act_anchor:
+                cursor = conn.execute(
+                    "SELECT id FROM acts WHERE anchor = ?", (act_anchor,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    act_id = row["id"]
+
+            # Check if anchor exists
+            cursor = conn.execute(
+                "SELECT id FROM chapters WHERE anchor = ?", (anchor,)
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existing chapter
+                conn.execute(
+                    """
+                    UPDATE chapters SET
+                        act_id = ?, title = ?, sequence = ?, summary = ?, visibility = ?
+                    WHERE anchor = ?
+                    """,
+                    (act_id, title, sequence, summary, visibility.value, anchor),
+                )
+                chapter_id = existing["id"]
+            else:
+                # Insert new chapter
+                cursor = conn.execute(
+                    """
+                    INSERT INTO chapters
+                    (anchor, act_id, title, sequence, summary, visibility, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (anchor, act_id, title, sequence, summary, visibility.value, created_at),
+                )
+                chapter_id = cursor.lastrowid
+
+            conn.commit()
+
+        return ColdChapter(
+            id=chapter_id,
+            anchor=anchor,
+            title=title,
+            sequence=sequence,
+            act_id=act_id,
+            summary=summary,
+            visibility=visibility,
+        )
+
+    def get_chapter(self, anchor: str) -> ColdChapter | None:
+        """Get a chapter by anchor."""
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM chapters WHERE anchor = ?", (anchor,)
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            return ColdChapter(
+                id=row["id"],
+                anchor=row["anchor"],
+                title=row["title"],
+                sequence=row["sequence"],
+                act_id=row["act_id"],
+                summary=row["summary"],
+                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+            )
+
+    def list_chapters(self, act_anchor: str | None = None) -> list[ColdChapter]:
+        """List chapters, optionally filtered by act."""
+        with self._connection() as conn:
+            if act_anchor:
+                cursor = conn.execute(
+                    """
+                    SELECT c.* FROM chapters c
+                    JOIN acts a ON c.act_id = a.id
+                    WHERE a.anchor = ?
+                    ORDER BY c.sequence
+                    """,
+                    (act_anchor,),
+                )
+            else:
+                cursor = conn.execute("SELECT * FROM chapters ORDER BY sequence")
+
+            return [
+                ColdChapter(
+                    id=row["id"],
+                    anchor=row["anchor"],
+                    title=row["title"],
+                    sequence=row["sequence"],
+                    act_id=row["act_id"],
+                    summary=row["summary"],
+                    visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                )
+                for row in cursor.fetchall()
+            ]
 
     # =========================================================================
     # Asset Operations
@@ -1047,12 +1358,14 @@ class ColdStore:
                 ColdSection(
                     id=row["id"],
                     anchor=row["anchor"],
+                    chapter_id=row["chapter_id"],
                     title=row["title"],
                     content=row["content"],
                     content_hash=row["content_hash"],
                     order=row["order_num"],
                     requires_gate=bool(row["requires_gate"]),
                     source_brief_id=row["source_brief_id"],
+                    visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
                     created_at=datetime.fromisoformat(row["created_at"]),
                 )
                 for row in cursor.fetchall()

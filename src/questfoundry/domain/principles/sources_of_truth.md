@@ -1,28 +1,45 @@
 # Sources of Truth
 
-> Hot discovers and argues. Cold agrees and ships.
+> Hot discovers and argues. Cold stores all approved canon. Views filter for audiences.
 
-This principle defines the canonical authority of QuestFoundry's state stores and how content moves between them.
+This principle defines the canonical authority of QuestFoundry's three-tier storage model.
 
-## The Two Stores
+## The Three Tiers
 
 ### hot_store (Working Space)
 
-The mutable workspace for creative change:
+The mutable workspace for active creative work:
 
 - Drafts, proposals, work-in-progress content
-- Canon notes with spoiler-level detail
+- **Process artifacts** that never promote: Briefs, HookCards, GatecheckReports
 - Research memos and uncertainty logs
-- Not export-safe; spoilers may exist
+- All spoilers allowed; no export safety required
 
 ### cold_store (Canonical Truth)
 
-The curated, stabilized source of truth:
+The persistent source of truth for **all approved content**:
 
-- Accepted world canon
-- Export-safe, player-facing content
-- Gatekeeper-approved artifacts only
-- Always playable; spoiler hygiene enforced
+- All gatekeeper-approved content artifacts (Scenes, Acts, Chapters, Canon, etc.)
+- Includes both player-facing and internal content
+- Per-artifact `visibility` field controls export filtering
+- Append-only; changes require formal process
+
+### Views/Exports (Filtered Output)
+
+Publisher creates filtered snapshots from cold_store:
+
+- **Player Export**: Only `visibility: public` content
+- **PN Session**: Player-safe snapshot for narration
+- **Author Reference**: Everything (no filtering)
+
+## Key Distinction: Storage vs. Export
+
+- **Storage decision**: Is this a process artifact (hot-only) or content artifact (promotable)?
+- **Export decision**: What visibility level does this content have?
+
+These are **separate concerns**. All content can be in cold_store; the `visibility` field
+controls what gets exported to players. Spoiler hygiene is an **export-time** concern,
+not a **storage-time** concern.
 
 ## Canon Hierarchy
 
@@ -91,10 +108,13 @@ cold_store (canon)
 
 ## Cold Store Guardrails
 
-- **No spoilers** in player-facing surfaces
 - **No orphaned references** — every link resolves
 - **No contradictions** — integrity bar must pass
 - **Append-only mindset** — changes are additions, not overwrites (except retcons)
+- **Visibility tagged** — every content artifact has explicit visibility
+
+**Note:** Spoiler hygiene is enforced at **export time** by Publisher, not at storage time.
+Cold_store may contain spoiler-level content with `visibility: spoiler` or `visibility: internal`.
 
 ## Anti-Patterns
 

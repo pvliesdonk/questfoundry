@@ -47,13 +47,13 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from questfoundry.generated.models.enums import AssetType, GateType, HookStatus, HookType, LoopType, QualityBar
+from questfoundry.generated.models.enums import AssetType, GateType, HookStatus, HookType, LoopType, QualityBar, Visibility
 
 
 class Act(BaseModel):
     """Act.
 
-    Store: hot
+    Store: both
     Lifecycle: draft → review → final
 
     Attributes
@@ -68,6 +68,8 @@ class Act(BaseModel):
         IDs of chapters in this act (optional)
     themes : list[str] | None
         Thematic elements explored in this act (optional)
+    visibility : Visibility | None
+        Export visibility (defaults to 'public'). Publisher filters based on this. (optional)
 
     Examples
     --------
@@ -110,6 +112,9 @@ class Act(BaseModel):
     )
     themes: list[str] | None = Field(
         default=None, title="Themes", description="Thematic elements explored in this act", examples=[["item1", "item2"]],
+    )
+    visibility: Visibility | None = Field(
+        default=None, title="Visibility", description="Export visibility (defaults to 'public'). Publisher filters based on this.", examples=["public"],
     )
 
 
@@ -447,7 +452,7 @@ class CanonEntry(BaseModel):
 class Chapter(BaseModel):
     """Chapter.
 
-    Store: hot
+    Store: both
     Lifecycle: draft → review → final
 
     Attributes
@@ -464,6 +469,8 @@ class Chapter(BaseModel):
         Brief summary of chapter events (optional)
     status : str | None
         Current lifecycle status (optional)
+    visibility : Visibility | None
+        Export visibility (defaults to 'public'). Publisher filters based on this. (optional)
 
     Examples
     --------
@@ -509,6 +516,9 @@ class Chapter(BaseModel):
     )
     status: str | None = Field(
         default=None, title="Status", description="Current lifecycle status", examples=["example_status"],
+    )
+    visibility: Visibility | None = Field(
+        default=None, title="Visibility", description="Export visibility (defaults to 'public'). Publisher filters based on this.", examples=["public"],
     )
 
 
@@ -640,6 +650,72 @@ class Choice(BaseModel):
     )
     consequence: str | None = Field(
         default=None, title="Consequence", description="Codeword or flag set when this choice is taken (e.g., 'chose_stealth')", examples=["example_consequence"],
+    )
+
+
+class ColdAct(BaseModel):
+    """Cold Act.
+
+    Store: cold
+
+    Attributes
+    ----------
+    id : int
+        Auto-increment primary key
+    anchor : str
+        Unique identifier (e.g., 'act_1', 'act_finale')
+    title : str
+        Act title for display
+    sequence : int
+        Order within the story (1-indexed)
+    description : str | None
+        Summary of the act's narrative purpose (optional)
+    visibility : Visibility | None
+        Export visibility (defaults to 'public') (optional)
+
+    Examples
+    --------
+    Create a Cold Act::
+
+        from questfoundry.generated.models import ColdAct
+
+        item = ColdAct(
+            id=1,
+            anchor="example_anchor",
+            title="example_title",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'id': 1,
+                    'anchor': 'example_anchor',
+                    'title': 'example_title',
+                    'sequence': 1,
+                },
+            ],
+        },
+    )
+
+    id: int = Field(
+        ..., title="Id", description="Auto-increment primary key", examples=[1],
+    )
+    anchor: str = Field(
+        ..., title="Anchor", description="Unique identifier (e.g., 'act_1', 'act_finale')", examples=["example_anchor"],
+    )
+    title: str = Field(
+        ..., title="Title", description="Act title for display", examples=["example_title"],
+    )
+    sequence: int = Field(
+        ..., title="Sequence", description="Order within the story (1-indexed)", examples=[1],
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Summary of the act's narrative purpose", examples=["example_description"],
+    )
+    visibility: Visibility | None = Field(
+        default=None, title="Visibility", description="Export visibility (defaults to 'public')", examples=["public"],
     )
 
 
@@ -787,6 +863,77 @@ class ColdBook(BaseModel):
     )
 
 
+class ColdChapter(BaseModel):
+    """Cold Chapter.
+
+    Store: cold
+
+    Attributes
+    ----------
+    id : int
+        Auto-increment primary key
+    anchor : str
+        Unique identifier (e.g., 'chapter_1', 'chapter_discovery')
+    title : str
+        Chapter title for display
+    sequence : int
+        Order within the act (1-indexed)
+    act_id : int | None
+        Foreign key to parent act (nullable for single-act stories) (optional)
+    summary : str | None
+        Brief summary of chapter events (optional)
+    visibility : Visibility | None
+        Export visibility (defaults to 'public') (optional)
+
+    Examples
+    --------
+    Create a Cold Chapter::
+
+        from questfoundry.generated.models import ColdChapter
+
+        item = ColdChapter(
+            id=1,
+            anchor="example_anchor",
+            title="example_title",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'id': 1,
+                    'anchor': 'example_anchor',
+                    'title': 'example_title',
+                    'sequence': 1,
+                },
+            ],
+        },
+    )
+
+    id: int = Field(
+        ..., title="Id", description="Auto-increment primary key", examples=[1],
+    )
+    anchor: str = Field(
+        ..., title="Anchor", description="Unique identifier (e.g., 'chapter_1', 'chapter_discovery')", examples=["example_anchor"],
+    )
+    title: str = Field(
+        ..., title="Title", description="Chapter title for display", examples=["example_title"],
+    )
+    sequence: int = Field(
+        ..., title="Sequence", description="Order within the act (1-indexed)", examples=[1],
+    )
+    act_id: int | None = Field(
+        default=None, title="Act Id", description="Foreign key to parent act (nullable for single-act stories)", examples=[1],
+    )
+    summary: str | None = Field(
+        default=None, title="Summary", description="Brief summary of chapter events", examples=["example_summary"],
+    )
+    visibility: Visibility | None = Field(
+        default=None, title="Visibility", description="Export visibility (defaults to 'public')", examples=["public"],
+    )
+
+
 class ColdSection(BaseModel):
     """Cold Section.
 
@@ -814,6 +961,10 @@ class ColdSection(BaseModel):
         Available choices/exits from this section for interactive fiction (optional)
     gates : list[Gate] | None
         Gate conditions that control access to this section (optional)
+    chapter_id : int | None
+        Foreign key to parent chapter (nullable for standalone sections) (optional)
+    visibility : Visibility | None
+        Export visibility (defaults to 'public'). Publisher filters based on this. (optional)
 
     Examples
     --------
@@ -872,6 +1023,12 @@ class ColdSection(BaseModel):
     )
     gates: list[Gate] | None = Field(
         default=None, title="Gates", description="Gate conditions that control access to this section", examples=[[]],
+    )
+    chapter_id: int | None = Field(
+        default=None, title="Chapter Id", description="Foreign key to parent chapter (nullable for standalone sections)", examples=[1],
+    )
+    visibility: Visibility | None = Field(
+        default=None, title="Visibility", description="Export visibility (defaults to 'public'). Publisher filters based on this.", examples=["public"],
     )
 
 
@@ -1559,6 +1716,8 @@ class Scene(BaseModel):
         Canon entries referenced in this scene (optional)
     style_notes : str | None
         Voice/register guidance for this scene (optional)
+    visibility : Visibility | None
+        Export visibility (defaults to 'public'). Publisher filters based on this. (optional)
 
     Examples
     --------
@@ -1613,6 +1772,9 @@ class Scene(BaseModel):
     )
     style_notes: str | None = Field(
         default=None, title="Style Notes", description="Voice/register guidance for this scene", examples=["example_style_notes"],
+    )
+    visibility: Visibility | None = Field(
+        default=None, title="Visibility", description="Export visibility (defaults to 'public'). Publisher filters based on this.", examples=["public"],
     )
 
 
@@ -1923,8 +2085,10 @@ ARTIFACT_REGISTRY: dict[str, type[BaseModel]] = {
     "chapter": Chapter,
     "character": Character,
     "choice": Choice,
+    "cold_act": ColdAct,
     "cold_asset": ColdAsset,
     "cold_book": ColdBook,
+    "cold_chapter": ColdChapter,
     "cold_section": ColdSection,
     "cold_snapshot": ColdSnapshot,
     "event": Event,

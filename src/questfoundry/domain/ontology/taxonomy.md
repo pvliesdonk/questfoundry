@@ -40,6 +40,36 @@ description: "Purely deterministic; crashes on ambiguity"
 
 ---
 
+## Visibility
+
+Content visibility controls export filtering by Publisher.
+All content artifacts can be in cold_store; visibility determines what gets exported to players.
+
+:::{enum-type}
+id: Visibility
+description: "Export visibility - controls what Publisher includes in player exports"
+:::
+
+:::{enum-value}
+enum: Visibility
+value: public
+description: "Included in player exports - safe for players to see"
+:::
+
+:::{enum-value}
+enum: Visibility
+value: internal
+description: "Author reference only - excluded from player exports"
+:::
+
+:::{enum-value}
+enum: Visibility
+value: spoiler
+description: "Contains spoilers - excluded until player reaches unlock point"
+:::
+
+---
+
 ## Store Types
 
 Artifact storage location determines mutability semantics.

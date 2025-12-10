@@ -223,16 +223,17 @@ description: "Hook card IDs this brief addresses"
 
 ## Scene
 
-A scene is the fundamental unit of **player-visible content** in QuestFoundry.
-Scenes contain the actual prose that players read during interactive fiction.
+A scene is the fundamental unit of **prose content** in QuestFoundry.
+Scenes contain the actual narrative text that forms the story experience.
 
-**IMPORTANT:** Scenes are the ONLY artifacts that become cold_store sections.
+Scenes are **content artifacts** that get promoted to cold_store when approved:
 
-- Scene.content → ColdSection.content (the prose players see)
+- Scene.content → ColdSection.content (the prose)
 - Scene.choices → ColdSection.choices (player navigation options)
 - Scene.gates → ColdSection.gates (access conditions)
 
-Acts and Chapters are organizational metadata; Scenes are the player experience.
+Scenes belong to Chapters which belong to Acts. All three are content that gets
+promoted to cold_store; Publisher applies visibility filtering at export time.
 
 :::{artifact-type}
 id: scene
@@ -315,6 +316,14 @@ name: style_notes
 type: str
 required: false
 description: "Voice/register guidance for this scene"
+:::
+
+:::{artifact-field}
+artifact: scene
+name: visibility
+type: Visibility
+required: false
+description: "Export visibility (defaults to 'public'). Publisher filters based on this."
 :::
 
 ---
@@ -878,16 +887,16 @@ description: "Categorization tags (public, secret, evolving, etc.)"
 An act is a structural division for organizing the story.
 Acts group chapters and represent significant narrative phases.
 
-**NOTE:** Acts are organizational metadata for the author, NOT player-facing content.
+Acts are **content artifacts** that get promoted to cold_store when approved:
 
-- Simple stories have **one implicit act** containing all scenes
-- Multi-act stories use explicit acts to organize larger narrative arcs
-- Only **Scenes** contain player-visible prose that gets promoted to cold_store sections
+- Act titles appear in navigation, table of contents, and save files
+- Simple stories may have one implicit act; multi-act stories use explicit acts
+- Publisher applies visibility filtering at export time
 
 :::{artifact-type}
 id: act
 name: "Act"
-store: hot
+store: both
 lifecycle: [draft, review, final]
 :::
 
@@ -933,6 +942,14 @@ required: false
 description: "Thematic elements explored in this act"
 :::
 
+:::{artifact-field}
+artifact: act
+name: visibility
+type: Visibility
+required: false
+description: "Export visibility (defaults to 'public'). Publisher filters based on this."
+:::
+
 ---
 
 ## Chapter
@@ -940,16 +957,16 @@ description: "Thematic elements explored in this act"
 A chapter is a content division containing multiple scenes.
 Chapters organize scenes into coherent narrative segments.
 
-**NOTE:** Chapters are organizational metadata, NOT player-facing content.
+Chapters are **content artifacts** that get promoted to cold_store when approved:
 
-- Simple stories have **one implicit chapter** containing all scenes
-- Multi-chapter stories use explicit chapters to group related scenes
-- Only **Scenes** contain player-visible prose that gets promoted to cold_store sections
+- Chapter titles appear in navigation, table of contents, and save files
+- Simple stories may have one implicit chapter; multi-chapter stories use explicit chapters
+- Publisher applies visibility filtering at export time
 
 :::{artifact-type}
 id: chapter
 name: "Chapter"
-store: hot
+store: both
 lifecycle: [draft, review, final]
 :::
 
@@ -1001,6 +1018,14 @@ name: status
 type: str
 required: false
 description: "Current lifecycle status"
+:::
+
+:::{artifact-field}
+artifact: chapter
+name: visibility
+type: Visibility
+required: false
+description: "Export visibility (defaults to 'public'). Publisher filters based on this."
 :::
 
 ---
