@@ -17,7 +17,19 @@
             "Bash(echo:*)",
             "Bash(set:*)",
             "Bash(export:*)",
-            "Bash(gh:*)"
+            "Bash(gh:*)",
+            "Bash(timeout 600 uv run qf ask:*)",
+            "Bash(qf compile:*)",
+            "Bash(rm:*)",
+            "Bash(mkdir:*)",
+            "Bash(sqlite3:*)",
+            "Bash(python3:*)",
+            "Bash(cat:*)",
+            "Bash(find:*)",
+            "Bash(grep:*)",
+            "Bash(tee:*)",
+            "Bash(timeout 900 uv run qf ask:*)",
+            "Bash(jq:*)"
         ],
         "deny": [],
         "ask": [

@@ -2,6 +2,14 @@
 
 Streamlined reference for Claude Code assistants. See `AGENTS.md` for full policy.
 
+## FIRST: Read Working Memory
+
+**Before ANY work, read these files to avoid repeating past mistakes:**
+
+1. `.claude/memory/invariants.md` — Critical facts that survive compaction
+2. `.claude/memory/test-protocol.md` — E2E testing checklist (timeouts, verification)
+3. `.claude/memory/current-task.md` — Track what you're actually working on
+
 ## Quick Reference
 
 - **Concise & factual**: State results directly; avoid filler
@@ -32,9 +40,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full v3 design.
 
 ## Before You Work
 
-1. Read `ARCHITECTURE.md` for the full v3 design
-2. Check `_archive/` for v2 reference material if needed
-3. Never edit files in `generated/`
+1. **Read `.claude/memory/invariants.md`** — Critical facts
+2. Read `ARCHITECTURE.md` for the full v3 design
+3. Check `_archive/` for v2 reference material if needed
+4. Never edit files in `generated/`
 
 ## Workflows
 
@@ -76,6 +85,30 @@ git diff src/questfoundry/generated/
 2. Run `qf compile`
 3. NEVER fix `generated/` directly
 
+### E2E Testing (CRITICAL)
+
+> **MINIMUM TIMEOUT: 900 seconds (15 minutes)** for full workflow with local models.
+
+```bash
+# Fresh test
+rm -rf project_test && timeout 900 uv run qf ask -vvv --log \
+  --project project_test --provider ollama "simple 1-act story" 2>&1
+
+# Resume from checkpoint (saves time!)
+timeout 900 uv run qf ask --project project_test --resume "continue" 2>&1
+
+# Resume from specific checkpoint
+timeout 900 uv run qf ask --project project_test --from-checkpoint 3 "continue" 2>&1
+```
+
+**Verify cold_store writes:**
+
+```bash
+sqlite3 project_test/project.qfdb "SELECT COUNT(*) FROM sections"
+```
+
+See `.claude/memory/test-protocol.md` for full checklist.
+
 ## Commits
 
 - **Format**: Conventional commits (`type(scope): subject`)
@@ -87,6 +120,7 @@ git diff src/questfoundry/generated/
 - **hot_store**: Working drafts, mutable, internal
 - **cold_store**: Committed canon, append-only, player-safe
 - **Rule**: Never leak Hot details into Cold
+- **CRITICAL**: Only Lorekeeper (LK) writes to cold_store
 
 ## The 8 Roles (v3)
 
@@ -111,3 +145,16 @@ Domain files use custom directives. Key types:
 - `{intent-type}`, `{routing-rule}`, `{quality-bar}`
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full directive vocabulary.
+
+## Anti-Patterns (DO NOT DO)
+
+1. **Editing generated/** — Always edit domain/ and compile
+2. **Short E2E timeouts** — Use 900s minimum with local models
+3. **Expecting cold writes before LK** — Only Lorekeeper promotes to canon
+4. **Fixing side bugs mid-task** — Finish current task first, log bugs in `current-task.md`
+5. **Not using checkpoints** — Use `--from-checkpoint` for faster iteration
+6. **Forgetting architecture after compaction** — Re-read invariants.md
+
+## VCR Testing
+
+For deterministic role tests without LLM calls, see `tests/fixtures/vcr/README.md`.
