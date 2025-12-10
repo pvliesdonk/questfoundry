@@ -631,23 +631,18 @@ class ToolExecutor:
     def _get_parameter_hint(self, tool: BaseTool, error: Exception) -> str:
         """Generate a helpful hint for tool execution errors.
 
-        For parameter name errors (TypeError with 'unexpected keyword argument'),
-        suggests the correct parameter name if a similar one exists.
+        Handles common LLM errors per section 9.4 Validate-with-Feedback Pattern:
+        - 'unexpected keyword argument' - wrong parameter name
+        - 'missing required positional arguments' - LLM passed wrong args entirely
         """
         error_str = str(error)
         default_hint = "Check tool arguments and try again. Use consult_schema for field requirements."
 
-        # Check for "unexpected keyword argument" TypeError
+        # Check for TypeError patterns
         if not isinstance(error, TypeError):
             return default_hint
 
         import re
-
-        match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
-        if not match:
-            return default_hint
-
-        wrong_param = match.group(1)
 
         # Get the tool's actual parameters from its schema
         try:
@@ -655,6 +650,41 @@ class ToolExecutor:
             actual_params = list(schema.model_fields.keys()) if hasattr(schema, "model_fields") else []
         except Exception:
             actual_params = []
+
+        # Pattern 1: "missing N required positional arguments: 'key' and 'value'"
+        # This happens when LLM passes wrong argument names (e.g., 'item' instead of 'key'+'value')
+        missing_match = re.search(
+            r"missing \d+ required positional arguments?: (.+)", error_str
+        )
+        if missing_match:
+            missing_args_str = missing_match.group(1)
+            # Extract argument names from "'key' and 'value'" or "'key', 'value'"
+            missing_args = re.findall(r"'(\w+)'", missing_args_str)
+
+            if actual_params:
+                # Generate tool-specific syntax hint
+                if tool.name == "write_hot_sot":
+                    return (
+                        f"Missing required arguments: {', '.join(missing_args)}. "
+                        f"Correct syntax: write_hot_sot(key=\"artifact_id\", value={{...}}). "
+                        f"'key' is a string ID like 'scene_1', 'value' is the artifact dict."
+                    )
+                else:
+                    param_hints = ", ".join(f"{p}=..." for p in actual_params[:3])
+                    return (
+                        f"Missing required arguments: {', '.join(missing_args)}. "
+                        f"Correct syntax: {tool.name}({param_hints}). "
+                        f"Required parameters: {', '.join(actual_params)}"
+                    )
+            else:
+                return f"Missing required arguments: {', '.join(missing_args)}. {default_hint}"
+
+        # Pattern 2: "unexpected keyword argument 'foo'"
+        match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
+        if not match:
+            return default_hint
+
+        wrong_param = match.group(1)
 
         if not actual_params:
             return f"Unknown parameter '{wrong_param}'. {default_hint}"
