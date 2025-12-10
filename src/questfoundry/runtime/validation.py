@@ -23,6 +23,7 @@ Usage
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -31,12 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 # Artifact type -> Pydantic model class mapping
-# Populated lazily to avoid import issues
+# Uses the generated ARTIFACT_REGISTRY from the domain compiler
 _ARTIFACT_MODELS: dict[str, type[BaseModel]] | None = None
 
 
 def _get_artifact_models() -> dict[str, type[BaseModel]]:
-    """Get mapping of artifact type names to Pydantic model classes."""
+    """Get mapping of artifact type names to Pydantic model classes.
+
+    Uses the generated ARTIFACT_REGISTRY from the domain compiler,
+    which maps artifact IDs (snake_case) to their Pydantic model classes.
+    """
     global _ARTIFACT_MODELS
     if _ARTIFACT_MODELS is not None:
         return _ARTIFACT_MODELS
@@ -44,81 +49,48 @@ def _get_artifact_models() -> dict[str, type[BaseModel]]:
     _ARTIFACT_MODELS = {}
 
     try:
-        from questfoundry.generated.models import (
-            Act,
-            AudioPlan,
-            Beat,
-            Brief,
-            CanonEntry,
-            Chapter,
-            Character,
-            Event,
-            Fact,
-            GatecheckReport,
-            HookCard,
-            Item,
-            Location,
-            Relationship,
-            Scene,
-            Sequence,
-            Shotlist,
-            Timeline,
-            TranslationPack,
-        )
+        from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
 
-        # Map various names to models (snake_case, kebab-case, etc.)
-        _ARTIFACT_MODELS.update(
-            {
-                # Core workflow artifacts
-                "brief": Brief,
-                "briefs": Brief,
-                "canon_entry": CanonEntry,
-                "canon-entry": CanonEntry,
-                "canon_entries": CanonEntry,
-                "gatecheck_report": GatecheckReport,
-                "gatecheck-report": GatecheckReport,
-                "gatecheck": GatecheckReport,
-                "hook_card": HookCard,
-                "hook-card": HookCard,
-                "hook": HookCard,
-                "hooks": HookCard,
-                # Narrative structure
-                "act": Act,
-                "acts": Act,
-                "chapter": Chapter,
-                "chapters": Chapter,
-                "scene": Scene,
-                "scenes": Scene,
-                "sequence": Sequence,
-                "sequences": Sequence,
-                "beat": Beat,
-                "beats": Beat,
-                # World building
-                "character": Character,
-                "characters": Character,
-                "location": Location,
-                "locations": Location,
-                "item": Item,
-                "items": Item,
-                "relationship": Relationship,
-                "relationships": Relationship,
-                "event": Event,
-                "events": Event,
-                "fact": Fact,
-                "facts": Fact,
-                "timeline": Timeline,
-                "timelines": Timeline,
-                # Production artifacts
-                "shotlist": Shotlist,
-                "shotlists": Shotlist,
-                "audio_plan": AudioPlan,
-                "audio-plan": AudioPlan,
-                "audio_plans": AudioPlan,
-                "translation_pack": TranslationPack,
-                "translation-pack": TranslationPack,
-                "translation_packs": TranslationPack,
-            }
-        )
+        # Copy the generated registry
+        _ARTIFACT_MODELS.update(ARTIFACT_REGISTRY)
+
+        # Add common aliases (plural forms, kebab-case, etc.)
+        alias_map = {
+            # Plurals
+            "briefs": "brief",
+            "acts": "act",
+            "chapters": "chapter",
+            "scenes": "scene",
+            "sequences": "sequence",
+            "beats": "beat",
+            "hooks": "hook_card",
+            "characters": "character",
+            "locations": "location",
+            "items": "item",
+            "relationships": "relationship",
+            "events": "event",
+            "facts": "fact",
+            "timelines": "timeline",
+            "shotlists": "shotlist",
+            "audio_plans": "audio_plan",
+            "translation_packs": "translation_pack",
+            "canon_entries": "canon_entry",
+            "gatecheck_reports": "gatecheck_report",
+            # Kebab-case
+            "canon-entry": "canon_entry",
+            "gatecheck-report": "gatecheck_report",
+            "hook-card": "hook_card",
+            "audio-plan": "audio_plan",
+            "translation-pack": "translation_pack",
+            # Short forms
+            "hook": "hook_card",
+            "gatecheck": "gatecheck_report",
+        }
+
+        for alias, canonical in alias_map.items():
+            if canonical in ARTIFACT_REGISTRY:
+                _ARTIFACT_MODELS[alias] = ARTIFACT_REGISTRY[canonical]
+
         logger.debug(f"Loaded {len(_ARTIFACT_MODELS)} artifact model mappings")
     except ImportError as e:
         logger.warning(f"Could not load generated models: {e}")
@@ -275,45 +247,13 @@ def validate_artifact(
         return format_validation_errors(e, artifact_type, model)
 
 
-# Hot store key -> artifact type mapping
-# Maps common hot_sot keys to their artifact types for auto-detection
-HOT_SOT_KEY_TO_ARTIFACT: dict[str, str] = {
-    "hooks": "hook_card",
-    "briefs": "brief",
-    "scenes": "scene",
-    "canon_entries": "canon_entry",
-    "gatecheck_reports": "gatecheck_report",
-    # Singular forms
-    "hook": "hook_card",
-    "brief": "brief",
-    "scene": "scene",
-}
-
-# Prefixes for numbered artifact keys (e.g., scene_1, act_1, chapter_2)
-ARTIFACT_KEY_PREFIXES: dict[str, str] = {
-    "scene_": "scene",
-    "act_": "act",
-    "chapter_": "chapter",
-    "hook_": "hook_card",
-    "brief_": "brief",
-    "gatecheck_": "gatecheck_report",
-    "character_": "character",
-    "location_": "location",
-    "item_": "item",
-    "event_": "event",
-    "fact_": "fact",
-    "relationship_": "relationship",
-    "timeline_": "timeline",
-    "sequence_": "sequence",
-    "beat_": "beat",
-    "shotlist_": "shotlist",
-    "audio_plan_": "audio_plan",
-    "translation_pack_": "translation_pack",
-}
-
-
 def detect_artifact_type(key: str) -> str | None:
     """Detect artifact type from hot_sot key.
+
+    Uses the generated ARTIFACT_REGISTRY to detect types from keys like:
+    - Exact matches: "scene", "act", "chapter"
+    - Numbered keys: "scene_1", "act_2", "chapter_3"
+    - Collection keys: "scenes", "acts", "hooks"
 
     Parameters
     ----------
@@ -331,13 +271,37 @@ def detect_artifact_type(key: str) -> str | None:
     # Extract top-level key (e.g., "hooks.0" -> "hooks")
     top_key = key.split(".")[0]
 
-    # Try exact match first
-    if top_key in HOT_SOT_KEY_TO_ARTIFACT:
-        return HOT_SOT_KEY_TO_ARTIFACT[top_key]
+    # Get the models (which includes both registry and aliases)
+    models = _get_artifact_models()
+
+    # Try exact match first (handles plurals and aliases via _get_artifact_models)
+    if top_key in models:
+        # Return the canonical artifact type ID
+        model = models[top_key]
+        # Find the canonical name from ARTIFACT_REGISTRY
+        try:
+            from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
+
+            for artifact_id, cls in ARTIFACT_REGISTRY.items():
+                if cls is model:
+                    return artifact_id
+        except ImportError:
+            pass
+        # Fallback: return the key if it's a known model
+        return top_key
 
     # Try prefix match for numbered keys (e.g., scene_1, act_2)
-    for prefix, artifact_type in ARTIFACT_KEY_PREFIXES.items():
-        if top_key.startswith(prefix):
-            return artifact_type
+    # Extract the prefix before any trailing digits/underscores
+    match = re.match(r"^([a-z_]+?)_?\d+$", top_key)
+    if match:
+        prefix = match.group(1)
+        # Check if prefix matches any registry entry
+        try:
+            from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
+
+            if prefix in ARTIFACT_REGISTRY:
+                return prefix
+        except ImportError:
+            pass
 
     return None

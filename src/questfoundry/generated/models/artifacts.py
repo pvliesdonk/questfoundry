@@ -1787,3 +1787,36 @@ class TranslationPack(BaseModel):
     blockers: list[str] | None = Field(
         default=None, title="Blockers", description="Issues preventing progress (missing context, ambiguous source)", examples=[["item1", "item2"]],
     )
+
+
+# =============================================================================
+# Artifact Registry
+# =============================================================================
+
+# Maps artifact type ID (snake_case) to Pydantic model class
+# Used by runtime validation for schema enforcement
+ARTIFACT_REGISTRY: dict[str, type[BaseModel]] = {
+    "act": Act,
+    "audio_plan": AudioPlan,
+    "beat": Beat,
+    "brief": Brief,
+    "canon_entry": CanonEntry,
+    "chapter": Chapter,
+    "character": Character,
+    "cold_asset": ColdAsset,
+    "cold_book": ColdBook,
+    "cold_section": ColdSection,
+    "cold_snapshot": ColdSnapshot,
+    "event": Event,
+    "fact": Fact,
+    "gatecheck_report": GatecheckReport,
+    "hook_card": HookCard,
+    "item": Item,
+    "location": Location,
+    "relationship": Relationship,
+    "scene": Scene,
+    "sequence": Sequence,
+    "shotlist": Shotlist,
+    "timeline": Timeline,
+    "translation_pack": TranslationPack,
+}

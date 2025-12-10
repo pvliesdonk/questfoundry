@@ -34,6 +34,7 @@
 
 from questfoundry.generated.models.enums import Agency, AssetType, GateType, HookStatus, HookType, IntentType, LoopType, QualityBar, StoreType
 from questfoundry.generated.models.artifacts import Act, AudioPlan, Beat, Brief, CanonEntry, Chapter, Character, ColdAsset, ColdBook, ColdSection, ColdSnapshot, Event, Fact, GatecheckReport, HookCard, Item, Location, Relationship, Scene, Sequence, Shotlist, Timeline, TranslationPack
+from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
 
 __all__ = [
     "Agency",
@@ -68,4 +69,5 @@ __all__ = [
     "Shotlist",
     "Timeline",
     "TranslationPack",
+    "ARTIFACT_REGISTRY",
 ]

@@ -516,6 +516,21 @@ def generate_artifacts_code(
 
         lines.append("")
 
+    # Generate ARTIFACT_REGISTRY at the end
+    lines.append("")
+    lines.append("# =============================================================================")
+    lines.append("# Artifact Registry")
+    lines.append("# =============================================================================")
+    lines.append("")
+    lines.append("# Maps artifact type ID (snake_case) to Pydantic model class")
+    lines.append("# Used by runtime validation for schema enforcement")
+    lines.append("ARTIFACT_REGISTRY: dict[str, type[BaseModel]] = {")
+    for artifact_id in sorted(artifacts.keys()):
+        cls = class_name(artifact_id)
+        lines.append(f'    "{artifact_id}": {cls},')
+    lines.append("}")
+    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -626,14 +641,16 @@ def generate_init_code(
         import_list = ", ".join(enum_names)
         lines.append(f"from questfoundry.generated.models.enums import {import_list}")
 
-    # Import artifacts
+    # Import artifacts and registry
     artifact_classes = [class_name(aid) for aid in sorted(artifacts.keys())]
     if artifact_classes:
         import_list = ", ".join(artifact_classes)
         lines.append(f"from questfoundry.generated.models.artifacts import {import_list}")
+        # Also import the registry
+        lines.append("from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY")
 
     # __all__
-    all_exports = enum_names + artifact_classes
+    all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY"]
     if all_exports:
         lines.append("")
         lines.append("__all__ = [")
