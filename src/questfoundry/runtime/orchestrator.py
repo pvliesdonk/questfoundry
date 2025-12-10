@@ -91,6 +91,7 @@ def _build_sr_tools(state: StudioState, cold_store: Any = None) -> list[BaseTool
     # Discovery tools
     list_hot_tool = ListHotStoreKeys()
     list_hot_tool.state = state_dict
+    list_hot_tool.cold_store = cold_store  # For promotion status hints
     tools.append(list_hot_tool)
 
     list_cold_tool = ListColdStoreKeys()

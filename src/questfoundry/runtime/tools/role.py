@@ -182,6 +182,7 @@ class ReturnToSR(BaseTool):
         # Log any unexpected kwargs for debugging
         if kwargs:
             logger.debug(f"return_to_sr received extra kwargs: {list(kwargs.keys())}")
+
         # Validate status (3 simple statuses)
         # - completed: work done (success or failure details go in message)
         # - blocked: cannot proceed (missing dependency, need external help)
@@ -878,17 +879,23 @@ class ListHotStoreKeys(BaseTool):
     Use this to discover what artifacts exist in hot_store before
     reading or working with them. Useful when you need to know
     what artifacts have been created by previous roles.
+
+    Also indicates which promotable artifacts (act_*, chapter_*, scene_*)
+    are NOT yet in cold_store - useful for SR to verify promotion completeness.
     """
 
     name: str = "list_hot_store_keys"
     description: str = (
         "List all artifact keys in hot_store. "
         "Use this to discover what artifacts exist. "
-        "Returns a list of keys and their types."
+        "Returns a list of keys and their types, plus which promotable "
+        "artifacts are NOT yet in cold_store."
     )
 
     # State is injected by executor
     state: dict[str, Any] = Field(default_factory=dict)
+    # ColdStore is injected for comparison (optional)
+    cold_store: Any = Field(default=None)
 
     def _run(self) -> str:
         """List all keys in hot_store."""
@@ -905,6 +912,8 @@ class ListHotStoreKeys(BaseTool):
 
         # Build key info with types
         key_info = []
+        promotable_keys = []  # Keys that could be promoted (act_*, chapter_*, scene_*)
+
         for key, value in hot_store.items():
             info = {"key": key}
             if hasattr(value, "model_dump"):
@@ -918,13 +927,29 @@ class ListHotStoreKeys(BaseTool):
                 info["type"] = type(value).__name__
             key_info.append(info)
 
-        return json.dumps(
-            {
-                "success": True,
-                "keys": key_info,
-                "count": len(key_info),
-            }
-        )
+            # Track promotable keys
+            if key.startswith(("act_", "chapter_", "scene_")):
+                promotable_keys.append(key)
+
+        result = {
+            "success": True,
+            "keys": key_info,
+            "count": len(key_info),
+        }
+
+        # If we have cold_store and promotable keys, check what's NOT in cold
+        if self.cold_store is not None and promotable_keys:
+            cold_sections = set(self.cold_store.list_sections())
+            not_in_cold = [k for k in promotable_keys if k not in cold_sections]
+
+            if not_in_cold:
+                result["promotable_not_in_cold"] = not_in_cold
+                result["promotion_hint"] = (
+                    f"{len(not_in_cold)} promotable artifact(s) not yet in cold_store. "
+                    f"Delegate to Lorekeeper to promote: {', '.join(not_in_cold)}"
+                )
+
+        return json.dumps(result)
 
 
 class ListColdStoreKeys(BaseTool):

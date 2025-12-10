@@ -228,7 +228,7 @@ def validate_artifact(
     -------
     dict[str, Any]
         On success: {"success": True, "validated": <normalized data>}
-        On failure: LLM-friendly feedback dict (see format_validation_errors)
+        On failure: LLM-friendly feedback dict with actionable hints
     """
     model = get_artifact_model(artifact_type)
     if model is None:
@@ -244,7 +244,59 @@ def validate_artifact(
             "validated": validated.model_dump(exclude_unset=True, mode="json"),
         }
     except ValidationError as e:
-        return format_validation_errors(e, artifact_type, model)
+        result = format_validation_errors(e, artifact_type, model)
+        # Enhance with 9.4 validate-with-feedback fields for common mismatches
+        _enhance_with_schema_guidance(artifact_type, data, result)
+        return result
+
+
+def _enhance_with_schema_guidance(
+    artifact_type: str, data: dict[str, Any], result: dict[str, Any]
+) -> None:
+    """Enhance validation error with 9.4 validate-with-feedback fields.
+
+    Adds:
+    - valid_* fields showing what values ARE valid
+    - Enhanced invalid_fields with 'provided' values
+    - Actionable hint with specific fix instructions
+    """
+    # Scene-specific: add valid schemas for gates and choices
+    if artifact_type == "scene":
+        result["valid_gate_schema"] = {
+            "key": "<unique_id>",
+            "gate_type": "flag | item | stat | event",
+            "description": "<optional description>",
+        }
+        result["valid_choice_schema"] = {
+            "label": "<player-visible text>",
+            "target": "<destination_scene_id>",
+            "condition": "<optional gate condition>",
+        }
+
+        # Build specific hint based on what's wrong
+        hints = []
+        gates = data.get("gates", [])
+        for i, gate in enumerate(gates):
+            if isinstance(gate, dict):
+                if "gate_id" in gate and "key" not in gate:
+                    hints.append(f"gates[{i}]: rename 'gate_id' to 'key'")
+                if "condition" in gate and "gate_type" not in gate:
+                    hints.append(f"gates[{i}]: add 'gate_type' (e.g., 'flag')")
+
+        choices = data.get("choices", [])
+        for i, choice in enumerate(choices):
+            if isinstance(choice, str):
+                hints.append(
+                    f"choices[{i}]: convert string '{choice}' to "
+                    f"{{'label': '{choice}', 'target': '<scene_id>'}}"
+                )
+
+        if hints:
+            # Prepend specific fixes to existing hint
+            fix_text = "; ".join(hints)
+            if data.get("content"):
+                fix_text += ". OR omit gates/choices (they are optional)"
+            result["hint"] = f"{fix_text}. {result.get('hint', '')}"
 
 
 def detect_artifact_type(key: str) -> str | None:

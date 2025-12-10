@@ -98,6 +98,7 @@ qf ask --project name --from-checkpoint 3 "continue"
 4. **Fixing small bugs mid-task** - Finish current task FIRST, track bugs separately
 5. **Not using checkpoints** - Use `--from-checkpoint` to skip completed work
 6. **Blaming the model** - See below
+7. **Calling regressions "separate bugs"** - See below
 
 ---
 
@@ -135,3 +136,35 @@ When tool validation fails, return structured feedback and let the LLM retry:
 ```
 
 This pattern should be applied to ALL stop tools (return_to_sr, terminate) to enforce required behaviors before allowing the role to return.
+
+---
+
+## Regression Accountability (CRITICAL)
+
+> **RULE:** If something was working and now it's broken, and you touched the code, YOU introduced a regression. Do not call it a "separate bug."
+
+**When something breaks after your changes:**
+
+1. **Accept responsibility** - You are the only one who touched the code
+2. **Investigate your changes** - Use `git diff` to see what you modified
+3. **Trace data flow** - If data was in hot_store and now it's gone, your changes broke something
+4. **Do not dismiss** - Never say "that's a separate issue" when you're the cause
+
+**Why this matters:**
+
+- Context compaction loses details of what you changed
+- Future sessions inherit your regressions without knowing
+- Dismissing as "separate" means the regression never gets fixed
+
+**Investigation steps when data disappears:**
+
+```bash
+# What files did you change?
+git diff HEAD~5 -- src/questfoundry/runtime/
+
+# Check state tools
+grep -n "state\[" src/questfoundry/runtime/tools/*.py
+
+# Check if state is being passed correctly
+grep -n "state_dict" src/questfoundry/runtime/roles.py
+```

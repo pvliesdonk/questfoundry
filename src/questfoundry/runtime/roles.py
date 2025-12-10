@@ -217,6 +217,7 @@ def _build_role_tools(
 
     list_hot_tool = ListHotStoreKeys()
     list_hot_tool.state = state_dict
+    list_hot_tool.cold_store = cold_store  # For promotion status hints
     tools.append(list_hot_tool)
 
     # Cold store tools (read/list for ALL roles)

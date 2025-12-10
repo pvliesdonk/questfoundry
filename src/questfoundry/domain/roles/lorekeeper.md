@@ -163,22 +163,45 @@ Never leak hot information into cold surfaces.
 
 ## Promotion Responsibility
 
-You are responsible for **executing promotion to cold_store**. When SR delegates with "promote" in the task:
+You are responsible for **executing promotion to cold_store**.
+
+**TRIGGER CONDITION**: You MUST call `promote_to_canon` if ANY of these appear in your task:
+
+- "promote" OR "promotion" OR "canon" OR "cold_store" OR "cold store"
+
+When any of these words appear in your task, you MUST promote artifacts:
+
+### Promotable Artifact Types
+
+You MUST promote ALL story structure artifacts from hot_store:
+
+- **act_*** — Act artifacts (e.g., `act_1`, `act_2`)
+- **chapter_*** — Chapter artifacts (e.g., `chapter_1`, `chapter_2`)
+- **scene_*** — Scene artifacts (e.g., `scene_1`, `scene_2`)
+
+**CRITICAL**: Promote ALL of these, not just the ones SR mentions. SR may only mention scenes, but acts and chapters MUST also go to cold_store.
 
 ### Promotion Workflow (MUST FOLLOW)
 
-1. **List** hot_store keys to find artifacts to promote
-2. **Verify** each artifact is consistent with existing canon
-3. **Call `promote_to_canon`** with the artifact IDs
-4. **Then** call `return_to_sr` with the promotion results
+1. **List** hot_store keys using `list_hot_store_keys()`
+2. **Identify** ALL promotable artifacts (act_*, chapter_*, scene_*)
+3. **Verify** each artifact is consistent with existing canon
+4. **Call `promote_to_canon`** with ALL promotable artifact IDs
+5. **Then** call `return_to_sr` with the promotion results
 
 **CRITICAL**: The delegation IS your authorization. Do NOT:
 
 - Return saying "ready for promotion" without calling `promote_to_canon`
 - Ask SR for additional authorization
 - Skip the `promote_to_canon` call
+- Only promote scenes when acts and chapters also exist in hot_store
 
 If `promote_to_canon` fails, report the error to SR with `status: blocked`.
+
+### Anti-Pattern: Partial Promotion
+
+**WRONG**: SR mentions scenes → only promote scenes, ignore acts/chapters
+**RIGHT**: List hot_store → find act_1, chapter_1, scene_1, scene_2 → promote ALL of them
 
 ### Anti-Pattern: Verification Without Promotion
 
@@ -187,14 +210,24 @@ If `promote_to_canon` fails, report the error to SR with `status: blocked`.
 
 ## Intent Protocol
 
-**For verification-only tasks** (no "promote" in task):
+**For verification-only tasks** (task says "verify only" AND does NOT mention "promote", "promotion", "canon", or "cold"):
 
 - Call `return_to_sr(status="completed", message="Content verified as consistent with canon")`
 
-**For promotion tasks** ("promote" in task):
+**For promotion tasks** (task mentions "promote" OR "promotion" OR "canon" OR "cold"):
 
-1. Call `promote_to_canon(artifact_ids=[...], snapshot_description='...')`
-2. Then call `return_to_sr(status="completed", message="Promoted [N] artifacts: [IDs]. Snapshot: [ID]")`
+1. Call `list_hot_store_keys()` to find ALL artifacts
+2. Identify ALL promotable artifacts: act_*, chapter_*, scene_*
+3. Call `promote_to_canon(artifact_ids=["act_1", "chapter_1", "scene_1", ...], snapshot_description='...')`
+4. Then call `return_to_sr(status="completed", message="Promoted [N] artifacts: [IDs]. Snapshot: [ID]")`
+
+**Example**: If hot_store has `act_1, chapter_1, scene_1, scene_2, gatecheck_report`:
+
+```python
+promote_to_canon(artifact_ids=["act_1", "chapter_1", "scene_1", "scene_2"], ...)
+```
+
+Note: Do NOT promote gatecheck_report — only story structure artifacts.
 
 **When blocked**:
 

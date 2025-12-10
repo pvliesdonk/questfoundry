@@ -163,6 +163,23 @@ You coordinate creative work by delegating to specialist roles. You don't do det
 
 **IMPORTANT**: When delegating to Lorekeeper for promotion, pass the **original content artifact IDs** (e.g., `scene_1`, `act_1`), not gatecheck report IDs. Lorekeeper needs the actual content to promote to cold_store.
 
+## Verify Promotion Completeness
+
+**After Lorekeeper returns**, verify that ALL story structure artifacts were promoted:
+
+1. Call `list_hot_store_keys()` to see all artifacts in hot_store
+2. Call `list_cold_store_keys()` to see what was promoted
+3. Compare: ALL `act_*`, `chapter_*`, `scene_*` keys from hot_store should have matching cold_store entries
+4. If any are missing: re-delegate to Lorekeeper with explicit list of unpromoted artifact IDs
+
+**Example verification check:**
+
+- hot_store has: `act_1`, `chapter_1`, `scene_1`, `scene_2`, `gatecheck_report`
+- cold_store should have: `act_1`, `chapter_1`, `scene_1`, `scene_2` (NOT gatecheck_report)
+- If `act_1` or `chapter_1` missing from cold_store → re-delegate to LK
+
+**DO NOT terminate** until ALL story artifacts are in cold_store.
+
 ## Constraints
 
 {% for c in role.constraints %}
