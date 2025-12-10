@@ -530,24 +530,28 @@ def generate_artifacts_code(
     lines.append("}")
     lines.append("")
 
-    # Generate COLD_PROMOTION_CONFIG for runtime cold_store promotion
+    # Generate PROMOTABLE_ARTIFACTS for runtime cold_store promotion
     lines.append("")
     lines.append("# =============================================================================")
-    lines.append("# Cold Promotion Configuration")
+    lines.append("# Promotable Artifacts")
     lines.append("# =============================================================================")
     lines.append("")
-    lines.append("# Maps artifact class name to cold promotion config.")
-    lines.append("# Only artifacts with store: cold or store: both and a content_field can be promoted.")
-    lines.append("# Used by runtime promote_to_canon for extraction and validation.")
-    lines.append("COLD_PROMOTION_CONFIG: dict[str, dict[str, str | bool]] = {")
+    lines.append("# Set of artifact class names that can be promoted to cold_store.")
+    lines.append("# Determined by store: cold or store: both in domain definitions.")
+    lines.append("# Runtime routes each type to appropriate cold_store method (add_act, add_chapter, add_section).")
+    lines.append("PROMOTABLE_ARTIFACTS: set[str] = {")
     for artifact_id in sorted(artifacts.keys()):
         artifact_ir = artifacts[artifact_id]
         # Only include artifacts that can be promoted to cold_store
-        if artifact_ir.store.value in ("cold", "both") and artifact_ir.content_field:
+        if artifact_ir.store.value in ("cold", "both"):
             cls = class_name(artifact_id)
-            content_field = artifact_ir.content_field
-            requires = "True" if artifact_ir.requires_content else "False"
-            lines.append(f'    "{cls}": {{"content_field": "{content_field}", "requires_content": {requires}}},')
+            lines.append(f'    "{cls}",')
+    lines.append("}")
+    lines.append("")
+    lines.append("# Legacy alias for backwards compatibility")
+    lines.append("COLD_PROMOTION_CONFIG: dict[str, dict[str, str | bool | None]] = {")
+    lines.append('    cls: {"content_field": None, "requires_content": False}')
+    lines.append("    for cls in PROMOTABLE_ARTIFACTS")
     lines.append("}")
     lines.append("")
 
@@ -666,12 +670,13 @@ def generate_init_code(
     if artifact_classes:
         import_list = ", ".join(artifact_classes)
         lines.append(f"from questfoundry.generated.models.artifacts import {import_list}")
-        # Also import the registry and cold promotion config
+        # Also import the registry and promotion config
         lines.append("from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY")
+        lines.append("from questfoundry.generated.models.artifacts import PROMOTABLE_ARTIFACTS")
         lines.append("from questfoundry.generated.models.artifacts import COLD_PROMOTION_CONFIG")
 
     # __all__
-    all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY", "COLD_PROMOTION_CONFIG"]
+    all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY", "PROMOTABLE_ARTIFACTS", "COLD_PROMOTION_CONFIG"]
     if all_exports:
         lines.append("")
         lines.append("__all__ = [")

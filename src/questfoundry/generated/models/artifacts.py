@@ -1700,10 +1700,10 @@ class Scene(BaseModel):
     ----------
     title : str
         Scene title or identifier
+    section_id : str
+        Parent section this scene belongs to
     content : str
         The scene prose content
-    chapter_id : str | None
-        Parent chapter this scene belongs to (optional for standalone scenes) (optional)
     status : str | None
         Current lifecycle status (defaults to 'draft') (optional)
     sequence : int | None
@@ -1727,6 +1727,7 @@ class Scene(BaseModel):
 
         item = Scene(
             title="example_title",
+            section_id="example_section_id",
             content="example_content",
         )
     """
@@ -1737,6 +1738,7 @@ class Scene(BaseModel):
             'examples': [
                 {
                     'title': 'example_title',
+                    'section_id': 'example_section_id',
                     'content': 'example_content',
                 },
             ],
@@ -1749,11 +1751,11 @@ class Scene(BaseModel):
     title: str = Field(
         ..., title="Title", description="Scene title or identifier", examples=["example_title"],
     )
+    section_id: str = Field(
+        ..., title="Section Id", description="Parent section this scene belongs to", examples=["example_section_id"],
+    )
     content: str = Field(
         ..., title="Content", description="The scene prose content", examples=["example_content"],
-    )
-    chapter_id: str | None = Field(
-        default=None, title="Chapter Id", description="Parent chapter this scene belongs to (optional for standalone scenes)", examples=["example_chapter_id"],
     )
     status: str | None = Field(
         default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
@@ -2108,20 +2110,36 @@ ARTIFACT_REGISTRY: dict[str, type[BaseModel]] = {
 
 
 # =============================================================================
-# Cold Promotion Configuration
+# Promotable Artifacts
 # =============================================================================
 
-# Maps artifact class name to cold promotion config.
-# Only artifacts with store: cold or store: both and a content_field can be promoted.
-# Used by runtime promote_to_canon for extraction and validation.
-COLD_PROMOTION_CONFIG: dict[str, dict[str, str | bool]] = {
-    "CanonEntry": {"content_field": "content", "requires_content": True},
-    "Character": {"content_field": "description", "requires_content": True},
-    "Event": {"content_field": "description", "requires_content": True},
-    "Fact": {"content_field": "statement", "requires_content": True},
-    "Item": {"content_field": "description", "requires_content": True},
-    "Location": {"content_field": "description", "requires_content": True},
-    "Relationship": {"content_field": "description", "requires_content": False},
-    "Scene": {"content_field": "content", "requires_content": True},
-    "Timeline": {"content_field": "description", "requires_content": False},
+# Set of artifact class names that can be promoted to cold_store.
+# Determined by store: cold or store: both in domain definitions.
+# Runtime routes each type to appropriate cold_store method (add_act, add_chapter, add_section).
+PROMOTABLE_ARTIFACTS: set[str] = {
+    "Act",
+    "CanonEntry",
+    "Chapter",
+    "Character",
+    "Choice",
+    "ColdAct",
+    "ColdAsset",
+    "ColdBook",
+    "ColdChapter",
+    "ColdSection",
+    "ColdSnapshot",
+    "Event",
+    "Fact",
+    "Gate",
+    "Item",
+    "Location",
+    "Relationship",
+    "Scene",
+    "Timeline",
+}
+
+# Legacy alias for backwards compatibility
+COLD_PROMOTION_CONFIG: dict[str, dict[str, str | bool | None]] = {
+    cls: {"content_field": None, "requires_content": False}
+    for cls in PROMOTABLE_ARTIFACTS
 }

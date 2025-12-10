@@ -20,8 +20,6 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.tools import BaseTool
 from pydantic import Field, ValidationError
 
-from questfoundry.generated.models.artifacts import COLD_PROMOTION_CONFIG
-
 if TYPE_CHECKING:
     from questfoundry.runtime.stores import ColdStore
 
@@ -64,6 +62,7 @@ def _detect_artifact_type(data: dict[str, Any]) -> tuple[str | None, Any | None,
     )
 
     # Order by specificity: more constrained schemas first
+    # Chapter must come before Act (both have title+sequence, but Chapter has more fields)
     models = [
         ("Scene", Scene),
         ("CanonEntry", CanonEntry),
@@ -72,8 +71,8 @@ def _detect_artifact_type(data: dict[str, Any]) -> tuple[str | None, Any | None,
         ("Item", Item),
         ("Event", Event),
         ("Fact", Fact),
+        ("Chapter", Chapter),  # Before Act - has act_id, scenes, summary
         ("Act", Act),
-        ("Chapter", Chapter),
         ("Timeline", Timeline),
         ("Relationship", Relationship),
     ]
@@ -99,46 +98,51 @@ def _extract_content_for_cold(
 ) -> tuple[str | None, str | None]:
     """Extract the content field value for cold_store promotion.
 
-    Uses COLD_PROMOTION_CONFIG from generated models to determine:
-    - Which field contains the prose content
-    - Whether content is required for this artifact type
+    Uses PROMOTABLE_ARTIFACTS to check if the artifact can be promoted.
+    Content extraction is type-dependent:
+    - Scene/CanonEntry: Extract from 'content' field
+    - Act/Chapter: Structural, no content to extract (returns empty string)
+    - Others: Try common content fields
 
     Returns:
         Tuple of (content_value, error_message).
         If extraction succeeds, error_message is None.
         If extraction fails, content_value is None and error_message explains why.
     """
-    # Look up cold promotion config for this artifact type
-    config = COLD_PROMOTION_CONFIG.get(artifact_type)
-    if not config:
+    from questfoundry.generated.models.artifacts import PROMOTABLE_ARTIFACTS
+
+    # Normalize type for comparison (key-based detection returns lowercase)
+    artifact_type_lower = artifact_type.lower()
+    promotable_lower = {t.lower() for t in PROMOTABLE_ARTIFACTS}
+
+    # Check if this artifact type is promotable
+    if artifact_type_lower not in promotable_lower:
         return None, (
             f"Artifact type '{artifact_type}' cannot be promoted to cold_store. "
-            f"Only artifacts with store: cold/both and content_field can be promoted. "
-            f"Promotable types: {', '.join(sorted(COLD_PROMOTION_CONFIG.keys()))}"
+            f"Promotable types: {', '.join(sorted(PROMOTABLE_ARTIFACTS))}"
         )
 
-    content_field = config["content_field"]
-    requires_content = config.get("requires_content", True)
+    # Structural artifacts don't have prose content
+    structural_types = {"act", "chapter", "choice", "gate"}
+    if artifact_type_lower in structural_types:
+        # These artifacts store metadata, not prose content
+        # Return description or empty string
+        content = getattr(validated_model, "description", None) or ""
+        return content, None
 
-    # Get content from validated model
-    content = getattr(validated_model, content_field, None)
+    # Content-bearing artifacts: try common content fields
+    content_fields = ["content", "statement", "description"]
+    for field in content_fields:
+        content = getattr(validated_model, field, None)
+        if content:
+            return content, None
 
-    # Check if this type requires content
-    if requires_content and not content:
-        return None, (
-            f"Artifact '{artifact_id}' ({artifact_type}) is missing required "
-            f"'{content_field}' field. Schema requires this field for cold promotion."
-        )
-
-    # For optional content types, allow empty but log
-    if not content:
-        logger.warning(
-            f"Artifact '{artifact_id}' ({artifact_type}) has no '{content_field}' value. "
-            f"Promoting with empty content."
-        )
-        content = ""
-
-    return content, None
+    # No content found - this may be OK for some types
+    logger.warning(
+        f"Artifact '{artifact_id}' ({artifact_type}) has no content field. "
+        f"Promoting with empty content."
+    )
+    return "", None
 
 
 class ReturnToSR(BaseTool):
@@ -656,12 +660,30 @@ class PromoteToCanon(BaseTool):
 
         hot_store = self.state.get("hot_store", {})
         promoted = []
-        errors = []
+
+        # Import validation utilities
+        from questfoundry.runtime.validation import detect_artifact_type, validate_artifact
+
+        # Helper to return structured error per 9.4 validate-with-feedback pattern
+        def _validation_error(artifact_id: str, error: str, invalid_fields: list, hint: str):
+            return json.dumps({
+                "success": False,
+                "error": error,
+                "artifact_id": artifact_id,
+                "invalid_fields": invalid_fields,
+                "hint": hint,
+            })
 
         for artifact_id in artifact_ids:
+            # Check artifact exists - fail immediately with feedback
             if artifact_id not in hot_store:
-                errors.append(f"Artifact '{artifact_id}' not found in hot_store")
-                continue
+                return _validation_error(
+                    artifact_id,
+                    f"Artifact '{artifact_id}' not found in hot_store",
+                    [{"field": "artifact_id", "provided": artifact_id, "issue": "not found"}],
+                    f"Use list_hot_store_keys to see available artifacts. "
+                    f"Create '{artifact_id}' with write_hot_sot before promoting.",
+                )
 
             artifact = hot_store[artifact_id]
 
@@ -671,11 +693,13 @@ class PromoteToCanon(BaseTool):
             elif isinstance(artifact, dict):
                 artifact_data = artifact
             else:
-                errors.append(
-                    f"Artifact '{artifact_id}' is not a dict or model. "
-                    f"Got type: {type(artifact).__name__}. Cannot validate against schema."
+                return _validation_error(
+                    artifact_id,
+                    f"Artifact '{artifact_id}' has invalid type: {type(artifact).__name__}",
+                    [{"field": "type", "provided": type(artifact).__name__,
+                      "issue": "must be dict"}],
+                    "Artifacts must be dicts. Use write_hot_sot with a dict value.",
                 )
-                continue
 
             # Handle nested 'data' field (some artifacts wrap content)
             if "data" in artifact_data and isinstance(artifact_data["data"], dict):
@@ -683,17 +707,53 @@ class PromoteToCanon(BaseTool):
             else:
                 content_data = artifact_data
 
-            # Schema-based validation: detect artifact type and validate
-            artifact_type, validated_model, validation_errors = _detect_artifact_type(content_data)
-
+            # Key-based type detection (more reliable than schema matching)
+            artifact_type = detect_artifact_type(artifact_id)
             if artifact_type is None:
-                # Artifact doesn't match any known schema
-                errors.append(
-                    f"Artifact '{artifact_id}' does not match any cold-store-eligible schema. "
-                    f"Validation failures: {'; '.join(validation_errors[:3])}. "
-                    f"Use consult_schema to check artifact requirements."
-                )
-                continue
+                # Fall back to schema-based detection
+                artifact_type, validated_model, validation_errors = _detect_artifact_type(content_data)
+                if artifact_type is None:
+                    return _validation_error(
+                        artifact_id,
+                        f"Cannot determine artifact type for '{artifact_id}'",
+                        [{"field": "artifact_id", "provided": artifact_id,
+                          "issue": f"Key must start with type prefix (e.g., scene_1, act_1). Errors: {'; '.join(validation_errors[:2])}"}],
+                        "Use artifact keys like 'scene_1', 'act_1', 'chapter_1'. "
+                        "Run consult_schema to see required fields for each type.",
+                    )
+            else:
+                # Validate the data against the detected type
+                # validate_artifact returns dict: {"success": bool, "validated": dict} or error dict
+                validation_result = validate_artifact(artifact_type, content_data)
+                if not validation_result.get("success", False):
+                    # Extract error info from validation result
+                    invalid_fields = validation_result.get("invalid_fields", [])
+                    missing_fields = validation_result.get("missing_fields", [])
+
+                    # Build combined invalid_fields list
+                    all_invalid = []
+                    for field in missing_fields:
+                        all_invalid.append({"field": field, "issue": "Field required"})
+                    all_invalid.extend(invalid_fields)
+
+                    return _validation_error(
+                        artifact_id,
+                        f"Artifact '{artifact_id}' ({artifact_type}) failed schema validation",
+                        (
+                            all_invalid[:5]
+                            if all_invalid
+                            else [{"field": "unknown", "issue": "Validation failed"}]
+                        ),
+                        f"Use consult_schema(artifact_type='{artifact_type}') "
+                        f"to see required fields. Update '{artifact_id}' with "
+                        "write_hot_sot to add missing fields, then retry.",
+                    )
+
+                # Create a SimpleNamespace from validated dict for getattr compatibility
+                from types import SimpleNamespace
+
+                validated_data = validation_result.get("validated", content_data)
+                validated_model = SimpleNamespace(**validated_data)
 
             # Extract content from the correct field for this artifact type
             content, extract_error = _extract_content_for_cold(
@@ -701,8 +761,13 @@ class PromoteToCanon(BaseTool):
             )
 
             if extract_error:
-                errors.append(extract_error)
-                continue
+                return _validation_error(
+                    artifact_id,
+                    f"Content extraction failed for '{artifact_id}'",
+                    [{"field": "content", "issue": extract_error}],
+                    f"Artifact type '{artifact_type}' requires a content field. "
+                    f"Use consult_schema(artifact_type='{artifact_type}') to see requirements.",
+                )
 
             # Extract title (try common fields, fall back to artifact_id)
             title = (
@@ -736,20 +801,61 @@ class PromoteToCanon(BaseTool):
                 ]
             requires_gate = bool(gates)
 
-            # Add to cold_store using new API with interactive fiction support
+            # Route to appropriate cold_store method based on artifact type
+            # Normalize type name (key-based detection returns lowercase)
+            artifact_type_lower = artifact_type.lower()
             try:
-                self.cold_store.add_section(
-                    anchor=artifact_id,
-                    title=title,
-                    content=content,
-                    source_brief_id=artifact_id,  # Track lineage
-                    choices=choices,
-                    gates=gates,
-                    requires_gate=requires_gate,
-                )
+                if artifact_type_lower == "act":
+                    # Extract Act-specific fields
+                    from questfoundry.generated.models.enums import Visibility
+                    sequence = getattr(validated_model, "sequence", 1)
+                    description = getattr(validated_model, "description", None)
+                    visibility_val = getattr(validated_model, "visibility", None)
+                    visibility = visibility_val if visibility_val else Visibility.PUBLIC
+
+                    self.cold_store.add_act(
+                        anchor=artifact_id,
+                        title=title,
+                        sequence=sequence,
+                        description=description,
+                        visibility=visibility,
+                    )
+                elif artifact_type_lower == "chapter":
+                    # Extract Chapter-specific fields
+                    from questfoundry.generated.models.enums import Visibility
+                    sequence = getattr(validated_model, "sequence", 1)
+                    act_anchor = getattr(validated_model, "act_id", None)
+                    summary = getattr(validated_model, "summary", None)
+                    visibility_val = getattr(validated_model, "visibility", None)
+                    visibility = visibility_val if visibility_val else Visibility.PUBLIC
+
+                    self.cold_store.add_chapter(
+                        anchor=artifact_id,
+                        title=title,
+                        sequence=sequence,
+                        act_anchor=act_anchor,
+                        summary=summary,
+                        visibility=visibility,
+                    )
+                else:
+                    # Content-bearing artifacts use add_section
+                    self.cold_store.add_section(
+                        anchor=artifact_id,
+                        title=title,
+                        content=content,
+                        source_brief_id=artifact_id,  # Track lineage
+                        choices=choices,
+                        gates=gates,
+                        requires_gate=requires_gate,
+                    )
                 promoted.append(artifact_id)
             except Exception as e:
-                errors.append(f"Failed to promote '{artifact_id}': {e}")
+                return _validation_error(
+                    artifact_id,
+                    f"Cold store write failed for '{artifact_id}'",
+                    [{"field": "cold_store", "issue": str(e)}],
+                    "This is likely a database error. Check cold_store connection and retry.",
+                )
 
         # Create snapshot if requested and we promoted something
         snapshot_id = None
@@ -759,9 +865,8 @@ class PromoteToCanon(BaseTool):
 
         return json.dumps(
             {
-                "success": len(promoted) > 0,
+                "success": True,
                 "promoted": promoted,
-                "errors": errors if errors else None,
                 "snapshot_id": snapshot_id,
             }
         )

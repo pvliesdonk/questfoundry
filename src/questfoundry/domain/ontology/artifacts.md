@@ -256,10 +256,10 @@ description: "Scene title or identifier"
 
 :::{artifact-field}
 artifact: scene
-name: chapter_id
+name: section_id
 type: str
-required: false
-description: "Parent chapter this scene belongs to (optional for standalone scenes)"
+required: true
+description: "Parent section this scene belongs to"
 :::
 
 :::{artifact-field}
