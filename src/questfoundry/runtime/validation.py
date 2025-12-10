@@ -289,6 +289,28 @@ HOT_SOT_KEY_TO_ARTIFACT: dict[str, str] = {
     "scene": "scene",
 }
 
+# Prefixes for numbered artifact keys (e.g., scene_1, act_1, chapter_2)
+ARTIFACT_KEY_PREFIXES: dict[str, str] = {
+    "scene_": "scene",
+    "act_": "act",
+    "chapter_": "chapter",
+    "hook_": "hook_card",
+    "brief_": "brief",
+    "gatecheck_": "gatecheck_report",
+    "character_": "character",
+    "location_": "location",
+    "item_": "item",
+    "event_": "event",
+    "fact_": "fact",
+    "relationship_": "relationship",
+    "timeline_": "timeline",
+    "sequence_": "sequence",
+    "beat_": "beat",
+    "shotlist_": "shotlist",
+    "audio_plan_": "audio_plan",
+    "translation_pack_": "translation_pack",
+}
+
 
 def detect_artifact_type(key: str) -> str | None:
     """Detect artifact type from hot_sot key.
@@ -296,13 +318,26 @@ def detect_artifact_type(key: str) -> str | None:
     Parameters
     ----------
     key : str
-        The hot_sot key (e.g., "hooks", "briefs").
+        The hot_sot key (e.g., "hooks", "briefs", "scene_1", "act_2").
 
     Returns
     -------
     str | None
         The artifact type, or None if not a known artifact key.
     """
+    if not key:
+        return None
+
     # Extract top-level key (e.g., "hooks.0" -> "hooks")
-    top_key = key.split(".")[0] if key else None
-    return HOT_SOT_KEY_TO_ARTIFACT.get(top_key) if top_key else None
+    top_key = key.split(".")[0]
+
+    # Try exact match first
+    if top_key in HOT_SOT_KEY_TO_ARTIFACT:
+        return HOT_SOT_KEY_TO_ARTIFACT[top_key]
+
+    # Try prefix match for numbered keys (e.g., scene_1, act_2)
+    for prefix, artifact_type in ARTIFACT_KEY_PREFIXES.items():
+        if top_key.startswith(prefix):
+            return artifact_type
+
+    return None
