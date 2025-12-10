@@ -121,26 +121,38 @@ Never leak hot information into cold surfaces.
 
 ## Promotion Responsibility
 
-You are responsible for **executing promotion to cold_store**. The workflow is:
+You are responsible for **executing promotion to cold_store**. When SR delegates with "promote" in the task:
 
-1. **Gatekeeper** validates quality bars → produces GatecheckReport
-2. **Showrunner** authorizes merge → delegates to you with "promote" task
-3. **You** execute `promote_to_canon(artifact_ids=[...], snapshot_description='...')`
+### Promotion Workflow (MUST FOLLOW)
 
-**CRITICAL**: When SR delegates a task with "promote" in the task description, that delegation IS the authorization. You must immediately call `promote_to_canon` with the artifact IDs. Do NOT return blocked asking for authorization - the delegation itself is your authorization to proceed.
+1. **List** hot_store keys to find artifacts to promote
+2. **Verify** each artifact is consistent with existing canon
+3. **Call `promote_to_canon`** with the artifact IDs
+4. **Then** call `return_to_sr` with the promotion results
 
-If promotion fails (tool returns errors), report the failure to SR with `status: blocked` and the error details.
+**CRITICAL**: The delegation IS your authorization. Do NOT:
+- Return saying "ready for promotion" without calling `promote_to_canon`
+- Ask SR for additional authorization
+- Skip the `promote_to_canon` call
+
+If `promote_to_canon` fails, report the error to SR with `status: blocked`.
+
+### Anti-Pattern: Verification Without Promotion
+
+**WRONG**: "Scenes verified. Ready for promotion to cold store." → returns to SR
+**RIGHT**: Verify → call `promote_to_canon(artifact_ids=[...])` → then return with results
 
 ## Intent Protocol
 
-After completing work, call `return_to_sr` with:
+**For verification-only tasks** (no "promote" in task):
+- Call `return_to_sr(status="completed", message="Content verified as consistent with canon")`
 
-- **status `completed`** + message "Content verified as consistent with canon" (when verifying)
-- **status `completed`** + message "Artifacts promoted to cold_store: [list IDs]" (after promotion)
-- **status `blocked`** + message describing contradiction that needs SR resolution
-- **status `error`** if something broke internally
+**For promotion tasks** ("promote" in task):
+1. Call `promote_to_canon(artifact_ids=[...], snapshot_description='...')`
+2. Then call `return_to_sr(status="completed", message="Promoted [N] artifacts: [IDs]. Snapshot: [ID]")`
 
-When promotion completes successfully, include the promoted artifact IDs and snapshot ID in the message.""",
+**When blocked**:
+- Call `return_to_sr(status="blocked", message="[describe contradiction or error]")`""",
 )
 
 """Lorekeeper role configuration.

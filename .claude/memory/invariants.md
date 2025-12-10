@@ -97,3 +97,41 @@ qf ask --project name --from-checkpoint 3 "continue"
 3. **Forgetting LK writes cold** - Only Lorekeeper promotes to canon
 4. **Fixing small bugs mid-task** - Finish current task FIRST, track bugs separately
 5. **Not using checkpoints** - Use `--from-checkpoint` to skip completed work
+6. **Blaming the model** - See below
+
+---
+
+## Model Capability Bias (DO NOT DO)
+
+> **CRITICAL:** When LLM agents don't follow instructions, the problem is PROMPT ENGINEERING, not model capability.
+
+**Facts:**
+
+- qwen3:8b via Ollama works for QuestFoundry tasks
+- GPT-5 and Sonnet 4.5 do NOT perform better on these tasks
+- When roles fail to call required tools, it's a **regression** that worked before
+
+**When a role doesn't follow instructions:**
+
+1. Check if ARCHITECTURE.md 9.4 Validate-with-Feedback is applied
+2. Strengthen the prompt with explicit enforcement
+3. Add validation that returns structured errors
+4. DO NOT suggest "use a more capable model"
+
+---
+
+## Key Architecture Patterns
+
+### 9.4 Validate-with-Feedback Pattern
+
+When tool validation fails, return structured feedback and let the LLM retry:
+
+```json
+{
+  "success": false,
+  "error": "Task included 'promote' but promote_to_canon was not called",
+  "hint": "Call promote_to_canon(artifact_keys=[...]) before returning"
+}
+```
+
+This pattern should be applied to ALL stop tools (return_to_sr, terminate) to enforce required behaviors before allowing the role to return.
