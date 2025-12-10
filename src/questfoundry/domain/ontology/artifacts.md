@@ -223,14 +223,24 @@ description: "Hook card IDs this brief addresses"
 
 ## Scene
 
-A scene is a unit of narrative content within the story structure.
-Scenes live in cold store once finalized.
+A scene is the fundamental unit of **player-visible content** in QuestFoundry.
+Scenes contain the actual prose that players read during interactive fiction.
+
+**IMPORTANT:** Scenes are the ONLY artifacts that become cold_store sections.
+
+- Scene.content → ColdSection.content (the prose players see)
+- Scene.choices → ColdSection.choices (player navigation options)
+- Scene.gates → ColdSection.gates (access conditions)
+
+Acts and Chapters are organizational metadata; Scenes are the player experience.
 
 :::{artifact-type}
 id: scene
 name: "Scene"
 store: both
 lifecycle: [draft, review, final]
+content_field: content
+requires_content: true
 :::
 
 ### Fields
@@ -245,10 +255,10 @@ description: "Scene title or identifier"
 
 :::{artifact-field}
 artifact: scene
-name: section_id
+name: chapter_id
 type: str
-required: true
-description: "Parent section this scene belongs to"
+required: false
+description: "Parent chapter this scene belongs to (optional for standalone scenes)"
 :::
 
 :::{artifact-field}
@@ -272,13 +282,13 @@ artifact: scene
 name: sequence
 type: int
 required: false
-description: "Order within the section"
+description: "Order within the chapter"
 :::
 
 :::{artifact-field}
 artifact: scene
 name: gates
-type: list[str]
+type: list[Gate]
 required: false
 description: "Gate conditions that control access to this scene"
 :::
@@ -286,7 +296,7 @@ description: "Gate conditions that control access to this scene"
 :::{artifact-field}
 artifact: scene
 name: choices
-type: list[str]
+type: list[Choice]
 required: false
 description: "Available choices/exits from this scene"
 :::
@@ -309,6 +319,110 @@ description: "Voice/register guidance for this scene"
 
 ---
 
+## Choice
+
+A choice is a player-facing action that links to another scene.
+Choices are the fundamental navigation element of interactive fiction.
+
+:::{artifact-type}
+id: choice
+name: "Choice"
+store: both
+description: "A player decision linking to another scene"
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: choice
+name: label
+type: str
+required: true
+description: "Player-visible text for this choice (e.g., 'Enter the library')"
+:::
+
+:::{artifact-field}
+artifact: choice
+name: target
+type: str
+required: true
+description: "Anchor of the destination scene this choice leads to"
+:::
+
+:::{artifact-field}
+artifact: choice
+name: condition
+type: str
+required: false
+description: "Gate condition that must be met for this choice to be available (e.g., 'has_key')"
+:::
+
+:::{artifact-field}
+artifact: choice
+name: sequence
+type: int
+required: false
+description: "Display order among choices (lower numbers first)"
+:::
+
+:::{artifact-field}
+artifact: choice
+name: consequence
+type: str
+required: false
+description: "Codeword or flag set when this choice is taken (e.g., 'chose_stealth')"
+:::
+
+---
+
+## Gate
+
+A gate is a diegetic condition controlling access to content.
+Gates are always phrased in-world, never as system messages.
+
+:::{artifact-type}
+id: gate
+name: "Gate"
+store: both
+description: "A condition controlling access to content"
+:::
+
+### Fields
+
+:::{artifact-field}
+artifact: gate
+name: key
+type: str
+required: true
+description: "Unique identifier for this gate condition (e.g., 'has_red_key', 'knows_secret')"
+:::
+
+:::{artifact-field}
+artifact: gate
+name: gate_type
+type: GateType
+required: true
+description: "Category of condition (token, reputation, knowledge, physical, temporal, composite)"
+:::
+
+:::{artifact-field}
+artifact: gate
+name: description
+type: str
+required: false
+description: "Diegetic explanation shown to player when gate is relevant"
+:::
+
+:::{artifact-field}
+artifact: gate
+name: unlock_hint
+type: str
+required: false
+description: "Optional hint about how to satisfy this gate (for player or author)"
+:::
+
+---
+
 ## CanonEntry
 
 A canon entry is a verified fact about the world.
@@ -319,6 +433,8 @@ id: canon_entry
 name: "Canon Entry"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: content
+requires_content: true
 :::
 
 ### Fields
@@ -471,6 +587,8 @@ id: character
 name: "Character"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: description
+requires_content: true
 :::
 
 ### Fields
@@ -543,6 +661,8 @@ id: location
 name: "Location"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: description
+requires_content: true
 :::
 
 ### Fields
@@ -615,6 +735,8 @@ id: item
 name: "Item"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: description
+requires_content: true
 :::
 
 ### Fields
@@ -687,6 +809,8 @@ id: relationship
 name: "Relationship"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: description
+requires_content: false
 :::
 
 ### Fields
@@ -751,13 +875,19 @@ description: "Categorization tags (public, secret, evolving, etc.)"
 
 ## Act
 
-An act is a major structural division of the story.
+An act is a structural division for organizing the story.
 Acts group chapters and represent significant narrative phases.
+
+**NOTE:** Acts are organizational metadata for the author, NOT player-facing content.
+
+- Simple stories have **one implicit act** containing all scenes
+- Multi-act stories use explicit acts to organize larger narrative arcs
+- Only **Scenes** contain player-visible prose that gets promoted to cold_store sections
 
 :::{artifact-type}
 id: act
 name: "Act"
-store: cold
+store: hot
 lifecycle: [draft, review, final]
 :::
 
@@ -807,13 +937,19 @@ description: "Thematic elements explored in this act"
 
 ## Chapter
 
-A chapter is a major content division containing multiple scenes.
+A chapter is a content division containing multiple scenes.
 Chapters organize scenes into coherent narrative segments.
+
+**NOTE:** Chapters are organizational metadata, NOT player-facing content.
+
+- Simple stories have **one implicit chapter** containing all scenes
+- Multi-chapter stories use explicit chapters to group related scenes
+- Only **Scenes** contain player-visible prose that gets promoted to cold_store sections
 
 :::{artifact-type}
 id: chapter
 name: "Chapter"
-store: cold
+store: hot
 lifecycle: [draft, review, final]
 :::
 
@@ -999,6 +1135,8 @@ id: timeline
 name: "Timeline"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: description
+requires_content: false
 :::
 
 ### Fields
@@ -1055,6 +1193,8 @@ id: event
 name: "Event"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: description
+requires_content: true
 :::
 
 ### Fields
@@ -1135,6 +1275,8 @@ id: fact
 name: "Fact"
 store: cold
 lifecycle: [draft, verified, canon]
+content_field: statement
+requires_content: true
 :::
 
 ### Fields

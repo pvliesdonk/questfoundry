@@ -214,12 +214,19 @@ def _extract_artifacts(
             store_str = directive.content.get("store", "hot")
             store = StoreType(store_str) if store_str in ["hot", "cold", "both"] else StoreType.HOT
 
+            # Parse cold promotion config
+            content_field = directive.content.get("content_field")
+            requires_content_raw = directive.content.get("requires_content", True)
+            requires_content = requires_content_raw not in (False, "false", "False", "no", "No")
+
             artifacts[artifact_id] = ArtifactTypeIR(
                 id=artifact_id,
                 name=directive.content.get("name", artifact_id),
                 store=store,
                 lifecycle=directive.content.get("lifecycle", []),
                 fields=[],
+                content_field=content_field,
+                requires_content=requires_content,
             )
 
         elif directive.type == DirectiveType.ARTIFACT_FIELD:

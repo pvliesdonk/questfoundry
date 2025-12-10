@@ -47,13 +47,13 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from questfoundry.generated.models.enums import AssetType, HookStatus, HookType, LoopType, QualityBar
+from questfoundry.generated.models.enums import AssetType, GateType, HookStatus, HookType, LoopType, QualityBar
 
 
 class Act(BaseModel):
     """Act.
 
-    Store: cold
+    Store: hot
     Lifecycle: draft → review → final
 
     Attributes
@@ -447,7 +447,7 @@ class CanonEntry(BaseModel):
 class Chapter(BaseModel):
     """Chapter.
 
-    Store: cold
+    Store: hot
     Lifecycle: draft → review → final
 
     Attributes
@@ -582,6 +582,64 @@ class Character(BaseModel):
     )
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags (mortal, immortal, recurring, etc.)", examples=[["item1", "item2"]],
+    )
+
+
+class Choice(BaseModel):
+    """Choice.
+
+    Store: both
+
+    Attributes
+    ----------
+    label : str
+        Player-visible text for this choice (e.g., 'Enter the library')
+    target : str
+        Anchor of the destination scene this choice leads to
+    condition : str | None
+        Gate condition that must be met for this choice to be available (e.g., 'has_key') (optional)
+    sequence : int | None
+        Display order among choices (lower numbers first) (optional)
+    consequence : str | None
+        Codeword or flag set when this choice is taken (e.g., 'chose_stealth') (optional)
+
+    Examples
+    --------
+    Create a Choice::
+
+        from questfoundry.generated.models import Choice
+
+        item = Choice(
+            label="example_label",
+            target="example_target",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'label': 'example_label',
+                    'target': 'example_target',
+                },
+            ],
+        },
+    )
+
+    label: str = Field(
+        ..., title="Label", description="Player-visible text for this choice (e.g., 'Enter the library')", examples=["example_label"],
+    )
+    target: str = Field(
+        ..., title="Target", description="Anchor of the destination scene this choice leads to", examples=["example_target"],
+    )
+    condition: str | None = Field(
+        default=None, title="Condition", description="Gate condition that must be met for this choice to be available (e.g., 'has_key')", examples=["example_condition"],
+    )
+    sequence: int | None = Field(
+        default=None, title="Sequence", description="Display order among choices (lower numbers first)", examples=[1],
+    )
+    consequence: str | None = Field(
+        default=None, title="Consequence", description="Codeword or flag set when this choice is taken (e.g., 'chose_stealth')", examples=["example_consequence"],
     )
 
 
@@ -752,6 +810,10 @@ class ColdSection(BaseModel):
         Whether this section has access conditions (optional)
     source_brief_id : str | None
         ID of the Brief that produced this section (lineage) (optional)
+    choices : list[Choice] | None
+        Available choices/exits from this section for interactive fiction (optional)
+    gates : list[Gate] | None
+        Gate conditions that control access to this section (optional)
 
     Examples
     --------
@@ -804,6 +866,12 @@ class ColdSection(BaseModel):
     )
     source_brief_id: str | None = Field(
         default=None, title="Source Brief Id", description="ID of the Brief that produced this section (lineage)", examples=["example_source_brief_id"],
+    )
+    choices: list[Choice] | None = Field(
+        default=None, title="Choices", description="Available choices/exits from this section for interactive fiction", examples=[[]],
+    )
+    gates: list[Gate] | None = Field(
+        default=None, title="Gates", description="Gate conditions that control access to this section", examples=[[]],
     )
 
 
@@ -1020,6 +1088,59 @@ class Fact(BaseModel):
     )
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags for filtering and search", examples=[["item1", "item2"]],
+    )
+
+
+class Gate(BaseModel):
+    """Gate.
+
+    Store: both
+
+    Attributes
+    ----------
+    key : str
+        Unique identifier for this gate condition (e.g., 'has_red_key', 'knows_secret')
+    gate_type : GateType
+        Category of condition (token, reputation, knowledge, physical, temporal, composite)
+    description : str | None
+        Diegetic explanation shown to player when gate is relevant (optional)
+    unlock_hint : str | None
+        Optional hint about how to satisfy this gate (for player or author) (optional)
+
+    Examples
+    --------
+    Create a Gate::
+
+        from questfoundry.generated.models import Gate
+
+        item = Gate(
+            key="example_key",
+            gate_type="token",
+        )
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'key': 'example_key',
+                    'gate_type': 'token',
+                },
+            ],
+        },
+    )
+
+    key: str = Field(
+        ..., title="Key", description="Unique identifier for this gate condition (e.g., 'has_red_key', 'knows_secret')", examples=["example_key"],
+    )
+    gate_type: GateType = Field(
+        ..., title="Gate Type", description="Category of condition (token, reputation, knowledge, physical, temporal, composite)", examples=["token"],
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Diegetic explanation shown to player when gate is relevant", examples=["example_description"],
+    )
+    unlock_hint: str | None = Field(
+        default=None, title="Unlock Hint", description="Optional hint about how to satisfy this gate (for player or author)", examples=["example_unlock_hint"],
     )
 
 
@@ -1422,17 +1543,17 @@ class Scene(BaseModel):
     ----------
     title : str
         Scene title or identifier
-    section_id : str
-        Parent section this scene belongs to
     content : str
         The scene prose content
+    chapter_id : str | None
+        Parent chapter this scene belongs to (optional for standalone scenes) (optional)
     status : str | None
         Current lifecycle status (defaults to 'draft') (optional)
     sequence : int | None
-        Order within the section (optional)
-    gates : list[str] | None
+        Order within the chapter (optional)
+    gates : list[Gate] | None
         Gate conditions that control access to this scene (optional)
-    choices : list[str] | None
+    choices : list[Choice] | None
         Available choices/exits from this scene (optional)
     canon_refs : list[str] | None
         Canon entries referenced in this scene (optional)
@@ -1447,7 +1568,6 @@ class Scene(BaseModel):
 
         item = Scene(
             title="example_title",
-            section_id="example_section_id",
             content="example_content",
         )
     """
@@ -1458,7 +1578,6 @@ class Scene(BaseModel):
             'examples': [
                 {
                     'title': 'example_title',
-                    'section_id': 'example_section_id',
                     'content': 'example_content',
                 },
             ],
@@ -1471,23 +1590,23 @@ class Scene(BaseModel):
     title: str = Field(
         ..., title="Title", description="Scene title or identifier", examples=["example_title"],
     )
-    section_id: str = Field(
-        ..., title="Section Id", description="Parent section this scene belongs to", examples=["example_section_id"],
-    )
     content: str = Field(
         ..., title="Content", description="The scene prose content", examples=["example_content"],
+    )
+    chapter_id: str | None = Field(
+        default=None, title="Chapter Id", description="Parent chapter this scene belongs to (optional for standalone scenes)", examples=["example_chapter_id"],
     )
     status: str | None = Field(
         default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
     sequence: int | None = Field(
-        default=None, title="Sequence", description="Order within the section", examples=[1],
+        default=None, title="Sequence", description="Order within the chapter", examples=[1],
     )
-    gates: list[str] | None = Field(
-        default=None, title="Gates", description="Gate conditions that control access to this scene", examples=[["item1", "item2"]],
+    gates: list[Gate] | None = Field(
+        default=None, title="Gates", description="Gate conditions that control access to this scene", examples=[[]],
     )
-    choices: list[str] | None = Field(
-        default=None, title="Choices", description="Available choices/exits from this scene", examples=[["item1", "item2"]],
+    choices: list[Choice] | None = Field(
+        default=None, title="Choices", description="Available choices/exits from this scene", examples=[[]],
     )
     canon_refs: list[str] | None = Field(
         default=None, title="Canon Refs", description="Canon entries referenced in this scene", examples=[["item1", "item2"]],
@@ -1803,12 +1922,14 @@ ARTIFACT_REGISTRY: dict[str, type[BaseModel]] = {
     "canon_entry": CanonEntry,
     "chapter": Chapter,
     "character": Character,
+    "choice": Choice,
     "cold_asset": ColdAsset,
     "cold_book": ColdBook,
     "cold_section": ColdSection,
     "cold_snapshot": ColdSnapshot,
     "event": Event,
     "fact": Fact,
+    "gate": Gate,
     "gatecheck_report": GatecheckReport,
     "hook_card": HookCard,
     "item": Item,
@@ -1819,4 +1940,24 @@ ARTIFACT_REGISTRY: dict[str, type[BaseModel]] = {
     "shotlist": Shotlist,
     "timeline": Timeline,
     "translation_pack": TranslationPack,
+}
+
+
+# =============================================================================
+# Cold Promotion Configuration
+# =============================================================================
+
+# Maps artifact class name to cold promotion config.
+# Only artifacts with store: cold or store: both and a content_field can be promoted.
+# Used by runtime promote_to_canon for extraction and validation.
+COLD_PROMOTION_CONFIG: dict[str, dict[str, str | bool]] = {
+    "CanonEntry": {"content_field": "content", "requires_content": True},
+    "Character": {"content_field": "description", "requires_content": True},
+    "Event": {"content_field": "description", "requires_content": True},
+    "Fact": {"content_field": "statement", "requires_content": True},
+    "Item": {"content_field": "description", "requires_content": True},
+    "Location": {"content_field": "description", "requires_content": True},
+    "Relationship": {"content_field": "description", "requires_content": False},
+    "Scene": {"content_field": "content", "requires_content": True},
+    "Timeline": {"content_field": "description", "requires_content": False},
 }

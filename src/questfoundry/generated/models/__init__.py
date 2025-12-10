@@ -33,7 +33,7 @@
 """Generated models from domain ontology."""
 
 from questfoundry.generated.models.enums import Agency, AssetType, GateType, HookStatus, HookType, IntentType, LoopType, QualityBar, StoreType
-from questfoundry.generated.models.artifacts import Act, AudioPlan, Beat, Brief, CanonEntry, Chapter, Character, ColdAsset, ColdBook, ColdSection, ColdSnapshot, Event, Fact, GatecheckReport, HookCard, Item, Location, Relationship, Scene, Sequence, Shotlist, Timeline, TranslationPack
+from questfoundry.generated.models.artifacts import Act, AudioPlan, Beat, Brief, CanonEntry, Chapter, Character, Choice, ColdAsset, ColdBook, ColdSection, ColdSnapshot, Event, Fact, Gate, GatecheckReport, HookCard, Item, Location, Relationship, Scene, Sequence, Shotlist, Timeline, TranslationPack
 from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
 
 __all__ = [
@@ -53,12 +53,14 @@ __all__ = [
     "CanonEntry",
     "Chapter",
     "Character",
+    "Choice",
     "ColdAsset",
     "ColdBook",
     "ColdSection",
     "ColdSnapshot",
     "Event",
     "Fact",
+    "Gate",
     "GatecheckReport",
     "HookCard",
     "Item",
@@ -70,4 +72,5 @@ __all__ = [
     "Timeline",
     "TranslationPack",
     "ARTIFACT_REGISTRY",
+    "COLD_PROMOTION_CONFIG",
 ]

@@ -28,7 +28,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from questfoundry.generated.models.artifacts import Choice, ColdSection, Gate
 
 logger = logging.getLogger(__name__)
 
@@ -64,20 +66,6 @@ class BookMetadata(BaseModel):
     language: str = "en"  # ISO 639-1
     author: str | None = None
     start_anchor: str | None = None
-
-
-class ColdSection(BaseModel):
-    """A unit of player-safe prose content."""
-
-    id: int  # Auto-increment primary key (stable across anchor renames)
-    anchor: str  # Unique identifier for navigation
-    title: str  # Player-visible section title
-    content: str  # Prose content as structured data
-    content_hash: str  # SHA-256 hash of content
-    order: int  # Display order in book (1-indexed)
-    requires_gate: bool = False  # Whether this section has access conditions
-    source_brief_id: str | None = None  # Lineage tracking
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AssetProvenance(BaseModel):
@@ -184,6 +172,8 @@ CREATE TABLE IF NOT EXISTS sections (
     order_num INTEGER NOT NULL UNIQUE,
     requires_gate INTEGER DEFAULT 0,
     source_brief_id TEXT,
+    choices TEXT,  -- JSON array of choice strings for interactive fiction
+    gates TEXT,    -- JSON array of gate condition strings
     created_at TEXT NOT NULL
 );
 
@@ -486,6 +476,8 @@ class ColdStore:
         order: int | None = None,
         requires_gate: bool = False,
         source_brief_id: str | None = None,
+        choices: list[Choice] | None = None,
+        gates: list[Gate] | None = None,
     ) -> ColdSection:
         """Add or update a section.
 
@@ -503,6 +495,10 @@ class ColdStore:
             Whether this section has access conditions.
         source_brief_id : str | None
             ID of the Brief that produced this section.
+        choices : list[Choice] | None
+            Available choices/exits for interactive fiction.
+        gates : list[Gate] | None
+            Gate conditions that control access.
 
         Returns
         -------
@@ -511,6 +507,10 @@ class ColdStore:
         """
         content_hash = _compute_hash(content)
         created_at = _now_iso()
+
+        # Serialize choices and gates as JSON (using model_dump for Pydantic objects)
+        choices_json = json.dumps([c.model_dump() for c in choices]) if choices else None
+        gates_json = json.dumps([g.model_dump() for g in gates]) if gates else None
 
         with self._connection() as conn:
             # Check if anchor exists
@@ -525,10 +525,11 @@ class ColdStore:
                     """
                     UPDATE sections SET
                         title = ?, content = ?, content_hash = ?,
-                        requires_gate = ?, source_brief_id = ?
+                        requires_gate = ?, source_brief_id = ?,
+                        choices = ?, gates = ?
                     WHERE anchor = ?
                     """,
-                    (title, content, content_hash, requires_gate, source_brief_id, anchor),
+                    (title, content, content_hash, requires_gate, source_brief_id, choices_json, gates_json, anchor),
                 )
                 section_id = existing["id"]
                 # Get current order
@@ -548,10 +549,10 @@ class ColdStore:
                 cursor = conn.execute(
                     """
                     INSERT INTO sections
-                    (anchor, title, content, content_hash, order_num, requires_gate, source_brief_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (anchor, title, content, content_hash, order_num, requires_gate, source_brief_id, choices, gates, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (anchor, title, content, content_hash, order, requires_gate, source_brief_id, created_at),
+                    (anchor, title, content, content_hash, order, requires_gate, source_brief_id, choices_json, gates_json, created_at),
                 )
                 section_id = cursor.lastrowid
 
@@ -566,6 +567,8 @@ class ColdStore:
             order=order,
             requires_gate=requires_gate,
             source_brief_id=source_brief_id,
+            choices=choices,
+            gates=gates,
             created_at=datetime.fromisoformat(created_at),
         )
 
@@ -579,6 +582,12 @@ class ColdStore:
             if row is None:
                 return None
 
+            # Parse JSON fields into Choice/Gate objects
+            choices_data = json.loads(row["choices"]) if row["choices"] else None
+            gates_data = json.loads(row["gates"]) if row["gates"] else None
+            choices = [Choice(**c) for c in choices_data] if choices_data else None
+            gates = [Gate(**g) for g in gates_data] if gates_data else None
+
             return ColdSection(
                 id=row["id"],
                 anchor=row["anchor"],
@@ -588,6 +597,8 @@ class ColdStore:
                 order=row["order_num"],
                 requires_gate=bool(row["requires_gate"]),
                 source_brief_id=row["source_brief_id"],
+                choices=choices,
+                gates=gates,
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
@@ -603,20 +614,29 @@ class ColdStore:
         """Get all sections in display order."""
         with self._connection() as conn:
             cursor = conn.execute("SELECT * FROM sections ORDER BY order_num")
-            return [
-                ColdSection(
-                    id=row["id"],
-                    anchor=row["anchor"],
-                    title=row["title"],
-                    content=row["content"],
-                    content_hash=row["content_hash"],
-                    order=row["order_num"],
-                    requires_gate=bool(row["requires_gate"]),
-                    source_brief_id=row["source_brief_id"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
+            sections = []
+            for row in cursor.fetchall():
+                # Parse JSON fields into Choice/Gate objects
+                choices_data = json.loads(row["choices"]) if row["choices"] else None
+                gates_data = json.loads(row["gates"]) if row["gates"] else None
+                choices = [Choice(**c) for c in choices_data] if choices_data else None
+                gates = [Gate(**g) for g in gates_data] if gates_data else None
+                sections.append(
+                    ColdSection(
+                        id=row["id"],
+                        anchor=row["anchor"],
+                        title=row["title"],
+                        content=row["content"],
+                        content_hash=row["content_hash"],
+                        order=row["order_num"],
+                        requires_gate=bool(row["requires_gate"]),
+                        source_brief_id=row["source_brief_id"],
+                        choices=choices,
+                        gates=gates,
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                    )
                 )
-                for row in cursor.fetchall()
-            ]
+            return sections
 
     def delete_section(self, anchor: str) -> bool:
         """Delete a section (fails if in a snapshot)."""

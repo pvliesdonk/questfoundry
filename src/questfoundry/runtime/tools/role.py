@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.tools import BaseTool
 from pydantic import Field, ValidationError
 
+from questfoundry.generated.models.artifacts import COLD_PROMOTION_CONFIG
+
 if TYPE_CHECKING:
     from questfoundry.runtime.stores import ColdStore
 
@@ -28,28 +30,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Artifact Schema Detection & Validation
 # ============================================================================
-# Maps artifact type name to the field containing promotable content.
-# Only artifacts with store: cold or store: both can be promoted.
-# Content field is used to extract prose for cold_section.content.
-_ARTIFACT_CONTENT_FIELDS: dict[str, str] = {
-    # store: both - has prose
-    "Scene": "content",
-    # store: cold - has prose
-    "CanonEntry": "content",
-    "Character": "description",
-    "Location": "description",
-    "Item": "description",
-    "Event": "description",
-    "Fact": "statement",
-    # store: cold - structural (optional prose)
-    "Act": "description",
-    "Chapter": "summary",
-    "Timeline": "description",
-    "Relationship": "description",
-}
-
-# Artifacts that MUST have their content field populated for cold promotion
-_REQUIRED_CONTENT_TYPES = {"Scene", "CanonEntry", "Character", "Location", "Item", "Event", "Fact"}
+# Cold promotion config is generated from domain definitions.
+# See COLD_PROMOTION_CONFIG in questfoundry.generated.models.artifacts
+#
+# The config maps artifact class names to their cold promotion settings:
+# - content_field: The field containing prose content to extract
+# - requires_content: Whether empty content should fail validation
 
 
 def _detect_artifact_type(data: dict[str, Any]) -> tuple[str | None, Any | None, list[str]]:
@@ -113,20 +99,32 @@ def _extract_content_for_cold(
 ) -> tuple[str | None, str | None]:
     """Extract the content field value for cold_store promotion.
 
+    Uses COLD_PROMOTION_CONFIG from generated models to determine:
+    - Which field contains the prose content
+    - Whether content is required for this artifact type
+
     Returns:
         Tuple of (content_value, error_message).
         If extraction succeeds, error_message is None.
         If extraction fails, content_value is None and error_message explains why.
     """
-    content_field = _ARTIFACT_CONTENT_FIELDS.get(artifact_type)
-    if not content_field:
-        return None, f"Artifact type '{artifact_type}' has no content field mapping"
+    # Look up cold promotion config for this artifact type
+    config = COLD_PROMOTION_CONFIG.get(artifact_type)
+    if not config:
+        return None, (
+            f"Artifact type '{artifact_type}' cannot be promoted to cold_store. "
+            f"Only artifacts with store: cold/both and content_field can be promoted. "
+            f"Promotable types: {', '.join(sorted(COLD_PROMOTION_CONFIG.keys()))}"
+        )
+
+    content_field = config["content_field"]
+    requires_content = config.get("requires_content", True)
 
     # Get content from validated model
     content = getattr(validated_model, content_field, None)
 
     # Check if this type requires content
-    if artifact_type in _REQUIRED_CONTENT_TYPES and not content:
+    if requires_content and not content:
         return None, (
             f"Artifact '{artifact_id}' ({artifact_type}) is missing required "
             f"'{content_field}' field. Schema requires this field for cold promotion."
@@ -716,13 +714,38 @@ class PromoteToCanon(BaseTool):
 
             logger.info(f"Promoting '{artifact_id}' as {artifact_type} with content from validated schema")
 
-            # Add to cold_store using new API
+            # Extract interactive fiction fields (choices, gates) from the model
+            # Handle both Pydantic objects and raw dicts from LLM output
+            from questfoundry.generated.models.artifacts import Choice, Gate
+
+            raw_choices = getattr(validated_model, "choices", None) or content_data.get("choices")
+            raw_gates = getattr(validated_model, "gates", None) or content_data.get("gates")
+
+            # Convert to proper types if needed (handles raw dicts from LLM)
+            choices = None
+            if raw_choices:
+                choices = [
+                    c if isinstance(c, Choice) else Choice(**c)
+                    for c in raw_choices
+                ]
+            gates = None
+            if raw_gates:
+                gates = [
+                    g if isinstance(g, Gate) else Gate(**g)
+                    for g in raw_gates
+                ]
+            requires_gate = bool(gates)
+
+            # Add to cold_store using new API with interactive fiction support
             try:
                 self.cold_store.add_section(
                     anchor=artifact_id,
                     title=title,
                     content=content,
                     source_brief_id=artifact_id,  # Track lineage
+                    choices=choices,
+                    gates=gates,
+                    requires_gate=requires_gate,
                 )
                 promoted.append(artifact_id)
             except Exception as e:

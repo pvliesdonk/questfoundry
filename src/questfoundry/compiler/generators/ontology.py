@@ -531,6 +531,27 @@ def generate_artifacts_code(
     lines.append("}")
     lines.append("")
 
+    # Generate COLD_PROMOTION_CONFIG for runtime cold_store promotion
+    lines.append("")
+    lines.append("# =============================================================================")
+    lines.append("# Cold Promotion Configuration")
+    lines.append("# =============================================================================")
+    lines.append("")
+    lines.append("# Maps artifact class name to cold promotion config.")
+    lines.append("# Only artifacts with store: cold or store: both and a content_field can be promoted.")
+    lines.append("# Used by runtime promote_to_canon for extraction and validation.")
+    lines.append("COLD_PROMOTION_CONFIG: dict[str, dict[str, str | bool]] = {")
+    for artifact_id in sorted(artifacts.keys()):
+        artifact_ir = artifacts[artifact_id]
+        # Only include artifacts that can be promoted to cold_store
+        if artifact_ir.store.value in ("cold", "both") and artifact_ir.content_field:
+            cls = class_name(artifact_id)
+            content_field = artifact_ir.content_field
+            requires = "True" if artifact_ir.requires_content else "False"
+            lines.append(f'    "{cls}": {{"content_field": "{content_field}", "requires_content": {requires}}},')
+    lines.append("}")
+    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -650,7 +671,7 @@ def generate_init_code(
         lines.append("from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY")
 
     # __all__
-    all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY"]
+    all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY", "COLD_PROMOTION_CONFIG"]
     if all_exports:
         lines.append("")
         lines.append("__all__ = [")

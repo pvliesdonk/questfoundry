@@ -205,6 +205,22 @@ required: false
 description: "ID of the Brief that produced this section (lineage)"
 :::
 
+:::{artifact-field}
+artifact: cold_section
+name: choices
+type: list[Choice]
+required: false
+description: "Available choices/exits from this section for interactive fiction"
+:::
+
+:::{artifact-field}
+artifact: cold_section
+name: gates
+type: list[Gate]
+required: false
+description: "Gate conditions that control access to this section"
+:::
+
 ---
 
 ## Asset

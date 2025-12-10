@@ -667,6 +667,20 @@ class ArtifactTypeIR(BaseModel):
     fields: list[ArtifactFieldIR] = Field(default_factory=list)
     """Field definitions."""
 
+    content_field: str | None = None
+    """Name of the field containing prose content for cold promotion.
+
+    Only relevant for artifacts with store: cold or store: both.
+    Examples: "content" for Scene, "description" for Character.
+    If None, artifact cannot be promoted to cold_store.
+    """
+
+    requires_content: bool = True
+    """Whether the content_field must be non-empty for cold promotion.
+
+    If True, promoting an artifact with empty content will fail validation.
+    """
+
     @property
     def class_name(self) -> str:
         """Generate Python class name from artifact ID.
