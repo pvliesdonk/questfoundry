@@ -1,8 +1,8 @@
 # Story Spark Loop
 
-> **Goal:** Create meaningful nonlinearity from a story seed.
+> **Goal:** Create meaningful narrative content from a story seed.
 
-The **Story Spark** loop handles the initial discovery phase when creating new story content. It transforms user requests into structured topology through delegation to specialist roles.
+The **Story Spark** loop handles full story creation from request to canon. It transforms user requests into structured topology (Plotwright), fills prose content (Scene Smith), validates quality (Gatekeeper), and promotes to cold_store (Lorekeeper).
 
 :::{loop-meta}
 id: story_spark
@@ -111,13 +111,24 @@ max_iterations: 5
 
 #### Gatekeeper Node
 
-Validates the completed topology against quality bars.
+Validates the completed topology and prose against quality bars.
 
 :::{graph-node}
 id: gatekeeper
 role: gatekeeper
 timeout: 300
 max_iterations: 3
+:::
+
+#### Scene Smith Node
+
+Fills structural shells with prose content.
+
+:::{graph-node}
+id: scene_smith
+role: scene_smith
+timeout: 900
+max_iterations: 15
 :::
 
 ### Graph Edges
@@ -161,7 +172,19 @@ condition: "intent.type == 'escalation'"
 :::{graph-edge}
 source: lorekeeper
 target: plotwright
-condition: "intent.status == 'verified'"
+condition: "intent.status == 'lore_verified'"
+:::
+
+:::{graph-edge}
+source: lorekeeper
+target: scene_smith
+condition: "intent.status == 'canon_provided'"
+:::
+
+:::{graph-edge}
+source: lorekeeper
+target: showrunner
+condition: "intent.status == 'promoted_to_canon'"
 :::
 
 :::{graph-edge}
@@ -175,19 +198,51 @@ condition: "intent.type == 'escalation'"
 :::{graph-edge}
 source: gatekeeper
 target: plotwright
-condition: "intent.status == 'failed'"
+condition: "intent.status == 'topology_failed'"
 :::
 
 :::{graph-edge}
 source: gatekeeper
-target: showrunner
-condition: "intent.status == 'passed'"
+target: scene_smith
+condition: "intent.status == 'topology_passed'"
+:::
+
+:::{graph-edge}
+source: gatekeeper
+target: scene_smith
+condition: "intent.status == 'prose_failed'"
+:::
+
+:::{graph-edge}
+source: gatekeeper
+target: lorekeeper
+condition: "intent.status == 'prose_passed'"
 :::
 
 :::{graph-edge}
 source: gatekeeper
 target: showrunner
 condition: "intent.status == 'waiver_requested'"
+:::
+
+#### From Scene Smith
+
+:::{graph-edge}
+source: scene_smith
+target: gatekeeper
+condition: "intent.status == 'prose_complete'"
+:::
+
+:::{graph-edge}
+source: scene_smith
+target: lorekeeper
+condition: "intent.status == 'needs_canon'"
+:::
+
+:::{graph-edge}
+source: scene_smith
+target: showrunner
+condition: "intent.type == 'escalation'"
 :::
 
 ## Quality Gates
@@ -207,22 +262,35 @@ blocking: true
 
 ## Expected Flow
 
-```
+```text
 User Request
     ↓
 [Showrunner] → creates Brief
     ↓
-[Plotwright] → designs topology
+[Plotwright] → designs topology (Acts, Chapters, Scenes)
     ↓ (if needs canon check)
-[Lorekeeper] → verifies facts
+[Lorekeeper] → verifies lore facts
     ↓
-[Gatekeeper] → validates structure
-    ↓ (if passed)
-[Showrunner] → approves/terminates
+[Gatekeeper] → validates topology
+    ↓ (if topology passed)
+[Scene Smith] → fills prose into Scene artifacts
+    ↓ (if needs canon)
+[Lorekeeper] → provides canon callbacks
+    ↓
+[Gatekeeper] → validates prose
+    ↓ (if prose passed)
+[Lorekeeper] → promotes Scene artifacts to cold_store
+    ↓
+[Showrunner] → terminates
 ```
 
 ## Artifacts Produced
 
 - **Brief**: Defines the scope and goals of the work
-- **Scene**: Structural shells with gates and choices (no prose yet)
+- **Act**: Structural division (title, sequence, chapter references)
+- **Chapter**: Structural grouping (title, sequence, scene references)
+- **Scene**: Prose content (title, section_id, content, gates, choices)
 - **GatecheckReport**: Validation results from Gatekeeper
+
+**Key**: Scene Smith writes prose into the `content` field of Scene artifacts.
+Acts and Chapters are structural containers that reference child IDs.

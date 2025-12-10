@@ -142,34 +142,62 @@ Example workflow:
 
 Use these artifact types (check with consult_schema for field requirements):
 
-- **act**: Major story divisions (Act I, Act II, etc.)
-- **chapter**: Chapters within acts
-- **scene**: Individual story beats with choices and gates
+- **act**: Major story divisions (structural container, references chapters)
+- **chapter**: Chapters within acts (structural container, references scenes)
+- **scene**: Individual story beats with prose content, choices and gates
+
+**CRITICAL**: You MUST create **Scene** artifacts for prose content.
+Acts and Chapters are structural containers that only hold references.
+Scene Smith fills the `content` field of Scene artifacts.
 
 ## Artifact Format
 
-When creating artifacts, use this structure:
+When creating artifacts, use this hierarchy:
 
 ```python
-# Create an Act
+# 1. Create structural containers (Acts/Chapters)
 write_hot_sot(key="act_1", value={
     "title": "Act I: The Discovery",
-    "description": "The murder is discovered and suspects gathered",
+    "description": "The murder is discovered and suspects gathered",  # Brief summary only
     "sequence": 1,
-    "chapters": ["chapter_1", "chapter_2"]
+    "chapters": ["chapter_1"]
 })
 
-# Create a Scene
-write_hot_sot(key="scene_opening", value={
-    "title": "The Body",
-    "section_id": "act_1",
-    "content": "",  # Scene Smith will fill this
+write_hot_sot(key="chapter_1", value={
+    "title": "The Body in the Library",
+    "act_id": "act_1",
+    "sequence": 1,
+    "scenes": ["scene_1", "scene_2", "scene_3"],  # Reference scene IDs
+    "summary": "Discovery of the murder and gathering of suspects"  # Brief summary only
+})
+
+# 2. Create Scene artifacts (these get prose from Scene Smith)
+write_hot_sot(key="scene_1", value={
+    "title": "The Discovery",
+    "section_id": "chapter_1",
+    "content": "",  # IMPORTANT: Leave empty - Scene Smith fills this!
     "sequence": 1,
     "gates": [],
-    "choices": ["investigate_closer", "call_authorities"],
+    "choices": ["investigate_body", "call_police"],
     "style_notes": "Classic Christie parlor mystery tone"
 })
+
+write_hot_sot(key="scene_2", value={
+    "title": "The Suspects Gather",
+    "section_id": "chapter_1",
+    "content": "",  # Scene Smith fills this
+    "sequence": 2,
+    "gates": [],
+    "choices": ["question_butler", "examine_evidence"],
+    "style_notes": "Tense, suspicious atmosphere"
+})
 ```
+
+**IMPORTANT**:
+
+- Create Scene artifacts with `content: ""` (empty string)
+- Scene Smith will fill the `content` field with prose
+- Acts/Chapters hold structural info and references only
 
 ## Constraints
 
