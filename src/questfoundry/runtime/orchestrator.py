@@ -168,7 +168,7 @@ class Orchestrator:
     @trace_orchestrator_run
     async def run(
         self,
-        request: str,
+        request: str | None = None,
         loop_id: str = "default",
         resume_run_id: str | None = None,
         resume_checkpoint_id: int | None = None,
@@ -177,8 +177,9 @@ class Orchestrator:
 
         Parameters
         ----------
-        request : str
-            The user's request to process.
+        request : str | None
+            The user's request to process. Required for new workflows,
+            optional when resuming (will use original request from checkpoint).
         loop_id : str
             Loop identifier for state tracking.
         resume_run_id : str | None
@@ -211,6 +212,18 @@ class Orchestrator:
                 raise ValueError(f"No checkpoints found for run {resume_run_id}")
             run_id = resume_run_id
             logger.info(f"Resuming from latest checkpoint of run {run_id}")
+
+        # If resuming without a request, retrieve original request from the run
+        if request is None and run_id is not None and self.checkpoint_store:
+            run = self.checkpoint_store.get_run(run_id)
+            if run is None:
+                raise ValueError(f"Run {run_id} not found")
+            request = run.request
+            logger.info(f"Using original request from run: {request[:100]}...")
+
+        # Validate request is provided (either directly or from checkpoint)
+        if request is None:
+            raise ValueError("Request is required for new workflows")
 
         # Initialize state - either fresh or from checkpoint
         if checkpoint is not None:

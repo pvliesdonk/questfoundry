@@ -89,7 +89,7 @@ def trace_orchestrator_run(
                 tags=["orchestrator", "questfoundry"],
                 metadata={
                     "loop_id": loop_id,
-                    "request": request[:500],  # Truncate long requests
+                    "request": request[:500] if request else "(resuming)",
                     "resume_run_id": resume_run_id,
                     "resume_checkpoint_id": resume_checkpoint_id,
                 },

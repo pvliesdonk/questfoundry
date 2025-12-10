@@ -186,7 +186,10 @@ def _run_async(coro: Any) -> Any:
 
 @app.command()
 def ask(
-    message: Annotated[str, typer.Argument(help="Your request in natural language")],
+    message: Annotated[
+        str | None,
+        typer.Argument(help="Your request in natural language (optional when resuming)"),
+    ] = None,
     # LLM Options
     provider: Annotated[
         str | None,
@@ -307,6 +310,11 @@ def ask(
             console.print("[red]Error: --resume and --from-checkpoint require --project[/red]")
             raise typer.Exit(1)
 
+        # Validate message is required unless resuming
+        if not message and not (resume or from_checkpoint):
+            console.print("[red]Error: MESSAGE is required unless using --resume or --from-checkpoint[/red]")
+            raise typer.Exit(1)
+
         # Set up logging based on verbosity
         # With --stream and no -v: suppress log output entirely (errors only)
         # With --stream and -v: use requested verbosity
@@ -354,15 +362,16 @@ def ask(
             )
             console.print()
 
-        # Display request
-        console.print(
-            Panel(
-                f"[bold]Your Request:[/bold]\n{message}",
-                style="blue",
-                border_style="blue",
+        # Display request (skip if resuming - original request will be in checkpoint)
+        if message:
+            console.print(
+                Panel(
+                    f"[bold]Your Request:[/bold]\n{message}",
+                    style="blue",
+                    border_style="blue",
+                )
             )
-        )
-        console.print()
+            console.print()
 
         # Import runtime components
         from questfoundry.generated.roles import ALL_ROLES
