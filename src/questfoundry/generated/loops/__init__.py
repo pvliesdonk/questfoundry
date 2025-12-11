@@ -51,12 +51,6 @@ STORY_SPARK = LoopIR(
             timeout=300,
             max_iterations=3,
         ),
-        GraphNodeIR(
-            id="scene_smith",
-            role="scene_smith",
-            timeout=900,
-            max_iterations=15,
-        ),
     ],
     edges=[
         # From Showrunner
@@ -90,17 +84,7 @@ STORY_SPARK = LoopIR(
         GraphEdgeIR(
             source="lorekeeper",
             target="plotwright",
-            condition="intent.status == 'lore_verified'",
-        ),
-        GraphEdgeIR(
-            source="lorekeeper",
-            target="scene_smith",
-            condition="intent.status == 'canon_provided'",
-        ),
-        GraphEdgeIR(
-            source="lorekeeper",
-            target="showrunner",
-            condition="intent.status == 'promoted_to_canon'",
+            condition="intent.status == 'verified'",
         ),
         GraphEdgeIR(
             source="lorekeeper",
@@ -111,43 +95,17 @@ STORY_SPARK = LoopIR(
         GraphEdgeIR(
             source="gatekeeper",
             target="plotwright",
-            condition="intent.status == 'topology_failed'",
+            condition="intent.status == 'failed'",
         ),
         GraphEdgeIR(
             source="gatekeeper",
-            target="scene_smith",
-            condition="intent.status == 'topology_passed'",
-        ),
-        GraphEdgeIR(
-            source="gatekeeper",
-            target="scene_smith",
-            condition="intent.status == 'prose_failed'",
-        ),
-        GraphEdgeIR(
-            source="gatekeeper",
-            target="lorekeeper",
-            condition="intent.status == 'prose_passed'",
+            target="showrunner",
+            condition="intent.status == 'passed'",
         ),
         GraphEdgeIR(
             source="gatekeeper",
             target="showrunner",
             condition="intent.status == 'waiver_requested'",
-        ),
-        # From Scene Smith
-        GraphEdgeIR(
-            source="scene_smith",
-            target="gatekeeper",
-            condition="intent.status == 'prose_complete'",
-        ),
-        GraphEdgeIR(
-            source="scene_smith",
-            target="lorekeeper",
-            condition="intent.status == 'needs_canon'",
-        ),
-        GraphEdgeIR(
-            source="scene_smith",
-            target="showrunner",
-            condition="intent.type == 'escalation'",
         ),
     ],
     quality_gates=[
