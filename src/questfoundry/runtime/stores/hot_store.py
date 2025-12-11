@@ -20,8 +20,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -300,14 +303,16 @@ class HotStore(BaseModel):
     # =========================================================================
 
     # Artifact types that should persist to cold_store's artifacts table
-    PERSISTENT_ARTIFACT_TYPES: ClassVar[frozenset[str]] = frozenset({
-        "hook_card",
-        "brief",
-        "gatecheck_report",
-        "shotlist",
-        "audio_plan",
-        "translation_pack",
-    })
+    PERSISTENT_ARTIFACT_TYPES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "hook_card",
+            "brief",
+            "gatecheck_report",
+            "shotlist",
+            "audio_plan",
+            "translation_pack",
+        }
+    )
 
     def load_from_cold_store(self, cold_store: ColdStore) -> int:
         """Load persistent work artifacts from cold_store.
@@ -326,6 +331,10 @@ class HotStore(BaseModel):
             Number of artifacts loaded.
         """
         count = 0
+        active_brief_count = 0
+
+        # Clear existing hooks to prevent duplicates on reload
+        self.hooks.clear()
 
         # Load all work artifacts
         for stored in cold_store.get_all_artifacts():
@@ -342,6 +351,12 @@ class HotStore(BaseModel):
 
             # Restore current brief if active
             if stored.artifact_type == "brief" and stored.status == "active":
+                active_brief_count += 1
+                if active_brief_count > 1:
+                    logger.warning(
+                        f"Multiple active briefs found ({active_brief_count}). "
+                        f"Using '{anchor}' as current brief."
+                    )
                 self.current_brief = artifact_data
 
             count += 1
@@ -403,7 +418,7 @@ class HotStore(BaseModel):
         # Check for explicit type field
         if isinstance(artifact, dict):
             if "artifact_type" in artifact:
-                return artifact["artifact_type"]
+                return str(artifact["artifact_type"])
             # Infer from field presence
             if "hook_type" in artifact:
                 return "hook_card"
@@ -417,22 +432,30 @@ class HotStore(BaseModel):
                 return "audio_plan"
             if "source_language" in artifact and "target_language" in artifact:
                 return "translation_pack"
-        elif hasattr(artifact, "__class__"):
-            # Use class name
-            class_name = artifact.__class__.__name__
-            # Convert CamelCase to snake_case
-            import re
+            return "unknown"
 
-            return re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
-        return "unknown"
+        # For objects, use class name converted to snake_case
+        class_name = artifact.__class__.__name__
+        return str(re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower())
 
     def _get_artifact_status(self, artifact: Any) -> str:
         """Extract status from an artifact object or dict."""
         if isinstance(artifact, dict):
-            return artifact.get("status", "draft")
+            status = artifact.get("status", "draft")
         elif hasattr(artifact, "status"):
-            return artifact.status or "draft"
-        return "draft"
+            status = artifact.status
+        else:
+            return "draft"
+
+        # Handle None
+        if status is None:
+            return "draft"
+
+        # Handle Enum values (e.g., HookStatus.PROPOSED -> "proposed")
+        if isinstance(status, Enum):
+            return str(status.value)
+
+        return str(status)
 
     def sync_hooks_to_cold_store(self, cold_store: ColdStore) -> int:
         """Sync just the hooks list to cold_store.
@@ -450,23 +473,32 @@ class HotStore(BaseModel):
             Number of hooks saved.
         """
         count = 0
-        for i, hook in enumerate(self.hooks):
-            # Generate anchor if not present
+        for hook in self.hooks:
+            # Generate anchor if not present (use UUID for stable identity)
             if isinstance(hook, dict):
-                anchor = hook.get("anchor") or f"hook_{i:04d}"
+                anchor = hook.get("anchor") or f"hook_{uuid.uuid4().hex[:12]}"
                 status = hook.get("status", "proposed")
+                # Store anchor back in dict for future syncs
+                if "anchor" not in hook:
+                    hook["anchor"] = anchor
                 data = hook
             elif hasattr(hook, "model_dump"):
-                anchor = getattr(hook, "anchor", None) or f"hook_{i:04d}"
+                anchor = getattr(hook, "anchor", None) or f"hook_{uuid.uuid4().hex[:12]}"
                 status = getattr(hook, "status", "proposed")
+                # Handle enum status
+                if isinstance(status, Enum):
+                    status = str(status.value)
                 data = hook.model_dump()
+                # Store anchor back in data for future syncs
+                if "anchor" not in data:
+                    data["anchor"] = anchor
             else:
                 continue
 
             cold_store.save_artifact(
                 anchor=anchor,
                 artifact_type="hook_card",
-                status=status,
+                status=str(status) if status else "proposed",
                 data=data,
             )
             count += 1

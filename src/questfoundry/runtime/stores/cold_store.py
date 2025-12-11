@@ -1329,7 +1329,9 @@ class ColdStore:
 
         with self._connection() as conn:
             # Check if anchor exists
-            cursor = conn.execute("SELECT id, created_at FROM artifacts WHERE anchor = ?", (anchor,))
+            cursor = conn.execute(
+                "SELECT id, created_at FROM artifacts WHERE anchor = ?", (anchor,)
+            )
             existing = cursor.fetchone()
 
             if existing:
