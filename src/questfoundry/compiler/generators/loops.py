@@ -4,7 +4,8 @@ This module generates Python code for workflow loop definitions from LoopIR.
 
 The generator creates:
 - An __init__.py in generated/loops/ with all loop definitions
-- Each loop as a LoopIR constant with nodes, edges, and quality gates
+- Each loop as a LoopIR constant with participants, routing_rules, and quality gates
+- Backward compatibility with deprecated nodes and edges
 
 Example Usage
 -------------
@@ -25,7 +26,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from questfoundry.compiler.generators._warning import GENERATED_FILE_WARNING
-from questfoundry.compiler.models import LoopIR
+from questfoundry.compiler.models import LoopIR, LoopParticipantConfig, LoopRoutingRuleIR
 
 
 def _constant_name(loop_id: str) -> str:
@@ -64,9 +65,11 @@ def generate_loops_code(loops: Mapping[str, LoopIR]) -> str:
 
     # Imports
     lines.append("from questfoundry.compiler.models import (")
-    lines.append("    GraphEdgeIR,")
-    lines.append("    GraphNodeIR,")
+    lines.append("    GraphEdgeIR,  # Deprecated")
+    lines.append("    GraphNodeIR,  # Deprecated")
     lines.append("    LoopIR,")
+    lines.append("    LoopParticipantConfig,")
+    lines.append("    LoopRoutingRuleIR,")
     lines.append("    QualityGateIR,")
     lines.append(")")
     lines.append("")
@@ -86,26 +89,62 @@ def generate_loops_code(loops: Mapping[str, LoopIR]) -> str:
         lines.append(f'    trigger="{loop.trigger}",')
         lines.append(f'    entry_point="{loop.entry_point}",')
 
-        # Nodes
-        lines.append("    nodes=[")
-        for node in loop.nodes:
-            lines.append("        GraphNodeIR(")
-            lines.append(f'            id="{node.id}",')
-            lines.append(f'            role="{node.role}",')
-            lines.append(f"            timeout={node.timeout},")
-            lines.append(f"            max_iterations={node.max_iterations},")
-            lines.append("        ),")
-        lines.append("    ],")
+        # New format: participants
+        if loop.participants:
+            lines.append("    participants={")
+            for role_id, config in sorted(loop.participants.items()):
+                lines.append(f'        "{role_id}": LoopParticipantConfig(')
+                lines.append(f"            timeout={config.timeout},")
+                lines.append(f"            max_iterations={config.max_iterations},")
+                lines.append("        ),")
+            lines.append("    },")
+        else:
+            lines.append("    participants={},")
 
-        # Edges
-        lines.append("    edges=[")
-        for edge in loop.edges:
-            lines.append("        GraphEdgeIR(")
-            lines.append(f'            source="{edge.source}",')
-            lines.append(f'            target="{edge.target}",')
-            lines.append(f'            condition="{edge.condition}",')
-            lines.append("        ),")
-        lines.append("    ],")
+        # New format: routing_rules
+        if loop.routing_rules:
+            lines.append("    routing_rules=[")
+            for rule in loop.routing_rules:
+                lines.append("        LoopRoutingRuleIR(")
+                lines.append(f'            after="{rule.after}",')
+                lines.append(f'            when="{rule.when}",')
+                lines.append(f'            delegate_to="{rule.delegate_to}",')
+                # Escape any quotes in description
+                desc = rule.description.replace('"', '\\"')
+                lines.append(f'            description="{desc}",')
+                lines.append("        ),")
+            lines.append("    ],")
+        else:
+            lines.append("    routing_rules=[],")
+
+        # Deprecated: nodes (for backward compatibility)
+        if loop.nodes:
+            lines.append("    # Deprecated: use participants instead")
+            lines.append("    nodes=[")
+            for node in loop.nodes:
+                lines.append("        GraphNodeIR(")
+                lines.append(f'            id="{node.id}",')
+                lines.append(f'            role="{node.role}",')
+                lines.append(f"            timeout={node.timeout},")
+                lines.append(f"            max_iterations={node.max_iterations},")
+                lines.append("        ),")
+            lines.append("    ],")
+        else:
+            lines.append("    nodes=[],")
+
+        # Deprecated: edges (for backward compatibility)
+        if loop.edges:
+            lines.append("    # Deprecated: use routing_rules instead")
+            lines.append("    edges=[")
+            for edge in loop.edges:
+                lines.append("        GraphEdgeIR(")
+                lines.append(f'            source="{edge.source}",')
+                lines.append(f'            target="{edge.target}",')
+                lines.append(f'            condition="{edge.condition}",')
+                lines.append("        ),")
+            lines.append("    ],")
+        else:
+            lines.append("    edges=[],")
 
         # Quality gates
         if loop.quality_gates:
