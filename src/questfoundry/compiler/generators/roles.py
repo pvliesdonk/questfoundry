@@ -179,7 +179,7 @@ def generate_roles_init(roles: Mapping[str, RoleIR]) -> str:
         "",
         '"""Generated role configurations from domain/roles/*.md."""',
         "",
-        f"# Aggregate domain version (max of all role versions)",
+        "# Aggregate domain version (max of all role versions)",
         f"DOMAIN_VERSION: int = {domain_version}",
         "",
     ]

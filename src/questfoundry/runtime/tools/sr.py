@@ -14,6 +14,7 @@ The SR orchestrates via hub-and-spoke pattern:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import Any
@@ -196,29 +197,21 @@ class Terminate(BaseTool):
                 cold_anchors: set[str] = set()
 
                 # Sections (scenes/narrative prose)
-                try:
+                with contextlib.suppress(Exception):
                     cold_anchors.update(self.cold_store.list_sections())
-                except Exception:
-                    pass
 
                 # Acts and Chapters (structural)
-                try:
+                with contextlib.suppress(Exception):
                     cold_anchors.update(a.anchor for a in self.cold_store.list_acts())
                     cold_anchors.update(c.anchor for c in self.cold_store.list_chapters())
-                except Exception:
-                    pass
 
                 # Codex (player-safe encyclopedia: character, location, item, relationship)
-                try:
+                with contextlib.suppress(Exception):
                     cold_anchors.update(self.cold_store.list_codex())
-                except Exception:
-                    pass
 
                 # Canon (internal world facts: canon_entry, event, fact, timeline)
-                try:
+                with contextlib.suppress(Exception):
                     cold_anchors.update(self.cold_store.list_canon())
-                except Exception:
-                    pass
 
                 unpromoted = [k for k in promotable_keys if k not in cold_anchors]
             except Exception:

@@ -208,8 +208,7 @@ class TestConfigFileFinding:
     def test_find_config_file_none(self, tmp_path: Path) -> None:
         """No config file found returns None."""
         with patch("pathlib.Path.cwd", return_value=tmp_path):
-            result = _find_config_file()
-            # May find ~/.config/questfoundry/config.yaml if it exists
+            _find_config_file()  # May find ~/.config/questfoundry/config.yaml if it exists
             # Just verify it doesn't crash
 
 
@@ -290,7 +289,7 @@ class TestSettingsSingleton:
 
     def test_reload_settings(self) -> None:
         """reload_settings clears cache."""
-        s1 = get_settings()
+        get_settings()  # Prime the cache
         s2 = reload_settings()
         s3 = get_settings()
 
@@ -309,6 +308,6 @@ class TestEnvironmentVariables:
 
         with patch.dict(os.environ, {"QF_LLM__PROVIDER": "google"}):
             # Need to reload for env to take effect
-            settings = reload_settings()
+            reload_settings()
             # Note: pydantic-settings may not pick up nested vars
             # This tests the mechanism, not full functionality

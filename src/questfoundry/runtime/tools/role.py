@@ -671,8 +671,10 @@ class PromoteToCanon(BaseTool):
         from questfoundry.runtime.validation import detect_artifact_type, validate_artifact
 
         # Helper to return structured error per 9.4 validate-with-feedback pattern
-        def _validation_error(artifact_id: str, error: str, invalid_fields: list, hint: str):
-            return json.dumps(
+        def _validation_error(
+            artifact_id: str, error: str, invalid_fields: list[Any], hint: str
+        ) -> str:
+            return str(json.dumps(
                 {
                     "success": False,
                     "error": error,
@@ -680,7 +682,7 @@ class PromoteToCanon(BaseTool):
                     "invalid_fields": invalid_fields,
                     "hint": hint,
                 }
-            )
+            ))
 
         for artifact_id in artifact_ids:
             # Check artifact exists - fail immediately with feedback

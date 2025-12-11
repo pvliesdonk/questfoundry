@@ -69,7 +69,7 @@ def compile(
             console.print(f"  {name}: {path}")
     except Exception as e:
         console.print(f"[red]Compilation failed: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -79,8 +79,7 @@ def validate(
     ),
 ) -> None:
     """Validate domain files without generating code."""
-    from questfoundry.compiler.compile import validate_loops
-    from questfoundry.compiler.compile import _parse_role_files, _extract_roles
+    from questfoundry.compiler.compile import _extract_roles, _parse_role_files, validate_loops
 
     domain_path = Path(domain)
 
@@ -101,7 +100,7 @@ def validate(
         console.print("[green]Validation passed[/green]")
     except Exception as e:
         console.print(f"[red]Validation failed: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()

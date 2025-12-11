@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -188,7 +187,7 @@ class TestExecutorCallbackEmissions:
         """Test that callback errors don't break execution."""
 
         class FailingCallbacks:
-            def on_llm_start(self, iteration: int) -> None:
+            def on_llm_start(self, iteration: int) -> None:  # noqa: ARG002
                 raise RuntimeError("Callback failed!")
 
         callbacks = FailingCallbacks()

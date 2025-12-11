@@ -51,6 +51,17 @@ from pydantic import BaseModel
 from questfoundry.generated.models.artifacts import Choice, ColdAct, ColdChapter, ColdSection, Gate
 from questfoundry.generated.models.enums import Visibility
 
+__all__ = [
+    "AssetProvenance",
+    "AssetType",
+    "BookMetadata",
+    "ColdAsset",
+    "ColdSection",
+    "ColdSnapshot",
+    "ColdStore",
+    "get_cold_store",
+]
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 4  # Added codex and canon tables
@@ -580,7 +591,7 @@ class ColdStore:
                 language=row["language"],
                 author=row["author"],
                 start_anchor=start_anchor,
-                domain_version=row["domain_version"] if "domain_version" in row else None,
+                domain_version=row.get("domain_version"),
             )
 
     def set_book_metadata(self, metadata: BookMetadata) -> None:
@@ -630,7 +641,8 @@ class ColdStore:
             row = cursor.fetchone()
             if row is None:
                 return None
-            return row["domain_version"]
+            result: int | None = row["domain_version"]
+            return result
 
     def set_domain_version(self, version: int) -> None:
         """Set the domain version for this project.
