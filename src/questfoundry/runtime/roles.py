@@ -47,6 +47,7 @@ from questfoundry.runtime.tools.role import (
     ReturnToSR,
     WriteHotSot,
 )
+from questfoundry.runtime.tools.searxng import WebSearchTool
 from questfoundry.runtime.tracing import trace_role_execution
 
 if TYPE_CHECKING:
@@ -127,6 +128,42 @@ These are the actual tool names you must use:
 ### Canon Promotion Tool (Lorekeeper exclusive)
 - **promote_to_canon(artifact_key, section_id)**: Promote validated artifact from hot_store to cold_store
 
+### Web Search Tool (optional)
+- **web_search(query, categories)**: Search the web for research and fact-checking
+  - query: search terms (e.g., "medieval castle architecture")
+  - categories: optional, one of "general", "news", "science", "images"
+  - Returns results with title, URL, and snippet
+  - If unavailable, returns a message - continue without web search
+
+### State Tools
+- **write_hot_sot(key, value)**: Write artifact to hot_store
+- **read_hot_sot(key)**: Read from hot_store
+- **list_hot_store_keys()**: List available artifacts
+- **read_cold_sot(key)**: Read from cold_store
+- **list_cold_store_keys()**: List sections/snapshots in cold_store
+
+### Knowledge Tools
+- **consult_schema(artifact_type)**: Get artifact requirements
+- **consult_playbook(query)**: Get workflow guidance
+
+### Completion (REQUIRED)
+- **return_to_sr(status, message, artifacts, recommendation)**: Return control to Showrunner
+
+**IMPORTANT**: You MUST call return_to_sr when done. Do not just describe what you would do.
+"""
+
+PLOTWRIGHT_RUNTIME_TOOLS = """
+## Runtime Tools
+
+These are the actual tool names you must use:
+
+### Web Search Tool (optional)
+- **web_search(query, categories)**: Search the web for research and fact-checking
+  - query: search terms (e.g., "medieval siege weapons", "undetectable poisons")
+  - categories: optional, one of "general", "news", "science", "images"
+  - Returns results with title, URL, and snippet
+  - If unavailable, returns a message - continue without web search
+
 ### State Tools
 - **write_hot_sot(key, value)**: Write artifact to hot_store
 - **read_hot_sot(key)**: Read from hot_store
@@ -164,6 +201,8 @@ def _render_prompt(role: RoleIR) -> str:
         runtime_tools = GATEKEEPER_RUNTIME_TOOLS
     elif role_id == "lorekeeper":
         runtime_tools = LOREKEEPER_RUNTIME_TOOLS
+    elif role_id == "plotwright":
+        runtime_tools = PLOTWRIGHT_RUNTIME_TOOLS
     else:
         runtime_tools = COMMON_RUNTIME_TOOLS
 
@@ -262,6 +301,18 @@ def _build_role_tools(
         promote_tool.cold_store = cold_store
         promote_tool.role_id = role.id
         tools.append(promote_tool)
+
+    # Web search tool for research (Lorekeeper and Plotwright)
+    # Optional - gracefully degrades if SearXNG not configured
+    if role.id.lower() in ("lorekeeper", "plotwright"):
+        from questfoundry.runtime.config import get_settings
+
+        settings = get_settings()
+        web_search_tool = WebSearchTool()
+        web_search_tool.searxng_url = settings.searxng.url
+        web_search_tool.timeout = settings.searxng.timeout
+        web_search_tool.max_results = settings.searxng.max_results
+        tools.append(web_search_tool)
 
     # Return to SR tool with role_id
     return_tool = ReturnToSR()

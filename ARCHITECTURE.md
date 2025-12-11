@@ -311,6 +311,37 @@ blocking: true
 
 Defines data structures. Can also be Hybrid (e.g., adding "Usage Examples" prose).
 
+#### Entity vs Embedded Artifacts
+
+Artifacts fall into two categories based on their identity model:
+
+| Aspect | Entity Artifacts | Embedded Artifacts (Value Objects) |
+|--------|------------------|-----------------------------------|
+| **Identity** | Independent ID, referenced by others | No independent identity |
+| **Lifecycle** | Has status: draft → review → canon | None — exists with parent |
+| **Storage** | Own rows in database | Embedded in parent's JSON blob |
+| **Versioning** | Can be snapshotted independently | Versioned with parent |
+| **Query** | Can query directly | Must query through parent |
+| **Examples** | Scene, Character, CanonEntry | Choice, Gate |
+
+**When to use Embedded:**
+
+- Artifact has no meaning outside its parent (e.g., a Choice belongs to a specific Scene)
+- Changes atomically with parent (never updated independently)
+- Never queried or referenced directly by other artifacts
+- No need for independent lifecycle tracking
+
+**When to use Entity:**
+
+- Referenced by multiple artifacts
+- Needs independent versioning or status tracking
+- Requires direct queries (e.g., "find all Characters in this story")
+- Has its own lifecycle (draft, review, canon states)
+
+**Domain Declaration:**
+
+Embedded artifacts have `lifecycle: none` or omit lifecycle entirely, and their `store:` field indicates where the parent stores them (typically `both` for Scene children).
+
 #### `{artifact-type}`
 
 ```markdown

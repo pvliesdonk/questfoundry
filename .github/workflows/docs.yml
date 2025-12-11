@@ -30,9 +30,7 @@ jobs:
         run: uv python install 3.11
 
       - name: Install dependencies
-        run: |
-          uv sync
-          uv pip install sphinx myst-parser sphinx-rtd-theme sphinx-autodoc-typehints
+        run: uv sync --extra docs
 
       - name: Build Sphinx documentation
         run: |
