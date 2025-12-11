@@ -29,11 +29,13 @@ The parser recognizes the following directive categories:
     - ``role-constraints``: Behavioral constraints and guidelines
     - ``role-prompt``: Jinja2 system prompt template
 
-**Loop Directives** (define workflow graphs):
+**Loop Directives** (define workflow guidance):
     - ``loop-meta``: Loop identity and entry configuration
-    - ``graph-node``: Individual workflow nodes
-    - ``graph-edge``: Transitions between nodes with conditions
+    - ``loop-participants``: Roles participating with operational params (replaces graph-node)
+    - ``routing-rule``: SR delegation decisions (replaces graph-edge)
     - ``quality-gate``: Validation checkpoints
+    - ``graph-node``: (deprecated) Individual workflow nodes
+    - ``graph-edge``: (deprecated) Transitions between nodes with conditions
 
 **Ontology Directives** (define data structures):
     - ``artifact-type``: Artifact definitions (like story hooks, scenes)
@@ -156,18 +158,22 @@ class DirectiveType(Enum):
     ROLE_PROMPT = "role-prompt"
     """Jinja2 template for the role's system prompt."""
 
-    # Loop directives - define workflow graphs
+    # Loop directives - define workflow guidance
     LOOP_META = "loop-meta"
-    """Loop identity: id, name, trigger type, entry point node."""
+    """Loop identity: id, name, trigger type, entry point."""
 
-    GRAPH_NODE = "graph-node"
-    """A node in the workflow graph, mapping to a role."""
-
-    GRAPH_EDGE = "graph-edge"
-    """A transition between nodes with optional condition."""
+    LOOP_PARTICIPANTS = "loop-participants"
+    """Roles participating in loop with operational params (timeout, max_iterations)."""
 
     QUALITY_GATE = "quality-gate"
     """Validation checkpoint requiring quality bars to pass."""
+
+    # Deprecated loop directives (use loop-participants and routing-rule instead)
+    GRAPH_NODE = "graph-node"
+    """(Deprecated) A node in the workflow graph, mapping to a role."""
+
+    GRAPH_EDGE = "graph-edge"
+    """(Deprecated) A transition between nodes with optional condition."""
 
     # Ontology directives - define data structures
     ARTIFACT_TYPE = "artifact-type"
@@ -187,7 +193,7 @@ class DirectiveType(Enum):
     """Intent message type for inter-role communication."""
 
     ROUTING_RULE = "routing-rule"
-    """Conditional routing logic for workflow transitions."""
+    """SR delegation decision: after role X, when status Y, delegate to role Z."""
 
     QUALITY_BAR = "quality-bar"
     """Quality threshold definition for validation gates."""
