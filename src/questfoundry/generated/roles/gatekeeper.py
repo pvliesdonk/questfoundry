@@ -152,6 +152,7 @@ When checking prose bars after Scene Smith:
 - **status `error`** if something broke internally
 
 **CRITICAL**: Use the correct status based on which bars you checked:
+
 - Topology bars (reachability, nonlinearity, gateways) → `topology_passed` or `topology_failed`
 - Prose bars (style, presentation) → `prose_passed` or `prose_failed`""",
 )

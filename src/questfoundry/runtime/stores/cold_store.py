@@ -59,12 +59,13 @@ __all__ = [
     "ColdSection",
     "ColdSnapshot",
     "ColdStore",
+    "StoredArtifact",
     "get_cold_store",
 ]
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4  # Added codex and canon tables
+SCHEMA_VERSION = 5  # Added artifacts table for persistent work artifacts
 
 
 # =============================================================================
@@ -177,6 +178,23 @@ class ColdCanon(BaseModel):
     metadata: dict[str, Any] | None = None  # Category-specific fields as JSON
     visibility: Visibility = Visibility.INTERNAL
     created_at: datetime
+
+
+class StoredArtifact(BaseModel):
+    """Persistent work artifact (HookCard, Brief, GatecheckReport, etc.).
+
+    This model wraps any work artifact for storage in the unified artifacts table.
+    The actual artifact data is stored as a JSON blob, allowing Pydantic to handle
+    schema evolution without database migrations.
+    """
+
+    id: int
+    anchor: str  # Unique identifier (e.g., 'hook_123', 'brief_abc')
+    artifact_type: str  # hook_card, brief, gatecheck_report, shotlist, etc.
+    status: str  # Lifecycle status from the artifact's lifecycle
+    data: dict[str, Any]  # JSON blob of the full Pydantic model
+    created_at: datetime
+    updated_at: datetime
 
 
 # =============================================================================
@@ -323,6 +341,19 @@ CREATE TABLE IF NOT EXISTS canon (
     created_at TEXT NOT NULL
 );
 
+-- Unified artifacts table for persistent work artifacts
+-- This replaces ephemeral hot_store for HookCard, Brief, GatecheckReport, etc.
+-- Uses JSON blobs for data - Pydantic handles serialization/evolution
+CREATE TABLE IF NOT EXISTS artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,         -- Unique identifier (e.g., 'hook_123', 'brief_abc')
+    artifact_type TEXT NOT NULL,         -- hook_card, brief, gatecheck_report, etc.
+    status TEXT NOT NULL,                -- Lifecycle status (proposed, active, completed, etc.)
+    data TEXT NOT NULL,                  -- JSON blob of Pydantic model
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 -- Snapshots for deterministic builds
 CREATE TABLE IF NOT EXISTS snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -361,6 +392,10 @@ CREATE INDEX IF NOT EXISTS idx_codex_category ON codex(category);
 CREATE INDEX IF NOT EXISTS idx_canon_anchor ON canon(anchor);
 CREATE INDEX IF NOT EXISTS idx_canon_category ON canon(category);
 CREATE INDEX IF NOT EXISTS idx_canon_spoiler ON canon(spoiler_level);
+CREATE INDEX IF NOT EXISTS idx_artifacts_anchor ON artifacts(anchor);
+CREATE INDEX IF NOT EXISTS idx_artifacts_type ON artifacts(artifact_type);
+CREATE INDEX IF NOT EXISTS idx_artifacts_status ON artifacts(status);
+CREATE INDEX IF NOT EXISTS idx_artifacts_type_status ON artifacts(artifact_type, status);
 CREATE INDEX IF NOT EXISTS idx_snapshots_created ON snapshots(created_at);
 """
 
@@ -552,6 +587,71 @@ class ColdStore:
             conn.execute("UPDATE schema_version SET version = 3")
             conn.commit()
             logger.info("Database migrated to schema v3")
+            from_version = 3
+
+        if from_version < 4:
+            # v3 → v4: Add codex and canon tables (already handled by SCHEMA_SQL)
+            logger.info("Migrating database schema from v3 to v4...")
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS codex (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    anchor TEXT NOT NULL UNIQUE,
+                    category TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    metadata TEXT,
+                    visibility TEXT DEFAULT 'public',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS canon (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    anchor TEXT NOT NULL UNIQUE,
+                    category TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    spoiler_level TEXT DEFAULT 'hot',
+                    metadata TEXT,
+                    visibility TEXT DEFAULT 'internal',
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_codex_anchor ON codex(anchor);
+                CREATE INDEX IF NOT EXISTS idx_codex_category ON codex(category);
+                CREATE INDEX IF NOT EXISTS idx_canon_anchor ON canon(anchor);
+                CREATE INDEX IF NOT EXISTS idx_canon_category ON canon(category);
+                CREATE INDEX IF NOT EXISTS idx_canon_spoiler ON canon(spoiler_level);
+                """
+            )
+            conn.execute("UPDATE schema_version SET version = 4")
+            conn.commit()
+            logger.info("Database migrated to schema v4")
+            from_version = 4
+
+        if from_version < 5:
+            # v4 → v5: Add artifacts table for persistent work artifacts
+            logger.info("Migrating database schema from v4 to v5...")
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    anchor TEXT NOT NULL UNIQUE,
+                    artifact_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_artifacts_anchor ON artifacts(anchor);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_type ON artifacts(artifact_type);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_status ON artifacts(status);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_type_status ON artifacts(artifact_type, status);
+                """
+            )
+            conn.execute("UPDATE schema_version SET version = 5")
+            conn.commit()
+            logger.info("Database migrated to schema v5")
 
     # =========================================================================
     # Book Metadata
@@ -1193,6 +1293,237 @@ class ColdStore:
 
             cursor = conn.execute(query, params)
             return [row["anchor"] for row in cursor.fetchall()]
+
+    # =========================================================================
+    # Artifact Operations (persistent work artifacts)
+    # Types: hook_card, brief, gatecheck_report, shotlist, audio_plan, etc.
+    # =========================================================================
+
+    def save_artifact(
+        self,
+        anchor: str,
+        artifact_type: str,
+        status: str,
+        data: dict[str, Any],
+    ) -> StoredArtifact:
+        """Save or update a work artifact.
+
+        Parameters
+        ----------
+        anchor : str
+            Unique identifier (e.g., 'hook_123', 'brief_abc').
+        artifact_type : str
+            Type of artifact: hook_card, brief, gatecheck_report, etc.
+        status : str
+            Lifecycle status (proposed, active, completed, etc.).
+        data : dict
+            Full artifact data as a dict (from Pydantic model_dump()).
+
+        Returns
+        -------
+        StoredArtifact
+            The saved artifact wrapper.
+        """
+        now = _now_iso()
+        data_json = json.dumps(data, default=str)
+
+        with self._connection() as conn:
+            # Check if anchor exists
+            cursor = conn.execute("SELECT id, created_at FROM artifacts WHERE anchor = ?", (anchor,))
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existing artifact
+                conn.execute(
+                    """
+                    UPDATE artifacts SET
+                        artifact_type = ?, status = ?, data = ?, updated_at = ?
+                    WHERE anchor = ?
+                    """,
+                    (artifact_type, status, data_json, now, anchor),
+                )
+                artifact_id = existing["id"]
+                created_at = existing["created_at"]
+            else:
+                # Insert new artifact
+                cursor = conn.execute(
+                    """
+                    INSERT INTO artifacts
+                    (anchor, artifact_type, status, data, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (anchor, artifact_type, status, data_json, now, now),
+                )
+                artifact_id = cursor.lastrowid
+                created_at = now
+
+            conn.commit()
+
+        return StoredArtifact(
+            id=artifact_id,
+            anchor=anchor,
+            artifact_type=artifact_type,
+            status=status,
+            data=data,
+            created_at=datetime.fromisoformat(created_at),
+            updated_at=datetime.fromisoformat(now),
+        )
+
+    def get_artifact(self, anchor: str) -> StoredArtifact | None:
+        """Get an artifact by anchor.
+
+        Parameters
+        ----------
+        anchor : str
+            The artifact's unique identifier.
+
+        Returns
+        -------
+        StoredArtifact | None
+            The artifact wrapper, or None if not found.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT * FROM artifacts WHERE anchor = ?", (anchor,))
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            return StoredArtifact(
+                id=row["id"],
+                anchor=row["anchor"],
+                artifact_type=row["artifact_type"],
+                status=row["status"],
+                data=json.loads(row["data"]),
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+
+    def delete_artifact(self, anchor: str) -> bool:
+        """Delete an artifact.
+
+        Parameters
+        ----------
+        anchor : str
+            The artifact's unique identifier.
+
+        Returns
+        -------
+        bool
+            True if deleted, False if not found.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM artifacts WHERE anchor = ?", (anchor,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def list_artifacts(
+        self,
+        artifact_type: str | None = None,
+        status: str | None = None,
+    ) -> list[str]:
+        """List artifact anchors, optionally filtered.
+
+        Parameters
+        ----------
+        artifact_type : str | None
+            Filter by artifact type (e.g., 'hook_card').
+        status : str | None
+            Filter by status (e.g., 'proposed').
+
+        Returns
+        -------
+        list[str]
+            List of matching artifact anchors.
+        """
+        with self._connection() as conn:
+            conditions = []
+            params: list[str] = []
+            if artifact_type:
+                conditions.append("artifact_type = ?")
+                params.append(artifact_type)
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+
+            query = "SELECT anchor FROM artifacts"
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY updated_at DESC"
+
+            cursor = conn.execute(query, params)
+            return [row["anchor"] for row in cursor.fetchall()]
+
+    def get_all_artifacts(
+        self,
+        artifact_type: str | None = None,
+        status: str | None = None,
+    ) -> list[StoredArtifact]:
+        """Get all artifacts, optionally filtered.
+
+        Parameters
+        ----------
+        artifact_type : str | None
+            Filter by artifact type (e.g., 'hook_card').
+        status : str | None
+            Filter by status (e.g., 'proposed').
+
+        Returns
+        -------
+        list[StoredArtifact]
+            List of matching artifacts.
+        """
+        with self._connection() as conn:
+            conditions = []
+            params: list[str] = []
+            if artifact_type:
+                conditions.append("artifact_type = ?")
+                params.append(artifact_type)
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+
+            query = "SELECT * FROM artifacts"
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY updated_at DESC"
+
+            cursor = conn.execute(query, params)
+            return [
+                StoredArtifact(
+                    id=row["id"],
+                    anchor=row["anchor"],
+                    artifact_type=row["artifact_type"],
+                    status=row["status"],
+                    data=json.loads(row["data"]),
+                    created_at=datetime.fromisoformat(row["created_at"]),
+                    updated_at=datetime.fromisoformat(row["updated_at"]),
+                )
+                for row in cursor.fetchall()
+            ]
+
+    def update_artifact_status(self, anchor: str, status: str) -> bool:
+        """Update an artifact's status.
+
+        Parameters
+        ----------
+        anchor : str
+            The artifact's unique identifier.
+        status : str
+            New status value.
+
+        Returns
+        -------
+        bool
+            True if updated, False if not found.
+        """
+        now = _now_iso()
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "UPDATE artifacts SET status = ?, updated_at = ? WHERE anchor = ?",
+                (status, now, anchor),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
 
     # =========================================================================
     # Act Operations

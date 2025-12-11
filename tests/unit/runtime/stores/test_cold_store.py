@@ -515,3 +515,122 @@ class TestStatistics:
         assert stats["snapshot_count"] == 1
         assert stats["total_content_bytes"] > 0
         assert stats["latest_snapshot_id"] is not None
+
+
+class TestArtifactOperations:
+    """Unified artifacts table operations for work artifacts."""
+
+    @pytest.fixture
+    def cold(self, tmp_path: Path) -> ColdStore:
+        store = ColdStore.create(tmp_path / "test_project")
+        yield store
+        store.close()
+
+    def test_save_artifact(self, cold: ColdStore) -> None:
+        """Save a work artifact."""
+        stored = cold.save_artifact(
+            anchor="hook_001",
+            artifact_type="hook_card",
+            status="proposed",
+            data={"title": "Test Hook", "description": "A test hook"},
+        )
+
+        assert stored.anchor == "hook_001"
+        assert stored.artifact_type == "hook_card"
+        assert stored.status == "proposed"
+        assert stored.data["title"] == "Test Hook"
+
+    def test_get_artifact(self, cold: ColdStore) -> None:
+        """Retrieve a saved artifact."""
+        cold.save_artifact(
+            anchor="hook_002",
+            artifact_type="hook_card",
+            status="proposed",
+            data={"title": "Another Hook"},
+        )
+
+        retrieved = cold.get_artifact("hook_002")
+        assert retrieved is not None
+        assert retrieved.anchor == "hook_002"
+        assert retrieved.data["title"] == "Another Hook"
+
+    def test_get_artifact_not_found(self, cold: ColdStore) -> None:
+        """Get missing artifact returns None."""
+        result = cold.get_artifact("nonexistent")
+        assert result is None
+
+    def test_delete_artifact(self, cold: ColdStore) -> None:
+        """Delete an artifact."""
+        cold.save_artifact(
+            anchor="hook_to_delete",
+            artifact_type="hook_card",
+            status="rejected",
+            data={"title": "Deleted Hook"},
+        )
+
+        result = cold.delete_artifact("hook_to_delete")
+        assert result is True
+        assert cold.get_artifact("hook_to_delete") is None
+
+    def test_delete_artifact_missing_returns_false(self, cold: ColdStore) -> None:
+        """Delete missing artifact returns False."""
+        result = cold.delete_artifact("nonexistent")
+        assert result is False
+
+    def test_list_artifacts(self, cold: ColdStore) -> None:
+        """List artifact anchors."""
+        cold.save_artifact("hook_a", "hook_card", "proposed", {"title": "A"})
+        cold.save_artifact("brief_b", "brief", "active", {"title": "B"})
+        cold.save_artifact("hook_c", "hook_card", "resolved", {"title": "C"})
+
+        all_anchors = cold.list_artifacts()
+        assert len(all_anchors) == 3
+
+        hooks_only = cold.list_artifacts(artifact_type="hook_card")
+        assert len(hooks_only) == 2
+        assert "hook_a" in hooks_only
+        assert "hook_c" in hooks_only
+
+        proposed_only = cold.list_artifacts(status="proposed")
+        assert len(proposed_only) == 1
+        assert "hook_a" in proposed_only
+
+    def test_get_all_artifacts(self, cold: ColdStore) -> None:
+        """Get all artifacts with filtering."""
+        cold.save_artifact("hook_x", "hook_card", "proposed", {"title": "X"})
+        cold.save_artifact("hook_y", "hook_card", "accepted", {"title": "Y"})
+
+        all_artifacts = cold.get_all_artifacts()
+        assert len(all_artifacts) == 2
+
+        proposed = cold.get_all_artifacts(status="proposed")
+        assert len(proposed) == 1
+        assert proposed[0].data["title"] == "X"
+
+    def test_update_artifact(self, cold: ColdStore) -> None:
+        """Update an existing artifact."""
+        cold.save_artifact("hook_update", "hook_card", "proposed", {"title": "Original"})
+
+        # Update with same anchor overwrites
+        cold.save_artifact("hook_update", "hook_card", "accepted", {"title": "Updated"})
+
+        retrieved = cold.get_artifact("hook_update")
+        assert retrieved is not None
+        assert retrieved.status == "accepted"
+        assert retrieved.data["title"] == "Updated"
+
+    def test_update_artifact_status(self, cold: ColdStore) -> None:
+        """Update just the status of an artifact."""
+        cold.save_artifact("hook_status", "hook_card", "proposed", {"title": "Status Test"})
+
+        result = cold.update_artifact_status("hook_status", "in_progress")
+        assert result is True
+
+        retrieved = cold.get_artifact("hook_status")
+        assert retrieved is not None
+        assert retrieved.status == "in_progress"
+
+    def test_update_artifact_status_missing_returns_false(self, cold: ColdStore) -> None:
+        """Update status of missing artifact returns False."""
+        result = cold.update_artifact_status("nonexistent", "rejected")
+        assert result is False
