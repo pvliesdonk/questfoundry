@@ -166,7 +166,11 @@ class TestWebSearchTool:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "results": [
-                {"title": f"Result {i}", "url": f"http://example.com/{i}", "content": f"Content {i}"}
+                {
+                    "title": f"Result {i}",
+                    "url": f"http://example.com/{i}",
+                    "content": f"Content {i}",
+                }
                 for i in range(20)
             ]
         }

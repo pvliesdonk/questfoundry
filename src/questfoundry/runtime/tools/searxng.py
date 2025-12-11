@@ -199,7 +199,7 @@ class WebSearchTool(BaseTool):
             )
 
         # Extract and format results
-        results = data.get("results", [])[:self.max_results]
+        results = data.get("results", [])[: self.max_results]
 
         formatted_results = []
         for r in results:
