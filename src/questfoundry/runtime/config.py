@@ -25,6 +25,9 @@ All settings can be overridden via environment variables with QF_ prefix::
     export QF_OLLAMA_HOST="http://localhost:11434"
     export QF_OLLAMA_MODEL="qwen3:8b"
 
+    # SearXNG settings (optional, for Lorekeeper web search)
+    export QF_SEARXNG__URL="http://localhost:8080"
+
 Config File
 -----------
 Create `questfoundry.yaml` in your project root::
@@ -173,6 +176,40 @@ class OpenAIConfig(BaseModel):
     )
 
 
+class SearXNGConfig(BaseModel):
+    """SearXNG web search configuration.
+
+    SearXNG is a self-hosted metasearch engine. The Lorekeeper role
+    can use it for research during world-building and lore creation.
+
+    This is optional - if not configured, Lorekeeper will operate
+    without web search capabilities.
+    """
+
+    url: str | None = Field(
+        default=None,
+        description="SearXNG instance URL (e.g., 'http://localhost:8080'). "
+        "If not set, web search is disabled.",
+    )
+    timeout: int = Field(
+        default=10,
+        ge=1,
+        le=60,
+        description="Request timeout in seconds",
+    )
+    max_results: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of search results to return",
+    )
+
+    @property
+    def enabled(self) -> bool:
+        """Check if SearXNG is configured and enabled."""
+        return bool(self.url)
+
+
 class PathsConfig(BaseModel):
     """File system paths and locations."""
 
@@ -272,6 +309,7 @@ class QuestFoundrySettings(BaseSettings):
     ollama: OllamaConfig = Field(default_factory=OllamaConfig)
     google: GoogleConfig = Field(default_factory=GoogleConfig)
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
+    searxng: SearXNGConfig = Field(default_factory=SearXNGConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 

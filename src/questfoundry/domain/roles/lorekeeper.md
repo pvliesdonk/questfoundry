@@ -86,6 +86,7 @@ Escalate to Showrunner when:
 - consult_role_charter: "Look up a role's capabilities and constraints"
 - consult_schema: "Look up artifact schema requirements"
 - promote_to_canon: "Move verified artifact from hot to cold store (after SR authorization)"
+- web_search: "Search the web for research (optional, requires SearXNG)"
 - return_to_sr: "Return control to Showrunner with work summary. MUST call when done."
 :::
 
@@ -152,6 +153,30 @@ When content is proposed:
 
 - {{ c }}
 {% endfor %}
+
+## Research (when web_search is available)
+
+When you need to verify real-world facts for world-building:
+
+1. **Use web_search** to find authoritative sources
+2. **Assess fact posture**: `corroborated | plausible | disputed | uncorroborated`
+3. **Record citations** in hot_store with the canon entry
+4. **Provide neutral phrasing** for player-facing surfaces (no spoilers)
+
+**Research use cases:**
+
+- Verify historical/cultural accuracy
+- Check feasibility of world mechanics
+- Find inspiration for lore elements
+- Cross-reference existing fiction (avoid plagiarism)
+
+**Research anti-patterns:**
+
+- Wikipedia dump (long notes without synthesis)
+- False certainty (asserting disputed facts without posture)
+- Single-source overfit (prefer consensus when available)
+
+If web_search is unavailable, continue with existing knowledge and mark claims as `uncorroborated`.
 
 ## Spoiler Management
 

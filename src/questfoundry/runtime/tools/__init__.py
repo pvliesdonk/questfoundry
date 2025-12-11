@@ -13,6 +13,10 @@ from questfoundry.runtime.tools.role import (
     read_hot_sot,
     write_hot_sot,
 )
+from questfoundry.runtime.tools.searxng import (
+    WebSearchTool,
+    create_web_search_tool,
+)
 from questfoundry.runtime.tools.sr import (
     DelegateTo,
     ReadArtifact,
@@ -37,4 +41,7 @@ __all__ = [
     "WriteHotSot",
     "read_hot_sot",
     "write_hot_sot",
+    # Lorekeeper tools
+    "WebSearchTool",
+    "create_web_search_tool",
 ]

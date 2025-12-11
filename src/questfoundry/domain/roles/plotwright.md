@@ -86,6 +86,7 @@ Escalate to Showrunner when:
 - consult_playbook: "Get workflow guidance from loop definitions"
 - consult_role_charter: "Look up a role's capabilities and constraints"
 - consult_schema: "Look up artifact schema requirements"
+- web_search: "Search the web for research (optional, requires SearXNG)"
 - return_to_sr: "Return control to Showrunner with work summary. MUST call when done."
 :::
 
@@ -199,6 +200,28 @@ write_hot_sot(key="scene_2", value={
 - Create Scene artifacts with `content: ""` (empty string)
 - Scene Smith will fill the `content` field with prose
 - Acts/Chapters hold structural info and references only
+
+## Research (when web_search is available)
+
+Before designing structures that depend on real-world facts, use web_search to verify:
+
+- **Feasibility**: Can this mechanism/technology/process actually work?
+- **Historical accuracy**: Did this exist in the time period?
+- **Plausibility**: Would this be believable to players?
+
+Example queries:
+
+- "medieval castle siege tactics" (for gate design)
+- "undetectable poisons historical" (for mystery plot)
+- "ship engine failure scenarios" (for dramatic tension)
+
+Record fact posture in your artifacts:
+
+- `corroborated`: Multiple sources confirm
+- `plausible`: Reasonable but not verified
+- `uncorroborated`: Needs Lorekeeper verification
+
+If web_search is unavailable, mark assumptions as `uncorroborated` for later verification.
 
 ## Constraints
 
