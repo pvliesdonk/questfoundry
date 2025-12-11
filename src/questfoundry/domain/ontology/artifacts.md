@@ -658,6 +658,14 @@ required: false
 description: "Categorization tags (mortal, immortal, recurring, etc.)"
 :::
 
+:::{artifact-field}
+artifact: character
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
+:::
+
 ---
 
 ## Location
@@ -730,6 +738,14 @@ name: tags
 type: list[str]
 required: false
 description: "Categorization tags (safe, dangerous, hub, etc.)"
+:::
+
+:::{artifact-field}
+artifact: location
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
 :::
 
 ---
@@ -806,6 +822,14 @@ required: false
 description: "Categorization tags (magical, mundane, unique, etc.)"
 :::
 
+:::{artifact-field}
+artifact: item
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
+:::
+
 ---
 
 ## Relationship
@@ -880,6 +904,14 @@ required: false
 description: "Categorization tags (public, secret, evolving, etc.)"
 :::
 
+:::{artifact-field}
+artifact: relationship
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
+:::
+
 ---
 
 ## Act
@@ -948,6 +980,14 @@ name: visibility
 type: Visibility
 required: false
 description: "Export visibility (defaults to 'public'). Publisher filters based on this."
+:::
+
+:::{artifact-field}
+artifact: act
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
 :::
 
 ---
@@ -1084,6 +1124,14 @@ required: false
 description: "Narrative function of this sequence"
 :::
 
+:::{artifact-field}
+artifact: sequence
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
+:::
+
 ---
 
 ## Beat
@@ -1148,6 +1196,14 @@ required: false
 description: "State changes triggered by this beat"
 :::
 
+:::{artifact-field}
+artifact: beat
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
+:::
+
 ---
 
 ## Timeline
@@ -1204,6 +1260,14 @@ name: scale
 type: str
 required: false
 description: "Time scale (years, decades, centuries, etc.)"
+:::
+
+:::{artifact-field}
+artifact: timeline
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
 :::
 
 ---
@@ -1288,6 +1352,14 @@ required: false
 description: "hot (internal) or cold (player-safe)"
 :::
 
+:::{artifact-field}
+artifact: event
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
+:::
+
 ---
 
 ## Fact
@@ -1360,6 +1432,14 @@ name: tags
 type: list[str]
 required: false
 description: "Categorization tags for filtering and search"
+:::
+
+:::{artifact-field}
+artifact: fact
+name: status
+type: str
+required: false
+description: "Current lifecycle status (defaults to 'draft')"
 :::
 
 ---
