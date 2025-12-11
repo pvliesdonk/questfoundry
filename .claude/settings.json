@@ -34,9 +34,9 @@
         ],
         "deny": [],
         "ask": [
-            "Write(spec/**)",
-            "Edit(spec/**)",
-            "MultiEdit(spec/**)"
+            "Write(src/questfoundry/domain/**)",
+            "Edit(src/questfoundry/domain/**)",
+            "MultiEdit(src/questfoundry/domain/**)"
         ]
     },
     "hooks": {
