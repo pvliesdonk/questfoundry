@@ -7,11 +7,13 @@ from questfoundry.compiler.models.ir import (
     DomainIR,
     EnumTypeIR,
     EnumValueIR,
-    GraphEdgeIR,
-    GraphNodeIR,
+    GraphEdgeIR,  # Deprecated
+    GraphNodeIR,  # Deprecated
     IntentFieldIR,
     IntentTypeIR,
     LoopIR,
+    LoopParticipantConfig,
+    LoopRoutingRuleIR,
     QualityBarIR,
     QualityGateIR,
     RoleIR,
@@ -27,11 +29,13 @@ __all__ = [
     "DomainIR",
     "EnumTypeIR",
     "EnumValueIR",
-    "GraphEdgeIR",
-    "GraphNodeIR",
+    "GraphEdgeIR",  # Deprecated
+    "GraphNodeIR",  # Deprecated
     "IntentFieldIR",
     "IntentTypeIR",
     "LoopIR",
+    "LoopParticipantConfig",
+    "LoopRoutingRuleIR",
     "QualityBarIR",
     "QualityGateIR",
     "RoleIR",

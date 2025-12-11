@@ -20,9 +20,10 @@ Model Categories
     Define agent personas with their identity, tools, constraints, and
     system prompt templates.
 
-**Loop Models** (:class:`LoopIR`, :class:`GraphNodeIR`, :class:`GraphEdgeIR`, :class:`QualityGateIR`):
-    Define workflow graphs as state machines with nodes (role instances),
-    edges (transitions), and quality gates (validation checkpoints).
+**Loop Models** (:class:`LoopIR`, :class:`LoopParticipantConfig`, :class:`LoopRoutingRuleIR`, :class:`QualityGateIR`):
+    Define workflow guidance with participants (roles with params),
+    routing rules (SR delegation decisions), and quality gates.
+    Note: :class:`GraphNodeIR` and :class:`GraphEdgeIR` are deprecated.
 
 **Ontology Models** (:class:`ArtifactTypeIR`, :class:`ArtifactFieldIR`, :class:`EnumTypeIR`, :class:`EnumValueIR`):
     Define the data model - artifact types like HookCard and Scene, their
@@ -280,6 +281,73 @@ class RoleIR(BaseModel):
 # =============================================================================
 
 
+class LoopParticipantConfig(BaseModel):
+    """Configuration for a role participating in a loop.
+
+    Defines operational parameters for how a role executes within a loop.
+    Used in the loop-participants directive.
+
+    Attributes
+    ----------
+    timeout : int
+        Maximum execution time in seconds. Defaults to 300 (5 minutes).
+    max_iterations : int
+        Maximum times this role can be invoked in a single loop run.
+        Prevents infinite loops. Defaults to 10.
+
+    Examples
+    --------
+    >>> config = LoopParticipantConfig(timeout=600, max_iterations=15)
+    """
+
+    timeout: int = 300
+    """Maximum execution time in seconds."""
+
+    max_iterations: int = 10
+    """Maximum invocations per loop run."""
+
+
+class LoopRoutingRuleIR(BaseModel):
+    """A routing rule defining SR delegation decisions within a loop.
+
+    Routing rules replace graph-edge directives with clearer semantics.
+    They describe when SR should delegate to a specific role based on
+    the outcome of a previous role's work.
+
+    Attributes
+    ----------
+    after : str
+        Role ID that just completed work.
+    when : str
+        Status/condition that triggers this routing (e.g., "topology_complete").
+    delegate_to : str
+        Role ID to delegate to next. Use "END" for loop completion.
+    description : str
+        Human-readable explanation of this routing decision. Defaults to empty.
+
+    Examples
+    --------
+    >>> rule = LoopRoutingRuleIR(
+    ...     after="plotwright",
+    ...     when="topology_complete",
+    ...     delegate_to="gatekeeper",
+    ...     description="When PW finishes topology, SR validates via GK"
+    ... )
+    """
+
+    after: str
+    """Role ID that just completed."""
+
+    when: str
+    """Status/condition triggering this route."""
+
+    delegate_to: str
+    """Role ID to delegate to (or 'END')."""
+
+    description: str = ""
+    """Human-readable explanation."""
+
+
 class GraphNodeIR(BaseModel):
     """A node in a workflow graph representing a role invocation.
 
@@ -398,11 +466,10 @@ class QualityGateIR(BaseModel):
 class LoopIR(BaseModel):
     """Intermediate representation of a workflow loop definition.
 
-    A loop is a complete workflow definition as a state machine graph.
-    It contains nodes (role invocations), edges (transitions), and
-    optional quality gates (validation checkpoints).
+    A loop is a complete workflow definition with participants (roles),
+    routing rules (SR delegation decisions), and quality gates (validation).
 
-    Loops are compiled to LangGraph StateGraph objects at runtime.
+    Loops guide SR's orchestration decisions at runtime.
 
     Attributes
     ----------
@@ -413,34 +480,43 @@ class LoopIR(BaseModel):
     trigger : str
         What initiates this loop (e.g., "user_request", "schedule", "artifact_created").
     entry_point : str
-        Node ID where execution starts.
-    exit_point : str | None
-        Optional explicit exit node. If None, uses "__end__" edges. Defaults to None.
-    nodes : list[GraphNodeIR]
-        All nodes in the workflow graph. Defaults to empty list.
-    edges : list[GraphEdgeIR]
-        All transitions between nodes. Defaults to empty list.
+        Role ID where execution starts.
+    participants : dict[str, LoopParticipantConfig]
+        Roles participating with operational params. Defaults to empty dict.
+    routing_rules : list[LoopRoutingRuleIR]
+        SR delegation decisions. Defaults to empty list.
     quality_gates : list[QualityGateIR]
         Validation checkpoints. Defaults to empty list.
     source_file : Path | None
         Source MyST file path for debugging. Defaults to None.
 
+    Deprecated Attributes (for backward compatibility)
+    --------------------------------------------------
+    nodes : list[GraphNodeIR]
+        (Deprecated) Use participants instead.
+    edges : list[GraphEdgeIR]
+        (Deprecated) Use routing_rules instead.
+
     Examples
     --------
-    Create a simple two-node loop::
+    Create a loop with new format::
 
         loop = LoopIR(
             id="story_spark",
             name="Story Spark",
             trigger="user_request",
             entry_point="showrunner",
-            nodes=[
-                GraphNodeIR(id="showrunner", role="showrunner"),
-                GraphNodeIR(id="plotwright", role="plotwright"),
-            ],
-            edges=[
-                GraphEdgeIR(source="showrunner", target="plotwright", condition="completed"),
-                GraphEdgeIR(source="plotwright", target="__end__", condition="completed"),
+            participants={
+                "showrunner": LoopParticipantConfig(timeout=300),
+                "plotwright": LoopParticipantConfig(timeout=600),
+            },
+            routing_rules=[
+                LoopRoutingRuleIR(
+                    after="showrunner",
+                    when="brief_created",
+                    delegate_to="plotwright",
+                    description="Begin topology design"
+                ),
             ],
         )
 
@@ -464,19 +540,27 @@ class LoopIR(BaseModel):
     """Event that initiates this loop."""
 
     entry_point: str
-    """Starting node ID."""
+    """Starting role ID."""
 
     version: int = 1
     """Domain version for checkpoint compatibility."""
 
     exit_point: str | None = None
-    """Explicit exit node ID, if any."""
+    """Explicit exit role ID, if any."""
 
+    # New format (preferred)
+    participants: dict[str, LoopParticipantConfig] = Field(default_factory=dict)
+    """Roles participating with operational params (timeout, max_iterations)."""
+
+    routing_rules: list[LoopRoutingRuleIR] = Field(default_factory=list)
+    """SR delegation decisions (after X, when Y, delegate to Z)."""
+
+    # Deprecated (for backward compatibility during migration)
     nodes: list[GraphNodeIR] = Field(default_factory=list)
-    """All workflow nodes."""
+    """(Deprecated) All workflow nodes. Use participants instead."""
 
     edges: list[GraphEdgeIR] = Field(default_factory=list)
-    """All node transitions."""
+    """(Deprecated) All node transitions. Use routing_rules instead."""
 
     quality_gates: list[QualityGateIR] = Field(default_factory=list)
     """Validation checkpoints."""
@@ -494,6 +578,30 @@ class LoopIR(BaseModel):
             Function name in format "build_{loop_id}_graph".
         """
         return f"build_{self.id}_graph"
+
+    def get_participant_config(self, role_id: str) -> LoopParticipantConfig:
+        """Get participant config for a role, falling back to nodes for compat.
+
+        Parameters
+        ----------
+        role_id : str
+            The role ID to look up.
+
+        Returns
+        -------
+        LoopParticipantConfig
+            Config for the role, with defaults if not explicitly configured.
+        """
+        if role_id in self.participants:
+            return self.participants[role_id]
+        # Backward compat: check deprecated nodes
+        for node in self.nodes:
+            if node.role == role_id:
+                return LoopParticipantConfig(
+                    timeout=node.timeout,
+                    max_iterations=node.max_iterations,
+                )
+        return LoopParticipantConfig()  # defaults
 
 
 # =============================================================================
