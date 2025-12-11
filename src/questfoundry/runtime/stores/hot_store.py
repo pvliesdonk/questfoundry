@@ -1,25 +1,37 @@
-"""HotStore - Ephemeral in-memory workspace for active creative work.
+"""HotStore - In-memory workspace for active creative work with optional persistence.
 
 The HotStore is the mutable workspace where roles collaborate on drafts.
 Content here is not player-safe and may contain spoilers.
 
 Characteristics:
-- Lifetime: Exists only during workflow execution
-- Persistence: None by default; checkpointing optional for resume
+- Lifetime: Session-scoped (in-memory for performance)
+- Persistence: Work artifacts (hooks, briefs) can persist to cold_store's artifacts table
 - Contents: Artifacts in draft/proposed/in_progress states
 - Spoilers: Allowed (not player-safe)
+
+Persistence Model:
+- Content artifacts (scenes, acts, chapters) are promoted to cold_store via Lorekeeper
+- Work artifacts (hooks, briefs, gatecheck reports) persist in cold_store's artifacts table
+- Use load_from_cold_store() at session start to restore work artifacts
+- Use save_to_cold_store() at session end to persist work artifacts
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.stores.cold_store import ColdStore
 
 logger = logging.getLogger(__name__)
 
@@ -285,3 +297,211 @@ class HotStore(BaseModel):
             self.artifacts[key] = default
             self._dirty = True
         return self.artifacts[key]
+
+    # =========================================================================
+    # Cold Store Integration (persistent work artifacts)
+    # =========================================================================
+
+    # Artifact types that should persist to cold_store's artifacts table
+    PERSISTENT_ARTIFACT_TYPES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "hook_card",
+            "brief",
+            "gatecheck_report",
+            "shotlist",
+            "audio_plan",
+            "translation_pack",
+        }
+    )
+
+    def load_from_cold_store(self, cold_store: ColdStore) -> int:
+        """Load persistent work artifacts from cold_store.
+
+        Call this at session start to restore hooks, briefs, and other
+        work artifacts from the previous session.
+
+        Parameters
+        ----------
+        cold_store : ColdStore
+            The cold store to load from.
+
+        Returns
+        -------
+        int
+            Number of artifacts loaded.
+        """
+        count = 0
+        active_brief_count = 0
+
+        # Clear existing hooks to prevent duplicates on reload
+        self.hooks.clear()
+
+        # Load all work artifacts
+        for stored in cold_store.get_all_artifacts():
+            # Reconstruct artifact from stored data
+            artifact_data = stored.data
+            anchor = stored.anchor
+
+            # Store in artifacts dict
+            self.artifacts[anchor] = artifact_data
+
+            # Also populate hooks list for HookCards
+            if stored.artifact_type == "hook_card":
+                self.hooks.append(artifact_data)
+
+            # Restore current brief if active
+            if stored.artifact_type == "brief" and stored.status == "active":
+                active_brief_count += 1
+                if active_brief_count > 1:
+                    logger.warning(
+                        f"Multiple active briefs found ({active_brief_count}). "
+                        f"Using '{anchor}' as current brief."
+                    )
+                self.current_brief = artifact_data
+
+            count += 1
+
+        logger.info(f"Loaded {count} work artifacts from cold_store")
+        self._dirty = False
+        return count
+
+    def save_to_cold_store(self, cold_store: ColdStore) -> int:
+        """Save persistent work artifacts to cold_store.
+
+        Call this at session end to persist hooks, briefs, and other
+        work artifacts for the next session.
+
+        Parameters
+        ----------
+        cold_store : ColdStore
+            The cold store to save to.
+
+        Returns
+        -------
+        int
+            Number of artifacts saved.
+        """
+        count = 0
+
+        for anchor, artifact in self.artifacts.items():
+            # Determine artifact type
+            artifact_type = self._get_artifact_type(artifact)
+            if artifact_type not in self.PERSISTENT_ARTIFACT_TYPES:
+                continue
+
+            # Get status from artifact (default to 'draft')
+            status = self._get_artifact_status(artifact)
+
+            # Serialize artifact data
+            if hasattr(artifact, "model_dump"):
+                data = artifact.model_dump()
+            elif isinstance(artifact, dict):
+                data = artifact
+            else:
+                logger.warning(f"Cannot serialize artifact {anchor}: {type(artifact)}")
+                continue
+
+            cold_store.save_artifact(
+                anchor=anchor,
+                artifact_type=artifact_type,
+                status=status,
+                data=data,
+            )
+            count += 1
+
+        logger.info(f"Saved {count} work artifacts to cold_store")
+        self._dirty = False
+        return count
+
+    def _get_artifact_type(self, artifact: Any) -> str:
+        """Determine the artifact type from an artifact object or dict."""
+        # Check for explicit type field
+        if isinstance(artifact, dict):
+            if "artifact_type" in artifact:
+                return str(artifact["artifact_type"])
+            # Infer from field presence
+            if "hook_type" in artifact:
+                return "hook_card"
+            if "loop_type" in artifact:
+                return "brief"
+            if "bars_checked" in artifact:
+                return "gatecheck_report"
+            if "shots" in artifact:
+                return "shotlist"
+            if "ambient" in artifact or "music_cues" in artifact:
+                return "audio_plan"
+            if "source_language" in artifact and "target_language" in artifact:
+                return "translation_pack"
+            return "unknown"
+
+        # For objects, use class name converted to snake_case
+        class_name = artifact.__class__.__name__
+        return str(re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower())
+
+    def _get_artifact_status(self, artifact: Any) -> str:
+        """Extract status from an artifact object or dict."""
+        if isinstance(artifact, dict):
+            status = artifact.get("status", "draft")
+        elif hasattr(artifact, "status"):
+            status = artifact.status
+        else:
+            return "draft"
+
+        # Handle None
+        if status is None:
+            return "draft"
+
+        # Handle Enum values (e.g., HookStatus.PROPOSED -> "proposed")
+        if isinstance(status, Enum):
+            return str(status.value)
+
+        return str(status)
+
+    def sync_hooks_to_cold_store(self, cold_store: ColdStore) -> int:
+        """Sync just the hooks list to cold_store.
+
+        Convenience method for saving hooks without full artifact sync.
+
+        Parameters
+        ----------
+        cold_store : ColdStore
+            The cold store to save to.
+
+        Returns
+        -------
+        int
+            Number of hooks saved.
+        """
+        count = 0
+        for hook in self.hooks:
+            # Generate anchor if not present (use UUID for stable identity)
+            if isinstance(hook, dict):
+                anchor = hook.get("anchor") or f"hook_{uuid.uuid4().hex[:12]}"
+                status = hook.get("status", "proposed")
+                # Store anchor back in dict for future syncs
+                if "anchor" not in hook:
+                    hook["anchor"] = anchor
+                data = hook
+            elif hasattr(hook, "model_dump"):
+                anchor = getattr(hook, "anchor", None) or f"hook_{uuid.uuid4().hex[:12]}"
+                status = getattr(hook, "status", "proposed")
+                # Handle enum status
+                if isinstance(status, Enum):
+                    status = str(status.value)
+                data = hook.model_dump()
+                # Store anchor back in data for future syncs
+                if "anchor" not in data:
+                    data["anchor"] = anchor
+            else:
+                continue
+
+            cold_store.save_artifact(
+                anchor=anchor,
+                artifact_type="hook_card",
+                status=str(status) if status else "proposed",
+                data=data,
+            )
+            count += 1
+
+        logger.info(f"Synced {count} hooks to cold_store")
+        return count

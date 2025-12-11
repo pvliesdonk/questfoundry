@@ -5,6 +5,22 @@
 
 ---
 
+## Store Field Reference
+
+The `store` field in artifact-type directives determines persistence behavior:
+
+| Value | Persistence | Destination |
+|-------|------------|-------------|
+| `hot` | Persistent in `artifacts` table | JSON blob storage, survives sessions |
+| `cold` | Persistent in dedicated table | Type-specific table (sections, codex, canon) |
+| `both` | Starts hot, promoted when approved | Hot → dedicated table on approval |
+
+**Note:** All artifacts now persist across CLI sessions. The `store` field indicates
+whether the artifact uses the unified `artifacts` table (hot) or gets promoted to
+a dedicated table (cold/both).
+
+---
+
 ## HookCard
 
 A hook card captures a proposed change, question, or work item.

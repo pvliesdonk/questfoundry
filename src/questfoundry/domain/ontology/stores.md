@@ -7,38 +7,49 @@
 
 ## Overview
 
-QuestFoundry maintains a **three-tier storage model**:
+QuestFoundry maintains a **unified storage model** with in-memory caching:
 
 | Tier | Persistence | Mutability | Contains |
 |------|-------------|------------|----------|
-| **hot_store** | Ephemeral (memory) | Freely mutable | Working drafts, process artifacts |
-| **cold_store** | Persistent (SQLite) | Append-only | All approved canon |
+| **hot_store** | Session cache + DB persistence | Freely mutable | Working drafts, process artifacts |
+| **cold_store** | Persistent (SQLite) | Append-only for content | All approved canon + work artifacts |
 | **Views/Exports** | Derived | Read-only | Filtered snapshots for specific audiences |
 
-**Rule:** Hot discovers and argues. Cold stores all approved canon. Views filter for audiences.
+**Rule:** Hot is the working memory. Cold stores everything persistently. Views filter for audiences.
 
-### Key Distinction: Storage vs. Export
+### Key Distinction: Content vs. Work Artifacts
 
-- **Storage** (hot → cold): Determined by artifact lifecycle. All content artifacts
-  (Scenes, Acts, Chapters, Canon entries) get promoted to cold when approved.
+- **Content artifacts** (Scenes, Acts, Chapters, Canon entries) are promoted to
+  cold_store's dedicated tables when approved by Gatekeeper.
+- **Work artifacts** (Briefs, HookCards, GatecheckReports) persist in cold_store's
+  unified `artifacts` table, surviving across CLI sessions.
 - **Export** (cold → view): Determined by `visibility` field. Publisher filters
   cold_store content based on visibility when creating player exports.
 
-**Process artifacts** (Briefs, HookCards, GatecheckReports) never go to cold_store.
-They are work-tracking artifacts, not story content.
+### Work Artifact Persistence
+
+**Work artifacts persist across sessions** to support multi-session workflows:
+
+1. **Story Spark** generates hooks during content creation
+2. User ends session → hooks saved to `artifacts` table
+3. User returns later → hooks restored from `artifacts` table
+4. **Hook Harvest** triages accumulated hooks
+5. Accepted hooks flow to Lore Deepening, Codex Expansion, etc.
+
+This enables workflows that span multiple CLI invocations.
 
 ---
 
 ## hot_store
 
-The hot_store is an ephemeral, in-memory workspace for active creative work.
+The hot_store is an in-memory workspace for active creative work with database persistence.
 
 ### Characteristics
 
-- **Lifetime**: Exists only during workflow execution
-- **Persistence**: None by default; checkpointing optional for resume
+- **Lifetime**: Session-scoped (in-memory for performance)
+- **Persistence**: Work artifacts sync to cold_store's `artifacts` table
 - **Contents**: Working drafts + process artifacts (Briefs, HookCards, etc.)
-- **Process artifacts**: Briefs, HookCards, GatecheckReports stay here permanently
+- **Session flow**: Load from DB on start → work in memory → save to DB on exit
 
 ### Structure
 
@@ -52,51 +63,89 @@ hot_store:
   scratch: dict[str, Any]            # Role working memory
 ```
 
+### Persistence Methods
+
+Work artifacts are saved to cold_store's unified `artifacts` table:
+
+- **On session start**: `hot_store.load_from_cold_store(cold_store)` restores work artifacts
+- **On session end**: `hot_store.save_to_cold_store(cold_store)` persists work artifacts
+- **Hooks sync**: `hot_store.sync_hooks_to_cold_store(cold_store)` for incremental saves
+
 ### Checkpointing (Optional)
 
-For long-running workflows or crash recovery, hot_store can be serialized:
+For crash recovery within a session, hot_store can also checkpoint to JSON:
 
 - **Format**: JSON dump of artifacts
 - **Location**: `{project}/.qf/checkpoint.json`
-- **Trigger**: On delegation boundary or explicit save
-- **Resume**: Load checkpoint → continue workflow
+- **Use case**: Resume interrupted workflows within same session
 
 ---
 
 ## cold_store
 
-The cold_store is the persistent, canonical source of truth for **all approved content**.
+The cold_store is the persistent, canonical source of truth for **all project data**.
 
 ### Characteristics
 
 - **Lifetime**: Permanent (project lifetime)
 - **Persistence**: SQLite database + external asset files
-- **Contents**: All gatekeeper-approved content artifacts
+- **Contents**: All approved content + persistent work artifacts
 - **Visibility**: Per-artifact `visibility` field controls export filtering
 
 ### What Goes to Cold Store
 
-All **content artifacts** get promoted when approved:
+**Content artifacts** are promoted to dedicated tables when approved:
 
-| Artifact Type | Promoted to Cold | Notes |
-|---------------|------------------|-------|
-| Scene | ✓ | Prose content with choices and gates |
-| Act | ✓ | Structural organization |
-| Chapter | ✓ | Structural organization |
-| CanonEntry | ✓ | World facts and lore |
-| Character | ✓ | Named entities |
-| Location | ✓ | Places in the world |
-| Brief | ✗ | Process artifact (work order) |
-| HookCard | ✗ | Process artifact (change request) |
-| GatecheckReport | ✗ | Process artifact (validation) |
+| Artifact Type | Table | Notes |
+|---------------|-------|-------|
+| Scene | sections | Prose content with choices and gates |
+| Act | acts | Structural organization |
+| Chapter | chapters | Structural organization |
+| CanonEntry, Event, Fact, Timeline | canon | Internal world facts (may have spoilers) |
+| Character, Location, Item, Relationship | codex | Player-safe encyclopedia |
+
+**Work artifacts** persist in the unified `artifacts` table:
+
+| Artifact Type | Persisted | Notes |
+|---------------|-----------|-------|
+| HookCard | ✓ | Proposed changes/ideas |
+| Brief | ✓ | Work orders |
+| GatecheckReport | ✓ | Validation results |
+| Shotlist | ✓ | Asset generation plans |
+| AudioPlan | ✓ | Sound design specifications |
 
 ### Components
 
 The cold_store contains these main components:
 
 1. **Book** — Story structure: Acts, Chapters, Sections (scenes)
-2. **Assets** — Binary files (images, audio, fonts)
-3. **Snapshots** — Point-in-time captures for deterministic builds
+2. **Codex** — Player-safe encyclopedia entries
+3. **Canon** — Internal world facts (may contain spoilers)
+4. **Artifacts** — Persistent work artifacts (hooks, briefs, reports)
+5. **Assets** — Binary files (images, audio, fonts)
+6. **Snapshots** — Point-in-time captures for deterministic builds
+
+### Artifacts Table
+
+The unified `artifacts` table stores work artifacts as JSON blobs:
+
+```sql
+artifacts (
+    id INTEGER PRIMARY KEY,
+    anchor TEXT UNIQUE,        -- e.g., 'hook_123', 'brief_abc'
+    artifact_type TEXT,        -- 'hook_card', 'brief', 'gatecheck_report'
+    status TEXT,               -- Lifecycle status from artifact definition
+    data TEXT,                 -- JSON blob of full Pydantic model
+    created_at TEXT,
+    updated_at TEXT
+)
+```
+
+**Benefits of JSON blob storage:**
+
+- No schema migrations when artifact fields change
+- Pydantic handles serialization and evolution
+- Simple implementation at expected scale (~100-200 artifacts)
 
 ---
 

@@ -70,6 +70,8 @@ class Act(BaseModel):
         Thematic elements explored in this act (optional)
     visibility : Visibility | None
         Export visibility (defaults to 'public'). Publisher filters based on this. (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -115,6 +117,9 @@ class Act(BaseModel):
     )
     visibility: Visibility | None = Field(
         default=None, title="Visibility", description="Export visibility (defaults to 'public'). Publisher filters based on this.", examples=["public"],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
@@ -221,6 +226,8 @@ class Beat(BaseModel):
         Character IDs involved in this beat (optional)
     state_effects : list[str] | None
         State changes triggered by this beat (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -268,6 +275,9 @@ class Beat(BaseModel):
     )
     state_effects: list[str] | None = Field(
         default=None, title="State Effects", description="State changes triggered by this beat", examples=[["item1", "item2"]],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
@@ -544,6 +554,8 @@ class Character(BaseModel):
         Scene or chapter where character is introduced (optional)
     tags : list[str] | None
         Categorization tags (mortal, immortal, recurring, etc.) (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -592,6 +604,9 @@ class Character(BaseModel):
     )
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags (mortal, immortal, recurring, etc.)", examples=[["item1", "item2"]],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
@@ -1121,6 +1136,8 @@ class Event(BaseModel):
         Event IDs that resulted from this event (optional)
     spoiler_level : str | None
         hot (internal) or cold (player-safe) (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1175,6 +1192,9 @@ class Event(BaseModel):
     spoiler_level: str | None = Field(
         default=None, title="Spoiler Level", description="hot (internal) or cold (player-safe)", examples=["example_spoiler_level"],
     )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
+    )
 
 
 class Fact(BaseModel):
@@ -1199,6 +1219,8 @@ class Fact(BaseModel):
         hot (internal) or cold (player-safe) (optional)
     tags : list[str] | None
         Categorization tags for filtering and search (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1245,6 +1267,9 @@ class Fact(BaseModel):
     )
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags for filtering and search", examples=[["item1", "item2"]],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
@@ -1491,6 +1516,8 @@ class Item(BaseModel):
         Location ID where item can be found (optional)
     tags : list[str] | None
         Categorization tags (magical, mundane, unique, etc.) (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1540,6 +1567,9 @@ class Item(BaseModel):
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags (magical, mundane, unique, etc.)", examples=[["item1", "item2"]],
     )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
+    )
 
 
 class Location(BaseModel):
@@ -1564,6 +1594,8 @@ class Location(BaseModel):
         Distinctive elements (landmarks, hazards, resources) (optional)
     tags : list[str] | None
         Categorization tags (safe, dangerous, hub, etc.) (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1613,6 +1645,9 @@ class Location(BaseModel):
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags (safe, dangerous, hub, etc.)", examples=[["item1", "item2"]],
     )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
+    )
 
 
 class Relationship(BaseModel):
@@ -1637,6 +1672,8 @@ class Relationship(BaseModel):
         Whether the relationship is bidirectional (optional)
     tags : list[str] | None
         Categorization tags (public, secret, evolving, etc.) (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1687,6 +1724,9 @@ class Relationship(BaseModel):
     )
     tags: list[str] | None = Field(
         default=None, title="Tags", description="Categorization tags (public, secret, evolving, etc.)", examples=[["item1", "item2"]],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
@@ -1798,6 +1838,8 @@ class Sequence(BaseModel):
         IDs of beats in this sequence (optional)
     purpose : str | None
         Narrative function of this sequence (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1842,6 +1884,9 @@ class Sequence(BaseModel):
     )
     purpose: str | None = Field(
         default=None, title="Purpose", description="Narrative function of this sequence", examples=["example_purpose"],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
@@ -1938,6 +1983,8 @@ class Timeline(BaseModel):
         IDs of events in this timeline (optional)
     scale : str | None
         Time scale (years, decades, centuries, etc.) (optional)
+    status : str | None
+        Current lifecycle status (defaults to 'draft') (optional)
 
     Examples
     --------
@@ -1978,6 +2025,9 @@ class Timeline(BaseModel):
     )
     scale: str | None = Field(
         default=None, title="Scale", description="Time scale (years, decades, centuries, etc.)", examples=["example_scale"],
+    )
+    status: str | None = Field(
+        default=None, title="Status", description="Current lifecycle status (defaults to 'draft')", examples=["example_status"],
     )
 
 
