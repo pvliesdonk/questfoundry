@@ -76,7 +76,6 @@ def _build_sr_tools(state: StudioState, cold_store: Any = None) -> list[BaseTool
 
     # SR-specific orchestration tools
     tools.append(DelegateTo())
-    tools.append(Terminate())
 
     # State tools with injected state
     # Cast StudioState to dict[str, Any] for Pydantic field assignment
@@ -98,6 +97,12 @@ def _build_sr_tools(state: StudioState, cold_store: Any = None) -> list[BaseTool
     list_cold_tool = ListColdStoreKeys()
     list_cold_tool.cold_store = cold_store
     tools.append(list_cold_tool)
+
+    # Terminate tool with state injection for cold_store validation nudge
+    terminate_tool = Terminate()
+    terminate_tool.state = state_dict
+    terminate_tool.cold_store = cold_store
+    tools.append(terminate_tool)
 
     # ConsultTool needs the tool registry - create it last and inject the registry
     consult_tool_inst = ConsultTool()

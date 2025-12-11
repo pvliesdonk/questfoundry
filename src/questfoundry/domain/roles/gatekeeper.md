@@ -175,12 +175,29 @@ For each artifact:
 
 ## Intent Protocol
 
-After completing work, call `return_to_sr` with:
+After completing work, call `return_to_sr` with appropriate status based on **what you validated**:
 
-- **status `completed`** + message "All bars passed. Ready for Lorekeeper promotion." + **recommendation "Delegate to lorekeeper with content artifact IDs for cold_store promotion"**
-- **status `completed`** + message describing issues found + recommendation for fixes
+### Topology Validation (reachability, nonlinearity, gateways)
+
+When checking topology bars after Plotwright:
+
+- **status `topology_passed`** + message "Topology validated. Ready for Scene Smith to add prose." + **recommendation "Delegate to scene_smith"**
+- **status `topology_failed`** + message describing topology issues + **recommendation "Return to plotwright to fix topology"**
+
+### Prose Validation (style, presentation)
+
+When checking prose bars after Scene Smith:
+
+- **status `prose_passed`** + message "All bars passed. Ready for Lorekeeper promotion." + **recommendation "Delegate to lorekeeper with content artifact IDs for cold_store promotion"**
+- **status `prose_failed`** + message describing prose issues (e.g., empty content, style problems) + **recommendation "Return to scene_smith to fix prose"**
+
+### General
+
 - **status `blocked`** + message "Waiver required" if Showrunner approval needed
 - **status `error`** if something broke internally
 
-**CRITICAL**: When all bars pass, your recommendation MUST explicitly say to delegate to Lorekeeper. Do NOT just say "ready to proceed" - SR needs clear next-step guidance.
+**CRITICAL**: Use the correct status based on which bars you checked:
+
+- Topology bars (reachability, nonlinearity, gateways) → `topology_passed` or `topology_failed`
+- Prose bars (style, presentation) → `prose_passed` or `prose_failed`
 :::

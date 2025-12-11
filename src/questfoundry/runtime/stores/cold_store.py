@@ -5,7 +5,7 @@ It contains both player-visible and internal content; visibility filtering
 is handled at export time by Publisher.
 
 Three-Tier Storage Model:
-- hot_store: Working drafts, mutable, process artifacts
+- hot_store: Working drafts, mutable, process artifacts (ephemeral)
 - cold_store: All approved content, append-only (this module)
 - Views/Exports: Filtered snapshots for different audiences
 
@@ -15,12 +15,22 @@ Characteristics:
 - Contents: All approved, gatekeeper-validated content
 - Visibility: Per-artifact visibility field controls export filtering
 
-Components:
+Components (per v2 spec):
 - Book: Story structure metadata
 - Acts/Chapters: Structural hierarchy
-- Sections: Prose content
+- Sections: Narrative prose (scenes)
+- Codex: Player-safe encyclopedia (character, location, item, relationship)
+         These are ALWAYS player-safe - no spoilers allowed.
+- Canon: Internal world facts (canon_entry, event, fact, timeline)
+         These CAN contain spoilers (spoiler_level: hot/cold).
 - Assets: Binary files (images, audio, fonts)
 - Snapshots: Point-in-time captures for deterministic builds
+
+Content Routing:
+- scene → sections table
+- character, location, item, relationship → codex table (player-safe)
+- canon_entry, event, fact, timeline → canon table (can have spoilers)
+- act, chapter → acts, chapters tables (structural)
 """
 
 from __future__ import annotations
@@ -43,7 +53,7 @@ from questfoundry.generated.models.enums import Visibility
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4  # Added codex and canon tables
 
 
 # =============================================================================
@@ -113,6 +123,49 @@ class ColdSnapshot(BaseModel):
     manifest_hash: str  # SHA-256 of all section + asset hashes
     section_count: int
     asset_count: int
+
+
+class ColdCodex(BaseModel):
+    """Player-safe encyclopedia entry.
+
+    Per v2 spec: "Codex entries are the player-facing encyclopedia containing
+    world knowledge that is explicitly safe for players to know."
+
+    Categories: character, location, item, relationship
+    These NEVER contain spoilers - they're always player-safe.
+    """
+
+    id: int
+    anchor: str  # Unique identifier (e.g., 'char_protagonist', 'loc_marketplace')
+    category: str  # character, location, item, relationship
+    title: str  # Display name
+    content: str  # Description/information
+    content_hash: str  # SHA-256 for integrity
+    metadata: dict[str, Any] | None = None  # Category-specific fields as JSON
+    visibility: Visibility = Visibility.PUBLIC
+    created_at: datetime
+
+
+class ColdCanon(BaseModel):
+    """Internal world facts (may contain spoilers).
+
+    Per v2 spec: "Canon can contain spoilers; never leaves Hot until
+    Gatekeeper approves player-safe summaries."
+
+    Categories: canon_entry, event, fact, timeline
+    spoiler_level distinguishes internal (hot) from player-safe (cold) summaries.
+    """
+
+    id: int
+    anchor: str  # Unique identifier (e.g., 'fact_magic_system', 'event_war')
+    category: str  # canon_entry, event, fact, timeline
+    title: str  # Display name
+    content: str  # The canonical information
+    content_hash: str  # SHA-256 for integrity
+    spoiler_level: str = "hot"  # hot (internal only) or cold (player-safe)
+    metadata: dict[str, Any] | None = None  # Category-specific fields as JSON
+    visibility: Visibility = Visibility.INTERNAL
+    created_at: datetime
 
 
 # =============================================================================
@@ -228,6 +281,39 @@ CREATE TABLE IF NOT EXISTS assets (
     provenance TEXT
 );
 
+-- Codex entries (player-safe encyclopedia)
+-- Categories: character, location, item, relationship
+-- These are ALWAYS player-safe - no spoiler_level field
+-- Per v2 spec: "Codex entries are the player-facing encyclopedia"
+CREATE TABLE IF NOT EXISTS codex (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,  -- character, location, item, relationship
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    metadata TEXT,  -- JSON for category-specific fields
+    visibility TEXT DEFAULT 'public',
+    created_at TEXT NOT NULL
+);
+
+-- Canon entries (internal world facts - can contain spoilers)
+-- Categories: canon_entry, event, fact, timeline
+-- Per v2 spec: "Canon can contain spoilers; never leaves Hot until Gatekeeper approves"
+-- spoiler_level: hot (internal only) or cold (player-safe summary)
+CREATE TABLE IF NOT EXISTS canon (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anchor TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,  -- canon_entry, event, fact, timeline
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    spoiler_level TEXT DEFAULT 'hot',  -- hot (internal) or cold (player-safe)
+    metadata TEXT,  -- JSON for category-specific fields (e.g., timeline refs, event dates)
+    visibility TEXT DEFAULT 'internal',
+    created_at TEXT NOT NULL
+);
+
 -- Snapshots for deterministic builds
 CREATE TABLE IF NOT EXISTS snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -261,6 +347,11 @@ CREATE INDEX IF NOT EXISTS idx_sections_anchor ON sections(anchor);
 CREATE INDEX IF NOT EXISTS idx_sections_order ON sections(order_num);
 CREATE INDEX IF NOT EXISTS idx_sections_chapter ON sections(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_assets_anchor ON assets(anchor);
+CREATE INDEX IF NOT EXISTS idx_codex_anchor ON codex(anchor);
+CREATE INDEX IF NOT EXISTS idx_codex_category ON codex(category);
+CREATE INDEX IF NOT EXISTS idx_canon_anchor ON canon(anchor);
+CREATE INDEX IF NOT EXISTS idx_canon_category ON canon(category);
+CREATE INDEX IF NOT EXISTS idx_canon_spoiler ON canon(spoiler_level);
 CREATE INDEX IF NOT EXISTS idx_snapshots_created ON snapshots(created_at);
 """
 
@@ -489,7 +580,7 @@ class ColdStore:
                 language=row["language"],
                 author=row["author"],
                 start_anchor=start_anchor,
-                domain_version=row["domain_version"] if "domain_version" in row.keys() else None,
+                domain_version=row["domain_version"] if "domain_version" in row else None,
             )
 
     def set_book_metadata(self, metadata: BookMetadata) -> None:
@@ -792,6 +883,267 @@ class ColdStore:
                 return True
             except sqlite3.IntegrityError:
                 return False
+
+    # =========================================================================
+    # Codex Operations (player-safe encyclopedia)
+    # Categories: character, location, item, relationship
+    # Per v2 spec: "Codex entries are the player-facing encyclopedia"
+    # =========================================================================
+
+    def add_codex(
+        self,
+        anchor: str,
+        category: str,
+        title: str,
+        content: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        visibility: Visibility = Visibility.PUBLIC,
+    ) -> ColdCodex:
+        """Add or update a codex entry.
+
+        Parameters
+        ----------
+        anchor : str
+            Unique identifier (e.g., 'char_protagonist', 'loc_marketplace').
+        category : str
+            Type of entry: character, location, item, relationship.
+        title : str
+            Display name.
+        content : str
+            Description/information.
+        metadata : dict | None
+            Category-specific fields as JSON.
+        visibility : Visibility
+            Export visibility (default: public).
+
+        Returns
+        -------
+        ColdCodex
+            The created/updated codex entry.
+        """
+        content_hash = _compute_hash(content)
+        created_at = _now_iso()
+        metadata_json = json.dumps(metadata) if metadata else None
+
+        with self._connection() as conn:
+            # Check if anchor exists
+            cursor = conn.execute(
+                "SELECT id FROM codex WHERE anchor = ?", (anchor,)
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existing entry
+                conn.execute(
+                    """
+                    UPDATE codex SET
+                        category = ?, title = ?, content = ?, content_hash = ?,
+                        metadata = ?, visibility = ?
+                    WHERE anchor = ?
+                    """,
+                    (category, title, content, content_hash, metadata_json, visibility.value, anchor),
+                )
+                codex_id = existing["id"]
+            else:
+                # Insert new entry
+                cursor = conn.execute(
+                    """
+                    INSERT INTO codex
+                    (anchor, category, title, content, content_hash, metadata, visibility, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (anchor, category, title, content, content_hash, metadata_json, visibility.value, created_at),
+                )
+                codex_id = cursor.lastrowid
+
+            conn.commit()
+
+        return ColdCodex(
+            id=codex_id,
+            anchor=anchor,
+            category=category,
+            title=title,
+            content=content,
+            content_hash=content_hash,
+            metadata=metadata,
+            visibility=visibility,
+            created_at=datetime.fromisoformat(created_at),
+        )
+
+    def get_codex(self, anchor: str) -> ColdCodex | None:
+        """Get a codex entry by anchor."""
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM codex WHERE anchor = ?", (anchor,)
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            metadata = json.loads(row["metadata"]) if row["metadata"] else None
+
+            return ColdCodex(
+                id=row["id"],
+                anchor=row["anchor"],
+                category=row["category"],
+                title=row["title"],
+                content=row["content"],
+                content_hash=row["content_hash"],
+                metadata=metadata,
+                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+
+    def list_codex(self, category: str | None = None) -> list[str]:
+        """List codex entry anchors, optionally filtered by category."""
+        with self._connection() as conn:
+            if category:
+                cursor = conn.execute(
+                    "SELECT anchor FROM codex WHERE category = ? ORDER BY title",
+                    (category,),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT anchor FROM codex ORDER BY category, title"
+                )
+            return [row["anchor"] for row in cursor.fetchall()]
+
+    # =========================================================================
+    # Canon Operations (internal world facts - can contain spoilers)
+    # Categories: canon_entry, event, fact, timeline
+    # Per v2 spec: "Canon can contain spoilers; never leaves Hot until approved"
+    # =========================================================================
+
+    def add_canon(
+        self,
+        anchor: str,
+        category: str,
+        title: str,
+        content: str,
+        *,
+        spoiler_level: str = "hot",
+        metadata: dict[str, Any] | None = None,
+        visibility: Visibility = Visibility.INTERNAL,
+    ) -> ColdCanon:
+        """Add or update a canon entry.
+
+        Parameters
+        ----------
+        anchor : str
+            Unique identifier (e.g., 'fact_magic_system', 'event_war').
+        category : str
+            Type of entry: canon_entry, event, fact, timeline.
+        title : str
+            Display name.
+        content : str
+            The canonical information.
+        spoiler_level : str
+            'hot' (internal only) or 'cold' (player-safe summary).
+        metadata : dict | None
+            Category-specific fields as JSON.
+        visibility : Visibility
+            Export visibility (default: internal).
+
+        Returns
+        -------
+        ColdCanon
+            The created/updated canon entry.
+        """
+        content_hash = _compute_hash(content)
+        created_at = _now_iso()
+        metadata_json = json.dumps(metadata) if metadata else None
+
+        with self._connection() as conn:
+            # Check if anchor exists
+            cursor = conn.execute(
+                "SELECT id FROM canon WHERE anchor = ?", (anchor,)
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existing entry
+                conn.execute(
+                    """
+                    UPDATE canon SET
+                        category = ?, title = ?, content = ?, content_hash = ?,
+                        spoiler_level = ?, metadata = ?, visibility = ?
+                    WHERE anchor = ?
+                    """,
+                    (category, title, content, content_hash, spoiler_level, metadata_json, visibility.value, anchor),
+                )
+                canon_id = existing["id"]
+            else:
+                # Insert new entry
+                cursor = conn.execute(
+                    """
+                    INSERT INTO canon
+                    (anchor, category, title, content, content_hash, spoiler_level, metadata, visibility, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (anchor, category, title, content, content_hash, spoiler_level, metadata_json, visibility.value, created_at),
+                )
+                canon_id = cursor.lastrowid
+
+            conn.commit()
+
+        return ColdCanon(
+            id=canon_id,
+            anchor=anchor,
+            category=category,
+            title=title,
+            content=content,
+            content_hash=content_hash,
+            spoiler_level=spoiler_level,
+            metadata=metadata,
+            visibility=visibility,
+            created_at=datetime.fromisoformat(created_at),
+        )
+
+    def get_canon(self, anchor: str) -> ColdCanon | None:
+        """Get a canon entry by anchor."""
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM canon WHERE anchor = ?", (anchor,)
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            metadata = json.loads(row["metadata"]) if row["metadata"] else None
+
+            return ColdCanon(
+                id=row["id"],
+                anchor=row["anchor"],
+                category=row["category"],
+                title=row["title"],
+                content=row["content"],
+                content_hash=row["content_hash"],
+                spoiler_level=row["spoiler_level"],
+                metadata=metadata,
+                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.INTERNAL,
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+
+    def list_canon(self, category: str | None = None, spoiler_level: str | None = None) -> list[str]:
+        """List canon entry anchors, optionally filtered by category and/or spoiler level."""
+        with self._connection() as conn:
+            conditions = []
+            params = []
+            if category:
+                conditions.append("category = ?")
+                params.append(category)
+            if spoiler_level:
+                conditions.append("spoiler_level = ?")
+                params.append(spoiler_level)
+
+            query = "SELECT anchor FROM canon"
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY category, title"
+
+            cursor = conn.execute(query, params)
+            return [row["anchor"] for row in cursor.fetchall()]
 
     # =========================================================================
     # Act Operations

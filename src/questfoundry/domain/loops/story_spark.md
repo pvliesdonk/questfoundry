@@ -248,9 +248,10 @@ condition: "intent.type == 'escalation'"
 
 ## Quality Gates
 
-### Pre-Gatekeeper Validation
+### Pre-Gatekeeper Topology Validation
 
 :::{quality-gate}
+id: topology_check
 before: gatekeeper
 role: gatekeeper
 bars:
@@ -258,6 +259,21 @@ bars:
 - reachability
 - nonlinearity
 - gateways
+blocking: true
+:::
+
+### Pre-Lorekeeper Prose Validation
+
+After Scene Smith fills prose, validate content quality before promotion.
+
+:::{quality-gate}
+id: prose_check
+before: lorekeeper
+role: gatekeeper
+bars:
+
+- style
+- presentation
 blocking: true
 :::
 

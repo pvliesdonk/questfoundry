@@ -133,6 +133,9 @@ class Terminate(BaseTool):
     - Human intervention is required
 
     Provide a reason and summary of what was accomplished.
+
+    NOTE: This tool will warn (but not block) if there are unpromoted
+    artifacts in hot_store that should be in cold_store.
     """
 
     name: str = "terminate"
@@ -141,14 +144,104 @@ class Terminate(BaseTool):
         "Inputs: reason (why terminating), summary (what was accomplished)"
     )
 
+    # State is injected by orchestrator for validation
+    state: dict[str, Any] = Field(default_factory=dict)
+    # ColdStore is injected for promotion check
+    cold_store: Any = Field(default=None)
+
     def _run(self, reason: str, summary: str = "") -> str:
-        """Signal workflow termination."""
+        """Signal workflow termination with cold_store validation nudge."""
         if not reason or not reason.strip():
             return json.dumps(
                 {
                     "success": False,
                     "error": "Termination reason is required",
                     "hint": "Explain why the workflow is ending (completed, blocked, error, etc.)",
+                }
+            )
+
+        # Check for unpromoted artifacts using domain ontology
+        hot_store = self.state.get("hot_store", {})
+
+        # Get promotable type names from domain ontology
+        try:
+            from questfoundry.generated.models.artifacts import (
+                ARTIFACT_REGISTRY,
+                PROMOTABLE_ARTIFACTS,
+            )
+            promotable_types = {
+                type_name for type_name, cls in ARTIFACT_REGISTRY.items()
+                if cls.__name__ in PROMOTABLE_ARTIFACTS
+                and not type_name.startswith("cold_")  # cold_* are output types, not input
+            }
+        except ImportError:
+            # Fallback if generated models not available
+            promotable_types = {"act", "chapter", "scene", "canon_entry"}
+
+        # Find artifacts with promotable types
+        promotable_keys = []
+        for key, artifact in hot_store.items():
+            artifact_type = None
+            if hasattr(artifact, "type"):
+                artifact_type = artifact.type
+            elif isinstance(artifact, dict):
+                artifact_type = artifact.get("type")
+            if artifact_type and artifact_type.lower() in promotable_types:
+                promotable_keys.append(key)
+
+        unpromoted: list[str] = []
+        if self.cold_store is not None and promotable_keys:
+            try:
+                # Get all anchors from cold_store (all tables)
+                cold_anchors: set[str] = set()
+
+                # Sections (scenes/narrative prose)
+                try:
+                    cold_anchors.update(self.cold_store.list_sections())
+                except Exception:
+                    pass
+
+                # Acts and Chapters (structural)
+                try:
+                    cold_anchors.update(a.anchor for a in self.cold_store.list_acts())
+                    cold_anchors.update(c.anchor for c in self.cold_store.list_chapters())
+                except Exception:
+                    pass
+
+                # Codex (player-safe encyclopedia: character, location, item, relationship)
+                try:
+                    cold_anchors.update(self.cold_store.list_codex())
+                except Exception:
+                    pass
+
+                # Canon (internal world facts: canon_entry, event, fact, timeline)
+                try:
+                    cold_anchors.update(self.cold_store.list_canon())
+                except Exception:
+                    pass
+
+                unpromoted = [k for k in promotable_keys if k not in cold_anchors]
+            except Exception:
+                pass  # If cold_store check fails, don't block termination
+
+        # BLOCK termination if there are unpromoted artifacts
+        if unpromoted:
+            logger.warning(
+                "Termination blocked: %d unpromoted artifacts: %s",
+                len(unpromoted),
+                unpromoted,
+            )
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Cannot terminate with unpromoted content",
+                    "unpromoted_artifacts": unpromoted,
+                    "hint": (
+                        f"{len(unpromoted)} artifact(s) in hot_store have NOT been promoted to cold_store: "
+                        f"{', '.join(unpromoted)}. "
+                        "Delegate to Lorekeeper to promote these artifacts before terminating. "
+                        "Content in hot_store will be LOST if you terminate now."
+                    ),
                 }
             )
 

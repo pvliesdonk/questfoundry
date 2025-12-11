@@ -647,6 +647,12 @@ STORY_SPARK = LoopIR(
             bars=["reachability", "nonlinearity", "gateways"],
             blocking=True,
         ),
+        QualityGateIR(
+            before="lorekeeper",
+            role="gatekeeper",
+            bars=["style", "presentation"],
+            blocking=True,
+        ),
     ],
 )
 

@@ -270,6 +270,109 @@ class TestCreateGatecheckReport:
         assert "error" in result
 
 
+class TestContentValidation:
+    """Test that presentation and style bars catch empty content."""
+
+    @pytest.fixture
+    def state_with_empty_scene(self) -> dict:
+        """Create a state with a scene that has no content."""
+        return {
+            "hot_store": {
+                "scene_1": {
+                    "title": "The Beginning",
+                    "content": "",  # Empty content
+                    "choices": [{"label": "Continue", "target": "scene_2"}],
+                }
+            },
+        }
+
+    @pytest.fixture
+    def state_with_valid_scene(self) -> dict:
+        """Create a state with a scene that has valid content."""
+        return {
+            "hot_store": {
+                "scene_1": {
+                    "title": "The Beginning",
+                    "content": "The storm raged outside the manor as guests began to arrive. "
+                               "Each carried secrets, and the night promised revelations. "
+                               "Lord Blackwood welcomed them with a cold smile.",
+                    "choices": [{"label": "Continue", "target": "scene_2"}],
+                }
+            },
+        }
+
+    def test_presentation_fails_on_empty_content(self, state_with_empty_scene: dict) -> None:
+        """Presentation bar fails when scene has empty content."""
+        tool = EvaluatePresentation()
+        tool.state = state_with_empty_scene
+
+        result = json.loads(tool._run("scene_1"))
+        assert result["bar"] == "presentation"
+        assert result["passed"] is False
+        assert any("empty content" in issue.lower() for issue in result["issues"])
+
+    def test_presentation_passes_with_valid_content(self, state_with_valid_scene: dict) -> None:
+        """Presentation bar passes when scene has valid content."""
+        tool = EvaluatePresentation()
+        tool.state = state_with_valid_scene
+
+        result = json.loads(tool._run("scene_1"))
+        assert result["bar"] == "presentation"
+        assert result["passed"] is True
+        assert len(result["issues"]) == 0
+
+    def test_style_fails_on_empty_content(self, state_with_empty_scene: dict) -> None:
+        """Style bar fails when scene has empty content."""
+        tool = EvaluateStyle()
+        tool.state = state_with_empty_scene
+
+        result = json.loads(tool._run("scene_1"))
+        assert result["bar"] == "style"
+        assert result["passed"] is False
+        assert any("no content" in issue.lower() for issue in result["issues"])
+
+    def test_style_passes_with_valid_content(self, state_with_valid_scene: dict) -> None:
+        """Style bar passes when scene has valid content."""
+        tool = EvaluateStyle()
+        tool.state = state_with_valid_scene
+
+        result = json.loads(tool._run("scene_1"))
+        assert result["bar"] == "style"
+        assert result["passed"] is True
+
+    def test_presentation_catches_placeholder_text(self) -> None:
+        """Presentation bar catches placeholder text like [TODO]."""
+        tool = EvaluatePresentation()
+        tool.state = {
+            "hot_store": {
+                "scene_1": {
+                    "title": "Draft Scene",
+                    "content": "The hero entered. [TODO: Add description of the room]",
+                }
+            },
+        }
+
+        result = json.loads(tool._run("scene_1"))
+        assert result["passed"] is False
+        assert any("placeholder" in issue.lower() for issue in result["issues"])
+
+    def test_presentation_warns_on_short_content(self) -> None:
+        """Presentation bar warns on very short content."""
+        tool = EvaluatePresentation()
+        tool.state = {
+            "hot_store": {
+                "scene_1": {
+                    "title": "Short Scene",
+                    "content": "They entered.",  # Too short
+                }
+            },
+        }
+
+        result = json.loads(tool._run("scene_1"))
+        assert result["passed"] is False
+        assert any("short" in issue.lower() for issue in result["issues"])
+
+
 class TestAllQualityBars:
     """Test that all 8 quality bars have evaluation tools."""
 

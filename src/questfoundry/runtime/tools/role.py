@@ -873,8 +873,77 @@ class PromoteToCanon(BaseTool):
                         summary=summary,
                         visibility=visibility,
                     )
+                elif artifact_type_lower in ("character", "location", "item", "relationship"):
+                    # Player-safe encyclopedia entries → codex table
+                    # Per v2 spec: "Codex entries are the player-facing encyclopedia"
+                    from questfoundry.generated.models.enums import Visibility
+
+                    visibility_val = getattr(validated_model, "visibility", None)
+                    if isinstance(visibility_val, str):
+                        try:
+                            visibility = Visibility(visibility_val)
+                        except ValueError:
+                            visibility = Visibility.PUBLIC
+                    elif visibility_val is not None:
+                        visibility = visibility_val
+                    else:
+                        visibility = Visibility.PUBLIC
+
+                    # Collect category-specific metadata
+                    metadata = {}
+                    for field in ("role_in_story", "faction", "relationships", "first_appearance",
+                                  "region", "location_type", "connected_to", "notable_features",
+                                  "item_type", "significance", "owner", "source_entity",
+                                  "target_entity", "relationship_type", "strength", "is_mutual", "tags"):
+                        val = getattr(validated_model, field, None) or content_data.get(field)
+                        if val is not None:
+                            metadata[field] = val
+
+                    self.cold_store.add_codex(
+                        anchor=artifact_id,
+                        category=artifact_type_lower,
+                        title=title,
+                        content=content,
+                        metadata=metadata if metadata else None,
+                        visibility=visibility,
+                    )
+                elif artifact_type_lower in ("canon_entry", "event", "fact", "timeline"):
+                    # Internal world facts → canon table
+                    # Per v2 spec: "Canon can contain spoilers; never leaves Hot until approved"
+                    from questfoundry.generated.models.enums import Visibility
+
+                    spoiler_level = getattr(validated_model, "spoiler_level", "hot") or content_data.get("spoiler_level", "hot")
+                    visibility_val = getattr(validated_model, "visibility", None)
+                    if isinstance(visibility_val, str):
+                        try:
+                            visibility = Visibility(visibility_val)
+                        except ValueError:
+                            visibility = Visibility.INTERNAL
+                    elif visibility_val is not None:
+                        visibility = visibility_val
+                    else:
+                        visibility = Visibility.INTERNAL
+
+                    # Collect category-specific metadata
+                    metadata = {}
+                    for field in ("category", "source", "related_entries", "confidence",
+                                  "timeline_id", "when", "participants", "location", "consequences",
+                                  "reference_point", "events", "scale", "related_entities", "tags"):
+                        val = getattr(validated_model, field, None) or content_data.get(field)
+                        if val is not None:
+                            metadata[field] = val
+
+                    self.cold_store.add_canon(
+                        anchor=artifact_id,
+                        category=artifact_type_lower,
+                        title=title,
+                        content=content,
+                        spoiler_level=spoiler_level,
+                        metadata=metadata if metadata else None,
+                        visibility=visibility,
+                    )
                 else:
-                    # Content-bearing artifacts use add_section
+                    # Narrative prose (scene) → sections table
                     self.cold_store.add_section(
                         anchor=artifact_id,
                         title=title,
@@ -945,25 +1014,45 @@ class ListHotStoreKeys(BaseTool):
                 }
             )
 
+        # Get promotable type names from domain ontology
+        try:
+            from questfoundry.generated.models.artifacts import (
+                ARTIFACT_REGISTRY,
+                PROMOTABLE_ARTIFACTS,
+            )
+            promotable_types = {
+                type_name for type_name, cls in ARTIFACT_REGISTRY.items()
+                if cls.__name__ in PROMOTABLE_ARTIFACTS
+                and not type_name.startswith("cold_")  # cold_* are output types, not input
+            }
+        except ImportError:
+            # Fallback if generated models not available
+            promotable_types = {"act", "chapter", "scene", "canon_entry"}
+
         # Build key info with types
         key_info = []
-        promotable_keys = []  # Keys that could be promoted (act_*, chapter_*, scene_*)
+        promotable_keys = []  # Keys with promotable artifact types
 
         for key, value in hot_store.items():
-            info = {"key": key}
+            info: dict[str, Any] = {"key": key}
+            artifact_type = None
+
             if hasattr(value, "model_dump"):
                 # Pydantic model
                 info["type"] = type(value).__name__
+                if hasattr(value, "type"):
+                    artifact_type = value.type
             elif isinstance(value, dict):
-                info["type"] = value.get("type", "dict")
+                artifact_type = value.get("type", "dict")
+                info["type"] = artifact_type
             elif isinstance(value, list):
                 info["type"] = f"list[{len(value)} items]"
             else:
                 info["type"] = type(value).__name__
             key_info.append(info)
 
-            # Track promotable keys
-            if key.startswith(("act_", "chapter_", "scene_")):
+            # Track promotable keys based on artifact type, not key prefix
+            if artifact_type and artifact_type.lower() in promotable_types:
                 promotable_keys.append(key)
 
         result = {
@@ -974,8 +1063,14 @@ class ListHotStoreKeys(BaseTool):
 
         # If we have cold_store and promotable keys, check what's NOT in cold
         if self.cold_store is not None and promotable_keys:
-            cold_sections = set(self.cold_store.list_sections())
-            not_in_cold = [k for k in promotable_keys if k not in cold_sections]
+            # Get all anchors from cold_store (acts, chapters, sections)
+            cold_anchors: set[str] = set(self.cold_store.list_sections())
+            try:
+                cold_anchors.update(a.anchor for a in self.cold_store.list_acts())
+                cold_anchors.update(c.anchor for c in self.cold_store.list_chapters())
+            except Exception:
+                pass  # If acts/chapters lookup fails, just use sections
+            not_in_cold = [k for k in promotable_keys if k not in cold_anchors]
 
             if not_in_cold:
                 result["promotable_not_in_cold"] = not_in_cold

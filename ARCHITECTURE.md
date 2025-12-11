@@ -99,12 +99,39 @@ QuestFoundry uses a **three-tier storage model**:
 | **cold_store** | SQLite + files | All approved content | Append-only |
 | **Views/Exports** | Derived | Filtered snapshots | Read-only |
 
+**Mindset: "Hot = discover & argue. Cold = agree & ship."**
+
+#### Hot Store: Ephemeral Working Space
+
+Hot store is internal working memory. Content here is **ephemeral** — it exists only during workflow execution and checkpoint recovery. When a workflow terminates, anything not promoted to cold_store is **lost**.
+
+Artifacts marked `store: hot` in the domain ontology (e.g., `hook_card`, `brief`, `shotlist`, `audio_plan`) are **intentionally ephemeral**. They're planning/coordination artifacts that don't need permanent storage.
+
+#### Cold Store: Permanent Canonical Record
+
+Cold store is the permanent source of truth. Once content is promoted here, it becomes **canonical** and append-only. This is where player-facing content lives.
+
+Artifacts marked `store: cold` or `store: both` in the domain ontology are **promotable**:
+
+| Domain `store:` | Meaning | Examples |
+|-----------------|---------|----------|
+| `hot` | Always ephemeral, never promoted | hook_card, brief, shotlist |
+| `cold` | Must end up in cold_store | canon_entry, character, location, event, fact |
+| `both` | Starts in hot (drafting), promoted when approved | scene, act, chapter |
+
+#### Promotion Flow
+
+Only **Lorekeeper** writes to cold_store (via `promote_to_canon` tool). The promotion flow:
+
+1. Specialist creates content in hot_store (e.g., Scene Smith writes scenes)
+2. Gatekeeper validates quality bars
+3. Lorekeeper promotes approved content to cold_store
+
 **Key Distinction:**
 
-- **Storage** (hot→cold): Determined by artifact type and approval status
+- **Storage** (hot→cold): Determined by artifact type (`store:` field in domain ontology)
 - **Export** (cold→view): Determined by `visibility` field per artifact
 
-All content artifacts (Scenes, Acts, Chapters, Canon) can be promoted to cold_store.
 Publisher filters by `visibility` at export time for spoiler hygiene.
 
 ### StudioState (LangGraph Native)
@@ -124,10 +151,27 @@ class StudioState(TypedDict):
 cold_store/
 ├── Acts          # Structural organization
 ├── Chapters      # Content divisions (linked to acts)
-├── Sections      # Prose content (linked to chapters)
+├── Sections      # Prose content - scenes (linked to chapters)
+├── Codex         # Player-safe encyclopedia (character, location, item, relationship)
+├── Canon         # Internal world facts (canon_entry, event, fact, timeline)
 ├── Assets        # Binary files (metadata in DB, files on disk)
 └── Snapshots     # Point-in-time captures
 ```
+
+**Content Table Routing:**
+
+| Artifact Type | Table | Description |
+|---------------|-------|-------------|
+| scene | sections | Narrative prose |
+| character, location, item, relationship | codex | Player-safe encyclopedia (NO spoilers) |
+| canon_entry, event, fact, timeline | canon | Internal world facts (CAN have spoilers) |
+| act | acts | Structural - groups chapters |
+| chapter | chapters | Structural - groups scenes |
+
+**Spoiler Handling:**
+
+- **Codex** entries are ALWAYS player-safe (visibility: public by default)
+- **Canon** entries have a `spoiler_level` field: `hot` (internal only) or `cold` (player-safe summary)
 
 Each content artifact has a `visibility` field:
 

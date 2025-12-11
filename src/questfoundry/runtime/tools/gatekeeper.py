@@ -273,11 +273,14 @@ class EvaluateStyle(BaseTool):
 
     Style ensures the narrative voice, tone, and register are consistent
     throughout the content and match the intended aesthetic.
+
+    Prerequisite: Content must exist before style can be evaluated.
     """
 
     name: str = "evaluate_style"
     description: str = (
         "Check voice and tone consistency across artifact. "
+        "Requires content to exist - cannot evaluate style of empty content. "
         "Returns pass/fail with style inconsistencies noted. "
         "Args: artifact_id (str) - the hot_store key of artifact to check"
     )
@@ -310,8 +313,51 @@ class EvaluateStyle(BaseTool):
                 }
             )
 
-        # Auto-pass for now (stub implementation)
-        # Real implementation would analyze voice/tone consistency
+        issues = []
+
+        # Style requires content to exist - can't evaluate style of nothing
+        if isinstance(artifact, dict):
+            content = artifact.get("content")
+            is_scene = "content" in artifact or artifact_id.startswith("scene_")
+
+            if is_scene:
+                if content is None or (isinstance(content, str) and not content.strip()):
+                    return json.dumps(
+                        {
+                            "bar": "style",
+                            "artifact_id": artifact_id,
+                            "passed": False,
+                            "issues": [
+                                f"Scene '{artifact_id}' has no content - cannot evaluate style of empty prose"
+                            ],
+                            "notes": "Style evaluation blocked - content required first",
+                            "next_step": "Return to Scene Smith to write prose before style can be evaluated.",
+                        }
+                    )
+
+                # Basic style checks (can be expanded with LLM analysis later)
+                content_str = content.strip()
+
+                # Check for obvious style issues
+                if content_str.isupper():
+                    issues.append("Content is all uppercase - inconsistent with narrative style")
+
+                # Check for mixed formatting indicators
+                if "##" in content_str and not content_str.startswith("#"):
+                    issues.append("Markdown headers in prose content - may break presentation")
+
+        if issues:
+            return json.dumps(
+                {
+                    "bar": "style",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": issues,
+                    "notes": f"Style issues found - {len(issues)} issue(s)",
+                    "next_step": "Return to Scene Smith or Creative Director to address style issues.",
+                }
+            )
+
         return json.dumps(
             {
                 "bar": "style",
@@ -384,11 +430,14 @@ class EvaluatePresentation(BaseTool):
 
     Presentation ensures content is properly formatted, structured,
     and ready for rendering without technical issues.
+
+    This includes checking that required content fields are populated -
+    empty content fields indicate incomplete work.
     """
 
     name: str = "evaluate_presentation"
     description: str = (
-        "Check formatting and structure correctness. "
+        "Check formatting and structure correctness, including content completeness. "
         "Returns pass/fail with formatting issues. "
         "Args: artifact_id (str) - the hot_store key of artifact to check"
     )
@@ -421,7 +470,56 @@ class EvaluatePresentation(BaseTool):
                 }
             )
 
-        # Auto-pass for now (stub implementation)
+        issues = []
+
+        # Check content completeness for scene-type artifacts
+        # Scenes must have prose content - empty content is a blocking issue
+        if isinstance(artifact, dict):
+            content = artifact.get("content")
+
+            # Check if this looks like a scene (has content field or scene in ID)
+            is_scene = "content" in artifact or artifact_id.startswith("scene_")
+
+            if is_scene:
+                if content is None:
+                    issues.append(
+                        f"Scene '{artifact_id}' has no 'content' field - prose required"
+                    )
+                elif isinstance(content, str):
+                    stripped = content.strip()
+                    if not stripped:
+                        issues.append(
+                            f"Scene '{artifact_id}' has empty content - prose required"
+                        )
+                    elif len(stripped) < 50:
+                        issues.append(
+                            f"Scene '{artifact_id}' has very short content ({len(stripped)} chars) - may need expansion"
+                        )
+                    # Check for placeholder text
+                    placeholders = ["[TODO", "[PLACEHOLDER", "[TBD", "Lorem ipsum"]
+                    for ph in placeholders:
+                        if ph.lower() in stripped.lower():
+                            issues.append(
+                                f"Scene '{artifact_id}' contains placeholder text: '{ph}'"
+                            )
+
+            # Check for valid title
+            title = artifact.get("title")
+            if title is not None and isinstance(title, str) and not title.strip():
+                issues.append(f"Artifact '{artifact_id}' has empty title")
+
+        if issues:
+            return json.dumps(
+                {
+                    "bar": "presentation",
+                    "artifact_id": artifact_id,
+                    "passed": False,
+                    "issues": issues,
+                    "notes": f"Presentation failed - {len(issues)} issue(s) found",
+                    "next_step": "Return to Scene Smith to fill missing prose content.",
+                }
+            )
+
         return json.dumps(
             {
                 "bar": "presentation",
