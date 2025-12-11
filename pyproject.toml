@@ -55,6 +55,12 @@ dev = [
     "mypy>=1.13",
     "types-PyYAML>=6.0",
 ]
+docs = [
+    "sphinx>=7.0",
+    "myst-parser>=3.0",
+    "sphinx-rtd-theme>=2.0",
+    "sphinx-autodoc-typehints>=2.0",
+]
 
 [project.scripts]
 qf = "questfoundry.cli:app"
