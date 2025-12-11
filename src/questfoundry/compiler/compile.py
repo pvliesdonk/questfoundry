@@ -42,6 +42,8 @@ from questfoundry.compiler.models import (
     GraphEdgeIR,
     GraphNodeIR,
     LoopIR,
+    LoopParticipantConfig,
+    LoopRoutingRuleIR,
     QualityGateIR,
     RoleIR,
     RoleToolIR,
@@ -443,6 +445,9 @@ def _parse_loop_files(loops_path: Path) -> dict[str, list[Directive]]:
 def _extract_loops(loops_by_id: dict[str, list[Directive]]) -> dict[str, LoopIR]:
     """Extract loop definitions from parsed directives.
 
+    Supports both new format (loop-participants, routing-rule) and
+    deprecated format (graph-node, graph-edge) for backward compatibility.
+
     Parameters
     ----------
     loops_by_id : dict
@@ -458,14 +463,47 @@ def _extract_loops(loops_by_id: dict[str, list[Directive]]) -> dict[str, LoopIR]
     for _loop_id, directives in loops_by_id.items():
         # Find loop-meta directive
         meta: dict[str, str] = {}
+
+        # New format
+        participants: dict[str, LoopParticipantConfig] = {}
+        routing_rules: list[LoopRoutingRuleIR] = []
+
+        # Deprecated format (kept for backward compatibility)
         nodes: list[GraphNodeIR] = []
         edges: list[GraphEdgeIR] = []
+
         quality_gates: list[QualityGateIR] = []
 
         for directive in directives:
             if directive.type == DirectiveType.LOOP_META:
                 meta = directive.content
 
+            # New format: loop-participants
+            elif directive.type == DirectiveType.LOOP_PARTICIPANTS:
+                # Content is a dict like: {role_id: {timeout: N, max_iterations: M}}
+                for role_id, config in directive.content.items():
+                    if isinstance(config, dict):
+                        participants[role_id] = LoopParticipantConfig(
+                            timeout=int(config.get("timeout", 300)),
+                            max_iterations=int(config.get("max_iterations", 10)),
+                        )
+                    else:
+                        # Handle simple format without config
+                        participants[role_id] = LoopParticipantConfig()
+
+            # New format: routing-rule
+            elif directive.type == DirectiveType.ROUTING_RULE:
+                rule_data = directive.content
+                routing_rules.append(
+                    LoopRoutingRuleIR(
+                        after=rule_data.get("after", ""),
+                        when=rule_data.get("when", ""),
+                        delegate_to=rule_data.get("delegate_to", ""),
+                        description=rule_data.get("description", ""),
+                    )
+                )
+
+            # Deprecated: graph-node
             elif directive.type == DirectiveType.GRAPH_NODE:
                 node_data = directive.content
                 nodes.append(
@@ -477,6 +515,7 @@ def _extract_loops(loops_by_id: dict[str, list[Directive]]) -> dict[str, LoopIR]
                     )
                 )
 
+            # Deprecated: graph-edge
             elif directive.type == DirectiveType.GRAPH_EDGE:
                 edge_data = directive.content
                 edges.append(
@@ -518,6 +557,10 @@ def _extract_loops(loops_by_id: dict[str, list[Directive]]) -> dict[str, LoopIR]
                 entry_point=meta.get("entry_point", ""),
                 exit_point=meta.get("exit_point"),
                 version=version,
+                # New format
+                participants=participants,
+                routing_rules=routing_rules,
+                # Deprecated format (for backward compatibility)
                 nodes=nodes,
                 edges=edges,
                 quality_gates=quality_gates,
@@ -535,6 +578,9 @@ def validate_loops(
     Loop definitions serve as documentation and guidance for SR orchestration.
     They are NOT compiled to executable graphs. This function parses them
     for validation purposes only.
+
+    Supports both new format (participants, routing_rules) and deprecated
+    format (nodes, edges) for backward compatibility.
 
     Parameters
     ----------
@@ -564,6 +610,25 @@ def validate_loops(
 
     # Validate that all referenced roles exist
     for loop_id, loop in loops.items():
+        # Check new format: participants
+        for role_id in loop.participants:
+            if role_id not in roles:
+                raise ValueError(
+                    f"Loop '{loop_id}' references unknown role '{role_id}' in participants"
+                )
+
+        # Check new format: routing_rules
+        for rule in loop.routing_rules:
+            if rule.after not in roles and rule.after != "*":
+                raise ValueError(
+                    f"Loop '{loop_id}' routing rule references unknown role '{rule.after}'"
+                )
+            if rule.delegate_to not in roles and rule.delegate_to not in ("END", "__end__"):
+                raise ValueError(
+                    f"Loop '{loop_id}' routing rule delegates to unknown role '{rule.delegate_to}'"
+                )
+
+        # Check deprecated format: nodes (for backward compatibility)
         for node in loop.nodes:
             if node.role not in roles:
                 raise ValueError(
