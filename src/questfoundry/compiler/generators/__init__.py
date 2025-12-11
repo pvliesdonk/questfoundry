@@ -9,9 +9,8 @@ ontology
     Generates Pydantic models from ontology definitions (artifact-type, enum-type).
 roles
     Generates role configurations from role definitions (role-meta, role-tools, etc.).
-
-Note: Loop definitions are NOT compiled to code. They serve as documentation and
-guidance for SR orchestration. See ARCHITECTURE.md for details.
+loops
+    Generates loop/workflow definitions from loop definitions (loop-meta, graph-node, etc.).
 
 See Also
 --------
@@ -20,7 +19,8 @@ See Also
 """
 
 from questfoundry.compiler.generators._warning import GENERATED_FILE_WARNING
+from questfoundry.compiler.generators.loops import generate_loops
 from questfoundry.compiler.generators.ontology import generate_models
 from questfoundry.compiler.generators.roles import generate_roles
 
-__all__ = ["generate_models", "generate_roles", "GENERATED_FILE_WARNING"]
+__all__ = ["generate_models", "generate_roles", "generate_loops", "GENERATED_FILE_WARNING"]

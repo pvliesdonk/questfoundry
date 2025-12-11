@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from questfoundry.compiler.generators import generate_models, generate_roles
+from questfoundry.compiler.generators import generate_loops, generate_models, generate_roles
 from questfoundry.compiler.models import (
     Agency,
     ArtifactFieldIR,
@@ -584,10 +584,7 @@ def compile_domain(
     This is the main entry point for compilation. It compiles:
     - ontology/ → generated/models/
     - roles/ → generated/roles/
-
-    Loop definitions are parsed for validation but NOT compiled to code.
-    Loops serve as documentation/guidance for SR orchestration, not as
-    executable graphs.
+    - loops/ → generated/loops/
 
     Parameters
     ----------
@@ -618,13 +615,25 @@ def compile_domain(
     roles_result = compile_roles(domain_path, roles_output)
     all_generated.update(roles_result)
 
-    # Validate loops (no code generation)
-    if validate:
-        # Need to extract roles IR for validation
-        roles_path = domain_path / "roles"
-        roles_by_id = _parse_role_files(roles_path)
-        roles = _extract_roles(roles_by_id)
-        validate_loops(domain_path, roles)
+    # Extract roles for loop validation
+    roles_path = domain_path / "roles"
+    roles_by_id = _parse_role_files(roles_path)
+    roles = _extract_roles(roles_by_id)
+
+    # Validate and compile loops
+    loops = validate_loops(domain_path, roles) if validate else {}
+
+    # If validation was skipped, still need to parse loops for generation
+    if not validate:
+        loops_path = domain_path / "loops"
+        loops_by_id = _parse_loop_files(loops_path)
+        loops = _extract_loops(loops_by_id)
+
+    # Generate loops code
+    if loops:
+        loops_output = output_path / "loops"
+        loops_result = generate_loops(loops, loops_output)
+        all_generated.update(loops_result)
 
     return all_generated
 
