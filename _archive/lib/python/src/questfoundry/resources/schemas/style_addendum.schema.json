@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/style_addendum.schema.json",
+  "title": "Style Addendum",
+  "description": "Generated from 02-dictionary/artifacts/style_addendum_ENRICHED.md. Captures slice-specific style guidance, patterns, and examples that remain player-safe while aligning with global house style.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slice or theme name for this addendum.",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this addendum was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the addendum; fixed to Style Lead.",
+      "enum": ["Style Lead"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "Player-safe slice description (1-2 lines).",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "neighbors": {
+      "type": "array",
+      "description": "Roles affected by this addendum.",
+      "items": {
+        "$ref": "#/$defs/role_name"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "register": {
+      "type": "string",
+      "description": "Optional register guidance for this slice.",
+      "enum": ["neutral", "formal", "colloquial"]
+    },
+    "voice_and_address": {
+      "type": "string",
+      "description": "Pronouns, formality, and directness guidance.",
+      "minLength": 10,
+      "maxLength": 400
+    },
+    "tense_aspect_mood": {
+      "type": "string",
+      "description": "Narrative tense/aspect/mood policy for this slice.",
+      "minLength": 10,
+      "maxLength": 400
+    },
+    "cadence": {
+      "type": "string",
+      "description": "Optional cadence guidance (line length, rhythm near choices).",
+      "maxLength": 300
+    },
+    "banned_preferred": {
+      "type": "array",
+      "description": "Slice-specific banned versus preferred phrasing deltas.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "pn_patterns": {
+      "type": "array",
+      "description": "Player-facing pattern snippets (gate refusal, choice labels, micro-recap, etc.).",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 400
+      },
+      "minItems": 3
+    },
+    "scene_level_patterns": {
+      "type": "array",
+      "description": "Optional actionable guidance for scene-level application.",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 400
+      }
+    },
+    "caption_guideline": {
+      "type": "string",
+      "description": "Optional caption guidance; one line, atmospheric or clarifying, no technique.",
+      "maxLength": 200
+    },
+    "alt_guidance": {
+      "type": "string",
+      "description": "Optional alt text guidance; one sentence covering subject, relation, and location.",
+      "maxLength": 240
+    },
+    "translator_notes": {
+      "type": "array",
+      "description": "Optional localization notes ensuring portability and register alignment.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "before_after": {
+      "type": "array",
+      "description": "Optional before/after examples illustrating style adjustments.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "Path and anchor for the example location.",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "issue": {
+            "type": "string",
+            "description": "Issue being addressed in the example.",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "before": {
+            "type": "string",
+            "description": "Player-safe text before the change.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "after": {
+            "type": "string",
+            "description": "Player-safe text after the change.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "owner": {
+            "$ref": "#/$defs/role_name",
+            "description": "Role responsible for applying the change."
+          }
+        },
+        "required": ["location", "issue", "before", "after", "owner"]
+      }
+    },
+    "accessibility_nudges": {
+      "type": "array",
+      "description": "Optional accessibility guidance for readability and contrast.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "hooks_filed": {
+      "type": "array",
+      "description": "Optional follow-up hooks generated by this addendum.",
+      "items": {
+        "type": "string",
+        "pattern": "^hook://[a-z0-9\\-]+/[a-z0-9\\-]+.*$"
+      }
+    },
+    "hand_offs": {
+      "type": "string",
+      "description": "Optional hand-off notes describing who applies which patterns.",
+      "maxLength": 240
+    },
+    "change_log": {
+      "type": "array",
+      "description": "Optional change log entries tracking revisions (YYYY-MM-DD - version - description).",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2} - v[0-9]+\\.[0-9]+ - .+$"
+      }
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist verifying readiness before approval.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 7,
+      "maxItems": 7
+    }
+  },
+  "required": [
+    "title",
+    "edited",
+    "owner",
+    "scope",
+    "snapshot",
+    "tu",
+    "neighbors",
+    "voice_and_address",
+    "tense_aspect_mood",
+    "banned_preferred",
+    "pn_patterns",
+    "done_checklist"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

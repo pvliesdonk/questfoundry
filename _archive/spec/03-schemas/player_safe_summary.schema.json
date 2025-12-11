@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/player_safe_summary.schema.json",
+  "title": "Player-Safe Summary",
+  "description": "Spoiler-free summary of lore, events, or artifacts suitable for player-facing contexts. Produced by Art Director, Lore Weaver, or Codex Curator.",
+  "type": "object",
+  "properties": {
+    "summary_id": {
+      "type": "string",
+      "description": "Unique identifier for this summary",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string",
+      "description": "What is being summarized (e.g., 'Maritime Guild History', 'Act I Events')",
+      "minLength": 5
+    },
+    "author": {
+      "type": "string",
+      "enum": ["art_director", "lore_weaver", "codex_curator"],
+      "description": "Role that created this summary"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Last edit date (YYYY-MM-DD)"
+    },
+    "summary_text": {
+      "type": "string",
+      "description": "The player-safe summary content (spoiler-free)",
+      "minLength": 20
+    },
+    "target_audience": {
+      "type": "string",
+      "enum": ["player", "translator", "external_review"],
+      "description": "Intended audience for this summary"
+    },
+    "spoiler_free": {
+      "type": "boolean",
+      "description": "Explicit confirmation this contains no spoilers",
+      "const": true
+    },
+    "context": {
+      "type": "string",
+      "description": "Why this summary was created (e.g., 'For press kit', 'For translator briefing')"
+    },
+    "related_artifacts": {
+      "type": "array",
+      "description": "References to full (non-player-safe) artifacts this summarizes",
+      "items": {"type": "string"}
+    },
+    "style_register": {
+      "type": "string",
+      "enum": ["formal", "casual", "neutral"],
+      "description": "Language register (formality level) used in summary"
+    },
+    "length_constraint": {
+      "type": "string",
+      "description": "Target length (e.g., '1 paragraph', '100 words', '2 sentences')"
+    }
+  },
+  "required": [
+    "summary_id",
+    "subject",
+    "author",
+    "tu",
+    "edited",
+    "summary_text",
+    "target_audience",
+    "spoiler_free"
+  ]
+}

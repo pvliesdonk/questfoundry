@@ -1,0 +1,118 @@
+---
+playbook_id: codex_expansion
+playbook_name: Codex Expansion
+abbreviation: CE
+version: 2.0.0
+category: Refinement
+
+# Purpose and outcome
+purpose: "Turn canon (often spoiler-heavy) into player-safe codex pages with clear cross-references. Improve comprehension without leaking twists or internal plumbing."
+
+outcome: "Codex entries and crosslink maps (in Hot) derived from canon and ready to merge to Cold after gatecheck. Taxonomy/clarity hooks may also be addressed here."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "After Lore Deepening produces new/updated canon"
+    - "When Story Spark/Scene Smith introduce terms repeatedly"
+    - "On player-comprehension concerns (PN/Binder feedback)"
+    - "To resolve taxonomy/clarity hooks (coverage gaps, red-links)"
+  tu_format: "tu-codex-<topic-or-batch>"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:codex_curator"
+      responsibilities: "Author player-safe entries; create cross-refs; may originate taxonomy hooks but does not invent deep lore"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Confirms scope/priority; sequences merges"
+  consulted:
+    - role: "@adapter:lore_weaver"
+      responsibilities: "Ensures summaries accurately reflect canon; marks spoilers to avoid"
+    - role: "@adapter:style_lead"
+      responsibilities: "Enforces voice clarity and reading level; motif consistency"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Checks Presentation Safety (no spoilers), Integrity (links resolve), Style"
+    - role: "@adapter:translator"
+      responsibilities: "If translations included, verify terminology consistency"
+  informed:
+    - role: "@adapter:player_narrator"
+      responsibilities: "Consumes codex for reference during narration"
+    - role: "@adapter:book_binder"
+      responsibilities: "Includes codex entries in exports"
+
+# Inputs
+inputs:
+  - "Canon entries from Lore Deepening (spoiler-level answers)"
+  - "Style guardrails (tone, register, motif vocabulary)"
+  - "Existing codex pages (Cold) for alignment"
+  - "Accepted taxonomy/clarity hooks (from Hook Harvest)"
+  - "PN feedback and Binder UX notes"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:player_safe_summarization"
+    - "@procedure:crosslink_management"
+    - "@procedure:terminology_alignment"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+    - "@procedure:player_safe_encyclopedia"
+    - "@procedure:curator_gap_identification"
+
+# Entry anatomy
+entry_anatomy:
+  required_fields:
+    - title         # Term/name players see in manuscript
+    - overview      # 2-4 sentences, neutral, spoiler-safe description
+    - usage         # How/why player might encounter the term
+    - context       # High-level setting notes (no twist details)
+    - see_also      # 3-5 related entries, prefer breadth over recursion
+    - notes         # Accessibility or localization hints
+    - lineage       # TU reference (traceability, no spoilers)
+
+# Success criteria
+success_criteria:
+  - "Entries are player-safe; no twist causality or internal plumbing"
+  - "Cross-references resolve and form coherent navigation clusters"
+  - "Style/register aligned with manuscript and PN surfaces"
+  - "Terminology consistent with Lore canon and prior entries"
+  - "Accessibility: descriptive headings, simple sentences, alt text for figures"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - integrity      # Crosslinks resolve; no orphan entries
+    - presentation   # No spoilers; player-safe summaries only
+    - accessibility  # Descriptive headings, simple sentences
+  secondary:
+    - style          # Terminology aligns with manuscript/PN
+    - gateways       # Entries support diegetic gate phrasing
+
+# Handoffs
+handoffs:
+  from_lore_weaver:
+    content: "Player-safe summaries derived from canon"
+
+  to_gatekeeper:
+    content: "Codex entries for Presentation and Integrity checks"
+
+  to_binder:
+    content: "Updated crosslink map and coverage notes"
+
+# Artifacts produced
+artifacts:
+  - codex_entry.schema.json
+  - glossary.schema.json
+  - crosslink_map.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - codex_entry.schema.json
+    - glossary.schema.json
+    - crosslink_map.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

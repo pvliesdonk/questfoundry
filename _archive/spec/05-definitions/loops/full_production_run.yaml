@@ -1,0 +1,166 @@
+# Loop Pattern: Full Production Run
+# Compiled from: spec/00-north-star/LOOPS/full_production_run.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: full_production_run
+
+metadata:
+  name: "Full Production Run"
+  type: "Full Cycle"
+  description: |
+    End-to-end loop that takes a project brief from Hot ideation to an exported view on Cold.
+    Exercises all core roles, but permits dormant roles (art/audio/translation/research) per
+    the Showrunner's plan.
+
+topology:
+  entry_node: kickoff
+
+  nodes:
+    - role_id: showrunner
+      node_id: kickoff
+      description: "Define target (chapter/act/booklet), constraints (tone, content limits), and which roles are active vs dormant. Open a Trace Unit for the production slice."
+
+    - role_id: plotwright
+      node_id: story_spark_phase
+      description: "Draft/update topology: parts/chapters, hubs, loops, gateways. Scene Smith drafts key sections. Style Lead reviews tone/register/motifs."
+
+    - role_id: showrunner
+      node_id: hook_harvest_phase
+      description: "Cluster and triage hooks. Collect citations if Researcher active; else mark uncorroborated with risk."
+
+    - role_id: lore_weaver
+      node_id: lore_deepening_phase
+      description: "Convert accepted hooks into canon. Resolve collisions or mark deliberate mystery. Coordinate with Plotwright if topology must adjust."
+
+    - role_id: codex_curator
+      node_id: codex_expansion_phase
+      description: "Publish player-safe entries that summarize new canon. Add cross-refs and See also trails."
+
+    - role_id: gatekeeper
+      node_id: stabilization
+      description: "Cross-role review; resolve contradictions and UX snags. Run Quality Bars: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation."
+
+    - role_id: showrunner
+      node_id: merge_to_cold
+      description: "On pass, merge canon, style addenda, codex entries, and any approved plans/assets to Cold. Stamp Cold snapshot ID."
+
+    - role_id: book_binder
+      node_id: binding_run_phase
+      description: "Assemble export view from Cold snapshot. Ensure accessibility and spoiler hygiene. Record snapshot ID and export options."
+
+    - role_id: player_narrator
+      node_id: narration_dry_run_phase
+      description: "Playtest the same Cold snapshot. Enforce gates diegetically. Log UX issues as notes back to Showrunner."
+
+    - role_id: showrunner
+      node_id: exit_follow_ups
+      description: "Close or roll forward. If issues remain, schedule targeted loops. If assets were deferred, keep markers and plan next activation window."
+
+  edges:
+    - source: kickoff
+      target: story_spark_phase
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.kickoff_complete == true"
+    - source: story_spark_phase
+      target: hook_harvest_phase
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.spark_complete == true"
+    - source: hook_harvest_phase
+      target: lore_deepening_phase
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.harvest_complete == true"
+    - source: lore_deepening_phase
+      target: codex_expansion_phase
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.deepening_complete == true"
+    - source: codex_expansion_phase
+      target: stabilization
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.codex_complete == true"
+    - source: stabilization
+      target: merge_to_cold
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.gatecheck_passed == true"
+    - source: merge_to_cold
+      target: binding_run_phase
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.merge_complete == true"
+    - source: binding_run_phase
+      target: narration_dry_run_phase
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.binding_complete == true"
+    - source: narration_dry_run_phase
+      target: exit_follow_ups
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.dry_run_complete == true"
+    - source: exit_follow_ups
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: project_brief
+      state_key: hot_sot.project_brief
+
+handoffs:
+  - target: post_mortem
+    condition: "completed TU data ready for retrospective analysis"
+
+gates:
+  quality_bars:
+    - Integrity
+    - Reachability
+    - Nonlinearity
+    - Gateways
+    - Style
+    - Determinism
+    - Presentation
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/full_production_run.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Full Production Run loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: export_exists
+      expression: "state.export_view_exists == true"
+      error_message: "Exported view exists, stamped with Cold snapshot"
+    - name: gatecheck_passed
+      expression: "state.gatecheck_passed == true"
+      error_message: "Gatecheck passed; traceability intact"
+    - name: followups_scheduled
+      expression: "state.followups_handled == true"
+      error_message: "Open follow-ups scheduled (if any)"

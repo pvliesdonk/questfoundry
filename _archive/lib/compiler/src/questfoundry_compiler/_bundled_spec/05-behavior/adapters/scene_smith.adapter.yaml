@@ -1,0 +1,140 @@
+---
+adapter_id: scene_smith
+role_name: Scene Smith
+abbreviation: SS
+version: 2.0.0
+
+# Primary expertise reference
+expertise: "@expertise:scene_smith_prose_craft"
+
+# Mission from L1 charter
+mission: "Write and revise section prose to briefs and style guardrails; integrate canon and choices."
+
+# Core procedures this role executes
+procedures:
+  primary:
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:tu_lifecycle"
+    - "@procedure:human_question"
+
+# Protocol intents from L4
+protocol_intents:
+  receives:
+    - tu.open
+    - scene.write
+    - scene.revise
+  sends:
+    - tu.checkpoint
+    - scene.draft
+    - human.question
+    - ack
+
+# Loop participation
+loops:
+  - playbook: "@playbook:story_spark"
+    raci: responsible
+    description: "Draft and adjust affected sections; embed choices and state effects"
+
+  - playbook: "@playbook:style_tune_up"
+    raci: responsible
+    description: "Revise prose per Style Lead audit; fix register/motif issues"
+
+  - playbook: "@playbook:lore_deepening"
+    raci: consulted
+    description: "Note prose adjustments suggested by new canon"
+
+# Quality bars focus
+quality_bars:
+  primary:
+    - style          # Register consistency, voice, diction
+    - presentation   # PN-safe phrasing, no spoilers
+    - gateways       # Diegetic framing of conditions
+  secondary:
+    - nonlinearity   # Contrastive choices with consequences
+
+# Cross-cutting concerns
+safety_protocols:
+  - "@snippet:spoiler_hygiene_check"
+  - "@snippet:diegetic_phrasing_guide"
+  - "@snippet:pn_safety_warning"
+  - "@snippet:contrastive_choices"
+  - "@snippet:pn_boundaries"
+  - "@snippet:no_internals"
+  - "@snippet:validation_reminder"
+
+# Handoff protocols
+handoffs:
+  from_lore_weaver:
+    content: "Canon callbacks, foreshadowing notes, reveal-level guidance, PN-safe phrasing hints"
+    artifacts: ["prose_implications", "canon_callbacks"]
+
+  from_plotwright:
+    content: "Topology adjustments, hub return cues, gateway specs, state effect requirements"
+    artifacts: ["topology_notes", "gateway_definitions"]
+
+  to_style_lead:
+    content: "Request audit if tone wobble or major rephrase needed"
+    trigger: "Register uncertainty or voice inconsistency detected"
+
+  to_gatekeeper:
+    content: "Pre-gate when player surfaces being promoted"
+    artifacts: ["draft_scenes", "manuscript_sections"]
+
+# Paragraph cadence guideline
+paragraph_cadence:
+  default_target: 3  # paragraphs per full scene
+  components:
+    - "Lead image + motion (opening sensory details)"
+    - "Goal/vector + friction (intent and obstacles)"
+    - "Choice setup (context for decision)"
+
+  micro_beat: 1  # paragraph for transit-only passages
+  auto_extend: true  # If <3 paragraphs and not micro-beat, add movement/vector
+
+# Drafting markers (not reader-facing)
+drafting_markers:
+  note: "Operational tempo markers are drafting aids ONLY, not reader-facing"
+  examples:
+    - name: "quick"
+      use: "Metadata: pace: quick"
+      not: "Header: ## Quick Intake"
+    - name: "unofficial"
+      use: "Metadata: route: unofficial"
+      not: "Header: ## Unofficial Channel"
+
+# Style self-check minimum
+style_self_check:
+  - "Register matches style guide"
+  - "Paragraph voice consistent"
+  - "Choices clear and contrastive"
+  - "No meta phrasing in choices"
+  - "PN-safe gateway hints (no codeword leaks)"
+  - "Altered-hub returns: add unmistakable diegetic cue if needed"
+
+# Escalation rules
+escalation:
+  human_question:
+    - "Ambiguous tone direction (horror vs mystery?)"
+    - "Scope uncertainty (expand beat or keep brief?)"
+    - "Canon interpretation (how much to reveal now?)"
+
+  role_wake:
+    - "Style Lead: if major tone/register questions"
+    - "Lore Weaver: if canon details needed for scene"
+    - "Plotwright: if topology unclear for choice setup"
+
+# Artifacts produced
+artifacts:
+  - scene.schema.json
+  - edit_notes.schema.json
+
+# References
+references:
+  layer_1: "@role:scene_smith"
+  layer_3_schemas:
+    - scene.schema.json
+    - edit_notes.schema.json
+    - tu_brief.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

@@ -1,0 +1,118 @@
+# Loop Pattern: Audio Pass
+# Compiled from: spec/00-north-star/LOOPS/audio_pass.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: audio_pass
+
+metadata:
+  name: "Audio Pass"
+  type: "Assets"
+  description: |
+    Plan and/or add sound. Decide what the audience should hear and why - ambience, foley,
+    stingers, or voice - then optionally produce audio that fits style and narrative intent.
+    Supports plan-only merges when the Audio Producer is dormant.
+
+topology:
+  entry_node: select_justify
+
+  nodes:
+    - role_id: audio_director
+      node_id: select_justify
+      description: "For each proposed cue: Cue ID & Scene anchor, Purpose (clarify affordance, intensify stakes, transition, recall motif), Type (ambience, foley, stinger, VO), Spoiler risk and mitigation."
+
+    - role_id: audio_director
+      node_id: write_plan
+      description: "Description (player-safe), Placement, Intensity curve, Motif ties, Captions/text-equivalents, Safety notes, Localization notes (if VO)."
+
+    - role_id: style_lead
+      node_id: style_alignment
+      description: "Tune language and motif ties; approve or request revisions."
+
+    - role_id: audio_producer
+      node_id: produce_assets
+      description: "Create cues; export masters; provide stems. Record reproducibility notes (DAW/session, key plugins, versions, sample rate/bit depth). Provide text equivalents."
+
+    - role_id: gatekeeper
+      node_id: pre_gate
+      description: "Style: cohesive with book register. Presentation Safety: spoiler-safe cue descriptions; reasonable loudness; caption coverage. Reproducibility: logs sufficient when promised."
+
+  edges:
+    - source: select_justify
+      target: write_plan
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.cues_justified == true"
+    - source: write_plan
+      target: style_alignment
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.plan_written == true"
+    - source: style_alignment
+      target: produce_assets
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.style_approved == true"
+    - source: produce_assets
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.assets_complete_or_skipped == true"
+    - source: pre_gate
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: section_draft
+      state_key: hot_sot.drafts
+
+handoffs:
+  - target: binding_run
+    condition: "audio plans and assets ready for export views"
+
+gates:
+  quality_bars:
+    - Style
+    - Presentation
+    - Determinism
+    - Accessibility
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/audio_pass.md"
+  message_sequences:
+    - step: 1
+      sender: "AuD"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Audio Pass loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: narrative_purpose
+      expression: "state.cues_have_purpose == true"
+      error_message: "Each cue has a clear narrative purpose (clarity, mood, or signposting)"
+    - name: player_safe_descriptions
+      expression: "state.descriptions_safe == true"
+      error_message: "Descriptions and captions are player-safe and consistent with Style Lead"
+    - name: reproducibility_notes
+      expression: "state.reproducibility_logged == true"
+      error_message: "Assets (if included) have reproducibility notes; loudness is reasonable; text equivalents exist"
+    - name: gate_passed
+      expression: "state.gate_passed == true"
+      error_message: "Gatekeeper reports green on Style/Presentation (and Reproducibility if applicable)"

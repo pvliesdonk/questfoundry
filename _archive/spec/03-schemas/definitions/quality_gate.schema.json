@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.dev/schemas/definitions/quality_gate.schema.json",
+  "title": "Quality Gate",
+  "description": "Reusable quality bar validation rule from Layer 0 QUALITY_BARS.md. Defines automated checks for one of the 8 quality bars with validation logic, error detection, and remediation guidance.",
+  "type": "object",
+  "required": ["bar_name", "validation_checks"],
+
+  "properties": {
+    "bar_name": {
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ],
+      "description": "Which of the 8 quality bars this gate validates (from Layer 0 QUALITY_BARS.md)"
+    },
+
+    "bar_definition": {
+      "type": "object",
+      "description": "Full definition from Layer 0 QUALITY_BARS.md for reference",
+      "properties": {
+        "what_it_means": {
+          "type": "string",
+          "description": "Human-readable definition of what this bar checks"
+        },
+        "layer_0_ref": {
+          "type": "string",
+          "pattern": "^spec/00-north-star/QUALITY_BARS\\.md#.+$",
+          "description": "Reference to section in Layer 0 QUALITY_BARS.md"
+        }
+      }
+    },
+
+    "validation_checks": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Automated validation checks for this bar. Each check is evaluated; bar passes if all checks pass.",
+      "items": {
+        "type": "object",
+        "required": ["check_id", "check_type", "validator"],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "description": "Unique identifier for this check within the bar"
+          },
+          "check_type": {
+            "enum": [
+              "schema_validation",
+              "reference_resolution",
+              "graph_analysis",
+              "content_safety",
+              "style_consistency",
+              "determinism_verification",
+              "accessibility_audit",
+              "custom"
+            ],
+            "description": "Type of validation check"
+          },
+          "validator": {
+            "type": "object",
+            "description": "Validation logic specification",
+            "required": ["method"],
+            "properties": {
+              "method": {
+                "enum": [
+                  "python_expression",
+                  "jsonpath_query",
+                  "regex_pattern",
+                  "graph_traversal",
+                  "llm_eval",
+                  "tool_call",
+                  "custom_function"
+                ],
+                "description": "Validation method:\n- python_expression: Execute Python code against state\n- jsonpath_query: Query state with JSONPath\n- regex_pattern: Match content against regex\n- graph_traversal: Analyze topology graph\n- llm_eval: Use LLM for subjective checks (Style, Presentation)\n- tool_call: Invoke validation tool\n- custom_function: Call named function from validator registry"
+              },
+              "expression": {
+                "type": "string",
+                "description": "Validation expression (Python, JSONPath, regex, etc.) depending on method"
+              },
+              "target": {
+                "type": "string",
+                "description": "What to validate (state key, artifact field, file path)"
+              },
+              "parameters": {
+                "type": "object",
+                "description": "Additional parameters for validator",
+                "additionalProperties": true
+              }
+            }
+          },
+          "pass_condition": {
+            "type": "string",
+            "description": "When does this check pass? (e.g., 'result == true', 'errors.length == 0')"
+          },
+          "severity": {
+            "enum": ["critical", "warning", "info"],
+            "default": "critical",
+            "description": "Severity level:\n- critical: Check failure = red bar\n- warning: Check failure = yellow bar\n- info: Check failure = note only"
+          },
+          "failure_message": {
+            "type": "string",
+            "description": "Human-readable message when check fails (can include {{template}} variables)"
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "scenario": {"type": "string"},
+                "passes": {"type": "boolean"},
+                "explanation": {"type": "string"}
+              }
+            },
+            "description": "Example scenarios for this check"
+          }
+        }
+      }
+    },
+
+    "status_thresholds": {
+      "type": "object",
+      "description": "How check results map to bar status (green/yellow/red)",
+      "properties": {
+        "green": {
+          "type": "object",
+          "description": "Conditions for green status (all good)",
+          "properties": {
+            "critical_failures": {
+              "type": "integer",
+              "default": 0,
+              "description": "Max critical failures allowed for green"
+            },
+            "warning_failures": {
+              "type": "integer",
+              "description": "Max warning failures allowed for green"
+            }
+          }
+        },
+        "yellow": {
+          "type": "object",
+          "description": "Conditions for yellow status (acceptable with remediation)",
+          "properties": {
+            "critical_failures": {
+              "type": "integer",
+              "default": 0,
+              "description": "Max critical failures allowed for yellow (typically 0)"
+            },
+            "warning_failures": {
+              "type": "integer",
+              "description": "Max warning failures for yellow"
+            }
+          }
+        }
+      }
+    },
+
+    "remediation": {
+      "type": "object",
+      "description": "Guidance for fixing failures (from Layer 0 QUALITY_BARS.md 'Common failures & fixes')",
+      "properties": {
+        "common_failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["issue", "fix"],
+            "properties": {
+              "issue": {
+                "type": "string",
+                "description": "Common failure pattern"
+              },
+              "fix": {
+                "type": "string",
+                "description": "How to remediate"
+              },
+              "check_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Which checks detect this issue"
+              },
+              "examples": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Example scenarios"
+              }
+            }
+          }
+        },
+        "smallest_viable_fix_template": {
+          "type": "string",
+          "description": "Template for generating 'smallest viable fix' from check failure details"
+        },
+        "owner_assignment": {
+          "type": "object",
+          "description": "Which role should fix which types of failures",
+          "additionalProperties": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Role abbreviation -> check_ids that role should fix"
+          }
+        }
+      }
+    },
+
+    "blocking_policy": {
+      "type": "object",
+      "description": "When does this bar block progression (from Layer 0 gatecheck rules)",
+      "properties": {
+        "blocks_on_red": {
+          "type": "boolean",
+          "default": true,
+          "description": "Does red status block merge to Cold?"
+        },
+        "blocks_on_yellow": {
+          "type": "boolean",
+          "default": false,
+          "description": "Does yellow status block merge? (typically false, yellow = conditional pass)"
+        },
+        "can_defer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Can this bar be deferred with explicit waiver? (rare, requires SR approval)"
+        }
+      }
+    },
+
+    "applicable_to": {
+      "type": "object",
+      "description": "Which artifacts/contexts this bar applies to",
+      "properties": {
+        "artifact_types": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Layer 3 schema names this bar validates (e.g., ['hook_card', 'canon_pack', 'codex_entry'])"
+        },
+        "loops": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Loop IDs where this bar is checked"
+        },
+        "hot_cold": {
+          "enum": ["hot", "cold", "both"],
+          "default": "cold",
+          "description": "Does this bar apply to Hot, Cold, or both SoTs? (Most bars apply at Cold merge)"
+        }
+      }
+    },
+
+    "automation": {
+      "type": "object",
+      "description": "Automation configuration for this bar",
+      "properties": {
+        "fully_automated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Can this bar be fully automated (no human review)? True for Integrity, Reachability. False for Style."
+        },
+        "requires_llm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Does this bar require LLM evaluation? (True for Style, Presentation subjective checks)"
+        },
+        "requires_human": {
+          "type": "boolean",
+          "default": false,
+          "description": "Does this bar always require human review? (True for some Accessibility checks)"
+        },
+        "evaluation_timeout": {
+          "type": "integer",
+          "description": "Max seconds to spend evaluating this bar (prevents hanging)"
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Version of this quality gate definition"
+        },
+        "author": {"type": "string"},
+        "updated": {"type": "string", "format": "date"},
+        "notes": {"type": "string"},
+        "test_cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "artifact": {"type": "object"},
+              "expected_status": {"enum": ["green", "yellow", "red"]},
+              "expected_failures": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "description": "Test cases for validating this quality gate implementation"
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "bar_name": "Integrity",
+      "bar_definition": {
+        "what_it_means": "No dead references, valid IDs, no accidental dead ends",
+        "layer_0_ref": "spec/00-north-star/QUALITY_BARS.md#1-integrity"
+      },
+      "validation_checks": [
+        {
+          "check_id": "no_dangling_refs",
+          "check_type": "reference_resolution",
+          "validator": {
+            "method": "graph_traversal",
+            "target": "hot_sot.hooks",
+            "expression": "all(ref in artifact_ids for hook in hooks for ref in hook.locations_links.related_hooks)",
+            "parameters": {
+              "check_bidirectional": true
+            }
+          },
+          "pass_condition": "result == true",
+          "severity": "critical",
+          "failure_message": "Found {{count}} dangling hook references: {{refs}}"
+        },
+        {
+          "check_id": "valid_id_format",
+          "check_type": "schema_validation",
+          "validator": {
+            "method": "regex_pattern",
+            "target": "*.header.id",
+            "expression": "^HK-\\d{8}-(0[1-9]|[1-9]\\d{1,2})$",
+            "parameters": {
+              "artifact_type": "hook_card"
+            }
+          },
+          "pass_condition": "all_match == true",
+          "severity": "critical",
+          "failure_message": "Invalid hook ID format: {{invalid_ids}}"
+        }
+      ],
+      "status_thresholds": {
+        "green": {
+          "critical_failures": 0,
+          "warning_failures": 0
+        },
+        "yellow": {
+          "critical_failures": 0,
+          "warning_failures": 3
+        }
+      },
+      "remediation": {
+        "common_failures": [
+          {
+            "issue": "Dangling link",
+            "fix": "Create the referenced section or retarget the choice",
+            "check_ids": ["no_dangling_refs"]
+          }
+        ]
+      }
+    },
+    {
+      "bar_name": "Style",
+      "bar_definition": {
+        "what_it_means": "Prose voice, register, motifs align with Style Lead guardrails",
+        "layer_0_ref": "spec/00-north-star/QUALITY_BARS.md#5-style"
+      },
+      "validation_checks": [
+        {
+          "check_id": "voice_consistency",
+          "check_type": "style_consistency",
+          "validator": {
+            "method": "llm_eval",
+            "target": "hot_sot.current_canon_pack.prose",
+            "expression": "Compare prose voice against style_addenda guidelines",
+            "parameters": {
+              "llm_prompt": "Evaluate if this prose maintains consistent voice with the style guide. Return 'pass' or 'fail' with explanation.",
+              "style_ref": "hot_sot.style_addenda[0]"
+            }
+          },
+          "pass_condition": "result == 'pass'",
+          "severity": "warning",
+          "failure_message": "Voice drift detected: {{explanation}}"
+        }
+      ],
+      "automation": {
+        "fully_automated": false,
+        "requires_llm": true,
+        "requires_human": false
+      }
+    }
+  ]
+}

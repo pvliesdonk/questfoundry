@@ -1,0 +1,117 @@
+# Loop Pattern: Narration Dry-Run
+# Compiled from: spec/00-north-star/LOOPS/narration_dry_run.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: narration_dry_run
+
+metadata:
+  name: "Narration Dry-Run"
+  type: "Export"
+  description: |
+    PN playtest of the current view. Play through the Cold snapshot exactly as a player would
+    experience it - in-world, spoiler-safe - to surface UX issues in comprehension, choice
+    clarity, pacing, and diegetic gate enforcement.
+
+topology:
+  entry_node: route_plan
+
+  nodes:
+    - role_id: showrunner
+      node_id: route_plan
+      description: "Choose representative paths: a hub route, a loop return, a gated branch, and at least one terminal. If time-boxed, pick high-traffic sections and one edge case."
+
+    - role_id: player_narrator
+      node_id: live_read
+      description: "Narrate in-voice; present choices clearly; perform recaps when natural. Enforce gateways without exposing internals. Do NOT improvise new content."
+
+    - role_id: player_narrator
+      node_id: issue_logging
+      description: "Tag each note with an issue type (choice-ambiguity, gate-friction, recap-needed, codex-invite, leak-risk, nav-bug, tone-wobble, accessibility) and a target."
+
+    - role_id: gatekeeper
+      node_id: spot_checks
+      description: "Classify severity and bar mapping. Binder verifies navigation/format issues. Curator checks codex links. Style Lead proposes phrasing patterns."
+
+  edges:
+    - source: route_plan
+      target: live_read
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.routes_planned == true"
+    - source: live_read
+      target: issue_logging
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.read_complete == true"
+    - source: issue_logging
+      target: spot_checks
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.issues_logged == true"
+    - source: spot_checks
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: false
+
+context:
+  required_artifacts:
+    - artifact_type: export_view
+      state_key: exports.current_view
+    - artifact_type: style_addendum
+      state_key: hot_sot.style
+
+handoffs:
+  - target: style_tune_up
+    condition: "tone/phrasing system issues identified"
+  - target: codex_expansion
+    condition: "coverage gaps or codex invites needed"
+  - target: binding_run
+    condition: "navigation/format issues found"
+  - target: story_spark
+    condition: "topology flaws discovered (rare)"
+
+gates:
+  quality_bars:
+    - Presentation
+    - Integrity
+    - Style
+    - Accessibility
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/narration_dry_run.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Narration Dry-Run loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: gates_diegetic
+      expression: "state.gates_enforced_diegetically == true"
+      error_message: "Gates enforced diegetically without confusion or leaks"
+    - name: choices_distinct
+      expression: "state.choices_distinct == true"
+      error_message: "Choices read as distinct and fair; recaps land where helpful"
+    - name: codex_invites_safe
+      expression: "state.codex_invites_safe == true"
+      error_message: "Codex invites clarify, not spoil"
+    - name: navigation_smooth
+      expression: "state.navigation_smooth == true"
+      error_message: "Navigation is smooth across all export formats"
+    - name: followups_exist
+      expression: "state.followups_exist == true"
+      error_message: "A small, prioritized list of actionable follow-ups exists"

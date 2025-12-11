@@ -1,0 +1,119 @@
+# Loop Pattern: Codex Expansion
+# Compiled from: spec/00-north-star/LOOPS/codex_expansion.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: codex_expansion
+
+metadata:
+  name: "Codex Expansion"
+  type: "Refinement"
+  description: |
+    Turn canon (often spoiler-heavy) into player-safe codex pages with clear cross-references.
+    Improve comprehension without leaking twists or internal plumbing.
+
+topology:
+  entry_node: select_topics
+
+  nodes:
+    - role_id: codex_curator
+      node_id: select_topics
+      description: "From canon deltas, term frequency in manuscript, and taxonomy hooks. Prioritize player-value: comprehension bottlenecks first."
+
+    - role_id: codex_curator
+      node_id: draft_entries
+      description: "Write overview and context in Style Lead's register. Add See also list that improves navigation (avoid self-loops)."
+
+    - role_id: lore_weaver
+      node_id: spoiler_sweep
+      description: "Compare against the spoiler-level canon; mask revelations. If masking makes an entry misleading, add neutral phrasing workaround or defer."
+
+    - role_id: codex_curator
+      node_id: link_audit
+      description: "Check that every cross-reference resolves (or create the stub if approved). Add disambiguation if a term is overloaded."
+
+    - role_id: gatekeeper
+      node_id: pre_check
+      description: "Presentation Safety, Integrity (links resolve), and Style. Flag any gateway logic leaks."
+
+  edges:
+    - source: select_topics
+      target: draft_entries
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.topics_selected == true"
+    - source: draft_entries
+      target: spoiler_sweep
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.entries_drafted == true"
+    - source: spoiler_sweep
+      target: link_audit
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.spoilers_masked == true"
+    - source: link_audit
+      target: pre_check
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.links_verified == true"
+    - source: pre_check
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: canon_pack
+      state_key: hot_sot.canon
+    - artifact_type: player_safe_summary
+      state_key: hot_sot.summaries
+
+handoffs:
+  - target: binding_run
+    condition: "codex entries ready for export views"
+
+gates:
+  quality_bars:
+    - Integrity
+    - Presentation
+    - Style
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/codex_expansion.md"
+  message_sequences:
+    - step: 1
+      sender: "CC"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Codex Expansion loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: term_coverage
+      expression: "state.terms_covered == true"
+      error_message: "High-frequency manuscript terms have matching codex entries"
+    - name: no_spoilers
+      expression: "state.no_spoilers == true"
+      error_message: "No spoilers; PN can reference entries safely"
+    - name: links_resolve
+      expression: "state.links_resolve == true"
+      error_message: "All See also links resolve; no dead ends"
+    - name: style_aligned
+      expression: "state.style_aligned == true"
+      error_message: "Reading level and tone align with Style Lead; localization notes present where needed"
+    - name: traceability_present
+      expression: "state.traceability_present == true"
+      error_message: "Traceability present (TU-ID lineages)"

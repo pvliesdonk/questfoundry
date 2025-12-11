@@ -1,0 +1,676 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/world_genesis_manifest.schema.json",
+  "title": "World Genesis Manifest",
+  "description": "Generated from 02-dictionary/artifacts/world_genesis_manifest.md. Records World Genesis loop execution: proactively created canon packs, codex baseline, style anchors, and constraint manifest for downstream Story Spark. Enables canon-first workflow for epic worldbuilding.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "Project slug (kebab-case identifier).",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "tu": {
+      "type": "string",
+      "description": "TU ID for this World Genesis run (format: TU-YYYY-MM-DD-LW-WorldGenesis).",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-LW-WorldGenesis$"
+    },
+    "completed": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this World Genesis loop completed."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role owning this manifest; fixed to Lore Weaver.",
+      "enum": ["Lore Weaver"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "1-2 line description of worldbuilding themes covered.",
+      "minLength": 20,
+      "maxLength": 240
+    },
+    "budget": {
+      "type": "string",
+      "description": "Worldbuilding budget tier.",
+      "enum": ["minimal", "standard", "epic"]
+    },
+    "worldbuilding_scope": {
+      "type": "array",
+      "description": "Themes covered in this World Genesis run.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "theme": {
+            "type": "string",
+            "description": "Theme name (geography, magic, history, factions, etc.).",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this theme was needed.",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "depth": {
+            "type": "string",
+            "description": "Depth level for this theme.",
+            "enum": ["minimal", "standard", "epic"]
+          }
+        },
+        "required": ["theme", "rationale", "depth"]
+      },
+      "minItems": 2
+    },
+    "canon_packs_created": {
+      "type": "array",
+      "description": "Canon packs generated proactively during World Genesis.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canon pack ID.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "theme": {
+            "type": "string",
+            "description": "Canon theme.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "status": {
+            "type": "string",
+            "description": "Always cold-merged for genesis canon.",
+            "enum": ["cold-merged"]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Canon pack summary.",
+            "minLength": 20,
+            "maxLength": 400
+          },
+          "invariants_count": {
+            "type": "integer",
+            "description": "Number of invariants defined in this pack.",
+            "minimum": 0
+          }
+        },
+        "required": ["id", "theme", "status", "summary", "invariants_count"]
+      },
+      "minItems": 1
+    },
+    "timeline_foundation": {
+      "type": "array",
+      "description": "Timeline anchors from World Genesis (T0/T1/T2).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "type": "string",
+            "description": "Timeline anchor label.",
+            "enum": ["T0", "T1", "T2"]
+          },
+          "year": {
+            "type": "string",
+            "description": "Year notation (e.g., Y-500, Y+0).",
+            "pattern": "^Y[+-]\\d+$"
+          },
+          "events": {
+            "type": "string",
+            "description": "Events at this anchor.",
+            "minLength": 10,
+            "maxLength": 400
+          },
+          "significance": {
+            "type": "string",
+            "description": "Why this anchor matters.",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "required": ["anchor", "year", "events", "significance"]
+      },
+      "minItems": 2
+    },
+    "entity_registry": {
+      "type": "object",
+      "description": "All entities defined in World Genesis.",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "description": "Character entities (may be legendary/historical).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "archetype": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "status": {
+                "type": "string",
+                "enum": ["alive", "dead", "legend", "unknown"]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "archetype", "status", "description"]
+          }
+        },
+        "places": {
+          "type": "array",
+          "description": "Place entities.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "type": {
+                "type": "string",
+                "enum": ["kingdom", "landmark", "region", "trade_route"]
+              },
+              "geography": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "type", "description"]
+          },
+          "minItems": 1
+        },
+        "factions": {
+          "type": "array",
+          "description": "Faction entities.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "structure": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "influence": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "structure", "influence", "description"]
+          },
+          "minItems": 1
+        },
+        "items": {
+          "type": "array",
+          "description": "Item/artifact entities (if applicable).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 80
+              },
+              "function": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "availability": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["name", "function", "availability", "description"]
+          }
+        }
+      },
+      "required": ["characters", "places", "factions", "items"]
+    },
+    "codex_baseline": {
+      "type": "array",
+      "description": "Player-safe codex entries created during World Genesis.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Codex entry ID.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "topic": {
+            "type": "string",
+            "description": "Topic category.",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "summary": {
+            "type": "string",
+            "description": "Player-safe summary.",
+            "minLength": 20,
+            "maxLength": 400
+          },
+          "status": {
+            "type": "string",
+            "description": "Always cold-merged for genesis codex.",
+            "enum": ["cold-merged"]
+          }
+        },
+        "required": ["id", "topic", "summary", "status"]
+      },
+      "minItems": 5
+    },
+    "style_anchors": {
+      "type": "object",
+      "description": "World voice and register defined during World Genesis.",
+      "properties": {
+        "style_addendum_id": {
+          "type": "string",
+          "description": "Style addendum artifact ID.",
+          "minLength": 3,
+          "maxLength": 80
+        },
+        "status": {
+          "type": "string",
+          "description": "Always cold-merged.",
+          "enum": ["cold-merged"]
+        },
+        "narrative_voice": {
+          "type": "string",
+          "description": "Narrative voice type (formal, colloquial, archaic).",
+          "minLength": 10,
+          "maxLength": 240
+        },
+        "dialogue_patterns": {
+          "type": "array",
+          "description": "Dialogue patterns by group.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "group": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 80
+              },
+              "register": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "example": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["group", "register"]
+          },
+          "minItems": 1
+        },
+        "motifs": {
+          "type": "array",
+          "description": "Recurring motifs.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "motif": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 80
+              },
+              "imagery": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 240
+              }
+            },
+            "required": ["motif", "imagery", "rationale"]
+          }
+        }
+      },
+      "required": ["style_addendum_id", "status", "narrative_voice"]
+    },
+    "constraint_manifest": {
+      "type": "object",
+      "description": "Actionable rules for Story Spark (what plot can/cannot do).",
+      "properties": {
+        "invariants": {
+          "type": "array",
+          "description": "Rules that cannot change.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        },
+        "geography_affordances": {
+          "type": "array",
+          "description": "What geography enables for Plotwright.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "magic_affordances": {
+          "type": "array",
+          "description": "What magic/metaphysics enables for Plotwright.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "faction_affordances": {
+          "type": "array",
+          "description": "What factions enable for Plotwright.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "you_can": {
+          "type": "array",
+          "description": "Examples of allowed story elements.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        },
+        "you_cannot": {
+          "type": "array",
+          "description": "Examples of forbidden story elements.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["invariants", "you_can", "you_cannot"]
+    },
+    "iteration_summary": {
+      "type": "object",
+      "description": "Loop execution summary.",
+      "properties": {
+        "total_iterations": {
+          "type": "integer",
+          "description": "Number of iterations until stabilization.",
+          "minimum": 1
+        },
+        "total_duration": {
+          "type": "string",
+          "description": "Total duration (e.g., '22h 15m').",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "description": "Final loop status.",
+          "enum": ["Stabilized"]
+        },
+        "iterations": {
+          "type": "array",
+          "description": "Per-iteration breakdown.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "iteration_num": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "steps_completed": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "blocked_at": {
+                "type": "string",
+                "minLength": 5,
+                "maxLength": 160
+              },
+              "issues": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 400
+              },
+              "result": {
+                "type": "string",
+                "enum": ["blocked", "stabilized"]
+              }
+            },
+            "required": ["iteration_num", "steps_completed", "result"]
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["total_iterations", "total_duration", "status", "iterations"]
+    },
+    "quality_bar_results": {
+      "type": "object",
+      "description": "Gatekeeper validation results.",
+      "properties": {
+        "integrity": {
+          "type": "boolean",
+          "description": "All entity references resolve."
+        },
+        "style": {
+          "type": "boolean",
+          "description": "Voice/register consistent."
+        },
+        "presentation": {
+          "type": "boolean",
+          "description": "Codex baseline is player-safe."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["APPROVED", "REJECTED"],
+          "description": "Overall validation status."
+        },
+        "validated_by": {
+          "type": "string",
+          "description": "Gatekeeper name or agent identifier.",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "validation_date": {
+          "$ref": "#/$defs/date_string"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Note that Reachability/Nonlinearity/Gateways not applicable pre-plot.",
+          "minLength": 10,
+          "maxLength": 400
+        }
+      },
+      "required": [
+        "integrity",
+        "style",
+        "presentation",
+        "status",
+        "validated_by",
+        "validation_date"
+      ]
+    },
+    "downstream_handoffs": {
+      "type": "object",
+      "description": "What creative roles receive from this World Genesis.",
+      "properties": {
+        "to_plotwright": {
+          "type": "array",
+          "description": "Handoffs to Plotwright.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        },
+        "to_scene_smith": {
+          "type": "array",
+          "description": "Handoffs to Scene Smith.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        },
+        "to_lore_weaver": {
+          "type": "array",
+          "description": "Handoffs to Lore Weaver (for future extensions).",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "to_codex_curator": {
+          "type": "array",
+          "description": "Handoffs to Codex Curator.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          }
+        },
+        "to_showrunner": {
+          "type": "array",
+          "description": "Handoffs to Showrunner.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 240
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["to_plotwright", "to_scene_smith", "to_showrunner"]
+    },
+    "lineage": {
+      "type": "object",
+      "description": "Traceability information.",
+      "properties": {
+        "tu": {
+          "type": "string",
+          "description": "TU ID (same as root tu field).",
+          "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-LW-WorldGenesis$"
+        },
+        "canon_pack_ids": {
+          "type": "array",
+          "description": "All canon pack IDs created.",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "minItems": 1
+        },
+        "codex_entry_ids": {
+          "type": "array",
+          "description": "All codex entry IDs created.",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80
+          },
+          "minItems": 5
+        },
+        "style_addendum_id": {
+          "type": "string",
+          "description": "Style addendum ID.",
+          "minLength": 3,
+          "maxLength": 80
+        },
+        "snapshot_impact": {
+          "type": "string",
+          "description": "Impact on Cold snapshots.",
+          "minLength": 20,
+          "maxLength": 400
+        }
+      },
+      "required": [
+        "tu",
+        "canon_pack_ids",
+        "codex_entry_ids",
+        "style_addendum_id",
+        "snapshot_impact"
+      ]
+    }
+  },
+  "required": [
+    "project",
+    "tu",
+    "completed",
+    "owner",
+    "scope",
+    "budget",
+    "worldbuilding_scope",
+    "canon_packs_created",
+    "timeline_foundation",
+    "entity_registry",
+    "codex_baseline",
+    "style_anchors",
+    "constraint_manifest",
+    "iteration_summary",
+    "quality_bar_results",
+    "downstream_handoffs",
+    "lineage"
+  ],
+  "$defs": {
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

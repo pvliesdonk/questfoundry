@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/post_mortem_report.schema.json",
+  "title": "Post-Mortem Report",
+  "description": "Structured retrospective documenting successes, failures, surprising discoveries, and concrete action items after completing a major milestone, release, or significant TU cluster. Producer: Showrunner. Consumers: All roles (process improvement), Gatekeeper (quality bar trends).",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Post-Mortem title (milestone or incident name)"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date retrospective was conducted (YYYY-MM-DD)"
+    },
+    "scope": {
+      "type": "string",
+      "description": "Period/work reviewed (e.g., 'Chapter 3 TU cluster', 'Act I milestone')"
+    },
+    "facilitator": {
+      "type": "string",
+      "const": "Showrunner",
+      "description": "Role facilitating retrospective (always Showrunner)"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Roles who contributed to retrospective"
+    },
+    "metrics_summary": {
+      "type": "object",
+      "description": "Quantitative data from completed TUs",
+      "properties": {
+        "gate_pass_rates": {
+          "type": "object",
+          "properties": {
+            "pass_count": { "type": "integer", "minimum": 0 },
+            "pass_percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+            "conditional_pass_count": { "type": "integer", "minimum": 0 },
+            "conditional_pass_percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+            "block_count": { "type": "integer", "minimum": 0 },
+            "block_percentage": { "type": "number", "minimum": 0, "maximum": 100 }
+          },
+          "required": ["pass_count", "pass_percentage"]
+        },
+        "bar_failures": {
+          "type": "array",
+          "description": "Most common bar failures by category",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bar_category": {
+                "type": "string",
+                "enum": [
+                  "Style",
+                  "Integrity",
+                  "Presentation",
+                  "Accessibility",
+                  "Reachability",
+                  "Nonlinearity",
+                  "Gateway",
+                  "Player Safety"
+                ]
+              },
+              "yellow_flags": { "type": "integer", "minimum": 0 },
+              "red_flags": { "type": "integer", "minimum": 0 },
+              "percentage": { "type": "number", "minimum": 0, "maximum": 100 }
+            },
+            "required": ["bar_category", "yellow_flags", "red_flags", "percentage"]
+          }
+        },
+        "rework_cycles": {
+          "type": "object",
+          "description": "Average cycles per artifact type",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "cycle_time": {
+          "type": "object",
+          "properties": {
+            "average_days": { "type": "number", "minimum": 0 },
+            "target_days": { "type": "number", "minimum": 0 },
+            "variance_days": { "type": "number" }
+          },
+          "required": ["average_days"]
+        },
+        "hook_triage": {
+          "type": "object",
+          "properties": {
+            "acceptance_percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+            "deferral_percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+            "rejection_percentage": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "dormant_role_activations": {
+          "type": "object",
+          "description": "Number of activations per dormant role",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "what_went_well": {
+      "type": "array",
+      "description": "Successes, wins, and effective practices (3-5 items)",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "properties": {
+          "practice": {
+            "type": "string",
+            "description": "Practice or achievement"
+          },
+          "impact": {
+            "type": "string",
+            "description": "What improved or succeeded"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Metrics, anecdotes, or observations"
+          },
+          "recommendation": {
+            "type": "string",
+            "enum": ["continue", "document as best practice", "scale up"],
+            "description": "Recommended action"
+          }
+        },
+        "required": ["practice", "impact", "evidence", "recommendation"]
+      }
+    },
+    "what_went_poorly": {
+      "type": "array",
+      "description": "Pain points, blockers, and inefficiencies (3-5 items)",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "properties": {
+          "problem": {
+            "type": "string",
+            "description": "Problem or pain point"
+          },
+          "impact": {
+            "type": "string",
+            "description": "What failed or suffered"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Metrics, anecdotes, or observations"
+          },
+          "root_cause": {
+            "type": "string",
+            "description": "System/process issue (not individual blame)"
+          },
+          "recommendation": {
+            "type": "string",
+            "description": "Action item to address"
+          }
+        },
+        "required": ["problem", "impact", "evidence", "root_cause", "recommendation"]
+      }
+    },
+    "surprising_discoveries": {
+      "type": "array",
+      "description": "Unexpected insights, emergent patterns (2-3 items)",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "discovery": {
+            "type": "string",
+            "description": "Discovery or insight"
+          },
+          "context": {
+            "type": "string",
+            "description": "What led to discovery"
+          },
+          "implication": {
+            "type": "string",
+            "description": "What this means for future work"
+          },
+          "recommendation": {
+            "type": "string",
+            "enum": ["investigate further", "apply immediately", "monitor"],
+            "description": "Recommended action"
+          }
+        },
+        "required": ["discovery", "context", "implication", "recommendation"]
+      }
+    },
+    "action_items": {
+      "type": "array",
+      "description": "Concrete next steps with owners and deadlines",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Specific action to take"
+          },
+          "owner": {
+            "type": "string",
+            "description": "Role responsible for implementation"
+          },
+          "target_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Completion date (YYYY-MM-DD)"
+          },
+          "success_criteria": {
+            "type": "string",
+            "description": "How we'll know it worked (measurable)"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["High", "Medium", "Low"],
+            "description": "Priority level"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "in-progress", "completed"],
+            "description": "Current status"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["Process", "Documentation", "Tooling", "Training"],
+            "description": "Action item category"
+          }
+        },
+        "required": [
+          "description",
+          "owner",
+          "target_date",
+          "success_criteria",
+          "priority",
+          "status"
+        ]
+      }
+    },
+    "best_practices_updated": {
+      "type": "array",
+      "description": "Documentation/guidance updated as result of retrospective",
+      "items": {
+        "type": "object",
+        "properties": {
+          "layer_file": {
+            "type": "string",
+            "description": "Layer/file updated (e.g., 'Layer 0: LOOPS/gatecheck.md')"
+          },
+          "change": {
+            "type": "string",
+            "description": "What was added, removed, or clarified"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this improves the process"
+          },
+          "related_action_item": {
+            "type": "string",
+            "description": "Related action item ID if applicable"
+          }
+        },
+        "required": ["layer_file", "change", "rationale"]
+      }
+    },
+    "next_review": {
+      "type": "object",
+      "description": "Next scheduled Post-Mortem",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Date or milestone (YYYY-MM-DD or milestone name)"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Next milestone or period to review"
+        },
+        "action_item_review": {
+          "type": "string",
+          "description": "What action items to check from this report"
+        }
+      },
+      "required": ["date", "scope"]
+    }
+  },
+  "required": [
+    "title",
+    "date",
+    "scope",
+    "facilitator",
+    "participants",
+    "what_went_well",
+    "what_went_poorly",
+    "surprising_discoveries",
+    "action_items"
+  ]
+}

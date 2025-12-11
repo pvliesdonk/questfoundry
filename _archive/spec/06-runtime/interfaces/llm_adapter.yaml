@@ -1,0 +1,191 @@
+# LLM Adapter Plugin Interface
+#
+# This YAML schema defines the contract for LLM provider plugins.
+# Plugins implementing this interface can be swapped without changing core runtime.
+
+interface_name: "LLMAdapter"
+interface_version: "1.0.0"
+plugin_type: "llm_provider"
+
+description: |
+  LLM Adapter plugins provide access to language models (OpenAI, Anthropic, local models).
+  They wrap provider-specific APIs into a unified interface compatible with LangChain.
+
+# Required methods
+methods:
+  get_llm:
+    description: "Get LLM instance with specified configuration"
+    inputs:
+      model:
+        type: "string"
+        required: true
+        description: "Model identifier (e.g., 'claude-3-5-sonnet-20241022')"
+        examples:
+          - "claude-3-5-sonnet-20241022"
+          - "claude-3-5-haiku-20241022"
+          - "gpt-4-turbo"
+          - "ollama/llama2"
+
+      temperature:
+        type: "float"
+        required: false
+        default: 0.7
+        description: "Sampling temperature (0.0-1.0)"
+        range: [0.0, 1.0]
+
+      max_tokens:
+        type: "integer"
+        required: false
+        default: 4096
+        description: "Maximum tokens to generate"
+
+      additional_config:
+        type: "object"
+        required: false
+        description: "Provider-specific configuration"
+        examples:
+          - top_p: 0.9
+          - top_k: 40
+          - stop_sequences: ["Human:", "Assistant:"]
+
+    outputs:
+      llm:
+        type: "BaseChatModel"
+        description: "LangChain-compatible chat model instance"
+
+    errors:
+      - name: "ModelNotFoundError"
+        description: "Requested model not available"
+      - name: "AuthenticationError"
+        description: "API key invalid or missing"
+      - name: "RateLimitError"
+        description: "API rate limit exceeded"
+
+  list_available_models:
+    description: "List all models available from this provider"
+    inputs: {}
+    outputs:
+      models:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            model_id:
+              type: "string"
+              description: "Model identifier"
+            name:
+              type: "string"
+              description: "Human-readable name"
+            context_window:
+              type: "integer"
+              description: "Maximum context window in tokens"
+            cost_per_1k_tokens:
+              type: "object"
+              properties:
+                input: { type: "float" }
+                output: { type: "float" }
+
+# Configuration schema
+configuration:
+  api_key:
+    type: "string"
+    required: true
+    description: "Provider API key"
+    env_var: "ANTHROPIC_API_KEY"  # or "OPENAI_API_KEY", etc.
+
+  base_url:
+    type: "string"
+    required: false
+    description: "Custom API base URL (for proxies or local models)"
+
+  timeout:
+    type: "integer"
+    required: false
+    default: 60
+    description: "Request timeout in seconds"
+
+  retry_config:
+    type: "object"
+    required: false
+    properties:
+      max_retries:
+        type: "integer"
+        default: 3
+      backoff_factor:
+        type: "float"
+        default: 2.0
+
+# Implementation examples
+implementations:
+  anthropic:
+    class: "AnthropicAdapter"
+    module: "questfoundry.plugins.llm.anthropic"
+    requires:
+      - "langchain_anthropic"
+    models:
+      - "claude-3-5-sonnet-20241022"
+      - "claude-3-5-haiku-20241022"
+      - "claude-3-opus-20240229"
+
+  openai:
+    class: "OpenAIAdapter"
+    module: "questfoundry.plugins.llm.openai"
+    requires:
+      - "langchain_openai"
+    models:
+      - "gpt-4-turbo"
+      - "gpt-4"
+      - "gpt-3.5-turbo"
+
+  ollama:
+    class: "OllamaAdapter"
+    module: "questfoundry.plugins.llm.ollama"
+    requires:
+      - "langchain_ollama"
+    models:
+      - "ollama/llama2"
+      - "ollama/mistral"
+      - "ollama/codellama"
+
+# Usage example
+example_usage: |
+  # Get LLM adapter
+  from questfoundry.plugins.llm import get_llm_adapter
+
+  # Initialize adapter
+  adapter = get_llm_adapter(provider="anthropic")
+
+  # Get LLM instance
+  llm = adapter.get_llm(
+      model="claude-3-5-sonnet-20241022",
+      temperature=0.7,
+      max_tokens=4096
+  )
+
+  # Use with LangChain
+  from langchain_core.prompts import ChatPromptTemplate
+  prompt = ChatPromptTemplate.from_messages([
+      ("system", "You are the Plotwright role."),
+      ("human", "{input}")
+  ])
+  chain = prompt | llm
+  result = chain.invoke({"input": "Write a tense scene"})
+
+# Testing requirements
+testing:
+  unit_tests:
+    - "Test get_llm with valid model"
+    - "Test get_llm with invalid model raises ModelNotFoundError"
+    - "Test authentication failure raises AuthenticationError"
+    - "Test list_available_models returns correct format"
+
+  integration_tests:
+    - "Test actual LLM call with small prompt"
+    - "Test streaming response"
+    - "Test retry logic on timeout"
+
+# Plugin registration
+registration:
+  registry_key: "llm_provider"
+  discovery_path: "questfoundry.plugins.llm"
+  config_file: "~/.questfoundry/plugins.yaml"

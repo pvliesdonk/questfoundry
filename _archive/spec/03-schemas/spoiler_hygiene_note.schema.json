@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/spoiler_hygiene_note.schema.json",
+  "title": "Spoiler Hygiene Note",
+  "description": "Summary of spoiler-level details masked when creating player-safe codex entries, and entries deferred due to spoil risk. Ensures Gatekeeper can verify spoiler hygiene compliance. Producer: Codex Curator. Consumers: Gatekeeper, Lore Weaver, Showrunner.",
+  "type": "object",
+  "properties": {
+    "tu_or_milestone": {
+      "type": "string",
+      "description": "TU-ID or milestone name"
+    },
+    "codex_curator": {
+      "type": "string",
+      "description": "Codex Curator name or agent identifier"
+    },
+    "canon_source": {
+      "type": "string",
+      "pattern": "^(TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2}\\d{2}|Canon Pack .+)$",
+      "description": "Canon Pack TU-ID or reference"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Creation date (YYYY-MM-DD)"
+    },
+    "entries_reviewed_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of codex entries reviewed for spoilers"
+    },
+    "masked_details_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of spoiler details masked"
+    },
+    "deferred_entries_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of entries deferred due to spoil risk"
+    },
+    "masked_details": {
+      "type": "array",
+      "description": "Spoiler-level canon details that were hidden when creating player-safe codex entries",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entry": {
+            "type": "string",
+            "description": "Codex entry title or ID"
+          },
+          "canon_truth_spoiler": {
+            "type": "string",
+            "description": "What the spoiler-level canon says"
+          },
+          "safe_phrasing_codex": {
+            "type": "string",
+            "description": "What the player-safe entry says instead"
+          },
+          "masking_technique": {
+            "type": "string",
+            "enum": [
+              "neutral phrasing",
+              "vague timeframe",
+              "omit causality",
+              "in-world belief",
+              "defer detail"
+            ],
+            "description": "Technique used to mask spoiler"
+          },
+          "reveal_timing": {
+            "type": "string",
+            "description": "When spoiler becomes safe (act/chapter/anchor or 'never')"
+          },
+          "risk_if_leaked": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "catastrophic"],
+            "description": "Impact if spoiler leaks to player"
+          }
+        },
+        "required": [
+          "entry",
+          "canon_truth_spoiler",
+          "safe_phrasing_codex",
+          "masking_technique",
+          "reveal_timing",
+          "risk_if_leaked"
+        ]
+      }
+    },
+    "deferred_entries": {
+      "type": "array",
+      "description": "Entire codex entries skipped because defining them would spoil",
+      "items": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "description": "Term that needs entry but is deferred"
+          },
+          "why_deferred": {
+            "type": "string",
+            "description": "Reason for deferral (spoils twist | reveals allegiance | exposes gate logic | timeline reveal)"
+          },
+          "canon_context": {
+            "type": "string",
+            "description": "Spoiler-level summary of why term is risky"
+          },
+          "deferred_until": {
+            "type": "string",
+            "description": "Act/chapter/milestone when entry becomes safe"
+          },
+          "workaround": {
+            "type": "string",
+            "description": "How manuscript/codex handles undefined term (context clues | synonym | omit)"
+          },
+          "hook_for_later": {
+            "type": "string",
+            "description": "Hook-id if filed for future expansion, or 'none'"
+          }
+        },
+        "required": [
+          "term",
+          "why_deferred",
+          "canon_context",
+          "deferred_until",
+          "workaround",
+          "hook_for_later"
+        ]
+      }
+    },
+    "gatekeeper_validation_points": {
+      "type": "array",
+      "description": "Entries flagged for extra scrutiny due to spoiler proximity",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entry": {
+            "type": "string",
+            "description": "Codex entry title or ID"
+          },
+          "concern": {
+            "type": "string",
+            "description": "Why this entry is high-risk for spoiler leaks"
+          },
+          "phrases_to_verify": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "phrase": { "type": "string" },
+                "safe": { "type": "boolean", "description": "True if safe, false if would leak spoiler" }
+              },
+              "required": ["phrase", "safe"]
+            },
+            "description": "List of phrases Gatekeeper should check (safe vs unsafe)"
+          },
+          "safe_alternative": {
+            "type": "string",
+            "description": "Backup phrasing if Gatekeeper blocks"
+          }
+        },
+        "required": ["entry", "concern", "phrases_to_verify", "safe_alternative"]
+      }
+    },
+    "reveal_timeline": {
+      "type": "array",
+      "description": "When masked details or deferred entries become safe to reveal",
+      "items": {
+        "type": "object",
+        "properties": {
+          "detail_entry": {
+            "type": "string",
+            "description": "Detail or term name"
+          },
+          "currently_masked_deferred": {
+            "type": "string",
+            "description": "What's hidden"
+          },
+          "safe_to_reveal": {
+            "type": "string",
+            "description": "Act/chapter/anchor when safe"
+          },
+          "hook_tu_for_future": {
+            "type": "string",
+            "description": "Hook-id or TU-ID for future work, or 'none'"
+          }
+        },
+        "required": [
+          "detail_entry",
+          "currently_masked_deferred",
+          "safe_to_reveal",
+          "hook_tu_for_future"
+        ]
+      }
+    }
+  },
+  "required": [
+    "tu_or_milestone",
+    "codex_curator",
+    "canon_source",
+    "date",
+    "entries_reviewed_count",
+    "masked_details_count",
+    "deferred_entries_count",
+    "masked_details"
+  ]
+}

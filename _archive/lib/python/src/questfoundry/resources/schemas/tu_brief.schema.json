@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/tu_brief.schema.json",
+  "title": "TU Brief",
+  "description": "Generated from 02-dictionary/artifacts/tu_brief_ENRICHED.md. Opens a focused timeboxed task unit, specifying scope, roles, bars, deliverables, and escalation paths while keeping player surfaces tied to Cold snapshots.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "TU identifier in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "opened": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date the TU was opened."
+    },
+    "owner_a": {
+      "$ref": "#/$defs/role_name",
+      "description": "Accountable owner for the TU (usually Showrunner)."
+    },
+    "responsible_r": {
+      "type": "array",
+      "description": "Roles responsible for executing the TU.",
+      "items": {
+        "$ref": "#/$defs/role_name"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "loop": {
+      "$ref": "#/$defs/loop_name",
+      "description": "Loop type from TU Types & Loop Alignment taxonomy."
+    },
+    "slice": {
+      "type": "string",
+      "description": "Player-safe slice description (1-2 lines).",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "snapshot_context": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "awake": {
+      "type": "array",
+      "description": "Roles actively participating in this TU.",
+      "items": {
+        "$ref": "#/$defs/role_name"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "dormant": {
+      "type": "array",
+      "description": "Roles not participating in this TU.",
+      "items": {
+        "$ref": "#/$defs/role_name"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "deferral_tags": {
+      "type": "array",
+      "description": "Optional deferral tags explaining dormant tracks.",
+      "items": {
+        "$ref": "#/$defs/deferral_tag"
+      },
+      "uniqueItems": true
+    },
+    "press": {
+      "type": "array",
+      "description": "Quality bars this TU will flip to green.",
+      "items": {
+        "$ref": "#/$defs/quality_bar"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "monitor": {
+      "type": "array",
+      "description": "Quality bars to monitor without committing to green.",
+      "items": {
+        "$ref": "#/$defs/quality_bar"
+      },
+      "uniqueItems": true
+    },
+    "pre_gate_risks": {
+      "type": "array",
+      "description": "Smallest likely failure points to watch before gate.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Prerequisites required before starting the TU.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "pairing_plan": {
+      "type": "string",
+      "description": "Optional note on which pair guides will be used.",
+      "maxLength": 200
+    },
+    "deliverables": {
+      "type": "array",
+      "description": "Concrete exit artifacts expected at TU completion.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "bars_green": {
+      "type": "array",
+      "description": "Bars that must be green before merge.",
+      "items": {
+        "$ref": "#/$defs/quality_bar"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "merge_view": {
+      "type": "string",
+      "description": "Merge decision and Binder involvement notes.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "timebox": {
+      "type": "string",
+      "description": "Timeboxed duration for this TU (45-90 min typical).",
+      "pattern": "^\\d{2,3} min$"
+    },
+    "checkpoint": {
+      "type": "string",
+      "description": "Optional mid-TU review time (HH:MM).",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "handoffs": {
+      "type": "string",
+      "description": "Optional note on who receives which deliverables and when.",
+      "maxLength": 240
+    },
+    "pre_gate": {
+      "type": "string",
+      "description": "Optional pre-gate sampling instructions for the Gatekeeper.",
+      "maxLength": 240
+    },
+    "gatecheck": {
+      "type": "string",
+      "description": "Gatecheck plan detailing pass/fail criteria by bar.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Optional escalation trigger statement.",
+      "maxLength": 200
+    },
+    "lane": {
+      "$ref": "#/$defs/role_name",
+      "description": "Optional escalation owner per escalation rules."
+    },
+    "record": {
+      "type": "string",
+      "description": "Optional note about where escalation is documented.",
+      "maxLength": 200
+    },
+    "tracelog": {
+      "type": "string",
+      "description": "Optional path to TU log file.",
+      "pattern": "^[\\w./-]+$",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "linkage": {
+      "type": "string",
+      "description": "Hooks filed, snapshot impact, and trace notes.",
+      "minLength": 10,
+      "maxLength": 240
+    }
+  },
+  "required": [
+    "id",
+    "opened",
+    "owner_a",
+    "responsible_r",
+    "loop",
+    "slice",
+    "snapshot_context",
+    "awake",
+    "dormant",
+    "press",
+    "pre_gate_risks",
+    "inputs",
+    "deliverables",
+    "bars_green",
+    "merge_view",
+    "timebox",
+    "gatecheck",
+    "linkage"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

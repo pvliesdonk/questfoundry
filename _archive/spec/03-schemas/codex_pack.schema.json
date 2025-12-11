@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/codex_pack.schema.json",
+  "title": "Codex Pack",
+  "description": "Batched deliverable for Codex Expansion loop. Groups related encyclopedia entries with coverage metrics, taxonomy updates, and crosslink map.",
+  "type": "object",
+  "required": [
+    "pack_name",
+    "author",
+    "tu_id",
+    "edited",
+    "status"
+  ],
+  "properties": {
+    "pack_name": {
+      "type": "string",
+      "description": "Name of this codex pack",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "theme": {
+      "type": "string",
+      "description": "Thematic scope or slice description",
+      "maxLength": 300
+    },
+    "author": {
+      "type": "string",
+      "description": "Producing role",
+      "enum": ["Codex Curator"]
+    },
+    "tu_id": {
+      "type": "string",
+      "description": "Trace unit identifier",
+      "pattern": "^TU-[0-9]{4}-[0-9]{2}-[0-9]{2}-[A-Z]{2}[0-9]{2}$"
+    },
+    "edited": {
+      "type": "string",
+      "description": "Last edit date",
+      "format": "date"
+    },
+    "entry_count": {
+      "type": "integer",
+      "description": "Number of entries in this pack",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "description": "Pack status",
+      "enum": ["draft", "review", "approved", "cold"]
+    },
+    "coverage_report": {
+      "type": "object",
+      "description": "Coverage metrics and completeness assessment",
+      "properties": {
+        "terms_identified": {
+          "type": "integer",
+          "description": "Number of terms found in manuscript slice",
+          "minimum": 0
+        },
+        "terms_defined": {
+          "type": "integer",
+          "description": "Number of terms included in this pack",
+          "minimum": 0
+        },
+        "coverage_percent": {
+          "type": "number",
+          "description": "Coverage percentage (terms_defined / terms_identified * 100)",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "completeness": {
+          "type": "string",
+          "description": "Completeness status",
+          "enum": ["complete", "partial", "initial"]
+        },
+        "included": {
+          "type": "array",
+          "description": "Terms/concepts covered in this pack",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": {
+                "type": "string",
+                "description": "Term name"
+              },
+              "note": {
+                "type": "string",
+                "description": "Brief note on scope or special handling"
+              }
+            }
+          }
+        },
+        "deferred": {
+          "type": "array",
+          "description": "Terms intentionally skipped",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": {
+                "type": "string",
+                "description": "Term name"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Reason for deferral (spoiler, not yet relevant, planned for later)",
+                "maxLength": 300
+              }
+            }
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "description": "Terms that need canon before defining",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": {
+                "type": "string",
+                "description": "Term name"
+              },
+              "missing": {
+                "type": "string",
+                "description": "What's missing from canon",
+                "maxLength": 300
+              },
+              "hook_filed": {
+                "type": "string",
+                "description": "Hook ID if filed (optional)",
+                "pattern": "^HK-[0-9]{8}-[0-9]{2}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "global_updates": {
+      "type": "object",
+      "description": "Batch-level changes affecting the entire codex (optional)",
+      "properties": {
+        "taxonomy_changes": {
+          "type": "array",
+          "description": "New categories or reorganizations",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "navigation_grouping": {
+          "type": "array",
+          "description": "Changes to codex structure or TOC",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "disambiguation": {
+          "type": "array",
+          "description": "New disambiguation pages or redirects",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": {
+                "type": "string",
+                "description": "Ambiguous term"
+              },
+              "disambiguates": {
+                "type": "string",
+                "description": "What it disambiguates between",
+                "maxLength": 300
+              }
+            }
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "List of all codex entries in this pack",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Entry identifier",
+            "pattern": "^codex_[a-z_]+$"
+          },
+          "title": {
+            "type": "string",
+            "description": "Entry title (player-facing)",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "category": {
+            "type": "string",
+            "description": "Entry category",
+            "enum": ["character", "location", "organization", "concept", "item", "procedure"]
+          },
+          "status": {
+            "type": "string",
+            "description": "Entry status",
+            "enum": ["draft", "approved"]
+          },
+          "file": {
+            "type": "string",
+            "description": "Path to entry markdown file",
+            "pattern": ".*\\.md$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "crosslink_map": {
+      "type": "object",
+      "description": "How entries reference each other and external entries",
+      "properties": {
+        "internal": {
+          "type": "array",
+          "description": "Crosslinks within this pack",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "Source entry ID",
+                "pattern": "^codex_[a-z_]+$"
+              },
+              "to": {
+                "type": "string",
+                "description": "Target entry ID",
+                "pattern": "^codex_[a-z_]+$"
+              },
+              "link_type": {
+                "type": "string",
+                "description": "Type of crosslink relationship",
+                "enum": ["see-also", "prerequisite", "parent-child"]
+              },
+              "bidirectional": {
+                "type": "boolean",
+                "description": "Whether link is reciprocal"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "external": {
+          "type": "array",
+          "description": "Crosslinks to entries in other packs",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "Source entry ID (in this pack)",
+                "pattern": "^codex_[a-z_]+$"
+              },
+              "to": {
+                "type": "string",
+                "description": "Target entry ID (in other pack)",
+                "pattern": "^codex_[a-z_]+$"
+              },
+              "pack": {
+                "type": "string",
+                "description": "Target pack name"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

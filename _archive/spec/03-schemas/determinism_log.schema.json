@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/determinism_log.schema.json",
+  "title": "Determinism Log",
+  "description": "Off-surface record of asset generation parameters for reproducibility.",
+  "type": "object",
+  "properties": {
+    "asset_id": {"type": "string"},
+    "asset_type": {"type": "string", "enum": ["visual", "audio"]},
+    "producer": {"type": "string", "enum": ["illustrator", "audio_producer"]},
+    "created": {"type": "string", "format": "date"},
+    "version": {"type": "string"},
+    "generation_details": {
+      "type": "object",
+      "properties": {
+        "model_tool": {"type": "string"},
+        "seed_parameters": {"type": "string"},
+        "prompt": {"type": "string"},
+        "resolution": {"type": "string"},
+        "format": {"type": "string"}
+      }
+    },
+    "source_files": {
+      "type": "object",
+      "properties": {
+        "raw_output": {"type": "string"},
+        "edits_applied": {"type": "array", "items": {"type": "string"}},
+        "final_file": {"type": "string"}
+      }
+    }
+  },
+  "required": ["asset_id", "asset_type", "producer", "created"]
+}

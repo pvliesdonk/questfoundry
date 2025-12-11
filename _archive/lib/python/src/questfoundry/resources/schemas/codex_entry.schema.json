@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/codex_entry.schema.json",
+  "title": "Codex Entry",
+  "description": "Generated from 02-dictionary/artifacts/codex_entry_ENRICHED.md. Provides player-safe lore and terminology guidance with lineage, variants, relations, and accessibility notes.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Player-safe entry title with no codewords.",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "slug": {
+      "type": "string",
+      "description": "Kebab-case anchor slug; ASCII or locale policy compliant.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "locale": {
+      "type": "string",
+      "description": "Locale code for this entry.",
+      "pattern": "^[A-Z]{2}(?:-[A-Z]{2})?$"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the entry; fixed to Codex Curator.",
+      "enum": ["Codex Curator"]
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this entry was last edited."
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "lineage": {
+      "type": "string",
+      "description": "Canon Pack and Research Memo lineage with posture noted.",
+      "minLength": 10,
+      "maxLength": 400
+    },
+    "register": {
+      "type": "string",
+      "description": "Optional register aligned with Style guidance.",
+      "enum": ["neutral", "formal", "colloquial"]
+    },
+    "overview": {
+      "type": "string",
+      "description": "2-5 line player-safe concept overview without spoilers or internals.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "where_to_link": {
+      "type": "string",
+      "description": "Optional guidance on where to link this entry.",
+      "maxLength": 200
+    },
+    "when_not_to_link": {
+      "type": "string",
+      "description": "Optional contexts where linking should be avoided.",
+      "maxLength": 200
+    },
+    "pn_cue": {
+      "type": "string",
+      "description": "Optional one-line in-voice nudge for Player Narrator use.",
+      "maxLength": 160
+    },
+    "context": {
+      "type": "string",
+      "description": "2-6 line surface-level background paragraph.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "variants": {
+      "type": "array",
+      "description": "Variants and synonyms table entries including register/region notes.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "type": "string",
+            "description": "Variant term.",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "register_region": {
+            "type": "string",
+            "description": "Register or region where the variant applies.",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "translator_notes": {
+            "type": "string",
+            "description": "Notes for translator about usage or risks.",
+            "minLength": 5,
+            "maxLength": 200
+          }
+        },
+        "required": ["variant", "register_region", "translator_notes"]
+      },
+      "minItems": 1
+    },
+    "relations": {
+      "type": "array",
+      "description": "Related codex entries or taxonomy paths with slug references.",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "reading_level": {
+      "type": "string",
+      "description": "Reading level indicator.",
+      "enum": ["plain", "needs glossary link"]
+    },
+    "alt_guidance": {
+      "type": "string",
+      "description": "Optional alt-text guidance (subject + relation + location).",
+      "maxLength": 240
+    },
+    "caption_guideline": {
+      "type": "string",
+      "description": "Optional caption guidance; one line, atmospheric, no technique.",
+      "maxLength": 200
+    },
+    "link_text": {
+      "type": "string",
+      "description": "Optional descriptive link text for anchors.",
+      "maxLength": 200
+    },
+    "anchor_slug": {
+      "type": "string",
+      "description": "Anchor slug path for binder (e.g., /codex/<kebab-case>).",
+      "pattern": "^/codex/[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "collision_risks": {
+      "type": "string",
+      "description": "Optional collision risks (diacritics, punctuation).",
+      "maxLength": 200
+    },
+    "binder_note": {
+      "type": "string",
+      "description": "Optional note for Binder about TOC or grouping.",
+      "maxLength": 200
+    },
+    "notes_to_avoid": {
+      "type": "array",
+      "description": "Anti-patterns or cautions for owners.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "from_canon": {
+      "type": "string",
+      "description": "Player-safe fact intake distilled from canon sources.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "research_posture_touched": {
+      "type": "string",
+      "description": "Highest research posture involved in this entry.",
+      "enum": [
+        "corroborated",
+        "plausible",
+        "disputed",
+        "uncorroborated:low",
+        "uncorroborated:medium",
+        "uncorroborated:high"
+      ]
+    },
+    "hooks_filed": {
+      "type": "array",
+      "description": "Optional follow-up hooks associated with this entry.",
+      "items": {
+        "type": "string",
+        "pattern": "^hook://[a-z0-9\\-]+/[a-z0-9\\-]+.*$"
+      }
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist verifying readiness before publication.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 8,
+      "maxItems": 8
+    }
+  },
+  "required": [
+    "title",
+    "slug",
+    "locale",
+    "owner",
+    "edited",
+    "snapshot",
+    "tu",
+    "lineage",
+    "overview",
+    "context",
+    "variants",
+    "relations",
+    "reading_level",
+    "anchor_slug",
+    "from_canon",
+    "research_posture_touched",
+    "done_checklist"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

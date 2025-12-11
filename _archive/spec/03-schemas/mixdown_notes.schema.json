@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/mixdown_notes.schema.json",
+  "title": "Mixdown Notes",
+  "description": "Audio Producer's technical notes on final mixdown: balance, mastering decisions, and quality checks.",
+  "type": "object",
+  "properties": {
+    "session_name": {
+      "type": "string",
+      "description": "Mixdown session identifier (e.g., 'Act I Audio Final')",
+      "minLength": 1
+    },
+    "author": {
+      "type": "string",
+      "const": "audio_producer",
+      "description": "Fixed role: Audio Producer"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Mixdown completion date (YYYY-MM-DD)"
+    },
+    "cues_included": {
+      "type": "array",
+      "description": "List of cue IDs included in this mixdown",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "target_platform": {
+      "type": "string",
+      "description": "Target playback platform (e.g., 'web', 'mobile', 'desktop')"
+    },
+    "master_settings": {
+      "type": "object",
+      "description": "Mastering settings applied",
+      "properties": {
+        "target_lufs": {
+          "type": "number",
+          "description": "Target integrated loudness (LUFS)"
+        },
+        "limiter_ceiling_db": {
+          "type": "number",
+          "description": "Peak limiter ceiling in dB"
+        },
+        "compression_applied": {
+          "type": "boolean",
+          "description": "Whether master compression was used"
+        }
+      }
+    },
+    "balance_notes": {
+      "type": "string",
+      "description": "Notes on relative balance between cues",
+      "minLength": 10
+    },
+    "quality_checks": {
+      "type": "object",
+      "description": "Quality verification checklist",
+      "properties": {
+        "no_clipping": {"type": "boolean"},
+        "consistent_loudness": {"type": "boolean"},
+        "readable_on_laptop_speakers": {"type": "boolean"},
+        "captions_match_audio": {"type": "boolean"}
+      },
+      "required": ["no_clipping", "consistent_loudness", "readable_on_laptop_speakers", "captions_match_audio"]
+    },
+    "issues_found": {
+      "type": "array",
+      "description": "Any issues discovered during mixdown",
+      "items": {"type": "string"}
+    },
+    "export_path": {
+      "type": "string",
+      "description": "Path to exported mixdown file"
+    }
+  },
+  "required": [
+    "session_name",
+    "author",
+    "tu",
+    "edited",
+    "cues_included",
+    "balance_notes",
+    "quality_checks"
+  ]
+}

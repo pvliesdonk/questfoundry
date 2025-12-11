@@ -1,0 +1,328 @@
+"""
+Trace Handler - captures and logs agent-to-agent communication.
+
+Provides visibility into protocol messages exchanged between roles during
+loop execution. Supports output to console or file.
+
+Based on: Issue #37 - feature request: capture all communication with an agent
+"""
+
+import json
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import TextIO
+
+from rich.console import Console
+from rich.panel import Panel
+
+from questfoundry.runtime.models.state import Message
+
+logger = logging.getLogger(__name__)
+
+
+class TraceHandler:
+    """Capture and log agent-to-agent protocol messages."""
+
+    def __init__(
+        self,
+        output_file: Path | None = None,
+        console: Console | None = None,
+        verbose: bool = True,
+        quiet_console: bool = False,
+    ):
+        """
+        Initialize trace handler.
+
+        Args:
+            output_file: Optional file path to write trace to
+            console: Rich Console for screen output (if None, creates new one)
+            verbose: If True, show full payload in console; if False, show summary only
+            quiet_console: If True, suppress console output (file-only mode for option C)
+
+        Note:
+            File output ALWAYS contains full messages regardless of verbose setting,
+            as files are for detailed debugging and analysis.
+
+        Modes:
+            - A (default): No trace handler created
+            - B (--trace): quiet_console=False, verbose=True → trace to screen
+            - C (--trace-file): quiet_console=True → trace to file only, screen via -v
+        """
+        self.output_file = output_file
+        self.console = console or Console()
+        self.quiet_console = quiet_console
+        # Auto-enable verbose for console if writing to file (debugging mode)
+        self.verbose = verbose or (output_file is not None)
+        self._file_handle: TextIO | None = None
+        self._message_count = 0
+
+        # Open file if specified
+        if self.output_file:
+            self.output_file.parent.mkdir(parents=True, exist_ok=True)
+            self._file_handle = self.output_file.open("w", encoding="utf-8")
+            self._write_header()
+
+        logger.debug(
+            f"Trace handler initialized (file: {output_file}, verbose: {self.verbose}, "
+            f"quiet_console: {quiet_console})"
+        )
+
+    def _write_header(self):
+        """Write trace file header."""
+        if self._file_handle:
+            header = {
+                "trace_started": datetime.utcnow().isoformat() + "Z",
+                "format": "QuestFoundry Protocol Trace",
+                "version": "1.0",
+            }
+            self._file_handle.write(json.dumps(header, indent=2) + "\n\n")
+            self._file_handle.write("=" * 80 + "\n")
+            self._file_handle.write("AGENT-TO-AGENT COMMUNICATION TRACE\n")
+            self._file_handle.write("=" * 80 + "\n\n")
+            self._file_handle.flush()
+
+    def trace_message(self, message: Message):
+        """
+        Capture and log a protocol message.
+
+        Args:
+            message: Protocol message to trace
+        """
+        self._message_count += 1
+
+        # Format message for display (unless quiet_console mode)
+        if not self.quiet_console:
+            self._display_to_console(message)
+
+        # Write to file if configured
+        if self._file_handle:
+            self._write_to_file(message)
+
+    def _display_to_console(self, message: Message):
+        """Display message to console with rich formatting."""
+        sender = message.get("sender", "unknown")
+        receiver = message.get("receiver", "unknown")
+        intent = message.get("intent", "unknown")
+        timestamp = message.get("timestamp", "")
+        payload = message.get("payload", {})
+        envelope = message.get("envelope", {})
+
+        # Format timestamp
+        time_str = ""
+        if timestamp:
+            try:
+                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                time_str = dt.strftime("%H:%M:%S")
+            except Exception:
+                pass
+
+        # Different formatting based on intent type
+        if intent == "role_started":
+            # Live progress indicator - simple, inline
+            role_name = payload.get("role_name", sender)
+            self.console.print(f"[cyan]⏳ {role_name}[/cyan] [dim]started ({time_str})[/dim]")
+            return
+
+        elif intent == "role_prompt":
+            # Show prompt BEFORE LLM invocation (so user can abort if wrong)
+            role_name = payload.get("role_name", sender)
+            prompt = payload.get("prompt", "")
+            user_prompt = payload.get("user_prompt", "")
+            tools = payload.get("tools", [])
+
+            if self.verbose:
+                # Show tools FIRST - prominently so user knows what's available
+                if tools:
+                    tool_names = [
+                        t.get("function", {}).get("name", t.get("name", "?")) for t in tools
+                    ]
+                    tools_text = "\n".join(f"  • {name}" for name in tool_names)
+                    self.console.print(
+                        Panel(
+                            tools_text,
+                            title=f"[bold yellow]TOOLS ({len(tools)})[/bold yellow]",
+                            border_style="yellow",
+                            padding=(0, 1),
+                        )
+                    )
+
+                # Show the FULL prompt - no truncation in trace mode
+                # Trace mode exists specifically for debugging; truncation defeats the purpose
+                if prompt:
+                    self.console.print(
+                        Panel(
+                            prompt,
+                            title=f"[bold blue]PROMPT → {role_name}[/bold blue] [dim]({len(prompt)} chars)[/dim]",
+                            border_style="blue",
+                            padding=(0, 1),
+                        )
+                    )
+
+                # Show user's original request
+                if user_prompt:
+                    self.console.print(
+                        f"[dim]User request: {user_prompt[:500]}{'...' if len(user_prompt) > 500 else ''}[/dim]"
+                    )
+            return
+
+        elif intent == "role_completed":
+            # Show completion with response (prompt was already shown in role_prompt)
+            role_name = payload.get("role_name", sender)
+            insight = payload.get("insight", "")
+
+            if self.verbose:
+                # Show response
+                self.console.print(
+                    f"\n[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
+                )
+
+                if insight:
+                    # Show the FULL LLM response - no truncation in trace mode
+                    self.console.print(
+                        Panel(
+                            insight,
+                            title=f"[bold green]RESPONSE ← {role_name}[/bold green] [dim]({len(insight)} chars)[/dim]",
+                            border_style="green",
+                            padding=(0, 1),
+                        )
+                    )
+            else:
+                # Brief summary only
+                if insight:
+                    summary = insight[:100] + "..." if len(insight) > 100 else insight
+                    self.console.print(
+                        f"[green]✓ {role_name}[/green] [dim]({time_str})[/dim]\n  [dim]{summary}[/dim]"
+                    )
+                else:
+                    self.console.print(
+                        f"[green]✓ {role_name}[/green] [dim]completed ({time_str})[/dim]"
+                    )
+            return
+
+        elif intent == "llm_iteration":
+            # Show raw LLM response during ReAct iteration
+            role_id = payload.get("role_id", sender)
+            iteration = payload.get("iteration", "?")
+            max_iter = payload.get("max_iterations", "?")
+            response = payload.get("response", "")
+
+            # Always show full LLM response - this is what we're debugging
+            self.console.print(
+                Panel(
+                    response,
+                    title=f"[bold magenta]LLM RESPONSE[/bold magenta] [dim]{role_id} iter {iteration}/{max_iter} ({len(response)} chars)[/dim]",
+                    border_style="magenta",
+                    padding=(0, 1),
+                )
+            )
+            return
+
+        elif intent == "tool_call":
+            # Show tool invocation
+            tool_name = payload.get("tool_name", "unknown")
+            tool_input = payload.get("input", {})
+            self.console.print(f"[yellow]🔧 {sender}[/yellow] → [bold]{tool_name}[/bold]")
+            if self.verbose and tool_input:
+                input_str = json.dumps(tool_input, indent=2)
+                self.console.print(f"[dim]{input_str}[/dim]")
+            return
+
+        elif intent == "tool_result":
+            # Show tool result
+            tool_name = payload.get("tool_name", "unknown")
+            result = payload.get("result", "")
+            success = payload.get("success", True)
+            status = "[green]✓[/green]" if success else "[red]✗[/red]"
+            self.console.print(f"  {status} [bold]{tool_name}[/bold] returned")
+            if self.verbose and result:
+                # Show FULL tool result - no truncation in trace mode
+                result_str = str(result)
+                self.console.print(f"  [dim]({len(result_str)} chars)[/dim]")
+                self.console.print(f"  [dim]{result_str}[/dim]")
+            return
+
+        # Standard message formatting for other intents
+        # Create header
+        header = f"[bold cyan]{sender}[/bold cyan] → [bold magenta]{receiver}[/bold magenta]"
+        if time_str:
+            header += f" [dim]({time_str})[/dim]"
+
+        # Create content
+        content_lines = [f"[bold]Intent:[/bold] {intent}"]
+
+        # Add envelope info (TU ID, etc.)
+        if envelope:
+            tu_id = envelope.get("tu_id")
+            if tu_id:
+                content_lines.append(f"[bold]TU:[/bold] {tu_id}")
+
+        # Add payload (full or summary based on verbose mode)
+        if self.verbose and payload:
+            # Show full payload as formatted JSON
+            payload_json = json.dumps(payload, indent=2)
+            content_lines.append("\n[bold]Payload:[/bold]")
+            content_lines.append(f"[dim]{payload_json}[/dim]")
+        elif payload:
+            # Show summary only
+            if isinstance(payload, dict):
+                keys = list(payload.keys())[:3]
+                summary = ", ".join(keys)
+                if len(payload) > 3:
+                    summary += f", ... ({len(payload)} fields)"
+                content_lines.append(f"[bold]Payload:[/bold] {summary}")
+
+        content = "\n".join(content_lines)
+
+        # Display panel
+        self.console.print(Panel(content, title=header, border_style="cyan", padding=(0, 1)))
+
+    def _write_to_file(self, message: Message):
+        """Write message to trace file."""
+        if not self._file_handle:
+            return
+
+        sender = message.get("sender", "unknown")
+        receiver = message.get("receiver", "unknown")
+        intent = message.get("intent", "unknown")
+        timestamp = message.get("timestamp", "")
+
+        # Write message header
+        self._file_handle.write(f"\n[Message #{self._message_count}]\n")
+        self._file_handle.write(f"Timestamp: {timestamp}\n")
+        self._file_handle.write(f"From: {sender}\n")
+        self._file_handle.write(f"To: {receiver}\n")
+        self._file_handle.write(f"Intent: {intent}\n")
+
+        # Write envelope
+        envelope = message.get("envelope", {})
+        if envelope:
+            self._file_handle.write(f"Envelope: {json.dumps(envelope)}\n")
+
+        # Write payload
+        payload = message.get("payload", {})
+        if payload:
+            self._file_handle.write("Payload:\n")
+            self._file_handle.write(json.dumps(payload, indent=2) + "\n")
+
+        self._file_handle.write("-" * 80 + "\n")
+        self._file_handle.flush()
+
+    def close(self):
+        """Close trace handler and write footer."""
+        if self._file_handle:
+            self._file_handle.write("\n" + "=" * 80 + "\n")
+            self._file_handle.write(f"TRACE COMPLETE - {self._message_count} messages captured\n")
+            self._file_handle.write("=" * 80 + "\n")
+            self._file_handle.close()
+            self._file_handle = None
+
+        logger.info(f"Trace handler closed ({self._message_count} messages)")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()

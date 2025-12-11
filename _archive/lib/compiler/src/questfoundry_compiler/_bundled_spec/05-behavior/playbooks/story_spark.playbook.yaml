@@ -1,0 +1,226 @@
+---
+playbook_id: story_spark
+playbook_name: Story Spark
+abbreviation: SS
+version: 2.0.0
+category: Discovery
+
+# Purpose and outcome
+purpose: "Introduce or reshape narrative structure—parts/chapters, hubs, loops, gateways, and codeword economy—then ripple changes through prose, hooks, and QA without leaking spoilers to player surfaces."
+
+outcome: "A stabilized topology update (in Hot) with section briefs and scene drafts, harvested hooks, and a Gatekeeper preview—ready to feed Lore Deepening and Codex Expansion, then merge to Cold after gatecheck."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "New chapter/act, subplot, or restructure request"
+    - "Fixes for reachability/nonlinearity issues"
+    - "Hook-led expansion (e.g., faction pressure suggests a new hub)"
+  tu_format: "tu-story-spark-<topic>"
+  showrunner_decision: "Confirms which optional roles (Researcher, Art/Audio, Translator) are active or dormant"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:plotwright"
+      responsibilities: "Sketch/adjust topology; mark gateway conditions; generate narrative hooks"
+    - role: "@adapter:scene_smith"
+      responsibilities: "Draft/adjust affected sections; embed choices and state effects"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Coordinate scope and timing; merge decisions"
+  consulted:
+    - role: "@adapter:style_lead"
+      responsibilities: "Guard tone/voice; flag drift; suggest motif threading"
+    - role: "@adapter:lore_weaver"
+      responsibilities: "Sanity-check feasibility vs canon; note likely lore needs"
+    - role: "@adapter:codex_curator"
+      responsibilities: "Identify taxonomy/clarity gaps created by new structure"
+    - role: "@adapter:researcher"
+      responsibilities: "If active: identify factual constraints; add factual hooks with citations"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Early preview: Integrity/Reachability/Nonlinearity sanity"
+  informed:
+    - role: "@adapter:player_narrator"
+      responsibilities: "Informed of topology changes for future narration"
+    - role: "@adapter:book_binder"
+      responsibilities: "Informed of structural changes that affect exports"
+
+# Inputs
+inputs:
+  - "Current Cold snapshot (canon, codex, style guardrails)"
+  - "Prior topology notes (Hot/Cold)"
+  - "Open hooks (if any) relevant to structure"
+  - "Known QA findings (Integrity/Reachability/Nonlinearity)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:topology_design"
+    - "@procedure:section_briefing"
+    - "@procedure:gateway_mapping"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+    - "@procedure:prose_drafting"
+    - "@procedure:sensory_anchoring"
+    - "@procedure:contrastive_choice_design"
+    - "@procedure:micro_context_management"
+
+# Validation requirements
+validation_requirements:
+  critical: "All roles producing JSON artifacts in this loop MUST validate before handoff"
+  reference: "@snippet:validation_reminder"
+  hard_gate: "Invalid artifacts STOP the loop. No exceptions."
+
+# Procedure steps
+procedure_steps:
+  - step: 1
+    name: "Topology Draft"
+    owner: "@adapter:plotwright"
+    action: "Map parts/chapters and designate hubs (fan-out), loops (return-with-difference), and gateways (state-gated)"
+    requirements:
+      - "For each gateway, write diegetic condition PN can enforce without exposing internals"
+      - "Examples: 'foreman's token', 'maintenance hex-key'"
+
+  - step: 2
+    name: "Section Briefs"
+    owner: "@adapter:plotwright"
+    action: "For each affected/new section: intent, stakes, choices, expected state effect, references"
+
+  - step: 3
+    name: "Prose Pass"
+    owner: "@adapter:scene_smith"
+    action: "Draft/adjust section text in style; make choices clear and distinct"
+    note: "Intended state effects in comments (human-level)"
+
+  - step: 4
+    name: "Hook Generation"
+    owners: ["@adapter:plotwright", "@adapter:scene_smith"]
+    action: "Create narrative/scene/factual hook cards with rationales and uncertainty levels"
+    protocol_intent: "hook.create"
+
+  - step: 5
+    name: "Style Check"
+    owner: "@adapter:style_lead"
+    action: "Sample sections; flag tone drift; propose motif anchors; suggest PN-surface phrasing patterns"
+
+  - step: 6
+    name: "Feasibility Check"
+    owner: "@adapter:lore_weaver"
+    action: "Flag canon collisions; suggest where Lore Deepening is needed"
+
+  - step: 7
+    name: "Preview Gate"
+    owner: "@adapter:gatekeeper"
+    action: "Run quick pre-gate: Integrity, Reachability, Nonlinearity"
+    checks:
+      - "Integrity: No accidental dead ends"
+      - "Reachability: Keystones reachable"
+      - "Nonlinearity: Hubs/loops exist and matter"
+
+  - step: 8
+    name: "Triage Hand-off"
+    owner: "@adapter:showrunner"
+    action: "Pass hook set to Hook Harvest loop; schedule Lore Deepening follow-up"
+
+# Deliverables
+deliverables:
+  topology_notes:
+    format: "Human prose"
+    contents: "Hubs/loops/gateways overview with rationale"
+
+  section_briefs_and_drafts:
+    contents: "Section briefs and draft prose for changed/new sections"
+
+  hook_list:
+    contents: "Narrative/scene/factual hooks with triage tags candidate"
+
+  style_addendum:
+    contents: "Style addendum (if any) and motif notes"
+    condition: "If style changes needed"
+
+  pre_gate_note:
+    owner: "@adapter:gatekeeper"
+    contents: "Early findings and risks"
+
+  tu_update:
+    contents: "All upstream refs and predicted downstream impacts"
+
+# Success criteria
+success_criteria:
+  - "Topology adds or repairs meaningful nonlinearity (not decorative)"
+  - "Gateways have clear diegetic conditions PN can enforce without leaks"
+  - "At least one loop returns with difference (via codeword/state)"
+  - "Drafted sections are in-voice and choice-clear"
+  - "Hooks are small, rationalized, and triaged-ready"
+  - "Pre-gate shows no accidental dead ends; keystones remain reachable"
+
+# Failure modes & remedies
+failure_modes:
+  cosmetic_hub_loop:
+    symptom: "Hub/loop adds no meaningful choice difference"
+    remedy: "Add outcome differences; re-justify or remove"
+
+  ambiguous_gateway:
+    symptom: "Gateway condition not clear or enforceable"
+    remedy: "Rewrite condition in-world; ensure at least one path to meet it"
+
+  overcoupled_restructure:
+    symptom: "Too many dependencies across domains"
+    remedy: "Split into smaller TUs; stage changes"
+
+  style_wobble:
+    symptom: "Tone/voice inconsistency"
+    remedy: "Run Style Tune-up before escalating"
+
+  research_dormant:
+    symptom: "Factual claims without corroboration"
+    remedy: "Mark relevant hooks uncorroborated:<risk>; log revisit"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - reachability   # Keystones reachable
+    - nonlinearity   # Meaningful hubs/loops
+    - gateways       # Diegetic conditions
+    - presentation   # Choice labels player-safe
+  secondary:
+    - integrity      # Referential consistency
+    - style          # In-voice prose
+
+# Handoffs
+handoffs:
+  to_hook_harvest:
+    content: "The hook list and topology delta"
+
+  to_lore_deepening:
+    content: "Accepted hooks that require canon backfill"
+
+  to_codex_expansion:
+    content: "The taxonomy/clarity needs list"
+
+  to_style_tune_up:
+    content: "Any drift notes that exceed minor edits"
+
+  to_gatecheck:
+    content: "After follow-on loops complete, full gatecheck before merge to Cold"
+
+# Artifacts produced
+artifacts:
+  - tu_brief.schema.json
+  - topology_notes.schema.json
+  - section_brief.schema.json
+  - scene.schema.json
+  - hook_card.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - tu_brief.schema.json
+    - topology_notes.schema.json
+    - section_brief.schema.json
+    - scene.schema.json
+    - hook_card.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

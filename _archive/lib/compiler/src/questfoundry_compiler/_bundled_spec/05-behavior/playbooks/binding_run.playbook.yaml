@@ -1,0 +1,132 @@
+---
+playbook_id: binding_run
+playbook_name: Binding Run
+abbreviation: BR
+version: 2.0.0
+category: Export
+
+# Purpose and outcome
+purpose: "Assemble a player-safe export view of the book from a specific Cold snapshot. Package manuscript, codex, and checklists—optionally including art/audio plans or assets and translation slices—without leaking spoilers or internal plumbing."
+
+outcome: "A stamped export bundle (Markdown/HTML/EPUB/PDF) with front-matter metadata (snapshot ID, options used) and a View Log. No new canon is created; this loop does not write to Cold."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "Milestone release (chapter/act/book)"
+    - "Playtest build needed for PN Narration Dry-Run"
+    - "External review or print/export request"
+  tu_format: "tu-binding-run-<date|milestone>"
+  note: "Trace only; content remains unchanged"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:book_binder"
+      responsibilities: "Assemble bundle from Cold only; ensure navigation, accessibility, and spoiler hygiene; stamp metadata"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Select snapshot and options; approve distribution"
+  consulted:
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Spot-check Presentation Safety, Integrity, Style on the built bundle"
+    - role: "@adapter:player_narrator"
+      responsibilities: "Confirms bundle suitable for Narration Dry-Run (same snapshot)"
+    - role: "@adapter:style_lead"
+      responsibilities: "Sanity on tone consistency in visible surfaces (titles/captions)"
+    - role: "@adapter:translator"
+      responsibilities: "If translations included, verify coverage flags and link integrity"
+
+# Inputs
+inputs:
+  - "Cold snapshot (manuscript, codex, style addenda, optional plans/assets, translations)"
+  - "Gatekeeper's latest pass notes (for presentation safety)"
+  - "Inclusion options from Showrunner"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:export_view_assembly"
+    - "@procedure:front_matter_composition"
+    - "@procedure:integrity_enforcement"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:binder_presentation_enforcement"
+    - "@procedure:view_log_maintenance"
+
+# Export options
+export_options:
+  art:
+    - plan-only
+    - with-assets
+  audio:
+    - plan-only
+    - with-assets
+  translations:
+    - coverage_flags
+    - language_list
+  formats:
+    - Markdown
+    - HTML
+    - EPUB
+    - PDF
+
+# Cold-only rule (CRITICAL)
+cold_only_rule:
+  enforcement: "NEVER export from Hot; NEVER mix Hot & Cold sources"
+  single_source: "Single snapshot source for entire view"
+
+# Front matter requirements
+front_matter:
+  required_fields:
+    - snapshot_id          # Reproducibility anchor
+    - export_timestamp     # When view was generated
+    - options              # Art/audio/language coverage
+    - accessibility_summary # Alt text status, captions, contrast
+    - coverage_notes       # Which sections/languages included
+
+# Success criteria
+success_criteria:
+  - "Bundle assembled from single Cold snapshot only"
+  - "All anchors and cross-links resolve correctly"
+  - "Front matter complete with snapshot ID and options"
+  - "No spoilers or internals in any player-facing surface"
+  - "Accessibility: alt text present, descriptive links, readable structure"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - integrity      # TOC works; anchors resolve; no orphan pages
+    - presentation   # No internal labels or technique leaks
+    - accessibility  # Front matter, alt text, navigation
+  secondary:
+    - style          # Consistent heading and labeling
+    - reachability   # Navigation enables keystones to be reached
+
+# Handoffs
+handoffs:
+  to_player_narrator:
+    content: "Deliver view bundle for dry-run testing"
+    artifacts: ["view.export.result"]
+
+  to_gatekeeper:
+    content: "Request export spot-check before view ships"
+
+  from_showrunner:
+    content: "Receive snapshot ID and export options"
+    artifacts: ["view.export.request"]
+
+# Artifacts produced
+artifacts:
+  - view_bundle.schema.json
+  - view_log.schema.json
+  - anchor_map.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - view_bundle.schema.json
+    - view_log.schema.json
+    - anchor_map.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

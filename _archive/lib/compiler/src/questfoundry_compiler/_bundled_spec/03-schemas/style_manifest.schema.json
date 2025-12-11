@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/style_manifest.schema.json",
+  "title": "Style Manifest",
+  "description": "Generated from 02-dictionary/artifacts/style_manifest.md. Style Lead's typography and style decisions for Book Binder export formatting. Defines font families, sizes, line heights, and other typographic parameters.",
+  "type": "object",
+  "properties": {
+    "typography": {
+      "type": "object",
+      "description": "Container for all typography specifications.",
+      "properties": {
+        "prose": {
+          "type": "object",
+          "description": "Body text typography for manuscript sections.",
+          "properties": {
+            "font_family": {
+              "type": "string",
+              "description": "Font name for body text.",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "fallback": {
+              "type": "string",
+              "description": "CSS fallback stack.",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "font_size": {
+              "type": "string",
+              "description": "Base font size (em/rem/px).",
+              "pattern": "^[0-9.]+[a-z%]+$"
+            },
+            "line_height": {
+              "type": "string",
+              "description": "Line height ratio (unitless number or em/rem).",
+              "pattern": "^[0-9.]+[a-z%]*$"
+            },
+            "paragraph_spacing": {
+              "type": "string",
+              "description": "Space between paragraphs (em/rem/px).",
+              "pattern": "^[0-9.]+[a-z%]+$"
+            }
+          },
+          "required": ["font_family", "fallback", "font_size", "line_height", "paragraph_spacing"],
+          "additionalProperties": false
+        },
+        "display": {
+          "type": "object",
+          "description": "Heading and title typography.",
+          "properties": {
+            "font_family": {
+              "type": "string",
+              "description": "Font name for headings.",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "fallback": {
+              "type": "string",
+              "description": "CSS fallback stack.",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "h1_size": {
+              "type": "string",
+              "description": "H1 heading size (em/rem/px).",
+              "pattern": "^[0-9.]+[a-z%]+$"
+            },
+            "h2_size": {
+              "type": "string",
+              "description": "H2 section heading size (em/rem/px).",
+              "pattern": "^[0-9.]+[a-z%]+$"
+            },
+            "h3_size": {
+              "type": "string",
+              "description": "H3 sub-heading size (em/rem/px).",
+              "pattern": "^[0-9.]+[a-z%]+$"
+            }
+          },
+          "required": ["font_family", "fallback", "h1_size", "h2_size", "h3_size"],
+          "additionalProperties": false
+        },
+        "cover": {
+          "type": "object",
+          "description": "Typography for cover art (when text is embedded in cover).",
+          "properties": {
+            "title_font": {
+              "type": "string",
+              "description": "Font for title on cover.",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "author_font": {
+              "type": "string",
+              "description": "Font for author name on cover.",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "fallback": {
+              "type": "string",
+              "description": "CSS fallback stack.",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": ["title_font", "author_font", "fallback"],
+          "additionalProperties": false
+        },
+        "ui": {
+          "type": "object",
+          "description": "Typography and styling for UI elements (choice links, captions, navigation).",
+          "properties": {
+            "link_color": {
+              "type": "string",
+              "description": "CSS color for links (hex/rgb/named).",
+              "pattern": "^(#[0-9a-fA-F]{3,6}|rgb\\([0-9,\\s]+\\)|rgba\\([0-9,\\s.]+\\)|[a-z]+)$"
+            },
+            "link_underline": {
+              "type": "boolean",
+              "description": "Whether to underline links."
+            },
+            "caption_font": {
+              "type": "string",
+              "description": "Font for image captions.",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "caption_size": {
+              "type": "string",
+              "description": "Caption font size (em/rem/px).",
+              "pattern": "^[0-9.]+[a-z%]+$"
+            }
+          },
+          "required": ["link_color", "link_underline", "caption_font", "caption_size"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["prose", "display", "cover", "ui"],
+      "additionalProperties": false
+    },
+    "fonts_required": {
+      "type": "array",
+      "description": "List of fonts needed for this typography specification. Format: 'Font Name (Styles)' where styles are comma-separated.",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 200
+      },
+      "minItems": 0
+    },
+    "embed_in_epub": {
+      "type": "boolean",
+      "description": "Whether to embed fonts in EPUB exports. If true, Book Binder will include font files in EPUB and generate @font-face CSS. Fonts must exist in /resources/fonts/ and be licensed for embedding."
+    }
+  },
+  "required": ["typography", "fonts_required", "embed_in_epub"],
+  "additionalProperties": false
+}

@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/summary_sheet.schema.json",
+  "title": "Summary Sheet",
+  "description": "Aggregated summary of PN playtest notes from Narration Dry-Run session, counting issues by type and severity, recommending follow-up loops, and documenting language testing. Producer: Player-Narrator. Consumers: Showrunner, Gatekeeper, Style Lead, Book Binder.",
+  "type": "object",
+  "properties": {
+    "session_or_view": {
+      "type": "string",
+      "description": "Dry-run session name or view identifier"
+    },
+    "pn": {
+      "type": "string",
+      "description": "Player-Narrator name or agent identifier"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Dry-run date (YYYY-MM-DD)"
+    },
+    "view_tested": {
+      "type": "string",
+      "description": "Snapshot/view ID tested (e.g., 'cold@2025-11-24')"
+    },
+    "routes_tested": {
+      "type": "string",
+      "description": "Count or description of routes tested (e.g., '3 routes (hub, loop, gate)')"
+    },
+    "total_issues_logged": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of issues logged in pn_playtest_notes"
+    },
+    "overall_assessment": {
+      "type": "string",
+      "enum": ["ready", "needs revision", "block"],
+      "description": "PN's recommendation on merge readiness"
+    },
+    "issue_count_by_type": {
+      "type": "array",
+      "description": "Breakdown of issues by category with severity counts",
+      "items": {
+        "type": "object",
+        "properties": {
+          "issue_type": {
+            "type": "string",
+            "enum": [
+              "choice-ambiguity",
+              "gate-friction",
+              "recap-needed",
+              "codex-invite",
+              "leak-risk",
+              "nav-bug",
+              "tone-wobble",
+              "accessibility",
+              "translation-glitch"
+            ],
+            "description": "Issue type category"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of issues of this type"
+          },
+          "percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of total issues"
+          },
+          "severity_blocker": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of blocker-severity issues"
+          },
+          "severity_major": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of major-severity issues"
+          },
+          "severity_minor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of minor-severity issues"
+          },
+          "severity_polish": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of polish-severity issues"
+          }
+        },
+        "required": [
+          "issue_type",
+          "count",
+          "percentage",
+          "severity_blocker",
+          "severity_major",
+          "severity_minor",
+          "severity_polish"
+        ]
+      }
+    },
+    "recommended_follow_up_loops": {
+      "type": "array",
+      "description": "Which loops should address which issue types",
+      "items": {
+        "type": "object",
+        "properties": {
+          "loop": {
+            "type": "string",
+            "description": "Loop name (e.g., 'Style Tune-up', 'Scene Draft', 'Codex Expansion')"
+          },
+          "issue_types": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of issue types this loop should address"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Priority level"
+          },
+          "estimated_tu_count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of TUs needed"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Coordination needs or dependencies"
+          }
+        },
+        "required": ["loop", "issue_types", "priority", "estimated_tu_count"]
+      }
+    },
+    "language_testing_results": {
+      "type": "array",
+      "description": "Results if multilingual dry-run was performed",
+      "items": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "Language code and name (e.g., 'EN - English', 'NL - Dutch')"
+          },
+          "coverage_percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of view translated"
+          },
+          "issues_found": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of issues found in this language"
+          },
+          "issue_types": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of translation-specific issues"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Tone shift, missing idioms, register mismatches, etc."
+          },
+          "recommended_action": {
+            "type": "string",
+            "enum": ["polish", "retranslate", "acceptable"],
+            "description": "Recommended action for this language"
+          }
+        },
+        "required": [
+          "language",
+          "coverage_percentage",
+          "issues_found",
+          "recommended_action"
+        ]
+      }
+    },
+    "blocker_issues": {
+      "type": "array",
+      "description": "Issues that must be fixed before merge",
+      "items": {
+        "type": "object",
+        "properties": {
+          "issue_id": {
+            "type": "string",
+            "description": "Reference to pn_playtest_notes item (e.g., 'PN-Note-007')"
+          },
+          "type": {
+            "type": "string",
+            "description": "Issue type"
+          },
+          "location": {
+            "type": "string",
+            "description": "Section anchor or path"
+          },
+          "description": {
+            "type": "string",
+            "description": "One-line summary"
+          },
+          "impact": {
+            "type": "string",
+            "description": "Why this blocks merge"
+          },
+          "owner": {
+            "type": "string",
+            "description": "Role responsible for fixing"
+          }
+        },
+        "required": ["issue_id", "type", "location", "description", "impact", "owner"]
+      }
+    },
+    "assessment_rationale": {
+      "type": "string",
+      "description": "Explanation for overall assessment based on issues"
+    },
+    "estimated_rework": {
+      "type": "string",
+      "description": "Hours or days needed if revision required"
+    },
+    "blockers_resolved": {
+      "type": "object",
+      "properties": {
+        "resolved": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["resolved", "total"],
+      "description": "Count of resolved vs total blockers"
+    }
+  },
+  "required": [
+    "session_or_view",
+    "pn",
+    "date",
+    "view_tested",
+    "routes_tested",
+    "total_issues_logged",
+    "overall_assessment",
+    "issue_count_by_type",
+    "recommended_follow_up_loops",
+    "assessment_rationale"
+  ]
+}

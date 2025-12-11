@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/phrasing_patterns.schema.json",
+  "title": "Phrasing Patterns",
+  "description": "Reusable diegetic phrasing templates for gates, refusals, state checks.",
+  "type": "object",
+  "properties": {
+    "voice": {"type": "string"},
+    "author": {"type": "string", "const": "style_lead"},
+    "tu": {"type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"},
+    "edited": {"type": "string", "format": "date"},
+    "gateway_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {"type": "string"},
+          "condition": {"type": "string"},
+          "phrasing_qualified": {"type": "string"},
+          "phrasing_unqualified": {"type": "string"},
+          "hint": {"type": "string"}
+        }
+      }
+    },
+    "state_reflections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {"type": "string"},
+          "state": {"type": "string"},
+          "phrasing": {"type": "string"}
+        }
+      }
+    },
+    "refusals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern_name": {"type": "string"},
+          "blocker": {"type": "string"},
+          "phrasing": {"type": "string"}
+        }
+      }
+    }
+  },
+  "required": ["voice", "author", "edited"]
+}

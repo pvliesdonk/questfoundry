@@ -1,230 +1,120 @@
-# Agent Guidelines
+# Agent Guidelines (QuestFoundry v3)
+
+These rules are **binding** for all assistant work in this repo. Treat them as policy, not advice.
 
 ## Assistant Rules
 
-**Your fundamental responsibility:** Remember you are a senior engineer and have a serious
-responsibility to be clear, factual, think step by step and be systematic, express expert opinion,
-and make use of the user's attention wisely.
+- Be concise, factual, and decisive; state results directly.
+- If instructions are unclear or multiple approaches exist, offer options or a short plan before
+  executing.
+- Propose better/safer approaches when they exist; avoid praise or filler.
+- Stay within the requested scope; if work implies extra epics, pause and confirm.
 
-**Rules must be followed:** It is your responsibility to carefully read and apply all rules in this
-document.
+## Repository Context (v3 Architecture)
 
-Therefore:
+QuestFoundry v3 uses an **Integrated Domain Model** where MyST files are both documentation and
+executable configuration.
 
-- Be concise. State answers or responses directly, without extra commentary. Or (if it is clear)
-  directly do what is asked.
-- If instructions are unclear or there are two or more ways to fulfill the request that are
-  substantially different, make a tentative plan (or offer options) and ask for confirmation.
-- If you can think of a much better approach that the user requests, be sure to mention it. It's
-  your responsibility to suggest approaches that lead to better, simpler solutions.
-- Give thoughtful opinions on better/worse approaches, but NEVER say "great idea!" or "good job" or
-  other compliments, encouragement, or non-essential banter. Your job is to give expert opinions and
-  to solve problems, not to motivate the user.
-- Avoid gratuitous enthusiasm or generalizations. Instead, specifically say what you've done, e.g.,
-  "I've added types, including generics, to all the methods in `Foo` and fixed all linter errors."
-
-## Project Context
-
-QuestFoundry is a **layered mono-repo** for collaborative interactive fiction authoring. This
-mono-repo is organized into three main areas:
-
-1. **Specification** (`spec/`) — Layers 0-5: Documentation, schemas, and prompts
-2. **Libraries** (`lib/`) — Layer 6: Implementation libraries (Python)
-3. **CLI Tools** (`cli/`) — Layer 7: Command-line interface tools
-
-### Mono-Repo Structure
+### Directory Structure
 
 ```text
-.
-├── spec/                 # Layers 0-5 (The Specification)
-│   ├── 00-north-star/    # Layer 0: Foundational principles, loops, quality bars
-│   ├── 01-roles/         # Layer 1: 15 studio roles (charters, briefs)
-│   ├── 02-dictionary/    # Layer 2: Common language (artifacts, taxonomies, glossary)
-│   ├── 03-schemas/       # Layer 3: JSON schemas (validation)
-│   ├── 04-protocol/      # Layer 4: Communication protocol (intents, lifecycles, flows)
-│   ├── 05-behavior/      # Atomic behavior primitives (expertises, procedures, playbooks, adapters)
-│   ├── AGENTS.md         # <-- Specification editing rules
-│   └── README.md         # Specification overview
-│
-├── lib/                  # Layer 6 (Implementation)
-│   └── python/           # Python library
-│       ├── src/
-│       ├── tests/
-│       ├── AGENTS.md     # <-- Python development rules
-│       └── README.md
-│
-├── cli/                  # Layer 7 (CLI Tools)
-│   └── python/           # Python CLI (future)
-│
-├── AGENTS.md             # <-- This file (global rules)
-└── README.md             # Mono-repo overview
+src/questfoundry/
+├── domain/         # MyST source of truth (roles, loops, ontology, protocol)
+├── compiler/       # MyST → generated code
+├── generated/      # Auto-generated Python (DO NOT EDIT)
+└── runtime/        # LangGraph execution engine
 ```
 
-### Essential Reading (Start Here)
+### Key Principles
 
-**Layer 0 (Foundational Principles):**
+- **domain/** is the single source of truth
+- **generated/** is output from compilation—never edit manually
+- **runtime/** consumes generated code
+- **_archive/** contains v2 content for reference only
 
-- `README.md` — Overview of the mono-repo and layered architecture
-- `spec/00-north-star/WORKING_MODEL.md` — How the studio operates (Customer → Showrunner → Roles)
-- `spec/00-north-star/ROLE_INDEX.md` — The 15 internal roles
-- `spec/00-north-star/QUALITY_BARS.md` — The 8 quality criteria (Gatekeeper enforces these)
-- `spec/00-north-star/LOOPS/README.md` — The 12 production loops
-- `spec/00-north-star/SOURCES_OF_TRUTH.md` — Hot vs Cold (discovery vs canon)
-- `spec/00-north-star/SPOILER_HYGIENE.md` — Player-safety rules
+### Hot vs. Cold
 
-**Layer Overviews (Read in Order):**
+- **Hot**: Internal, implementation, spoilers (hot_store)
+- **Cold**: Player-facing, canon (cold_store)
+- **Rule**: Never leak Hot details into Cold
 
-- `spec/01-roles/README.md` — Roles layer (who does what)
-- `spec/02-dictionary/README.md` — Common language layer (artifact structures)
-- `spec/03-schemas/README.md` — JSON schemas layer (machine validation)
-- `spec/04-protocol/README.md` — Protocol layer (message envelopes, intents, lifecycles)
-- `spec/05-behavior/README.md` — AI agent behavior primitives layer (v2 architecture)
-- `lib/compiler/README.md` — Spec compiler documentation
+## Architecture Reference
 
-**Implementation (Layer 6):**
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full v3 design.
 
-- `lib/python/README.md` — Python library documentation
-- `lib/python/AGENTS.md` — Python development guidelines
+**Maintenance task:** Keep ARCHITECTURE.md up-to-date when making architectural changes.
 
-### Key Architectural Principles
+## Non-Negotiables
 
-1. **Layered Architecture**: Specification (L0-L5) → Implementation (L6) → CLI (L7)
-2. **Single Source of Truth**: The `spec/` directory is the canonical source for schemas and prompts
-3. **Human-Centric Design**: Layer 2 (human-readable) is the source of truth; Layer 3 (schemas) is
-   derived
-4. **Customer/Showrunner Model**: External Customer gives directives → AI Showrunner orchestrates 15
-   internal roles
-5. **Loop-Focused**: Loops are the executable units; roles participate in loops
-6. **Hot/Cold**: Hot = discovery/drafts/spoilers; Cold = canon/player-safe/export-ready
-7. **8 Quality Bars**: Gatekeeper validates all Cold merges against 8 criteria
+- Read `ARCHITECTURE.md` before making significant changes
+- Use repo-standard tooling: `uv` for Python workflows, `pre-commit`
+- Run `pre-commit run --all-files` before handing work back
+- No "fluff" files: create only files with a clear, maintained purpose
 
-## Developer Setup (One-Time)
+### CRITICAL: Domain Changes MUST Use the Compiler
 
-Before starting work in this repository, complete the following one-time setup:
+> **WARNING:** Direct edits to `generated/` files cause regressions that are difficult to debug.
+> Previous sessions have made this mistake repeatedly. DO NOT repeat it.
 
-### 1. Install Dependencies
+1. **NEVER edit files in `generated/`** — This includes:
+   - `generated/roles/*.py`
+   - `generated/models/*.py`
+   - `generated/loops/*.py`
 
-From the `lib/python/` directory, run:
+2. **Domain changes require this workflow:**
+
+   ```bash
+   # 1. Edit the source file in domain/
+   vim src/questfoundry/domain/roles/plotwright.md
+
+   # 2. Regenerate via compiler
+   qf compile
+
+   # 3. Verify the generated output
+   git diff src/questfoundry/generated/
+   ```
+
+3. **If you find a bug in generated code:**
+   - Find the corresponding source in `domain/`
+   - Fix the source file OR fix the compiler in `compiler/`
+   - Run `qf compile` to regenerate
+   - NEVER fix generated files directly
+
+4. **The compiler exists and works** — It is not stubbed. Use it.
+
+## Workflows
+
+### Code Changes
 
 ```bash
-cd lib/python
-uv sync
+uv sync                      # Install dependencies
+# Make your changes
+uv run ruff check src/       # Lint
+uv run mypy src/             # Type-check
+uv run pytest                # Test
+uv run ruff format src/      # Format
 ```
 
-This installs all Python dependencies and development tools.
-
-### 2. Install Pre-Commit Hooks
-
-From the repository root, run:
+### Domain Changes
 
 ```bash
-pre-commit install
+# Edit files in src/questfoundry/domain/
+qf compile                   # Regenerate generated/
+qf validate                  # Check without generating
 ```
 
-This enables automatic quality checks on every commit, including:
+## Commit, Branch, PR
 
-- Markdown linting
-- Python linting and formatting (Ruff)
-- Type checking (mypy)
-- Commit message validation (Commitizen)
+- Conventional commits `type(scope): subject`
+- Common scopes: `domain`, `compiler`, `runtime`, `cli`
+- Prefer small, atomic commits; avoid WIP commits
+- All CI gates (lint, type-check, tests) must pass before considering work done
 
-### 3. Bundle Resources
+## Definition of Done
 
-Bundle schemas and prompts from spec/ into the library:
-
-```bash
-cd lib/python
-uv run hatch run bundle
-```
-
-## Development Guidelines
-
-### No-Fluff Rule
-
-**Agents are strictly prohibited from creating new, high-maintenance files** that are not automatically generated or enforced by the CI/CD pipeline.
-
-Examples of prohibited files:
-
-- `CHANGELOG.md` (auto-generated by Commitizen)
-- `TODO.md` (use GitHub Issues instead)
-- Manual checklists or tracking documents
-
-Only create files that serve a clear, non-redundant purpose and are actively maintained by automation or developers.
-
-### Separation of Concerns
-
-When working in this mono-repo, respect the boundaries between layers:
-
-1. **Specification Work** (`spec/`):
-   - Focus on documentation, schemas, and prompts
-   - Follow guidelines in `spec/AGENTS.md`
-   - Do not modify Python code in `lib/`
-
-2. **Library Development** (`lib/python/`):
-   - Focus on Python implementation
-   - Follow guidelines in `lib/python/AGENTS.md`
-   - Read from `spec/` but never modify it
-   - The library bundles schemas and prompts from `spec/` at build time
-
-3. **Cross-Layer Changes**:
-   - If both spec and implementation need changes, do them in sequence
-   - Update spec first, then update library code to use the new spec
-
-### Key Rule: Single Source of Truth
-
-- **`spec/` is the single source of truth** for all schemas and prompts
-- The Python library bundles resources from `spec/` at build time via `scripts/bundle_resources.py`
-- Never manually edit files in `lib/python/src/questfoundry/resources/` - always edit in `spec/` and re-bundle
-- Bundled resources are excluded from git (see `.gitignore`)
-
-## Markdown Guidelines
-
-- All Markdown files (`*.md`) should follow consistent formatting.
-- Use standard Markdown conventions.
-- Run Prettier or similar formatters to ensure consistency.
-
-## Commit, Branch, and PR Workflow
-
-### Conventional Commits
-
-- Use Conventional Commits for every commit: `type(scope)!: subject`
-- **Allowed `type`:** `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `ci`, `build`,`perf`.
-- **`scope`:** Use concise, project-specific scopes (e.g., `spec`, `lib/python`, `cli`, `schemas`,
-  `prompts`).
-- **Subject:** Use imperative, present-tense.
-- **Body:** Use when needed to explain _why_.
-
-### Commit Granularity
-
-- **One commit per "TODO" item.** Changes should be small and atomic.
-- Avoid "WIP" commits.
-
-### Branching Strategy
-
-- **Default:** One branch per epic. Naming: `epic/<key>-<slug>`.
-- **Agent Exception:** Agent-specific prefixes (e.g., `claude/`) are permitted if the tool enforces
-  them.
-
-### PR Policy and CI Gate
-
-- A PR corresponds to one epic.
-- All CI checks must pass (lint, type-check, tests) before merge.
-
-### Chat Session Scope (for agents)
-
-- **Implement at most one epic per chat session.**
-- If asked to proceed to another epic, refuse and propose a new chat.
-
-### Definition of Done (per epic/PR)
-
-- All documentation is clear and internally consistent.
-- Cross-references are updated across all affected layers.
-- Markdown formatting is consistent.
-- All tests pass.
-- Review performed and feedback addressed.
-
-## Working with Specific Areas
-
-**For specification work**, see: `spec/AGENTS.md`
-
-**For Python library development**, see: `lib/python/AGENTS.md`
+- Requirements are satisfied with minimal necessary change
+- Hot/Cold boundaries respected
+- Formatting/lint/type/tests pass with repo tools
+- Generated code regenerated if domain changed (via `qf compile`, NOT manual edits)
+- No direct edits to `generated/` directory (verify with `git diff --name-only | grep generated`)
+- Notes/assumptions and validation steps are captured when relevant

@@ -1,0 +1,98 @@
+# Loop Pattern: Binding Run
+# Compiled from: spec/00-north-star/LOOPS/binding_run.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: binding_run
+
+metadata:
+  name: "Binding Run"
+  type: "Export"
+  description: |
+    Assemble a player-safe export view of the book from a specific Cold snapshot. Package
+    manuscript, codex, and checklists - optionally including art/audio plans or assets and
+    translation slices - without leaking spoilers or internal plumbing.
+
+topology:
+  entry_node: assemble
+
+  nodes:
+    - role_id: book_binder
+      node_id: assemble
+      description: "Compile hyperlinked sections from Cold snapshot; ensure terminals clearly marked. Generate codeword/gateway checklists in player-safe wording. Attach codex with See also crosslinks."
+
+    - role_id: book_binder
+      node_id: validate_accessibility
+      description: "Alt text, descriptive link text, proper headings; high-contrast print layout if enabled. No motion/flash surprises; audio warnings where needed. Verify all links resolve."
+
+    - role_id: book_binder
+      node_id: render
+      description: "Emit Markdown (source), HTML, EPUB, PDF (single-column, print-friendly). Stamp front matter with title, credits, Cold snapshot ID, options used, coverage %. Generate View Log page."
+
+  edges:
+    - source: assemble
+      target: validate_accessibility
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.bundle_assembled == true"
+    - source: validate_accessibility
+      target: render
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.accessibility_verified == true"
+    - source: render
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: false
+
+context:
+  required_artifacts:
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: gatecheck_report
+      state_key: gates.gatecheck_report
+
+handoffs:
+  - target: narration_dry_run
+    condition: "export bundle ready for PN playtest"
+
+gates:
+  quality_bars:
+    - Integrity
+    - Presentation
+    - Style
+    - Accessibility
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/binding_run.md"
+  message_sequences:
+    - step: 1
+      sender: "BB"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Binding Run loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: player_safe_bundle
+      expression: "state.bundle_player_safe == true"
+      error_message: "Bundle is player-safe, navigable, and accessible"
+    - name: consistent_formats
+      expression: "state.formats_consistent == true"
+      error_message: "Snapshot & options are clear and consistent across formats"
+    - name: no_leaks
+      expression: "state.no_leaks == true"
+      error_message: "PN can run a Narration Dry-Run without encountering leaks"
+    - name: limitations_disclosed
+      expression: "state.limitations_disclosed == true"
+      error_message: "Known limitations are disclosed in the View Log"

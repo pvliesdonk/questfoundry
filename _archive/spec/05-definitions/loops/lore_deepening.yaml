@@ -1,0 +1,103 @@
+# Loop Pattern: Lore Deepening
+# Compiled from: spec/00-north-star/LOOPS/lore_deepening.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: lore_deepening
+
+metadata:
+  name: "Lore Deepening"
+  type: "Discovery"
+  description: |
+    Transform accepted hooks into coherent, contradiction-aware canon - backstories, timelines,
+    metaphysics, causal links. Keep spoilers in canon notes; publish player-safe surfaces later
+    via Codex Expansion.
+
+topology:
+  entry_node: draft_canon
+
+  nodes:
+    - role_id: lore_weaver
+      node_id: draft_canon
+      description: "Frame the canon question for each theme/cluster. Provide precise, spoiler-level answers: backstory, causal chain, timeline anchors, implicated entities, constraints. Tag sensitivity."
+
+    - role_id: researcher
+      node_id: verify
+      description: "Validate real-world claims; attach citations. If Researcher dormant, keep uncorroborated risk labels and note wording guidance for PN/Binder."
+
+    - role_id: lore_weaver
+      node_id: summarize
+      description: "Package canon entry with: Title, Canon Answer, Timeline anchors, Entities affected, Constraints, Sensitivity tag, Upstream hooks/TUs, Downstream impacts. Add notes for Plotwright/Scene Smith."
+
+  edges:
+    - source: draft_canon
+      target: verify
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.canon_drafted == true"
+    - source: verify
+      target: summarize
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.facts_checked_or_flagged == true"
+    - source: summarize
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: hook_card
+      state_key: hot_sot.hooks
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+
+handoffs:
+  - target: codex_expansion
+    condition: "player-safe summaries ready for codex entries"
+  - target: story_spark
+    condition: "topology/prose notes indicate structure needs adjustment"
+
+gates:
+  quality_bars:
+    - Integrity
+    - Reachability
+    - Gateways
+    - Presentation
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/lore_deepening.md"
+  message_sequences:
+    - step: 1
+      sender: "LW"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Lore Deepening loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: hooks_processed
+      expression: "state.hooks_canonized_or_handled == true"
+      error_message: "Each accepted hook is either canonized, deferred with reason, or rejected with rationale"
+    - name: contradictions_resolved
+      expression: "state.contradictions_resolved == true"
+      error_message: "Canon resolves prior contradictions or marks deliberate mystery with bounds"
+    - name: impacts_enumerated
+      expression: "state.impacts_enumerated == true"
+      error_message: "Topology/prose impacts are enumerated and handed off"
+    - name: spoilers_separated
+      expression: "state.spoilers_separated == true"
+      error_message: "Spoilers are separated from player-safe summaries"
+    - name: citations_present
+      expression: "state.citations_or_flags_present == true"
+      error_message: "Factual claims carry citations or explicit risk flags"

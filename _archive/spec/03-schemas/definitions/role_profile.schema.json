@@ -1,0 +1,753 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.dev/schemas/definitions/role_profile.schema.json",
+  "title": "Role Profile",
+  "description": "Executable definition of a QuestFoundry role (agent node) that encapsulates Layers 0-4 semantics for LangGraph runtime execution. This schema defines how a role behaves, what artifacts it processes, which protocol operations it can perform, and what constraints it must enforce.\n\nIMPORTANT: This is a Layer 5 implementation schema. The planning/execution split (e.g., role_type, service_config) are purely implementation choices and do not reflect conceptual changes to Layers 0-4. From a human team perspective, there is still ONE Illustrator role, ONE Book Binder role, etc. How that role is executed (reasoning agent vs production executor vs service) is an internal runtime decision.",
+  "type": "object",
+  "required": ["id", "identity", "interface", "behavior", "protocol", "constraints"],
+
+  "properties": {
+    "prompt_content": {
+      "type": "object",
+      "description": "Structured prompt knowledge for this role. Contains operating principles, anti-patterns, heuristics, and guidance extracted from Layer 1 briefs. This content is injected into prompts at runtime, replacing the fat templates with thin injection layers. Optional during migration - roles without this section fall back to legacy template-based prompts.",
+      "properties": {
+        "core_mandate": {
+          "type": "string",
+          "description": "High-level mission statement for this role. Typically 1-3 sentences describing what this role does and why it exists. Rendered prominently in prompt after role name."
+        },
+        "operating_principles": {
+          "type": "array",
+          "description": "Core principles this role follows when working. These shape decision-making and prioritization.",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Principle identifier (e.g., 'topology_first', 'contrast_over_clutter')"
+              },
+              "description": {
+                "type": "string",
+                "description": "Full principle statement (e.g., 'Design fan-out and safe returns before line-level thinking')"
+              }
+            }
+          }
+        },
+        "anti_patterns": {
+          "type": "array",
+          "description": "Common mistakes or bad practices this role must avoid",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Anti-pattern identifier (e.g., 'fake_choice', 'secret_maze')"
+              },
+              "description": {
+                "type": "string",
+                "description": "What makes this a problem (e.g., 'options that differ only in wording, not consequence')"
+              }
+            }
+          }
+        },
+        "heuristics": {
+          "type": "array",
+          "description": "Practical guidelines and patterns for common situations. Heuristics are more tactical than principles.",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Heuristic identifier (e.g., 'intent_labels', 'two_step_fairness')"
+              },
+              "description": {
+                "type": "string",
+                "description": "Guidance for this situation"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Abstract pattern formula (e.g., 'verb + object / verb + object', 'Knowledge → Tool → Access'). NO concrete proper nouns from example projects."
+              },
+              "examples": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Generic examples that illustrate the pattern WITHOUT proper nouns (e.g., ['unlocked door', 'altered dialogue'] NOT ['Dock 7', 'Union Token'])"
+              }
+            }
+          }
+        },
+        "quality_bars_owned": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "Integrity",
+              "Reachability",
+              "Nonlinearity",
+              "Gateways",
+              "Style",
+              "Determinism",
+              "Presentation",
+              "Accessibility"
+            ]
+          },
+          "description": "Which of the 8 quality bars this role is responsible for self-checking before handoff"
+        },
+        "task_guidance": {
+          "type": "string",
+          "description": "Generic task description that applies across loops. Describes WHAT the role produces and HOW to approach the work. Rendered in prompt as 'Your Task' section."
+        }
+      }
+    },
+
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z_]+$",
+      "description": "Role identifier matching filename (e.g., 'plotwright', 'gatekeeper', 'lore_weaver'). Must match the YAML filename without extension."
+    },
+
+    "identity": {
+      "type": "object",
+      "required": ["name", "abbreviation", "charter_ref", "dormancy_policy"],
+      "description": "Role identity and metadata from Layer 0 (ROLE_INDEX.md) and Layer 1 (role charters)",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full role name (e.g., 'Plotwright', 'Gatekeeper', 'Scene Smith')"
+        },
+        "abbreviation": {
+          "type": "string",
+          "pattern": "^[A-Z]{2,4}$",
+          "description": "Role abbreviation from spec/02-dictionary/role_abbreviations.md. Used in protocol envelopes, TU IDs, and RACI matrices.",
+          "examples": ["SR", "GK", "PW", "SS", "LW", "CC", "ST", "PN", "BB"]
+        },
+        "charter_ref": {
+          "type": "string",
+          "pattern": "^spec/01-roles/charters/.+\\.md$",
+          "description": "Reference to Layer 1 role charter defining mission, scope, authorities, and constraints"
+        },
+        "brief_ref": {
+          "type": "string",
+          "pattern": "^spec/01-roles/briefs/.+\\.md$",
+          "description": "Reference to Layer 1 agent brief with practical heuristics"
+        },
+        "dormancy_policy": {
+          "enum": ["always_on", "default_on", "optional"],
+          "description": "Role activation policy from Layer 0 ROLE_INDEX.md:\n- always_on: SR, GK (never dormant)\n- default_on: PW, SS, ST, LW, CC (active unless explicitly put to sleep)\n- optional: RS, AD, IL, AuD, AuP, TR, BB, PN (wake only when needed)"
+        },
+        "wake_conditions": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Conditions under which this role should be woken if dormant (from Layer 1 interfaces/dormancy_signals.md)"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Alternative names for onboarding clarity (e.g., 'Plot Drafter', 'World Bible Author')"
+        },
+        "role_type": {
+          "enum": ["reasoning_agent", "production_executor", "service"],
+          "default": "reasoning_agent",
+          "description": "Layer 5 implementation pattern (does NOT reflect conceptual role split in Layers 0-4):\n- reasoning_agent: Full LLM with complex reasoning and decision-making (default for most roles)\n- production_executor: Thin LLM wrapper + heavy tool orchestration (e.g., Illustrator with Stable Diffusion)\n- service: Pure tool execution, no LLM reasoning (e.g., Export Service)\n\nNOTE: This is purely an implementation detail. From a human/conceptual perspective, there is still ONE role (e.g., 'Illustrator' or 'Book Binder'). How that role is executed internally is a runtime optimization choice."
+        }
+      }
+    },
+
+    "interface": {
+      "type": "object",
+      "required": ["inputs", "outputs"],
+      "description": "Artifact I/O contract mapping to Layer 2 dictionary and Layer 3 schemas. Defines what this role consumes and produces.",
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "description": "Artifacts this role reads/consumes. Maps to Layer 3 schema names.",
+          "items": {
+            "type": "object",
+            "required": ["artifact_type", "required"],
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "description": "Schema name from spec/03-schemas/ (without .schema.json extension). Must be one of the 28 Layer 3 schemas.",
+                "examples": ["hook_card", "tu_brief", "canon_pack", "codex_entry", "style_addendum", "gatecheck_report", "view_log"]
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Is this input mandatory for role execution? If true, runtime must ensure it exists in state before invoking this node."
+              },
+              "state_key": {
+                "type": "string",
+                "description": "Key in StudioState where this artifact lives (e.g., 'hot_sot.hooks', 'artifacts.current_hook')"
+              },
+              "filter": {
+                "type": "string",
+                "description": "JSONPath or Python expression to filter state before injection into prompt. Critical for context window management - only show relevant subset."
+              },
+              "validation_mode": {
+                "enum": ["strict", "lenient", "none"],
+                "default": "strict",
+                "description": "How strictly to validate input against Layer 3 schema:\n- strict: Reject invalid inputs with error\n- lenient: Warn but proceed\n- none: Skip validation (use sparingly)"
+              }
+            }
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "description": "Artifacts this role creates/updates. Each output is validated against Layer 3 schema before state update.",
+          "items": {
+            "type": "object",
+            "required": ["artifact_type", "state_key"],
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "description": "Schema name from spec/03-schemas/"
+              },
+              "state_key": {
+                "type": "string",
+                "description": "Key in StudioState where output should be written"
+              },
+              "validation_required": {
+                "type": "boolean",
+                "default": true,
+                "description": "Must output validate against Layer 3 schema? If true, invalid output blocks state update."
+              },
+              "merge_strategy": {
+                "enum": ["replace", "append", "merge"],
+                "default": "replace",
+                "description": "How to handle output if state_key already exists:\n- replace: Overwrite entirely\n- append: Add to array\n- merge: Deep merge objects"
+              }
+            }
+          }
+        },
+        "side_effects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "write_hot_sot",
+              "write_cold_sot",
+              "create_snapshot",
+              "send_protocol_message",
+              "update_tu",
+              "trigger_gatecheck",
+              "wake_dormant_role",
+              "checkpoint_state"
+            ]
+          },
+          "description": "Non-state side effects this role can perform. Runtime must provide tool implementations for these."
+        }
+      }
+    },
+
+    "behavior": {
+      "type": "object",
+      "required": [],
+      "description": "Behavioral configuration for role execution. As of v2.0.0, this section contains only structured_output configuration. Prompt templates and tools have been migrated to prompt_content and capabilities sections respectively.",
+      "properties": {
+        "structured_output": {
+          "type": "object",
+          "description": "Structured output configuration for LLM response parsing",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enforce structured output from LLM?"
+            },
+            "schema_ref": {
+              "type": "string",
+              "description": "Which Layer 3 schema to use for structured output enforcement (typically matches primary output artifact_type)"
+            },
+            "format": {
+              "enum": ["json", "yaml"],
+              "default": "json",
+              "description": "Output format to request from LLM"
+            },
+            "retry_on_invalid": {
+              "type": "boolean",
+              "default": true,
+              "description": "Retry LLM call if output doesn't validate against schema?"
+            },
+            "max_retries": {
+              "type": "integer",
+              "default": 2,
+              "minimum": 0,
+              "maximum": 5
+            }
+          }
+        }
+      }
+    },
+
+    "capabilities": {
+      "type": "object",
+      "description": "Capability requirements for this role. Capabilities define external tools, integrations, and resource access that the role needs to execute. Introduced in v2.0.0 to replace the tools section.",
+      "properties": {
+        "required": {
+          "type": "array",
+          "description": "Array of required capability IDs that must be available for this role to execute. Capability IDs are defined in capabilities.yaml and map to external service integrations, tool plugins, and resource access patterns.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z_]+$",
+            "description": "Capability identifier (e.g., 'image_generation', 'text_synthesis', 'code_execution'). Must match entries in spec/03-schemas/capabilities.schema.json"
+          },
+          "examples": [
+            "image_generation",
+            "audio_synthesis",
+            "text_to_speech",
+            "file_export",
+            "web_scraping",
+            "code_execution"
+          ]
+        }
+      }
+    },
+
+    "protocol": {
+      "type": "object",
+      "description": "Layer 4 protocol permissions, lifecycle participation, and envelope configuration. Defines how this role participates in the QuestFoundry protocol.",
+      "properties": {
+        "intents": {
+          "type": "object",
+          "description": "Which Layer 4 message intents this role can send and receive (from 04-protocol/INTENTS.md)",
+          "properties": {
+            "can_send": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Intent verbs this role is authorized to send",
+              "examples": [
+                "hook.create",
+                "hook.update_status",
+                "tu.open",
+                "tu.update",
+                "tu.close",
+                "gate.report.submit",
+                "gate.decision",
+                "merge.request",
+                "merge.approve",
+                "view.export.request",
+                "pn.playtest.submit",
+                "ack",
+                "error"
+              ]
+            },
+            "can_receive": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Intent verbs this role can receive and handle"
+            }
+          }
+        },
+        "lifecycles": {
+          "type": "object",
+          "description": "Lifecycle state machine participation (from Layer 4 LIFECYCLES/)",
+          "properties": {
+            "hook": {
+              "type": "object",
+              "description": "Hook Card lifecycle participation (04-protocol/LIFECYCLES/hooks.md)",
+              "properties": {
+                "can_create": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Can this role create new hooks?"
+                },
+                "can_transition": {
+                  "type": "array",
+                  "items": {"$ref": "#/$defs/state_transition"},
+                  "description": "Which hook state transitions can this role perform?"
+                }
+              }
+            },
+            "tu": {
+              "type": "object",
+              "description": "Trace Unit lifecycle participation (04-protocol/LIFECYCLES/tu.md)",
+              "properties": {
+                "can_open": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Can this role open (create) new TUs?"
+                },
+                "can_close": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Can this role close (merge to Cold) TUs?"
+                },
+                "can_transition": {
+                  "type": "array",
+                  "items": {"$ref": "#/$defs/state_transition"},
+                  "description": "Which TU state transitions can this role perform?"
+                }
+              }
+            },
+            "gate": {
+              "type": "object",
+              "description": "Gate (gatecheck) lifecycle participation (04-protocol/LIFECYCLES/gate.md)",
+              "properties": {
+                "can_evaluate": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Can this role perform gatecheck evaluations?"
+                },
+                "can_decide": {
+                  "type": "array",
+                  "items": {"enum": ["pass", "conditional_pass", "block"]},
+                  "description": "Which gatecheck decisions can this role make?"
+                }
+              }
+            },
+            "view": {
+              "type": "object",
+              "description": "View/Export lifecycle participation (04-protocol/LIFECYCLES/view.md)",
+              "properties": {
+                "can_bind": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Can this role bind (create) view exports?"
+                },
+                "can_playtest": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Can this role perform PN playtesting?"
+                }
+              }
+            }
+          }
+        },
+        "envelope_defaults": {
+          "type": "object",
+          "description": "Default Layer 4 envelope fields when this role sends protocol messages. Runtime merges these with message-specific values.",
+          "properties": {
+            "safety": {
+              "type": "object",
+              "description": "Default safety flags for messages sent by this role",
+              "properties": {
+                "player_safe": {
+                  "type": "boolean",
+                  "description": "Are this role's messages player-safe by default?"
+                },
+                "spoilers": {
+                  "enum": ["allowed", "forbidden"],
+                  "description": "Default spoiler policy for this role's messages"
+                }
+              }
+            },
+            "context": {
+              "type": "object",
+              "description": "Default context fields for messages sent by this role",
+              "properties": {
+                "hot_cold": {
+                  "enum": ["hot", "cold"],
+                  "description": "Does this role typically work in Hot or Cold SoT?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "constraints": {
+      "type": "object",
+      "description": "Layer 0 policy constraints and enforcement rules. These are non-negotiable runtime checks.",
+      "required": ["safety"],
+      "properties": {
+        "safety": {
+          "type": "object",
+          "required": ["can_see_hot", "can_see_spoilers", "pn_safe"],
+          "description": "Layer 0 safety boundaries from PN_PRINCIPLES.md and SPOILER_HYGIENE.md",
+          "properties": {
+            "can_see_hot": {
+              "type": "boolean",
+              "description": "Can this role access Hot Source of Truth? If false, runtime filters Hot content from state before prompt injection."
+            },
+            "can_see_spoilers": {
+              "type": "boolean",
+              "description": "Can this role see spoiler content? If false, runtime ensures only player-safe summaries are visible."
+            },
+            "pn_safe": {
+              "type": "boolean",
+              "description": "Is this the Player-Narrator role? If true, enforces PN Safety Invariant:\n- MUST NOT see Hot content\n- MUST NOT see spoilers\n- MUST NOT see internal plumbing (codewords, gate logic, seeds/models)\nViolation is critical error."
+            },
+            "spoiler_hygiene_level": {
+              "enum": ["full_access", "player_safe_only", "pn_strict"],
+              "description": "Spoiler access level from Layer 0 SPOILER_HYGIENE.md:\n- full_access: Internal roles (SR, GK, PW, SS, LW)\n- player_safe_only: Codex Curator, Translator\n- pn_strict: Player-Narrator (strictest)"
+            }
+          }
+        },
+        "traceability": {
+          "type": "object",
+          "description": "Layer 0 traceability requirements from TRACEABILITY.md",
+          "properties": {
+            "requires_tu_linkage": {
+              "type": "boolean",
+              "default": false,
+              "description": "Must this role's outputs reference a TU? If true, runtime validates TU field exists in outputs."
+            },
+            "requires_snapshot_context": {
+              "type": "boolean",
+              "default": false,
+              "description": "Must this role reference Cold snapshots? If true, runtime ensures snapshot_context exists in state."
+            },
+            "can_create_snapshots": {
+              "type": "boolean",
+              "default": false,
+              "description": "Can this role create new Cold snapshots? (Typically only SR after successful merge)"
+            },
+            "cold_bound": {
+              "type": "boolean",
+              "default": false,
+              "description": "Are this role's outputs always Cold-bound (must go through gatecheck)? If true, enforces TU linkage and gatecheck requirement."
+            }
+          }
+        },
+        "quality_gates": {
+          "type": "object",
+          "description": "Quality bar enforcement from Layer 0 QUALITY_BARS.md",
+          "properties": {
+            "enforces_bars": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "Integrity",
+                  "Reachability",
+                  "Nonlinearity",
+                  "Gateways",
+                  "Style",
+                  "Determinism",
+                  "Presentation",
+                  "Accessibility"
+                ]
+              },
+              "description": "Which of the 8 quality bars this role is responsible for checking. Gatekeeper enforces all 8; other roles may check subsets."
+            },
+            "blocks_on_failure": {
+              "type": "boolean",
+              "default": false,
+              "description": "Does this role block graph progression on quality bar failure? (True for Gatekeeper only)"
+            },
+            "evaluation_mode": {
+              "enum": ["pre_gate", "gatecheck", "spot_check"],
+              "description": "How this role performs quality checks:\n- pre_gate: Early validation before gatecheck\n- gatecheck: Full formal gatecheck with blocking\n- spot_check: Non-blocking advisory checks"
+            }
+          }
+        },
+        "hot_cold_permissions": {
+          "type": "object",
+          "description": "Fine-grained Hot/Cold access control from Layer 0 SOURCES_OF_TRUTH.md. Uses hot/cold sections with read/write flags as of v2.0.0.",
+          "required": ["hot", "cold"],
+          "properties": {
+            "hot": {
+              "type": "object",
+              "required": ["read", "write"],
+              "description": "Permissions for Hot Source of Truth access",
+              "properties": {
+                "read": {
+                  "type": "boolean",
+                  "description": "Can this role read from Hot SoT?"
+                },
+                "write": {
+                  "type": "boolean",
+                  "description": "Can this role write to Hot SoT?"
+                }
+              }
+            },
+            "cold": {
+              "type": "object",
+              "required": ["read", "write"],
+              "description": "Permissions for Cold Source of Truth access",
+              "properties": {
+                "read": {
+                  "type": "boolean",
+                  "description": "Can this role read from Cold SoT?"
+                },
+                "write": {
+                  "type": "boolean",
+                  "description": "Can this role write to Cold SoT? (Typically only true for SR after gatecheck passes)"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "raci": {
+      "type": "object",
+      "description": "RACI matrix entries for this role across loops (from Layer 0 WORKING_MODEL.md and Layer 1 charters)",
+      "properties": {
+        "loops": {
+          "type": "object",
+          "description": "Per-loop RACI assignments. Keys are loop IDs, values are RACI flags.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "responsible": {
+                "type": "boolean",
+                "description": "Is this role Responsible (does the work)?"
+              },
+              "accountable": {
+                "type": "boolean",
+                "description": "Is this role Accountable (approves/owns outcome)?"
+              },
+              "consulted": {
+                "type": "boolean",
+                "description": "Is this role Consulted (provides input)?"
+              },
+              "informed": {
+                "type": "boolean",
+                "description": "Is this role Informed (receives updates)?"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "llm_config": {
+      "type": "object",
+      "description": "LLM provider and model configuration for this role. Runtime uses this to instantiate the appropriate LLM client. OPTIONAL for role_type='service' (pure tool execution with no LLM). REQUIRED for role_type='reasoning_agent' and 'production_executor'. Two modes: (1) Explicit: provider + model, or (2) Tier-based: provider='auto' + model_tier.",
+      "properties": {
+        "provider": {
+          "enum": ["openai", "anthropic", "ollama", "google", "azure_openai", "auto"],
+          "description": "LLM provider. Use 'auto' with model_tier to let runtime select provider based on availability and configuration."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model identifier (e.g., 'gpt-4', 'claude-3-opus-20240229', 'llama2'). Required if provider != 'auto'.",
+          "examples": ["gpt-4-turbo-preview", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "gemini-1.5-pro", "llama2:70b"]
+        },
+        "model_tier": {
+          "enum": ["creative-writing", "structured-thinking", "validation", "customer-facing", "quick-feedback", "long-context"],
+          "description": "Model tier for automatic provider/model selection. Maps to work type: creative-writing (prose), structured-thinking (planning), validation (quality checks), customer-facing (communication), quick-feedback (fast iteration), long-context (large manuscripts). Required if provider='auto'."
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0.7,
+          "description": "Sampling temperature for LLM generation"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum tokens for LLM response"
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Nucleus sampling parameter"
+        },
+        "frequency_penalty": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2,
+          "description": "Frequency penalty for OpenAI models"
+        },
+        "presence_penalty": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2,
+          "description": "Presence penalty for OpenAI models"
+        },
+        "fallback_models": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Fallback models if primary fails (in order of preference)"
+        }
+      }
+    },
+
+    "service_config": {
+      "type": "object",
+      "description": "Configuration for production executor and service roles. Layer 5 implementation detail for tool orchestration and service execution. OPTIONAL for reasoning_agent roles (rarely needed). Typically used by role_type='production_executor' or 'service'.",
+      "properties": {
+        "execution_mode": {
+          "enum": ["synchronous", "asynchronous", "batch"],
+          "default": "synchronous",
+          "description": "How this service executes tasks:\n- synchronous: Wait for completion before returning\n- asynchronous: Start task and poll for completion\n- batch: Process multiple requests together"
+        },
+        "concurrency_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Maximum concurrent executions (for asynchronous/batch modes)"
+        },
+        "default_timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "description": "Default timeout for service operations in milliseconds"
+        },
+        "quality_validation_enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable post-execution quality validation checks?"
+        },
+        "determinism_logging_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable automatic logging of execution parameters for reproducibility (e.g., Stable Diffusion seeds)?"
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for documentation and tooling",
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version of this role profile definition"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author or maintainer of this profile"
+        },
+        "created": {
+          "type": "string",
+          "format": "date",
+          "description": "Creation date (ISO 8601)"
+        },
+        "updated": {
+          "type": "string",
+          "format": "date",
+          "description": "Last update date (ISO 8601)"
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Tags for categorization and search"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-form notes about this role profile"
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "state_transition": {
+      "type": "object",
+      "required": ["from_state", "to_state"],
+      "description": "Lifecycle state transition rule",
+      "properties": {
+        "from_state": {
+          "type": "string",
+          "description": "Source state (e.g., 'proposed', 'hot-proposed', 'gatecheck')"
+        },
+        "to_state": {
+          "type": "string",
+          "description": "Target state (e.g., 'accepted', 'stabilizing', 'cold-merged')"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Optional condition that must be true for transition (Python expression or state key match)"
+        },
+        "intent": {
+          "type": "string",
+          "description": "Layer 4 protocol intent that triggers this transition"
+        }
+      }
+    }
+  }
+}

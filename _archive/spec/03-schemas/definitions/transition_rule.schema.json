@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.dev/schemas/definitions/transition_rule.schema.json",
+  "title": "Transition Rule",
+  "description": "Reusable lifecycle state machine transition rule from Layer 4 LIFECYCLES/. Defines a state transition for Hook, TU, Gate, or View lifecycles with authorization, validation, and side effects.",
+  "type": "object",
+  "required": ["lifecycle_type", "from_state", "to_state", "intent", "authorization"],
+
+  "properties": {
+    "lifecycle_type": {
+      "enum": ["hook", "tu", "gate", "view"],
+      "description": "Which lifecycle this transition applies to (from Layer 4 LIFECYCLES/)"
+    },
+
+    "from_state": {
+      "type": "string",
+      "description": "Source state in the lifecycle state machine"
+    },
+
+    "to_state": {
+      "type": "string",
+      "description": "Target state in the lifecycle state machine"
+    },
+
+    "intent": {
+      "type": "string",
+      "description": "Layer 4 protocol intent that triggers this transition (from 04-protocol/INTENTS.md)",
+      "examples": [
+        "hook.create",
+        "hook.update_status",
+        "tu.open",
+        "tu.submit_gate",
+        "tu.close",
+        "gate.decision",
+        "view.export.request"
+      ]
+    },
+
+    "authorization": {
+      "type": "object",
+      "required": ["allowed_senders"],
+      "description": "Who can trigger this transition (role authorization from Layer 4)",
+      "properties": {
+        "allowed_senders": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Role abbreviations authorized to send the intent that triggers this transition",
+          "examples": [["SR"], ["SR", "GK"], ["PW", "SS", "LW"], ["*"]]
+        },
+        "required_permissions": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Additional permission checks beyond role membership"
+        },
+        "forbidden_senders": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Roles explicitly forbidden from triggering this transition (e.g., PN cannot trigger Hot transitions)"
+        }
+      }
+    },
+
+    "preconditions": {
+      "type": "object",
+      "description": "Conditions that must be true before transition can occur",
+      "properties": {
+        "state_requirements": {
+          "type": "array",
+          "description": "State keys that must exist and meet conditions",
+          "items": {
+            "type": "object",
+            "required": ["key", "condition"],
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "StudioState key (JSONPath or dot notation)"
+              },
+              "condition": {
+                "type": "string",
+                "description": "Condition expression (Python or comparison operator)"
+              },
+              "error_message": {
+                "type": "string",
+                "description": "Error to show if condition fails"
+              }
+            }
+          }
+        },
+        "artifact_validation": {
+          "type": "object",
+          "description": "Artifact must validate against schema before transition",
+          "properties": {
+            "required": {
+              "type": "boolean",
+              "default": true
+            },
+            "schema_ref": {
+              "type": "string",
+              "description": "Layer 3 schema to validate against"
+            }
+          }
+        },
+        "quality_bars": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "bar": {
+                "enum": ["Integrity", "Reachability", "Nonlinearity", "Gateways", "Style", "Determinism", "Presentation", "Accessibility"]
+              },
+              "required_status": {
+                "enum": ["green", "yellow"],
+                "description": "Bar must be at least this status (green or yellow, not red)"
+              }
+            }
+          },
+          "description": "Quality bars that must pass before transition"
+        },
+        "tu_requirements": {
+          "type": "object",
+          "description": "TU-specific preconditions",
+          "properties": {
+            "tu_must_exist": {
+              "type": "boolean",
+              "default": false,
+              "description": "Must a TU be open/active for this transition?"
+            },
+            "tu_state": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "TU must be in one of these states"
+            }
+          }
+        },
+        "snapshot_requirements": {
+          "type": "object",
+          "description": "Cold snapshot preconditions",
+          "properties": {
+            "snapshot_must_exist": {
+              "type": "boolean",
+              "default": false
+            },
+            "snapshot_ref_required": {
+              "type": "boolean",
+              "default": false,
+              "description": "Must snapshot reference be present in context?"
+            }
+          }
+        },
+        "custom_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["expression"],
+            "properties": {
+              "expression": {
+                "type": "string",
+                "description": "Python expression evaluated against state"
+              },
+              "error_message": {"type": "string"}
+            }
+          },
+          "description": "Custom precondition checks"
+        }
+      }
+    },
+
+    "effects": {
+      "type": "object",
+      "description": "Side effects and state changes when transition occurs",
+      "properties": {
+        "state_updates": {
+          "type": "array",
+          "description": "Updates to apply to StudioState",
+          "items": {
+            "type": "object",
+            "required": ["key", "value"],
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "State key to update (JSONPath or dot notation)"
+              },
+              "value": {
+                "description": "Value to set (can be template string with {{var}} interpolation)"
+              },
+              "operation": {
+                "enum": ["set", "append", "merge", "delete"],
+                "default": "set",
+                "description": "Update operation type"
+              }
+            }
+          }
+        },
+        "artifact_updates": {
+          "type": "array",
+          "description": "Updates to artifact fields",
+          "items": {
+            "type": "object",
+            "required": ["artifact_key", "field", "value"],
+            "properties": {
+              "artifact_key": {
+                "type": "string",
+                "description": "State key of artifact to update"
+              },
+              "field": {
+                "type": "string",
+                "description": "Field within artifact to update (JSONPath)"
+              },
+              "value": {
+                "description": "New value (can be template)"
+              }
+            }
+          }
+        },
+        "protocol_messages": {
+          "type": "array",
+          "description": "Protocol messages to send as side effects",
+          "items": {
+            "type": "object",
+            "required": ["sender", "receiver", "intent"],
+            "properties": {
+              "sender": {"type": "string"},
+              "receiver": {"type": "string"},
+              "intent": {"type": "string"},
+              "payload_template": {
+                "type": "object",
+                "description": "Payload data with template variables"
+              }
+            }
+          }
+        },
+        "role_signals": {
+          "type": "array",
+          "description": "Role wake/sleep signals to send",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role_id": {"type": "string"},
+              "action": {"enum": ["wake", "sleep"]},
+              "reason": {"type": "string"}
+            }
+          }
+        },
+        "filesystem_operations": {
+          "type": "array",
+          "description": "Filesystem side effects (Hot/Cold SoT writes)",
+          "items": {
+            "type": "object",
+            "required": ["operation", "path"],
+            "properties": {
+              "operation": {
+                "enum": ["write", "delete", "create_snapshot"],
+                "description": "Filesystem operation"
+              },
+              "path": {
+                "type": "string",
+                "description": "File path (relative to Hot or Cold root)"
+              },
+              "hot_cold": {
+                "enum": ["hot", "cold"],
+                "description": "Which SoT to operate on"
+              },
+              "artifact_ref": {
+                "type": "string",
+                "description": "State key of artifact to write"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "validation": {
+      "type": "object",
+      "description": "Post-transition validation rules",
+      "properties": {
+        "verify_state_consistency": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check that state remains consistent after transition?"
+        },
+        "verify_artifact_integrity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-validate artifact after updates?"
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Artifact fields that must be present after transition"
+        }
+      }
+    },
+
+    "error_handling": {
+      "type": "object",
+      "description": "What happens if transition fails",
+      "properties": {
+        "on_precondition_failure": {
+          "enum": ["block", "warn", "rollback"],
+          "default": "block",
+          "description": "Action when preconditions not met"
+        },
+        "on_effect_failure": {
+          "enum": ["rollback", "partial", "fail"],
+          "default": "rollback",
+          "description": "Action when side effects fail"
+        },
+        "error_intent": {
+          "type": "string",
+          "description": "Protocol intent to send on error (typically 'error')"
+        },
+        "rollback_strategy": {
+          "enum": ["full", "partial", "none"],
+          "default": "full",
+          "description": "How much to rollback on failure"
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Metadata about this transition rule",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this transition does"
+        },
+        "lifecycle_ref": {
+          "type": "string",
+          "pattern": "^spec/04-protocol/LIFECYCLES/.+\\.md$",
+          "description": "Reference to Layer 4 lifecycle documentation"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "scenario": {"type": "string"},
+              "before_state": {"type": "object"},
+              "after_state": {"type": "object"}
+            }
+          },
+          "description": "Example state before/after this transition"
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "lifecycle_type": "hook",
+      "from_state": "proposed",
+      "to_state": "accepted",
+      "intent": "hook.update_status",
+      "authorization": {
+        "allowed_senders": ["SR"]
+      },
+      "preconditions": {
+        "state_requirements": [
+          {
+            "key": "hot_sot.current_hook.header.status",
+            "condition": "== 'proposed'",
+            "error_message": "Hook must be in 'proposed' state"
+          }
+        ]
+      },
+      "effects": {
+        "artifact_updates": [
+          {
+            "artifact_key": "hot_sot.current_hook",
+            "field": "header.status",
+            "value": "accepted"
+          },
+          {
+            "artifact_key": "hot_sot.current_hook",
+            "field": "header.edited",
+            "value": "{{current_date}}"
+          }
+        ]
+      }
+    },
+    {
+      "lifecycle_type": "tu",
+      "from_state": "stabilizing",
+      "to_state": "gatecheck",
+      "intent": "tu.submit_gate",
+      "authorization": {
+        "allowed_senders": ["SR"],
+        "required_permissions": ["can_submit_gatecheck"]
+      },
+      "preconditions": {
+        "state_requirements": [
+          {
+            "key": "hot_sot.current_tu.deliverables",
+            "condition": "len(value) > 0",
+            "error_message": "TU must have deliverables before gatecheck"
+          }
+        ],
+        "quality_bars": [
+          {
+            "bar": "Integrity",
+            "required_status": "green"
+          }
+        ]
+      },
+      "effects": {
+        "state_updates": [
+          {
+            "key": "hot_sot.current_tu.status",
+            "value": "gatecheck"
+          }
+        ],
+        "protocol_messages": [
+          {
+            "sender": "SR",
+            "receiver": "GK",
+            "intent": "gate.report.submit",
+            "payload_template": {
+              "type": "gatecheck_report",
+              "data": {
+                "title": "{{tu.id}}",
+                "mode": "gatecheck"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

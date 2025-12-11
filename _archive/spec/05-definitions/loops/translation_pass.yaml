@@ -1,0 +1,117 @@
+# Loop Pattern: Translation Pass
+# Compiled from: spec/00-north-star/LOOPS/translation_pass.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: translation_pass
+
+metadata:
+  name: "Translation Pass"
+  type: "Localization"
+  description: |
+    Add or maintain a target-language slice. Create or update a player-safe translation of
+    manuscript/codex surfaces while preserving PN boundaries, style intent, and navigation.
+    Supports plan-only merges (glossary/style kit) when the full slice isn't ready.
+
+topology:
+  entry_node: scope_coverage
+
+  nodes:
+    - role_id: translator
+      node_id: scope_coverage
+      description: "Decide slice (full book, acts, codex subset). Set coverage target and time box; mark partial outputs as incomplete."
+
+    - role_id: translator
+      node_id: glossary_first
+      description: "Create/refresh glossary with Style Lead. Decide register (T/V distinction, dialect); lock decisions here."
+
+    - role_id: translator
+      node_id: segment_localize
+      description: "Translate player surfaces: no internal labels, no spoilers, preserve PN diegesis. Keep hyperlinks and anchors intact; choice labels stay distinct and clear."
+
+    - role_id: style_lead
+      node_id: idiom_pass
+      description: "Validate motif resonance; solve idioms with functionally equivalent phrases."
+
+    - role_id: gatekeeper
+      node_id: pre_gate
+      description: "Presentation Safety (no leaks), Integrity (links), Style (tone/voice)."
+
+  edges:
+    - source: scope_coverage
+      target: glossary_first
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.scope_defined == true"
+    - source: glossary_first
+      target: segment_localize
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.glossary_locked == true"
+    - source: segment_localize
+      target: idiom_pass
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.segments_translated == true"
+    - source: idiom_pass
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.idioms_resolved == true"
+    - source: pre_gate
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: style_addendum
+      state_key: hot_sot.style
+
+handoffs:
+  - target: binding_run
+    condition: "language pack ready for export views"
+
+gates:
+  quality_bars:
+    - Presentation
+    - Integrity
+    - Style
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/translation_pass.md"
+  message_sequences:
+    - step: 1
+      sender: "TR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Translation Pass loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: native_register
+      expression: "state.register_native == true"
+      error_message: "Register and tone feel native; PN voice preserved"
+    - name: links_resolve
+      expression: "state.links_resolve == true"
+      error_message: "Links/cross-refs resolve; choice labels remain distinct"
+    - name: glossary_stable
+      expression: "state.glossary_stable == true"
+      error_message: "Glossary stable; idioms handled; motifs resonate"
+    - name: no_leaks
+      expression: "state.no_leaks == true"
+      error_message: "No spoilers or internal labels leaked; accessibility text localized"

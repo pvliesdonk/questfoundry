@@ -1,0 +1,329 @@
+# Trace Unit (TU) Lifecycle - State machine transitions
+# Based on spec: 04-protocol/LIFECYCLES/tu.md
+
+lifecycle_type: tu
+
+metadata:
+  description: "Trace Unit lifecycle: tracking all meaningful changes targeting Cold SoT"
+  lifecycle_ref: "spec/04-protocol/LIFECYCLES/tu.md"
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Any artifact destined for Cold MUST have an associated TU. No TU = No Cold merge."
+
+states:
+  - hot-proposed
+  - stabilizing
+  - gatecheck
+  - cold-merged
+  - deferred
+  - rejected
+
+terminal_states:
+  - cold-merged
+  - rejected
+
+entry_state: hot-proposed
+
+transitions:
+  # (init) → hot-proposed (TU creation)
+  - from_state: null
+    to_state: hot-proposed
+    intent: "tu.open"
+    authorization:
+      allowed_senders: ["SR", "{{tu.owner_a}}"]
+    preconditions:
+      state_requirements:
+        - key: "payload.id"
+          condition: "!= null"
+          error_message: "TU must have an ID"
+        - key: "payload.owner_a"
+          condition: "!= null"
+          error_message: "TU must have an accountable owner"
+        - key: "payload.loop"
+          condition: "!= null"
+          error_message: "TU must specify a loop"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu"
+          value: "{{payload}}"
+          operation: "set"
+        - key: "hot_sot.current_tu.status"
+          value: "hot-proposed"
+          operation: "set"
+        - key: "hot_sot.current_tu.opened"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      protocol_messages:
+        - sender: "SR"
+          receiver: "*"
+          intent: "tu.open"
+          payload_template:
+            tu_id: "{{payload.id}}"
+            loop: "{{payload.loop}}"
+            owner: "{{payload.owner_a}}"
+
+  # hot-proposed → stabilizing (Work begins)
+  - from_state: hot-proposed
+    to_state: stabilizing
+    intent: "tu.start"
+    authorization:
+      allowed_senders: ["SR", "{{tu.owner_a}}"]
+    preconditions:
+      state_requirements:
+        - key: "hot_sot.current_tu.status"
+          condition: "== 'hot-proposed'"
+          error_message: "TU must be in hot-proposed state"
+        - key: "hot_sot.current_tu.awake"
+          condition: "len(value) > 0"
+          error_message: "TU must have at least one awake role"
+        - key: "hot_sot.current_tu.timebox"
+          condition: "in ['45 min', '90 min']"
+          error_message: "TU must have valid timebox"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "stabilizing"
+          operation: "set"
+        - key: "hot_sot.current_tu.started"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      role_signals:
+        - role_id: "{{role}}"
+          action: "wake"
+          reason: "TU work started"
+          # Applies to each role in tu.awake
+
+  # hot-proposed → deferred (Postpone with reason)
+  - from_state: hot-proposed
+    to_state: deferred
+    intent: "tu.defer"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.deferral_tags"
+          condition: "len(value) > 0"
+          error_message: "Deferral requires tags (e.g., deferred:art)"
+        - key: "payload.linkage"
+          condition: "!= null"
+          error_message: "Deferral requires reason and revisit condition"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "deferred"
+          operation: "set"
+        - key: "hot_sot.current_tu.deferral_tags"
+          value: "{{payload.deferral_tags}}"
+          operation: "set"
+        - key: "hot_sot.current_tu.linkage"
+          value: "{{payload.linkage}}"
+          operation: "set"
+
+  # hot-proposed → rejected (Won't pursue)
+  - from_state: hot-proposed
+    to_state: rejected
+    intent: "tu.reject"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.rejection_reason"
+          condition: "!= null"
+          error_message: "Rejection requires reason"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "rejected"
+          operation: "set"
+        - key: "hot_sot.current_tu.rejection_reason"
+          value: "{{payload.rejection_reason}}"
+          operation: "set"
+        - key: "hot_sot.current_tu.closed"
+          value: "{{current_timestamp}}"
+          operation: "set"
+
+  # stabilizing → gatecheck (Deliverables complete, ready for quality check)
+  - from_state: stabilizing
+    to_state: gatecheck
+    intent: "tu.submit_gate"
+    authorization:
+      allowed_senders: ["{{tu.owner_a}}"]
+    preconditions:
+      state_requirements:
+        - key: "hot_sot.current_tu.deliverables"
+          condition: "len(value) > 0"
+          error_message: "TU must have deliverables before gatecheck"
+      artifact_validation:
+        required: true
+        schema_ref: "tu_brief.schema.json"
+      quality_bars:
+        - bar: "Integrity"
+          required_status: "green"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "gatecheck"
+          operation: "set"
+      protocol_messages:
+        - sender: "{{tu.owner_a}}"
+          receiver: "GK"
+          intent: "gate.report.submit"
+          payload_template:
+            type: "gatecheck_report"
+            data:
+              title: "{{tu.id}}"
+              mode: "gatecheck"
+              tu_id: "{{tu.id}}"
+              deliverables: "{{tu.deliverables}}"
+
+  # stabilizing → deferred (If blocked during work)
+  - from_state: stabilizing
+    to_state: deferred
+    intent: "tu.defer"
+    authorization:
+      allowed_senders: ["SR", "{{tu.owner_a}}"]
+    preconditions:
+      state_requirements:
+        - key: "payload.deferral_tags"
+          condition: "len(value) > 0"
+          error_message: "Deferral requires tags"
+        - key: "payload.linkage"
+          condition: "!= null"
+          error_message: "Deferral requires reason"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "deferred"
+          operation: "set"
+        - key: "hot_sot.current_tu.deferral_tags"
+          value: "{{payload.deferral_tags}}"
+          operation: "set"
+        - key: "hot_sot.current_tu.linkage"
+          value: "{{payload.linkage}}"
+          operation: "set"
+
+  # gatecheck → cold-merged (GK passed, merge to Cold)
+  - from_state: gatecheck
+    to_state: cold-merged
+    intent: "merge.approve"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      quality_bars:
+        - bar: "Integrity"
+          required_status: "green"
+        - bar: "Reachability"
+          required_status: "green"
+        - bar: "Presentation"
+          required_status: "green"
+      state_requirements:
+        - key: "hot_sot.current_gatecheck.decision"
+          condition: "== 'pass'"
+          error_message: "Gatekeeper must approve before merge"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "cold-merged"
+          operation: "set"
+        - key: "hot_sot.current_tu.closed"
+          value: "{{current_timestamp}}"
+          operation: "set"
+        - key: "hot_sot.current_tu.cold_snapshot_ref"
+          value: "{{cold_snapshot_id}}"
+          operation: "set"
+      filesystem_operations:
+        - operation: "create_snapshot"
+          hot_cold: "cold"
+          path: "snapshots/{{cold_snapshot_id}}"
+          artifact_ref: "hot_sot.current_tu.deliverables"
+      protocol_messages:
+        - sender: "SR"
+          receiver: "*"
+          intent: "tu.merged"
+          payload_template:
+            tu_id: "{{tu.id}}"
+            snapshot: "{{cold_snapshot_id}}"
+
+  # gatecheck → stabilizing (GK failed, rework needed)
+  - from_state: gatecheck
+    to_state: stabilizing
+    intent: "tu.rework"
+    authorization:
+      allowed_senders: ["GK", "{{tu.owner_a}}"]
+    preconditions:
+      state_requirements:
+        - key: "payload.remediation_notes"
+          condition: "!= null"
+          error_message: "Rework requires remediation notes from Gatekeeper"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "stabilizing"
+          operation: "set"
+        - key: "hot_sot.current_tu.remediation_notes"
+          value: "{{payload.remediation_notes}}"
+          operation: "append"
+      protocol_messages:
+        - sender: "GK"
+          receiver: "{{tu.responsible_r}}"
+          intent: "tu.rework_required"
+          payload_template:
+            tu_id: "{{tu.id}}"
+            notes: "{{payload.remediation_notes}}"
+
+  # deferred → stabilizing (Reactivating)
+  - from_state: deferred
+    to_state: stabilizing
+    intent: "tu.reactivate"
+    authorization:
+      allowed_senders: ["SR"]
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "stabilizing"
+          operation: "set"
+        - key: "hot_sot.current_tu.reactivated"
+          value: "{{current_timestamp}}"
+          operation: "set"
+      role_signals:
+        - role_id: "{{role}}"
+          action: "wake"
+          reason: "TU reactivated"
+
+  # deferred → rejected (Abandoning)
+  - from_state: deferred
+    to_state: rejected
+    intent: "tu.reject"
+    authorization:
+      allowed_senders: ["SR"]
+    preconditions:
+      state_requirements:
+        - key: "payload.rejection_reason"
+          condition: "!= null"
+          error_message: "Rejection requires reason"
+    effects:
+      state_updates:
+        - key: "hot_sot.current_tu.status"
+          value: "rejected"
+          operation: "set"
+        - key: "hot_sot.current_tu.rejection_reason"
+          value: "{{payload.rejection_reason}}"
+          operation: "set"
+        - key: "hot_sot.current_tu.closed"
+          value: "{{current_timestamp}}"
+          operation: "set"
+
+error_handling:
+  on_precondition_failure: "block"
+  on_effect_failure: "rollback"
+  error_intent: "tu.error"
+  rollback_strategy: "full"
+
+validation:
+  verify_state_consistency: true
+  verify_artifact_integrity: true
+  required_fields:
+    - "id"
+    - "owner_a"
+    - "loop"

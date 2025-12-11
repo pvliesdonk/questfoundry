@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/glossary_slice.schema.json",
+  "title": "Glossary Slice",
+  "description": "Concise list of key terms with brief definitions, used for translator briefings and PN phrasing alignment. Player-safe only.",
+  "type": "object",
+  "properties": {
+    "project_name": {
+      "type": "string",
+      "description": "Project or act name",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "description": "Coverage description (e.g., 'Core terms for lighthouse investigation')",
+      "minLength": 10
+    },
+    "author": {
+      "type": "string",
+      "const": "codex_curator",
+      "description": "Fixed role: Codex Curator"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Last edit date (YYYY-MM-DD)"
+    },
+    "term_count": {
+      "type": "integer",
+      "description": "Number of terms in this glossary",
+      "minimum": 1
+    },
+    "languages": {
+      "type": "array",
+      "description": "Primary language plus translations (e.g., ['Dutch', 'English'])",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "terms": {
+      "type": "array",
+      "description": "List of glossary term entries",
+      "items": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "description": "Canonical term name",
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "enum": ["character", "location", "organization", "concept", "item"],
+            "description": "Term category"
+          },
+          "definition": {
+            "type": "string",
+            "description": "1-2 sentence player-safe definition",
+            "minLength": 10
+          },
+          "pronunciation": {
+            "type": "string",
+            "description": "Phonetic guide if non-obvious (IPA format recommended)"
+          },
+          "style_register": {
+            "type": "string",
+            "enum": ["formal", "casual", "neutral", "technical", "proper_noun"],
+            "description": "Language register (formality level) for this term"
+          },
+          "translation_notes": {
+            "type": "string",
+            "description": "Localization guidance for translators"
+          }
+        },
+        "required": ["term", "category", "definition", "style_register"]
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "project_name",
+    "scope",
+    "author",
+    "tu",
+    "edited",
+    "term_count",
+    "languages",
+    "terms"
+  ]
+}

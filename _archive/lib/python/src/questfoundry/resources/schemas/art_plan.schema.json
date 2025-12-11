@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/art_plan.schema.json",
+  "title": "Art Plan",
+  "description": "Generated from 02-dictionary/artifacts/art_plan_ENRICHED.md. Specifies an illustration slot so an Illustrator can execute without guessing while keeping player surfaces safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slot identifier or short name.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this plan was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the plan; fixed to Art Director.",
+      "enum": ["Art Director"]
+    },
+    "slice": {
+      "type": "string",
+      "description": "Short player-safe scope label such as \"Act I - Foreman Gate (3 sections)\".",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "status": {
+      "type": "string",
+      "description": "Current art status for the slot.",
+      "enum": ["planned", "rendering", "done", "deferred"]
+    },
+    "purpose": {
+      "type": "string",
+      "description": "Primary art purpose for this slot.",
+      "enum": ["clarify", "recall", "mood", "signpost"]
+    },
+    "purpose_rationale": {
+      "type": "string",
+      "description": "1-2 lines explaining how the image helps the reader here.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "subject": {
+      "type": "string",
+      "description": "Concrete nouns describing what the image shows.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "focal_affordance": {
+      "type": "string",
+      "description": "What must remain readable at target sizes.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "composition_intent": {
+      "type": "string",
+      "description": "Framing, angle, and hierarchy guidance expressed without technique terms.",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "framing": {
+      "type": "string",
+      "description": "Optional framing guidance.",
+      "enum": ["tight", "medium", "wide"]
+    },
+    "angle": {
+      "type": "string",
+      "description": "Optional camera angle guidance.",
+      "enum": ["eye", "low", "high", "oblique"]
+    },
+    "distance": {
+      "type": "string",
+      "description": "Optional distance guidance.",
+      "enum": ["close", "room", "establishing"]
+    },
+    "hierarchy": {
+      "type": "string",
+      "description": "Optional eye movement order or emphasis notes.",
+      "maxLength": 240
+    },
+    "spatial_cues": {
+      "type": "string",
+      "description": "Optional description of lines, occlusion, or overlap used to guide reading.",
+      "maxLength": 240
+    },
+    "legibility_at_size": {
+      "type": "string",
+      "description": "Target sizes and what must remain readable at thumbnail/print.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "iconography_motifs": {
+      "type": "string",
+      "description": "Motifs to include and avoid, aligned with canon and style patterns.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "light_palette_texture": {
+      "type": "string",
+      "description": "Descriptive notes on light, palette, and texture without technique jargon.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "environment_props": {
+      "type": "string",
+      "description": "Player-safe location tells and props that communicate context.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "characters_poses": {
+      "type": "string",
+      "description": "Roles/titles visible and the readable gestures or poses they hold.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "inclusion_criteria": {
+      "type": "string",
+      "description": "Conditions for when to include and when to exclude this slot.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "caption": {
+      "type": "string",
+      "description": "Player-safe caption (one line, no technique).",
+      "minLength": 5,
+      "maxLength": 200
+    },
+    "alt_text": {
+      "type": "string",
+      "description": "Alt text describing subject, relation, and location in one sentence.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "variants": {
+      "type": "array",
+      "description": "Optional variant or crop descriptions.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      }
+    },
+    "selection_rule": {
+      "type": "string",
+      "description": "Optional rule for when to choose a given variant.",
+      "maxLength": 240
+    },
+    "anchor_targets": {
+      "type": "array",
+      "description": "Manuscript paths anchored by this slot.",
+      "items": {
+        "type": "string",
+        "pattern": "^/[A-Za-z0-9._\\-/]+#[A-Za-z0-9._\\-]+$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "placement": {
+      "type": "string",
+      "description": "Timing for placement relative to prose or choices.",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "anchor_stability_risks": {
+      "type": "string",
+      "description": "Optional coordination notes on anchor stability risks.",
+      "maxLength": 240
+    },
+    "accessibility": {
+      "type": "string",
+      "description": "Accessibility risks and mitigations for readability.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "localization": {
+      "type": "string",
+      "description": "Optional localization notes ensuring captions and terms remain portable.",
+      "maxLength": 400
+    },
+    "determinism": {
+      "type": "string",
+      "description": "Off-surface reproduction expectations including any constraints.",
+      "minLength": 20,
+      "maxLength": 400
+    },
+    "repro_expectation": {
+      "type": "string",
+      "description": "Whether additional producer logging is expected.",
+      "enum": ["none", "log-only"]
+    },
+    "producer_log_fields": {
+      "type": "string",
+      "description": "Optional list of producer log fields for off-surface technique notes.",
+      "maxLength": 400
+    },
+    "handoffs": {
+      "type": "array",
+      "description": "Hand-off notes enumerating who receives which deliverables.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 5
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist confirming readiness before changing status to rendering.",
+      "items": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 200
+      },
+      "minItems": 8,
+      "maxItems": 8
+    }
+  },
+  "required": [
+    "title",
+    "tu",
+    "edited",
+    "owner",
+    "slice",
+    "status",
+    "purpose",
+    "purpose_rationale",
+    "subject",
+    "focal_affordance",
+    "composition_intent",
+    "legibility_at_size",
+    "iconography_motifs",
+    "light_palette_texture",
+    "environment_props",
+    "characters_poses",
+    "inclusion_criteria",
+    "caption",
+    "alt_text",
+    "anchor_targets",
+    "placement",
+    "accessibility",
+    "determinism",
+    "repro_expectation",
+    "handoffs",
+    "done_checklist"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

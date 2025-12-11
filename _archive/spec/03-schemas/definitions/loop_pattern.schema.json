@@ -1,0 +1,758 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.dev/schemas/definitions/loop_pattern.schema.json",
+  "title": "Loop Pattern",
+  "description": "Executable graph topology and protocol flow for a QuestFoundry loop. Defines the LangGraph StateGraph structure, message sequences, quality gates, and execution constraints that implement a Layer 0 production loop.",
+  "type": "object",
+  "required": ["id", "metadata", "topology", "protocol_flow", "gates", "traceability"],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z_]+$",
+      "description": "Loop identifier matching filename (e.g., 'hook_harvest', 'story_spark', 'lore_deepening'). Must match YAML filename without extension."
+    },
+
+    "metadata": {
+      "type": "object",
+      "required": ["name", "type"],
+      "description": "Loop metadata from Layer 0 and Layer 2 dictionaries",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name from spec/02-dictionary/loop_names.md (e.g., 'Hook Harvest', 'Story Spark', 'Lore Deepening')"
+        },
+        "type": {
+          "enum": ["Discovery", "Refinement", "Assets", "Localization", "Export", "Full Cycle", "Reflection"],
+          "description": "Loop category from Layer 0 (README.md §2: The 12 Production Loops)"
+        },
+        "layer0_loop_ref": {
+          "type": "string",
+          "pattern": "^.*\\.md$",
+          "description": "Reference to Layer 0 loop guide with detailed workflow"
+        },
+        "playbook_ref": {
+          "type": "string",
+          "pattern": "^spec/00-north-star/PLAYBOOKS/.+\\.md$",
+          "description": "Optional reference to Layer 0 playbook (checkbox version of loop guide)"
+        },
+        "protocol_flow_ref": {
+          "type": "string",
+          "pattern": "^spec/04-protocol/FLOWS/.+\\.md$",
+          "description": "Reference to Layer 4 protocol flow documentation"
+        },
+        "timebox_minutes": {
+          "type": "number",
+          "description": "Expected duration in minutes from Layer 0 loop guide"
+        },
+        "schema_ref": {
+          "type": "string",
+          "description": "Reference to the JSON schema for validation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable loop description"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version of this loop pattern"
+        },
+        "created": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this loop pattern was created"
+        },
+        "updated": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this loop pattern was last updated"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author of this loop pattern"
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Tags for categorization and search"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about this loop pattern"
+        }
+      }
+    },
+
+    "topology": {
+      "type": "object",
+      "required": ["entry_node", "nodes", "edges"],
+      "description": "LangGraph StateGraph structure: nodes (role invocations) and edges (transitions)",
+      "properties": {
+        "entry_node": {
+          "type": "string",
+          "description": "Role ID to start execution (e.g., 'plotwright', 'showrunner'). Must match a node role_id."
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Nodes in the graph. Each node represents a role invocation.",
+          "items": {
+            "type": "object",
+            "required": ["role_id"],
+            "properties": {
+              "role_id": {
+                "type": "string",
+                "description": "Role identifier (matches role profile filename). Multiple nodes can reference the same role."
+              },
+              "node_id": {
+                "type": "string",
+                "description": "Optional unique node ID if multiple nodes use same role (e.g., 'plotwright_initial', 'plotwright_rework'). Defaults to role_id if not specified."
+              },
+              "role_profile_ref": {
+                "type": "string",
+                "pattern": "^spec/05-definitions/roles/.+\\.yaml$",
+                "description": "Reference to role profile definition (optional if using default location)"
+              },
+              "override_config": {
+                "type": "object",
+                "description": "Loop-specific overrides to role profile (e.g., different temperature, additional tools)",
+                "properties": {
+                  "llm_config": {
+                    "type": "object",
+                    "description": "Override LLM config for this node"
+                  },
+                  "behavior": {
+                    "type": "object",
+                    "description": "Override behavior config (e.g., different prompt template)"
+                  },
+                  "tools": {
+                    "type": "array",
+                    "description": "Additional or replacement tools for this node"
+                  }
+                }
+              },
+              "description": {
+                "type": "string",
+                "description": "What this node does in this loop context"
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Edges between nodes. Defines graph traversal logic.",
+          "items": {
+            "type": "object",
+            "required": ["source", "target"],
+            "properties": {
+              "source": {
+                "type": "string",
+                "description": "Source node_id (or role_id if no node_id specified)"
+              },
+              "target": {
+                "type": "string",
+                "description": "Target node_id, or special values: 'END' (terminate successfully), 'ERROR' (terminate with error)"
+              },
+              "type": {
+                "enum": ["direct", "conditional"],
+                "default": "direct",
+                "description": "Edge type:\n- direct: Unconditional transition\n- conditional: Evaluated at runtime based on condition"
+              },
+              "condition": {
+                "type": "object",
+                "description": "Conditional routing logic (required if type='conditional')",
+                "required": ["evaluator"],
+                "properties": {
+                  "evaluator": {
+                    "enum": ["python_expression", "state_key_match", "artifact_field_match", "quality_bar_status"],
+                    "description": "How to evaluate the condition:\n- python_expression: Execute Python code against state\n- state_key_match: Check if state key equals value\n- artifact_field_match: Check artifact field value\n- quality_bar_status: Check quality bar result"
+                  },
+                  "expression": {
+                    "type": "string",
+                    "description": "Python expression or JSONPath for evaluation. Has access to 'state' variable."
+                  },
+                  "routes": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "Map of condition values to target nodes. Example: {'approved': 'END', 'rejected': 'plotwright_rework', 'deferred': 'ERROR'}"
+                  },
+                  "default_route": {
+                    "type": "string",
+                    "description": "Default target if no route matches (optional)"
+                  }
+                }
+              },
+              "protocol_intent": {
+                "type": "string",
+                "description": "Layer 4 protocol intent that triggers this edge (optional, for protocol flow tracking)"
+              },
+              "description": {
+                "type": "string",
+                "description": "Human-readable description of this edge/transition"
+              }
+            }
+          }
+        },
+        "exit_conditions": {
+          "type": "array",
+          "description": "Explicit exit conditions for the loop. Runtime checks these on every node completion.",
+          "items": {
+            "type": "object",
+            "required": ["name", "condition"],
+            "properties": {
+              "name": {
+                "enum": ["success", "failure", "deferred", "blocked"],
+                "description": "Exit type"
+              },
+              "condition": {
+                "type": "string",
+                "description": "Python expression evaluated against state. If true, loop exits with this status."
+              },
+              "final_state_requirements": {
+                "type": "object",
+                "description": "Expected state keys/values at this exit. Runtime validates before exit.",
+                "properties": {
+                  "artifacts_present": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "State keys that must exist (e.g., ['artifacts.hook_card', 'gates.current_gatecheck'])"
+                  },
+                  "tu_state": {
+                    "enum": ["hot-proposed", "stabilizing", "gatecheck", "cold-merged", "deferred", "rejected"],
+                    "description": "Required TU state at exit"
+                  },
+                  "bars_status": {
+                    "type": "object",
+                    "additionalProperties": {"enum": ["green", "yellow", "red"]},
+                    "description": "Required quality bar statuses (e.g., {'Integrity': 'green', 'Style': 'yellow'})"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "protocol_flow": {
+      "type": "object",
+      "description": "Layer 4 protocol message sequences that implement this loop. Maps protocol intents to graph edges.",
+      "properties": {
+        "flow_ref": {
+          "type": "string",
+          "pattern": "^spec/04-protocol/FLOWS/.+\\.md$",
+          "description": "Reference to Layer 4 flow documentation (e.g., 04-protocol/FLOWS/hook_harvest.md)"
+        },
+        "message_sequences": {
+          "type": "array",
+          "description": "Ordered sequence of protocol messages for this loop",
+          "items": {
+            "type": "object",
+            "required": ["step", "sender", "receiver", "intent"],
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Sequence number for ordering"
+              },
+              "sender": {
+                "type": "string",
+                "description": "Role abbreviation (e.g., 'SR', 'PW', 'GK')"
+              },
+              "receiver": {
+                "type": "string",
+                "description": "Role abbreviation or '*' for broadcast"
+              },
+              "intent": {
+                "type": "string",
+                "description": "Layer 4 intent from 04-protocol/INTENTS.md"
+              },
+              "payload_type": {
+                "type": "string",
+                "description": "Layer 3 schema name for payload (e.g., 'hook_card', 'tu_brief')"
+              },
+              "envelope_requirements": {
+                "type": "object",
+                "description": "Required envelope fields for this message",
+                "properties": {
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "hot_cold": {"enum": ["hot", "cold"]},
+                      "tu_required": {"type": "boolean"},
+                      "snapshot_required": {"type": "boolean"}
+                    }
+                  },
+                  "safety": {
+                    "type": "object",
+                    "properties": {
+                      "player_safe": {"type": "boolean"},
+                      "spoilers": {"enum": ["allowed", "forbidden"]}
+                    }
+                  },
+                  "refs_required": {
+                    "type": "boolean",
+                    "description": "Must refs field be populated?"
+                  }
+                }
+              },
+              "triggers_edge": {
+                "type": "string",
+                "description": "Which graph edge this message activates (source->target)"
+              },
+              "expected_reply": {
+                "type": "string",
+                "description": "Expected reply intent (e.g., 'ack', 'error', 'gate.decision')"
+              },
+              "description": {
+                "type": "string",
+                "description": "What this message accomplishes"
+              }
+            }
+          }
+        },
+        "correlation": {
+          "type": "object",
+          "description": "Message correlation configuration for this loop",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Use correlation IDs to group loop messages?"
+            },
+            "correlation_id_pattern": {
+              "type": "string",
+              "description": "Pattern for correlation ID generation (e.g., 'corr-{loop_id}-{date}')"
+            }
+          }
+        }
+      }
+    },
+
+    "gates": {
+      "type": "object",
+      "description": "Quality gates and validation checkpoints from Layer 0 QUALITY_BARS.md",
+      "properties": {
+        "gatecheck_required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Does this loop require formal Gatekeeper gatecheck before exit? True for loops that produce Cold content."
+        },
+        "quality_bars": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "Integrity",
+              "Reachability",
+              "Nonlinearity",
+              "Gateways",
+              "Style",
+              "Determinism",
+              "Presentation",
+              "Accessibility"
+            ]
+          },
+          "description": "Which of the 8 quality bars apply to this loop's output"
+        },
+        "gate_points": {
+          "type": "array",
+          "description": "Specific points in the loop where quality checks occur",
+          "items": {
+            "type": "object",
+            "required": ["node_id", "bars_checked"],
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "description": "Node after which gate check occurs"
+              },
+              "bars_checked": {
+                "type": "array",
+                "items": {"enum": ["Integrity", "Reachability", "Nonlinearity", "Gateways", "Style", "Determinism", "Presentation", "Accessibility"]},
+                "description": "Which bars are checked at this point"
+              },
+              "blocking": {
+                "type": "boolean",
+                "default": false,
+                "description": "Does failure block progression? True for formal gatechecks, false for pre-gates."
+              },
+              "mode": {
+                "enum": ["pre_gate", "gatecheck", "spot_check"],
+                "description": "Gate check mode (from role_profile.constraints.quality_gates.evaluation_mode)"
+              }
+            }
+          }
+        },
+        "pre_gate_requirements": {
+          "type": "object",
+          "description": "What must be true before gatecheck can run",
+          "properties": {
+            "artifacts_complete": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Artifact state keys that must exist and be valid"
+            },
+            "tu_state": {
+              "enum": ["stabilizing", "gatecheck"],
+              "description": "TU must be in this state"
+            }
+          }
+        }
+      }
+    },
+
+    "traceability": {
+      "type": "object",
+      "required": ["tu_lifecycle", "produces_cold"],
+      "description": "Layer 0 traceability requirements from TRACEABILITY.md and SOURCES_OF_TRUTH.md",
+      "properties": {
+        "tu_lifecycle": {
+          "type": "object",
+          "required": ["required"],
+          "description": "TU (Trace Unit) lifecycle requirements for this loop",
+          "properties": {
+            "required": {
+              "type": "boolean",
+              "description": "Does this loop require a TU to track changes? False only for read-only loops (e.g., Narration Dry-Run)."
+            },
+            "starts_in": {
+              "enum": ["hot-proposed", "stabilizing", "gatecheck"],
+              "description": "Which TU state must the loop start in? (from Layer 4 LIFECYCLES/tu.md)"
+            },
+            "must_reach": {
+              "enum": ["stabilizing", "gatecheck", "cold-merged", "deferred", "rejected"],
+              "description": "Which TU state must the loop reach before exit?"
+            },
+            "can_defer": {
+              "type": "boolean",
+              "default": true,
+              "description": "Can this loop defer the TU instead of completing it?"
+            },
+            "transitions": {
+              "type": "array",
+              "description": "Explicit TU state transitions this loop performs",
+              "items": {
+                "type": "object",
+                "required": ["from", "to", "trigger"],
+                "properties": {
+                  "from": {"type": "string"},
+                  "to": {"type": "string"},
+                  "trigger": {"type": "string", "description": "What causes this transition (node_id or condition)"}
+                }
+              }
+            }
+          }
+        },
+        "produces_cold": {
+          "type": "boolean",
+          "description": "Does this loop produce Cold Source of Truth content? If true, gatecheck is mandatory."
+        },
+        "snapshot_handling": {
+          "type": "object",
+          "description": "Cold snapshot handling for this loop",
+          "properties": {
+            "requires_snapshot_ref": {
+              "type": "boolean",
+              "default": false,
+              "description": "Must this loop reference an existing Cold snapshot?"
+            },
+            "creates_snapshot": {
+              "type": "boolean",
+              "default": false,
+              "description": "Does this loop create a new Cold snapshot? (True for merge operations)"
+            },
+            "snapshot_name_pattern": {
+              "type": "string",
+              "description": "Pattern for snapshot naming (e.g., 'Cold @ {date}')"
+            },
+            "snapshot_context_required": {
+              "type": "boolean",
+              "default": false,
+              "description": "Must snapshot context be present in state before loop starts?"
+            }
+          }
+        },
+        "artifact_lineage": {
+          "type": "object",
+          "description": "How artifacts track their lineage in this loop",
+          "properties": {
+            "tracks_upstream": {
+              "type": "boolean",
+              "default": true,
+              "description": "Do artifacts produced in this loop track upstream dependencies?"
+            },
+            "required_refs": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Required reference types (e.g., ['hook_id', 'tu_id', 'canon_pack_id'])"
+            }
+          }
+        }
+      }
+    },
+
+    "roles": {
+      "type": "object",
+      "description": "Role participation and dormancy management from Layer 0 ROLE_INDEX.md and Layer 1 interfaces/dormancy_signals.md",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Roles that MUST be active for this loop to run. Runtime fails if these roles are dormant."
+        },
+        "optional": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Roles that MAY participate if active, but loop can run without them."
+        },
+        "wake_dormant": {
+          "type": "array",
+          "description": "Dormant roles to wake for this loop, with conditions",
+          "items": {
+            "type": "object",
+            "required": ["role_id", "wake_condition"],
+            "properties": {
+              "role_id": {
+                "type": "string",
+                "description": "Role to wake (must have dormancy_policy='optional' in role profile)"
+              },
+              "wake_condition": {
+                "type": "string",
+                "description": "When to wake this role (e.g., 'loop_start', 'after_node:plotwright', 'if:state.needs_research')"
+              },
+              "sleep_condition": {
+                "type": "string",
+                "description": "When to return role to dormancy (e.g., 'loop_end', 'after_deliverable')"
+              },
+              "wake_message": {
+                "type": "string",
+                "description": "Human-readable reason for waking (sent via role.wake intent)"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "context": {
+      "type": "object",
+      "description": "State and context requirements for loop execution",
+      "properties": {
+        "hot_cold": {
+          "enum": ["hot", "cold", "both"],
+          "description": "Which Source of Truth this loop operates on:\n- hot: Works only in Hot SoT\n- cold: Works only in Cold SoT (rare, typically PN operations)\n- both: May access both (typically read Cold, write Hot)"
+        },
+        "required_artifacts": {
+          "type": "array",
+          "description": "Artifacts that must exist in state before loop starts",
+          "items": {
+            "type": "object",
+            "required": ["artifact_type", "state_key"],
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "description": "Layer 3 schema name"
+              },
+              "state_key": {
+                "type": "string",
+                "description": "StudioState key where artifact should exist"
+              },
+              "required": {
+                "type": "boolean",
+                "default": true,
+                "description": "Is this artifact mandatory? If true, runtime fails if missing."
+              },
+              "default_value": {
+                "description": "Default value to use if artifact missing (optional)"
+              }
+            }
+          }
+        },
+        "required_state_keys": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Non-artifact state keys that must exist (e.g., 'meta.project_id', 'meta.current_snapshot')"
+        },
+        "state_initialization": {
+          "type": "object",
+          "description": "How to initialize state if keys are missing",
+          "additionalProperties": true
+        }
+      }
+    },
+
+    "success_criteria": {
+      "type": "object",
+      "description": "What defines successful loop completion (from Layer 0 loop guides)",
+      "properties": {
+        "artifacts_produced": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Artifact state keys that must exist at success exit"
+        },
+        "bars_must_be_green": {
+          "type": "array",
+          "items": {"enum": ["Integrity", "Reachability", "Nonlinearity", "Gateways", "Style", "Determinism", "Presentation", "Accessibility"]},
+          "description": "Which quality bars must be green for success"
+        },
+        "tu_final_state": {
+          "enum": ["cold-merged", "stabilizing", "gatecheck", "deferred"],
+          "description": "Required TU state at successful exit"
+        },
+        "custom_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "expression"],
+            "properties": {
+              "name": {"type": "string"},
+              "expression": {"type": "string", "description": "Python expression against state"},
+              "error_message": {"type": "string"}
+            }
+          },
+          "description": "Custom success validation checks"
+        }
+      }
+    },
+
+    "execution": {
+      "type": "object",
+      "description": "Runtime execution parameters and error handling",
+      "properties": {
+        "max_iterations": {
+          "type": "integer",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum iterations for conditional loops (prevents infinite loops from gatekeeper rejection cycles)"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Loop timeout in seconds (optional)"
+        },
+        "checkpointing": {
+          "type": "object",
+          "description": "State checkpointing configuration for LangGraph persistence",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable LangGraph state persistence?"
+            },
+            "checkpoint_after_nodes": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Node IDs after which to checkpoint state (empty = checkpoint after every node)"
+            },
+            "checkpoint_backend": {
+              "enum": ["sqlite", "file", "memory"],
+              "default": "sqlite",
+              "description": "Persistence backend for checkpoints"
+            }
+          }
+        },
+        "error_handling": {
+          "type": "object",
+          "description": "How to handle errors during loop execution",
+          "properties": {
+            "on_validation_error": {
+              "enum": ["retry", "defer", "fail", "escalate_to_human"],
+              "default": "retry",
+              "description": "What to do when artifact validation fails"
+            },
+            "on_bar_failure": {
+              "enum": ["rework", "defer", "escalate", "fail"],
+              "default": "rework",
+              "description": "What to do when quality bar fails at gatecheck"
+            },
+            "on_protocol_error": {
+              "enum": ["retry", "fail", "continue"],
+              "default": "retry",
+              "description": "What to do when protocol message fails to send/receive"
+            },
+            "max_retries": {
+              "type": "integer",
+              "default": 2,
+              "minimum": 0,
+              "maximum": 5
+            },
+            "retry_backoff": {
+              "enum": ["none", "linear", "exponential"],
+              "default": "exponential",
+              "description": "Retry backoff strategy"
+            }
+          }
+        },
+        "human_interaction": {
+          "type": "object",
+          "description": "Human-in-the-loop configuration (from Layer 4 human.question/human.response intents)",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Allow human interaction during loop execution?"
+            },
+            "checkpoints": {
+              "type": "array",
+              "description": "Points where human input is requested",
+              "items": {
+                "type": "object",
+                "required": ["after_node", "question"],
+                "properties": {
+                  "after_node": {
+                    "type": "string",
+                    "description": "Node after which to ask question"
+                  },
+                  "question": {
+                    "type": "string",
+                    "description": "Question to ask human (Jinja2 template with access to state)"
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Predefined options for human to choose from"
+                  },
+                  "required": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Must human respond, or can loop continue without response?"
+                  },
+                  "timeout": {
+                    "type": "integer",
+                    "description": "Seconds to wait for human response before timeout"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "observability": {
+          "type": "object",
+          "description": "Logging and monitoring configuration",
+          "properties": {
+            "log_level": {
+              "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
+              "default": "INFO"
+            },
+            "trace_protocol_messages": {
+              "type": "boolean",
+              "default": true,
+              "description": "Log all protocol messages?"
+            },
+            "trace_state_changes": {
+              "type": "boolean",
+              "default": false,
+              "description": "Log state diffs after each node?"
+            },
+            "metrics": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Metrics to collect (e.g., 'node_duration', 'artifact_validation_failures')"
+            }
+          }
+        }
+      }
+    }
+  }
+}

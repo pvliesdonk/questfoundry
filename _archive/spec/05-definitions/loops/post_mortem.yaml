@@ -1,0 +1,120 @@
+# Loop Pattern: Post-Mortem
+# Compiled from: spec/00-north-star/LOOPS/post_mortem.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: post_mortem
+
+metadata:
+  name: "Post-Mortem"
+  type: "Reflection"
+  description: |
+    Retrospective analysis and process improvement. Conduct a structured retrospective after
+    completing a major milestone, release, or significant TU cluster to extract actionable
+    lessons and update best practices.
+
+topology:
+  entry_node: gather_data
+
+  nodes:
+    - role_id: showrunner
+      node_id: gather_data
+      description: "Collect metrics from completed TUs: gate pass rates, most common bar failures, rework cycles, time to merge, hook acceptance patterns."
+
+    - role_id: showrunner
+      node_id: frame_retrospective
+      description: "Set scope: milestone, date range, or incident. Emphasize blameless culture. Timebox session (60-90 minutes for major milestones)."
+
+    - role_id: showrunner
+      node_id: session
+      description: "Discuss four categories: What went well, What went poorly, Surprising discoveries, Improvements to try. All participating roles contribute."
+
+    - role_id: showrunner
+      node_id: identify_actions
+      description: "For each improvement area, create an action item: Description, Owner, Target date, Success Criteria, Priority."
+
+    - role_id: showrunner
+      node_id: update_practices
+      description: "Document new patterns or guidance in relevant layers. Add to role prompts, loop guides, and shared resources. Archive Post-Mortem Report."
+
+  edges:
+    - source: gather_data
+      target: frame_retrospective
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.data_gathered == true"
+    - source: frame_retrospective
+      target: session
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.frame_set == true"
+    - source: session
+      target: identify_actions
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.session_complete == true"
+    - source: identify_actions
+      target: update_practices
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.actions_identified == true"
+    - source: update_practices
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: false
+
+context:
+  required_artifacts:
+    - artifact_type: tu_brief
+      state_key: hot_sot.current_tu
+    - artifact_type: gatecheck_report
+      state_key: gates.gatecheck_report
+
+handoffs:
+  - target: next_production_cycle
+    condition: "action items and updated guidance ready"
+
+gates:
+  quality_bars: []
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/post_mortem.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Post-Mortem loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: all_roles_contribute
+      expression: "state.all_roles_contributed == true"
+      error_message: "All participating roles contribute to retrospective"
+    - name: action_items_complete
+      expression: "state.action_items_complete == true"
+      error_message: "Action items are specific, owned, dated, and have success criteria"
+    - name: best_practice_documented
+      expression: "state.best_practice_documented == true"
+      error_message: "At least one best practice or process improvement documented"
+    - name: report_archived
+      expression: "state.report_archived == true"
+      error_message: "Report archived and accessible for future reference"
+    - name: action_items_tracked
+      expression: "state.action_items_tracked == true"
+      error_message: "Action items tracked and reviewed in subsequent Post-Mortem"
+    - name: blameless_culture
+      expression: "state.blameless_culture_maintained == true"
+      error_message: "Blameless culture maintained (focus on systems, not individuals)"

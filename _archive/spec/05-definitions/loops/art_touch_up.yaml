@@ -1,0 +1,118 @@
+# Loop Pattern: Art Touch-up
+# Compiled from: spec/00-north-star/LOOPS/art_touch_up.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: art_touch_up
+
+metadata:
+  name: "Art Touch-up"
+  type: "Assets"
+  description: |
+    Plan and/or add illustrations. Decide what to illustrate and why, then optionally produce
+    illustrations that match style and narrative intent - without leaking spoilers. Supports
+    plan-only merges when the Illustrator is dormant.
+
+topology:
+  entry_node: select_justify
+
+  nodes:
+    - role_id: art_director
+      node_id: select_justify
+      description: "For each proposed image: Subject, Scene anchor, Purpose (clarify, foreshadow, mood), Spoiler risk. If risk > low, consider alternate subject or move to plan-only."
+
+    - role_id: art_director
+      node_id: write_plan
+      description: "Composition intent, Caption (player-safe), Constraints (aspect, palette/motif hooks), Accessibility notes (alt text guidance)."
+
+    - role_id: style_lead
+      node_id: style_alignment
+      description: "Tune plan to guardrails; add motif tie-ins; veto style drift."
+
+    - role_id: illustrator
+      node_id: render
+      description: "Produce candidate renders; refine to intent. Record determinism log (seed, prompt/version, model/build, aspect, steps/CFG, post-process chain). Provide alt text."
+
+    - role_id: gatekeeper
+      node_id: pre_gate
+      description: "Style: guardrails & tone. Presentation Safety: no spoilers; captions and alt text safe. Determinism: logs complete when promised."
+
+  edges:
+    - source: select_justify
+      target: write_plan
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.selections_justified == true"
+    - source: write_plan
+      target: style_alignment
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.plan_written == true"
+    - source: style_alignment
+      target: render
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.style_approved == true"
+    - source: render
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.renders_complete_or_skipped == true"
+    - source: pre_gate
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: section_draft
+      state_key: hot_sot.drafts
+
+handoffs:
+  - target: binding_run
+    condition: "art plans and renders ready for export views"
+
+gates:
+  quality_bars:
+    - Style
+    - Presentation
+    - Determinism
+    - Accessibility
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/art_touch_up.md"
+  message_sequences:
+    - step: 1
+      sender: "AD"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Art Touch-up loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: narrative_purpose
+      expression: "state.images_have_purpose == true"
+      error_message: "Each image has a clear narrative purpose (clarity, recall anchor, mood, or signposting)"
+    - name: spoiler_safe_captions
+      expression: "state.captions_safe == true"
+      error_message: "Captions are spoiler-safe, readable, and consistent with Style Lead"
+    - name: determinism_logs
+      expression: "state.determinism_logs_present == true"
+      error_message: "If renders included, determinism logs are sufficient and alt text is present"
+    - name: gate_passed
+      expression: "state.gate_passed == true"
+      error_message: "Gatekeeper reports green on Style/Presentation (and Determinism if applicable)"

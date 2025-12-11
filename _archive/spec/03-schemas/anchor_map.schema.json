@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/anchor_map.schema.json",
+  "title": "Anchor Map",
+  "description": "Link integrity report for manuscript anchors and crosslinks.",
+  "type": "object",
+  "properties": {
+    "snapshot_id": {"type": "string", "pattern": "^cold-\\d{4}-\\d{2}-\\d{2}$"},
+    "generated": {"type": "string", "format": "date-time"},
+    "producer": {"type": "string", "const": "book_binder"},
+    "total_anchors": {"type": "integer"},
+    "total_links": {"type": "integer"},
+    "status": {"type": "string", "enum": ["all_resolved", "warnings", "errors"]},
+    "section_anchors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "anchor": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "title": {"type": "string"},
+          "file": {"type": "string"},
+          "status": {"type": "string", "enum": ["present", "missing"]},
+          "incoming_links": {"type": "integer"},
+          "outgoing_links": {"type": "integer"}
+        }
+      }
+    },
+    "choice_links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "choice_text": {"type": "string"},
+          "target": {"type": "string", "pattern": "^anchor\\d{3,}$"},
+          "status": {"type": "string", "enum": ["resolved", "terminal", "broken"]}
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {"type": "string"},
+          "location": {"type": "string"},
+          "description": {"type": "string"},
+          "suggested_fix": {"type": "string"}
+        }
+      }
+    }
+  },
+  "required": ["snapshot_id", "generated", "producer", "status"]
+}

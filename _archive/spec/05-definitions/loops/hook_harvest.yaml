@@ -1,0 +1,119 @@
+# Loop Pattern: Hook Harvest
+# Compiled from: spec/00-north-star/LOOPS/hook_harvest.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: hook_harvest
+
+metadata:
+  name: "Hook Harvest"
+  type: "Discovery"
+  description: |
+    Collect, cluster, and triage hooks - sweeping up newly proposed hooks (narrative, scene,
+    factual, taxonomy), removing duplicates, and deciding what advances now, later, or never.
+
+topology:
+  entry_node: collect
+
+  nodes:
+    - role_id: showrunner
+      node_id: collect
+      description: "Sweep all new proposed hooks. Reject obvious dupes; link provenance rather than deleting."
+
+    - role_id: showrunner
+      node_id: cluster
+      description: "Group by theme (e.g., 'Wormhole economy', 'Kestrel arc'), then by type (narrative, scene, factual, taxonomy)."
+
+    - role_id: showrunner
+      node_id: annotate
+      description: "For each hook, add or confirm: triage tag (quick-win, needs-research, structure-impact, style-impact, deferred, reject), uncertainty (for factual), dependencies."
+
+    - role_id: showrunner
+      node_id: triage
+      description: "Mark each as accepted, deferred, or rejected (with 1-line reason). For accepted hooks, assign next loop (lore_deepening, story_spark, style_tune_up, codex_expansion)."
+
+    - role_id: showrunner
+      node_id: package
+      description: "Produce a Harvest Sheet summarizing decisions for hand-off to downstream loops."
+
+  edges:
+    - source: collect
+      target: cluster
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_collected == true"
+    - source: cluster
+      target: annotate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_clustered == true"
+    - source: annotate
+      target: triage
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.hooks_annotated == true"
+    - source: triage
+      target: package
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.decisions_made == true"
+    - source: package
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: false
+
+context:
+  required_artifacts:
+    - artifact_type: hook_card
+      state_key: hot_sot.hooks
+
+handoffs:
+  - target: lore_deepening
+    condition: "hook.type in ['narrative', 'scene', 'factual'] and requires_canon"
+  - target: story_spark
+    condition: "hook reshapes topology"
+  - target: codex_expansion
+    condition: "hook.type == 'taxonomy' or improves player-safe coverage"
+  - target: style_tune_up
+    condition: "primary effect is tone/voice/aesthetics"
+
+gates:
+  quality_bars:
+    - Integrity
+    - Presentation
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/hook_harvest.md"
+  message_sequences:
+    - step: 1
+      sender: "SR"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Hook Harvest loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: hooks_processed
+      expression: "state.hooks_deduped_and_tagged == true"
+      error_message: "Hooks are deduped, clustered, and tagged; uncertainty visible"
+    - name: routing_clear
+      expression: "state.routing_clear == true"
+      error_message: "Clear next loop and owner for each accepted hook"
+    - name: activation_list
+      expression: "state.activation_list_ready == true"
+      error_message: "Showrunner has a short activation list (which dormant roles to wake)"
+    - name: risk_snapshot
+      expression: "state.risk_snapshot_aligned == true"
+      error_message: "Gatekeeper has a risk snapshot aligned to Quality Bars"

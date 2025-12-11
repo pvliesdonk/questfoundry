@@ -1,0 +1,246 @@
+---
+playbook_id: lore_deepening
+playbook_name: Lore Deepening
+abbreviation: LD
+version: 2.0.0
+category: Discovery
+
+# Purpose and outcome
+purpose: "Transform accepted hooks into coherent, contradiction-aware canon (backstories, timelines, metaphysics, causal links). Keep spoilers in canon notes; publish player-safe surfaces later via Codex Expansion."
+
+outcome: "Canonical entries ready to merge to Cold (after gatecheck), with clear lineage to hooks/TUs, plus notes for Plotwright/Scene Smith when structure or prose should react."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "After Hook Harvest marks hooks as 'accepted'"
+    - "When Plotwright/Scene Smith need causal backfill to proceed"
+    - "When contradictions surface and must be adjudicated"
+  tu_format: "tu-lore-deepening-<topic>"
+  showrunner_decision: "Confirms whether Researcher is active (affects factual claims)"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:lore_weaver"
+      responsibilities: "Expand accepted hooks into canon; resolve collisions; label mysteries"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Scopes the deepening pass; resolves cross-domain contention"
+  consulted:
+    - role: "@adapter:researcher"
+      responsibilities: "Corroborate factual claims; supply citations; downgrade/upgrade uncertainty"
+    - role: "@adapter:plotwright"
+      responsibilities: "Sanity-check topology implications; request/accept constraints"
+    - role: "@adapter:scene_smith"
+      responsibilities: "Note prose adjustments suggested by new canon"
+    - role: "@adapter:style_lead"
+      responsibilities: "Ensure lore tone/voice fits setting register; flag motif opportunities"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Pre-reads for likely Integrity/Reachability/Gateway risk before gatecheck"
+  informed:
+    - role: "@adapter:codex_curator"
+      responsibilities: "Receives player-safe summaries for codex expansion"
+
+# Inputs
+inputs:
+  - "Accepted hooks (narrative/scene/factual/taxonomy) clustered by theme"
+  - "Current Cold canon/codex; relevant style guardrails"
+  - "Topology deltas from Story Spark (if any)"
+  - "Research memos or uncorroborated:<risk> flags"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:canonization_core"
+    - "@procedure:continuity_check"
+    - "@procedure:player_safe_summarization"
+    - "@procedure:artifact_validation"
+  supporting:
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+    - "@procedure:lore_translation"
+
+# Validation requirements
+validation_requirements:
+  critical: "All roles producing JSON artifacts in this loop MUST validate before handoff"
+  reference: "@snippet:validation_reminder"
+  hard_gate: "Invalid artifacts STOP the loop. No exceptions."
+
+# Procedure steps
+procedure_steps:
+  - step: 1
+    name: "Open Lore Deepening TU"
+    owner: "@adapter:showrunner"
+    action: "Open TU and broadcast to consulted roles"
+    protocol_intent: "tu.open"
+
+  - step: 2
+    name: "Frame the Canon Question"
+    owner: "@adapter:lore_weaver"
+    action: "For each theme/cluster: write a 1-3 line canon question"
+    example: "What caused Kestrel's jaw scar, and who else was involved?"
+
+  - step: 3
+    name: "Draft Canon Answer"
+    owner: "@adapter:lore_weaver"
+    action: "Provide precise, spoiler-level answer"
+    contents:
+      - "Backstory, causal chain, timeline anchors"
+      - "Implicated entities/factions"
+      - "Constraints on technology/magic/metaphysics"
+    sensitivity_tags:
+      - spoiler-heavy
+      - player-safe-summary-possible
+
+  - step: 4
+    name: "Check Contradictions & Coupling"
+    owner: "@adapter:lore_weaver"
+    action: "Compare against Cold; identify clashes; propose reconciliations or mark deliberate mystery"
+
+  - step: 5
+    name: "Factual Pass"
+    owner: "@adapter:researcher"
+    condition: "If Researcher active"
+    action: "Validate real-world claims; attach citations"
+    dormant_fallback: "Keep uncorroborated:<risk> and note wording guidance for PN/Binder"
+
+  - step: 6
+    name: "Topology & Prose Notes"
+    owner: "@adapter:lore_weaver"
+    action: "List consequences for gateways, loops, hubs; suggest hooks for Story Spark if needed"
+    outputs:
+      - "Topology implications"
+      - "Scene callout notes (foreshadow/recall/describe)"
+
+  - step: 7
+    name: "Style Sweep"
+    owner: "@adapter:style_lead"
+    action: "Annotate motif ties and tone consistency; no rewrite, only guidance"
+
+  - step: 8
+    name: "Package Canon Entry"
+    owner: "@adapter:lore_weaver"
+    structure:
+      - Title
+      - Canon Answer
+      - Timeline anchors
+      - Entities affected
+      - Constraints
+      - Sensitivity tag
+      - Upstream hooks/TUs
+      - Downstream impacts
+      - Notes
+
+  - step: 9
+    name: "Pre-Gate Review"
+    owner: "@adapter:gatekeeper"
+    action: "Early read for risks"
+    checks:
+      - "Integrity (referential)"
+      - "Reachability (if topology touched)"
+      - "Gateways (consistency)"
+      - "Presentation (spoiler segregation)"
+    protocol_intent: "gate.submit"
+
+  - step: 10
+    name: "Submit for Merge"
+    owner: "@adapter:lore_weaver"
+    action: "After addressing pre-gate feedback, submit merge request"
+    protocol_intent: "merge.request"
+
+  - step: 11
+    name: "Handoff"
+    owner: "@adapter:lore_weaver"
+    action: "Send player-safe summaries to Codex Expansion; send topology/prose notes to Story Spark / Scene Smith"
+
+# Deliverables
+deliverables:
+  canon_pack:
+    format: "Human text, spoiler-level"
+    per_entry:
+      - Title
+      - Canon Answer
+      - Timeline
+      - Entities/Factions
+      - Constraints
+      - Sensitivity
+      - Upstream hooks/TUs
+      - Downstream impacts
+      - Notes
+
+  prose_notes:
+    recipient: "@adapter:scene_smith"
+    contents: "Foreshadow/callbacks/description updates"
+
+  topology_notes:
+    recipient: "@adapter:plotwright"
+    contents: "Gateway/loop implications"
+
+  factual_appendix:
+    contents: "Citations or uncorroborated:<risk> list"
+
+  pre_gate_note:
+    owner: "@adapter:gatekeeper"
+    contents: "Anticipated bar risks"
+
+# Success criteria
+success_criteria:
+  - "Each accepted hook is either canonized, deferred with reason, or rejected with rationale"
+  - "Canon resolves prior contradictions OR marks deliberate mystery with bounds"
+  - "Topology/prose impacts are enumerated and handed off"
+  - "Spoilers are separated from player-safe summaries"
+  - "Factual claims carry citations or explicit risk flags"
+
+# Failure modes & remedies
+failure_modes:
+  canon_sprawl:
+    symptom: "Too many moving parts in one entry"
+    remedy: "Split into smaller themed entries; stage merges"
+
+  hidden_spoiler_leak:
+    symptom: "Spoiler details in player-safe codex summary"
+    remedy: "Move detail back to canon notes; codex receives a summary"
+
+  topology_unacknowledged:
+    symptom: "Gateway/loop implications not addressed"
+    remedy: "Route a Story Spark mini to adjust gateways/loops"
+
+  research_dormant_high_risk:
+    symptom: "High-risk factual claims without corroboration"
+    remedy: "Keep neutral PN/Binder wording; schedule a research revisit TU"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - integrity      # No contradictions
+    - gateways       # World reasons
+  secondary:
+    - presentation   # Spoiler segregation
+
+# Handoffs
+handoffs:
+  to_codex_expansion:
+    content: "Player-safe summaries for publication"
+
+  to_scene_smith:
+    content: "Scene callbacks, description updates, foreshadowing notes"
+
+  to_plotwright:
+    content: "Topology/gateway implications requiring structural adjustment"
+
+  to_style_lead:
+    content: "Tone/voice guidance for motif consistency"
+
+  to_gatecheck:
+    content: "After deliverables complete, full gatecheck before merge to Cold"
+
+# Artifacts produced
+artifacts:
+  - canon_pack.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - canon_pack.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

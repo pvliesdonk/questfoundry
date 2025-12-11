@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/section.schema.json",
+  "title": "Section Draft",
+  "description": "Structural intermediate for Scene Smith containing prose, embedded choices, lead image, and decoupled gate logic.",
+  "type": "object",
+  "required": [
+    "section_id",
+    "title",
+    "author",
+    "tu_id",
+    "edited",
+    "status",
+    "lead_image",
+    "prose",
+    "choices"
+  ],
+  "properties": {
+    "section_id": {
+      "type": "string",
+      "description": "Section anchor identifier (e.g., 'anchor006')",
+      "pattern": "^anchor[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable section title (player-safe)",
+      "minLength": 3,
+      "maxLength": 100
+    },
+    "author": {
+      "type": "string",
+      "description": "Producing role",
+      "enum": ["Scene Smith"]
+    },
+    "tu_id": {
+      "type": "string",
+      "description": "Trace unit identifier",
+      "pattern": "^TU-[0-9]{4}-[0-9]{2}-[0-9]{2}-[A-Z]{2}[0-9]{2}$"
+    },
+    "edited": {
+      "type": "string",
+      "description": "Last edit date",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "description": "Draft status",
+      "enum": ["draft", "review", "approved", "cold"]
+    },
+    "brief_reference": {
+      "type": "string",
+      "description": "Reference to Plotwright's section brief (optional)",
+      "format": "uri-reference"
+    },
+    "lead_image": {
+      "type": "string",
+      "description": "Sensory anchor string for illustrator coordination (single sentence describing atmosphere, composition, or key visual)",
+      "minLength": 10,
+      "maxLength": 300
+    },
+    "prose": {
+      "type": "array",
+      "description": "Narrative beats structured as array of prose blocks (paragraphs). Each block = one beat or micro-scene.",
+      "items": {
+        "type": "string",
+        "minLength": 10,
+        "maxLength": 2000
+      },
+      "minItems": 1
+    },
+    "choices": {
+      "type": "array",
+      "description": "Player-facing options embedded in the section. Each choice has label + target + optional gates.",
+      "items": {
+        "type": "object",
+        "required": ["label", "target"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Player-facing choice text (must be contrastive and diegetic)",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "target": {
+            "type": "string",
+            "description": "Destination section anchor",
+            "pattern": "^anchor[0-9]{3,}(_[a-z_]+)?$"
+          },
+          "gates": {
+            "type": "array",
+            "description": "Optional array of gate IDs that affect this choice's availability",
+            "items": {
+              "type": "string",
+              "pattern": "^gate_[a-z_]+$"
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "gate_definitions": {
+      "type": "array",
+      "description": "Decoupled gate logic definitions (optional)",
+      "items": {
+        "type": "object",
+        "required": ["id", "condition", "qualification_path", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique gate identifier (referenced in choices)",
+            "pattern": "^gate_[a-z_]+$"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Diegetic check (what the world tests)",
+            "minLength": 10,
+            "maxLength": 300
+          },
+          "qualification_path": {
+            "type": "string",
+            "description": "How player can qualify (explicit paths)",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "type": {
+            "type": "string",
+            "description": "Gate category",
+            "enum": [
+              "item-based",
+              "reputation-based",
+              "knowledge-based",
+              "tool-based",
+              "state-based"
+            ]
+          },
+          "fairness_notes": {
+            "type": "string",
+            "description": "Optional fairness analysis (reachability, multiple paths)",
+            "maxLength": 300
+          }
+        },
+        "additionalProperties": false
+      },
+      "uniqueItems": true
+    },
+    "notes": {
+      "type": "object",
+      "description": "Internal context for downstream roles (optional)",
+      "properties": {
+        "for_gatekeeper": {
+          "type": "array",
+          "description": "Notes for Gatekeeper validation",
+          "items": { "type": "string" }
+        },
+        "for_illustrator": {
+          "type": "array",
+          "description": "Notes for Illustrator coordination",
+          "items": { "type": "string" }
+        },
+        "for_player_narrator": {
+          "type": "array",
+          "description": "Notes for Player-Narrator phrasing",
+          "items": { "type": "string" }
+        },
+        "for_binder": {
+          "type": "array",
+          "description": "Notes for Book Binder assembly",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

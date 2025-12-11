@@ -1,0 +1,640 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.local/schema/protocol",
+  "title": "QuestFoundry Protocol Schema",
+  "description": "JSON Schema for the QuestFoundry Protocol Definition (protocol.yaml). Validates the complete protocol structure including envelope, roles, intents, state machines, and validation rules.",
+  "type": "object",
+  "required": [
+    "version",
+    "protocol_name",
+    "envelope",
+    "roles",
+    "loops",
+    "intents",
+    "state_machines",
+    "error_codes",
+    "routing_matrix",
+    "validation",
+    "references"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the protocol",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0"]
+    },
+    "protocol_name": {
+      "type": "string",
+      "description": "Machine-readable protocol identifier",
+      "pattern": "^[a-z0-9\\-]+$",
+      "examples": ["qf-protocol"]
+    },
+    "envelope": {
+      "$ref": "#/$defs/envelope_definition"
+    },
+    "roles": {
+      "type": "object",
+      "description": "Role definitions with abbreviations as keys",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/role_definition"
+      },
+      "examples": [
+        {
+          "SR": {
+            "name": "Showrunner",
+            "activity": "always_active",
+            "primary_artifacts": ["TU Briefs", "ADRs"]
+          }
+        }
+      ]
+    },
+    "loops": {
+      "type": "array",
+      "description": "Production loop definitions",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/loop_definition"
+      }
+    },
+    "intents": {
+      "type": "object",
+      "description": "Intent definitions mapping intent IDs to specifications",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/intent_definition"
+      }
+    },
+    "state_machines": {
+      "type": "object",
+      "description": "State machine definitions for lifecycle management",
+      "additionalProperties": {
+        "$ref": "#/$defs/state_machine_definition"
+      },
+      "examples": [
+        {
+          "tu": {
+            "description": "Trace Unit lifecycle",
+            "states": {},
+            "transitions": []
+          }
+        }
+      ]
+    },
+    "error_codes": {
+      "type": "object",
+      "description": "Error taxonomy with error codes as keys",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/error_code_definition"
+      }
+    },
+    "routing_matrix": {
+      "type": "object",
+      "description": "Intent to role routing matrix defining allowed sender/receiver pairs",
+      "properties": {
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/routing_rule"
+      }
+    },
+    "validation": {
+      "type": "object",
+      "description": "Validation rules and enforcement strategies",
+      "additionalProperties": true,
+      "properties": {
+        "two_pass_validation": {
+          "type": "object",
+          "description": "Two-pass envelope and payload validation",
+          "required": ["description", "pass_1", "pass_2"],
+          "properties": {
+            "description": { "type": "string" },
+            "pass_1": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "validates": { "type": "string" },
+                "checks": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "required": ["name", "validates", "checks"]
+            },
+            "pass_2": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "validates": { "type": "string" },
+                "checks": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "skip_if": { "type": "string" }
+              },
+              "required": ["name", "validates", "checks"]
+            }
+          }
+        },
+        "pn_safety_validation": {
+          "type": "object",
+          "description": "PN safety invariant enforcement rules",
+          "required": ["description", "enforcement_points", "violation_response"],
+          "properties": {
+            "description": { "type": "string" },
+            "enforcement_points": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            },
+            "violation_response": {
+              "type": "object",
+              "properties": {
+                "intent": { "type": "string" },
+                "code": { "type": "string" },
+                "rule": { "type": "string" },
+                "reference": { "type": "string" }
+              },
+              "required": ["intent", "code"]
+            }
+          }
+        },
+        "traceability_rules": {
+          "type": "object",
+          "description": "Traceability and linkage requirements",
+          "properties": {
+            "cold_merge_requirements": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "tu_linkage": {
+              "type": "object",
+              "properties": {
+                "description": { "type": "string" },
+                "applies_to": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "quality_bars": {
+      "type": "array",
+      "description": "Quality assessment criteria for gatecheck decisions",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Quality bar name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Quality bar assessment criteria"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "references": {
+      "type": "object",
+      "description": "Cross-references to specification documents organized by layer",
+      "properties": {
+        "layer_0": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "layer_1": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "layer_2": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "layer_3": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "layer_4": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "envelope_definition": {
+      "type": "object",
+      "description": "Message envelope structure and safety rules",
+      "required": ["version", "schema_ref", "required_fields", "pn_safety_rule"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Envelope schema version",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "schema_ref": {
+          "type": "string",
+          "description": "Reference path to envelope JSON schema"
+        },
+        "required_fields": {
+          "type": "array",
+          "description": "List of mandatory envelope fields",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["protocol", "id", "time", "sender", "receiver", "intent", "context", "safety", "payload"]
+          }
+        },
+        "pn_safety_rule": {
+          "type": "object",
+          "description": "Player-Narrator safety invariant (non-negotiable)",
+          "required": ["description", "conditions", "violation_error_code", "violation_rule_ref"],
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "conditions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "oneOf": [
+                      { "type": "string" },
+                      { "type": "boolean" }
+                    ]
+                  },
+                  "required": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["field"]
+              }
+            },
+            "violation_error_code": {
+              "type": "string"
+            },
+            "violation_rule_ref": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "role_definition": {
+      "type": "object",
+      "description": "Role definition with activity level and artifacts",
+      "required": ["name", "activity", "primary_artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the role",
+          "minLength": 1
+        },
+        "activity": {
+          "type": "string",
+          "description": "Activity level of the role",
+          "enum": ["always_active", "active", "optional_dormant"]
+        },
+        "primary_artifacts": {
+          "type": "array",
+          "description": "Primary artifacts produced by this role",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "special_constraints": {
+          "type": "array",
+          "description": "Special constraints or restrictions for this role",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "loop_definition": {
+      "type": "object",
+      "description": "Production loop definition",
+      "required": ["display_name", "file_name", "abbreviation", "category"],
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable loop name",
+          "minLength": 1
+        },
+        "file_name": {
+          "type": "string",
+          "description": "Reference file name",
+          "pattern": "^[a-z0-9\\-]+\\.md$"
+        },
+        "abbreviation": {
+          "type": "string",
+          "description": "Loop abbreviation",
+          "pattern": "^[A-Z]{1,3}$"
+        },
+        "category": {
+          "type": "string",
+          "description": "Loop category",
+          "enum": ["Discovery", "Refinement", "Asset", "Export"]
+        }
+      }
+    },
+    "intent_definition": {
+      "type": "object",
+      "description": "Intent specification with routing and context requirements",
+      "required": ["description", "domain", "payload_type", "allowed_senders", "allowed_receivers"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Intent description",
+          "minLength": 1
+        },
+        "domain": {
+          "type": "string",
+          "description": "Domain classification",
+          "enum": ["general", "hook", "tu", "gate", "merge", "view", "pn", "canon", "human", "role"]
+        },
+        "payload_type": {
+          "type": "string",
+          "description": "Expected payload type",
+          "minLength": 1
+        },
+        "payload_schema": {
+          "type": "string",
+          "description": "Reference path to payload JSON schema"
+        },
+        "allowed_senders": {
+          "type": "array",
+          "description": "Roles authorized to send this intent",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowed_receivers": {
+          "type": "array",
+          "description": "Roles authorized to receive this intent",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "requires_reply_to": {
+          "type": "boolean",
+          "description": "Whether this intent requires a reply_to field"
+        },
+        "context_requirements": {
+          "$ref": "#/$defs/context_requirements"
+        },
+        "safety_requirements": {
+          "$ref": "#/$defs/safety_requirements"
+        },
+        "payload_structure": {
+          "type": "object",
+          "description": "Inline payload field specifications",
+          "additionalProperties": {
+            "$ref": "#/$defs/payload_field"
+          }
+        }
+      }
+    },
+    "context_requirements": {
+      "type": "object",
+      "description": "Context requirements for an intent",
+      "additionalProperties": false,
+      "properties": {
+        "hot_cold": {
+          "type": "string",
+          "enum": ["hot", "cold"],
+          "description": "Hot/Cold context requirement"
+        },
+        "tu_required": {
+          "type": "boolean",
+          "description": "Whether a TU context is required"
+        },
+        "snapshot_required": {
+          "type": "boolean",
+          "description": "Whether a snapshot context is required"
+        }
+      }
+    },
+    "safety_requirements": {
+      "type": "object",
+      "description": "Safety requirements for an intent",
+      "additionalProperties": false,
+      "properties": {
+        "player_safe": {
+          "type": "boolean",
+          "description": "Whether content must be player-safe"
+        },
+        "spoilers": {
+          "type": "string",
+          "enum": ["forbidden", "allowed"],
+          "description": "Spoiler restrictions"
+        }
+      }
+    },
+    "payload_field": {
+      "type": "object",
+      "description": "Payload field specification",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Field type",
+          "enum": ["string", "enum", "object", "array", "boolean", "number"]
+        },
+        "values": {
+          "type": "array",
+          "description": "Enum values",
+          "items": { "type": "string" }
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this field is required"
+        },
+        "min_length": {
+          "type": "integer",
+          "description": "Minimum string length"
+        },
+        "min_items": {
+          "type": "integer",
+          "description": "Minimum array items"
+        }
+      }
+    },
+    "state_machine_definition": {
+      "type": "object",
+      "description": "State machine lifecycle definition",
+      "required": ["description", "spec_ref", "states", "transitions"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "State machine description",
+          "minLength": 1
+        },
+        "spec_ref": {
+          "type": "string",
+          "description": "Reference to specification document"
+        },
+        "states": {
+          "type": "object",
+          "description": "State definitions",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/state_definition"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "description": "State transitions",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/transition_definition"
+          }
+        }
+      }
+    },
+    "state_definition": {
+      "type": "object",
+      "description": "State definition",
+      "required": ["description", "terminal"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "State description",
+          "minLength": 1
+        },
+        "terminal": {
+          "type": "boolean",
+          "description": "Whether this is a terminal state"
+        }
+      }
+    },
+    "transition_definition": {
+      "type": "object",
+      "description": "State transition definition",
+      "required": ["from", "to", "intent", "allowed_senders"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Source state",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "description": "Target state",
+          "minLength": 1
+        },
+        "intent": {
+          "type": "string",
+          "description": "Intent triggering this transition",
+          "minLength": 1
+        },
+        "allowed_senders": {
+          "type": "array",
+          "description": "Roles allowed to trigger this transition",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "payload_field": {
+          "type": "object",
+          "description": "Payload field requirements for transition",
+          "additionalProperties": true
+        },
+        "requires_context": {
+          "$ref": "#/$defs/context_requirements"
+        },
+        "requires_safety": {
+          "$ref": "#/$defs/safety_requirements"
+        },
+        "requires_bars": {
+          "type": "string",
+          "description": "Quality bar requirements",
+          "enum": ["all_green", "some_yellow_no_red", "one_or_more_red"]
+        }
+      }
+    },
+    "error_code_definition": {
+      "type": "object",
+      "description": "Error code specification",
+      "required": ["description", "category"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Error description",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "description": "Error category",
+          "enum": ["validation", "policy", "authorization", "reference", "state"]
+        },
+        "typical_causes": {
+          "type": "array",
+          "description": "Common causes of this error",
+          "items": {
+            "type": "string"
+          }
+        },
+        "remediation": {
+          "type": "string",
+          "description": "How to remediate this error"
+        }
+      }
+    },
+    "routing_rule": {
+      "type": "object",
+      "description": "Intent routing rule",
+      "required": ["senders", "receivers"],
+      "additionalProperties": false,
+      "properties": {
+        "senders": {
+          "type": "array",
+          "description": "Allowed sender roles",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "receivers": {
+          "type": "array",
+          "description": "Allowed receiver roles (use '*' for broadcast)",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

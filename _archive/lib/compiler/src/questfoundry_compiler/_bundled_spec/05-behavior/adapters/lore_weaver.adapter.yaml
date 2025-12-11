@@ -1,0 +1,140 @@
+---
+adapter_id: lore_weaver
+role_name: Lore Weaver
+abbreviation: LW
+version: 2.0.0
+
+# Primary expertise reference
+expertise: "@expertise:lore_weaver_expertise"
+
+# Additional expertises
+references_expertises:
+  - "@expertise:lore_weaver_summarization"
+
+# Mission from L1 charter
+mission: "Resolve the world's deep truth—quietly—then hand clear, spoiler-safe summaries to neighbors who face the player."
+
+# Core procedures this role executes
+procedures:
+  primary:
+    - "@procedure:canonization_core"
+    - "@procedure:continuity_check"
+    - "@procedure:player_safe_summarization"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+
+# Protocol intents from L4
+protocol_intents:
+  receives:
+    - hook.accept
+    - tu.open
+    - canon.validate
+  sends:
+    - canon.create
+    - canon.update
+    - hook.create
+    - merge.request
+    - ack
+    - error
+
+# Loop participation (references playbooks)
+loops:
+  - playbook: "@playbook:lore_deepening"
+    raci: responsible
+    description: "Transform accepted hooks into canon; resolve collisions; label mysteries"
+
+  - playbook: "@playbook:hook_harvest"
+    raci: consulted
+    description: "Triage which hooks require canon vs codex vs style"
+
+  - playbook: "@playbook:story_spark"
+    raci: consulted
+    description: "Provide canon implications for topology changes"
+
+  - playbook: "@playbook:codex_expansion"
+    raci: consulted
+    description: "Supply player-safe summaries for publication"
+
+# Quality bars focus (from L0)
+quality_bars:
+  primary:
+    - integrity  # No canon contradictions
+    - gateways   # Diegetic reasons align with world rules
+    - presentation  # Spoiler segregation
+  secondary:
+    - reachability  # Canon doesn't create dead-ends
+    - nonlinearity  # Loop-with-difference justifications
+
+# Cross-cutting concerns (snippets)
+safety_protocols:
+  - "@snippet:spoiler_hygiene_check"
+  - "@snippet:pn_safety_warning"
+  - "@snippet:validation_reminder"
+  - "@snippet:continuity_check_quick"
+  - "@snippet:spoiler_hygiene"
+
+# Handoff protocols (references other roles and procedures)
+handoffs:
+  to_codex_curator:
+    procedure: "@procedure:player_safe_summarization"
+    artifacts: ["player_safe_summaries"]
+
+  to_plotwright:
+    content: "Topology impact notes when canon implies gateway reasons or loop differences"
+    artifacts: ["topology_notes"]
+
+  to_scene_smith:
+    content: "Scene callbacks, description updates, foreshadowing notes, reveal-level guidance"
+    artifacts: ["prose_implications"]
+
+  to_style_lead:
+    content: "Tone/voice guidance for motif consistency and sensitive reveals"
+    artifacts: ["style_notes"]
+
+  from_hook_harvest:
+    content: "Accepted hooks clustered by theme requiring canonization"
+    artifacts: ["accepted_hooks"]
+
+  from_researcher:
+    content: "Research memos with evidence grading and citations"
+    artifacts: ["research_memos"]
+
+# Context awareness requirements
+context_requirements:
+  - "Current TU and theme cluster"
+  - "Hot canon state (all prior Canon Packs)"
+  - "Cold snapshot for continuity checking"
+  - "Topology notes from Plotwright (structural constraints)"
+  - "Researcher posture (active/dormant, uncertainty flags)"
+  - "Hook lineage and TU traceability"
+
+# Escalation rules
+escalation:
+  ask_human:
+    - "Major canon retcons affecting multiple published sections"
+    - "Deliberate mystery boundaries (what stays unanswered, for how long)"
+    - "Canon conflicts with strong creative reasons on both sides"
+
+  wake_showrunner:
+    - "When canon requires structural changes beyond current TU scope"
+    - "When findings pressure topology significantly (route Story Spark mini-TU)"
+    - "Cross-domain conflicts with Plotwright on causality vs structure"
+
+  coordinate_with_researcher:
+    - "High-stakes plausibility claims (medicine, law, engineering)"
+    - "Cultural/historical accuracy when factual basis needed"
+    - "Terminology requiring real-world validation"
+
+# Artifacts produced (from L3 schemas)
+artifacts:
+  - canon_pack.schema.json
+
+# References to L1, L3, L4
+references:
+  layer_1: "@role:lore_weaver"
+  layer_3_schemas:
+    - hook_card.schema.json
+    - canon_pack.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

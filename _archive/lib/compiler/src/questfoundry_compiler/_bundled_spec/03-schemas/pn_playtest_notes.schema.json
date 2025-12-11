@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/pn_playtest_notes.schema.json",
+  "title": "PN Playtest Notes",
+  "description": "Generated from 02-dictionary/artifacts/pn_playtest_notes_ENRICHED.md. Logs dry-run observations from Player Narrator sessions while keeping all examples player-safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "View name or slice covered by this playtest session.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "run": {
+      "type": "string",
+      "description": "Timestamp for the session in format YYYY-MM-DD HH:MM.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2} [0-2]\\d:[0-5]\\d$"
+    },
+    "pn": {
+      "type": "string",
+      "description": "Player Narrator name or agent identifier.",
+      "minLength": 2,
+      "maxLength": 120
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Cold snapshot reference in format \"Cold @ YYYY-MM-DD\".",
+      "pattern": "^Cold @ \\d{4}-\\d{2}-\\d{2}$"
+    },
+    "targets": {
+      "type": "array",
+      "description": "Export formats covered during the dry-run (e.g., PDF, HTML, EPUB).",
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 40
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "mode": {
+      "type": "string",
+      "description": "Playtest mode; fixed to dry-run (no improv).",
+      "enum": ["dry-run (no improv)"]
+    },
+    "pace": {
+      "type": "string",
+      "description": "Optional narration pace.",
+      "enum": ["normal", "slow", "fast"]
+    },
+    "log": {
+      "type": "array",
+      "description": "Player-safe issue log entries captured during the session.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "when": {
+            "type": "string",
+            "description": "Timestamp within the session in format MM:SS or HH:MM:SS.",
+            "pattern": "^(\\d{2}:\\d{2})(?::\\d{2})?$"
+          },
+          "location": {
+            "type": "string",
+            "description": "Path and anchor for the affected content.",
+            "minLength": 5,
+            "maxLength": 200
+          },
+          "tags": {
+            "type": "array",
+            "description": "Issue tags describing the friction observed.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "choice-ambiguity",
+                "gate-friction",
+                "nav-bug",
+                "tone-wobble",
+                "translation-glitch",
+                "accessibility",
+                "pace",
+                "caption-mismatch",
+                "label-collision",
+                "other"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity level of the issue.",
+            "enum": ["low", "med", "high"]
+          },
+          "snippet": {
+            "type": "string",
+            "description": "Player-safe snippet illustrating the issue.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "smallest_viable_fix": {
+            "type": "string",
+            "description": "Smallest change that resolves the issue.",
+            "minLength": 5,
+            "maxLength": 400
+          },
+          "owner": {
+            "type": "string",
+            "description": "Role or lane responsible for handling the fix.",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional additional notes for context.",
+            "maxLength": 400
+          }
+        },
+        "required": [
+          "when",
+          "location",
+          "tags",
+          "severity",
+          "snippet",
+          "smallest_viable_fix",
+          "owner"
+        ]
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["title", "run", "pn", "tu", "snapshot", "targets", "mode", "log"],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

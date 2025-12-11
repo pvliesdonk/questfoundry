@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/alt_text.schema.json",
+  "title": "Alt Text",
+  "description": "Illustrator's accessibility text for visual elements. Describes images for screen readers and non-visual contexts.",
+  "type": "object",
+  "properties": {
+    "image_id": {
+      "type": "string",
+      "description": "Unique identifier for the image",
+      "minLength": 1
+    },
+    "section_anchor": {
+      "type": "string",
+      "pattern": "^anchor[0-9]{3,}$",
+      "description": "Section anchor where this image appears"
+    },
+    "author": {
+      "type": "string",
+      "const": "illustrator",
+      "description": "Fixed role: Illustrator"
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID"
+    },
+    "edited": {
+      "type": "string",
+      "format": "date",
+      "description": "Last edit date (YYYY-MM-DD)"
+    },
+    "alt_text_short": {
+      "type": "string",
+      "description": "Concise alt text (1-2 sentences) for standard accessibility",
+      "minLength": 10,
+      "maxLength": 200
+    },
+    "alt_text_long": {
+      "type": "string",
+      "description": "Detailed description for extended accessibility contexts (optional)"
+    },
+    "image_purpose": {
+      "type": "string",
+      "enum": ["narrative", "decorative", "informational", "emotional"],
+      "description": "Purpose of the image in context"
+    },
+    "player_safe": {
+      "type": "boolean",
+      "description": "Whether alt text is spoiler-free"
+    },
+    "file_reference": {
+      "type": "string",
+      "description": "Path to the actual image file"
+    },
+    "accessibility_notes": {
+      "type": "string",
+      "description": "Additional accessibility considerations"
+    }
+  },
+  "required": [
+    "image_id",
+    "section_anchor",
+    "author",
+    "tu",
+    "edited",
+    "alt_text_short",
+    "image_purpose",
+    "player_safe"
+  ]
+}

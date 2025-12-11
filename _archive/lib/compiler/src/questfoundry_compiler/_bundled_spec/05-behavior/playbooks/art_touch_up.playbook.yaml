@@ -1,0 +1,109 @@
+---
+playbook_id: art_touch_up
+playbook_name: Art Touch-up
+abbreviation: AT
+version: 2.0.0
+category: Asset
+
+# Purpose and outcome
+purpose: "Decide what to illustrate and why, then (optionally) produce illustrations that match style and narrative intent—without leaking spoilers. This loop supports plan-only merges when the Illustrator is dormant."
+
+outcome: "An Art Plan (subjects, purpose, composition intent, captions, constraints) and, if active, art renders with determinism notes. Ready for Gatekeeper checks and merge to Cold (plans may merge as deferred; renders merge only on full pass)."
+
+# Activation criteria
+activation_criteria:
+  triggers:
+    - "New chapter/act needs anchoring visuals"
+    - "Scene gained iconic imagery (after Story Spark / Scene Smith pass)"
+    - "Style Lead requests motif reinforcement"
+    - "Replacement or upgrade of an existing illustration"
+    - "Export goal includes art plan/renders"
+  tu_format: "tu-art-<scope>"
+  showrunner_decision: "Confirm Art Director/Illustrator activation; they may be dormant individually"
+
+# RACI assignments
+raci:
+  responsible:
+    - role: "@adapter:art_director"
+      responsibilities: "Select scenes/subjects; state purpose; write composition intent and spoiler-safe captions; specify constraints"
+    - role: "@adapter:illustrator"
+      responsibilities: "If active: produce renders; iterate to intent; log determinism parameters if promised"
+  accountable:
+    - role: "@adapter:showrunner"
+      responsibilities: "Sets scope; decides plan-only vs render; sequences merge"
+  consulted:
+    - role: "@adapter:style_lead"
+      responsibilities: "Ensure visual language matches register/motifs; flag drift"
+    - role: "@adapter:gatekeeper"
+      responsibilities: "Check Presentation Safety, Style, and Determinism (when applicable)"
+  informed:
+    - role: "@adapter:codex_curator"
+      responsibilities: "Ensure captions stay player-safe"
+    - role: "@adapter:player_narrator"
+      responsibilities: "Receives art for reference during narration (surface wording stays safe)"
+
+# Inputs
+inputs:
+  - "Current Cold snapshot (canon, codex, style guardrails)"
+  - "Target sections/scenes (Hot drafts acceptable for planning)"
+  - "Lore Deepening notes (spoiler flags), Codex entries (player-safe wording)"
+  - "Accessibility and PN considerations (alt text patterns, diegetic references)"
+
+# Core procedures
+procedures:
+  primary:
+    - "@procedure:illustration_slot_selection"
+    - "@procedure:art_plan_authoring"
+    - "@procedure:visual_language_maintenance"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:art_determinism_planning"
+    - "@procedure:alt_text_creation"
+    - "@procedure:determinism_logging"
+
+# Merge options
+merge_options:
+  plan_only: "Plans merge as deferred without rendering"
+  full_pass: "Plans + renders merge together"
+
+# Success criteria
+success_criteria:
+  - "Art Plans specify purpose, composition, captions (player-safe), alt guidance"
+  - "If renders: match plan intent; determinism logged off-surface"
+  - "No spoilers in captions or alt text"
+  - "Visual language consistent with Style register/motifs"
+
+# Quality bars pressed
+quality_bars:
+  primary:
+    - presentation   # No internals/technique; spoiler-safe captions/alt
+    - accessibility  # Alt guidance concrete; captions don't contradict text
+  secondary:
+    - style          # Visual language consistent with register
+    - determinism    # Logs off-surface when promised
+
+# Handoffs
+handoffs:
+  to_illustrator:
+    content: "Art plans for rendering"
+    condition: "If Illustrator active"
+
+  to_gatekeeper:
+    content: "Plans and renders for Presentation and Accessibility checks"
+
+# Artifacts produced
+artifacts:
+  - art_plan.schema.json
+  - shotlist.schema.json
+  - art_render.schema.json
+  - determinism_log.schema.json
+
+# References
+references:
+  layer_3_schemas:
+    - art_plan.schema.json
+    - shotlist.schema.json
+    - art_render.schema.json
+    - determinism_log.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

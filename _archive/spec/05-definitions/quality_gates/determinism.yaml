@@ -1,0 +1,131 @@
+# Determinism Quality Gate
+# Ensures promised assets are reproducible from recorded parameters
+
+bar_name: Determinism
+
+bar_definition:
+  what_it_means: "Visual/audio assets can be reproduced from recorded parameters (seed, prompt version, model, aspect, chain). If determinism is not promised, this bar is N/A."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#6-determinism-when-promised"
+
+validation_checks:
+  - check_id: parameters_logged
+    check_type: determinism_verification
+    validator:
+      method: custom_function
+      target: "artifacts.*.asset_metadata"
+      expression: "check_reproducibility_params"
+      parameters:
+        required_fields: ["seed", "model_version", "prompt_version", "aspect_ratio"]
+        check_completeness: true
+    pass_condition: "missing_params.length == 0"
+    severity: critical
+    failure_message: "{{count}} assets missing reproducibility parameters: {{asset_ids}}"
+
+  - check_id: plan_only_marked
+    check_type: schema_validation
+    validator:
+      method: jsonpath_query
+      target: "artifacts"
+      # Updated to match Layer 2 standardized status field (e.g., art_plan.md uses status: "deferred")
+      expression: "$..[?(@.status == 'deferred')]"
+      parameters:
+        require_deferred_marker: true
+        require_constraints: true
+    pass_condition: "unmarked_plans.length == 0"
+    severity: warning
+    failure_message: "{{count}} plan-only assets lack deferred:<asset> marker: {{asset_ids}}"
+
+  - check_id: constraints_reviewed
+    check_type: determinism_verification
+    validator:
+      method: custom_function
+      target: "artifacts.*.visual_plans"
+      expression: "check_constraints_with_style_lead"
+      parameters:
+        check_style_alignment: true
+        require_review_timestamp: true
+    pass_condition: "unreviewed_constraints.length == 0"
+    severity: warning
+    failure_message: "{{count}} asset plans not reviewed with Style Lead: {{plan_ids}}"
+
+  - check_id: convergence_state_reflection
+    check_type: content_safety
+    validator:
+      method: llm_eval
+      target: "convergence_points"
+      expression: "Check convergence first paragraph reflects entering state and has conditional affordance"
+      parameters:
+        llm_prompt: "At this convergence point after branches, does the first paragraph acknowledge different entry states? Is at least one affordance conditioned on entry state?"
+    pass_condition: "violations.length == 0"
+    severity: critical
+    failure_message: "{{count}} convergence points lack state reflection: {{section_ids}}"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 2
+
+remediation:
+  common_failures:
+    - issue: "Missing seeds/model versions"
+      fix: "Regenerate with full parameter logging, or explicitly accept as non-deterministic"
+      check_ids: ["parameters_logged"]
+      examples:
+        - "Image generated but no seed recorded → regenerate with logging or mark non-deterministic"
+
+    - issue: "Plan contradicts style guardrails"
+      fix: "Adjust constraints with Style Lead before execution"
+      check_ids: ["constraints_reviewed"]
+      examples:
+        - "Visual plan calls for modern tech in historical setting → revise to period-appropriate"
+
+    - issue: "Plan-only asset not marked deferred"
+      fix: "Add deferred:<asset_type> marker and document constraints"
+      check_ids: ["plan_only_marked"]
+      examples:
+        - "Audio plan exists but not executed → mark as 'deferred:audio' with composition notes"
+
+    - issue: "Convergence ignores branch history"
+      fix: "Revise first paragraph to acknowledge entry path, add conditional element"
+      check_ids: ["convergence_state_reflection"]
+      examples:
+        - "Two paths merge but text identical → add 'Having [taken the shortcut/warned the guards]...'"
+
+  smallest_viable_fix_template: "Log parameters for {{asset_id}} or mark deferred with constraints"
+
+  owner_assignment:
+    IL: ["parameters_logged"]
+    AUP: ["parameters_logged"]
+    AD: ["plan_only_marked", "constraints_reviewed"]
+    AUD: ["plan_only_marked", "constraints_reviewed"]
+    PW: ["convergence_state_reflection"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: true  # Can defer execution if plan is reviewed and constraints documented
+
+applicable_to:
+  artifact_types:
+    - visual_plan
+    - audio_plan
+    - hook_card
+  loops:
+    - art_touch_up
+    - audio_pass
+  hot_cold: cold
+
+automation:
+  fully_automated: true
+  requires_llm: true  # For convergence state reflection
+  requires_human: false
+  evaluation_timeout: 45
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Determinism only applies when promised. Plan-only assets can defer execution with proper documentation."

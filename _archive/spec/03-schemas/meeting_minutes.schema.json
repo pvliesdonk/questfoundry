@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/meeting_minutes.schema.json",
+  "title": "Meeting Minutes",
+  "description": "Structured record of Showrunner ↔ Customer interface sessions. Captures directives, clarifying questions, and extracted action items.",
+  "type": "object",
+  "properties": {
+    "session_name": {
+      "type": "string",
+      "description": "Session name or identifier",
+      "minLength": 1
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Session date (YYYY-MM-DD)"
+    },
+    "attendees": {
+      "type": "array",
+      "description": "List of attendees (Customer name/role, Showrunner)",
+      "items": {"type": "string"},
+      "minItems": 2
+    },
+    "duration_minutes": {
+      "type": "integer",
+      "description": "Meeting duration in minutes",
+      "minimum": 1
+    },
+    "context": {
+      "type": "string",
+      "description": "Project phase, milestone, or trigger for the meeting",
+      "minLength": 5
+    },
+    "raw_summary": {
+      "type": "string",
+      "description": "1-3 paragraphs summarizing the discussion, Customer's tone, priorities, and key themes",
+      "minLength": 50
+    },
+    "clarifying_questions": {
+      "type": "array",
+      "description": "Questions the Showrunner asked to resolve ambiguity",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 10
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 10
+          }
+        },
+        "required": ["question", "answer"]
+      }
+    },
+    "directives": {
+      "type": "array",
+      "description": "Actionable studio directives extracted from Customer requests",
+      "items": {
+        "type": "object",
+        "properties": {
+          "directive": {
+            "type": "string",
+            "description": "Brief description of the directive",
+            "minLength": 5
+          },
+          "owner": {
+            "type": "array",
+            "description": "Roles responsible for this directive",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "loop": {
+            "type": "array",
+            "description": "Production loops involved",
+            "items": {"type": "string"},
+            "minItems": 1
+          },
+          "urgency": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Priority level"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Expected scope of work",
+            "minLength": 10
+          }
+        },
+        "required": ["directive", "owner", "loop", "urgency", "scope"]
+      },
+      "minItems": 1
+    },
+    "follow_up_actions": {
+      "type": "array",
+      "description": "Immediate next steps for the Showrunner",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "minLength": 5
+          },
+          "completed": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["action"]
+      }
+    },
+    "open_issues": {
+      "type": "array",
+      "description": "Unresolved questions or concerns",
+      "items": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "type": "string",
+            "description": "Description of the open issue",
+            "minLength": 10
+          },
+          "owner": {
+            "type": "string",
+            "description": "Person or role responsible for resolution"
+          },
+          "target_resolution": {
+            "type": "string",
+            "description": "Target date or milestone for resolution"
+          }
+        },
+        "required": ["issue", "owner"]
+      }
+    },
+    "tu": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$",
+      "description": "Trace unit ID for traceability"
+    }
+  },
+  "required": [
+    "session_name",
+    "date",
+    "attendees",
+    "duration_minutes",
+    "context",
+    "raw_summary",
+    "directives"
+  ]
+}

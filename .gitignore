@@ -2,6 +2,34 @@
 .DS_Store
 .idea/
 .vscode/
+nul
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
+# Debug/trace files
+*.log
+trace.log
+
+# Structured logging JSONL files (can be written anywhere via --log-dir)
+**/message-bus.jsonl
+**/prompts.jsonl
+**/state-sot.jsonl
+**/tool-calls.jsonl
+**/debug.jsonl
+**/loop-health.jsonl
+**/reasoning.jsonl
+**/agent-feedback.jsonl
+**/llm.jsonl
+**/tools.jsonl
+**/state.jsonl
+**/delegations.jsonl
+**/logs/
+
+# Project directories
+**/project_*/
 
 # Python
 *.pyc
@@ -31,3 +59,5 @@ py-repo/
 # build artifacts for compiler package
 lib/compiler/.spec_cache/
 lib/compiler/src/questfoundry_compiler/_bundled_spec/
+.claude/settings.local.json
+lib/runtime/logs/agent-feedback.jsonl

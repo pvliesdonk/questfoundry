@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/harvest_sheet.schema.json",
+  "title": "Harvest Sheet",
+  "description": "Summary of Hook Harvest decisions clustering hooks by acceptance, deferral, or rejection with next loop assignments and risk notes. Producer: Showrunner. Consumers: Lore Weaver, Plotwright, Style Lead, Codex Curator.",
+  "type": "object",
+  "properties": {
+    "tu_id": {
+      "type": "string",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2}\\d{2}$",
+      "description": "Trace Unit ID (format: TU-YYYY-MM-DD-<role><seq>)"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Harvest date (YYYY-MM-DD)"
+    },
+    "harvested_by": {
+      "type": "string",
+      "const": "Showrunner",
+      "description": "Role conducting harvest (always Showrunner)"
+    },
+    "hooks_triaged_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of hooks triaged in this session"
+    },
+    "accepted_hooks": {
+      "type": "array",
+      "description": "Hooks advancing to next loops, clustered by theme",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cluster_name": {
+            "type": "string",
+            "description": "Thematic cluster name (e.g., 'Maritime Guild Organizations')"
+          },
+          "hooks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hook_id": {
+                  "type": "string",
+                  "pattern": "^HK-\\d{8}-\\d{2}$",
+                  "description": "Hook card ID (format: HK-YYYYMMDD-NN)"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "One-line description of hook"
+                },
+                "next_loop": {
+                  "type": "string",
+                  "enum": [
+                    "lore_deepening",
+                    "story_spark",
+                    "codex_expansion",
+                    "style_tune_up",
+                    "research_pass",
+                    "scene_draft",
+                    "art_pass",
+                    "audio_pass"
+                  ],
+                  "description": "Next loop to process this hook"
+                },
+                "owner": {
+                  "type": "string",
+                  "description": "Role responsible for next loop"
+                },
+                "due_window": {
+                  "type": "string",
+                  "description": "Milestone or date range for completion"
+                },
+                "dependencies": {
+                  "type": "string",
+                  "description": "Upstream hooks, dormant role activations, etc."
+                },
+                "triage_tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "quick-win",
+                      "needs-research",
+                      "structure-impact",
+                      "style-impact",
+                      "deferred",
+                      "reject"
+                    ]
+                  },
+                  "description": "Triage tags for prioritization"
+                },
+                "uncertainty": {
+                  "type": "string",
+                  "enum": [
+                    "N/A",
+                    "uncorroborated_low",
+                    "uncorroborated_medium",
+                    "uncorroborated_high",
+                    "corroborated",
+                    "plausible",
+                    "disputed"
+                  ],
+                  "description": "Uncertainty level for factual hooks (research posture)"
+                }
+              },
+              "required": [
+                "hook_id",
+                "description",
+                "next_loop",
+                "owner",
+                "due_window"
+              ]
+            }
+          }
+        },
+        "required": ["cluster_name", "hooks"]
+      }
+    },
+    "deferred_hooks": {
+      "type": "array",
+      "description": "Hooks postponed with wake conditions",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hook_id": {
+            "type": "string",
+            "pattern": "^HK-\\d{8}-\\d{2}$",
+            "description": "Hook card ID"
+          },
+          "description": {
+            "type": "string",
+            "description": "One-line description"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why deferred (not needed | requires dormant role | depends on topology)"
+          },
+          "wake_condition": {
+            "type": "string",
+            "description": "When to revisit (milestone | external verification | role activation)"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Context for future consideration"
+          }
+        },
+        "required": ["hook_id", "description", "reason", "wake_condition"]
+      }
+    },
+    "rejected_hooks": {
+      "type": "array",
+      "description": "Hooks closed with rationale",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hook_id": {
+            "type": "string",
+            "pattern": "^HK-\\d{8}-\\d{2}$",
+            "description": "Hook card ID"
+          },
+          "description": {
+            "type": "string",
+            "description": "One-line description"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why rejected (duplicate | violates boundaries | unwinnable | out of scope)"
+          },
+          "surviving_duplicate": {
+            "type": "string",
+            "pattern": "^(HK-\\d{8}-\\d{2}|N/A)$",
+            "description": "Hook ID if this is a duplicate, or N/A"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Lessons learned or provenance"
+          }
+        },
+        "required": ["hook_id", "description", "reason"]
+      }
+    },
+    "risk_notes": {
+      "type": "array",
+      "description": "Potential blockers or concerns",
+      "items": {
+        "type": "object",
+        "properties": {
+          "risk": {
+            "type": "string",
+            "description": "Risk description"
+          },
+          "mitigation": {
+            "type": "string",
+            "description": "Action taken or planned"
+          },
+          "owner": {
+            "type": "string",
+            "description": "Role responsible for mitigation"
+          }
+        },
+        "required": ["risk", "mitigation", "owner"]
+      }
+    },
+    "activation_requests": {
+      "type": "array",
+      "description": "Dormant roles to wake",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Role name to activate"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why activation needed"
+          },
+          "for_hooks": {
+            "type": "string",
+            "description": "Which hooks/loops require this role"
+          }
+        },
+        "required": ["role", "reason", "for_hooks"]
+      }
+    },
+    "handoffs": {
+      "type": "object",
+      "description": "Summary of handoffs to receiving loops",
+      "properties": {
+        "to_lore_deepening": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Hook IDs for Lore Deepening"
+        },
+        "to_story_spark": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Hook IDs for Story Spark"
+        },
+        "to_codex_expansion": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Hook IDs for Codex Expansion"
+        },
+        "to_style_tune_up": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Hook IDs for Style Tune-up"
+        },
+        "to_research_pass": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Hook IDs for Research Pass"
+        }
+      }
+    }
+  },
+  "required": [
+    "tu_id",
+    "date",
+    "harvested_by",
+    "hooks_triaged_count",
+    "accepted_hooks",
+    "deferred_hooks",
+    "rejected_hooks"
+  ]
+}

@@ -1,0 +1,205 @@
+---
+adapter_id: codex_curator
+role_name: Codex Curator
+abbreviation: CC
+version: 2.0.0
+
+# Primary expertise reference
+expertise: "@expertise:codex_curator_publication"
+
+# Additional expertises
+references_expertises:
+  - "@expertise:codex_curator_terminology"
+
+# Mission from L1 charter
+mission: "Explain just enough of the world for players to act with confidence—clearly, concisely, and without spoilers."
+
+# Core procedures this role executes
+procedures:
+  primary:
+    - "@procedure:player_safe_summarization"
+    - "@procedure:crosslink_management"
+    - "@procedure:terminology_alignment"
+  supporting:
+    - "@procedure:artifact_validation"
+    - "@procedure:spoiler_hygiene"
+    - "@procedure:tu_lifecycle"
+
+# Protocol intents from L4
+protocol_intents:
+  receives:
+    - tu.open
+    - canon.summary
+    - hook.accept
+    - terminology.request
+  sends:
+    - codex.create
+    - codex.update
+    - glossary.slice
+    - hook.create
+    - merge.request
+    - ack
+
+# Loop participation
+loops:
+  - playbook: "@playbook:codex_expansion"
+    raci: responsible
+    description: "Author entries; maintain crosslinks; update glossary"
+
+  - playbook: "@playbook:hook_harvest"
+    raci: consulted
+    description: "Taxonomy & gap triage"
+
+  - playbook: "@playbook:translation_pass"
+    raci: consulted
+    description: "Terminology & register map coordination"
+
+  - playbook: "@playbook:binding_run"
+    raci: consulted
+    description: "Link integrity & front-matter notes"
+
+  - playbook: "@playbook:story_spark"
+    raci: consulted
+    description: "Identify taxonomy/clarity gaps created by new structure"
+
+  - playbook: "@playbook:lore_deepening"
+    raci: informed
+    description: "Receive player-safe summaries for publication"
+
+# Quality bars focus
+quality_bars:
+  primary:
+    - integrity      # Crosslinks resolve; no orphan entries; anchors stable
+    - presentation   # No spoilers; no internals; player-safe summaries only
+    - accessibility  # Descriptive headings; descriptive link text; simple sentences
+  secondary:
+    - style          # Terminology aligns with manuscript/PN/Style guidance
+    - gateways       # Entries support diegetic gate phrasing without exposing logic
+
+# Cross-cutting concerns
+safety_protocols:
+  - "@snippet:spoiler_hygiene_check"
+  - "@snippet:pn_safety_warning"
+  - "@snippet:validation_reminder"
+  - "@snippet:terminology"
+  - "@snippet:accessibility"
+  - "@snippet:no_internals"
+
+# Codex entry structure
+entry_structure:
+  standard_sections:
+    - overview       # What is this concept?
+    - usage          # How/when does it appear in the story?
+    - context        # Why does it matter?
+    - see_also       # Related entries
+    - notes          # Optional: variant terms, disambiguation
+    - lineage        # TU/canon traceability (player-safe)
+
+# Spoiler hygiene rules (CRITICAL)
+spoiler_hygiene_rules:
+  never_include:
+    - "Twist causality"
+    - "Secret allegiances"
+    - "Gate logic"
+    - "Codewords or internal checks"
+  summarize_neutrally:
+    - "Outcomes without revealing motivations"
+    - "Diegetic descriptions without meta explanations"
+  defer_if_spoiling:
+    - "If entry would spoil, defer until appropriate story moment"
+
+# Accessibility requirements
+accessibility_requirements:
+  descriptive_headings: "Clear section headings that describe content"
+  descriptive_links: "Use 'See Salvage Permits', not 'click here'"
+  simple_sentences: "Assume variable reading levels"
+  alt_text: "If figures appear, provide alt text"
+  no_jargon: "Define specialized terms on first use"
+
+# Terminology alignment
+terminology_coordination:
+  manuscript: "Align with Scene Smith's prose terms"
+  pn_phrasing: "Support Player Narrator's diegetic language"
+  captions: "Coordinate with Art/Audio descriptions"
+  translations: "Maintain bilingual glossary with Translator"
+
+# Handoff protocols
+handoffs:
+  from_lore_weaver:
+    content: "Receive player-safe summaries for entry content"
+    artifacts: ["player_safe_summaries"]
+    rule: "NEVER invent canon or add hidden causality"
+
+  from_style_lead:
+    content: "Receive register guidance and phrasing patterns"
+    artifacts: ["style_notes"]
+
+  from_translator:
+    content: "Coordinate terminology and bilingual glossary"
+    artifacts: ["translation_notes", "bilingual_glossary"]
+
+  to_gatekeeper:
+    content: "Submit entries for Integrity and Presentation checks"
+    artifacts: ["codex_entries"]
+
+  to_binder:
+    content: "Provide updated crosslink map and coverage notes"
+    artifacts: ["crosslink_map", "coverage_notes"]
+
+  to_player_narrator:
+    content: "Supply terminology clarifications for in-world phrasing"
+    artifacts: ["terminology_guide"]
+
+# Context awareness requirements
+context_requirements:
+  - "Current TU and theme/terms"
+  - "Hot: Lore summaries, Style addenda, Translator notes"
+  - "Cold: Manuscript sections, existing codex entries, prior crosslinks"
+  - "Coverage status (which terms documented, which gaps remain)"
+  - "Glossary state (approved terms, variants, register)"
+
+# Escalation rules
+escalation:
+  ask_human:
+    - "When entry timing affects spoiler reveals"
+    - "Terminology conflicts with strong reasons on multiple sides"
+    - "Coverage scope questions (how deep to go)"
+
+  wake_showrunner:
+    - "When gap requires Lore summary not yet provided (don't guess)"
+    - "When clarity depends on structure (request Plotwright anchor)"
+
+  coordinate_with_lore_weaver:
+    - "Request player-safe summaries; never fill with guesses"
+    - "Validate that summary is actually player-safe"
+
+  coordinate_with_style_lead:
+    - "Tone/register shifts in entries"
+    - "Recurring phrasing patterns"
+
+  coordinate_with_translator:
+    - "Target-language terminology risks"
+    - "Bilingual glossary updates"
+
+# Gap identification
+gap_identification:
+  triggers:
+    - "Missing anchors (concepts referenced but not explained)"
+    - "Ambiguous terms (multiple interpretations)"
+    - "Orphan references (links with no target)"
+  response: "Propose hooks for clarification or new entries"
+
+# Artifacts produced
+artifacts:
+  - codex_entry.schema.json
+  - glossary.schema.json
+  - crosslink_map.schema.json
+
+# References
+references:
+  layer_1: "@role:codex_curator"
+  layer_3_schemas:
+    - codex_entry.schema.json
+    - glossary.schema.json
+    - crosslink_map.schema.json
+  layer_4_protocol: "04-protocol/INTENTS.md"

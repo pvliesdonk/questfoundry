@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/hot_manifest.schema.json",
+  "title": "Hot Manifest",
+  "description": "Master index of all Hot discovery space artifacts. Tracks in-progress work, proposals, hooks, TUs, and Hot artifacts before they stabilize and merge to Cold. STORAGE-AGNOSTIC: This schema defines logical structure only; Layer 6 implementations may use JSON files, SQLite, Redis, or other backends as long as they validate against this schema. Real-time collaboration tools may prefer Redis/database backends for queryability and concurrent access.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference",
+      "const": "https://questfoundry.liesdonk.nl/schemas/hot_manifest.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "Manifest format version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "snapshot_at": {
+      "$ref": "#/$defs/iso8601_timestamp",
+      "description": "Snapshot timestamp (when this Hot state was captured)"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "description": "Unique snapshot identifier (format: hot-YYYYMMDD-HHMMSS or custom)",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "minLength": 3,
+      "maxLength": 64
+    },
+    "cold_reference": {
+      "type": "string",
+      "description": "Reference to Cold snapshot this Hot state is based on",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "trace_units": {
+      "type": "array",
+      "description": "All active TU Briefs (in-progress work orders)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "hooks": {
+      "type": "array",
+      "description": "All active Hook Cards (follow-ups and uncertainties)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "research_memos": {
+      "type": "array",
+      "description": "Research Memos (fact-checking, world details)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "canon_packs": {
+      "type": "array",
+      "description": "Canon Packs (stabilized lore bundles)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "style_addenda": {
+      "type": "array",
+      "description": "Style Addenda (style guidance updates)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "In-progress manuscript sections (Hot draft, not yet approved)",
+      "items": {
+        "$ref": "#/$defs/section_reference"
+      }
+    },
+    "art_plans": {
+      "type": "array",
+      "description": "Art Plans (illustration specifications, not yet approved)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "audio_plans": {
+      "type": "array",
+      "description": "Audio Plans (soundscape specifications, not yet approved)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "proposed_assets": {
+      "type": "array",
+      "description": "Proposed assets (images, audio) awaiting approval",
+      "items": {
+        "$ref": "#/$defs/asset_reference"
+      }
+    },
+    "gatecheck_reports": {
+      "type": "array",
+      "description": "Recent Gatecheck Reports (Quality Bar validations)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    },
+    "view_logs": {
+      "type": "array",
+      "description": "View Logs (build and export records)",
+      "items": {
+        "$ref": "#/$defs/artifact_reference"
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "version",
+    "snapshot_at",
+    "snapshot_id",
+    "cold_reference",
+    "trace_units",
+    "hooks"
+  ],
+  "$defs": {
+    "artifact_reference": {
+      "type": "object",
+      "description": "Reference to a Hot artifact with ID, path, and status",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Artifact ID (e.g., TU-2025-11-05-SS01, HK-20251105-01, RM-20251105-001)",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative path to artifact file (e.g., 'hot/tu_briefs/TU-2025-11-05-SS01.json')",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "status": {
+          "type": "string",
+          "description": "Current artifact status (e.g., proposed, in-progress, stabilizing, gatecheck, resolved)",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "artifact_type": {
+          "type": "string",
+          "description": "Schema type of artifact",
+          "enum": [
+            "tu_brief",
+            "hook_card",
+            "research_memo",
+            "canon_pack",
+            "style_addendum",
+            "art_plan",
+            "audio_plan",
+            "gatecheck_report",
+            "view_log",
+            "language_pack",
+            "shotlist",
+            "cuelist",
+            "edit_notes",
+            "pn_playtest_notes"
+          ]
+        }
+      },
+      "required": ["id", "path", "status", "artifact_type"]
+    },
+    "section_reference": {
+      "type": "object",
+      "description": "Reference to a Hot section (in-progress manuscript)",
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "description": "Section anchor (e.g., anchor001)",
+          "pattern": "^anchor\\d{3,}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Section title (may be provisional)",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "text_file": {
+          "type": "string",
+          "description": "Relative path to Hot section markdown",
+          "pattern": "^hot/sections/.+\\.md$"
+        },
+        "status": {
+          "type": "string",
+          "description": "Section status",
+          "enum": ["draft", "revising", "stabilizing", "gatecheck", "approved"]
+        },
+        "tu_id": {
+          "type": "string",
+          "description": "TU that created or last modified this section",
+          "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+        }
+      },
+      "required": ["anchor", "title", "text_file", "status"]
+    },
+    "asset_reference": {
+      "type": "object",
+      "description": "Reference to a proposed asset (not yet approved)",
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "description": "Associated section anchor or special anchor",
+          "pattern": "^(anchor\\d{3,}|cover|icon|logo)$"
+        },
+        "type": {
+          "type": "string",
+          "description": "Asset type",
+          "enum": ["plate", "cover", "icon", "logo", "ornament", "diagram", "audio"]
+        },
+        "filename": {
+          "type": "string",
+          "description": "Proposed filename (may change on approval)",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative path to Hot asset file",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "status": {
+          "type": "string",
+          "description": "Asset approval status",
+          "enum": ["proposed", "in-review", "approved", "rejected"]
+        },
+        "art_plan_id": {
+          "type": "string",
+          "description": "Associated Art Plan or Audio Plan ID (optional)",
+          "maxLength": 64
+        }
+      },
+      "required": ["anchor", "type", "filename", "path", "status"]
+    },
+    "iso8601_timestamp": {
+      "type": "string",
+      "description": "ISO 8601 timestamp with timezone (e.g., 2025-11-05T12:00:00Z)",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+    }
+  }
+}

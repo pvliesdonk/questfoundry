@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/art_plan.schema.json",
+  "title": "Art Plan",
+  "description": "Generated from 02-dictionary/artifacts/art_plan_ENRICHED.md. Specifies an illustration slot so an Illustrator can execute without guessing while keeping player surfaces safe.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slot identifier or short name.",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "tu": {
+      "type": "string",
+      "description": "Reference TU ID in format TU-YYYY-MM-DD-<role><seq>.",
+      "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"
+    },
+    "edited": {
+      "$ref": "#/$defs/date_string",
+      "description": "Date this plan was last edited."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Role maintaining the plan; fixed to Art Director.",
+      "enum": ["Art Director"]
+    },
+    "slice": {
+      "type": "string",
+      "description": "Short player-safe scope label such as \"Act I - Foreman Gate (3 sections)\".",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "status": {
+      "type": "string",
+      "description": "Current art status for the slot.",
+      "enum": ["planned", "rendering", "done", "deferred"]
+    },
+    "purpose": {
+      "type": "string",
+      "description": "Primary art purpose for this slot.",
+      "enum": ["clarify", "recall", "mood", "signpost"]
+    },
+    "purpose_rationale": {
+      "type": "string",
+      "description": "1-2 lines explaining how the image helps the reader here.",
+      "maxLength": 240
+    },
+    "subject": {
+      "type": "string",
+      "description": "Concrete nouns describing what the image shows.",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "focal_affordance": {
+      "type": "string",
+      "description": "What must remain readable at target sizes.",
+      "maxLength": 240
+    },
+    "composition_intent": {
+      "type": "string",
+      "description": "Framing, angle, and hierarchy guidance expressed without technique terms.",
+      "maxLength": 600
+    },
+    "framing": {
+      "type": "string",
+      "description": "Optional framing guidance.",
+      "enum": ["tight", "medium", "wide"]
+    },
+    "angle": {
+      "type": "string",
+      "description": "Optional camera angle guidance.",
+      "enum": ["eye", "low", "high", "oblique"]
+    },
+    "distance": {
+      "type": "string",
+      "description": "Optional distance guidance.",
+      "enum": ["close", "room", "establishing"]
+    },
+    "hierarchy": {
+      "type": "string",
+      "description": "Optional eye movement order or emphasis notes.",
+      "maxLength": 240
+    },
+    "spatial_cues": {
+      "type": "string",
+      "description": "Optional description of lines, occlusion, or overlap used to guide reading.",
+      "maxLength": 240
+    },
+    "legibility_at_size": {
+      "type": "string",
+      "description": "Target sizes and what must remain readable at thumbnail/print.",
+      "maxLength": 400
+    },
+    "iconography_motifs": {
+      "type": "string",
+      "description": "Motifs to include and avoid, aligned with canon and style patterns.",
+      "maxLength": 400
+    },
+    "light_palette_texture": {
+      "type": "string",
+      "description": "Descriptive notes on light, palette, and texture without technique jargon.",
+      "maxLength": 400
+    },
+    "environment_props": {
+      "type": "string",
+      "description": "Player-safe location tells and props that communicate context.",
+      "maxLength": 400
+    },
+    "characters_poses": {
+      "type": "string",
+      "description": "Roles/titles visible and the readable gestures or poses they hold.",
+      "maxLength": 400
+    },
+    "inclusion_criteria": {
+      "type": "string",
+      "description": "Conditions for when to include and when to exclude this slot.",
+      "maxLength": 400
+    },
+    "caption": {
+      "type": "string",
+      "description": "Player-safe caption (one line, no technique).",
+      "maxLength": 200
+    },
+    "alt_text": {
+      "type": "string",
+      "description": "Alt text describing subject, relation, and location in one sentence.",
+      "maxLength": 240
+    },
+    "variants": {
+      "type": "array",
+      "description": "Optional variant or crop descriptions.",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "selection_rule": {
+      "type": "string",
+      "description": "Optional rule for when to choose a given variant.",
+      "maxLength": 240
+    },
+    "anchor_targets": {
+      "type": "array",
+      "description": "Manuscript paths anchored by this slot.",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "placement": {
+      "type": "string",
+      "description": "Timing for placement relative to prose or choices.",
+      "maxLength": 240
+    },
+    "anchor_stability_risks": {
+      "type": "string",
+      "description": "Optional coordination notes on anchor stability risks.",
+      "maxLength": 240
+    },
+    "accessibility": {
+      "type": "string",
+      "description": "Accessibility risks and mitigations for readability.",
+      "maxLength": 400
+    },
+    "localization": {
+      "type": "string",
+      "description": "Optional localization notes ensuring captions and terms remain portable.",
+      "maxLength": 400
+    },
+    "determinism": {
+      "type": "string",
+      "description": "Off-surface reproduction expectations including any constraints.",
+      "maxLength": 400
+    },
+    "repro_expectation": {
+      "type": "string",
+      "description": "Whether additional producer logging is expected.",
+      "enum": ["none", "log-only"]
+    },
+    "producer_log_fields": {
+      "type": "string",
+      "description": "Optional list of producer log fields for off-surface technique notes.",
+      "maxLength": 400
+    },
+    "handoffs": {
+      "type": "array",
+      "description": "Hand-off notes enumerating who receives which deliverables.",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "done_checklist": {
+      "type": "array",
+      "description": "Completion checklist confirming readiness before changing status to rendering.",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    }
+  },
+  "required": [
+    "title",
+    "tu",
+    "edited",
+    "owner",
+    "slice",
+    "status",
+    "purpose",
+    "subject"
+  ],
+  "$defs": {
+    "role_name": {
+      "type": "string",
+      "description": "QuestFoundry role abbreviation (see 02-dictionary/role_abbreviations.md)",
+      "enum": [
+        "SR",
+        "GK",
+        "PW",
+        "SS",
+        "ST",
+        "LW",
+        "CC",
+        "AD",
+        "IL",
+        "AuD",
+        "AuP",
+        "TR",
+        "BB",
+        "PN",
+        "RS"
+      ]
+    },
+    "date_string": {
+      "type": "string",
+      "description": "Date in YYYY-MM-DD format",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "quality_bar": {
+      "type": "string",
+      "description": "One of 8 Quality Bars (see taxonomies.md §5)",
+      "enum": [
+        "Integrity",
+        "Reachability",
+        "Nonlinearity",
+        "Gateways",
+        "Style",
+        "Determinism",
+        "Presentation",
+        "Accessibility"
+      ]
+    },
+    "loop_name": {
+      "type": "string",
+      "description": "One of 13 TU loop types (see taxonomies.md §3 and loop_names.md)",
+      "enum": [
+        "Story Spark",
+        "Hook Harvest",
+        "Lore Deepening",
+        "Codex Expansion",
+        "Style Tune-up",
+        "Art Touch-up",
+        "Audio Pass",
+        "Translation Pass",
+        "Binding Run",
+        "Narration Dry-Run",
+        "Gatecheck",
+        "Post-Mortem",
+        "Archive Snapshot"
+      ]
+    },
+    "deferral_tag": {
+      "type": "string",
+      "description": "Deferral type for dormant roles (see taxonomies.md §7)",
+      "enum": ["deferred:art", "deferred:audio", "deferred:translation", "deferred:research"]
+    }
+  }
+}

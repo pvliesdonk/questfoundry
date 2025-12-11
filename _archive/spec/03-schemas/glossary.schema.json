@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://questfoundry.liesdonk.nl/schemas/glossary.schema.json",
+  "title": "Glossary",
+  "description": "Concise term list for translator briefings and PN alignment.",
+  "type": "object",
+  "properties": {
+    "scope": {"type": "string"},
+    "author": {"type": "string", "const": "codex_curator"},
+    "tu": {"type": "string", "pattern": "^TU-\\d{4}-\\d{2}-\\d{2}-[A-Z]{2,4}\\d{2}$"},
+    "edited": {"type": "string", "format": "date"},
+    "term_count": {"type": "integer"},
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "terms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "term": {"type": "string"},
+          "category": {"type": "string", "enum": ["character", "location", "organization", "concept", "item"]},
+          "definition": {"type": "string"},
+          "pronunciation": {"type": "string"},
+          "style_register": {"type": "string", "enum": ["formal", "casual", "technical", "neutral"]},
+          "translation_notes": {"type": "string"}
+        },
+        "required": ["term", "category", "definition"]
+      }
+    }
+  },
+  "required": ["scope", "author", "edited", "terms"]
+}

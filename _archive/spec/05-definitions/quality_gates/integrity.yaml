@@ -1,0 +1,181 @@
+# Integrity Quality Gate
+# Ensures no dead references, all links resolve, no accidental dead ends
+
+bar_name: Integrity
+
+bar_definition:
+  what_it_means: "All links/section references resolve. No accidental dead ends (only intentional terminals). Codeword/state effects don't create contradictions downstream."
+  layer_0_ref: "spec/00-north-star/QUALITY_BARS.md#1-integrity"
+
+validation_checks:
+  - check_id: no_dangling_refs
+    check_type: reference_resolution
+    validator:
+      method: graph_traversal
+      target: "hot_sot.hooks"
+      expression: "all(ref in artifact_ids for hook in hooks for ref in hook.locations_links.related_hooks)"
+      parameters:
+        check_bidirectional: true
+        allow_external_refs: false
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "Found {{count}} dangling hook references: {{refs}}"
+    examples:
+      - scenario: "Hook references HK-20250101-002 but it doesn't exist"
+        passes: false
+        explanation: "Dangling reference detected"
+      - scenario: "All hook references point to existing hooks"
+        passes: true
+        explanation: "No dangling references"
+
+  - check_id: valid_id_format
+    check_type: schema_validation
+    validator:
+      method: regex_pattern
+      target: "*.header.id"
+      expression: "^HK-\\d{8}-(0[1-9]|[1-9]\\d{1,2})$"
+      parameters:
+        artifact_type: hook_card
+    pass_condition: "all_match == true"
+    severity: critical
+    failure_message: "Invalid hook ID format: {{invalid_ids}}"
+
+  - check_id: no_unintentional_dead_ends
+    check_type: graph_analysis
+    validator:
+      method: graph_traversal
+      target: "hot_sot.hooks"
+      expression: "all(hook.is_terminal or len(hook.choices) > 0 for hook in hooks)"
+      parameters:
+        check_reachability: true
+        require_terminal_marker: true
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "Found {{count}} unintentional dead ends (no choices, not marked terminal): {{hook_ids}}"
+
+  - check_id: state_consistency
+    check_type: graph_analysis
+    validator:
+      method: custom_function
+      target: "hot_sot"
+      expression: "check_codeword_consistency"
+      parameters:
+        check_contradictions: true
+        check_downstream_effects: true
+    pass_condition: "contradictions.length == 0"
+    severity: warning
+    failure_message: "Found {{count}} potential state contradictions: {{issues}}"
+
+  - check_id: valid_canon_references
+    check_type: reference_resolution
+    validator:
+      method: graph_traversal
+      target: "hot_sot.canon_packs"
+      expression: "all(hook_id in hot_sot.hooks for canon_pack in canon_packs for hook_id in canon_pack.hooks_answered)"
+      parameters:
+        check_bidirectional: false
+        validate_hook_existence: true
+    pass_condition: "result == true"
+    severity: critical
+    failure_message: "Found {{count}} invalid hook references in canon packs: {{refs}}"
+    examples:
+      - scenario: "Canon pack references HK-20250120-003 in hooks_answered but hook doesn't exist"
+        passes: false
+        explanation: "hooks_answered must reference existing hooks"
+      - scenario: "All hooks_answered IDs exist in hot_sot.hooks"
+        passes: true
+        explanation: "Canon pack references are valid"
+
+status_thresholds:
+  green:
+    critical_failures: 0
+    warning_failures: 0
+  yellow:
+    critical_failures: 0
+    warning_failures: 2
+
+remediation:
+  common_failures:
+    - issue: "Dangling link to non-existent section"
+      fix: "Create the referenced section or retarget the choice to existing section"
+      check_ids: ["no_dangling_refs"]
+      examples:
+        - "Choice points to HK-20250115-005 which doesn't exist → create section or fix reference"
+
+    - issue: "Forgotten return from a loop"
+      fix: "Add a return path to the hub or mark section as deliberately terminal"
+      check_ids: ["no_unintentional_dead_ends"]
+      examples:
+        - "Loop section has no way back to main flow → add return choice or mark as _The End_"
+
+    - issue: "Invalid ID format"
+      fix: "Correct ID to match HK-YYYYMMDD-NNN format"
+      check_ids: ["valid_id_format"]
+      examples:
+        - "ID 'HK-001' should be 'HK-20250120-001'"
+
+    - issue: "Codeword creates downstream contradiction"
+      fix: "Reconcile codeword effects or add conditional branches to handle both states"
+      check_ids: ["state_consistency"]
+      examples:
+        - "Setting 'met_captain' but later assuming they're strangers"
+
+    - issue: "Canon pack references non-existent hook"
+      fix: "Ensure hooks_answered only references existing hook IDs or create missing hooks"
+      check_ids: ["valid_canon_references"]
+      examples:
+        - "Canon pack lists HK-20250120-003 in hooks_answered but hook doesn't exist → create hook or remove reference"
+
+  smallest_viable_fix_template: "For {{check_id}}: {{fix_action}} in {{artifact_id}}"
+
+  owner_assignment:
+    PW: ["no_dangling_refs", "no_unintentional_dead_ends", "state_consistency"]
+    SS: ["no_dangling_refs", "no_unintentional_dead_ends"]
+    GK: ["valid_id_format"]
+    LW: ["valid_canon_references"]
+
+blocking_policy:
+  blocks_on_red: true
+  blocks_on_yellow: false
+  can_defer: false
+
+applicable_to:
+  artifact_types:
+    - hook_card
+    - canon_pack
+    - gateway_map
+  loops:
+    - story_spark
+    - hook_harvest
+    - lore_deepening
+  hot_cold: cold
+
+automation:
+  fully_automated: true
+  requires_llm: false
+  requires_human: false
+  evaluation_timeout: 30
+
+metadata:
+  version: "1.0.0"
+  author: "QuestFoundry Migration (Phase 6)"
+  updated: "2025-11-21"
+  notes: "Integrity is the most critical bar - no dangling references can reach Cold"
+  test_cases:
+    - name: "Valid hook card with all references resolving"
+      artifact:
+        id: "HK-20250121-001"
+        choices:
+          - target: "HK-20250121-002"
+        locations_links:
+          related_hooks: ["HK-20250121-002"]
+      expected_status: green
+      expected_failures: []
+
+    - name: "Hook card with dangling reference"
+      artifact:
+        id: "HK-20250121-001"
+        choices:
+          - target: "HK-20250121-999"
+      expected_status: red
+      expected_failures: ["no_dangling_refs"]

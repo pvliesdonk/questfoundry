@@ -1,0 +1,116 @@
+# Loop Pattern: Style Tune-up
+# Compiled from: spec/00-north-star/LOOPS/style_tune_up.md
+# Schema: spec/03-schemas/definitions/loop_pattern.schema.json
+
+id: style_tune_up
+
+metadata:
+  name: "Style Tune-up"
+  type: "Refinement"
+  description: |
+    Detect and correct style drift across prose, captions, and PN surfaces without re-architecting
+    the story. Tighten voice, register, motifs, and visual guardrails so the book reads like one
+    mind made it.
+
+topology:
+  entry_node: diagnose
+
+  nodes:
+    - role_id: style_lead
+      node_id: diagnose
+      description: "Sample sections (early/middle/late), PN lines, and recent captions. Tag issues: voice-shift, register-mismatch, motif-missing, over-exposition, jargon-spike."
+
+    - role_id: style_lead
+      node_id: exemplars
+      description: "Provide short before/after exemplars for each issue (human prose). Reaffirm motif kit (e.g., 'shadow-side neon', 'low-G dust', 'relay hum')."
+
+    - role_id: style_lead
+      node_id: addendum
+      description: "Add rules or clarifications: sentence rhythm under pressure, idiom boundaries, POV distance, caption tone. Include localization notes."
+
+    - role_id: style_lead
+      node_id: distribute
+      description: "Create annotated edit notes: file/section -> issue -> fix suggestion. PN phrase bank updates if needed."
+
+    - role_id: gatekeeper
+      node_id: pre_gate
+      description: "Style & Presentation Safety check; ensure no spoilers snuck into captions/PN."
+
+  edges:
+    - source: diagnose
+      target: exemplars
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.issues_identified == true"
+    - source: exemplars
+      target: addendum
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.exemplars_created == true"
+    - source: addendum
+      target: distribute
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.addendum_complete == true"
+    - source: distribute
+      target: pre_gate
+      type: conditional
+      condition:
+        evaluator: state_key_match
+        expression: "state.notes_distributed == true"
+    - source: pre_gate
+      target: END
+      type: direct
+
+traceability:
+  tu_lifecycle:
+    required: true
+  produces_cold: true
+
+context:
+  required_artifacts:
+    - artifact_type: cold_snapshot
+      state_key: cold_sot.snapshot
+    - artifact_type: section_draft
+      state_key: hot_sot.drafts
+
+handoffs:
+  - target: binding_run
+    condition: "updated style guidance ready for export assembly"
+
+gates:
+  quality_bars:
+    - Style
+    - Presentation
+
+protocol_flow:
+  flow_ref: "spec/04-protocol/FLOWS/style_tune_up.md"
+  message_sequences:
+    - step: 1
+      sender: "ST"
+      receiver: "*"
+      intent: "tu.start"
+      description: "Initiate the Style Tune-up loop"
+    - step: 2
+      sender: "GK"
+      receiver: "SR"
+      intent: "gate.report.submit"
+      description: "Standard quality gate check"
+
+success_criteria:
+  custom_checks:
+    - name: consistent_register
+      expression: "state.register_consistent == true"
+      error_message: "Prose and PN read in a consistent register; motifs reappear intentionally"
+    - name: captions_aligned
+      expression: "state.captions_aligned == true"
+      error_message: "Captions and cue sheets align with voice; no technique-talk on surfaces"
+    - name: localization_noted
+      expression: "state.localization_noted == true"
+      error_message: "Localization pitfalls are noted with alternatives"
+    - name: gate_passed
+      expression: "state.gate_passed == true"
+      error_message: "Gatekeeper reports Style/Presentation green"
