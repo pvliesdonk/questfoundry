@@ -35,9 +35,7 @@ class TestEvaluationTools:
                         {"id": "kitchen", "title": "Kitchen", "choices": ["entry"]},
                         {"id": "secret_room", "title": "Secret Room", "choices": ["library"]},
                     ],
-                    "gates": [
-                        {"target": "secret_room", "condition": "has_key"}
-                    ]
+                    "gates": [{"target": "secret_room", "condition": "has_key"}],
                 }
             },
             "metadata": {},
@@ -160,14 +158,16 @@ class TestCreateGatecheckReport:
         tool.state = state
         tool.role_id = "gatekeeper"
 
-        result = json.loads(tool._run(
-            target_artifact="topology_001",
-            bars_checked=["integrity", "reachability"],
-            status="passed",
-            bar_results={"integrity": "PASS", "reachability": "PASS"},
-            issues=[],
-            recommendations=[],
-        ))
+        result = json.loads(
+            tool._run(
+                target_artifact="topology_001",
+                bars_checked=["integrity", "reachability"],
+                status="passed",
+                bar_results={"integrity": "PASS", "reachability": "PASS"},
+                issues=[],
+                recommendations=[],
+            )
+        )
 
         assert result["success"] is True
         assert "report_id" in result
@@ -180,14 +180,16 @@ class TestCreateGatecheckReport:
         tool.state = state
         tool.role_id = "gatekeeper"
 
-        result = json.loads(tool._run(
-            target_artifact="scene_001",
-            bars_checked=["style", "accessibility"],
-            status="failed",
-            bar_results={"style": "FAIL - inconsistent tone", "accessibility": "PASS"},
-            issues=["Inconsistent narrative voice between paragraphs 2 and 5"],
-            recommendations=["Review with Narrator for tone consistency"],
-        ))
+        result = json.loads(
+            tool._run(
+                target_artifact="scene_001",
+                bars_checked=["style", "accessibility"],
+                status="failed",
+                bar_results={"style": "FAIL - inconsistent tone", "accessibility": "PASS"},
+                issues=["Inconsistent narrative voice between paragraphs 2 and 5"],
+                recommendations=["Review with Narrator for tone consistency"],
+            )
+        )
 
         assert result["success"] is True
         assert result["status"] == "failed"
@@ -204,11 +206,13 @@ class TestCreateGatecheckReport:
         tool.state = state
         tool.role_id = "gatekeeper"
 
-        result = json.loads(tool._run(
-            target_artifact="topology_001",
-            bars_checked=["invalid_bar", "also_invalid"],
-            status="passed",
-        ))
+        result = json.loads(
+            tool._run(
+                target_artifact="topology_001",
+                bars_checked=["invalid_bar", "also_invalid"],
+                status="passed",
+            )
+        )
 
         assert "error" in result
         assert "invalid_bar" in result["error"]
@@ -220,19 +224,23 @@ class TestCreateGatecheckReport:
         tool.role_id = "gatekeeper"
 
         # Create first report
-        result1 = json.loads(tool._run(
-            target_artifact="artifact_a",
-            bars_checked=["integrity"],
-            status="passed",
-        ))
+        result1 = json.loads(
+            tool._run(
+                target_artifact="artifact_a",
+                bars_checked=["integrity"],
+                status="passed",
+            )
+        )
 
         # Create second report
-        result2 = json.loads(tool._run(
-            target_artifact="artifact_b",
-            bars_checked=["style"],
-            status="failed",
-            issues=["Issue found"],
-        ))
+        result2 = json.loads(
+            tool._run(
+                target_artifact="artifact_b",
+                bars_checked=["style"],
+                status="failed",
+                issues=["Issue found"],
+            )
+        )
 
         # Verify different IDs
         assert result1["report_id"] != result2["report_id"]
@@ -244,12 +252,14 @@ class TestCreateGatecheckReport:
         tool.state = state
         tool.role_id = "gatekeeper"
 
-        result = json.loads(tool._run(
-            target_artifact="topology_001",
-            bars_checked=["accessibility"],
-            status="waived",
-            waiver_reason="Time constraint - will address in next iteration",
-        ))
+        result = json.loads(
+            tool._run(
+                target_artifact="topology_001",
+                bars_checked=["accessibility"],
+                status="waived",
+                waiver_reason="Time constraint - will address in next iteration",
+            )
+        )
 
         report = state["hot_store"][result["report_id"]]
         assert report["status"] == "waived"
@@ -261,11 +271,13 @@ class TestCreateGatecheckReport:
         tool = CreateGatecheckReport()
         tool.state = None
 
-        result = json.loads(tool._run(
-            target_artifact="anything",
-            bars_checked=["integrity"],
-            status="passed",
-        ))
+        result = json.loads(
+            tool._run(
+                target_artifact="anything",
+                bars_checked=["integrity"],
+                status="passed",
+            )
+        )
 
         assert "error" in result
 
@@ -294,8 +306,8 @@ class TestContentValidation:
                 "scene_1": {
                     "title": "The Beginning",
                     "content": "The storm raged outside the manor as guests began to arrive. "
-                               "Each carried secrets, and the night promised revelations. "
-                               "Lord Blackwood welcomed them with a cold smile.",
+                    "Each carried secrets, and the night promised revelations. "
+                    "Lord Blackwood welcomed them with a cold smile.",
                     "choices": [{"label": "Continue", "target": "scene_2"}],
                 }
             },

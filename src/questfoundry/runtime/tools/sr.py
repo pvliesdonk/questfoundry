@@ -170,8 +170,10 @@ class Terminate(BaseTool):
                 ARTIFACT_REGISTRY,
                 PROMOTABLE_ARTIFACTS,
             )
+
             promotable_types = {
-                type_name for type_name, cls in ARTIFACT_REGISTRY.items()
+                type_name
+                for type_name, cls in ARTIFACT_REGISTRY.items()
                 if cls.__name__ in PROMOTABLE_ARTIFACTS
                 and not type_name.startswith("cold_")  # cold_* are output types, not input
             }

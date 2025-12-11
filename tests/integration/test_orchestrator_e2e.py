@@ -114,7 +114,7 @@ async def test_sr_delegates_to_plotwright(ollama_llm, compiled_roles):
     delegation_history = result["metadata"].get("delegation_history", [])
     logger.info(f"Delegation history ({len(delegation_history)} delegations):")
     for i, delegation in enumerate(delegation_history):
-        logger.info(f"  [{i+1}] Role: {delegation['role']}")
+        logger.info(f"  [{i + 1}] Role: {delegation['role']}")
         logger.info(f"      Task: {delegation['task'][:100]}...")
         logger.info(f"      Status: {delegation['result']['status']}")
 
@@ -162,7 +162,11 @@ async def test_sr_handles_simple_request(ollama_llm, compiled_roles):
     logger.info(f"Metadata keys: {list(result['metadata'].keys())}")
 
     # This should complete (either terminate or hit max)
-    assert "termination" in result["metadata"] or "error" in result["metadata"] or "total_delegations" in result["metadata"]
+    assert (
+        "termination" in result["metadata"]
+        or "error" in result["metadata"]
+        or "total_delegations" in result["metadata"]
+    )
 
 
 @pytest.mark.asyncio
@@ -259,7 +263,7 @@ async def test_multi_turn_delegation(ollama_llm, compiled_roles):
     delegation_history = result["metadata"].get("delegation_history", [])
     logger.info(f"Delegation history ({len(delegation_history)} delegations):")
     for i, delegation in enumerate(delegation_history):
-        logger.info(f"  [{i+1}] Role: {delegation['role']}")
+        logger.info(f"  [{i + 1}] Role: {delegation['role']}")
         logger.info(f"      Task: {delegation['task'][:80]}...")
         logger.info(f"      Status: {delegation['result']['status']}")
 
@@ -276,16 +280,17 @@ async def test_multi_turn_delegation(ollama_llm, compiled_roles):
     # Check that we delegated to at least 2 different roles
     roles_used = {d["role"] for d in delegation_history}
     logger.info(f"Roles used: {roles_used}")
-    assert len(roles_used) >= 2, (
-        f"Expected at least 2 different roles, got {roles_used}"
-    )
+    assert len(roles_used) >= 2, f"Expected at least 2 different roles, got {roles_used}"
 
     # Verify each delegation result has proper structure
     for delegation in delegation_history:
         assert "status" in delegation["result"], "Delegation should have status"
         assert "message" in delegation["result"], "Delegation should have message"
         assert delegation["result"]["status"] in [
-            "completed", "blocked", "needs_review", "error"
+            "completed",
+            "blocked",
+            "needs_review",
+            "error",
         ], f"Invalid status: {delegation['result']['status']}"
 
 

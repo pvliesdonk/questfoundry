@@ -67,6 +67,7 @@ class ExecutorCallbacks(Protocol):
         """Called when execution completes via done tool."""
         ...
 
+
 # Tools that consult compiled resources for guidance.
 # Successful calls are tracked so policy guards can verify prerequisites.
 CONSULT_TOOL_NAMES: frozenset[str] = frozenset(
@@ -319,8 +320,7 @@ class ToolExecutor:
             # Extract tool calls if present
             tool_calls = getattr(response, "tool_calls", None) or []
             tool_calls_for_log = [
-                {"name": tc.get("name", ""), "args": tc.get("args", {})}
-                for tc in tool_calls
+                {"name": tc.get("name", ""), "args": tc.get("args", {})} for tc in tool_calls
             ]
 
             log_llm_response(
@@ -564,7 +564,9 @@ class ToolExecutor:
                 )
 
         # Max iterations reached
-        error_msg = f"Max iterations ({self.max_iterations}) reached without calling {self.done_tool_name}"
+        error_msg = (
+            f"Max iterations ({self.max_iterations}) reached without calling {self.done_tool_name}"
+        )
         self._emit("on_error", error_msg)
         return ExecutorResult(
             success=False,
@@ -636,7 +638,9 @@ class ToolExecutor:
         - 'missing required positional arguments' - LLM passed wrong args entirely
         """
         error_str = str(error)
-        default_hint = "Check tool arguments and try again. Use consult_schema for field requirements."
+        default_hint = (
+            "Check tool arguments and try again. Use consult_schema for field requirements."
+        )
 
         # Check for TypeError patterns
         if not isinstance(error, TypeError):
@@ -647,15 +651,15 @@ class ToolExecutor:
         # Get the tool's actual parameters from its schema
         try:
             schema = tool.get_input_schema()
-            actual_params = list(schema.model_fields.keys()) if hasattr(schema, "model_fields") else []
+            actual_params = (
+                list(schema.model_fields.keys()) if hasattr(schema, "model_fields") else []
+            )
         except Exception:
             actual_params = []
 
         # Pattern 1: "missing N required positional arguments: 'key' and 'value'"
         # This happens when LLM passes wrong argument names (e.g., 'item' instead of 'key'+'value')
-        missing_match = re.search(
-            r"missing \d+ required positional arguments?: (.+)", error_str
-        )
+        missing_match = re.search(r"missing \d+ required positional arguments?: (.+)", error_str)
         if missing_match:
             missing_args_str = missing_match.group(1)
             # Extract argument names from "'key' and 'value'" or "'key', 'value'"
@@ -666,7 +670,7 @@ class ToolExecutor:
                 if tool.name == "write_hot_sot":
                     return (
                         f"Missing required arguments: {', '.join(missing_args)}. "
-                        f"Correct syntax: write_hot_sot(key=\"artifact_id\", value={{...}}). "
+                        f'Correct syntax: write_hot_sot(key="artifact_id", value={{...}}). '
                         f"'key' is a string ID like 'scene_1', 'value' is the artifact dict."
                     )
                 else:

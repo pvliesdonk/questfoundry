@@ -482,15 +482,11 @@ class EvaluatePresentation(BaseTool):
 
             if is_scene:
                 if content is None:
-                    issues.append(
-                        f"Scene '{artifact_id}' has no 'content' field - prose required"
-                    )
+                    issues.append(f"Scene '{artifact_id}' has no 'content' field - prose required")
                 elif isinstance(content, str):
                     stripped = content.strip()
                     if not stripped:
-                        issues.append(
-                            f"Scene '{artifact_id}' has empty content - prose required"
-                        )
+                        issues.append(f"Scene '{artifact_id}' has empty content - prose required")
                     elif len(stripped) < 50:
                         issues.append(
                             f"Scene '{artifact_id}' has very short content ({len(stripped)} chars) - may need expansion"

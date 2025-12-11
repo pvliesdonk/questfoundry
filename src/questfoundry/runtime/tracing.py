@@ -48,9 +48,8 @@ def is_tracing_enabled() -> bool:
     """Check if LangSmith tracing is enabled via environment variables."""
     global _tracing_enabled
     if _tracing_enabled is None:
-        _tracing_enabled = (
-            os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
-            and bool(os.environ.get("LANGSMITH_API_KEY"))
+        _tracing_enabled = os.environ.get("LANGSMITH_TRACING", "").lower() == "true" and bool(
+            os.environ.get("LANGSMITH_API_KEY")
         )
         if _tracing_enabled:
             logger.info("LangSmith tracing enabled")
@@ -67,6 +66,7 @@ def trace_orchestrator_run(
     - request: The user's request
     - Tags: ["orchestrator", "questfoundry"]
     """
+
     @wraps(func)
     async def wrapper(
         self: Any,
@@ -127,6 +127,7 @@ def trace_role_execution(
     - task: The task being performed (truncated)
     - Tags: ["role:{role_id}", "questfoundry"]
     """
+
     @wraps(func)
     async def wrapper(self: Any, task: str) -> Any:
         if not is_tracing_enabled():
@@ -170,6 +171,7 @@ def trace_sr_turn(turn: int, delegation_count: int) -> Callable[[F], F]:
     delegation_count : int
         Number of delegations so far.
     """
+
     def decorator(func: F) -> F:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -197,6 +199,7 @@ def trace_sr_turn(turn: int, delegation_count: int) -> Callable[[F], F]:
                 return await func(*args, **kwargs)
 
         return wrapper  # type: ignore[return-value]
+
     return decorator
 
 
@@ -267,6 +270,4 @@ def configure_tracing() -> None:
         os.environ["LANGSMITH_PROJECT"] = "questfoundry"
 
     if is_tracing_enabled():
-        logger.info(
-            f"LangSmith tracing configured: project={get_langsmith_project()}"
-        )
+        logger.info(f"LangSmith tracing configured: project={get_langsmith_project()}")

@@ -198,9 +198,7 @@ def _compute_file_hash(path: Path) -> str:
     return sha256.hexdigest()
 
 
-def _compute_manifest_hash(
-    sections: list[tuple[str, str]], assets: list[tuple[str, str]]
-) -> str:
+def _compute_manifest_hash(sections: list[tuple[str, str]], assets: list[tuple[str, str]]) -> str:
     """Compute manifest hash from section and asset hashes."""
     parts = []
     for anchor, hash_ in sorted(sections):
@@ -526,9 +524,7 @@ class ColdStore:
                 (SCHEMA_VERSION,),
             )
             # Initialize book metadata singleton
-            conn.execute(
-                "INSERT OR IGNORE INTO book_metadata (id) VALUES (1)"
-            )
+            conn.execute("INSERT OR IGNORE INTO book_metadata (id) VALUES (1)")
             conn.commit()
 
     def _check_schema_version(self) -> None:
@@ -541,8 +537,7 @@ class ColdStore:
             db_version = row["version"]
             if db_version > SCHEMA_VERSION:
                 raise ValueError(
-                    f"Database schema v{db_version} is newer than "
-                    f"supported v{SCHEMA_VERSION}"
+                    f"Database schema v{db_version} is newer than supported v{SCHEMA_VERSION}"
                 )
             # Run migrations for older databases
             if db_version < SCHEMA_VERSION:
@@ -553,12 +548,8 @@ class ColdStore:
         if from_version < 3:
             # v2 → v3: Add domain_version column to book_metadata
             logger.info("Migrating database schema from v2 to v3...")
-            conn.execute(
-                "ALTER TABLE book_metadata ADD COLUMN domain_version INTEGER"
-            )
-            conn.execute(
-                "UPDATE schema_version SET version = 3"
-            )
+            conn.execute("ALTER TABLE book_metadata ADD COLUMN domain_version INTEGER")
+            conn.execute("UPDATE schema_version SET version = 3")
             conn.commit()
             logger.info("Database migrated to schema v3")
 
@@ -591,7 +582,7 @@ class ColdStore:
                 language=row["language"],
                 author=row["author"],
                 start_anchor=start_anchor,
-                domain_version=row.get("domain_version"),
+                domain_version=row["domain_version"] if "domain_version" in row.keys() else None,
             )
 
     def set_book_metadata(self, metadata: BookMetadata) -> None:
@@ -635,9 +626,7 @@ class ColdStore:
             The domain version, or None if not set.
         """
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT domain_version FROM book_metadata WHERE id = 1"
-            )
+            cursor = conn.execute("SELECT domain_version FROM book_metadata WHERE id = 1")
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -718,17 +707,13 @@ class ColdStore:
             # Resolve chapter_anchor to chapter_id
             chapter_id = None
             if chapter_anchor:
-                cursor = conn.execute(
-                    "SELECT id FROM chapters WHERE anchor = ?", (chapter_anchor,)
-                )
+                cursor = conn.execute("SELECT id FROM chapters WHERE anchor = ?", (chapter_anchor,))
                 row = cursor.fetchone()
                 if row:
                     chapter_id = row["id"]
 
             # Check if anchor exists
-            cursor = conn.execute(
-                "SELECT id FROM sections WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT id FROM sections WHERE anchor = ?", (anchor,))
             existing = cursor.fetchone()
 
             if existing:
@@ -741,13 +726,22 @@ class ColdStore:
                         choices = ?, gates = ?, visibility = ?
                     WHERE anchor = ?
                     """,
-                    (chapter_id, title, content, content_hash, requires_gate, source_brief_id, choices_json, gates_json, visibility.value, anchor),
+                    (
+                        chapter_id,
+                        title,
+                        content,
+                        content_hash,
+                        requires_gate,
+                        source_brief_id,
+                        choices_json,
+                        gates_json,
+                        visibility.value,
+                        anchor,
+                    ),
                 )
                 section_id = existing["id"]
                 # Get current order
-                cursor = conn.execute(
-                    "SELECT order_num FROM sections WHERE id = ?", (section_id,)
-                )
+                cursor = conn.execute("SELECT order_num FROM sections WHERE id = ?", (section_id,))
                 order = cursor.fetchone()["order_num"]
             else:
                 # Auto-assign order if not provided
@@ -764,7 +758,20 @@ class ColdStore:
                     (anchor, chapter_id, title, content, content_hash, order_num, requires_gate, source_brief_id, choices, gates, visibility, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (anchor, chapter_id, title, content, content_hash, order, requires_gate, source_brief_id, choices_json, gates_json, visibility.value, created_at),
+                    (
+                        anchor,
+                        chapter_id,
+                        title,
+                        content,
+                        content_hash,
+                        order,
+                        requires_gate,
+                        source_brief_id,
+                        choices_json,
+                        gates_json,
+                        visibility.value,
+                        created_at,
+                    ),
                 )
                 section_id = cursor.lastrowid
 
@@ -789,9 +796,7 @@ class ColdStore:
     def get_section(self, anchor: str) -> ColdSection | None:
         """Get a section by anchor."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM sections WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT * FROM sections WHERE anchor = ?", (anchor,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -814,16 +819,16 @@ class ColdStore:
                 source_brief_id=row["source_brief_id"],
                 choices=choices,
                 gates=gates,
-                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                visibility=Visibility(row["visibility"])
+                if row["visibility"]
+                else Visibility.PUBLIC,
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
     def list_sections(self) -> list[str]:
         """List all section anchors in display order."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT anchor FROM sections ORDER BY order_num"
-            )
+            cursor = conn.execute("SELECT anchor FROM sections ORDER BY order_num")
             return [row["anchor"] for row in cursor.fetchall()]
 
     def get_all_sections(self) -> list[ColdSection]:
@@ -850,7 +855,9 @@ class ColdStore:
                         source_brief_id=row["source_brief_id"],
                         choices=choices,
                         gates=gates,
-                        visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                        visibility=Visibility(row["visibility"])
+                        if row["visibility"]
+                        else Visibility.PUBLIC,
                         created_at=datetime.fromisoformat(row["created_at"]),
                     )
                 )
@@ -872,9 +879,7 @@ class ColdStore:
                 logger.warning(f"Cannot delete section '{anchor}': in snapshot")
                 return False
 
-            cursor = conn.execute(
-                "DELETE FROM sections WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("DELETE FROM sections WHERE anchor = ?", (anchor,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -940,9 +945,7 @@ class ColdStore:
 
         with self._connection() as conn:
             # Check if anchor exists
-            cursor = conn.execute(
-                "SELECT id FROM codex WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT id FROM codex WHERE anchor = ?", (anchor,))
             existing = cursor.fetchone()
 
             if existing:
@@ -954,7 +957,15 @@ class ColdStore:
                         metadata = ?, visibility = ?
                     WHERE anchor = ?
                     """,
-                    (category, title, content, content_hash, metadata_json, visibility.value, anchor),
+                    (
+                        category,
+                        title,
+                        content,
+                        content_hash,
+                        metadata_json,
+                        visibility.value,
+                        anchor,
+                    ),
                 )
                 codex_id = existing["id"]
             else:
@@ -965,7 +976,16 @@ class ColdStore:
                     (anchor, category, title, content, content_hash, metadata, visibility, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (anchor, category, title, content, content_hash, metadata_json, visibility.value, created_at),
+                    (
+                        anchor,
+                        category,
+                        title,
+                        content,
+                        content_hash,
+                        metadata_json,
+                        visibility.value,
+                        created_at,
+                    ),
                 )
                 codex_id = cursor.lastrowid
 
@@ -986,9 +1006,7 @@ class ColdStore:
     def get_codex(self, anchor: str) -> ColdCodex | None:
         """Get a codex entry by anchor."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM codex WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT * FROM codex WHERE anchor = ?", (anchor,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -1003,7 +1021,9 @@ class ColdStore:
                 content=row["content"],
                 content_hash=row["content_hash"],
                 metadata=metadata,
-                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                visibility=Visibility(row["visibility"])
+                if row["visibility"]
+                else Visibility.PUBLIC,
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
@@ -1016,9 +1036,7 @@ class ColdStore:
                     (category,),
                 )
             else:
-                cursor = conn.execute(
-                    "SELECT anchor FROM codex ORDER BY category, title"
-                )
+                cursor = conn.execute("SELECT anchor FROM codex ORDER BY category, title")
             return [row["anchor"] for row in cursor.fetchall()]
 
     # =========================================================================
@@ -1068,9 +1086,7 @@ class ColdStore:
 
         with self._connection() as conn:
             # Check if anchor exists
-            cursor = conn.execute(
-                "SELECT id FROM canon WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT id FROM canon WHERE anchor = ?", (anchor,))
             existing = cursor.fetchone()
 
             if existing:
@@ -1082,7 +1098,16 @@ class ColdStore:
                         spoiler_level = ?, metadata = ?, visibility = ?
                     WHERE anchor = ?
                     """,
-                    (category, title, content, content_hash, spoiler_level, metadata_json, visibility.value, anchor),
+                    (
+                        category,
+                        title,
+                        content,
+                        content_hash,
+                        spoiler_level,
+                        metadata_json,
+                        visibility.value,
+                        anchor,
+                    ),
                 )
                 canon_id = existing["id"]
             else:
@@ -1093,7 +1118,17 @@ class ColdStore:
                     (anchor, category, title, content, content_hash, spoiler_level, metadata, visibility, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (anchor, category, title, content, content_hash, spoiler_level, metadata_json, visibility.value, created_at),
+                    (
+                        anchor,
+                        category,
+                        title,
+                        content,
+                        content_hash,
+                        spoiler_level,
+                        metadata_json,
+                        visibility.value,
+                        created_at,
+                    ),
                 )
                 canon_id = cursor.lastrowid
 
@@ -1115,9 +1150,7 @@ class ColdStore:
     def get_canon(self, anchor: str) -> ColdCanon | None:
         """Get a canon entry by anchor."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM canon WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT * FROM canon WHERE anchor = ?", (anchor,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -1133,11 +1166,15 @@ class ColdStore:
                 content_hash=row["content_hash"],
                 spoiler_level=row["spoiler_level"],
                 metadata=metadata,
-                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.INTERNAL,
+                visibility=Visibility(row["visibility"])
+                if row["visibility"]
+                else Visibility.INTERNAL,
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
 
-    def list_canon(self, category: str | None = None, spoiler_level: str | None = None) -> list[str]:
+    def list_canon(
+        self, category: str | None = None, spoiler_level: str | None = None
+    ) -> list[str]:
         """List canon entry anchors, optionally filtered by category and/or spoiler level."""
         with self._connection() as conn:
             conditions = []
@@ -1194,9 +1231,7 @@ class ColdStore:
 
         with self._connection() as conn:
             # Check if anchor exists
-            cursor = conn.execute(
-                "SELECT id FROM acts WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT id FROM acts WHERE anchor = ?", (anchor,))
             existing = cursor.fetchone()
 
             if existing:
@@ -1236,9 +1271,7 @@ class ColdStore:
     def get_act(self, anchor: str) -> ColdAct | None:
         """Get an act by anchor."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM acts WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT * FROM acts WHERE anchor = ?", (anchor,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -1249,7 +1282,9 @@ class ColdStore:
                 title=row["title"],
                 sequence=row["sequence"],
                 description=row["description"],
-                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                visibility=Visibility(row["visibility"])
+                if row["visibility"]
+                else Visibility.PUBLIC,
             )
 
     def list_acts(self) -> list[ColdAct]:
@@ -1263,7 +1298,9 @@ class ColdStore:
                     title=row["title"],
                     sequence=row["sequence"],
                     description=row["description"],
-                    visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                    visibility=Visibility(row["visibility"])
+                    if row["visibility"]
+                    else Visibility.PUBLIC,
                 )
                 for row in cursor.fetchall()
             ]
@@ -1310,17 +1347,13 @@ class ColdStore:
             # Resolve act_anchor to act_id
             act_id = None
             if act_anchor:
-                cursor = conn.execute(
-                    "SELECT id FROM acts WHERE anchor = ?", (act_anchor,)
-                )
+                cursor = conn.execute("SELECT id FROM acts WHERE anchor = ?", (act_anchor,))
                 row = cursor.fetchone()
                 if row:
                     act_id = row["id"]
 
             # Check if anchor exists
-            cursor = conn.execute(
-                "SELECT id FROM chapters WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT id FROM chapters WHERE anchor = ?", (anchor,))
             existing = cursor.fetchone()
 
             if existing:
@@ -1361,9 +1394,7 @@ class ColdStore:
     def get_chapter(self, anchor: str) -> ColdChapter | None:
         """Get a chapter by anchor."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM chapters WHERE anchor = ?", (anchor,)
-            )
+            cursor = conn.execute("SELECT * FROM chapters WHERE anchor = ?", (anchor,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -1375,7 +1406,9 @@ class ColdStore:
                 sequence=row["sequence"],
                 act_id=row["act_id"],
                 summary=row["summary"],
-                visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                visibility=Visibility(row["visibility"])
+                if row["visibility"]
+                else Visibility.PUBLIC,
             )
 
     def list_chapters(self, act_anchor: str | None = None) -> list[ColdChapter]:
@@ -1402,7 +1435,9 @@ class ColdStore:
                     sequence=row["sequence"],
                     act_id=row["act_id"],
                     summary=row["summary"],
-                    visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                    visibility=Visibility(row["visibility"])
+                    if row["visibility"]
+                    else Visibility.PUBLIC,
                 )
                 for row in cursor.fetchall()
             ]
@@ -1482,6 +1517,7 @@ class ColdStore:
         # Copy file
         dest_path = dest_dir / filename
         import shutil
+
         shutil.copy2(file_path, dest_path)
 
         approved_at = _now_iso()
@@ -1490,9 +1526,7 @@ class ColdStore:
             # Get section_id if anchor refers to a section
             section_id = None
             if anchor not in ("cover", "logo"):
-                cursor = conn.execute(
-                    "SELECT id FROM sections WHERE anchor = ?", (anchor,)
-                )
+                cursor = conn.execute("SELECT id FROM sections WHERE anchor = ?", (anchor,))
                 row = cursor.fetchone()
                 if row:
                     section_id = row["id"]
@@ -1540,9 +1574,7 @@ class ColdStore:
     def get_asset(self, filename: str) -> ColdAsset | None:
         """Get an asset by filename."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM assets WHERE filename = ?", (filename,)
-            )
+            cursor = conn.execute("SELECT * FROM assets WHERE filename = ?", (filename,))
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -1595,9 +1627,7 @@ class ColdStore:
     def list_assets(self) -> list[ColdAsset]:
         """List all assets."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM assets ORDER BY anchor, asset_type"
-            )
+            cursor = conn.execute("SELECT * FROM assets ORDER BY anchor, asset_type")
             assets = []
             for row in cursor.fetchall():
                 provenance = None
@@ -1625,7 +1655,12 @@ class ColdStore:
         if asset is None:
             return None
 
-        if asset.asset_type in (AssetType.PLATE, AssetType.COVER, AssetType.ICON, AssetType.ORNAMENT):
+        if asset.asset_type in (
+            AssetType.PLATE,
+            AssetType.COVER,
+            AssetType.ICON,
+            AssetType.ORNAMENT,
+        ):
             return self.assets_dir / "images" / filename
         elif asset.asset_type == AssetType.AUDIO:
             return self.assets_dir / "audio" / filename
@@ -1647,24 +1682,14 @@ class ColdStore:
         """
         with self._connection() as conn:
             # Get all sections
-            cursor = conn.execute(
-                "SELECT id, anchor, content_hash FROM sections ORDER BY anchor"
-            )
+            cursor = conn.execute("SELECT id, anchor, content_hash FROM sections ORDER BY anchor")
             sections = [(row["anchor"], row["content_hash"]) for row in cursor.fetchall()]
-            section_ids = [
-                row["id"]
-                for row in conn.execute("SELECT id FROM sections").fetchall()
-            ]
+            section_ids = [row["id"] for row in conn.execute("SELECT id FROM sections").fetchall()]
 
             # Get all assets
-            cursor = conn.execute(
-                "SELECT id, filename, file_hash FROM assets ORDER BY filename"
-            )
+            cursor = conn.execute("SELECT id, filename, file_hash FROM assets ORDER BY filename")
             assets = [(row["filename"], row["file_hash"]) for row in cursor.fetchall()]
-            asset_ids = [
-                row["id"]
-                for row in conn.execute("SELECT id FROM assets").fetchall()
-            ]
+            asset_ids = [row["id"] for row in conn.execute("SELECT id FROM assets").fetchall()]
 
             # Compute manifest hash
             manifest_hash = _compute_manifest_hash(sections, assets)
@@ -1734,17 +1759,13 @@ class ColdStore:
     def list_snapshots(self) -> list[str]:
         """List all snapshot IDs (newest first)."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT snapshot_id FROM snapshots ORDER BY created_at DESC"
-            )
+            cursor = conn.execute("SELECT snapshot_id FROM snapshots ORDER BY created_at DESC")
             return [row["snapshot_id"] for row in cursor.fetchall()]
 
     def get_latest_snapshot(self) -> ColdSnapshot | None:
         """Get the most recent snapshot."""
         with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM snapshots ORDER BY created_at DESC LIMIT 1"
-            )
+            cursor = conn.execute("SELECT * FROM snapshots ORDER BY created_at DESC LIMIT 1")
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -1783,7 +1804,9 @@ class ColdStore:
                     order=row["order_num"],
                     requires_gate=bool(row["requires_gate"]),
                     source_brief_id=row["source_brief_id"],
-                    visibility=Visibility(row["visibility"]) if row["visibility"] else Visibility.PUBLIC,
+                    visibility=Visibility(row["visibility"])
+                    if row["visibility"]
+                    else Visibility.PUBLIC,
                     created_at=datetime.fromisoformat(row["created_at"]),
                 )
                 for row in cursor.fetchall()
@@ -1869,9 +1892,7 @@ class ColdStore:
                         )
 
             # Check book metadata
-            cursor = conn.execute(
-                "SELECT start_section_id FROM book_metadata WHERE id = 1"
-            )
+            cursor = conn.execute("SELECT start_section_id FROM book_metadata WHERE id = 1")
             row = cursor.fetchone()
             if row and row["start_section_id"]:
                 cursor = conn.execute(
@@ -1879,21 +1900,15 @@ class ColdStore:
                     (row["start_section_id"],),
                 )
                 if cursor.fetchone() is None:
-                    errors.append(
-                        f"Invalid start_section_id: {row['start_section_id']}"
-                    )
+                    errors.append(f"Invalid start_section_id: {row['start_section_id']}")
 
             # Check section order contiguity
-            cursor = conn.execute(
-                "SELECT order_num FROM sections ORDER BY order_num"
-            )
+            cursor = conn.execute("SELECT order_num FROM sections ORDER BY order_num")
             orders = [row["order_num"] for row in cursor.fetchall()]
             if orders:
                 expected = list(range(1, len(orders) + 1))
                 if orders != expected:
-                    errors.append(
-                        f"Non-contiguous section order: {orders} (expected {expected})"
-                    )
+                    errors.append(f"Non-contiguous section order: {orders} (expected {expected})")
 
         return errors
 
@@ -1904,17 +1919,11 @@ class ColdStore:
     def get_stats(self) -> dict[str, Any]:
         """Get store statistics."""
         with self._connection() as conn:
-            section_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM sections"
-            ).fetchone()["cnt"]
+            section_count = conn.execute("SELECT COUNT(*) as cnt FROM sections").fetchone()["cnt"]
 
-            asset_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM assets"
-            ).fetchone()["cnt"]
+            asset_count = conn.execute("SELECT COUNT(*) as cnt FROM assets").fetchone()["cnt"]
 
-            snapshot_count = conn.execute(
-                "SELECT COUNT(*) as cnt FROM snapshots"
-            ).fetchone()["cnt"]
+            snapshot_count = conn.execute("SELECT COUNT(*) as cnt FROM snapshots").fetchone()["cnt"]
 
             total_content = conn.execute(
                 "SELECT COALESCE(SUM(LENGTH(content)), 0) as total FROM sections"

@@ -12,7 +12,7 @@ the individual generator modules.
 # The pattern has been: developers edit generated/ files directly, then those
 # changes get overwritten by `qf compile`. This wastes time and causes bugs.
 
-GENERATED_FILE_WARNING = '''
+GENERATED_FILE_WARNING = """
 # ╔═══════════════════════════════════════════════════════════════════════════╗
 # ║                                                                           ║
 # ║   ██████╗  ██████╗     ███╗   ██╗ ██████╗ ████████╗    ███████╗██████╗   ║
@@ -44,4 +44,4 @@ GENERATED_FILE_WARNING = '''
 # ║    domain/ontology/*.md   → generated/models/*.py                         ║
 # ║                                                                           ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
-'''
+"""

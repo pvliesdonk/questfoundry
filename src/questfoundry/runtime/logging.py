@@ -87,33 +87,35 @@ class _JsonlFormatter(logging.Formatter):
     """
 
     # Fields to capture for VCR replay and debugging
-    VCR_FIELDS = frozenset({
-        # LLM interaction fields (from log_llm_request/response)
-        "event",
-        "model",
-        "role",
-        "iteration",
-        "messages",
-        "message_count",
-        "content",
-        "tool_calls",
-        "has_tool_calls",
-        "duration_ms",
-        # Tool execution fields
-        "tool",
-        "args",
-        "result",
-        "success",
-        # State fields
-        "artifact",
-        "key",
-        "value",
-        # Session markers
-        "session_id",
-        "task",
-        "system_prompt",
-        "hot_store_snapshot",
-    })
+    VCR_FIELDS = frozenset(
+        {
+            # LLM interaction fields (from log_llm_request/response)
+            "event",
+            "model",
+            "role",
+            "iteration",
+            "messages",
+            "message_count",
+            "content",
+            "tool_calls",
+            "has_tool_calls",
+            "duration_ms",
+            # Tool execution fields
+            "tool",
+            "args",
+            "result",
+            "success",
+            # State fields
+            "artifact",
+            "key",
+            "value",
+            # Session markers
+            "session_id",
+            "task",
+            "system_prompt",
+            "hot_store_snapshot",
+        }
+    )
 
     def format(self, record: logging.LogRecord) -> str:
         data = {
@@ -351,10 +353,12 @@ def log_llm_request(
         content = msg.get("content", "")
         if isinstance(content, str) and len(content) > 2000:
             content = content[:2000] + "... [truncated]"
-        formatted_messages.append({
-            "role": msg.get("role", msg.get("type", "unknown")),
-            "content": content,
-        })
+        formatted_messages.append(
+            {
+                "role": msg.get("role", msg.get("type", "unknown")),
+                "content": content,
+            }
+        )
 
     logger.info(
         "llm_request",

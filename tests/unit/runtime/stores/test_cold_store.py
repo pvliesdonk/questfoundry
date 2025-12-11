@@ -163,9 +163,7 @@ class TestSectionOperations:
 
     def test_add_with_source_brief(self, cold: ColdStore) -> None:
         """Add section with source brief lineage."""
-        section = cold.add_section(
-            "scene", "Scene", "Content", source_brief_id="brief-001"
-        )
+        section = cold.add_section("scene", "Scene", "Content", source_brief_id="brief-001")
         assert section.source_brief_id == "brief-001"
 
     def test_get_section(self, cold: ColdStore) -> None:

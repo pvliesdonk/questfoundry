@@ -538,7 +538,9 @@ def generate_artifacts_code(
     lines.append("")
     lines.append("# Set of artifact class names that can be promoted to cold_store.")
     lines.append("# Determined by store: cold or store: both in domain definitions.")
-    lines.append("# Runtime routes each type to appropriate cold_store method (add_act, add_chapter, add_section).")
+    lines.append(
+        "# Runtime routes each type to appropriate cold_store method (add_act, add_chapter, add_section)."
+    )
     lines.append("PROMOTABLE_ARTIFACTS: set[str] = {")
     for artifact_id in sorted(artifacts.keys()):
         artifact_ir = artifacts[artifact_id]
@@ -676,7 +678,11 @@ def generate_init_code(
         lines.append("from questfoundry.generated.models.artifacts import COLD_PROMOTION_CONFIG")
 
     # __all__
-    all_exports = enum_names + artifact_classes + ["ARTIFACT_REGISTRY", "PROMOTABLE_ARTIFACTS", "COLD_PROMOTION_CONFIG"]
+    all_exports = (
+        enum_names
+        + artifact_classes
+        + ["ARTIFACT_REGISTRY", "PROMOTABLE_ARTIFACTS", "COLD_PROMOTION_CONFIG"]
+    )
     if all_exports:
         lines.append("")
         lines.append("__all__ = [")

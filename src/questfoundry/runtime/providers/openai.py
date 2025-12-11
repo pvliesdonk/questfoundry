@@ -92,14 +92,10 @@ def create_openai_llm(
 
     key = api_key or os.environ.get("OPENAI_API_KEY")
     if not key:
-        raise ValueError(
-            "OpenAI API key required. Set OPENAI_API_KEY env var or pass api_key."
-        )
+        raise ValueError("OpenAI API key required. Set OPENAI_API_KEY env var or pass api_key.")
 
     if model not in SUPPORTED_MODELS:
-        logger.warning(
-            f"Model '{model}' not in validated list. Supported: {SUPPORTED_MODELS}"
-        )
+        logger.warning(f"Model '{model}' not in validated list. Supported: {SUPPORTED_MODELS}")
 
     logger.info(f"Creating OpenAI LLM: model={model}, temperature={temperature}")
 

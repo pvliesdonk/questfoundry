@@ -674,15 +674,17 @@ class PromoteToCanon(BaseTool):
         def _validation_error(
             artifact_id: str, error: str, invalid_fields: list[Any], hint: str
         ) -> str:
-            return str(json.dumps(
-                {
-                    "success": False,
-                    "error": error,
-                    "artifact_id": artifact_id,
-                    "invalid_fields": invalid_fields,
-                    "hint": hint,
-                }
-            ))
+            return str(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": error,
+                        "artifact_id": artifact_id,
+                        "invalid_fields": invalid_fields,
+                        "hint": hint,
+                    }
+                )
+            )
 
         for artifact_id in artifact_ids:
             # Check artifact exists - fail immediately with feedback
@@ -893,10 +895,25 @@ class PromoteToCanon(BaseTool):
 
                     # Collect category-specific metadata
                     metadata = {}
-                    for field in ("role_in_story", "faction", "relationships", "first_appearance",
-                                  "region", "location_type", "connected_to", "notable_features",
-                                  "item_type", "significance", "owner", "source_entity",
-                                  "target_entity", "relationship_type", "strength", "is_mutual", "tags"):
+                    for field in (
+                        "role_in_story",
+                        "faction",
+                        "relationships",
+                        "first_appearance",
+                        "region",
+                        "location_type",
+                        "connected_to",
+                        "notable_features",
+                        "item_type",
+                        "significance",
+                        "owner",
+                        "source_entity",
+                        "target_entity",
+                        "relationship_type",
+                        "strength",
+                        "is_mutual",
+                        "tags",
+                    ):
                         val = getattr(validated_model, field, None) or content_data.get(field)
                         if val is not None:
                             metadata[field] = val
@@ -914,7 +931,9 @@ class PromoteToCanon(BaseTool):
                     # Per v2 spec: "Canon can contain spoilers; never leaves Hot until approved"
                     from questfoundry.generated.models.enums import Visibility
 
-                    spoiler_level = getattr(validated_model, "spoiler_level", "hot") or content_data.get("spoiler_level", "hot")
+                    spoiler_level = getattr(
+                        validated_model, "spoiler_level", "hot"
+                    ) or content_data.get("spoiler_level", "hot")
                     visibility_val = getattr(validated_model, "visibility", None)
                     if isinstance(visibility_val, str):
                         try:
@@ -928,9 +947,22 @@ class PromoteToCanon(BaseTool):
 
                     # Collect category-specific metadata
                     metadata = {}
-                    for field in ("category", "source", "related_entries", "confidence",
-                                  "timeline_id", "when", "participants", "location", "consequences",
-                                  "reference_point", "events", "scale", "related_entities", "tags"):
+                    for field in (
+                        "category",
+                        "source",
+                        "related_entries",
+                        "confidence",
+                        "timeline_id",
+                        "when",
+                        "participants",
+                        "location",
+                        "consequences",
+                        "reference_point",
+                        "events",
+                        "scale",
+                        "related_entities",
+                        "tags",
+                    ):
                         val = getattr(validated_model, field, None) or content_data.get(field)
                         if val is not None:
                             metadata[field] = val
@@ -1022,8 +1054,10 @@ class ListHotStoreKeys(BaseTool):
                 ARTIFACT_REGISTRY,
                 PROMOTABLE_ARTIFACTS,
             )
+
             promotable_types = {
-                type_name for type_name, cls in ARTIFACT_REGISTRY.items()
+                type_name
+                for type_name, cls in ARTIFACT_REGISTRY.items()
                 if cls.__name__ in PROMOTABLE_ARTIFACTS
                 and not type_name.startswith("cold_")  # cold_* are output types, not input
             }

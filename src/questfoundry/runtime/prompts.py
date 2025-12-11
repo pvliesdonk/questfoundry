@@ -125,6 +125,7 @@ I'll delegate the scene writing to Scene Smith.
 # Domain Template Rendering
 # =============================================================================
 
+
 def _render_role_prompt_template(role: RoleIR) -> str:
     """Render the role's Jinja2 prompt template with role data.
 
@@ -139,7 +140,7 @@ Your mandate: **{role.mandate}**
 
 ## Constraints
 
-{chr(10).join(f'- {c}' for c in role.constraints)}
+{chr(10).join(f"- {c}" for c in role.constraints)}
 """
 
     # Create Jinja2 environment and render
@@ -217,6 +218,7 @@ def _build_sr_tools_section(roles: dict[str, RoleIR]) -> str:
 # =============================================================================
 # Public API
 # =============================================================================
+
 
 def build_sr_prompt(roles: dict[str, RoleIR]) -> str:
     """Build SR's complete system prompt with domain + runtime layers.

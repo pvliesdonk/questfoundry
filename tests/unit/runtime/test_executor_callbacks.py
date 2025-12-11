@@ -85,9 +85,7 @@ class TestExecutorCallbackEmissions:
 
         # Create mock response with tool call to done tool
         mock_response = MagicMock()
-        mock_response.tool_calls = [
-            {"name": "done", "args": {}, "id": "call-1"}
-        ]
+        mock_response.tool_calls = [{"name": "done", "args": {}, "id": "call-1"}]
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         executor = ToolExecutor(
@@ -163,9 +161,7 @@ class TestExecutorCallbackEmissions:
         """Test that executor works without callbacks."""
         # Create mock response with tool call to done tool
         mock_response = MagicMock()
-        mock_response.tool_calls = [
-            {"name": "done", "args": {}, "id": "call-1"}
-        ]
+        mock_response.tool_calls = [{"name": "done", "args": {}, "id": "call-1"}]
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         executor = ToolExecutor(
@@ -193,9 +189,7 @@ class TestExecutorCallbackEmissions:
         callbacks = FailingCallbacks()
 
         mock_response = MagicMock()
-        mock_response.tool_calls = [
-            {"name": "done", "args": {}, "id": "call-1"}
-        ]
+        mock_response.tool_calls = [{"name": "done", "args": {}, "id": "call-1"}]
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         executor = ToolExecutor(
