@@ -582,7 +582,7 @@ class ColdStore:
                 language=row["language"],
                 author=row["author"],
                 start_anchor=start_anchor,
-                domain_version=row["domain_version"] if "domain_version" in row.keys() else None,
+                domain_version=row["domain_version"] if "domain_version" in row else None,  # noqa: SIM401
             )
 
     def set_book_metadata(self, metadata: BookMetadata) -> None:
