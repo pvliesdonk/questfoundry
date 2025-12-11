@@ -202,10 +202,62 @@ class ConsultPlaybook(BaseTool):
             lines.append(loop["description"])
             lines.append("")
 
-        # Nodes (roles/steps)
+        # New format: participants (preferred)
+        participants = loop.get("participants", {})
+        if participants:
+            lines.append("## Participants")
+            lines.append("")
+            for role_id, config in sorted(participants.items()):
+                if isinstance(config, dict):
+                    timeout = config.get("timeout", 300)
+                    max_iter = config.get("max_iterations", 10)
+                else:
+                    # Handle LoopParticipantConfig object
+                    timeout = getattr(config, "timeout", 300)
+                    max_iter = getattr(config, "max_iterations", 10)
+                lines.append(f"- **{role_id}**: timeout={timeout}s, max_iterations={max_iter}")
+            lines.append("")
+
+        # New format: routing_rules as decision table (preferred)
+        routing_rules = loop.get("routing_rules", [])
+        if routing_rules:
+            lines.append("## Routing Rules (Decision Table for SR)")
+            lines.append("")
+            lines.append("After a role completes, delegate based on their status:")
+            lines.append("")
+
+            # Group rules by 'after' role for readability
+            rules_by_role: dict[str, list[dict[str, Any]]] = {}
+            for rule in routing_rules:
+                if isinstance(rule, dict):
+                    after = rule.get("after", "unknown")
+                    rules_by_role.setdefault(after, []).append(rule)
+                else:
+                    # Handle LoopRoutingRuleIR object
+                    after = getattr(rule, "after", "unknown")
+                    rules_by_role.setdefault(after, []).append({
+                        "after": after,
+                        "when": getattr(rule, "when", ""),
+                        "delegate_to": getattr(rule, "delegate_to", ""),
+                        "description": getattr(rule, "description", ""),
+                    })
+
+            for after_role in sorted(rules_by_role.keys()):
+                lines.append(f"### After {after_role}")
+                for rule in rules_by_role[after_role]:
+                    when = rule.get("when", "")
+                    delegate_to = rule.get("delegate_to", "")
+                    description = rule.get("description", "")
+                    if description:
+                        lines.append(f"- **{when}** → {delegate_to}: {description}")
+                    else:
+                        lines.append(f"- **{when}** → {delegate_to}")
+                lines.append("")
+
+        # Deprecated: nodes (fallback for non-migrated loops)
         nodes = loop.get("nodes", [])
-        if nodes:
-            lines.append("## Workflow Steps (Nodes)")
+        if nodes and not participants:
+            lines.append("## Workflow Steps")
             for node in nodes:
                 if isinstance(node, dict):
                     node_id = node.get("id", node.get("node_id", "unknown"))
@@ -216,16 +268,15 @@ class ConsultPlaybook(BaseTool):
                     lines.append(f"- {node}")
             lines.append("")
 
-        # Edges (transitions)
+        # Deprecated: edges (fallback for non-migrated loops)
         edges = loop.get("edges", [])
-        if edges:
-            lines.append("## Transitions (Edges)")
+        if edges and not routing_rules:
+            lines.append("## Transitions")
             for edge in edges:
                 if isinstance(edge, dict):
                     src = edge.get("source", "?")
                     tgt = edge.get("target", "?")
                     cond = edge.get("condition", "")
-                    # Format target nicely
                     tgt_display = "END" if tgt == "__end__" else tgt
                     lines.append(f"- {src} → {tgt_display}: `{cond}`")
             lines.append("")
