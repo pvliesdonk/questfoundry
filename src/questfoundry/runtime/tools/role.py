@@ -828,7 +828,16 @@ class PromoteToCanon(BaseTool):
                     sequence = getattr(validated_model, "sequence", 1)
                     description = getattr(validated_model, "description", None)
                     visibility_val = getattr(validated_model, "visibility", None)
-                    visibility = visibility_val if visibility_val else Visibility.PUBLIC
+                    # Convert string to Visibility enum if needed
+                    if isinstance(visibility_val, str):
+                        try:
+                            visibility = Visibility(visibility_val)
+                        except ValueError:
+                            visibility = Visibility.PUBLIC
+                    elif visibility_val is not None:
+                        visibility = visibility_val
+                    else:
+                        visibility = Visibility.PUBLIC
 
                     self.cold_store.add_act(
                         anchor=artifact_id,
@@ -845,7 +854,16 @@ class PromoteToCanon(BaseTool):
                     act_anchor = getattr(validated_model, "act_id", None)
                     summary = getattr(validated_model, "summary", None)
                     visibility_val = getattr(validated_model, "visibility", None)
-                    visibility = visibility_val if visibility_val else Visibility.PUBLIC
+                    # Convert string to Visibility enum if needed
+                    if isinstance(visibility_val, str):
+                        try:
+                            visibility = Visibility(visibility_val)
+                        except ValueError:
+                            visibility = Visibility.PUBLIC
+                    elif visibility_val is not None:
+                        visibility = visibility_val
+                    else:
+                        visibility = Visibility.PUBLIC
 
                     self.cold_store.add_chapter(
                         anchor=artifact_id,

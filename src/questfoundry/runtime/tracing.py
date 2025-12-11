@@ -70,14 +70,15 @@ def trace_orchestrator_run(
     @wraps(func)
     async def wrapper(
         self: Any,
-        request: str,
+        request: str | None = None,
         loop_id: str = "default",
         resume_run_id: str | None = None,
         resume_checkpoint_id: int | None = None,
+        force_resume: bool = False,
     ) -> Any:
         if not is_tracing_enabled():
             return await func(
-                self, request, loop_id, resume_run_id, resume_checkpoint_id
+                self, request, loop_id, resume_run_id, resume_checkpoint_id, force_resume
             )
 
         try:
@@ -96,20 +97,21 @@ def trace_orchestrator_run(
             )
             async def traced_run(
                 orchestrator: Any,
-                req: str,
+                req: str | None,
                 lid: str,
                 run_id: str | None,
                 checkpoint_id: int | None,
+                force: bool,
             ) -> Any:
-                return await func(orchestrator, req, lid, run_id, checkpoint_id)
+                return await func(orchestrator, req, lid, run_id, checkpoint_id, force)
 
             return await traced_run(
-                self, request, loop_id, resume_run_id, resume_checkpoint_id
+                self, request, loop_id, resume_run_id, resume_checkpoint_id, force_resume
             )
         except ImportError:
             logger.debug("langsmith not available, skipping tracing")
             return await func(
-                self, request, loop_id, resume_run_id, resume_checkpoint_id
+                self, request, loop_id, resume_run_id, resume_checkpoint_id, force_resume
             )
 
     return wrapper
