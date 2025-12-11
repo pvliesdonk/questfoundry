@@ -52,7 +52,7 @@ _archive/           # v2 content (reference only)
 
 ```bash
 # Clone and install
-git clone https://github.com/questfoundry/questfoundry.git
+git clone https://github.com/pvliesdonk/questfoundry.git
 cd questfoundry
 uv sync
 
