@@ -81,141 +81,118 @@ The loop succeeds when:
 - Fix: Remove explanation; trust Codex for world facts
 - Prevention: Check if detail serves story or just informs
 
-## Execution Graph
+## Loop Participants
 
-### Graph Nodes
+The roles that participate in this loop with their operational parameters.
 
-#### Showrunner Node
-
-The entry point that assigns prose work and coordinates style.
-
-:::{graph-node}
-id: showrunner
-role: showrunner
-timeout: 300
-max_iterations: 5
+:::{loop-participants}
+showrunner:
+  timeout: 300
+  max_iterations: 5
+scene_smith:
+  timeout: 900
+  max_iterations: 15
+creative_director:
+  timeout: 300
+  max_iterations: 5
+lorekeeper:
+  timeout: 300
+  max_iterations: 5
+gatekeeper:
+  timeout: 300
+  max_iterations: 3
 :::
 
-#### Scene Smith Node
+## Routing Rules
 
-Drafts prose content based on structural briefs.
+Decision table for Showrunner: after a role completes work, these rules
+describe when to delegate to the next role.
 
-:::{graph-node}
-id: scene_smith
-role: scene_smith
-timeout: 900
-max_iterations: 15
+### After Showrunner
+
+:::{routing-rule}
+after: showrunner
+when: brief_created
+delegate_to: scene_smith
+description: SR creates prose brief; SS drafts content
 :::
 
-#### Creative Director Node
-
-Ensures voice and style consistency; provides register guidance.
-
-:::{graph-node}
-id: creative_director
-role: creative_director
-timeout: 300
-max_iterations: 5
+:::{routing-rule}
+after: showrunner
+when: terminate
+delegate_to: END
+description: Scene weaving complete; end the loop
 :::
 
-#### Lorekeeper Node
+### After Scene Smith
 
-Provides canon callbacks and foreshadowing guidance.
-
-:::{graph-node}
-id: lorekeeper
-role: lorekeeper
-timeout: 300
-max_iterations: 5
+:::{routing-rule}
+after: scene_smith
+when: needs_canon
+delegate_to: lorekeeper
+description: SS needs canon facts for accurate prose
 :::
 
-#### Gatekeeper Node
-
-Validates style, presentation, and PN-safety of prose.
-
-:::{graph-node}
-id: gatekeeper
-role: gatekeeper
-timeout: 300
-max_iterations: 3
+:::{routing-rule}
+after: scene_smith
+when: needs_style_check
+delegate_to: creative_director
+description: SS has voice questions; CD provides guidance
 :::
 
-### Graph Edges
-
-#### From Showrunner
-
-:::{graph-edge}
-source: showrunner
-target: scene_smith
-condition: "intent.status == 'brief_created'"
+:::{routing-rule}
+after: scene_smith
+when: draft_complete
+delegate_to: gatekeeper
+description: Prose drafted; GK validates style and safety
 :::
 
-:::{graph-edge}
-source: showrunner
-target: END
-condition: "intent.type == 'terminate'"
+:::{routing-rule}
+after: scene_smith
+when: escalation
+delegate_to: showrunner
+description: SS encounters blocking issue requiring SR decision
 :::
 
-#### From Scene Smith
+### After Lorekeeper
 
-:::{graph-edge}
-source: scene_smith
-target: lorekeeper
-condition: "intent.status == 'needs_canon'"
+:::{routing-rule}
+after: lorekeeper
+when: canon_provided
+delegate_to: scene_smith
+description: Canon callbacks ready; SS continues prose work
 :::
 
-:::{graph-edge}
-source: scene_smith
-target: creative_director
-condition: "intent.status == 'needs_style_check'"
+### After Creative Director
+
+:::{routing-rule}
+after: creative_director
+when: style_guidance_provided
+delegate_to: scene_smith
+description: Style guidance given; SS applies to prose
 :::
 
-:::{graph-edge}
-source: scene_smith
-target: gatekeeper
-condition: "intent.status == 'draft_complete'"
+:::{routing-rule}
+after: creative_director
+when: escalation
+delegate_to: showrunner
+description: CD encounters voice conflict requiring SR decision
 :::
 
-:::{graph-edge}
-source: scene_smith
-target: showrunner
-condition: "intent.type == 'escalation'"
+### After Gatekeeper
+
+:::{routing-rule}
+after: gatekeeper
+when: failed
+delegate_to: scene_smith
+description: Validation failed; SS revises prose
 :::
 
-#### From Lorekeeper
-
-:::{graph-edge}
-source: lorekeeper
-target: scene_smith
-condition: "intent.status == 'canon_provided'"
-:::
-
-#### From Creative Director
-
-:::{graph-edge}
-source: creative_director
-target: scene_smith
-condition: "intent.status == 'style_guidance_provided'"
-:::
-
-:::{graph-edge}
-source: creative_director
-target: showrunner
-condition: "intent.type == 'escalation'"
-:::
-
-#### From Gatekeeper
-
-:::{graph-edge}
-source: gatekeeper
-target: scene_smith
-condition: "intent.status == 'failed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'passed'"
+:::{routing-rule}
+after: gatekeeper
+when: passed
+delegate_to: showrunner
+description: All bars passed; SR approves for merge
 :::
 
 ## Quality Gates
@@ -237,18 +214,18 @@ blocking: true
 
 ```text
 Topology Ready
-    ↓
-[Showrunner] → creates prose brief
-    ↓
-[Scene Smith] → drafts prose
-    ↓ (if canon needed)
-[Lorekeeper] → provides callbacks
-    ↓ (if style questions)
-[Creative Director] → provides guidance
-    ↓
-[Gatekeeper] → validates prose
-    ↓ (if passed)
-[Showrunner] → approves for merge
+    |
+[Showrunner] -> creates prose brief
+    |
+[Scene Smith] -> drafts prose
+    | (if canon needed)
+[Lorekeeper] -> provides callbacks
+    | (if style questions)
+[Creative Director] -> provides guidance
+    |
+[Gatekeeper] -> validates prose
+    | (if passed)
+[Showrunner] -> approves for merge
 ```
 
 ## Artifacts Produced

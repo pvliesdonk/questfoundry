@@ -75,122 +75,106 @@ The loop succeeds when:
 - Fix: Add `uncorroborated:<risk>` and neutral phrasing notes
 - Prevention: Always tag factual claims with research status
 
-## Execution Graph
+## Loop Participants
 
-### Graph Nodes
+The roles that participate in this loop with their operational parameters.
 
-#### Showrunner Node
-
-The entry point that scopes the deepening pass and resolves conflicts.
-
-:::{graph-node}
-id: showrunner
-role: showrunner
-timeout: 300
-max_iterations: 5
+:::{loop-participants}
+showrunner:
+  timeout: 300
+  max_iterations: 5
+lorekeeper:
+  timeout: 900
+  max_iterations: 15
+plotwright:
+  timeout: 300
+  max_iterations: 5
+gatekeeper:
+  timeout: 300
+  max_iterations: 3
 :::
 
-#### Lorekeeper Node
+## Routing Rules
 
-Drafts canon entries, resolves contradictions, and produces downstream notes.
+Decision table for Showrunner: after a role completes work, these rules
+describe when to delegate to the next role.
 
-:::{graph-node}
-id: lorekeeper
-role: lorekeeper
-timeout: 900
-max_iterations: 15
+### After Showrunner
+
+:::{routing-rule}
+after: showrunner
+when: brief_created
+delegate_to: lorekeeper
+description: SR scopes deepening pass; LK drafts canon entries
 :::
 
-#### Plotwright Node
-
-Sanity-checks topology implications and requests structural adjustments.
-
-:::{graph-node}
-id: plotwright
-role: plotwright
-timeout: 300
-max_iterations: 5
+:::{routing-rule}
+after: showrunner
+when: terminate
+delegate_to: END
+description: Deepening complete or cancelled; end the loop
 :::
 
-#### Gatekeeper Node
+### After Lorekeeper
 
-Pre-reads for integrity and reachability risks before formal gatecheck.
-
-:::{graph-node}
-id: gatekeeper
-role: gatekeeper
-timeout: 300
-max_iterations: 3
+:::{routing-rule}
+after: lorekeeper
+when: needs_topology_check
+delegate_to: plotwright
+description: Canon changes may affect structure; PW assesses
 :::
 
-### Graph Edges
-
-#### From Showrunner
-
-:::{graph-edge}
-source: showrunner
-target: lorekeeper
-condition: "intent.status == 'brief_created'"
+:::{routing-rule}
+after: lorekeeper
+when: canon_drafted
+delegate_to: gatekeeper
+description: Canon entries ready; GK validates before approval
 :::
 
-:::{graph-edge}
-source: showrunner
-target: END
-condition: "intent.type == 'terminate'"
+:::{routing-rule}
+after: lorekeeper
+when: escalation
+delegate_to: showrunner
+description: LK encounters conflict requiring SR decision
 :::
 
-#### From Lorekeeper
+### After Plotwright
 
-:::{graph-edge}
-source: lorekeeper
-target: plotwright
-condition: "intent.status == 'needs_topology_check'"
+:::{routing-rule}
+after: plotwright
+when: topology_assessed
+delegate_to: lorekeeper
+description: Structure impact assessed; LK incorporates feedback
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: gatekeeper
-condition: "intent.status == 'canon_drafted'"
+:::{routing-rule}
+after: plotwright
+when: escalation
+delegate_to: showrunner
+description: PW finds major topology issue requiring SR decision
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.type == 'escalation'"
+### After Gatekeeper
+
+:::{routing-rule}
+after: gatekeeper
+when: failed
+delegate_to: lorekeeper
+description: Validation failed; LK revises canon entries
 :::
 
-#### From Plotwright
-
-:::{graph-edge}
-source: plotwright
-target: lorekeeper
-condition: "intent.status == 'topology_assessed'"
+:::{routing-rule}
+after: gatekeeper
+when: passed
+delegate_to: showrunner
+description: Canon validated; SR approves for merge
 :::
 
-:::{graph-edge}
-source: plotwright
-target: showrunner
-condition: "intent.type == 'escalation'"
-:::
-
-#### From Gatekeeper
-
-:::{graph-edge}
-source: gatekeeper
-target: lorekeeper
-condition: "intent.status == 'failed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'passed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'waiver_requested'"
+:::{routing-rule}
+after: gatekeeper
+when: waiver_requested
+delegate_to: showrunner
+description: GK requests waiver for quality bar; SR decides
 :::
 
 ## Quality Gates
@@ -211,18 +195,18 @@ blocking: true
 
 ```text
 Accepted Hooks
-    ↓
-[Showrunner] → scopes deepening pass
-    ↓
-[Lorekeeper] → drafts canon entries
-    ↓ (if topology affected)
-[Plotwright] → validates structure implications
-    ↓
-[Lorekeeper] → finalizes with downstream notes
-    ↓
-[Gatekeeper] → pre-gate validation
-    ↓ (if passed)
-[Showrunner] → approves for merge
+    |
+[Showrunner] -> scopes deepening pass
+    |
+[Lorekeeper] -> drafts canon entries
+    | (if topology affected)
+[Plotwright] -> validates structure implications
+    |
+[Lorekeeper] -> finalizes with downstream notes
+    |
+[Gatekeeper] -> pre-gate validation
+    | (if passed)
+[Showrunner] -> approves for merge
 ```
 
 ## Artifacts Produced

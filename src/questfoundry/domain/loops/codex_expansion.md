@@ -75,116 +75,99 @@ The loop succeeds when:
 - Fix: Prioritize by player-value; batch releases
 - Prevention: Set entry budget per cycle; focus on comprehension bottlenecks
 
-## Execution Graph
+## Loop Participants
 
-### Graph Nodes
+The roles that participate in this loop with their operational parameters.
 
-#### Showrunner Node
-
-The entry point that scopes codex work and confirms priorities.
-
-:::{graph-node}
-id: showrunner
-role: showrunner
-timeout: 300
-max_iterations: 5
+:::{loop-participants}
+showrunner:
+  timeout: 300
+  max_iterations: 5
+lorekeeper:
+  timeout: 300
+  max_iterations: 5
+creative_director:
+  timeout: 300
+  max_iterations: 5
+gatekeeper:
+  timeout: 300
+  max_iterations: 3
 :::
 
-#### Lorekeeper Node
+## Routing Rules
 
-Provides canon source material and sweeps for spoiler leaks.
+Decision table for Showrunner: after a role completes work, these rules
+describe when to delegate to the next role.
 
-:::{graph-node}
-id: lorekeeper
-role: lorekeeper
-timeout: 300
-max_iterations: 5
+### After Showrunner
+
+:::{routing-rule}
+after: showrunner
+when: brief_created
+delegate_to: lorekeeper
+description: SR scopes codex work; LK drafts player-safe entries
 :::
 
-#### Creative Director Node
-
-Ensures voice clarity and reading level; enforces style consistency.
-
-:::{graph-node}
-id: creative_director
-role: creative_director
-timeout: 300
-max_iterations: 5
+:::{routing-rule}
+after: showrunner
+when: terminate
+delegate_to: END
+description: Codex expansion complete; end the loop
 :::
 
-#### Gatekeeper Node
+### After Lorekeeper
 
-Validates presentation safety, integrity, and style.
-
-:::{graph-node}
-id: gatekeeper
-role: gatekeeper
-timeout: 300
-max_iterations: 3
+:::{routing-rule}
+after: lorekeeper
+when: entries_drafted
+delegate_to: creative_director
+description: Entries drafted; CD reviews style and voice
 :::
 
-### Graph Edges
-
-#### From Showrunner
-
-:::{graph-edge}
-source: showrunner
-target: lorekeeper
-condition: "intent.status == 'brief_created'"
+:::{routing-rule}
+after: lorekeeper
+when: escalation
+delegate_to: showrunner
+description: LK encounters spoiler issue requiring SR decision
 :::
 
-:::{graph-edge}
-source: showrunner
-target: END
-condition: "intent.type == 'terminate'"
+### After Creative Director
+
+:::{routing-rule}
+after: creative_director
+when: style_approved
+delegate_to: gatekeeper
+description: Style pass complete; GK validates safety and integrity
 :::
 
-#### From Lorekeeper
-
-:::{graph-edge}
-source: lorekeeper
-target: creative_director
-condition: "intent.status == 'entries_drafted'"
+:::{routing-rule}
+after: creative_director
+when: needs_revision
+delegate_to: lorekeeper
+description: CD requests content changes; LK revises entries
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.type == 'escalation'"
+:::{routing-rule}
+after: creative_director
+when: escalation
+delegate_to: showrunner
+description: CD encounters voice conflict requiring SR decision
 :::
 
-#### From Creative Director
+### After Gatekeeper
 
-:::{graph-edge}
-source: creative_director
-target: gatekeeper
-condition: "intent.status == 'style_approved'"
+:::{routing-rule}
+after: gatekeeper
+when: failed
+delegate_to: lorekeeper
+description: Validation failed; LK revises entries
 :::
 
-:::{graph-edge}
-source: creative_director
-target: lorekeeper
-condition: "intent.status == 'needs_revision'"
-:::
-
-:::{graph-edge}
-source: creative_director
-target: showrunner
-condition: "intent.type == 'escalation'"
-:::
-
-#### From Gatekeeper
-
-:::{graph-edge}
-source: gatekeeper
-target: lorekeeper
-condition: "intent.status == 'failed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'passed'"
+:::{routing-rule}
+after: gatekeeper
+when: passed
+delegate_to: showrunner
+description: All bars passed; SR approves for merge
 :::
 
 ## Quality Gates
@@ -206,16 +189,16 @@ blocking: true
 
 ```text
 Canon Available
-    ↓
-[Showrunner] → scopes codex work
-    ↓
-[Lorekeeper] → drafts player-safe entries
-    ↓
-[Creative Director] → style pass
-    ↓
-[Gatekeeper] → validates safety and integrity
-    ↓ (if passed)
-[Showrunner] → approves for merge
+    |
+[Showrunner] -> scopes codex work
+    |
+[Lorekeeper] -> drafts player-safe entries
+    |
+[Creative Director] -> style pass
+    |
+[Gatekeeper] -> validates safety and integrity
+    | (if passed)
+[Showrunner] -> approves for merge
 ```
 
 ## Artifacts Produced

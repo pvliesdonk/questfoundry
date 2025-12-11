@@ -73,122 +73,106 @@ The loop succeeds when:
 - Fix: Defer instead of reject; add wake conditions
 - Prevention: Reject only for clear violations, not uncertainty
 
-## Execution Graph
+## Loop Participants
 
-### Graph Nodes
+The roles that participate in this loop with their operational parameters.
 
-#### Showrunner Node
-
-The entry point that runs the harvest session and makes triage decisions.
-
-:::{graph-node}
-id: showrunner
-role: showrunner
-timeout: 600
-max_iterations: 10
+:::{loop-participants}
+showrunner:
+  timeout: 600
+  max_iterations: 10
+lorekeeper:
+  timeout: 300
+  max_iterations: 5
+plotwright:
+  timeout: 300
+  max_iterations: 5
+gatekeeper:
+  timeout: 300
+  max_iterations: 3
 :::
 
-#### Lorekeeper Node
+## Routing Rules
 
-Flags canon collisions and opportunities; suggests deepening order.
+Decision table for Showrunner: after a role completes work, these rules
+describe when to delegate to the next role.
 
-:::{graph-node}
-id: lorekeeper
-role: lorekeeper
-timeout: 300
-max_iterations: 5
+### After Showrunner
+
+:::{routing-rule}
+after: showrunner
+when: needs_canon_check
+delegate_to: lorekeeper
+description: Hooks have canon implications; LK assesses impact
 :::
 
-#### Plotwright Node
-
-Judges structural impact and identifies gateway implications.
-
-:::{graph-node}
-id: plotwright
-role: plotwright
-timeout: 300
-max_iterations: 5
+:::{routing-rule}
+after: showrunner
+when: needs_structure_check
+delegate_to: plotwright
+description: Hooks have topology implications; PW assesses impact
 :::
 
-#### Gatekeeper Node
-
-Points out quality bars likely to fail if a hook advances.
-
-:::{graph-node}
-id: gatekeeper
-role: gatekeeper
-timeout: 300
-max_iterations: 3
+:::{routing-rule}
+after: showrunner
+when: harvest_complete
+delegate_to: gatekeeper
+description: Triage done; GK validates harvest sheet
 :::
 
-### Graph Edges
-
-#### From Showrunner
-
-:::{graph-edge}
-source: showrunner
-target: lorekeeper
-condition: "intent.status == 'needs_canon_check'"
+:::{routing-rule}
+after: showrunner
+when: terminate
+delegate_to: END
+description: Harvest complete; end the loop
 :::
 
-:::{graph-edge}
-source: showrunner
-target: plotwright
-condition: "intent.status == 'needs_structure_check'"
+### After Lorekeeper
+
+:::{routing-rule}
+after: lorekeeper
+when: canon_assessed
+delegate_to: showrunner
+description: Canon impact assessed; SR continues triage
 :::
 
-:::{graph-edge}
-source: showrunner
-target: gatekeeper
-condition: "intent.status == 'harvest_complete'"
+:::{routing-rule}
+after: lorekeeper
+when: escalation
+delegate_to: showrunner
+description: LK encounters issue requiring SR decision
 :::
 
-:::{graph-edge}
-source: showrunner
-target: END
-condition: "intent.type == 'terminate'"
+### After Plotwright
+
+:::{routing-rule}
+after: plotwright
+when: structure_assessed
+delegate_to: showrunner
+description: Structure impact assessed; SR continues triage
 :::
 
-#### From Lorekeeper
-
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.status == 'canon_assessed'"
+:::{routing-rule}
+after: plotwright
+when: escalation
+delegate_to: showrunner
+description: PW encounters issue requiring SR decision
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.type == 'escalation'"
+### After Gatekeeper
+
+:::{routing-rule}
+after: gatekeeper
+when: passed
+delegate_to: showrunner
+description: Harvest sheet validated; SR hands off to downstream
 :::
 
-#### From Plotwright
-
-:::{graph-edge}
-source: plotwright
-target: showrunner
-condition: "intent.status == 'structure_assessed'"
-:::
-
-:::{graph-edge}
-source: plotwright
-target: showrunner
-condition: "intent.type == 'escalation'"
-:::
-
-#### From Gatekeeper
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'passed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'failed'"
+:::{routing-rule}
+after: gatekeeper
+when: failed
+delegate_to: showrunner
+description: Validation issues found; SR reviews and adjusts
 :::
 
 ## Quality Gates
@@ -208,18 +192,18 @@ blocking: false
 
 ```text
 Backlog Review Request
-    ↓
-[Showrunner] → collects and clusters hooks
-    ↓ (if canon implications)
-[Lorekeeper] → assesses canon impact
-    ↓ (if structure implications)
-[Plotwright] → assesses topology impact
-    ↓
-[Showrunner] → triages and decides
-    ↓
-[Gatekeeper] → validates harvest sheet
-    ↓
-[Showrunner] → hands off to downstream loops
+    |
+[Showrunner] -> collects and clusters hooks
+    | (if canon implications)
+[Lorekeeper] -> assesses canon impact
+    | (if structure implications)
+[Plotwright] -> assesses topology impact
+    |
+[Showrunner] -> triages and decides
+    |
+[Gatekeeper] -> validates harvest sheet
+    |
+[Showrunner] -> hands off to downstream loops
 ```
 
 ## Artifacts Produced

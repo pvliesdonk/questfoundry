@@ -75,85 +75,73 @@ The loop succeeds when:
 - Fix: May need partial rollback; complete dependencies
 - Prevention: Verify dependency graph before committing
 
-## Execution Graph
+## Loop Participants
 
-### Graph Nodes
+The roles that participate in this loop with their operational parameters.
 
-#### Showrunner Node
-
-Authorizes the merge and coordinates the commit process.
-
-:::{graph-node}
-id: showrunner
-role: showrunner
-timeout: 300
-max_iterations: 5
+:::{loop-participants}
+showrunner:
+  timeout: 300
+  max_iterations: 5
+lorekeeper:
+  timeout: 600
+  max_iterations: 10
+gatekeeper:
+  timeout: 300
+  max_iterations: 3
 :::
 
-#### Lorekeeper Node
+## Routing Rules
 
-Verifies referential integrity and manages the actual merge.
+Decision table for Showrunner: after a role completes work, these rules
+describe when to delegate to the next role.
 
-:::{graph-node}
-id: lorekeeper
-role: lorekeeper
-timeout: 600
-max_iterations: 10
+### After Showrunner
+
+:::{routing-rule}
+after: showrunner
+when: merge_authorized
+delegate_to: lorekeeper
+description: SR authorizes the merge; LK prepares and validates
 :::
 
-#### Gatekeeper Node
-
-Final validation that merged content maintains quality bars.
-
-:::{graph-node}
-id: gatekeeper
-role: gatekeeper
-timeout: 300
-max_iterations: 3
+:::{routing-rule}
+after: showrunner
+when: terminate
+delegate_to: END
+description: Merge complete or cancelled; end the loop
 :::
 
-### Graph Edges
+### After Lorekeeper
 
-#### From Showrunner
-
-:::{graph-edge}
-source: showrunner
-target: lorekeeper
-condition: "intent.status == 'merge_authorized'"
+:::{routing-rule}
+after: lorekeeper
+when: merge_prepared
+delegate_to: gatekeeper
+description: LK prepared merge; GK validates integrity before commit
 :::
 
-:::{graph-edge}
-source: showrunner
-target: END
-condition: "intent.type == 'terminate'"
+:::{routing-rule}
+after: lorekeeper
+when: escalation
+delegate_to: showrunner
+description: LK encounters merge conflict requiring SR decision
 :::
 
-#### From Lorekeeper
+### After Gatekeeper
 
-:::{graph-edge}
-source: lorekeeper
-target: gatekeeper
-condition: "intent.status == 'merge_prepared'"
+:::{routing-rule}
+after: gatekeeper
+when: failed
+delegate_to: lorekeeper
+description: Validation failed; LK fixes issues and re-prepares
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.type == 'escalation'"
-:::
-
-#### From Gatekeeper
-
-:::{graph-edge}
-source: gatekeeper
-target: lorekeeper
-condition: "intent.status == 'failed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'passed'"
+:::{routing-rule}
+after: gatekeeper
+when: passed
+delegate_to: showrunner
+description: All validations passed; SR confirms and closes loop
 :::
 
 ## Quality Gates
@@ -174,16 +162,16 @@ blocking: true
 
 ```text
 Gatecheck Passed
-    ↓
-[Showrunner] → authorizes merge
-    ↓
-[Lorekeeper] → prepares merge (integrity check)
-    ↓
-[Gatekeeper] → final validation
-    ↓ (if passed)
-[Lorekeeper] → executes merge to cold_store
-    ↓
-[Showrunner] → confirms and notifies
+    |
+[Showrunner] -> authorizes merge
+    |
+[Lorekeeper] -> prepares merge (integrity check)
+    |
+[Gatekeeper] -> final validation
+    | (if passed)
+[Lorekeeper] -> executes merge to cold_store
+    |
+[Showrunner] -> confirms and notifies
 ```
 
 ## Artifacts Produced
