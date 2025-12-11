@@ -73,177 +73,160 @@ The loop succeeds when:
 - Fix: Complete current scope, create new Brief for additions
 - Prevention: Showrunner enforces scope boundaries
 
-## Execution Graph
+## Loop Participants
 
-### Graph Nodes
+The roles that participate in this loop with their operational parameters.
 
-#### Showrunner Node
-
-The entry point that receives user requests and delegates work.
-
-:::{graph-node}
-id: showrunner
-role: showrunner
-timeout: 300
-max_iterations: 5
+:::{loop-participants}
+showrunner:
+  timeout: 300
+  max_iterations: 5
+plotwright:
+  timeout: 600
+  max_iterations: 10
+lorekeeper:
+  timeout: 300
+  max_iterations: 5
+gatekeeper:
+  timeout: 300
+  max_iterations: 3
+scene_smith:
+  timeout: 900
+  max_iterations: 15
 :::
 
-#### Plotwright Node
+## Routing Rules
 
-Designs the narrative topology based on the brief.
+Decision table for Showrunner: after a role completes work, these rules
+describe when to delegate to the next role.
 
-:::{graph-node}
-id: plotwright
-role: plotwright
-timeout: 600
-max_iterations: 10
+### After Showrunner
+
+:::{routing-rule}
+after: showrunner
+when: brief_created
+delegate_to: plotwright
+description: After SR creates the Brief, delegate to PW for topology design
 :::
 
-#### Lorekeeper Node
-
-Verifies canon consistency when structural decisions require it.
-
-:::{graph-node}
-id: lorekeeper
-role: lorekeeper
-timeout: 300
-max_iterations: 5
+:::{routing-rule}
+after: showrunner
+when: terminate
+delegate_to: END
+description: User request complete or cancelled; end the loop
 :::
 
-#### Gatekeeper Node
+### After Plotwright
 
-Validates the completed topology and prose against quality bars.
-
-:::{graph-node}
-id: gatekeeper
-role: gatekeeper
-timeout: 300
-max_iterations: 3
+:::{routing-rule}
+after: plotwright
+when: needs_lore
+delegate_to: lorekeeper
+description: PW needs canon facts to inform structural decisions
 :::
 
-#### Scene Smith Node
-
-Fills structural shells with prose content.
-
-:::{graph-node}
-id: scene_smith
-role: scene_smith
-timeout: 900
-max_iterations: 15
+:::{routing-rule}
+after: plotwright
+when: topology_complete
+delegate_to: gatekeeper
+description: Topology design done; GK validates structure quality
 :::
 
-### Graph Edges
-
-#### From Showrunner
-
-:::{graph-edge}
-source: showrunner
-target: plotwright
-condition: "intent.status == 'brief_created'"
+:::{routing-rule}
+after: plotwright
+when: escalation
+delegate_to: showrunner
+description: PW encounters blocking issue requiring SR intervention
 :::
 
-:::{graph-edge}
-source: showrunner
-target: END
-condition: "intent.type == 'terminate'"
+### After Lorekeeper
+
+:::{routing-rule}
+after: lorekeeper
+when: lore_verified
+delegate_to: plotwright
+description: Canon facts confirmed; PW continues topology work
 :::
 
-#### From Plotwright
-
-:::{graph-edge}
-source: plotwright
-target: lorekeeper
-condition: "intent.status == 'needs_lore'"
+:::{routing-rule}
+after: lorekeeper
+when: canon_provided
+delegate_to: scene_smith
+description: Canon callbacks ready; SS can reference them in prose
 :::
 
-:::{graph-edge}
-source: plotwright
-target: gatekeeper
-condition: "intent.status == 'topology_complete'"
+:::{routing-rule}
+after: lorekeeper
+when: promoted_to_canon
+delegate_to: showrunner
+description: Content promoted to cold_store; notify SR of completion
 :::
 
-:::{graph-edge}
-source: plotwright
-target: showrunner
-condition: "intent.type == 'escalation'"
+:::{routing-rule}
+after: lorekeeper
+when: escalation
+delegate_to: showrunner
+description: LK encounters canon conflict requiring SR decision
 :::
 
-#### From Lorekeeper
+### After Gatekeeper
 
-:::{graph-edge}
-source: lorekeeper
-target: plotwright
-condition: "intent.status == 'lore_verified'"
+:::{routing-rule}
+after: gatekeeper
+when: topology_failed
+delegate_to: plotwright
+description: Structure validation failed; PW must fix issues
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: scene_smith
-condition: "intent.status == 'canon_provided'"
+:::{routing-rule}
+after: gatekeeper
+when: topology_passed
+delegate_to: scene_smith
+description: Structure validated; SS fills prose into scene shells
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.status == 'promoted_to_canon'"
+:::{routing-rule}
+after: gatekeeper
+when: prose_failed
+delegate_to: scene_smith
+description: Prose validation failed; SS must revise content
 :::
 
-:::{graph-edge}
-source: lorekeeper
-target: showrunner
-condition: "intent.type == 'escalation'"
+:::{routing-rule}
+after: gatekeeper
+when: prose_passed
+delegate_to: lorekeeper
+description: All quality bars passed; LK promotes to canon
 :::
 
-#### From Gatekeeper
-
-:::{graph-edge}
-source: gatekeeper
-target: plotwright
-condition: "intent.status == 'topology_failed'"
+:::{routing-rule}
+after: gatekeeper
+when: waiver_requested
+delegate_to: showrunner
+description: GK requests waiver for quality bar; SR decides
 :::
 
-:::{graph-edge}
-source: gatekeeper
-target: scene_smith
-condition: "intent.status == 'topology_passed'"
+### After Scene Smith
+
+:::{routing-rule}
+after: scene_smith
+when: prose_complete
+delegate_to: gatekeeper
+description: Prose written; GK validates content quality
 :::
 
-:::{graph-edge}
-source: gatekeeper
-target: scene_smith
-condition: "intent.status == 'prose_failed'"
+:::{routing-rule}
+after: scene_smith
+when: needs_canon
+delegate_to: lorekeeper
+description: SS needs canon facts for accurate prose
 :::
 
-:::{graph-edge}
-source: gatekeeper
-target: lorekeeper
-condition: "intent.status == 'prose_passed'"
-:::
-
-:::{graph-edge}
-source: gatekeeper
-target: showrunner
-condition: "intent.status == 'waiver_requested'"
-:::
-
-#### From Scene Smith
-
-:::{graph-edge}
-source: scene_smith
-target: gatekeeper
-condition: "intent.status == 'prose_complete'"
-:::
-
-:::{graph-edge}
-source: scene_smith
-target: lorekeeper
-condition: "intent.status == 'needs_canon'"
-:::
-
-:::{graph-edge}
-source: scene_smith
-target: showrunner
-condition: "intent.type == 'escalation'"
+:::{routing-rule}
+after: scene_smith
+when: escalation
+delegate_to: showrunner
+description: SS encounters blocking issue requiring SR decision
 :::
 
 ## Quality Gates
@@ -281,24 +264,24 @@ blocking: true
 
 ```text
 User Request
-    ↓
-[Showrunner] → creates Brief
-    ↓
-[Plotwright] → designs topology (Acts, Chapters, Scenes)
-    ↓ (if needs canon check)
-[Lorekeeper] → verifies lore facts
-    ↓
-[Gatekeeper] → validates topology
-    ↓ (if topology passed)
-[Scene Smith] → fills prose into Scene artifacts
-    ↓ (if needs canon)
-[Lorekeeper] → provides canon callbacks
-    ↓
-[Gatekeeper] → validates prose
-    ↓ (if prose passed)
-[Lorekeeper] → promotes Scene artifacts to cold_store
-    ↓
-[Showrunner] → terminates
+    |
+[Showrunner] -> creates Brief
+    |
+[Plotwright] -> designs topology (Acts, Chapters, Scenes)
+    | (if needs canon check)
+[Lorekeeper] -> verifies lore facts
+    |
+[Gatekeeper] -> validates topology
+    | (if topology passed)
+[Scene Smith] -> fills prose into Scene artifacts
+    | (if needs canon)
+[Lorekeeper] -> provides canon callbacks
+    |
+[Gatekeeper] -> validates prose
+    | (if prose passed)
+[Lorekeeper] -> promotes Scene artifacts to cold_store
+    |
+[Showrunner] -> terminates
 ```
 
 ## Artifacts Produced
