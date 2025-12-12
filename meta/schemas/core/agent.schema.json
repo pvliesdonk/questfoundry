@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent.schema.json",
+  "title": "Agent",
+  "description": "A role that can take actions within the studio. Agents have archetypes defining their behavioral patterns, capabilities defining what they can do, and constraints defining their boundaries.",
+
+  "type": "object",
+  "required": ["id", "name"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this agent within the studio"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name for display"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "What this agent does and why it exists"
+    },
+
+    "archetypes": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/archetype"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": ["creator"],
+      "description": "Behavioral patterns this agent implements. An agent may implement multiple archetypes (e.g., a Lorekeeper might be both curator and researcher)"
+    },
+
+    "is_entry_agent": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, this agent is the customer-facing entry point. Only entry agents communicate directly with external customers. A studio should have exactly one entry agent."
+    },
+
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "capability.schema.json"
+      },
+      "default": [],
+      "description": "What this agent can do (tools, permissions, actions)"
+    },
+
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "constraint.schema.json"
+      },
+      "default": [],
+      "description": "What this agent cannot do (boundaries, prohibitions)"
+    },
+
+    "exclusive_stores": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/store_ref"
+      },
+      "default": [],
+      "description": "Stores that only this agent can write to. Other agents may read but not write. Used for canonical knowledge curation."
+    },
+
+    "knowledge_requirements": {
+      "$ref": "#/$defs/knowledge_requirements",
+      "description": "What knowledge this agent needs access to"
+    },
+
+    "system_prompt_template": {
+      "$ref": "_definitions.schema.json#/$defs/markdown_text",
+      "description": "Optional template for the agent's system prompt. May include placeholders for knowledge injection."
+    },
+
+    "flow_control_override": {
+      "$ref": "#/$defs/flow_control_override",
+      "description": "Override studio flow control defaults for this specific agent"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "knowledge_requirements": {
+      "type": "object",
+      "properties": {
+        "constitution": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this agent receives the studio constitution (almost always true)"
+        },
+        "must_know": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "IDs of must-know knowledge entries to include in system prompt"
+        },
+        "role_specific": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "IDs of role-specific knowledge entries for this agent"
+        },
+        "can_lookup": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "IDs of knowledge entries this agent can query via tools"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "flow_control_override": {
+      "type": "object",
+      "description": "Override studio flow control defaults for this specific agent. Use this to tune capacity (e.g., orchestrator may handle more concurrent delegations than a specialized creator).",
+      "properties": {
+        "max_inbox_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Override max inbox size for this agent"
+        },
+        "max_active_delegations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Override max concurrent delegations for this agent"
+        },
+        "accepts_delegations": {
+          "type": "boolean",
+          "default": true,
+          "description": "If false, this agent cannot receive new delegations (useful for temporarily pausing an agent)"
+        },
+        "priority_boost": {
+          "type": "integer",
+          "minimum": -10,
+          "maximum": 10,
+          "default": 0,
+          "description": "Boost (positive) or penalize (negative) this agent's messages in recipient inboxes. Higher priority messages survive summarization longer."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

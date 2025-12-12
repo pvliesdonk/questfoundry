@@ -1,0 +1,762 @@
+{
+  "$schema": "../../schemas/core/studio.schema.json",
+  "id": "interactive_fiction_studio",
+  "name": "Interactive Fiction Studio",
+  "description": "A comprehensive example studio for creating interactive fiction with multiple agents, tools, lifecycle management, and RAG-based reference knowledge.",
+  "version": "1.0.0",
+
+  "constitution": {
+    "preamble": "This studio produces interactive fiction experiences. All agents collaborate to create immersive, consistent narrative worlds.",
+    "principles": [
+      {
+        "id": "safe_content",
+        "statement": "Never generate content harmful to minors or that promotes violence, hate, or illegal activities",
+        "category": "ethics",
+        "severity": "critical"
+      },
+      {
+        "id": "narrative_consistency",
+        "statement": "Maintain internal consistency within the story world - facts established must remain true unless explicitly retconned through proper channels",
+        "category": "quality"
+      },
+      {
+        "id": "player_agency",
+        "statement": "Respect player choices - never railroad players or invalidate meaningful decisions",
+        "category": "quality"
+      },
+      {
+        "id": "lorekeeper_authority",
+        "statement": "The Lorekeeper has final authority on canonical facts. Other agents may propose, but only Lorekeeper commits to the world bible.",
+        "category": "process"
+      }
+    ]
+  },
+
+  "agents": [
+    {
+      "id": "showrunner",
+      "name": "Showrunner",
+      "description": "Orchestrates story production, interfaces with customers, and coordinates all other agents",
+      "archetypes": ["orchestrator"],
+      "is_entry_agent": true,
+      "capabilities": [
+        {
+          "id": "customer_interface",
+          "category": "communication",
+          "description": "Communicate with external customers"
+        },
+        {
+          "id": "delegate_to_all",
+          "category": "delegation",
+          "description": "Delegate work to any agent in the studio"
+        }
+      ],
+      "flow_control_override": {
+        "max_inbox_size": 20,
+        "max_active_delegations": 10,
+        "priority_boost": 2
+      },
+      "knowledge_requirements": {
+        "constitution": true,
+        "must_know": ["studio_workflow", "agent_capabilities"],
+        "can_lookup": ["genre_conventions"]
+      }
+    },
+    {
+      "id": "lorekeeper",
+      "name": "Lorekeeper",
+      "description": "Maintains the canonical world bible. Only agent with write access to the lore vault.",
+      "archetypes": ["curator", "researcher"],
+      "exclusive_stores": ["lore_vault"],
+      "capabilities": [
+        {
+          "id": "manage_canon",
+          "category": "artifact_action",
+          "artifact_types": ["world_bible_entry", "character_profile", "location_profile"],
+          "actions": ["create", "read", "update", "delete"]
+        },
+        {
+          "id": "research_lore",
+          "category": "tool",
+          "tool_ref": "web_search",
+          "description": "Research historical and mythological references"
+        },
+        {
+          "id": "consult_references",
+          "category": "tool",
+          "tool_ref": "consult_corpus",
+          "description": "Search the reference library for genre conventions"
+        }
+      ],
+      "constraints": [
+        {
+          "id": "no_story_writing",
+          "type": "prohibition",
+          "description": "Lorekeeper establishes facts, not prose. Do not write scenes or dialogue."
+        }
+      ],
+      "knowledge_requirements": {
+        "constitution": true,
+        "role_specific": ["worldbuilding_guide"],
+        "can_lookup": ["genre_conventions", "mythology_reference"]
+      }
+    },
+    {
+      "id": "scene_smith",
+      "name": "Scene Smith",
+      "description": "Writes scene prose, dialogue, and narrative descriptions",
+      "archetypes": ["creator"],
+      "capabilities": [
+        {
+          "id": "write_scenes",
+          "category": "artifact_action",
+          "artifact_types": ["scene_draft", "dialogue_block"],
+          "actions": ["create", "update"]
+        },
+        {
+          "id": "read_lore",
+          "category": "store_access",
+          "stores": ["lore_vault"],
+          "access_level": "read"
+        }
+      ],
+      "constraints": [
+        {
+          "id": "follow_canon",
+          "type": "guidance",
+          "description": "All written content must be consistent with established lore in the world bible"
+        },
+        {
+          "id": "no_canon_changes",
+          "type": "prohibition",
+          "description": "Cannot modify or contradict established canon. Propose changes to Lorekeeper instead."
+        }
+      ],
+      "knowledge_requirements": {
+        "constitution": true,
+        "role_specific": ["prose_style_guide", "dialogue_guide"],
+        "can_lookup": ["genre_conventions"]
+      }
+    },
+    {
+      "id": "gatekeeper",
+      "name": "Gatekeeper",
+      "description": "Reviews all content for quality, consistency, and adherence to standards",
+      "archetypes": ["validator"],
+      "capabilities": [
+        {
+          "id": "validate_content",
+          "category": "artifact_action",
+          "artifact_types": ["scene_draft", "dialogue_block", "world_bible_entry"],
+          "actions": ["read", "validate"]
+        },
+        {
+          "id": "check_consistency",
+          "category": "tool",
+          "tool_ref": "consistency_checker",
+          "description": "Run automated consistency checks against the world bible"
+        }
+      ],
+      "knowledge_requirements": {
+        "constitution": true,
+        "role_specific": ["quality_standards"],
+        "can_lookup": ["genre_conventions"]
+      }
+    },
+    {
+      "id": "publisher",
+      "name": "Publisher",
+      "description": "Exports final content to various formats (ePub, PDF, game engine)",
+      "archetypes": ["creator"],
+      "exclusive_stores": ["exports"],
+      "capabilities": [
+        {
+          "id": "export_content",
+          "category": "tool",
+          "tool_ref": "export_epub",
+          "description": "Export to ePub format"
+        },
+        {
+          "id": "generate_images",
+          "category": "tool",
+          "tool_ref": "image_gen",
+          "description": "Generate character portraits and scene illustrations"
+        },
+        {
+          "id": "read_approved",
+          "category": "artifact_action",
+          "artifact_types": ["scene_draft"],
+          "actions": ["read"]
+        }
+      ],
+      "constraints": [
+        {
+          "id": "only_approved",
+          "type": "guidance",
+          "description": "Only export content that has reached 'approved' lifecycle state"
+        }
+      ]
+    }
+  ],
+
+  "entry_agent": "showrunner",
+
+  "artifact_types": [
+    {
+      "id": "story_brief",
+      "name": "Story Brief",
+      "description": "Customer's initial request describing the story they want",
+      "category": "document",
+      "fields": [
+        { "name": "title", "type": "string", "required": true, "description": "Working title for the story" },
+        { "name": "genre", "type": "string", "required": true, "description": "Primary genre (mystery, fantasy, sci-fi, etc.)" },
+        { "name": "subgenres", "type": "array", "items_type": "string", "description": "Secondary genre elements" },
+        { "name": "premise", "type": "text", "required": true, "description": "Core story premise in 1-3 sentences" },
+        { "name": "tone", "type": "string", "enum": ["dark", "light", "comedic", "dramatic", "neutral"], "description": "Overall tone" },
+        { "name": "target_length", "type": "string", "enum": ["short", "novella", "novel"], "default": "novella" },
+        { "name": "special_requirements", "type": "text", "description": "Any specific customer requirements" }
+      ]
+    },
+    {
+      "id": "world_bible_entry",
+      "name": "World Bible Entry",
+      "description": "A canonical fact about the story world",
+      "category": "record",
+      "fields": [
+        { "name": "title", "type": "string", "required": true },
+        { "name": "category", "type": "string", "required": true, "enum": ["geography", "history", "culture", "magic_system", "technology", "religion", "politics", "other"] },
+        { "name": "content", "type": "text", "required": true, "description": "The canonical information" },
+        { "name": "sources", "type": "array", "items_type": "string", "description": "References to other entries this builds on" },
+        { "name": "contradicts", "type": "array", "items_type": "string", "description": "Entries this explicitly supersedes (for retcons)" }
+      ],
+      "lifecycle": {
+        "states": [
+          { "id": "proposed", "name": "Proposed", "description": "Suggested by an agent, awaiting Lorekeeper review" },
+          { "id": "canonical", "name": "Canonical", "description": "Accepted as official world fact" },
+          { "id": "deprecated", "name": "Deprecated", "terminal": true, "description": "Superseded by newer information" }
+        ],
+        "initial_state": "proposed",
+        "transitions": [
+          { "from": "proposed", "to": "canonical", "requires_validation": ["lorekeeper_approval"] },
+          { "from": "proposed", "to": "deprecated", "description": "Rejected" },
+          { "from": "canonical", "to": "deprecated", "requires_validation": ["lorekeeper_approval"], "description": "Retcon" }
+        ]
+      }
+    },
+    {
+      "id": "character_profile",
+      "name": "Character Profile",
+      "description": "Detailed profile of a story character",
+      "category": "record",
+      "fields": [
+        { "name": "name", "type": "string", "required": true },
+        { "name": "role", "type": "string", "enum": ["protagonist", "antagonist", "supporting", "minor", "mentioned"], "required": true },
+        { "name": "description", "type": "text", "required": true, "description": "Physical appearance and distinguishing features" },
+        { "name": "personality", "type": "text", "description": "Personality traits and quirks" },
+        { "name": "background", "type": "text", "description": "Backstory and history" },
+        { "name": "motivations", "type": "array", "items_type": "string", "description": "What drives this character" },
+        { "name": "relationships", "type": "array", "items": { "name": "rel", "type": "object", "properties": [
+          { "name": "character_ref", "type": "string" },
+          { "name": "relationship_type", "type": "string" },
+          { "name": "notes", "type": "string" }
+        ]}, "description": "Connections to other characters" },
+        { "name": "voice_notes", "type": "text", "description": "How this character speaks - vocabulary, patterns, accent" }
+      ],
+      "lifecycle": {
+        "states": [
+          { "id": "draft", "name": "Draft" },
+          { "id": "canonical", "name": "Canonical" }
+        ],
+        "initial_state": "draft",
+        "transitions": [
+          { "from": "draft", "to": "canonical", "requires_validation": ["lorekeeper_approval"] }
+        ]
+      }
+    },
+    {
+      "id": "scene_draft",
+      "name": "Scene Draft",
+      "description": "A draft scene with narrative prose",
+      "category": "document",
+      "fields": [
+        { "name": "title", "type": "string", "required": true },
+        { "name": "sequence_number", "type": "integer", "description": "Order in the story" },
+        { "name": "location_ref", "type": "string", "description": "Reference to location profile" },
+        { "name": "characters_present", "type": "array", "items_type": "string", "description": "Character profile references" },
+        { "name": "content", "type": "text", "required": true, "description": "The scene prose" },
+        { "name": "word_count", "type": "integer" },
+        { "name": "author_notes", "type": "text", "description": "Notes for reviewers" }
+      ],
+      "lifecycle": {
+        "states": [
+          { "id": "draft", "name": "Draft" },
+          { "id": "review", "name": "In Review" },
+          { "id": "revision", "name": "Needs Revision" },
+          { "id": "approved", "name": "Approved" },
+          { "id": "published", "name": "Published", "terminal": true }
+        ],
+        "initial_state": "draft",
+        "transitions": [
+          { "from": "draft", "to": "review" },
+          { "from": "review", "to": "approved", "requires_validation": ["prose_quality", "lore_consistency"] },
+          { "from": "review", "to": "revision" },
+          { "from": "revision", "to": "review" },
+          { "from": "approved", "to": "published" }
+        ]
+      }
+    },
+    {
+      "id": "dialogue_block",
+      "name": "Dialogue Block",
+      "description": "A conversation between characters",
+      "category": "document",
+      "fields": [
+        { "name": "participants", "type": "array", "items_type": "string", "required": true, "min_length": 2 },
+        { "name": "context", "type": "text", "description": "Situation and emotional context" },
+        { "name": "content", "type": "text", "required": true, "description": "The dialogue" },
+        { "name": "subtext_notes", "type": "text", "description": "What's really being communicated" }
+      ]
+    }
+  ],
+
+  "asset_types": [
+    {
+      "id": "character_portrait",
+      "name": "Character Portrait",
+      "description": "Visual representation of a character",
+      "mime_types": ["image/png", "image/jpeg", "image/webp"],
+      "manifest_fields": [
+        { "name": "character_ref", "type": "string", "required": true, "description": "Reference to character profile" },
+        { "name": "style", "type": "string", "enum": ["realistic", "stylized", "sketch", "pixel_art"] },
+        { "name": "expression", "type": "string" },
+        { "name": "prompt_used", "type": "text", "description": "Generation prompt for reproducibility" }
+      ]
+    },
+    {
+      "id": "export_package",
+      "name": "Export Package",
+      "description": "Compiled story export",
+      "mime_types": ["application/epub+zip", "application/pdf"],
+      "manifest_fields": [
+        { "name": "format", "type": "string", "required": true, "enum": ["epub", "pdf", "html"] },
+        { "name": "version", "type": "string", "required": true },
+        { "name": "included_scenes", "type": "array", "items_type": "string" }
+      ]
+    }
+  ],
+
+  "stores": [
+    {
+      "id": "story_workspace",
+      "name": "Story Workspace",
+      "description": "Active work in progress",
+      "semantics": "mutable",
+      "allowed_artifact_types": ["story_brief", "scene_draft", "dialogue_block"],
+      "workflow_intent": {
+        "consumption_guidance": "all",
+        "production_guidance": "specified",
+        "designated_producers": ["scene_smith", "showrunner"]
+      }
+    },
+    {
+      "id": "lore_vault",
+      "name": "Lore Vault",
+      "description": "Canonical world bible - only Lorekeeper writes here",
+      "semantics": "versioned",
+      "allowed_artifact_types": ["world_bible_entry", "character_profile", "location_profile"],
+      "workflow_intent": {
+        "consumption_guidance": "all",
+        "production_guidance": "exclusive",
+        "designated_producers": ["lorekeeper"]
+      },
+      "retention_policy": {
+        "keep_versions": 10,
+        "archive_after_days": 365
+      }
+    },
+    {
+      "id": "exports",
+      "name": "Published Exports",
+      "description": "Final exported content",
+      "semantics": "cold",
+      "workflow_intent": {
+        "consumption_guidance": "specified",
+        "designated_consumers": ["showrunner", "publisher"],
+        "production_guidance": "exclusive",
+        "designated_producers": ["publisher"]
+      }
+    },
+    {
+      "id": "reference_library",
+      "name": "Reference Library",
+      "description": "General domain knowledge - genre guides, craft books, conventions. RAG-searchable, not loaded into context.",
+      "semantics": "cold",
+      "workflow_intent": {
+        "consumption_guidance": "none",
+        "production_guidance": "exclusive",
+        "designated_producers": ["lorekeeper"]
+      }
+    }
+  ],
+
+  "tools": [
+    {
+      "id": "web_search",
+      "name": "Web Search",
+      "description": "Search the web for research information. Use for historical facts, mythology, real-world references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search query" },
+          "num_results": { "type": "integer", "default": 5 }
+        },
+        "required": ["query"]
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "requests_per_agent_per_minute": 10
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "consult_corpus",
+      "name": "Consult Reference Corpus",
+      "description": "Search the reference library for genre conventions, writing craft advice, and general domain knowledge. Returns relevant excerpts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "knowledge_id": { "type": "string", "description": "ID of the corpus knowledge entry to search" },
+          "query": { "type": "string", "description": "Natural language query" },
+          "max_results": { "type": "integer", "default": 3 }
+        },
+        "required": ["knowledge_id", "query"]
+      },
+      "timeout_ms": 5000
+    },
+    {
+      "id": "consistency_checker",
+      "name": "Lore Consistency Checker",
+      "description": "Check a piece of content against the world bible for contradictions or inconsistencies.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "content": { "type": "string", "description": "The content to check" },
+          "check_against": { "type": "array", "items": { "type": "string" }, "description": "Specific lore entry IDs to check against (optional)" }
+        },
+        "required": ["content"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "consistent": { "type": "boolean" },
+          "issues": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    },
+    {
+      "id": "image_gen",
+      "name": "Image Generator",
+      "description": "Generate images for character portraits, scene illustrations, etc.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "Image generation prompt" },
+          "style": { "type": "string", "enum": ["realistic", "stylized", "sketch", "pixel_art"] },
+          "aspect_ratio": { "type": "string", "enum": ["1:1", "16:9", "9:16", "4:3"], "default": "1:1" }
+        },
+        "required": ["prompt"]
+      },
+      "secrets_required": ["IMAGE_GEN_API_KEY"],
+      "rate_limit": {
+        "requests_per_minute": 10,
+        "requests_per_agent_per_minute": 5
+      },
+      "timeout_ms": 60000,
+      "retry_policy": {
+        "max_retries": 2,
+        "initial_delay_ms": 2000,
+        "backoff_multiplier": 2,
+        "retryable_errors": ["timeout", "rate_limited"]
+      }
+    },
+    {
+      "id": "export_epub",
+      "name": "ePub Exporter",
+      "description": "Compile approved scenes into an ePub file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "author": { "type": "string" },
+          "scene_ids": { "type": "array", "items": { "type": "string" }, "description": "Scene artifact IDs to include, in order" },
+          "include_illustrations": { "type": "boolean", "default": true }
+        },
+        "required": ["title", "author", "scene_ids"]
+      },
+      "timeout_ms": 120000
+    }
+  ],
+
+  "playbooks": [
+    {
+      "id": "new_story",
+      "name": "New Story Creation",
+      "purpose": "Create a complete interactive fiction story from a customer brief",
+      "triggers": [
+        { "condition": "Customer submits a new story brief", "priority": 1 }
+      ],
+      "inputs": {
+        "context_requirements": ["Customer's story brief"]
+      },
+      "outputs": {
+        "required_artifacts": [
+          { "type": "scene_draft", "state": "approved", "min_count": 3 }
+        ]
+      },
+      "entry_phase": "worldbuilding",
+      "phases": {
+        "worldbuilding": {
+          "name": "World Building",
+          "purpose": "Establish the story world and major characters",
+          "steps": {
+            "analyze_brief": {
+              "action": "Analyze the customer brief and identify world-building needs",
+              "agent_archetype": "orchestrator"
+            },
+            "create_world_entries": {
+              "action": "Create initial world bible entries based on the brief",
+              "agent_archetype": "curator",
+              "depends_on": ["analyze_brief"],
+              "outputs": [{ "name": "world_entries", "artifact_type": "world_bible_entry" }]
+            },
+            "create_characters": {
+              "action": "Create profiles for main characters",
+              "agent_archetype": "curator",
+              "depends_on": ["create_world_entries"],
+              "outputs": [{ "name": "characters", "artifact_type": "character_profile" }]
+            }
+          },
+          "entry_step": "analyze_brief",
+          "quality_checkpoint": {
+            "criteria": ["lorekeeper_approval"],
+            "validator_archetype": "curator"
+          },
+          "completion_criteria": ["At least 3 world bible entries and 2 character profiles exist"],
+          "on_success": { "next_phases": ["drafting"] }
+        },
+        "drafting": {
+          "name": "Scene Drafting",
+          "purpose": "Write the story scenes",
+          "depends_on": ["worldbuilding"],
+          "steps": {
+            "outline_scenes": {
+              "action": "Create a scene outline based on world and characters",
+              "agent_archetype": "orchestrator"
+            },
+            "write_scenes": {
+              "action": "Write each scene following the outline",
+              "agent_archetype": "creator",
+              "depends_on": ["outline_scenes"],
+              "outputs": [{ "name": "scenes", "artifact_type": "scene_draft" }]
+            }
+          },
+          "completion_criteria": ["All outlined scenes have been drafted"],
+          "on_success": { "next_phases": ["review"] }
+        },
+        "review": {
+          "name": "Quality Review",
+          "purpose": "Review all scenes for quality and consistency",
+          "depends_on": ["drafting"],
+          "steps": {
+            "review_scenes": {
+              "action": "Review each scene for prose quality and lore consistency",
+              "agent_archetype": "validator",
+              "inputs": [{ "name": "scenes", "artifact_type": "scene_draft", "from_phase": "drafting" }]
+            }
+          },
+          "quality_checkpoint": {
+            "criteria": ["prose_quality", "lore_consistency"],
+            "validator_archetype": "validator"
+          },
+          "completion_criteria": ["All scenes have been reviewed"],
+          "on_success": { "end_playbook": true, "message": "Story complete and approved" },
+          "on_failure": { "next_phases": ["revision"], "message": "Some scenes need revision" },
+          "is_rework_target": true
+        },
+        "revision": {
+          "name": "Revision",
+          "purpose": "Revise scenes based on review feedback",
+          "depends_on": ["review"],
+          "steps": {
+            "revise_scenes": {
+              "action": "Revise scenes addressing all feedback",
+              "agent_archetype": "creator"
+            }
+          },
+          "completion_criteria": ["All flagged scenes have been revised"],
+          "on_success": { "next_phases": ["review"] }
+        }
+      },
+      "max_rework_cycles": 3
+    }
+  ],
+
+  "quality_criteria": [
+    {
+      "id": "prose_quality",
+      "name": "Prose Quality Check",
+      "description": "Evaluate writing quality, style consistency, and engagement",
+      "enforcement": "llm",
+      "blocking": "gate",
+      "check": {
+        "type": "llm_prompt",
+        "prompt": "Evaluate this scene for prose quality. Check for:\n1. Clear, engaging writing\n2. Consistent narrative voice\n3. Show-don't-tell where appropriate\n4. Natural dialogue\n5. Appropriate pacing\n\nReturn PASS if quality is acceptable, FAIL with specific issues if not."
+      },
+      "applicable_to": {
+        "artifact_types": ["scene_draft", "dialogue_block"]
+      }
+    },
+    {
+      "id": "lore_consistency",
+      "name": "Lore Consistency Check",
+      "description": "Verify content doesn't contradict established world facts",
+      "enforcement": "runtime",
+      "blocking": "gate",
+      "check": {
+        "type": "tool_invocation",
+        "tool_id": "consistency_checker"
+      },
+      "applicable_to": {
+        "artifact_types": ["scene_draft", "dialogue_block", "character_profile"]
+      }
+    },
+    {
+      "id": "lorekeeper_approval",
+      "name": "Lorekeeper Approval",
+      "description": "Lorekeeper must approve all canonical content",
+      "enforcement": "llm",
+      "blocking": "gate",
+      "check": {
+        "type": "agent_approval",
+        "agent_archetype": "curator"
+      },
+      "applicable_to": {
+        "artifact_types": ["world_bible_entry", "character_profile"]
+      }
+    }
+  ],
+
+  "knowledge": [
+    {
+      "id": "studio_workflow",
+      "name": "Studio Workflow Guide",
+      "layer": "must_know",
+      "summary": "How work flows through the studio and each agent's role",
+      "content": {
+        "type": "inline",
+        "text": "# Studio Workflow\n\n## Agent Roles\n- **Showrunner**: Orchestrates everything, talks to customers\n- **Lorekeeper**: Maintains world bible, approves canonical facts\n- **Scene Smith**: Writes prose and dialogue\n- **Gatekeeper**: Reviews quality and consistency\n- **Publisher**: Exports final content\n\n## Typical Flow\n1. Customer submits brief → Showrunner\n2. Showrunner delegates worldbuilding → Lorekeeper\n3. Lorekeeper creates world bible entries\n4. Showrunner delegates scene writing → Scene Smith\n5. Scene Smith writes scenes (consulting lore)\n6. Gatekeeper reviews scenes\n7. Loop until approved\n8. Publisher exports"
+      }
+    },
+    {
+      "id": "agent_capabilities",
+      "name": "Agent Capabilities Reference",
+      "layer": "must_know",
+      "summary": "Quick reference for which agent can do what",
+      "content": {
+        "type": "inline",
+        "text": "# Agent Capabilities\n\n| Agent | Can Do | Cannot Do |\n|-------|--------|----------|\n| Showrunner | Delegate, coordinate, customer comms | Write content directly |\n| Lorekeeper | Create/edit world bible, approve canon | Write scenes |\n| Scene Smith | Write scenes, dialogue | Edit world bible |\n| Gatekeeper | Review, validate, provide feedback | Create content |\n| Publisher | Export, generate images | Modify content |"
+      }
+    },
+    {
+      "id": "prose_style_guide",
+      "name": "Prose Style Guide",
+      "layer": "role_specific",
+      "summary": "Writing style guidelines for scene creation",
+      "applicable_to": {
+        "archetypes": ["creator"]
+      },
+      "content": {
+        "type": "inline",
+        "text": "# Prose Style Guide\n\n## Voice\n- Third person limited or first person (per project)\n- Past tense unless specified otherwise\n- Match POV character's vocabulary level\n\n## Pacing\n- Vary sentence length for rhythm\n- Use short sentences for action\n- Use longer sentences for reflection\n\n## Dialogue\n- Each character should have a distinct voice\n- Use dialogue tags sparingly\n- Action beats > 'said' variations"
+      }
+    },
+    {
+      "id": "worldbuilding_guide",
+      "name": "Worldbuilding Guide",
+      "layer": "role_specific",
+      "summary": "Best practices for creating consistent worlds",
+      "applicable_to": {
+        "archetypes": ["curator"]
+      },
+      "content": {
+        "type": "inline",
+        "text": "# Worldbuilding Guide\n\n## Principles\n1. **Internal Consistency**: Rules established must remain true\n2. **Logical Consequences**: Magic/tech has costs and limits\n3. **Cultural Depth**: Societies have history, conflict, change\n4. **Character Grounding**: World affects how people think/act\n\n## Entry Structure\n- State facts clearly\n- Note sources/references\n- Flag potential conflicts\n- Version for retcons"
+      }
+    },
+    {
+      "id": "quality_standards",
+      "name": "Quality Standards",
+      "layer": "role_specific",
+      "summary": "What to look for when reviewing content",
+      "applicable_to": {
+        "archetypes": ["validator"]
+      },
+      "content": {
+        "type": "inline",
+        "text": "# Quality Review Standards\n\n## Must Check\n1. Lore consistency (use consistency_checker tool)\n2. Character voice accuracy\n3. Prose quality (clarity, engagement)\n4. Pacing appropriateness\n5. Constitution compliance\n\n## Red Flags\n- Contradicts world bible\n- Character acts out of character without reason\n- Exposition dumps\n- Purple prose\n- Inappropriate content"
+      }
+    },
+    {
+      "id": "genre_conventions",
+      "name": "Genre Conventions Encyclopedia",
+      "layer": "lookup",
+      "summary": "General reference for genre tropes, conventions, and craft advice. Search with consult_corpus tool.",
+      "keywords": ["tropes", "conventions", "genre", "mystery", "fantasy", "sci-fi", "romance", "thriller"],
+      "content": {
+        "type": "corpus",
+        "corpus_ref": {
+          "store_ref": "reference_library",
+          "path_pattern": "genres/**",
+          "index_config": {
+            "chunk_size": 1000,
+            "chunk_overlap": 100
+          }
+        }
+      }
+    },
+    {
+      "id": "mythology_reference",
+      "name": "Mythology and Folklore Reference",
+      "layer": "lookup",
+      "summary": "Reference material on world mythology, folklore, and legend. Search with consult_corpus tool.",
+      "keywords": ["mythology", "folklore", "legends", "gods", "creatures", "archetypes"],
+      "content": {
+        "type": "corpus",
+        "corpus_ref": {
+          "store_ref": "reference_library",
+          "path_pattern": "reference/mythology/**"
+        }
+      }
+    }
+  ],
+
+  "defaults": {
+    "default_store": "story_workspace",
+    "default_playbook": "new_story",
+    "max_rework_cycles": 3,
+    "default_quality_criteria": ["prose_quality", "lore_consistency"],
+    "flow_control": {
+      "max_inbox_size": 10,
+      "auto_summarize_threshold": 5,
+      "max_active_delegations_per_agent": 3,
+      "default_message_ttl_turns": 24
+    }
+  },
+
+  "metadata": {
+    "domain": "interactive fiction",
+    "authors": ["Studio Designer"],
+    "tags": ["fiction", "interactive", "narrative", "storytelling"],
+    "license": "MIT"
+  }
+}

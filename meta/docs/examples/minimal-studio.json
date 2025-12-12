@@ -1,0 +1,224 @@
+{
+  "$schema": "../../schemas/core/studio.schema.json",
+  "id": "minimal_writing_studio",
+  "name": "Minimal Writing Studio",
+  "description": "A minimal example studio for collaborative writing",
+  "version": "1.0.0",
+
+  "constitution": {
+    "preamble": "This studio produces creative writing collaboratively.",
+    "principles": [
+      {
+        "id": "original_content",
+        "statement": "All content must be original creative work",
+        "category": "ethics"
+      },
+      {
+        "id": "consistent_voice",
+        "statement": "Maintain consistent narrative voice within a piece",
+        "category": "quality"
+      }
+    ]
+  },
+
+  "agents": [
+    {
+      "id": "project_lead",
+      "name": "Project Lead",
+      "description": "Orchestrates writing projects and interfaces with customers",
+      "archetypes": ["orchestrator"],
+      "is_entry_agent": true,
+      "capabilities": [
+        {
+          "id": "receive_requests",
+          "category": "communication",
+          "description": "Receive and interpret customer requests"
+        },
+        {
+          "id": "delegate_work",
+          "category": "delegation",
+          "description": "Delegate work to other agents"
+        }
+      ]
+    },
+    {
+      "id": "writer",
+      "name": "Content Writer",
+      "description": "Creates narrative content",
+      "archetypes": ["creator"],
+      "capabilities": [
+        {
+          "id": "create_content",
+          "category": "artifact_action",
+          "artifact_types": ["draft", "scene"],
+          "actions": ["create", "update"]
+        }
+      ]
+    },
+    {
+      "id": "editor",
+      "name": "Editor",
+      "description": "Reviews and provides feedback on content",
+      "archetypes": ["validator"],
+      "capabilities": [
+        {
+          "id": "review_content",
+          "category": "artifact_action",
+          "artifact_types": ["draft", "scene"],
+          "actions": ["read", "validate"]
+        }
+      ]
+    }
+  ],
+
+  "entry_agent": "project_lead",
+
+  "artifact_types": [
+    {
+      "id": "draft",
+      "name": "Draft",
+      "description": "A draft piece of writing",
+      "category": "document",
+      "fields": [
+        { "name": "title", "type": "string", "required": true },
+        { "name": "content", "type": "text", "required": true },
+        { "name": "word_count", "type": "integer" },
+        { "name": "notes", "type": "text" }
+      ],
+      "lifecycle": {
+        "states": [
+          { "id": "draft", "name": "Draft" },
+          { "id": "review", "name": "In Review" },
+          { "id": "approved", "name": "Approved" },
+          { "id": "published", "name": "Published", "terminal": true }
+        ],
+        "initial_state": "draft",
+        "transitions": [
+          { "from": "draft", "to": "review" },
+          { "from": "review", "to": "draft" },
+          { "from": "review", "to": "approved" },
+          { "from": "approved", "to": "published" }
+        ]
+      }
+    }
+  ],
+
+  "stores": [
+    {
+      "id": "working",
+      "name": "Working Store",
+      "description": "Store for work in progress",
+      "semantics": "mutable"
+    },
+    {
+      "id": "published",
+      "name": "Published Store",
+      "description": "Store for completed, published work",
+      "semantics": "append_only"
+    }
+  ],
+
+  "playbooks": [
+    {
+      "id": "create_content",
+      "name": "Create Content",
+      "purpose": "Create a new piece of written content from customer request",
+      "triggers": [
+        { "condition": "Customer requests new content creation", "priority": 1 }
+      ],
+      "inputs": {
+        "context_requirements": ["Description of what customer wants"]
+      },
+      "outputs": {
+        "required_artifacts": [
+          { "type": "draft", "state": "approved" }
+        ]
+      },
+      "entry_phase": "drafting",
+      "phases": {
+        "drafting": {
+          "name": "Drafting",
+          "purpose": "Create initial draft",
+          "steps": {
+            "understand_request": {
+              "action": "Clarify the customer's requirements and intent",
+              "agent_archetype": "orchestrator"
+            },
+            "create_draft": {
+              "action": "Write the initial draft based on requirements",
+              "agent_archetype": "creator",
+              "depends_on": ["understand_request"],
+              "outputs": [{ "name": "draft", "artifact_type": "draft" }]
+            }
+          },
+          "entry_step": "understand_request",
+          "completion_criteria": ["Draft artifact has been created"],
+          "on_success": { "next_phases": ["review"] }
+        },
+        "review": {
+          "name": "Review",
+          "purpose": "Review draft for quality",
+          "depends_on": ["drafting"],
+          "steps": {
+            "review_draft": {
+              "action": "Review the draft for quality, consistency, and adherence to requirements",
+              "agent_archetype": "validator",
+              "inputs": [{ "name": "draft", "artifact_type": "draft", "from_phase": "drafting" }]
+            }
+          },
+          "quality_checkpoint": {
+            "criteria": ["style_check"],
+            "validator_archetype": "validator"
+          },
+          "completion_criteria": ["Review feedback has been provided"],
+          "on_success": { "end_playbook": true, "message": "Draft approved" },
+          "on_failure": { "next_phases": ["revision"], "message": "Draft needs revision" },
+          "is_rework_target": true
+        },
+        "revision": {
+          "name": "Revision",
+          "purpose": "Revise draft based on feedback",
+          "depends_on": ["review"],
+          "steps": {
+            "revise_draft": {
+              "action": "Revise the draft addressing all feedback points",
+              "agent_archetype": "creator",
+              "inputs": [{ "name": "draft", "artifact_type": "draft", "from_phase": "drafting" }],
+              "outputs": [{ "name": "revised_draft", "artifact_type": "draft" }]
+            }
+          },
+          "completion_criteria": ["Revised draft has been created"],
+          "on_success": { "next_phases": ["review"] }
+        }
+      },
+      "max_rework_cycles": 3
+    }
+  ],
+
+  "quality_criteria": [
+    {
+      "id": "style_check",
+      "name": "Style Consistency Check",
+      "description": "Verify writing maintains consistent style and voice",
+      "enforcement": "llm",
+      "blocking": "gate",
+      "check": {
+        "type": "llm_prompt",
+        "prompt": "Review this draft for style consistency. Check for: consistent tense, consistent point of view, appropriate tone. Return PASS if consistent, FAIL with specific issues if not."
+      }
+    }
+  ],
+
+  "knowledge": [
+    {
+      "id": "style_guide",
+      "name": "Style Guide",
+      "layer": "should_know",
+      "summary": "Guidelines for writing style and tone",
+      "content": {
+        "type": "inline",
+        "text": "# Style Guide\n\n## Voice\n- Write in active voice unless passive is specifically required\n- Maintain consistent point of view throughout a piece\n\n## Tone\n- Match tone to content type and audience\n- Be clear and concise"
+      }
+    }
+  ]
+}

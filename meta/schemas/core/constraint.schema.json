@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "constraint.schema.json",
+  "title": "Constraint",
+  "description": "A constraint on an agent's behavior. Constraints define what an agent CANNOT do - boundaries, prohibitions, or limitations.",
+
+  "type": "object",
+  "required": ["id", "rule"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this constraint"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "Why this constraint exists"
+    },
+
+    "rule": {
+      "type": "string",
+      "description": "The constraint rule in natural language. Should be clear and unambiguous."
+    },
+
+    "category": {
+      "type": "string",
+      "enum": [
+        "content",
+        "process",
+        "access",
+        "communication",
+        "safety"
+      ],
+      "description": "Category of constraint"
+    },
+
+    "enforcement": {
+      "$ref": "_definitions.schema.json#/$defs/enforcement_type",
+      "default": "llm",
+      "description": "How this constraint is enforced. 'runtime' constraints are programmatically checked, 'llm' constraints rely on agent compliance."
+    },
+
+    "severity": {
+      "type": "string",
+      "enum": ["warning", "error", "critical"],
+      "default": "error",
+      "description": "Severity if constraint is violated. 'critical' violations invalidate all work."
+    },
+
+    "applies_to_artifact_types": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/artifact_type_ref"
+      },
+      "description": "If specified, constraint only applies when working with these artifact types"
+    }
+  },
+
+  "additionalProperties": false
+}

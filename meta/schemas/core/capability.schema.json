@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capability.schema.json",
+  "title": "Capability",
+  "description": "A capability that an agent possesses. Capabilities define what an agent CAN do - tools they can use, actions they can take, or permissions they have.",
+
+  "type": "object",
+  "required": ["id"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this capability"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "What this capability allows the agent to do"
+    },
+
+    "category": {
+      "type": "string",
+      "enum": [
+        "tool",
+        "artifact_action",
+        "store_access",
+        "communication",
+        "delegation"
+      ],
+      "description": "Category of capability"
+    },
+
+    "tool_ref": {
+      "$ref": "_definitions.schema.json#/$defs/tool_ref",
+      "description": "For tool capabilities, reference to the tool-definition this grants access to. Must match a tool ID defined in studio.tools array."
+    },
+
+    "artifact_types": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/artifact_type_ref"
+      },
+      "description": "For artifact_action capabilities, which artifact types this applies to"
+    },
+
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["create", "read", "update", "delete", "validate"]
+      },
+      "description": "For artifact_action capabilities, which actions are allowed"
+    },
+
+    "stores": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/store_ref"
+      },
+      "description": "For store_access capabilities, which stores can be accessed"
+    },
+
+    "access_level": {
+      "type": "string",
+      "enum": ["read", "write", "admin"],
+      "default": "read",
+      "description": "For store_access capabilities, the level of access granted"
+    },
+
+    "targets": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/agent_ref"
+      },
+      "description": "For communication/delegation capabilities, which agents can be contacted"
+    }
+  },
+
+  "additionalProperties": false
+}

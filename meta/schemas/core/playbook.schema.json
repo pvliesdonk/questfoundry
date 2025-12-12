@@ -1,0 +1,523 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "playbook.schema.json",
+  "title": "Playbook",
+  "description": "A structured guide for how work should flow through the studio. Playbooks define phases with DAG-based steps (dependencies, not strict sequence), quality checkpoints, and expected outputs. RUNTIME NOTE: The runtime parses playbooks and presents contextual views to agents (current phase, available steps, ready inputs) - agents never see raw playbook JSON. The orchestrator follows playbook guidance to coordinate work; playbooks are guidance, not executable state machines.",
+
+  "type": "object",
+  "required": ["id", "name", "purpose", "phases"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this playbook"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "purpose": {
+      "type": "string",
+      "minLength": 10,
+      "description": "What this playbook accomplishes. Used by orchestrator to select appropriate playbook."
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/markdown_text",
+      "description": "Detailed description of when and how to use this playbook"
+    },
+
+    "version": {
+      "$ref": "_definitions.schema.json#/$defs/semver",
+      "description": "Version of this playbook"
+    },
+
+    "triggers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trigger"
+      },
+      "default": [],
+      "description": "Conditions that suggest this playbook should be used"
+    },
+
+    "inputs": {
+      "$ref": "#/$defs/io_spec",
+      "description": "What the playbook needs to start"
+    },
+
+    "outputs": {
+      "$ref": "#/$defs/io_spec",
+      "description": "What the playbook produces when complete"
+    },
+
+    "phases": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/phase"
+      },
+      "minProperties": 1,
+      "description": "Map of phase ID to phase definition. Phases form a DAG via depends_on relationships."
+    },
+
+    "entry_phase": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "ID of the starting phase (if not specified, phase with no dependencies is entry)"
+    },
+
+    "quality_criteria": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/ref"
+      },
+      "default": [],
+      "description": "IDs of quality criteria that apply to work done under this playbook"
+    },
+
+    "max_rework_cycles": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3,
+      "description": "Maximum times work can be sent back for rework before escalation"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "trigger": {
+      "type": "object",
+      "required": ["condition"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "Natural language description of when this playbook applies"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 5,
+          "description": "Priority when multiple playbooks match (1=highest)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "io_spec": {
+      "type": "object",
+      "properties": {
+        "required_artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact_requirement"
+          },
+          "default": [],
+          "description": "Artifacts that must be provided/produced"
+        },
+        "optional_artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact_requirement"
+          },
+          "default": [],
+          "description": "Artifacts that may be provided/produced"
+        },
+        "context_requirements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Other context needed (natural language descriptions)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "artifact_requirement": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+          "description": "The artifact type"
+        },
+        "alias": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "Local name for this artifact in the playbook context"
+        },
+        "description": {
+          "type": "string",
+          "description": "Additional context about this artifact requirement"
+        },
+        "state": {
+          "type": "string",
+          "description": "Required lifecycle state (if artifact type has lifecycle)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "phase": {
+      "type": "object",
+      "required": ["name", "steps"],
+      "properties": {
+        "name": {
+          "$ref": "_definitions.schema.json#/$defs/name",
+          "description": "Human-readable phase name"
+        },
+
+        "purpose": {
+          "type": "string",
+          "description": "What this phase accomplishes"
+        },
+
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/id"
+          },
+          "default": [],
+          "description": "IDs of phases that must complete before this phase can start"
+        },
+
+        "entry_conditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional conditions that must be true to enter this phase"
+        },
+
+        "steps": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/step"
+          },
+          "minProperties": 1,
+          "description": "Map of step ID to step definition. Steps form a DAG via depends_on relationships."
+        },
+
+        "entry_step": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "ID of the starting step (if not specified, step with no dependencies is entry)"
+        },
+
+        "quality_checkpoint": {
+          "$ref": "#/$defs/quality_checkpoint",
+          "description": "Quality validation to perform at the end of this phase"
+        },
+
+        "completion_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Conditions that indicate this phase is complete"
+        },
+
+        "on_success": {
+          "$ref": "#/$defs/phase_transition",
+          "description": "What happens when phase completes successfully (passes quality checkpoint)"
+        },
+
+        "on_failure": {
+          "$ref": "#/$defs/phase_transition",
+          "description": "What happens if phase fails quality checkpoint"
+        },
+
+        "is_rework_target": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, this phase can be targeted for rework loops"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "step": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Clear, imperative description of what to do. Should be actionable."
+        },
+
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/id"
+          },
+          "default": [],
+          "description": "IDs of steps that must complete before this step can start"
+        },
+
+        "condition": {
+          "type": "string",
+          "description": "Optional condition for executing this step. If false, step is skipped."
+        },
+
+        "agent_archetype": {
+          "$ref": "_definitions.schema.json#/$defs/archetype",
+          "description": "Which archetype should perform this step (orchestrator selects specific agent)"
+        },
+
+        "specific_agent": {
+          "$ref": "_definitions.schema.json#/$defs/agent_ref",
+          "description": "If a specific agent is required (rather than any agent of the archetype)"
+        },
+
+        "team": {
+          "$ref": "#/$defs/team_spec",
+          "description": "For collaborative steps, the team that works together"
+        },
+
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step_io"
+          },
+          "default": [],
+          "description": "Inputs needed for this step (artifacts from previous steps or external)"
+        },
+
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step_io"
+          },
+          "default": [],
+          "description": "Outputs produced by this step"
+        },
+
+        "delegation": {
+          "$ref": "#/$defs/delegation_spec",
+          "description": "If this step involves delegating to a subprocess"
+        },
+
+        "guidance": {
+          "type": "string",
+          "description": "Additional guidance for performing this step"
+        },
+
+        "validation": {
+          "$ref": "#/$defs/step_validation",
+          "description": "Inline validation for this step's output"
+        },
+
+        "on_failure": {
+          "$ref": "#/$defs/step_failure_handling",
+          "description": "What to do if this step fails"
+        },
+
+        "timeout_hint": {
+          "type": "string",
+          "description": "Hint about expected duration (for nudging)"
+        },
+
+        "can_parallelize": {
+          "type": "boolean",
+          "default": true,
+          "description": "If false, this step should not run in parallel with siblings"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "step_io": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "Local name for this input/output"
+        },
+        "artifact_type": {
+          "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+          "description": "Type of artifact"
+        },
+        "from_step": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "For inputs: ID of step that produces this artifact"
+        },
+        "from_phase": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "For inputs: ID of phase that produces this artifact (if from different phase)"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this input/output is required"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "team_spec": {
+      "type": "object",
+      "required": ["roles"],
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["archetype", "responsibility"],
+            "properties": {
+              "archetype": {
+                "$ref": "_definitions.schema.json#/$defs/archetype"
+              },
+              "specific_agent": {
+                "$ref": "_definitions.schema.json#/$defs/agent_ref"
+              },
+              "responsibility": {
+                "type": "string",
+                "description": "What this role contributes to the team effort"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 2,
+          "description": "Roles that make up the team"
+        },
+        "coordination": {
+          "type": "string",
+          "enum": ["sequential", "parallel", "self_organizing"],
+          "default": "self_organizing",
+          "description": "How team members coordinate their work"
+        },
+        "lead": {
+          "$ref": "_definitions.schema.json#/$defs/archetype",
+          "description": "Which role leads/coordinates the team effort"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "delegation_spec": {
+      "type": "object",
+      "required": ["playbook"],
+      "properties": {
+        "playbook": {
+          "$ref": "_definitions.schema.json#/$defs/playbook_ref",
+          "description": "Playbook to delegate to"
+        },
+        "input_mapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map current context to subprocess inputs"
+        },
+        "output_mapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map subprocess outputs back to current context"
+        },
+        "wait": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to wait for subprocess completion before continuing"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "step_validation": {
+      "type": "object",
+      "properties": {
+        "quality_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IDs of quality criteria to check"
+        },
+        "blocking": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, step cannot complete until validation passes"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "step_failure_handling": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["retry", "skip", "escalate", "rework", "fail_phase"],
+          "default": "escalate",
+          "description": "How to handle step failure"
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1,
+          "description": "For retry strategy: max attempts"
+        },
+        "rework_to_step": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "For rework strategy: which step to return to"
+        },
+        "rework_to_phase": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "For rework strategy: which phase to return to"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "quality_checkpoint": {
+      "type": "object",
+      "properties": {
+        "criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "IDs of quality criteria to evaluate"
+        },
+        "validator_archetype": {
+          "$ref": "_definitions.schema.json#/$defs/archetype",
+          "default": "validator",
+          "description": "Which archetype performs the validation"
+        },
+        "pass_threshold": {
+          "type": "string",
+          "enum": ["all", "majority", "any"],
+          "default": "all",
+          "description": "How many criteria must pass"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "phase_transition": {
+      "type": "object",
+      "properties": {
+        "next_phases": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/id"
+          },
+          "description": "IDs of phases to enable (can trigger multiple parallel phases)"
+        },
+        "escalate": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, escalate to orchestrator for decision"
+        },
+        "message": {
+          "type": "string",
+          "description": "Message to include in transition (e.g., feedback for rework)"
+        },
+        "end_playbook": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, this transition ends the playbook"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

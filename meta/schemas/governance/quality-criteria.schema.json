@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "quality-criteria.schema.json",
+  "title": "Quality Criteria",
+  "description": "A named quality criterion used to validate work. Quality criteria can be runtime-enforced (programmatic) or LLM-enforced (semantic), and can be blocking (gate) or advisory (feedback only).",
+
+  "type": "object",
+  "required": ["id", "name", "check"],
+
+  "properties": {
+    "id": {
+      "$ref": "../core/_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this criterion"
+    },
+
+    "name": {
+      "$ref": "../core/_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "../core/_definitions.schema.json#/$defs/description",
+      "description": "What this criterion checks for"
+    },
+
+    "enforcement": {
+      "$ref": "../core/_definitions.schema.json#/$defs/enforcement_type",
+      "default": "llm",
+      "description": "'runtime' for programmatic checks, 'llm' for semantic checks"
+    },
+
+    "blocking": {
+      "$ref": "../core/_definitions.schema.json#/$defs/blocking_behavior",
+      "default": "gate",
+      "description": "'gate' means work cannot proceed without passing, 'advisory' means feedback only"
+    },
+
+    "applies_to": {
+      "$ref": "#/$defs/applicability",
+      "description": "What this criterion applies to"
+    },
+
+    "check": {
+      "$ref": "#/$defs/check_definition",
+      "description": "How to perform the check"
+    },
+
+    "failure_guidance": {
+      "type": "string",
+      "description": "Guidance for agents when this criterion fails"
+    },
+
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "error", "critical"],
+      "default": "error",
+      "description": "Severity level of a failure"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "applicability": {
+      "type": "object",
+      "properties": {
+        "artifact_types": {
+          "type": "array",
+          "items": {
+            "$ref": "../core/_definitions.schema.json#/$defs/artifact_type_ref"
+          },
+          "description": "Artifact types this applies to (empty = all)"
+        },
+        "phases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Playbook phases this applies to"
+        },
+        "archetypes": {
+          "type": "array",
+          "items": {
+            "$ref": "../core/_definitions.schema.json#/$defs/archetype"
+          },
+          "description": "Agent archetypes this applies to"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "check_definition": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "json_schema",
+            "regex",
+            "script",
+            "llm_prompt",
+            "llm_rubric"
+          ],
+          "description": "Type of check"
+        },
+
+        "schema_ref": {
+          "type": "string",
+          "description": "For json_schema type: path to schema file"
+        },
+
+        "pattern": {
+          "type": "string",
+          "description": "For regex type: the regex pattern"
+        },
+
+        "field": {
+          "type": "string",
+          "description": "For regex type: which field to check"
+        },
+
+        "script": {
+          "type": "string",
+          "description": "For script type: script to execute (must return exit code 0 for pass)"
+        },
+
+        "prompt": {
+          "type": "string",
+          "description": "For llm_prompt type: prompt to send to LLM. Must instruct LLM to return PASS or FAIL."
+        },
+
+        "rubric": {
+          "$ref": "#/$defs/llm_rubric",
+          "description": "For llm_rubric type: structured rubric for LLM evaluation"
+        },
+
+        "pass_condition": {
+          "type": "string",
+          "description": "How to interpret the check result as pass/fail"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "llm_rubric": {
+      "type": "object",
+      "required": ["criteria"],
+      "properties": {
+        "instructions": {
+          "type": "string",
+          "description": "Instructions for the evaluating LLM"
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 1
+              },
+              "examples": {
+                "type": "object",
+                "properties": {
+                  "good": { "type": "array", "items": { "type": "string" } },
+                  "bad": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Individual criteria to evaluate"
+        },
+        "pass_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "Weighted score threshold to pass (0-1)"
+        },
+        "output_format": {
+          "type": "string",
+          "enum": ["pass_fail", "score", "detailed"],
+          "default": "pass_fail",
+          "description": "Format of the evaluation output"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

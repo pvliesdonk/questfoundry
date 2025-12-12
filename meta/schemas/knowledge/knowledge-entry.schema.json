@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge-entry.schema.json",
+  "title": "Knowledge Entry",
+  "description": "A piece of knowledge available to agents. Knowledge is stratified by layer, determining how it is accessed (always in prompt, retrieved via tool, etc.). Supports the menu+consult pattern with summary (menu) and details (consult).\n\nSTUDIO DOGMA vs REFERENCE MATERIAL: Use inline/file_ref/structured for Studio Dogma (internal rules, brand voice, project-specific facts). Use 'corpus' type for Reference Material (external genre guides, general craft knowledge) - this points to a RAG-searchable store without polluting the agent's context menu.",
+
+  "type": "object",
+  "required": ["id", "layer"],
+
+  "properties": {
+    "id": {
+      "$ref": "../core/_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this knowledge entry"
+    },
+
+    "name": {
+      "$ref": "../core/_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "layer": {
+      "$ref": "../core/_definitions.schema.json#/$defs/knowledge_layer",
+      "description": "Which knowledge layer this belongs to"
+    },
+
+    "summary": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Brief summary for the 'menu' - shown in system prompt for must_know, or as search result preview. Keep concise for context efficiency."
+    },
+
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Keywords for semantic matching and search. Include synonyms, related terms, and domain-specific vocabulary."
+    },
+
+    "triggers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Phrases or patterns that suggest this knowledge should be consulted. E.g., 'character voice', 'dialogue style', 'how to write dialogue'."
+    },
+
+    "discriminators": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "What makes this entry DIFFERENT from similar entries. Helps distinguish between multiple entries with similar summaries."
+    },
+
+    "content": {
+      "$ref": "#/$defs/knowledge_content",
+      "description": "The actual knowledge content"
+    },
+
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Tags for categorization and search"
+    },
+
+    "applicable_to": {
+      "$ref": "#/$defs/applicability",
+      "description": "What this knowledge applies to"
+    },
+
+    "related_entries": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "IDs of related knowledge entries"
+    },
+
+    "version": {
+      "$ref": "../core/_definitions.schema.json#/$defs/semver",
+      "description": "Version of this knowledge entry"
+    },
+
+    "last_updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this entry was last updated"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "knowledge_content": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["inline", "file_ref", "structured", "corpus"],
+          "default": "inline",
+          "description": "How content is provided. Use 'corpus' for RAG-searchable reference material stored in a dedicated store."
+        },
+
+        "text": {
+          "$ref": "../core/_definitions.schema.json#/$defs/markdown_text",
+          "description": "For inline type: the actual content (markdown)"
+        },
+
+        "file_path": {
+          "type": "string",
+          "description": "For file_ref type: path to the file containing content. MUST be relative to the studio root directory (e.g., 'knowledge/style-guide.md'). Never use absolute paths."
+        },
+
+        "format": {
+          "type": "string",
+          "enum": ["markdown", "json", "yaml", "plain"],
+          "default": "markdown",
+          "description": "Format of the content"
+        },
+
+        "data": {
+          "type": "object",
+          "description": "For structured type: structured data"
+        },
+
+        "schema_ref": {
+          "type": "string",
+          "description": "For structured type: schema the data conforms to"
+        },
+
+        "corpus_ref": {
+          "$ref": "#/$defs/corpus_reference",
+          "description": "For corpus type: defines a RAG-searchable reference collection. The Runtime routes consult queries to vector search over this corpus."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "corpus_reference": {
+      "type": "object",
+      "description": "Reference to a corpus of documents for RAG-based retrieval. The 'Reference Shelf' pattern: store general domain knowledge (genre guides, craft books, heuristics) in a cold store, and let agents search it on demand without cluttering their context.",
+      "required": ["store_ref"],
+      "properties": {
+        "store_ref": {
+          "$ref": "../core/_definitions.schema.json#/$defs/store_ref",
+          "description": "The store containing the corpus documents. Should typically be a 'cold' store with consumption_guidance='none'."
+        },
+        "path_pattern": {
+          "type": "string",
+          "default": "**/*",
+          "description": "Glob pattern to filter which files in the store are part of this corpus. E.g., 'genres/mystery/**' to limit to mystery-related references."
+        },
+        "index_config": {
+          "type": "object",
+          "properties": {
+            "chunk_size": {
+              "type": "integer",
+              "minimum": 100,
+              "default": 1000,
+              "description": "Target chunk size in tokens for RAG indexing"
+            },
+            "chunk_overlap": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 100,
+              "description": "Overlap between chunks in tokens"
+            },
+            "embedding_model": {
+              "type": "string",
+              "description": "Optional: specific embedding model to use for this corpus"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Optional configuration for how the corpus is indexed"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "applicability": {
+      "type": "object",
+      "properties": {
+        "archetypes": {
+          "type": "array",
+          "items": {
+            "$ref": "../core/_definitions.schema.json#/$defs/archetype"
+          },
+          "description": "Which archetypes this knowledge is relevant to"
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "../core/_definitions.schema.json#/$defs/agent_ref"
+          },
+          "description": "Specific agents this knowledge is for"
+        },
+        "playbooks": {
+          "type": "array",
+          "items": {
+            "$ref": "../core/_definitions.schema.json#/$defs/playbook_ref"
+          },
+          "description": "Playbooks where this knowledge is relevant"
+        },
+        "artifact_types": {
+          "type": "array",
+          "items": {
+            "$ref": "../core/_definitions.schema.json#/$defs/artifact_type_ref"
+          },
+          "description": "Artifact types this knowledge relates to"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

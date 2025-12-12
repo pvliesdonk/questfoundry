@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-definition.schema.json",
+  "title": "Tool Definition",
+  "description": "Definition of a tool available to agents. Tools are external capabilities (APIs, services, utilities) that agents can invoke. The Runtime uses this schema to: 1) Inject tool definitions into LLM function calling, 2) Validate tool arguments before execution, 3) Provide helpful error messages for invalid calls.\n\nTOOL vs CAPABILITY: A 'capability' in agent.schema.json grants permission to use a tool. A 'tool-definition' defines the tool's interface (what arguments it accepts). Both are needed: the studio defines tools, agents are granted capabilities to use them.",
+
+  "type": "object",
+  "required": ["id", "name", "description"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this tool"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name shown in function calling UI"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/markdown_text",
+      "description": "What this tool does - included in LLM context to help it decide when to use the tool"
+    },
+
+    "input_schema": {
+      "$ref": "#/$defs/tool_input_schema",
+      "description": "JSON Schema defining the tool's arguments (function signature)"
+    },
+
+    "output_schema": {
+      "$ref": "#/$defs/tool_output_schema",
+      "description": "Optional schema for the tool's return value (for documentation and runtime validation)"
+    },
+
+    "secrets_required": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Environment variables the Runtime needs to execute this tool (e.g., 'OPENAI_API_KEY', 'DATABASE_URL'). Runtime validates these exist before enabling the tool."
+    },
+
+    "rate_limit": {
+      "$ref": "#/$defs/rate_limit",
+      "description": "Optional rate limiting configuration"
+    },
+
+    "timeout_ms": {
+      "type": "integer",
+      "minimum": 100,
+      "default": 30000,
+      "description": "Maximum execution time in milliseconds before the tool call times out"
+    },
+
+    "retry_policy": {
+      "$ref": "#/$defs/retry_policy",
+      "description": "How to handle transient failures"
+    },
+
+    "examples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool_example"
+      },
+      "default": [],
+      "description": "Example invocations to help agents understand usage patterns"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "tool_input_schema": {
+      "type": "object",
+      "description": "JSON Schema for tool arguments. The Runtime validates agent tool calls against this schema before execution.",
+      "properties": {
+        "type": {
+          "const": "object",
+          "description": "Tool inputs are always objects"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "description": "JSON Schema for each argument"
+          },
+          "description": "The tool's arguments"
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Which arguments are required"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "tool_output_schema": {
+      "type": "object",
+      "description": "JSON Schema for tool return value. Optional - used for documentation and optional runtime validation.",
+      "additionalProperties": true
+    },
+
+    "rate_limit": {
+      "type": "object",
+      "properties": {
+        "requests_per_minute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum calls per minute across all agents"
+        },
+        "requests_per_agent_per_minute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum calls per minute per agent"
+        },
+        "burst_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum concurrent calls"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "retry_policy": {
+      "type": "object",
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3,
+          "description": "Maximum retry attempts"
+        },
+        "initial_delay_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "default": 1000,
+          "description": "Initial delay before first retry"
+        },
+        "backoff_multiplier": {
+          "type": "number",
+          "minimum": 1,
+          "default": 2,
+          "description": "Multiplier for exponential backoff"
+        },
+        "retryable_errors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["timeout", "rate_limited", "service_unavailable"],
+          "description": "Error types that trigger retry"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "tool_example": {
+      "type": "object",
+      "required": ["description", "input"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What this example demonstrates"
+        },
+        "input": {
+          "type": "object",
+          "description": "Example input arguments"
+        },
+        "output": {
+          "description": "Expected output (for documentation)"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

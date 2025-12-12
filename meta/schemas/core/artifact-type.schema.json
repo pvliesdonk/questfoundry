@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artifact-type.schema.json",
+  "title": "Artifact Type",
+  "description": "Definition of an artifact type. Artifacts are structured work products (JSON-serializable data) produced and consumed by agents. Studios define their own artifact types.\n\nVALIDATION STRATEGY: The 'fields' array uses ordered field definitions optimized for LLM prompting. The Runtime MUST compile these into standard JSON Schema Draft 2020-12 for validation. This 'transpiler' approach trades engineering complexity for LLM ergonomics. For edge cases requiring advanced JSON Schema features (oneOf, allOf, patternProperties), use 'json_schema_override'.\n\nRESERVED SYSTEM FIELDS: Field names starting with underscore (_) are reserved for Runtime use. Studios MUST NOT define fields with these names. The Runtime manages: _id (instance identifier), _type (artifact type ref), _version (semver), _created_at, _updated_at, _created_by (agent ref), _lifecycle_state (if lifecycle defined). The _lifecycle_state field is write-protected and can only be modified via lifecycle_transition_request messages.",
+
+  "type": "object",
+  "required": ["id", "name"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this artifact type"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "What this artifact represents and when it is used"
+    },
+
+    "category": {
+      "type": "string",
+      "enum": [
+        "document",
+        "record",
+        "manifest",
+        "composite",
+        "decision",
+        "feedback"
+      ],
+      "default": "document",
+      "description": "General category of artifact. 'manifest' indicates this artifact references external assets."
+    },
+
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/field_definition"
+      },
+      "default": [],
+      "description": "Ordered field definitions. Order is preserved when presenting to LLMs. Runtime compiles to JSON Schema for validation."
+    },
+
+    "json_schema_override": {
+      "type": "object",
+      "description": "Optional raw JSON Schema fragment merged into the compiled schema. Use for advanced features not expressible in field_definition (oneOf, allOf, patternProperties, etc.). Merged AFTER field compilation, so can override/extend."
+    },
+
+    "lifecycle": {
+      "$ref": "#/$defs/lifecycle",
+      "description": "Optional lifecycle states for this artifact type"
+    },
+
+    "validation": {
+      "$ref": "#/$defs/validation_rules",
+      "description": "Additional validation rules beyond field types"
+    },
+
+    "default_store": {
+      "$ref": "_definitions.schema.json#/$defs/store_ref",
+      "description": "Default store where artifacts of this type are persisted"
+    },
+
+    "extends": {
+      "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+      "description": "Another artifact type this type extends (inherits fields from)"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "lifecycle": {
+      "type": "object",
+      "properties": {
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "$ref": "_definitions.schema.json#/$defs/id"
+              },
+              "name": {
+                "$ref": "_definitions.schema.json#/$defs/name"
+              },
+              "description": {
+                "$ref": "_definitions.schema.json#/$defs/description"
+              },
+              "terminal": {
+                "type": "boolean",
+                "default": false,
+                "description": "If true, artifact cannot leave this state"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Possible states an artifact of this type can be in"
+        },
+        "initial_state": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "State assigned when artifact is first created"
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": {
+                "$ref": "_definitions.schema.json#/$defs/id",
+                "description": "Source state"
+              },
+              "to": {
+                "$ref": "_definitions.schema.json#/$defs/id",
+                "description": "Target state"
+              },
+              "allowed_agents": {
+                "type": "array",
+                "items": {
+                  "$ref": "_definitions.schema.json#/$defs/agent_ref"
+                },
+                "description": "Agents allowed to make this transition (empty = any)"
+              },
+              "requires_validation": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "IDs of quality criteria that must pass for this transition"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Allowed state transitions"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "validation_rules": {
+      "type": "object",
+      "properties": {
+        "required_together": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Groups of fields that must all be present if any one is present"
+        },
+        "mutually_exclusive": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Groups of fields where only one may be present"
+        },
+        "custom_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description"],
+            "properties": {
+              "id": { "$ref": "_definitions.schema.json#/$defs/id" },
+              "description": { "type": "string" },
+              "enforcement": {
+                "$ref": "_definitions.schema.json#/$defs/enforcement_type"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Custom validation rules (runtime-enforced require implementation)"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

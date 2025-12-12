@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "_definitions.schema.json",
+  "title": "Shared Definitions",
+  "description": "Common type definitions used across all studio schemas",
+
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "A lowercase identifier using letters, numbers, underscores, and hyphens"
+    },
+
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "A human-readable display name"
+    },
+
+    "description": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "A brief explanation of purpose or function"
+    },
+
+    "markdown_text": {
+      "type": "string",
+      "description": "Longer-form text content, may contain markdown formatting"
+    },
+
+    "ref": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(:[a-z][a-z0-9_-]*)?$",
+      "description": "Reference to another entity. Format: 'id' for local, 'scope:id' for cross-scope. For version-pinned refs, use versioned_ref."
+    },
+
+    "versioned_ref": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(:[a-z][a-z0-9_-]*)?(@(\\^|~|>=?|<=?)?\\d+(\\.\\d+)?(\\.\\d+)?)?$",
+      "description": "Reference with optional version constraint. Format: 'id@version', 'scope:id@version'. Version supports semver constraints (^1.0.0, ~1.2.0, >=2.0.0). Without version, resolves to latest."
+    },
+
+    "agent_ref": {
+      "$ref": "#/$defs/ref",
+      "description": "Reference to an agent by ID"
+    },
+
+    "store_ref": {
+      "$ref": "#/$defs/ref",
+      "description": "Reference to a store by ID"
+    },
+
+    "tool_ref": {
+      "$ref": "#/$defs/ref",
+      "description": "Reference to a tool-definition by ID"
+    },
+
+    "artifact_type_ref": {
+      "$ref": "#/$defs/versioned_ref",
+      "description": "Reference to an artifact type by ID, optionally with version constraint (e.g., 'story_draft@^1.0.0')"
+    },
+
+    "playbook_ref": {
+      "$ref": "#/$defs/versioned_ref",
+      "description": "Reference to a playbook by ID, optionally with version constraint"
+    },
+
+    "archetype": {
+      "type": "string",
+      "enum": [
+        "orchestrator",
+        "creator",
+        "validator",
+        "researcher",
+        "curator"
+      ],
+      "description": "Agent archetype defining behavioral patterns"
+    },
+
+    "store_semantics": {
+      "type": "string",
+      "enum": [
+        "append_only",
+        "mutable",
+        "versioned",
+        "cold"
+      ],
+      "description": "Storage behavior semantics"
+    },
+
+    "enforcement_type": {
+      "type": "string",
+      "enum": ["runtime", "llm"],
+      "description": "How a quality check is enforced"
+    },
+
+    "blocking_behavior": {
+      "type": "string",
+      "enum": ["gate", "advisory"],
+      "description": "Whether a check blocks progress or provides feedback only"
+    },
+
+    "knowledge_layer": {
+      "type": "string",
+      "enum": [
+        "constitution",
+        "must_know",
+        "should_know",
+        "role_specific",
+        "lookup"
+      ],
+      "description": "Knowledge stratification layer determining access pattern"
+    },
+
+    "field_type": {
+      "type": "string",
+      "enum": [
+        "string",
+        "text",
+        "integer",
+        "number",
+        "boolean",
+        "date",
+        "datetime",
+        "uri",
+        "array",
+        "object",
+        "ref"
+      ],
+      "description": "Data type for artifact fields"
+    },
+
+    "field_definition": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id",
+          "description": "Field identifier"
+        },
+        "type": {
+          "$ref": "#/$defs/field_type"
+        },
+        "description": {
+          "$ref": "#/$defs/description"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this field must be present"
+        },
+        "default": {
+          "description": "Default value if not provided"
+        },
+        "properties": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/field_definition" },
+          "description": "For object type: nested field definitions (recursive)"
+        },
+        "items": {
+          "$ref": "#/$defs/field_definition",
+          "description": "For array type: definition of array item structure (recursive)"
+        },
+        "items_type": {
+          "$ref": "#/$defs/field_type",
+          "description": "For array type (simple): scalar type of items. Use 'items' for complex structures."
+        },
+        "ref_target": {
+          "type": "string",
+          "description": "For ref type: what entity type is referenced (agent, artifact_type, store, etc.)"
+        },
+        "enum": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "For string type: allowed values"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["email", "uri", "uuid", "date", "datetime", "markdown"],
+          "description": "For string type: format hint for validation and display"
+        },
+        "min": {
+          "type": "number",
+          "description": "For number/integer type: minimum value"
+        },
+        "max": {
+          "type": "number",
+          "description": "For number/integer type: maximum value"
+        },
+        "min_length": {
+          "type": "integer",
+          "description": "For string/text/array type: minimum length"
+        },
+        "max_length": {
+          "type": "integer",
+          "description": "For string/text/array type: maximum length"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "artifact_instance_ref": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/artifact_type_ref",
+          "description": "The artifact type"
+        },
+        "id": {
+          "type": "string",
+          "description": "The specific artifact instance ID"
+        },
+        "version": {
+          "$ref": "#/$defs/semver",
+          "description": "Optional version specifier"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Reference to a specific artifact instance"
+    },
+
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?(\\+[a-zA-Z0-9.]+)?$",
+      "description": "Semantic version (e.g., '1.0.0', '2.1.0-beta.1')"
+    },
+
+    "version_constraint": {
+      "type": "string",
+      "pattern": "^(\\^|~|>=?|<=?)?\\d+(\\.\\d+)?(\\.\\d+)?(-[a-zA-Z0-9.]+)?$",
+      "description": "Version constraint (e.g., '^1.0.0', '>=2.0.0', '~1.2.0')"
+    },
+
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp"
+    },
+
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "delegation_request",
+        "delegation_response",
+        "progress_update",
+        "clarification_request",
+        "clarification_response",
+        "feedback",
+        "escalation",
+        "nudge",
+        "completion_signal",
+        "lifecycle_transition_request",
+        "lifecycle_transition_response",
+        "digest"
+      ],
+      "description": "Type of inter-agent message. 'digest' is a runtime-generated summary of multiple messages (flow control). See message.schema.json for payload definitions."
+    },
+
+    "completion_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "cancelled"
+      ],
+      "description": "Status of a completed delegation"
+    }
+  }
+}

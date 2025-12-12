@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge-layer.schema.json",
+  "title": "Knowledge Layer Configuration",
+  "description": "Configuration for how knowledge layers are handled at runtime. This schema defines the access patterns and constraints for each layer.",
+
+  "type": "object",
+  "required": ["layers"],
+
+  "properties": {
+    "layers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/layer_config"
+      },
+      "minItems": 1,
+      "description": "Configuration for each knowledge layer"
+    },
+
+    "total_prompt_budget_tokens": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 4000,
+      "description": "Total token budget for knowledge in system prompts (constitution + must_know)"
+    },
+
+    "lookup_result_max_tokens": {
+      "type": "integer",
+      "minimum": 100,
+      "default": 2000,
+      "description": "Maximum tokens to return from a single lookup query"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "layer_config": {
+      "type": "object",
+      "required": ["layer", "access_pattern"],
+      "properties": {
+        "layer": {
+          "$ref": "../core/_definitions.schema.json#/$defs/knowledge_layer",
+          "description": "Which layer this configures"
+        },
+
+        "access_pattern": {
+          "type": "string",
+          "enum": [
+            "always_in_prompt",
+            "menu_in_prompt",
+            "on_demand",
+            "explicit_query"
+          ],
+          "description": "How this layer is accessed"
+        },
+
+        "description": {
+          "type": "string",
+          "description": "Description of this layer's purpose"
+        },
+
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum tokens from this layer in system prompt"
+        },
+
+        "retrieval_tool": {
+          "type": "string",
+          "description": "For on_demand/explicit_query layers, the tool name for retrieval"
+        },
+
+        "cache_duration_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How long retrieved knowledge is cached in context"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

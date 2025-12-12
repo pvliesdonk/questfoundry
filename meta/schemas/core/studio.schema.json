@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "studio.schema.json",
+  "title": "Studio",
+  "description": "The top-level container for a creative AI studio. A studio defines agents, artifact types, stores, playbooks, quality criteria, and knowledge - everything needed to describe how creative work is done.",
+
+  "type": "object",
+  "required": ["id", "name", "agents"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this studio"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/markdown_text",
+      "description": "Description of what this studio does and its creative domain"
+    },
+
+    "version": {
+      "$ref": "_definitions.schema.json#/$defs/semver",
+      "description": "Semantic version of this studio definition"
+    },
+
+    "constitution": {
+      "$ref": "../governance/constitution.schema.json",
+      "description": "Inviolable principles all agents must follow"
+    },
+
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "agent.schema.json"
+      },
+      "minItems": 1,
+      "description": "Agents that can perform work in this studio"
+    },
+
+    "entry_agent": {
+      "$ref": "_definitions.schema.json#/$defs/agent_ref",
+      "description": "The agent that interfaces with external customers. Must reference an agent with is_entry_agent=true."
+    },
+
+    "artifact_types": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-type.schema.json"
+      },
+      "default": [],
+      "description": "Types of artifacts that can be created in this studio"
+    },
+
+    "asset_types": {
+      "type": "array",
+      "items": {
+        "$ref": "asset-type.schema.json"
+      },
+      "default": [],
+      "description": "Types of binary assets that can be stored in this studio"
+    },
+
+    "stores": {
+      "type": "array",
+      "items": {
+        "$ref": "store.schema.json"
+      },
+      "default": [],
+      "description": "Storage locations for artifacts and assets"
+    },
+
+    "playbooks": {
+      "type": "array",
+      "items": {
+        "$ref": "playbook.schema.json"
+      },
+      "default": [],
+      "description": "Playbooks defining how work flows through the studio"
+    },
+
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "tool-definition.schema.json"
+      },
+      "default": [],
+      "description": "Tool definitions available to agents. Capabilities in agent.schema.json grant permission to use these tools; this array defines the tool interfaces."
+    },
+
+    "quality_criteria": {
+      "type": "array",
+      "items": {
+        "$ref": "../governance/quality-criteria.schema.json"
+      },
+      "default": [],
+      "description": "Quality criteria used to validate work"
+    },
+
+    "knowledge": {
+      "type": "array",
+      "items": {
+        "$ref": "../knowledge/knowledge-entry.schema.json"
+      },
+      "default": [],
+      "description": "Knowledge entries available to agents"
+    },
+
+    "defaults": {
+      "$ref": "#/$defs/studio_defaults",
+      "description": "Default values and configurations"
+    },
+
+    "metadata": {
+      "$ref": "#/$defs/studio_metadata",
+      "description": "Additional metadata about the studio"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "studio_defaults": {
+      "type": "object",
+      "properties": {
+        "default_store": {
+          "$ref": "_definitions.schema.json#/$defs/store_ref",
+          "description": "Default store for artifacts without a specified store"
+        },
+        "default_playbook": {
+          "$ref": "_definitions.schema.json#/$defs/playbook_ref",
+          "description": "Default playbook when none specified"
+        },
+        "max_rework_cycles": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Default maximum rework cycles for playbooks"
+        },
+        "default_quality_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Quality criteria applied by default to all work"
+        },
+        "flow_control": {
+          "$ref": "#/$defs/flow_control_settings",
+          "description": "Settings for managing agent mailbox overflow and backpressure"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "flow_control_settings": {
+      "type": "object",
+      "description": "Flow control settings to prevent mailbox overflow and context explosion. The Runtime uses these to implement the Secretary (auto-summarization), Bouncer (backpressure), and TTL (expiration) patterns.",
+      "properties": {
+        "max_inbox_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "Maximum messages shown in an agent's context. Beyond this, oldest messages are summarized into digests."
+        },
+        "auto_summarize_threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 5,
+          "description": "When inbox exceeds this count, trigger automatic summarization of older messages into a digest."
+        },
+        "max_active_delegations_per_agent": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Maximum concurrent delegations an agent can have. New delegations are rejected (backpressure) when exceeded."
+        },
+        "default_message_ttl_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 24,
+          "description": "Default turns before ephemeral messages expire. Delegations never expire; clarifications and progress updates may."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "studio_metadata": {
+      "type": "object",
+      "properties": {
+        "domain": {
+          "type": "string",
+          "description": "Creative domain (e.g., 'interactive fiction', 'music production', 'game design')"
+        },
+        "authors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "People who created this studio definition"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags for categorization"
+        },
+        "license": {
+          "type": "string",
+          "description": "License for this studio definition"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asset-type.schema.json",
+  "title": "Asset Type",
+  "description": "Definition of an asset type. Assets are binary files (images, audio, video, etc.) that cannot be directly serialized into JSON. Assets are stored separately from artifacts and referenced via manifests.",
+
+  "type": "object",
+  "required": ["id", "name"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this asset type"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "What this asset type represents"
+    },
+
+    "category": {
+      "type": "string",
+      "enum": [
+        "image",
+        "audio",
+        "video",
+        "document",
+        "data",
+        "other"
+      ],
+      "description": "General category of asset"
+    },
+
+    "mime_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z]+/[a-z0-9.+-]+$"
+      },
+      "minItems": 1,
+      "description": "Allowed MIME types for this asset type (e.g., 'image/png', 'audio/mpeg')"
+    },
+
+    "max_size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum file size in bytes"
+    },
+
+    "manifest_fields": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/field_definition"
+      },
+      "default": [],
+      "description": "Additional metadata fields for the asset manifest beyond the standard fields (file_path, file_hash, mime_type, size_bytes)"
+    },
+
+    "default_store": {
+      "$ref": "_definitions.schema.json#/$defs/store_ref",
+      "description": "Default store where assets of this type are persisted"
+    },
+
+    "processing_hints": {
+      "$ref": "#/$defs/processing_hints",
+      "description": "Hints for how the runtime should handle this asset type"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "processing_hints": {
+      "type": "object",
+      "properties": {
+        "generate_thumbnails": {
+          "type": "boolean",
+          "default": false,
+          "description": "For images/videos, whether to generate thumbnails"
+        },
+        "extract_metadata": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to extract embedded metadata (EXIF, ID3, etc.)"
+        },
+        "compute_dimensions": {
+          "type": "boolean",
+          "default": false,
+          "description": "For images/videos, whether to compute width/height"
+        },
+        "compute_duration": {
+          "type": "boolean",
+          "default": false,
+          "description": "For audio/video, whether to compute duration"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

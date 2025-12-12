@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "constitution.schema.json",
+  "title": "Constitution",
+  "description": "Inviolable principles that all agents in the studio must follow. The constitution is always included in every agent's system prompt. Violations of constitutional principles invalidate all work.",
+
+  "type": "object",
+  "required": ["principles"],
+
+  "properties": {
+    "preamble": {
+      "type": "string",
+      "description": "Introductory text explaining the studio's core values and purpose"
+    },
+
+    "principles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/principle"
+      },
+      "minItems": 1,
+      "description": "The inviolable principles"
+    },
+
+    "applies_to": {
+      "type": "string",
+      "enum": ["all_agents", "specified_archetypes"],
+      "default": "all_agents",
+      "description": "Whether constitution applies to all agents or only specific archetypes"
+    },
+
+    "archetypes": {
+      "type": "array",
+      "items": {
+        "$ref": "../core/_definitions.schema.json#/$defs/archetype"
+      },
+      "description": "If applies_to='specified_archetypes', which archetypes"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "principle": {
+      "type": "object",
+      "required": ["id", "statement"],
+      "properties": {
+        "id": {
+          "$ref": "../core/_definitions.schema.json#/$defs/id",
+          "description": "Unique identifier for this principle"
+        },
+
+        "statement": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The principle itself, stated clearly and unambiguously"
+        },
+
+        "rationale": {
+          "type": "string",
+          "description": "Why this principle exists"
+        },
+
+        "category": {
+          "type": "string",
+          "enum": [
+            "safety",
+            "quality",
+            "consistency",
+            "ethics",
+            "domain_specific"
+          ],
+          "description": "Category of principle"
+        },
+
+        "examples": {
+          "$ref": "#/$defs/principle_examples",
+          "description": "Examples of compliance and violation"
+        },
+
+        "enforcement": {
+          "type": "string",
+          "enum": ["absolute", "contextual"],
+          "default": "absolute",
+          "description": "'absolute' means no exceptions, 'contextual' means may be relaxed in specific documented circumstances"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "principle_examples": {
+      "type": "object",
+      "properties": {
+        "compliant": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of behavior that follows this principle"
+        },
+        "violation": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of behavior that violates this principle"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

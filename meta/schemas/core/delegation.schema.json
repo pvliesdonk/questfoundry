@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "delegation.schema.json",
+  "title": "Delegation",
+  "description": "A formal request from one agent to another to perform work. Delegations are how the orchestrator (or any agent with delegation capability) assigns tasks to other agents or teams.\n\nDELEGATION AS RESPONSIBILITY ASSIGNMENT: Delegation is NOT about permission - it is about assigning responsibility. It prevents the 'bystander effect' (no one acts) and 'stampede effect' (everyone acts). The delegatee is explicitly accountable for the task.\n\nIMPLICIT ACCESS GUARANTEE: Artifacts passed in 'context.artifacts' are GUARANTEED available to the delegatee. Since stores never deny access (open floor principle), no explicit 'grant_access' field is needed. The act of including an artifact in a delegation IS the guarantee.",
+
+  "type": "object",
+  "required": ["id", "from_agent", "task"],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for this delegation instance"
+    },
+
+    "from_agent": {
+      "$ref": "_definitions.schema.json#/$defs/agent_ref",
+      "description": "Agent making the delegation"
+    },
+
+    "to_agent": {
+      "$ref": "_definitions.schema.json#/$defs/agent_ref",
+      "description": "Specific agent to delegate to (mutually exclusive with to_archetype and to_team)"
+    },
+
+    "to_archetype": {
+      "$ref": "_definitions.schema.json#/$defs/archetype",
+      "description": "Archetype to delegate to - orchestrator selects specific agent (mutually exclusive with to_agent and to_team)"
+    },
+
+    "to_team": {
+      "$ref": "#/$defs/team_assignment",
+      "description": "Team to delegate to for collaborative work (mutually exclusive with to_agent and to_archetype)"
+    },
+
+    "task": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Clear description of what needs to be done"
+    },
+
+    "context": {
+      "$ref": "#/$defs/delegation_context",
+      "description": "Context and resources for performing the task"
+    },
+
+    "expectations": {
+      "$ref": "#/$defs/delegation_expectations",
+      "description": "What is expected in return"
+    },
+
+    "playbook_ref": {
+      "$ref": "_definitions.schema.json#/$defs/playbook_ref",
+      "description": "If this delegation is part of a playbook, which playbook"
+    },
+
+    "phase_ref": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "If part of a playbook, which phase"
+    },
+
+    "step_ref": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "If part of a playbook, which step"
+    },
+
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "urgent"],
+      "default": "normal",
+      "description": "Priority of this delegation"
+    },
+
+    "deadline": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional deadline for completion"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "oneOf": [
+    { "required": ["to_agent"] },
+    { "required": ["to_archetype"] },
+    { "required": ["to_team"] }
+  ],
+
+  "$defs": {
+    "team_assignment": {
+      "type": "object",
+      "required": ["roles"],
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["archetype", "responsibility"],
+            "properties": {
+              "archetype": {
+                "$ref": "_definitions.schema.json#/$defs/archetype"
+              },
+              "agent": {
+                "$ref": "_definitions.schema.json#/$defs/agent_ref",
+                "description": "Specific agent for this role (optional)"
+              },
+              "responsibility": {
+                "type": "string",
+                "description": "What this role is responsible for"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 2
+        },
+        "lead_archetype": {
+          "$ref": "_definitions.schema.json#/$defs/archetype",
+          "description": "Which role leads the team"
+        },
+        "coordination_mode": {
+          "type": "string",
+          "enum": ["sequential", "parallel", "self_organizing"],
+          "default": "self_organizing",
+          "description": "How team members coordinate"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "delegation_context": {
+      "type": "object",
+      "description": "Context provided to the delegatee. Everything in context is GUARANTEED available - the Runtime ensures the delegatee can access these resources.",
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref"
+          },
+          "default": [],
+          "description": "Artifacts the delegatee needs for this task. IMPLICIT GUARANTEE: These artifacts are guaranteed readable by the delegatee regardless of store workflow_intent. The Runtime loads them into the agent's context."
+        },
+        "knowledge_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "IDs of knowledge entries relevant to this task"
+        },
+        "background": {
+          "type": "string",
+          "description": "Additional context not captured in artifacts"
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Specific constraints for this task"
+        },
+        "previous_attempts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/attempt_summary"
+          },
+          "default": [],
+          "description": "If this is a rework, summaries of previous attempts"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "attempt_summary": {
+      "type": "object",
+      "properties": {
+        "attempt_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["rejected", "partial", "needs_revision"]
+        },
+        "feedback": {
+          "type": "string",
+          "description": "Feedback from the rejection/revision request"
+        },
+        "artifacts_produced": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "delegation_expectations": {
+      "type": "object",
+      "properties": {
+        "artifact_types": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_type_ref"
+          },
+          "default": [],
+          "description": "Types of artifacts expected to be produced"
+        },
+        "quality_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "IDs of quality criteria the output must meet"
+        },
+        "completion_signal": {
+          "type": "string",
+          "enum": ["report_back", "artifact_ready", "store_updated"],
+          "default": "report_back",
+          "description": "How completion is signaled"
+        },
+        "success_definition": {
+          "type": "string",
+          "description": "Natural language definition of success for this task"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

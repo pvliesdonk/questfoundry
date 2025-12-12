@@ -1,0 +1,631 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "message.schema.json",
+  "title": "Message",
+  "description": "Inter-agent communication protocol. Messages are the 'verbs' of the system - how agents communicate requests, responses, progress, and feedback.",
+
+  "type": "object",
+  "required": ["id", "type", "from", "timestamp"],
+
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique message identifier"
+    },
+
+    "type": {
+      "$ref": "_definitions.schema.json#/$defs/message_type",
+      "description": "Type of message"
+    },
+
+    "from": {
+      "$ref": "_definitions.schema.json#/$defs/agent_ref",
+      "description": "Sending agent"
+    },
+
+    "to": {
+      "$ref": "_definitions.schema.json#/$defs/agent_ref",
+      "description": "Receiving agent (omit for broadcast/runtime)"
+    },
+
+    "timestamp": {
+      "$ref": "_definitions.schema.json#/$defs/timestamp",
+      "description": "When the message was created"
+    },
+
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Links related messages (e.g., request/response pairs)"
+    },
+
+    "in_reply_to": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ID of message this is responding to"
+    },
+
+    "delegation_id": {
+      "type": "string",
+      "description": "If related to a delegation, its ID"
+    },
+
+    "playbook_context": {
+      "$ref": "#/$defs/playbook_context",
+      "description": "Current playbook execution context"
+    },
+
+    "payload": {
+      "$ref": "#/$defs/message_payload",
+      "description": "Message-type-specific payload"
+    },
+
+    "ttl_turns": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Time-to-live in agent turns. If the recipient doesn't see this message within this many turns, it expires and is deleted. Omit for durable messages (delegations, feedback). Use for ephemeral messages (clarifications, progress updates)."
+    },
+
+    "priority": {
+      "type": "integer",
+      "minimum": -10,
+      "maximum": 10,
+      "default": 0,
+      "description": "Message priority. Higher priority messages are shown first and survive summarization longer. Urgent delegations might have priority=5; routine progress updates might have priority=-2."
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "playbook_context": {
+      "type": "object",
+      "properties": {
+        "playbook_id": {
+          "$ref": "_definitions.schema.json#/$defs/playbook_ref"
+        },
+        "phase_id": {
+          "$ref": "_definitions.schema.json#/$defs/id"
+        },
+        "step_id": {
+          "$ref": "_definitions.schema.json#/$defs/id"
+        },
+        "attempt_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For rework loops, which attempt this is"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "message_payload": {
+      "type": "object",
+      "description": "Payload varies by message type",
+      "properties": {
+        "delegation_request": {
+          "$ref": "delegation.schema.json",
+          "description": "The full delegation specification. For delegation_request messages, this contains all the information needed for the delegatee to perform the work."
+        },
+        "delegation_response": {
+          "$ref": "#/$defs/delegation_response_payload"
+        },
+        "progress_update": {
+          "$ref": "#/$defs/progress_update_payload"
+        },
+        "clarification_request": {
+          "$ref": "#/$defs/clarification_payload"
+        },
+        "clarification_response": {
+          "$ref": "#/$defs/clarification_payload"
+        },
+        "feedback": {
+          "$ref": "#/$defs/feedback_payload"
+        },
+        "escalation": {
+          "$ref": "#/$defs/escalation_payload"
+        },
+        "nudge": {
+          "$ref": "#/$defs/nudge_payload"
+        },
+        "completion_signal": {
+          "$ref": "#/$defs/completion_signal_payload"
+        },
+        "lifecycle_transition_request": {
+          "$ref": "#/$defs/lifecycle_transition_request_payload"
+        },
+        "lifecycle_transition_response": {
+          "$ref": "#/$defs/lifecycle_transition_response_payload"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest_payload"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "digest_payload": {
+      "type": "object",
+      "description": "Runtime-generated summary of multiple messages. Created when inbox exceeds auto_summarize_threshold to prevent context explosion. The agent sees a compressed view of older activity.",
+      "required": ["summary", "summarized_count", "original_senders"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of the compressed messages. Generated by a fast model (e.g., Gemini Flash) to preserve key requests while dropping noise."
+        },
+        "summarized_count": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "How many messages were compressed into this digest"
+        },
+        "original_ids": {
+          "type": "array",
+          "items": { "type": "string", "format": "uuid" },
+          "description": "IDs of the original messages (for audit trail)"
+        },
+        "original_senders": {
+          "type": "array",
+          "items": { "$ref": "_definitions.schema.json#/$defs/agent_ref" },
+          "description": "Agents who sent the original messages"
+        },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "earliest": { "$ref": "_definitions.schema.json#/$defs/timestamp" },
+            "latest": { "$ref": "_definitions.schema.json#/$defs/timestamp" }
+          },
+          "description": "Time span covered by the summarized messages"
+        },
+        "urgency": {
+          "type": "string",
+          "enum": ["low", "normal", "high"],
+          "default": "normal",
+          "description": "Highest urgency level among summarized messages"
+        },
+        "contains_delegations": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether any summarized messages were delegation requests (important for the agent to know)"
+        },
+        "action_items": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Extracted action items from the summarized messages"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "delegation_response_payload": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "$ref": "_definitions.schema.json#/$defs/completion_status"
+        },
+        "artifacts_produced": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref"
+          },
+          "description": "Artifacts created as part of this delegation"
+        },
+        "inline_results": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Small/trivial results that don't warrant full artifact persistence (e.g., suggested_title, word_count, decision). Avoid creating artifacts for ephemeral data."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of what was accomplished"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "description": "Issues encountered (for partial/failed status)"
+        },
+        "next_steps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Suggested next steps (if any)"
+        },
+        "metrics": {
+          "$ref": "#/$defs/execution_metrics"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "progress_update_payload": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["started", "in_progress", "blocked", "completing"],
+          "description": "Current status"
+        },
+        "percent_complete": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Estimated completion percentage"
+        },
+        "current_activity": {
+          "type": "string",
+          "description": "What is currently being worked on"
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Current blockers (if status is blocked)"
+        },
+        "artifacts_in_progress": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref"
+          },
+          "description": "Artifacts currently being worked on"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "clarification_payload": {
+      "type": "object",
+      "required": ["question"],
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The clarifying question or response"
+        },
+        "context": {
+          "type": "string",
+          "description": "Why this clarification is needed"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description"],
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "implications": { "type": "string" }
+            }
+          },
+          "description": "Possible options if presenting choices"
+        },
+        "selected_option": {
+          "type": "string",
+          "description": "For responses: which option was selected"
+        },
+        "answer": {
+          "type": "string",
+          "description": "For responses: free-form answer"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "feedback_payload": {
+      "type": "object",
+      "required": ["feedback_type"],
+      "properties": {
+        "feedback_type": {
+          "type": "string",
+          "enum": ["quality_result", "suggestion", "concern", "approval"],
+          "description": "Type of feedback"
+        },
+        "target_artifact": {
+          "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref",
+          "description": "Artifact this feedback is about"
+        },
+        "overall_assessment": {
+          "type": "string",
+          "enum": ["pass", "fail", "needs_revision", "conditional_pass"],
+          "description": "Overall assessment"
+        },
+        "criteria_results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/criterion_result"
+          },
+          "description": "Results for individual quality criteria"
+        },
+        "comments": {
+          "type": "string",
+          "description": "General feedback comments"
+        },
+        "actionable_items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["item"],
+            "properties": {
+              "item": { "type": "string" },
+              "priority": {
+                "type": "string",
+                "enum": ["required", "recommended", "optional"]
+              },
+              "location": {
+                "type": "string",
+                "description": "Where in the artifact this applies"
+              }
+            }
+          },
+          "description": "Specific actionable feedback items"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "escalation_payload": {
+      "type": "object",
+      "required": ["reason"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "max_rework_exceeded",
+            "blocked_dependency",
+            "capability_mismatch",
+            "customer_input_needed",
+            "quality_gate_impasse",
+            "resource_constraint",
+            "other"
+          ],
+          "description": "Reason for escalation"
+        },
+        "details": {
+          "type": "string",
+          "description": "Detailed explanation"
+        },
+        "attempted_resolutions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What was already tried"
+        },
+        "suggested_actions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Suggested ways to resolve"
+        },
+        "requires_customer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether customer input is required"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "nudge_payload": {
+      "type": "object",
+      "required": ["nudge_type", "observation"],
+      "properties": {
+        "nudge_type": {
+          "type": "string",
+          "enum": [
+            "missing_output",
+            "unexpected_state",
+            "quality_gate_reminder",
+            "timeout_warning",
+            "consistency_concern"
+          ],
+          "description": "Type of nudge"
+        },
+        "observation": {
+          "type": "string",
+          "description": "What the runtime observed"
+        },
+        "expected": {
+          "type": "string",
+          "description": "What was expected based on playbook"
+        },
+        "question": {
+          "type": "string",
+          "description": "Question to the agent about the discrepancy"
+        },
+        "playbook_reference": {
+          "type": "string",
+          "description": "Reference to relevant playbook section"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "completion_signal_payload": {
+      "type": "object",
+      "required": ["signal_type"],
+      "properties": {
+        "signal_type": {
+          "type": "string",
+          "enum": [
+            "artifact_ready",
+            "store_updated",
+            "phase_complete",
+            "playbook_complete",
+            "handoff_ready"
+          ],
+          "description": "Type of completion signal"
+        },
+        "artifact": {
+          "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref",
+          "description": "For artifact_ready: the artifact"
+        },
+        "store": {
+          "$ref": "_definitions.schema.json#/$defs/store_ref",
+          "description": "For store_updated: the store"
+        },
+        "next_phase": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "For phase_complete: suggested next phase"
+        },
+        "handoff_to": {
+          "$ref": "_definitions.schema.json#/$defs/agent_ref",
+          "description": "For handoff_ready: who should take over"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "issue": {
+      "type": "object",
+      "required": ["severity", "description"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "error", "critical"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string",
+          "description": "How it was resolved (if at all)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "criterion_result": {
+      "type": "object",
+      "required": ["criterion_id", "result"],
+      "properties": {
+        "criterion_id": {
+          "type": "string",
+          "description": "ID of the quality criterion"
+        },
+        "result": {
+          "type": "string",
+          "enum": ["pass", "fail", "skip", "error"]
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "For scored criteria"
+        },
+        "details": {
+          "type": "string",
+          "description": "Detailed result information"
+        },
+        "issues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific issues found"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "execution_metrics": {
+      "type": "object",
+      "properties": {
+        "started_at": {
+          "$ref": "_definitions.schema.json#/$defs/timestamp"
+        },
+        "completed_at": {
+          "$ref": "_definitions.schema.json#/$defs/timestamp"
+        },
+        "duration_seconds": {
+          "type": "number"
+        },
+        "llm_calls": {
+          "type": "integer",
+          "description": "Number of LLM invocations"
+        },
+        "tokens_used": {
+          "type": "integer",
+          "description": "Total tokens consumed"
+        },
+        "rework_cycles": {
+          "type": "integer",
+          "description": "Number of rework iterations"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "lifecycle_transition_request_payload": {
+      "type": "object",
+      "description": "Request to transition an artifact to a new lifecycle state. The agent asserts it has met the criteria; the Runtime validates and commits (or rejects) the transition. This formal handshake enables enforcement of 'requires_validation' rules defined in artifact-type lifecycle transitions.",
+      "required": ["artifact", "from_state", "to_state"],
+      "properties": {
+        "artifact": {
+          "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref",
+          "description": "The artifact to transition"
+        },
+        "from_state": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "Current state (for consistency check)"
+        },
+        "to_state": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "Requested target state"
+        },
+        "justification": {
+          "type": "string",
+          "description": "Agent's explanation of why the transition criteria are met"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "criterion_id": {
+                "type": "string",
+                "description": "Quality criterion ID from 'requires_validation'"
+              },
+              "claim": {
+                "type": "string",
+                "description": "Agent's claim about meeting this criterion"
+              }
+            }
+          },
+          "description": "Evidence for each 'requires_validation' criterion (optional, aids Runtime evaluation)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "lifecycle_transition_response_payload": {
+      "type": "object",
+      "description": "Runtime's response to a lifecycle transition request. Includes validation results if 'requires_validation' was defined.",
+      "required": ["result"],
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": ["committed", "rejected", "deferred"],
+          "description": "'committed': transition applied. 'rejected': criteria not met. 'deferred': needs orchestrator/customer decision."
+        },
+        "new_state": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "The artifact's state after this response (may be unchanged if rejected)"
+        },
+        "validation_results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/criterion_result"
+          },
+          "description": "Results of 'requires_validation' checks"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "description": "If rejected: why the transition was not allowed"
+        },
+        "guidance": {
+          "type": "string",
+          "description": "Guidance for the agent on next steps"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

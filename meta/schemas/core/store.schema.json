@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "store.schema.json",
+  "title": "Store",
+  "description": "Definition of a storage location for artifacts and assets. Stores have semantics that define their behavior (mutable, append-only, versioned, cold). IMPORTANT: Studios operate on an 'open floor' principle - there are no secrets between agents. The Runtime NEVER denies access; workflow_intent provides guidance for orchestration and routing, not authorization. Violations result in nudges and logging, not denial.",
+
+  "type": "object",
+  "required": ["id", "name", "semantics"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this store"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "Purpose of this store and what should be stored here"
+    },
+
+    "semantics": {
+      "$ref": "_definitions.schema.json#/$defs/store_semantics",
+      "description": "Storage behavior: 'append_only' (write once), 'mutable' (read/write), 'versioned' (history preserved), 'cold' (optimized for long-term read-heavy access)"
+    },
+
+    "artifact_types": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/artifact_type_ref"
+      },
+      "default": [],
+      "description": "Artifact types that can be stored here. Empty means any type."
+    },
+
+    "asset_types": {
+      "type": "array",
+      "items": {
+        "$ref": "_definitions.schema.json#/$defs/artifact_type_ref"
+      },
+      "default": [],
+      "description": "Asset types that can be stored here. Empty means any type."
+    },
+
+    "workflow_intent": {
+      "$ref": "#/$defs/workflow_intent",
+      "description": "Workflow guidance: who SHOULD consume/produce data here. This informs orchestration routing, not access control. The Runtime never denies based on this."
+    },
+
+    "retention": {
+      "$ref": "#/$defs/retention_policy",
+      "description": "How long data is kept"
+    },
+
+    "asset_storage": {
+      "$ref": "#/$defs/asset_storage_config",
+      "description": "Configuration for binary asset storage (if this store holds assets)"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "workflow_intent": {
+      "type": "object",
+      "description": "Defines intended workflow patterns for this store. Serves TWO purposes:\n\n1. ATTENTION MECHANISM: Helps the Runtime decide what to load into each agent's context. Without this, every agent would need the entire studio state (context window explosion). Example: 'Only load SourceCode store for CodeReviewer, ignore MarketingAssets.'\n\n2. WORKFLOW OBSERVABILITY: Enables nudging and logging when agents deviate from intended patterns. NOT access control - the Runtime never denies access.",
+      "properties": {
+        "consumption_guidance": {
+          "type": "string",
+          "enum": ["all", "specified", "none"],
+          "default": "all",
+          "description": "ATTENTION HINT: Which agents should have this store's contents loaded into context by default. 'all' = broadcast, 'specified' = targeted routing, 'none' = on-demand only (reduces noise)"
+        },
+        "production_guidance": {
+          "type": "string",
+          "enum": ["all", "specified", "exclusive", "none"],
+          "default": "all",
+          "description": "RESPONSIBILITY HINT: Who is responsible for producing data here. Used for workflow routing and violation detection. 'exclusive' means single-owner semantics (e.g., Lorekeeper owns canon store)."
+        },
+        "designated_consumers": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/agent_ref"
+          },
+          "description": "If consumption_guidance='specified': agents whose context should include this store by default"
+        },
+        "designated_producers": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/agent_ref"
+          },
+          "description": "If production_guidance='specified': agents responsible for producing to this store"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "retention_policy": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["forever", "duration", "count", "project_scoped"],
+          "default": "forever",
+          "description": "Retention type"
+        },
+        "duration_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For 'duration' type, how many days to keep"
+        },
+        "max_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For 'count' type, maximum number of items (oldest removed)"
+        },
+        "max_versions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For versioned stores, max versions per artifact to keep"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "asset_storage_config": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string",
+          "enum": ["filesystem", "s3", "azure_blob", "gcs"],
+          "default": "filesystem",
+          "description": "Storage backend for binary assets"
+        },
+        "base_path": {
+          "type": "string",
+          "description": "For filesystem backend, the base directory path"
+        },
+        "bucket": {
+          "type": "string",
+          "description": "For cloud backends, the bucket/container name"
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Path prefix within the bucket/directory"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
