@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "quality_bars_overview",
+  "name": "Quality Bars Overview",
+  "layer": "must_know",
+
+  "summary": "8 mandatory quality bars must pass before merging to Cold: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation, Accessibility.",
+
+  "keywords": ["quality", "gatecheck", "bars", "merge criteria", "validation"],
+
+  "triggers": [
+    "quality bars",
+    "gatecheck",
+    "what must pass",
+    "merge criteria",
+    "validation requirements"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## The 8 Quality Bars\n\nEvery merge to Cold must pass all 8 bars:\n\n### 1. Integrity\nReferences resolve; no unintended dead ends; state effects don't create contradictions.\n\n### 2. Reachability\nMust-see beats (keystones, required items) reachable via at least one viable path.\n\n### 3. Nonlinearity\nHubs/loops/gateways exist where intended and matter to play (not decorative).\n\n### 4. Gateways\nConditions are consistent, enforceable by PN, and spoiler-safe on surface.\n\n### 5. Style\nVoice, register, motifs align with guardrails; PN remains in-voice.\n\n### 6. Determinism (when promised)\nAssets reproducible from recorded parameters (seed, model, etc.).\n\n### 7. Presentation\nPlayer surfaces contain no spoilers or internal plumbing.\n\n### 8. Accessibility\nNavigation clear; alt text present; sensory considerations respected.\n\n### Gatekeeper's Role\n\n- Gatekeeper enforces all 8 bars\n- Block with specific bar citation and smallest viable fix\n- No merge on fail (exceptions are rare, explicit, time-boxed)"
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator", "validator"],
+    "agents": ["showrunner", "gatekeeper"]
+  },
+
+  "tags": ["quality", "validation", "gatecheck"]
+}

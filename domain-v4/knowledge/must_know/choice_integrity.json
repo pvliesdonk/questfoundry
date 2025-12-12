@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "choice_integrity",
+  "name": "Choice Integrity",
+  "layer": "must_know",
+
+  "summary": "Choices must be contrastive (differ in intent and outcome). Two clear options beat five near-synonyms. Convergence must be acknowledged.",
+
+  "keywords": ["choices", "contrastive", "convergence", "fake agency", "meaningful choices"],
+
+  "triggers": [
+    "writing choices",
+    "how choices should differ",
+    "convergence",
+    "fake agency",
+    "making choices matter"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Choice Integrity\n\n### The Principle\n\nEvery choice must offer meaningfully different paths. Cosmetic variation is fake agency.\n\n### Contrastive Choices\n\n**Two clear options beat five near-synonyms.**\n\nChoices must differ in:\n- Intent (what the player is trying to do)\n- Outcome (what happens as a result)\n- Tone/approach (how it feels to choose)\n\n### Handling Convergence\n\nWhen branches must converge:\n\n1. **Immediate Reflection**: The next scene's first paragraph reflects the entering path (lexical, behavioral, or situational difference)\n\n2. **State-Aware Affordances**: At least one option reads differently based on entering state\n\n3. **Diegetic Bridge**: A short in-world transition bridges the convergence\n\n4. **Micro-Beat Between**: When necessary, add a short beat that sets a visible state flag\n\n### Examples\n\n**Good Contrastive Choices**:\n- 'Confront the foreman directly' vs 'Gather evidence first'\n- 'Trust Kestrel's word' vs 'Demand proof'\n\n**Bad (Near-Synonyms)**:\n- 'Go north' vs 'Head northward' vs 'Travel north'\n- 'Fight' vs 'Attack' vs 'Battle'\n\n### The First-Choice Test\n\nAt the first choice point:\n- Are the options functionally different?\n- If they converge, does the next scene acknowledge which path was taken?"
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator"],
+    "agents": ["plotwright", "scene_smith"]
+  },
+
+  "tags": ["content", "narrative", "design"]
+}

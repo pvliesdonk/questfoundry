@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "diegetic_gates",
+  "name": "Diegetic Gates",
+  "layer": "must_know",
+
+  "summary": "All access gates must be expressed through in-world fiction, not mechanics. The Player-Narrator enforces gates diegetically without exposing internal state.",
+
+  "keywords": ["gates", "gateways", "conditions", "codewords", "diegetic", "in-world", "PN enforcement"],
+
+  "triggers": [
+    "writing a gate",
+    "access conditions",
+    "how to phrase gates",
+    "codeword usage",
+    "PN enforcement"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Diegetic Gates\n\n### The Principle\n\nGates must feel like world facts, not game mechanics. Players encounter gates as story elements they can understand without meta-knowledge.\n\n### Types of Diegetic Gates\n\n- **Badge/Token**: 'If you carry the foreman's seal...'\n- **Knowledge**: 'If you've learned the true name...'\n- **Reputation**: 'If the miners trust you...'\n- **Tool/Item**: 'If you have the override key...'\n\n### How to Write Gates\n\n**DO**:\n- 'If the foreman vouched for you, proceed to...'\n- 'Those who bear the guild token may enter'\n- 'Only those who spoke with Kestrel know the way'\n\n**DON'T**:\n- 'If FLAG_FOREMAN is true...'\n- 'If state.bribed == 1...'\n- 'Go to section 42 if you have codeword ASH'\n\n### PN Enforcement\n\nThe Player-Narrator asks in-world questions:\n- 'Did the foreman give you his seal?'\n- 'Have you spoken with Kestrel about the passage?'\n\nThe PN never says:\n- 'Check if you have codeword ASH'\n- 'Is your reputation score above 5?'\n\n### The Test\n\nCould a character in this world ask this question naturally? If yes, the gate is diegetic."
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator"],
+    "agents": ["plotwright", "scene_smith"]
+  },
+
+  "tags": ["content", "narrative", "player-facing"]
+}

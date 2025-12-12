@@ -1,0 +1,62 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "consult_schema",
+  "name": "Consult Schema",
+  "description": "Retrieve the schema definition for an artifact type. Returns the field definitions, validation rules, and lifecycle states for the specified artifact type. Use this to understand the structure of artifacts before creating or validating them.\n\nPattern: consult-schema - agent asks for schema, gets both structure and documentation.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "artifact_type_id": {
+        "type": "string",
+        "description": "The ID of the artifact type to retrieve (e.g., 'section', 'hook_card', 'section_brief')"
+      },
+      "include_examples": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to include usage examples in the response"
+      },
+      "include_validation_rules": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to include validation rules in the response"
+      }
+    },
+    "required": ["artifact_type_id"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "artifact_type": {
+        "type": "object",
+        "description": "The full artifact type definition"
+      },
+      "field_summary": {
+        "type": "string",
+        "description": "Human-readable summary of required and optional fields"
+      },
+      "lifecycle_summary": {
+        "type": "string",
+        "description": "Human-readable summary of lifecycle states and transitions"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Get the Section Brief schema before creating one",
+      "input": {
+        "artifact_type_id": "section_brief",
+        "include_examples": true
+      }
+    },
+    {
+      "description": "Get Section schema for validation",
+      "input": {
+        "artifact_type_id": "section",
+        "include_validation_rules": true
+      }
+    }
+  ]
+}

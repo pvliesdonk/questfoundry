@@ -1,0 +1,55 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "determinism",
+  "name": "Determinism",
+  "description": "Visual and audio assets can be reproduced from recorded parameters (seed, prompt version, model, aspect, chain). If determinism is not promised, this bar is N/A.",
+
+  "enforcement": "llm",
+  "blocking": "advisory",
+  "severity": "warning",
+
+  "applies_to": {
+    "artifact_types": ["section"],
+    "phases": ["asset_creation", "art_pass", "audio_pass"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate whether promised assets are reproducible. Check that parameters are logged sufficiently. If determinism is not promised for an asset, skip this check for that asset.",
+      "criteria": [
+        {
+          "name": "parameter_logging",
+          "description": "All parameters needed to reproduce the asset are logged: seed, prompt, model version, aspect ratio, processing chain.",
+          "weight": 0.5,
+          "examples": {
+            "good": ["Full generation parameters recorded", "Seed and prompt version documented"],
+            "bad": ["Missing seed value", "No record of model version used"]
+          }
+        },
+        {
+          "name": "deferred_review",
+          "description": "Plan-only items (no execution yet) are marked deferred with constraints reviewed.",
+          "weight": 0.25,
+          "examples": {
+            "good": ["Art plan marked deferred:illustration with style constraints noted", "Audio plan deferred with reviewed parameters"],
+            "bad": ["Unexecuted plan with no deferral marking", "Constraints not reviewed before deferral"]
+          }
+        },
+        {
+          "name": "convergence_reflection",
+          "description": "When branches converge, the next scene's first paragraph reflects the entering state with at least one conditioned affordance.",
+          "weight": 0.25,
+          "examples": {
+            "good": ["Convergence scene acknowledges prior path", "At least one element is state-dependent"],
+            "bad": ["Convergence ignores entering state", "No trace of prior branch"]
+          }
+        }
+      ],
+      "pass_threshold": 0.7,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Regenerate assets with proper logging or explicitly accept as non-deterministic. For plan-only items, ensure deferral is marked and constraints are reviewed. Adjust constraints with Style Lead if plan contradicts style."
+}

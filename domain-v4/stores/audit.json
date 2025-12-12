@@ -1,0 +1,18 @@
+{
+  "$schema": "../../meta/schemas/core/store.schema.json",
+  "id": "audit",
+  "name": "Audit Log",
+  "description": "Append-only history store for traceability. Contains TU history, hook lifecycle events, gatecheck results, lifecycle transitions, and all significant state changes. Supports the traceability principle: we can always explain why something exists.",
+
+  "semantics": "append_only",
+
+  "workflow_intent": {
+    "consumption_guidance": "specified",
+    "production_guidance": "all",
+    "designated_consumers": ["showrunner", "gatekeeper"]
+  },
+
+  "retention": {
+    "type": "forever"
+  }
+}

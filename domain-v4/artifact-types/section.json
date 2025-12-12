@@ -1,0 +1,233 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "section",
+  "name": "Section",
+  "description": "A complete unit of narrative prose ending in one or more player-facing choices. Sections are the atomic reading units of the manuscript, written by Scene Smith from Section Briefs. In Cold state, sections are player-safe and ready for export.",
+  "category": "document",
+
+  "fields": [
+    {
+      "name": "anchor",
+      "type": "string",
+      "description": "Unique anchor identifier (e.g., anchor001)",
+      "required": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Human-readable section title",
+      "required": true
+    },
+    {
+      "name": "brief_ref",
+      "type": "string",
+      "description": "Reference to the Section Brief this implements (format: SB-NNN)"
+    },
+    {
+      "name": "tu_ref",
+      "type": "string",
+      "description": "Reference to originating TU Brief"
+    },
+    {
+      "name": "prose",
+      "type": "text",
+      "description": "Narrative paragraphs with opening beat, development, and setup for choices. 150-500 words typical. May contain inline codex references as bold text.",
+      "format": "markdown",
+      "required": true
+    },
+    {
+      "name": "choices",
+      "type": "array",
+      "description": "Player-facing choices at the end of the section. Minimum 2, maximum 5.",
+      "items": {
+        "name": "choice",
+        "type": "object",
+        "properties": [
+          {
+            "name": "text",
+            "type": "string",
+            "description": "Choice text shown to player (concrete verb + object)",
+            "required": true
+          },
+          {
+            "name": "target_anchor",
+            "type": "string",
+            "description": "Anchor ID this choice leads to",
+            "required": true
+          },
+          {
+            "name": "gate",
+            "type": "object",
+            "description": "Optional diegetic gate condition",
+            "properties": [
+              {
+                "name": "condition_type",
+                "type": "string",
+                "description": "Type of gate: token, reputation, knowledge, tool",
+                "enum": ["token", "reputation", "knowledge", "tool"]
+              },
+              {
+                "name": "diegetic_check",
+                "type": "text",
+                "description": "In-world phrasing for the gate (what PN says)"
+              },
+              {
+                "name": "diegetic_refusal",
+                "type": "text",
+                "description": "In-world phrasing when gate blocks access"
+              }
+            ]
+          }
+        ]
+      },
+      "min_length": 2,
+      "max_length": 5,
+      "required": true
+    },
+    {
+      "name": "codex_refs",
+      "type": "array",
+      "items_type": "string",
+      "description": "List of codex entry IDs referenced in this section"
+    },
+    {
+      "name": "art_placements",
+      "type": "array",
+      "description": "Planned art placement points",
+      "items": {
+        "name": "art_placement",
+        "type": "object",
+        "properties": [
+          {
+            "name": "position",
+            "type": "string",
+            "description": "Where in prose (top, after_beat_N, before_choices)"
+          },
+          {
+            "name": "art_plan_ref",
+            "type": "string",
+            "description": "Reference to Art Plan if exists"
+          },
+          {
+            "name": "caption",
+            "type": "text",
+            "description": "Diegetic caption (mood/affordance, no technique)"
+          },
+          {
+            "name": "alt_text",
+            "type": "text",
+            "description": "Accessibility alt text"
+          }
+        ]
+      }
+    },
+    {
+      "name": "audio_cues",
+      "type": "array",
+      "description": "Planned audio cue points",
+      "items": {
+        "name": "audio_cue",
+        "type": "object",
+        "properties": [
+          {
+            "name": "trigger",
+            "type": "string",
+            "description": "When to play (on_enter, at_beat_N, on_choice)"
+          },
+          {
+            "name": "audio_plan_ref",
+            "type": "string",
+            "description": "Reference to Audio Plan if exists"
+          },
+          {
+            "name": "text_equivalent",
+            "type": "text",
+            "description": "Accessibility text equivalent"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convergence_notes",
+      "type": "text",
+      "description": "If this section converges from multiple paths, notes for immediate reflection"
+    },
+    {
+      "name": "content_warnings",
+      "type": "array",
+      "items_type": "string",
+      "description": "Content warning tags if needed"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Section is being written by Scene Smith"
+      },
+      {
+        "id": "review",
+        "name": "Review",
+        "description": "Section is under Style Lead review"
+      },
+      {
+        "id": "gatecheck",
+        "name": "Gatecheck",
+        "description": "Section is awaiting Gatekeeper validation"
+      },
+      {
+        "id": "approved",
+        "name": "Approved",
+        "description": "Section has passed gatecheck, ready for Cold merge"
+      },
+      {
+        "id": "cold",
+        "name": "Cold",
+        "description": "Section is merged to Cold SoT, player-safe",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "review" },
+      { "from": "review", "to": "draft" },
+      { "from": "review", "to": "gatecheck" },
+      { "from": "gatecheck", "to": "draft" },
+      { "from": "gatecheck", "to": "approved" },
+      {
+        "from": "approved",
+        "to": "cold",
+        "requires_validation": ["integrity", "reachability", "style", "presentation"]
+      }
+    ]
+  },
+
+  "validation": {
+    "custom_rules": [
+      {
+        "id": "choice_integrity",
+        "description": "Choices must be contrastive (different outcomes), not synonyms",
+        "enforcement": "llm"
+      },
+      {
+        "id": "spoiler_hygiene",
+        "description": "No internals, codewords, gate logic, or spoilers in prose or choice text",
+        "enforcement": "llm"
+      },
+      {
+        "id": "diegetic_gates",
+        "description": "All gates must use in-world phrasing (token, reputation, knowledge, tool)",
+        "enforcement": "llm"
+      },
+      {
+        "id": "anchor_resolution",
+        "description": "All target anchors must resolve to valid sections",
+        "enforcement": "runtime"
+      }
+    ]
+  },
+
+  "default_store": "workspace"
+}

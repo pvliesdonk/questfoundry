@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "topology_patterns",
+  "name": "Topology Patterns",
+  "layer": "must_know",
+
+  "summary": "Core narrative topology patterns: Hubs (fan-out), Loops (return-with-difference), and Gateways (state-gated access). Structure meaningful nonlinearity.",
+
+  "keywords": ["hubs", "loops", "gateways", "topology", "structure", "nonlinearity"],
+
+  "triggers": [
+    "designing structure",
+    "hub pattern",
+    "loop pattern",
+    "gateway pattern",
+    "narrative topology"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Topology Patterns\n\n### Hub\n\n**Definition**: A section (or cluster) with meaningful fan-out to multiple distinct routes.\n\n**Purpose**: Give players genuine choice about where to go.\n\n**Requirements**:\n- Branches lead to genuinely different content\n- Not cosmetic variations\n- Each path has distinct stakes or outcomes\n\n**Example**: A marketplace hub where players can visit the smith, the tavern, or the docks - each offering different opportunities.\n\n### Loop\n\n**Definition**: A design that returns the reader to a prior location with difference.\n\n**Purpose**: Create depth and consequence through revisitation.\n\n**Requirements**:\n- Return changes something (context, options, relationships)\n- Usually via codeword/state change\n- Not just circular navigation\n\n**Example**: Returning to the tavern after learning a secret - new dialogue options appear.\n\n### Gateway\n\n**Definition**: A diegetic condition controlling access to content.\n\n**Purpose**: Create gated progression that feels earned.\n\n**Requirements**:\n- Clear, single condition\n- At least one obtainable path to condition\n- PN can enforce without exposing internals\n\n**Example**: 'Only those bearing the foreman's seal may enter the control room.'\n\n### Combining Patterns\n\nRich topology uses all three:\n- Hub for exploration freedom\n- Loops for depth and consequence\n- Gateways for meaningful progression"
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator"],
+    "agents": ["plotwright"]
+  },
+
+  "tags": ["design", "structure", "narrative"]
+}

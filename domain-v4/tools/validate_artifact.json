@@ -1,0 +1,91 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "validate_artifact",
+  "name": "Validate Artifact",
+  "description": "Validate an artifact against its type schema and the 8 quality bars. Returns validation results with specific errors and suggested fixes.\n\nQuality Bars checked:\n1. Integrity - No contradictions or dead links\n2. Reachability - Critical content accessible\n3. Nonlinearity - Branches matter\n4. Gateways - Conditions enforceable\n5. Style - Voice consistent\n6. Determinism - Reproducible where promised\n7. Presentation - Spoiler-safe\n8. Accessibility - Navigation clear\n\nPattern: validate-with-feedback - strict validation, clear rejection messages with remediation guidance.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "artifact_id": {
+        "type": "string",
+        "description": "ID of the artifact to validate"
+      },
+      "artifact_type_id": {
+        "type": "string",
+        "description": "Type of the artifact (e.g., 'section', 'hook_card')"
+      },
+      "artifact_data": {
+        "type": "object",
+        "description": "The artifact content to validate (if not already persisted)"
+      },
+      "validation_mode": {
+        "type": "string",
+        "enum": ["schema_only", "bars_only", "full"],
+        "default": "full",
+        "description": "What to validate: schema compliance only, quality bars only, or both"
+      },
+      "bars_to_check": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["integrity", "reachability", "nonlinearity", "gateways", "style", "determinism", "presentation", "accessibility"]
+        },
+        "description": "Specific bars to check (default: all 8)"
+      }
+    },
+    "required": ["artifact_type_id"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "valid": {
+        "type": "boolean",
+        "description": "Overall validation result"
+      },
+      "schema_errors": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "field": { "type": "string" },
+            "error": { "type": "string" },
+            "suggested_fix": { "type": "string" }
+          }
+        }
+      },
+      "bar_results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bar": { "type": "string" },
+            "status": { "type": "string", "enum": ["green", "yellow", "red"] },
+            "evidence": { "type": "string" },
+            "smallest_fix": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Validate a Section before merging to Cold",
+      "input": {
+        "artifact_id": "section-001",
+        "artifact_type_id": "section",
+        "validation_mode": "full"
+      }
+    },
+    {
+      "description": "Quick schema check on a draft",
+      "input": {
+        "artifact_type_id": "section_brief",
+        "artifact_data": { "brief_id": "SB-001", "goal": "Test" },
+        "validation_mode": "schema_only"
+      }
+    }
+  ]
+}

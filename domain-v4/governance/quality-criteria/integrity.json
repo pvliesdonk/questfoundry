@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "integrity",
+  "name": "Integrity",
+  "description": "All links and section references resolve. No unintended dead ends. Codeword/state effects don't create contradictions downstream. Only intentional terminals are permitted.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "error",
+
+  "applies_to": {
+    "artifact_types": ["section", "section_brief"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate whether this content maintains structural integrity. Check that all references resolve and there are no unintended dead ends.",
+      "criteria": [
+        {
+          "name": "reference_resolution",
+          "description": "Every choice leads somewhere. All referenced sections exist or are clearly planned.",
+          "weight": 0.4,
+          "examples": {
+            "good": ["All choices have valid target anchors", "Referenced sections exist in workspace"],
+            "bad": ["Choice points to non-existent section", "Dangling link with no target"]
+          }
+        },
+        {
+          "name": "terminal_intentionality",
+          "description": "Dead ends are marked clearly as 'The End' or equivalent. No accidental terminals.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["Terminal sections clearly marked", "Endings feel intentional"],
+            "bad": ["Section ends abruptly with no choices", "Forgotten return path from loop"]
+          }
+        },
+        {
+          "name": "state_consistency",
+          "description": "State changes don't create downstream contradictions or paradoxes.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["State effects are consistent across branches", "No contradictory conditions"],
+            "bad": ["Player can both have and not have an item", "State creates impossible situations"]
+          }
+        }
+      ],
+      "pass_threshold": 1.0,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Fix dangling links by creating the target section or retargeting the choice. Add return paths for forgotten loops or mark sections as intentional terminals. Resolve state contradictions by adjusting conditions or adding fail-forward beats."
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "style",
+  "name": "Style",
+  "description": "Prose voice, register, and motifs align with style guardrails. Visual/aesthetic cues align with style. The Player-Narrator remains in-voice.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "warning",
+
+  "applies_to": {
+    "artifact_types": ["section"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate voice and style consistency. Read sections for tone coherence and alignment with established guardrails.",
+      "criteria": [
+        {
+          "name": "voice_consistency",
+          "description": "Prose voice maintains consistent register across sections. No jarring tone shifts.",
+          "weight": 0.4,
+          "examples": {
+            "good": ["Same dry, sardonic tone throughout", "Register consistent with style guide"],
+            "bad": ["Suddenly shifts from formal to casual", "Tone wobbles between sections"]
+          }
+        },
+        {
+          "name": "motif_coherence",
+          "description": "Recurring motifs are threaded consistently. Aesthetic patterns align across content.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["Water imagery recurs as established", "Captions feel like same book"],
+            "bad": ["Motif used inconsistently", "Aesthetic cues contradict each other"]
+          }
+        },
+        {
+          "name": "pn_voice_alignment",
+          "description": "Player-Narrator phrasing matches agreed register and character.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["PN maintains established personality", "Voice matches earnest/sardonic/dry setting"],
+            "bad": ["PN breaks character", "PN voice contradicts established register"]
+          }
+        }
+      ],
+      "pass_threshold": 0.7,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Run a Style Tune-up loop for tone wobble. Move over-exposition to codex; keep player surface lean. Coordinate with Style Lead for voice corrections."
+}

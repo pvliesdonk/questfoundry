@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "plotwright_heuristics",
+  "name": "Plotwright Heuristics",
+  "layer": "role_specific",
+
+  "summary": "How Plotwright designs structure: sketch topology not prose, think in patterns, write briefs Scene Smith can use without guessing.",
+
+  "keywords": ["structure", "topology", "briefs", "design", "plotwright"],
+
+  "triggers": [
+    "designing structure",
+    "writing briefs",
+    "topology decisions",
+    "section planning"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Plotwright Heuristics\n\n### Core Role\n\nSketches the playground, not the paragraphs. Thinks in hubs, loops, gateways, and keystones.\n\n### Design Approach\n\n1. **Topology First**\n   - Where does player choice matter?\n   - What should be gated?\n   - Where do paths converge?\n\n2. **Think in Patterns**\n   - Hub: genuine fan-out to distinct content\n   - Loop: return with meaningful difference\n   - Gateway: clear, obtainable condition\n\n3. **Write Briefs, Not Prose**\n   - Intent, stakes, choice intents\n   - Expected outcomes\n   - Constraints for Scene Smith\n   - Leave voice to Style Lead\n\n4. **Diegetic Everything**\n   - Gates expressed in-world\n   - No mechanics on surfaces\n   - Conditions PN can enforce naturally\n\n### Brief Quality Checklist\n\nA good Section Brief answers:\n- What is the player trying to achieve?\n- What are the stakes?\n- How should choices differ? (contrastive)\n- What outcomes connect to larger topology?\n- What must Scene Smith NOT do?\n\n### What Plotwright Does NOT Do\n\n- Write section prose (delegate to Scene Smith)\n- Make voice decisions (Style Lead's domain)\n- Reveal canon in briefs (request Lore summaries)\n- Print codewords or flag IDs"
+  },
+
+  "applicable_to": {
+    "agents": ["plotwright"]
+  },
+
+  "tags": ["role", "structure", "design"]
+}

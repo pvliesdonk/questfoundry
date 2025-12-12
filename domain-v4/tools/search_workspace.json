@@ -1,0 +1,98 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "search_workspace",
+  "name": "Search Workspace",
+  "description": "Search for artifacts in the Hot SoT (workspace store). Supports filtering by artifact type, lifecycle state, and text search within fields. Returns matching artifacts with their current state.\n\nUse this to find:\n- Drafts in progress\n- Section briefs ready for implementation\n- Hooks awaiting triage\n- Related artifacts for context",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Text search query (searches across text fields)"
+      },
+      "artifact_types": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Filter by artifact type(s) (e.g., ['section', 'section_brief'])"
+      },
+      "lifecycle_states": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Filter by lifecycle state(s) (e.g., ['draft', 'ready'])"
+      },
+      "created_by": {
+        "type": "string",
+        "description": "Filter by creator agent ID"
+      },
+      "created_after": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Filter by creation date (after)"
+      },
+      "related_to": {
+        "type": "string",
+        "description": "Find artifacts related to this artifact ID"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20,
+        "description": "Maximum results to return"
+      }
+    }
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "artifact_id": { "type": "string" },
+            "artifact_type": { "type": "string" },
+            "lifecycle_state": { "type": "string" },
+            "summary": { "type": "string" },
+            "created_by": { "type": "string" },
+            "created_at": { "type": "string" }
+          }
+        }
+      },
+      "total_count": {
+        "type": "integer",
+        "description": "Total matching artifacts (may exceed limit)"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Find all Section Briefs ready for Scene Smith",
+      "input": {
+        "artifact_types": ["section_brief"],
+        "lifecycle_states": ["ready"]
+      }
+    },
+    {
+      "description": "Search for hooks mentioning 'lighthouse'",
+      "input": {
+        "query": "lighthouse",
+        "artifact_types": ["hook_card"]
+      }
+    },
+    {
+      "description": "Find drafts created by Plotwright",
+      "input": {
+        "created_by": "plotwright",
+        "lifecycle_states": ["draft"]
+      }
+    }
+  ]
+}

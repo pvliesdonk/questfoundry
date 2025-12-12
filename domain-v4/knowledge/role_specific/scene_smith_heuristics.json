@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "scene_smith_heuristics",
+  "name": "Scene Smith Heuristics",
+  "layer": "role_specific",
+
+  "summary": "How Scene Smith writes prose: honor the brief, show the world hide the gears, keep choices contrastive, respect style guardrails.",
+
+  "keywords": ["prose", "writing", "voice", "choices", "scene_smith"],
+
+  "triggers": [
+    "writing prose",
+    "filling briefs",
+    "creating sections",
+    "dialogue and description"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Scene Smith Heuristics\n\n### Core Role\n\nShows the world, hides the gears. Writes clean beats and contrastive choices from Plotwright briefs.\n\n### Writing Approach\n\n1. **Honor the Brief**\n   - Keep Plotwright's intent on screen\n   - Don't invent new topology\n   - Respect stated constraints\n\n2. **Show the World, Hide the Gears**\n   - No codewords, flag IDs, or schema names in prose\n   - No seeds, models, or DAW notes\n   - Gates expressed diegetically\n\n3. **Contrastive Choices**\n   - Two clear options beat five near-synonyms\n   - Choices differ in intent AND outcome\n   - Players should feel real difference\n\n4. **Respect Style Domain**\n   - Don't fight the register\n   - Propose alternatives if something feels wrong\n   - Style Lead has final voice authority\n\n### The Diegetic Gate Test\n\nBefore writing any gate, verify:\n- Reads as world fact (badge, knowledge, reputation, tool)\n- Never reads as mechanic\n- PN can enforce naturally\n\n### What Scene Smith Does NOT Do\n\n- Change topology (escalate to Plotwright)\n- Expose canon (request Lore summaries)\n- Override style decisions\n- Print any internal mechanics\n\n### Self-Validation\n\nBefore requesting gatecheck:\n- [ ] All choices lead somewhere (anchor resolution)\n- [ ] No spoilers in prose\n- [ ] Choices are contrastive\n- [ ] Gates are diegetic"
+  },
+
+  "applicable_to": {
+    "agents": ["scene_smith"]
+  },
+
+  "tags": ["role", "writing", "prose"]
+}

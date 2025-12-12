@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "nonlinearity",
+  "name": "Nonlinearity",
+  "description": "Hubs, loops, and gateways exist where intended and matter to play. Nonlinearity is deliberate, not decorative. Choices are meaningfully different.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "error",
+
+  "applies_to": {
+    "artifact_types": ["section", "section_brief"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate whether nonlinear elements are meaningful. Hubs should fan out, loops should return with difference, gateways should matter.",
+      "criteria": [
+        {
+          "name": "hub_significance",
+          "description": "Hubs fan out to genuinely different content, not cosmetic variations.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["Hub offers 3 paths with distinct consequences", "Each branch explores different themes"],
+            "bad": ["Hub has 3 paths that all lead to same outcome", "Branches are cosmetically different only"]
+          }
+        },
+        {
+          "name": "loop_difference",
+          "description": "Loops return with meaningful difference via codeword/state changes.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["Returning players see different dialogue based on prior choices", "Loop revisit changes available options"],
+            "bad": ["Loop returns to identical content", "No recognition of prior passage"]
+          }
+        },
+        {
+          "name": "first_choice_integrity",
+          "description": "Early choices avoid funnels where siblings are functionally equivalent. Convergence is acknowledged in subsequent prose.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["First paragraph after convergence reflects the entering path", "Choices feel distinct even if converging later"],
+            "bad": ["Three choices all lead to same unchanged scene", "Player choice immediately ignored"]
+          }
+        }
+      ],
+      "pass_threshold": 1.0,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Add outcome differences to cosmetic loops. Add branches with distinct outcomes to thin hubs or merge if unnecessary. Ensure convergence scenes acknowledge the entering path with lexical, behavioral, or situational differences."
+}

@@ -1,0 +1,208 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "section_brief",
+  "name": "Section Brief",
+  "description": "Writing instructions from Plotwright to Scene Smith for drafting a specific section. Defines goal, beats, choice intents, and expected outcomes. Section Briefs are the bridge between Story Spark (structure) and Scene Weave (prose). They remain in Hot as working documents and are not exported to players.",
+  "category": "document",
+
+  "fields": [
+    {
+      "name": "brief_id",
+      "type": "string",
+      "description": "Unique identifier (format: SB-NNN)",
+      "required": true
+    },
+    {
+      "name": "section_title",
+      "type": "string",
+      "description": "Human-readable title for the section being planned",
+      "required": true
+    },
+    {
+      "name": "target_anchor",
+      "type": "string",
+      "description": "Anchor ID for the section this brief describes (e.g., anchor005)",
+      "required": true
+    },
+    {
+      "name": "topology_context",
+      "type": "string",
+      "description": "Structural context: Hub, Loop, Gateway, or Linear",
+      "enum": ["hub", "loop", "gateway", "linear"],
+      "required": true
+    },
+    {
+      "name": "tu_ref",
+      "type": "string",
+      "description": "Reference to originating TU Brief"
+    },
+    {
+      "name": "goal",
+      "type": "text",
+      "description": "What this section accomplishes narratively (1-2 sentences)",
+      "required": true
+    },
+    {
+      "name": "key_beats",
+      "type": "array",
+      "description": "2-4 story moments that must appear in the prose, in sequence",
+      "items": {
+        "name": "beat",
+        "type": "object",
+        "properties": [
+          {
+            "name": "sequence",
+            "type": "integer",
+            "description": "Order of this beat (1-4)"
+          },
+          {
+            "name": "description",
+            "type": "text",
+            "description": "What happens in this beat"
+          }
+        ]
+      },
+      "min_length": 2,
+      "max_length": 4,
+      "required": true
+    },
+    {
+      "name": "choice_intents",
+      "type": "array",
+      "description": "Contrastive choices with their intents and targets",
+      "items": {
+        "name": "choice_intent",
+        "type": "object",
+        "properties": [
+          {
+            "name": "intent",
+            "type": "string",
+            "description": "Clear verb + object describing what player does"
+          },
+          {
+            "name": "target_anchor",
+            "type": "string",
+            "description": "Anchor ID this choice leads to"
+          },
+          {
+            "name": "outcome_difference",
+            "type": "text",
+            "description": "How this path differs from sibling choices"
+          },
+          {
+            "name": "gate",
+            "type": "text",
+            "description": "Diegetic condition if gated (empty if ungated)"
+          }
+        ]
+      },
+      "min_length": 2,
+      "max_length": 5
+    },
+    {
+      "name": "expected_outcomes",
+      "type": "text",
+      "description": "What the player should understand after reading this section (player-safe, no spoilers)"
+    },
+    {
+      "name": "open_questions",
+      "type": "array",
+      "description": "Questions needing clarification from Lore, Style, or Curator before drafting",
+      "items": {
+        "name": "question",
+        "type": "object",
+        "properties": [
+          {
+            "name": "target_role",
+            "type": "string",
+            "description": "Role to consult (lore_weaver, style_lead, codex_curator)"
+          },
+          {
+            "name": "question",
+            "type": "text",
+            "description": "What needs clarification"
+          },
+          {
+            "name": "resolved",
+            "type": "boolean",
+            "description": "Whether this question has been answered"
+          },
+          {
+            "name": "resolution",
+            "type": "text",
+            "description": "Answer if resolved"
+          }
+        ]
+      }
+    },
+    {
+      "name": "constraints",
+      "type": "object",
+      "description": "Optional constraints for Scene Smith",
+      "properties": [
+        {
+          "name": "continuity_notes",
+          "type": "text",
+          "description": "References to prior sections/choices"
+        },
+        {
+          "name": "accessibility_notes",
+          "type": "text",
+          "description": "Alt text opportunities, content warnings"
+        },
+        {
+          "name": "art_cues",
+          "type": "array",
+          "items_type": "string",
+          "description": "Moments that benefit from illustration"
+        },
+        {
+          "name": "audio_cues",
+          "type": "array",
+          "items_type": "string",
+          "description": "Moments that benefit from sound"
+        },
+        {
+          "name": "micro_context",
+          "type": "text",
+          "description": "Immediate reflection needed when converging from multiple paths"
+        }
+      ]
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Brief is being written by Plotwright"
+      },
+      {
+        "id": "ready",
+        "name": "Ready",
+        "description": "Brief is complete and ready for Scene Smith"
+      },
+      {
+        "id": "in_use",
+        "name": "In Use",
+        "description": "Scene Smith is actively drafting the section"
+      },
+      {
+        "id": "archived",
+        "name": "Archived",
+        "description": "Section has been completed and merged to Cold",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "ready" },
+      { "from": "ready", "to": "in_use" },
+      { "from": "in_use", "to": "ready" },
+      { "from": "in_use", "to": "archived" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

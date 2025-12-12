@@ -1,0 +1,80 @@
+{
+  "$schema": "../meta/schemas/core/studio.schema.json",
+  "id": "questfoundry",
+  "name": "QuestFoundry Interactive Fiction Studio",
+  "version": "4.0.0",
+
+  "description": "A multi-agent studio for creating interactive fiction with meaningful choices, diegetic gates, and player-safe surfaces. Decomposes the creative process into specialized roles coordinated through loops.",
+
+  "entry_agents": {
+    "authoring": "showrunner",
+    "playtest": "player_narrator"
+  },
+
+  "constitution_ref": "governance/constitution.json",
+
+  "stores": [
+    "stores/workspace.json",
+    "stores/canon.json",
+    "stores/audit.json"
+  ],
+
+  "agents": [
+    "agents/showrunner.json",
+    "agents/gatekeeper.json",
+    "agents/plotwright.json",
+    "agents/scene_smith.json"
+  ],
+
+  "playbooks": [
+    "playbooks/story_spark.json",
+    "playbooks/scene_weave.json",
+    "playbooks/hook_harvest.json"
+  ],
+
+  "artifact_types": [
+    "artifact-types/section_brief.json",
+    "artifact-types/section.json",
+    "artifact-types/hook_card.json",
+    "artifact-types/gatecheck_report.json"
+  ],
+
+  "tools": [
+    "tools/consult_schema.json",
+    "tools/validate_artifact.json",
+    "tools/search_workspace.json",
+    "tools/delegate.json"
+  ],
+
+  "quality_criteria": [
+    "governance/quality-criteria/integrity.json",
+    "governance/quality-criteria/reachability.json",
+    "governance/quality-criteria/nonlinearity.json",
+    "governance/quality-criteria/gateways.json",
+    "governance/quality-criteria/style.json",
+    "governance/quality-criteria/determinism.json",
+    "governance/quality-criteria/presentation.json",
+    "governance/quality-criteria/accessibility.json"
+  ],
+
+  "knowledge_config": "knowledge/layers.json",
+
+  "defaults": {
+    "flow_control": {
+      "max_inbox_size": 20,
+      "max_active_delegations": 5,
+      "backpressure_threshold": 0.8,
+      "secretary_summarization_trigger": 10
+    },
+    "quality": {
+      "max_rework_cycles": 3,
+      "escalation_after_rework": true
+    }
+  },
+
+  "metadata": {
+    "wave": 1,
+    "status": "initial",
+    "notes": "Wave 1: Core writing studio with Showrunner, Gatekeeper, Plotwright, Scene Smith. 3 playbooks: Story Spark, Scene Weave, Hook Harvest."
+  }
+}

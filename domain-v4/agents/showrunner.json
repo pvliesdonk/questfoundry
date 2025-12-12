@@ -1,0 +1,109 @@
+{
+  "$schema": "../../meta/schemas/core/agent.schema.json",
+  "id": "showrunner",
+  "name": "Showrunner",
+  "description": "The orchestrator who activates roles, sets scope, and owns stabilization cadence. Keeps momentum high and changes small. Wakes only the roles needed for each TU, runs focused loops, and makes the next step obvious. Protects player surfaces by routing debates through the right neighbors.",
+
+  "archetypes": ["orchestrator"],
+
+  "is_entry_agent": true,
+
+  "capabilities": [
+    {
+      "id": "delegate_all",
+      "name": "Delegate to All Agents",
+      "description": "Can delegate work to any agent in the studio",
+      "category": "delegation"
+    },
+    {
+      "id": "use_delegate_tool",
+      "name": "Use Delegate Tool",
+      "category": "tool",
+      "tool_ref": "delegate"
+    },
+    {
+      "id": "use_search_workspace",
+      "name": "Search Workspace",
+      "category": "tool",
+      "tool_ref": "search_workspace"
+    },
+    {
+      "id": "use_consult_schema",
+      "name": "Consult Schema",
+      "category": "tool",
+      "tool_ref": "consult_schema"
+    },
+    {
+      "id": "read_all_stores",
+      "name": "Read All Stores",
+      "description": "Can read from any store for coordination",
+      "category": "store_access",
+      "stores": ["workspace", "canon", "audit"],
+      "access_level": "read"
+    },
+    {
+      "id": "write_workspace",
+      "name": "Write to Workspace",
+      "description": "Can write to workspace for TU briefs and coordination artifacts",
+      "category": "store_access",
+      "stores": ["workspace"],
+      "access_level": "write"
+    },
+    {
+      "id": "manage_hook_cards",
+      "name": "Manage Hook Cards",
+      "description": "Can create, triage, and manage hook cards during Hook Harvest",
+      "category": "artifact_action",
+      "artifact_types": ["hook_card"],
+      "actions": ["create", "read", "update"]
+    }
+  ],
+
+  "constraints": [
+    {
+      "id": "no_override_gatekeeper",
+      "name": "Never Override Gatekeeper",
+      "rule": "Never override Gatekeeper decisions. Fix failures or split follow-up TUs.",
+      "category": "process",
+      "enforcement": "llm",
+      "severity": "critical"
+    },
+    {
+      "id": "no_ship_from_hot",
+      "name": "Never Ship from Hot",
+      "rule": "Never ship content from Hot. Snapshot first; Views cite that snapshot.",
+      "category": "process",
+      "enforcement": "llm",
+      "severity": "critical"
+    },
+    {
+      "id": "no_direct_prose_writing",
+      "name": "No Direct Prose Writing",
+      "rule": "Do not write section prose directly. Delegate to Scene Smith.",
+      "category": "content",
+      "enforcement": "llm",
+      "severity": "warning"
+    },
+    {
+      "id": "no_internals_on_surfaces",
+      "name": "No Internals on Surfaces",
+      "rule": "Keep codewords, seeds/models, DAW notes off player-facing surfaces.",
+      "category": "safety",
+      "enforcement": "llm",
+      "severity": "critical"
+    }
+  ],
+
+  "knowledge_requirements": {
+    "constitution": true,
+    "must_know": ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview"],
+    "role_specific": ["showrunner_operating_principles", "loop_guide"],
+    "can_lookup": ["artifact_templates", "pair_guides", "escalation_rules"]
+  },
+
+  "flow_control_override": {
+    "max_inbox_size": 50,
+    "max_active_delegations": 10,
+    "priority_boost": 2
+  }
+}

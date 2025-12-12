@@ -1,0 +1,24 @@
+{
+  "$schema": "../../meta/schemas/core/store.schema.json",
+  "id": "workspace",
+  "name": "Workspace (Hot SoT)",
+  "description": "Working space for creative change. Contains drafts, proposals, hooks, WIP topology, scene text, style notes, and plans. Not export-safe; spoilers may exist. This is where discovery and argument happen.",
+
+  "semantics": "mutable",
+
+  "artifact_types": [
+    "section_brief",
+    "section",
+    "hook_card",
+    "gatecheck_report"
+  ],
+
+  "workflow_intent": {
+    "consumption_guidance": "all",
+    "production_guidance": "all"
+  },
+
+  "retention": {
+    "type": "project_scoped"
+  }
+}

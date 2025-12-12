@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "presentation",
+  "name": "Presentation",
+  "description": "Player-facing surfaces (manuscript, codex, PN) contain no spoilers or internal plumbing. All visible text respects spoiler hygiene and uses in-world language.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "critical",
+
+  "applies_to": {
+    "artifact_types": ["section", "gatecheck_report"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate spoiler hygiene and presentation cleanliness. Player surfaces must reveal no internals, no spoilers, and no meta-content.",
+      "criteria": [
+        {
+          "name": "spoiler_hygiene",
+          "description": "No twists, secrets, or backstory revealed prematurely. Canon stays hidden from player surface.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["Mystery preserved for player discovery", "Backstory referenced obliquely, not revealed"],
+            "bad": ["Spoiler in codex entry", "PN accidentally reveals the twist"]
+          }
+        },
+        {
+          "name": "no_internals",
+          "description": "No codewords, flag IDs, state names, seeds, models, or DAW notes visible on player surfaces.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["All mechanics hidden behind in-world phrasing", "No schema references in prose"],
+            "bad": ["FLAG_FOREMAN visible in text", "Seed value shown in caption"]
+          }
+        },
+        {
+          "name": "diegetic_phrasing",
+          "description": "PN lines use in-world wording. Choices are clear without being meta. Diegetic transit present on anchor jumps.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["If the foreman vouched for you, proceed...", "Transition describes physical movement"],
+            "bad": ["Go to section 42 if state=BRIBED", "Teleporting without narrative explanation"]
+          }
+        }
+      ],
+      "pass_threshold": 1.0,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Move spoilers from codex to canon notes; keep player-safe summaries only. Rephrase PN lines to diegetic checks. Replace internal labels with player-safe refs or in-world terms. Add narrative transitions for anchor jumps."
+}

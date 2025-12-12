@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "accessibility",
+  "name": "Accessibility",
+  "description": "Navigation is clear and predictable. Alt text is present for all images. Sensory considerations are respected. Content notes flag potentially distressing material.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "error",
+
+  "applies_to": {
+    "artifact_types": ["section"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate accessibility. Check navigation clarity, alt text presence, and sensory considerations.",
+      "criteria": [
+        {
+          "name": "alt_text_presence",
+          "description": "Alt text present for all images. Descriptions capture composition/intent without spoilers.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["Every image has descriptive alt text", "Alt text describes scene without revealing plot"],
+            "bad": ["Image with no alt text", "Alt text says 'image' or is empty"]
+          }
+        },
+        {
+          "name": "navigation_clarity",
+          "description": "Headings and link text are informative. Navigation breadcrumbs or section markers help orient readers.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["Choice text describes destination", "Clear section headers aid navigation"],
+            "bad": ["Link says 'click here'", "No section markers for orientation"]
+          }
+        },
+        {
+          "name": "sensory_considerations",
+          "description": "Content notes flag potentially distressing material. No flashing or sensory overload without warning.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["Content note warns of violence", "No unexpected flashing content"],
+            "bad": ["Distressing content with no warning", "Flashing images with no seizure warning"]
+          }
+        }
+      ],
+      "pass_threshold": 0.7,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Add descriptive alt text for missing images (coordinate with Art Director). Revise link text to be informative; add section headers or breadcrumbs. Add content notes for potentially distressing material or adjust composition plan."
+}

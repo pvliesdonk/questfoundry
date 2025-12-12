@@ -1,0 +1,22 @@
+{
+  "$schema": "../../meta/schemas/core/store.schema.json",
+  "id": "canon",
+  "name": "Canon (Cold SoT)",
+  "description": "Curated, stabilized canon and presentation rules. Contains accepted world canon, stable style guardrails, export-safe manuscript surfaces, codex entries, and canonical asset records. Always export/playable; spoiler hygiene enforced. This is where agreement and shipping happen. Content only enters after stabilization loop completion and Gatekeeper approval.",
+
+  "semantics": "cold",
+
+  "artifact_types": [
+    "section"
+  ],
+
+  "workflow_intent": {
+    "consumption_guidance": "all",
+    "production_guidance": "exclusive",
+    "designated_producers": ["lore_weaver"]
+  },
+
+  "retention": {
+    "type": "forever"
+  }
+}

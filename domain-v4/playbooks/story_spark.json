@@ -1,0 +1,218 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "story_spark",
+  "name": "Story Spark",
+  "version": "1.0.0",
+  "purpose": "Design or reshape narrative topology (hubs, loops, gateways, codewords) and produce Section Briefs for Scene Weave. Structure first, prose second.",
+
+  "description": "Story Spark is the structure loop. Plotwright sketches the playground—not the paragraphs. The focus is on meaningful nonlinearity: hubs that fan out, loops that return with difference, gateways that gate diegetically. The output is Section Briefs that Scene Smith can draft without guessing intent. This loop explicitly does NOT write prose; it hands off structural shells to Scene Weave.",
+
+  "triggers": [
+    {
+      "condition": "New chapter, act, subplot, or restructure request",
+      "priority": 1
+    },
+    {
+      "condition": "Fixes needed for reachability or nonlinearity issues",
+      "priority": 2
+    },
+    {
+      "condition": "Hook-led expansion suggesting new hub or gateway",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [],
+    "optional_artifacts": [
+      {
+        "type": "hook_card",
+        "alias": "structure_hooks",
+        "description": "Accepted hooks that affect topology",
+        "state": "accepted"
+      }
+    ],
+    "context_requirements": [
+      "Current Cold snapshot (canon, codex, style guardrails)",
+      "Prior topology notes from workspace",
+      "Known QA findings (Integrity/Reachability/Nonlinearity)"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "section_brief",
+        "alias": "briefs",
+        "description": "Section Briefs for each new or affected section",
+        "state": "ready"
+      }
+    ],
+    "optional_artifacts": [
+      {
+        "type": "hook_card",
+        "alias": "new_hooks",
+        "description": "Narrative and scene hooks generated during topology design",
+        "state": "proposed"
+      }
+    ],
+    "context_requirements": [
+      "Topology notes in workspace (human prose describing hubs/loops/gateways)",
+      "Pre-gate note from Gatekeeper preview"
+    ]
+  },
+
+  "entry_phase": "topology_design",
+
+  "phases": {
+    "topology_design": {
+      "name": "Topology Design",
+      "purpose": "Map the structure: parts/chapters, hubs (fan-out), loops (return-with-difference), gateways (state-gated)",
+
+      "steps": {
+        "sketch_structure": {
+          "action": "Map parts/chapters and designate hubs, loops, and gateways. For each gateway, write a diegetic condition the Player-Narrator can enforce.",
+          "specific_agent": "plotwright",
+          "guidance": "Think in terms of player navigation: where do choices fan out (hub), where do players return changed (loop), where is progress gated (gateway). Never use schema names or flag IDs—write conditions in-world ('foreman's token', 'maintenance hex-key').",
+          "outputs": [
+            {
+              "name": "topology_notes",
+              "description": "Human-readable topology delta with rationale"
+            }
+          ]
+        },
+        "feasibility_check": {
+          "action": "Review topology for canon collisions and flag where Lore Deepening will be needed.",
+          "depends_on": ["sketch_structure"],
+          "agent_archetype": "curator",
+          "guidance": "Identify any canon constraints that affect the proposed structure. Do not block—note concerns and suggest where deepening is needed.",
+          "inputs": [
+            {
+              "name": "topology_notes",
+              "from_step": "sketch_structure"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Topology notes document all new hubs, loops, and gateways",
+        "Each gateway has a diegetic condition in human terms",
+        "Canon feasibility concerns are documented"
+      ],
+
+      "on_success": {
+        "next_phases": ["brief_creation"]
+      }
+    },
+
+    "brief_creation": {
+      "name": "Brief Creation",
+      "purpose": "Create Section Briefs that Scene Smith can draft from without ambiguity",
+      "depends_on": ["topology_design"],
+
+      "steps": {
+        "write_briefs": {
+          "action": "For each new or affected section, create a Section Brief with goal, key beats, choice intents, and constraints.",
+          "specific_agent": "plotwright",
+          "guidance": "A good brief answers: What is the player trying to achieve? What are the stakes? What choices should feel meaningfully different? What outcomes connect to the larger topology? Leave voice/register decisions to Style Lead.",
+          "inputs": [
+            {
+              "name": "topology_notes",
+              "from_step": "sketch_structure",
+              "from_phase": "topology_design"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "section_briefs",
+              "artifact_type": "section_brief",
+              "description": "Section Briefs ready for Scene Weave"
+            }
+          ]
+        },
+        "generate_hooks": {
+          "action": "Create hook cards for narrative elements, scene details, and factual questions that arose during topology design.",
+          "depends_on": ["write_briefs"],
+          "specific_agent": "plotwright",
+          "guidance": "Hooks capture ideas that need resolution but shouldn't block the current work. Mark uncertainty levels and suggested owners.",
+          "outputs": [
+            {
+              "name": "proposed_hooks",
+              "artifact_type": "hook_card"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Every new section has a Section Brief",
+        "Briefs specify goal, stakes, choice intents, and constraints",
+        "Generated hooks are tagged with classification and uncertainty"
+      ],
+
+      "on_success": {
+        "next_phases": ["preview_gate"]
+      },
+
+      "is_rework_target": true
+    },
+
+    "preview_gate": {
+      "name": "Preview Gate",
+      "purpose": "Quick sanity check on Integrity, Reachability, and Nonlinearity before handoff",
+      "depends_on": ["brief_creation"],
+
+      "steps": {
+        "pre_gate_check": {
+          "action": "Run a quick pre-gate review: check for accidental dead ends (Integrity), keystone reachability (Reachability), and meaningful hubs/loops (Nonlinearity).",
+          "specific_agent": "gatekeeper",
+          "guidance": "This is a preview, not a full gatecheck. Flag risks but do not block unless critical. The goal is to give Showrunner a risk snapshot.",
+          "inputs": [
+            {
+              "name": "section_briefs",
+              "from_step": "write_briefs",
+              "from_phase": "brief_creation"
+            },
+            {
+              "name": "topology_notes",
+              "from_step": "sketch_structure",
+              "from_phase": "topology_design"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "pre_gate_note",
+              "description": "Early findings and risks for Showrunner"
+            }
+          ]
+        }
+      },
+
+      "quality_checkpoint": {
+        "criteria": ["integrity", "reachability", "nonlinearity"],
+        "validator_archetype": "validator",
+        "pass_threshold": "all"
+      },
+
+      "completion_criteria": [
+        "Pre-gate note documents any risks",
+        "No critical dead ends or unreachable keystones"
+      ],
+
+      "on_success": {
+        "message": "Section Briefs ready for Scene Weave. Hooks ready for Hook Harvest.",
+        "end_playbook": true
+      },
+
+      "on_failure": {
+        "next_phases": ["brief_creation"],
+        "message": "Pre-gate found issues. Return to Brief Creation with Gatekeeper feedback."
+      }
+    }
+  },
+
+  "quality_criteria": ["integrity", "reachability", "nonlinearity", "gateways"],
+
+  "max_rework_cycles": 3
+}

@@ -1,0 +1,281 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "hook_harvest",
+  "name": "Hook Harvest",
+  "version": "1.0.0",
+  "purpose": "Collect, cluster, and triage hooks from creative work. Decide what advances now, what defers, and what gets rejected. Fast ideas, safe canon.",
+
+  "description": "Hook Harvest is the triage loop. Showrunner sweeps up newly proposed hooks from Story Spark, Scene Weave, and other creative bursts. The goal is to remove duplicates, cluster related ideas, annotate with uncertainty and dependencies, and make clear decisions: accepted (with next loop), deferred (with wake condition), or rejected (with reason). This loop maintains velocity by keeping the hook backlog clean.",
+
+  "triggers": [
+    {
+      "condition": "After Story Spark or Scene Weave produces hooks",
+      "priority": 1
+    },
+    {
+      "condition": "Before a stabilization window or merge train",
+      "priority": 2
+    },
+    {
+      "condition": "Hook backlog feels fuzzy or has drifted",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [
+      {
+        "type": "hook_card",
+        "alias": "proposed_hooks",
+        "description": "Hook cards in proposed state awaiting triage",
+        "state": "proposed"
+      }
+    ],
+    "optional_artifacts": [],
+    "context_requirements": [
+      "Recent topology notes and section drafts",
+      "Open QA notes from Gatekeeper",
+      "Prior harvest decisions (for consistency)"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "hook_card",
+        "alias": "triaged_hooks",
+        "description": "Hook cards updated with triage decisions",
+        "state": "accepted"
+      }
+    ],
+    "optional_artifacts": [],
+    "context_requirements": [
+      "Harvest Sheet summarizing decisions",
+      "Activation requests for dormant roles"
+    ]
+  },
+
+  "entry_phase": "collection",
+
+  "phases": {
+    "collection": {
+      "name": "Collection",
+      "purpose": "Sweep all proposed hooks and remove obvious duplicates",
+
+      "steps": {
+        "gather_hooks": {
+          "action": "Collect all hook cards in proposed state. Identify and link duplicates—do not delete, preserve provenance.",
+          "specific_agent": "showrunner",
+          "guidance": "Use search_workspace to find all proposed hooks. When you find duplicates, link them (one references the other) rather than deleting. This preserves the source of ideas.",
+          "outputs": [
+            {
+              "name": "collected_hooks",
+              "artifact_type": "hook_card",
+              "description": "Deduplicated hook collection"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All proposed hooks collected",
+        "Duplicates linked (not deleted)"
+      ],
+
+      "on_success": {
+        "next_phases": ["clustering"]
+      }
+    },
+
+    "clustering": {
+      "name": "Clustering",
+      "purpose": "Group hooks by theme and type for efficient triage",
+      "depends_on": ["collection"],
+
+      "steps": {
+        "group_by_theme": {
+          "action": "Cluster hooks by theme (e.g., character arc, location, faction) and then by type (narrative, scene, factual, taxonomy).",
+          "specific_agent": "showrunner",
+          "guidance": "Good clusters make triage faster. Group by what the hook affects, not by who proposed it. A hook about 'Wormhole economy' should cluster with other economy hooks.",
+          "inputs": [
+            {
+              "name": "collected_hooks",
+              "from_step": "gather_hooks",
+              "from_phase": "collection"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "clustered_hooks",
+              "description": "Hooks organized by theme and type"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All hooks assigned to a cluster",
+        "Clusters are coherent (single theme)"
+      ],
+
+      "on_success": {
+        "next_phases": ["annotation"]
+      }
+    },
+
+    "annotation": {
+      "name": "Annotation",
+      "purpose": "Add triage tags, uncertainty levels, and dependencies to each hook",
+      "depends_on": ["clustering"],
+
+      "steps": {
+        "add_metadata": {
+          "action": "For each hook, add or confirm: triage tag (quick-win, needs-research, structure-impact, style-impact, deferred, reject), uncertainty level for factual hooks, and dependencies.",
+          "specific_agent": "showrunner",
+          "guidance": "Consult specialists as needed: Plotwright for structure impact, Scene Smith for scene viability, Gatekeeper for quality bar risks. Mark which dormant roles would need to wake.",
+          "inputs": [
+            {
+              "name": "clustered_hooks",
+              "from_step": "group_by_theme",
+              "from_phase": "clustering"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "annotated_hooks",
+              "artifact_type": "hook_card",
+              "description": "Hooks with triage metadata"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Every hook has a triage tag",
+        "Factual hooks have uncertainty levels",
+        "Dependencies are explicit"
+      ],
+
+      "on_success": {
+        "next_phases": ["decision"]
+      }
+    },
+
+    "decision": {
+      "name": "Decision",
+      "purpose": "Make final accept/defer/reject decisions for each hook",
+      "depends_on": ["annotation"],
+
+      "steps": {
+        "triage_decision": {
+          "action": "Mark each hook as accepted (with next loop and owner), deferred (with reason and wake condition), or rejected (with reason).",
+          "specific_agent": "showrunner",
+          "guidance": "Promote now if: untangles contradictions, strengthens nonlinearity, improves player comprehension, low coupling high gain. Defer if: requires dormant roles, triggers wide churn, depends on unverified externals. Reject if: duplicate, violates boundaries, creates unwinnable states.",
+          "inputs": [
+            {
+              "name": "annotated_hooks",
+              "from_step": "add_metadata",
+              "from_phase": "annotation"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "decided_hooks",
+              "artifact_type": "hook_card",
+              "description": "Hooks with final status"
+            }
+          ]
+        },
+        "assign_next_loop": {
+          "action": "For accepted hooks, assign the next loop: story_spark (topology changes), scene_weave (prose needs), lore_deepening (canon required), codex_expansion (taxonomy), style_pass (voice).",
+          "depends_on": ["triage_decision"],
+          "specific_agent": "showrunner",
+          "guidance": "Most accepted hooks go to lore_deepening in Wave 3. For Wave 1, hooks requiring topology changes go back to story_spark; hooks requiring prose work go to scene_weave.",
+          "inputs": [
+            {
+              "name": "decided_hooks",
+              "from_step": "triage_decision"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "routed_hooks",
+              "artifact_type": "hook_card"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Every hook has accepted/deferred/rejected status",
+        "Accepted hooks have next loop and owner",
+        "Deferred hooks have wake conditions",
+        "Rejected hooks have reasons"
+      ],
+
+      "on_success": {
+        "next_phases": ["packaging"]
+      }
+    },
+
+    "packaging": {
+      "name": "Packaging",
+      "purpose": "Produce Harvest Sheet and prepare handoffs",
+      "depends_on": ["decision"],
+
+      "steps": {
+        "create_harvest_sheet": {
+          "action": "Produce a Harvest Sheet summarizing: date, clusters, accepted hooks (with owners and next loops), deferred hooks (with wake conditions), rejected hooks (with reasons), risk notes, activation requests.",
+          "specific_agent": "showrunner",
+          "guidance": "The Harvest Sheet is the handoff document. It should be human-readable and actionable. Include which dormant roles should wake for upcoming work.",
+          "inputs": [
+            {
+              "name": "routed_hooks",
+              "from_step": "assign_next_loop",
+              "from_phase": "decision"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "harvest_sheet",
+              "description": "Summary document for handoffs"
+            }
+          ]
+        },
+        "update_hook_cards": {
+          "action": "Update all hook cards with final status, triage tags, uncertainty levels, and routing information.",
+          "depends_on": ["create_harvest_sheet"],
+          "specific_agent": "showrunner",
+          "inputs": [
+            {
+              "name": "routed_hooks",
+              "from_step": "assign_next_loop",
+              "from_phase": "decision"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "final_hooks",
+              "artifact_type": "hook_card"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Harvest Sheet is complete",
+        "All hook cards updated",
+        "Handoffs are clear"
+      ],
+
+      "on_success": {
+        "message": "Harvest complete. Accepted hooks routed to next loops. Showrunner has activation list.",
+        "end_playbook": true
+      }
+    }
+  },
+
+  "quality_criteria": ["integrity", "traceability"],
+
+  "max_rework_cycles": 2
+}

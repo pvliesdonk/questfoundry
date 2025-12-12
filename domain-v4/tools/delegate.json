@@ -1,0 +1,124 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "delegate",
+  "name": "Delegate Work",
+  "description": "Formally assign work to another agent. Creates a delegation request with context, expected outputs, and quality criteria. The receiving agent will be notified and can accept, request clarification, or report completion.\n\nDelegation is the primary mechanism for work distribution in the studio. The Showrunner uses this extensively to route work to specialized agents.\n\nSee: delegation.schema.json for the full delegation protocol.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "to_agent": {
+        "type": "string",
+        "description": "ID of the agent to delegate to (e.g., 'scene_smith', 'gatekeeper')"
+      },
+      "to_archetype": {
+        "type": "string",
+        "enum": ["orchestrator", "creator", "validator", "researcher", "curator"],
+        "description": "Alternative: delegate to any agent of this archetype"
+      },
+      "task": {
+        "type": "string",
+        "description": "Clear description of what needs to be done"
+      },
+      "context": {
+        "type": "object",
+        "properties": {
+          "artifact_refs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs of relevant artifacts"
+          },
+          "knowledge_refs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "References to relevant knowledge entries"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional context for the receiving agent"
+          }
+        }
+      },
+      "expected_outputs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "artifact_type": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "description": "What artifacts should be produced"
+      },
+      "quality_criteria": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Specific quality criteria to meet"
+      },
+      "priority": {
+        "type": "string",
+        "enum": ["low", "normal", "high", "urgent"],
+        "default": "normal"
+      },
+      "playbook_ref": {
+        "type": "string",
+        "description": "Reference to playbook this delegation is part of"
+      },
+      "phase_ref": {
+        "type": "string",
+        "description": "Reference to playbook phase"
+      }
+    },
+    "required": ["task"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "delegation_id": {
+        "type": "string",
+        "description": "Unique ID for tracking this delegation"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["sent", "accepted", "in_progress", "completed", "blocked"],
+        "description": "Current delegation status"
+      },
+      "assigned_to": {
+        "type": "string",
+        "description": "Agent ID who accepted the delegation"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Delegate section drafting to Scene Smith",
+      "input": {
+        "to_agent": "scene_smith",
+        "task": "Draft section prose for SB-005 (The Lighthouse Lock)",
+        "context": {
+          "artifact_refs": ["SB-005"],
+          "notes": "Hub with 3 exits; player discovers lighthouse is locked"
+        },
+        "expected_outputs": [
+          { "artifact_type": "section", "description": "Draft section with 3 choices" }
+        ],
+        "quality_criteria": ["choice_integrity", "diegetic_gates"]
+      }
+    },
+    {
+      "description": "Request gatecheck from Gatekeeper",
+      "input": {
+        "to_agent": "gatekeeper",
+        "task": "Gatecheck section-005 for Cold merge",
+        "context": {
+          "artifact_refs": ["section-005"]
+        },
+        "expected_outputs": [
+          { "artifact_type": "gatecheck_report", "description": "All 8 bars assessed" }
+        ]
+      }
+    }
+  ]
+}

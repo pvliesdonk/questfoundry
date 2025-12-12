@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "sources_of_truth",
+  "name": "Sources of Truth",
+  "layer": "must_know",
+
+  "summary": "Two SoTs exist: Hot (workspace) for discovery and Cold (canon) for curated truth. Work in Hot, merge to Cold after Gatekeeper passes. Views export from Cold snapshots only.",
+
+  "keywords": ["hot", "cold", "workspace", "canon", "snapshot", "view", "merge", "stores"],
+
+  "triggers": [
+    "where to save work",
+    "when to merge",
+    "snapshot or view",
+    "what is cold",
+    "what is hot"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Sources of Truth\n\n### Hot SoT (Workspace)\n\n**Purpose**: Discovery space for drafts, hooks, work-in-progress\n\n**Characteristics**:\n- Mutable (all agents can read/write)\n- Spoilers allowed\n- Canon work-in-progress lives here\n- Plan-only assets (art/audio) staged here\n\n### Cold SoT (Canon)\n\n**Purpose**: Curated canon and player-safe surfaces\n\n**Characteristics**:\n- Cold semantics (exclusive production by Lore Weaver)\n- No spoilers on player-facing content\n- Merge to Cold only after Gatekeeper passes all quality bars\n- Ship-ready, not staging\n\n### Snapshots and Views\n\n**Snapshot**: Immutable tag of Cold (e.g., `cold@2025-10-28`)\n- Exports are cut from snapshots\n- Views cite their source snapshot\n\n**View**: Player-safe export bundle (MD/HTML/EPUB/PDF)\n- Built from a snapshot via Binding Run\n- Never ships from Hot\n\n### The Merge Train\n\n1. Work in Hot\n2. Gatecheck (8 quality bars)\n3. Merge to Cold (on pass)\n4. Snapshot\n5. Build View\n\n### Golden Rule\n\n**Never ship from Hot. Never bypass Gatekeeper.**"
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator"],
+    "agents": ["showrunner"]
+  },
+
+  "tags": ["architecture", "stores", "workflow"]
+}

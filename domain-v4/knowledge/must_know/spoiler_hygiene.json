@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "spoiler_hygiene",
+  "name": "Spoiler Hygiene",
+  "layer": "must_know",
+
+  "summary": "Player-facing surfaces must never reveal twists, secrets, or backstory that the narrative intends to reveal through play. Keep canon separate from codex.",
+
+  "keywords": ["spoilers", "player-safe", "canon", "codex", "secrets", "twists", "player surfaces"],
+
+  "triggers": [
+    "writing player-facing text",
+    "creating codex entries",
+    "PN dialogue",
+    "captions or descriptions",
+    "what can players see"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Spoiler Hygiene\n\n### Core Principle\n\nPlayer-facing surfaces (manuscript, codex, PN lines, captions) must never reveal:\n- Twists the narrative intends to reveal through play\n- Backstory that should emerge through discovery\n- Internal mechanics or system names\n\n### The Canon/Codex Separation\n\n**Canon** (Cold SoT, Lore Weaver only):\n- Spoiler-level truth about the world\n- Causal relationships, hidden histories\n- What REALLY happened and why\n\n**Codex** (Player-safe):\n- What players have LEARNED or could learn\n- Summaries without revealing secrets\n- References that aid comprehension, not revelation\n\n### What Never Appears on Player Surfaces\n\n- Codeword names (use in-world phrasing)\n- Flag IDs or state variables\n- Seeds, models, or DAW session references\n- Schema names or internal identifiers\n- Spoilers in any form\n\n### The Diegetic Test\n\nBefore any text reaches a player surface, ask:\n1. Could a character in this world say this?\n2. Does it reveal more than the player should know?\n3. Would reading this spoil a discovery?\n\nIf yes to #2 or #3, move content to canon or remove it."
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator", "orchestrator", "validator"],
+    "agents": ["showrunner", "gatekeeper", "plotwright", "scene_smith"]
+  },
+
+  "tags": ["safety", "player-facing", "content-hygiene"]
+}

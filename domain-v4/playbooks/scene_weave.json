@@ -1,0 +1,280 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "scene_weave",
+  "name": "Scene Weave",
+  "version": "1.0.0",
+  "purpose": "Transform Section Briefs into full prose Sections with dialogue, sensory detail, and contrastive choices. Voice first, structure assumed stable.",
+
+  "description": "Scene Weave is the prose loop. Scene Smith fills structural shells from Story Spark with dialogue and sensory detail. The structure is assumed stable—this loop does not change topology, only inhabits it. The focus is on voice, aesthetic quality, contrastive choices, and diegetic gate phrasing. Hooks generated here are scene-level (traits, tells, props) rather than structural.",
+
+  "triggers": [
+    {
+      "condition": "Section Briefs are ready from Story Spark",
+      "priority": 1
+    },
+    {
+      "condition": "Style Lead requests prose revision for voice consistency",
+      "priority": 2
+    },
+    {
+      "condition": "Gatekeeper flags style or presentation issues in existing sections",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [
+      {
+        "type": "section_brief",
+        "alias": "briefs",
+        "description": "Section Briefs from Story Spark defining structure and intent",
+        "state": "ready"
+      }
+    ],
+    "optional_artifacts": [],
+    "context_requirements": [
+      "Style guardrails from workspace (register, motifs, voice patterns)",
+      "Codex entries relevant to the section (player-safe references)",
+      "Canon summaries if needed for accurate portrayal (request from Lore Weaver)"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "section",
+        "alias": "sections",
+        "description": "Full prose Sections with choices and gates",
+        "state": "review"
+      }
+    ],
+    "optional_artifacts": [
+      {
+        "type": "hook_card",
+        "alias": "scene_hooks",
+        "description": "Scene-level hooks (traits, tells, props, style questions)",
+        "state": "proposed"
+      }
+    ],
+    "context_requirements": []
+  },
+
+  "entry_phase": "prose_drafting",
+
+  "phases": {
+    "prose_drafting": {
+      "name": "Prose Drafting",
+      "purpose": "Transform each Section Brief into draft prose with dialogue, choices, and sensory detail",
+
+      "steps": {
+        "draft_prose": {
+          "action": "Draft section prose following the brief's intent, stakes, and choice intents. Make choices clear and contrastive. Express gates diegetically.",
+          "specific_agent": "scene_smith",
+          "guidance": "Honor the Plotwright brief—do not invent new topology. Two clear options beat five near-synonyms. Gates must read as world facts (badge, knowledge, reputation, tool), never as mechanics. Never print codeword names, flag IDs, or schema references in prose.",
+          "inputs": [
+            {
+              "name": "section_briefs",
+              "artifact_type": "section_brief"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "draft_sections",
+              "artifact_type": "section",
+              "description": "Draft sections ready for style review"
+            }
+          ]
+        },
+        "generate_scene_hooks": {
+          "action": "Create hook cards for scene-level questions: character traits, environmental tells, props that could matter, style uncertainties.",
+          "depends_on": ["draft_prose"],
+          "specific_agent": "scene_smith",
+          "guidance": "Scene hooks capture aesthetic possibilities, not structural changes. If you discover a structural problem, escalate to Plotwright via hook rather than fixing it in prose.",
+          "outputs": [
+            {
+              "name": "scene_hooks",
+              "artifact_type": "hook_card"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Every Section Brief has a corresponding draft Section",
+        "Choices are contrastive (differ in intent and outcome)",
+        "Gates are expressed diegetically",
+        "No internal mechanics visible in prose"
+      ],
+
+      "on_success": {
+        "next_phases": ["style_review"]
+      },
+
+      "is_rework_target": true
+    },
+
+    "style_review": {
+      "name": "Style Review",
+      "purpose": "Verify voice consistency and flag any drift from established register",
+      "depends_on": ["prose_drafting"],
+
+      "steps": {
+        "check_voice": {
+          "action": "Review draft sections for voice, register, and motif consistency. Flag drift and propose corrections.",
+          "agent_archetype": "validator",
+          "guidance": "Scene Smith respects the Style Lead domain. Do not fight the register—propose alternatives if something feels wrong. Sample sections for motif anchors.",
+          "inputs": [
+            {
+              "name": "draft_sections",
+              "from_step": "draft_prose",
+              "from_phase": "prose_drafting"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "style_notes",
+              "description": "Voice and register feedback"
+            }
+          ]
+        },
+        "apply_corrections": {
+          "action": "Apply style corrections to draft sections based on feedback.",
+          "depends_on": ["check_voice"],
+          "specific_agent": "scene_smith",
+          "condition": "Style notes contain actionable corrections",
+          "inputs": [
+            {
+              "name": "style_notes",
+              "from_step": "check_voice"
+            },
+            {
+              "name": "draft_sections",
+              "from_step": "draft_prose",
+              "from_phase": "prose_drafting"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "revised_sections",
+              "artifact_type": "section"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Sections are in-voice per style guardrails",
+        "No register drift flagged",
+        "Motif threading is consistent"
+      ],
+
+      "on_success": {
+        "next_phases": ["self_validation"]
+      },
+
+      "on_failure": {
+        "next_phases": ["prose_drafting"],
+        "message": "Style review found drift. Return to Prose Drafting with style feedback."
+      }
+    },
+
+    "self_validation": {
+      "name": "Self Validation",
+      "purpose": "Scene Smith self-checks before requesting formal gatecheck",
+      "depends_on": ["style_review"],
+
+      "steps": {
+        "validate_sections": {
+          "action": "Self-validate sections against schema and quality criteria. Use validate_artifact tool.",
+          "specific_agent": "scene_smith",
+          "guidance": "Check: anchor resolution (all choices lead somewhere), spoiler hygiene (no canon leakage), choice integrity (contrastive options), diegetic gates (no mechanics). Fix any issues before requesting gatecheck.",
+          "validation": {
+            "quality_criteria": ["choice_integrity", "spoiler_hygiene", "diegetic_gates"],
+            "blocking": false
+          },
+          "inputs": [
+            {
+              "name": "revised_sections",
+              "from_step": "apply_corrections",
+              "from_phase": "style_review"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "validated_sections",
+              "artifact_type": "section",
+              "description": "Sections ready for formal gatecheck"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All sections pass self-validation",
+        "No schema violations",
+        "Ready for Gatekeeper review"
+      ],
+
+      "on_success": {
+        "next_phases": ["gatecheck_request"]
+      },
+
+      "on_failure": {
+        "next_phases": ["prose_drafting"],
+        "message": "Self-validation failed. Return to Prose Drafting with validation feedback."
+      }
+    },
+
+    "gatecheck_request": {
+      "name": "Gatecheck Request",
+      "purpose": "Request formal Gatekeeper review of completed sections",
+      "depends_on": ["self_validation"],
+
+      "steps": {
+        "submit_for_review": {
+          "action": "Submit sections to Gatekeeper for formal gatecheck against all 8 quality bars.",
+          "specific_agent": "gatekeeper",
+          "guidance": "Gatekeeper enforces: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation, Accessibility. Block with reason and offer smallest viable fix.",
+          "inputs": [
+            {
+              "name": "validated_sections",
+              "from_step": "validate_sections",
+              "from_phase": "self_validation"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "gatecheck_report",
+              "artifact_type": "gatecheck_report"
+            }
+          ]
+        }
+      },
+
+      "quality_checkpoint": {
+        "criteria": ["integrity", "reachability", "nonlinearity", "gateways", "style", "determinism", "presentation", "accessibility"],
+        "validator_archetype": "validator",
+        "pass_threshold": "all"
+      },
+
+      "completion_criteria": [
+        "Gatekeeper has reviewed all sections",
+        "Gatecheck report issued with pass/conditional_pass/block"
+      ],
+
+      "on_success": {
+        "message": "Sections approved. Ready for Cold merge after full pipeline (Lore, Codex, etc.).",
+        "end_playbook": true
+      },
+
+      "on_failure": {
+        "next_phases": ["prose_drafting"],
+        "message": "Gatecheck blocked. Return to Prose Drafting with Gatekeeper feedback."
+      }
+    }
+  },
+
+  "quality_criteria": ["integrity", "style", "presentation", "accessibility", "choice_integrity", "spoiler_hygiene", "diegetic_gates"],
+
+  "max_rework_cycles": 3
+}

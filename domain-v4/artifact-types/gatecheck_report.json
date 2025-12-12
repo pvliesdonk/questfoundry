@@ -1,0 +1,334 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "gatecheck_report",
+  "name": "Gatecheck Report",
+  "description": "Gatekeeper's formal assessment of a TU or View against the 8 quality bars. Names each bar status (green/yellow/red), cites the smallest viable fix, and routes to the correct owner. Examples must be player-safe; never paste Hot content.",
+  "category": "feedback",
+
+  "fields": [
+    {
+      "name": "report_title",
+      "type": "string",
+      "description": "TU ID or View name being checked",
+      "required": true
+    },
+    {
+      "name": "checked_date",
+      "type": "date",
+      "description": "Date of gatecheck",
+      "required": true
+    },
+    {
+      "name": "gatekeeper",
+      "type": "ref",
+      "ref_target": "agent",
+      "description": "Gatekeeper who performed the check",
+      "required": true
+    },
+    {
+      "name": "scope",
+      "type": "string",
+      "description": "Slice or export target being checked",
+      "required": true
+    },
+    {
+      "name": "mode",
+      "type": "string",
+      "description": "Type of check",
+      "enum": ["pre_gate", "gatecheck"],
+      "required": true
+    },
+    {
+      "name": "cold_snapshot",
+      "type": "string",
+      "description": "Cold snapshot date for context (format: cold@YYYY-MM-DD)"
+    },
+    {
+      "name": "artifacts_checked",
+      "type": "array",
+      "items_type": "string",
+      "description": "Paths or IDs of artifacts/samples checked"
+    },
+    {
+      "name": "summary",
+      "type": "object",
+      "description": "One-screen summary",
+      "required": true,
+      "properties": [
+        {
+          "name": "decision",
+          "type": "string",
+          "enum": ["pass", "conditional_pass", "block"],
+          "description": "Overall gatecheck decision",
+          "required": true
+        },
+        {
+          "name": "rationale",
+          "type": "text",
+          "description": "1-2 lines explaining decision tied to bars"
+        },
+        {
+          "name": "next_actions",
+          "type": "text",
+          "description": "Smallest viable fixes + owners"
+        }
+      ]
+    },
+    {
+      "name": "bars",
+      "type": "array",
+      "description": "Status of each quality bar (all 8 required)",
+      "required": true,
+      "min_length": 8,
+      "max_length": 8,
+      "items": {
+        "name": "bar_status",
+        "type": "object",
+        "properties": [
+          {
+            "name": "bar",
+            "type": "string",
+            "enum": ["integrity", "reachability", "nonlinearity", "gateways", "style", "determinism", "presentation", "accessibility"],
+            "required": true
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "enum": ["green", "yellow", "red"],
+            "description": "green=no defects, yellow=minor/mergeable, red=blocks",
+            "required": true
+          },
+          {
+            "name": "evidence",
+            "type": "text",
+            "description": "Player-safe evidence for this status",
+            "required": true
+          },
+          {
+            "name": "smallest_fix",
+            "type": "text",
+            "description": "Required if yellow or red - specific actionable fix"
+          },
+          {
+            "name": "owner",
+            "type": "ref",
+            "ref_target": "agent",
+            "description": "Required if yellow or red - who should fix"
+          },
+          {
+            "name": "notes",
+            "type": "text",
+            "description": "Brief additional context"
+          }
+        ]
+      }
+    },
+    {
+      "name": "incidents",
+      "type": "array",
+      "description": "Specific issues found",
+      "items": {
+        "name": "incident",
+        "type": "object",
+        "properties": [
+          {
+            "name": "type",
+            "type": "string",
+            "description": "Category of incident"
+          },
+          {
+            "name": "location",
+            "type": "string",
+            "description": "Where found (path or anchor)"
+          },
+          {
+            "name": "impact_bar",
+            "type": "string",
+            "description": "Quality bar affected"
+          },
+          {
+            "name": "fix",
+            "type": "text",
+            "description": "Smallest fix"
+          },
+          {
+            "name": "owner",
+            "type": "ref",
+            "ref_target": "agent"
+          }
+        ]
+      }
+    },
+    {
+      "name": "coverage",
+      "type": "object",
+      "description": "Deferral and coverage status (for exports/views)",
+      "properties": [
+        {
+          "name": "art_status",
+          "type": "string",
+          "enum": ["none", "plans_only", "renders_included"]
+        },
+        {
+          "name": "audio_status",
+          "type": "string",
+          "enum": ["none", "plans_only", "cues_included"]
+        },
+        {
+          "name": "locales",
+          "type": "object",
+          "description": "Coverage percentages per locale",
+          "properties": [
+            {
+              "name": "locale_coverage",
+              "type": "array",
+              "items": {
+                "name": "locale",
+                "type": "object",
+                "properties": [
+                  { "name": "locale_code", "type": "string" },
+                  { "name": "coverage_pct", "type": "integer" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "accessibility_snapshot",
+          "type": "text",
+          "description": "Alt/captions/reading-order status"
+        }
+      ]
+    },
+    {
+      "name": "handoffs",
+      "type": "array",
+      "description": "Work items to hand off",
+      "items": {
+        "name": "handoff",
+        "type": "object",
+        "properties": [
+          {
+            "name": "bar",
+            "type": "string",
+            "description": "Related quality bar"
+          },
+          {
+            "name": "fix",
+            "type": "text",
+            "description": "What needs to be done"
+          },
+          {
+            "name": "owner",
+            "type": "ref",
+            "ref_target": "agent"
+          },
+          {
+            "name": "tu_ref",
+            "type": "string",
+            "description": "TU ID or 'SR to open'"
+          },
+          {
+            "name": "due_date",
+            "type": "date"
+          }
+        ]
+      }
+    },
+    {
+      "name": "escalation",
+      "type": "object",
+      "description": "If escalation is needed",
+      "properties": [
+        {
+          "name": "topic",
+          "type": "text",
+          "description": "One-sentence decision to escalate"
+        },
+        {
+          "name": "lane",
+          "type": "ref",
+          "ref_target": "agent",
+          "description": "Escalation owner"
+        },
+        {
+          "name": "level",
+          "type": "string",
+          "enum": ["l1_micro", "l2_cross_domain", "l3_policy"],
+          "description": "Escalation level"
+        },
+        {
+          "name": "bundle_attached",
+          "type": "boolean",
+          "description": "Whether escalation bundle is attached"
+        }
+      ]
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Report being written"
+      },
+      {
+        "id": "issued",
+        "name": "Issued",
+        "description": "Report issued to stakeholders"
+      },
+      {
+        "id": "acknowledged",
+        "name": "Acknowledged",
+        "description": "Stakeholders have acknowledged the report"
+      },
+      {
+        "id": "superseded",
+        "name": "Superseded",
+        "description": "A newer gatecheck report exists",
+        "terminal": true
+      },
+      {
+        "id": "archived",
+        "name": "Archived",
+        "description": "Work complete, report archived",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "issued" },
+      { "from": "issued", "to": "acknowledged" },
+      { "from": "acknowledged", "to": "superseded" },
+      { "from": "acknowledged", "to": "archived" }
+    ]
+  },
+
+  "validation": {
+    "custom_rules": [
+      {
+        "id": "all_bars_present",
+        "description": "All 8 quality bars must be assessed",
+        "enforcement": "runtime"
+      },
+      {
+        "id": "fix_required_for_issues",
+        "description": "Yellow and red bars must have smallest_fix and owner",
+        "enforcement": "runtime"
+      },
+      {
+        "id": "player_safe_evidence",
+        "description": "Evidence must be player-safe, no Hot canon or internals",
+        "enforcement": "llm"
+      },
+      {
+        "id": "decision_matches_bars",
+        "description": "Decision 'block' requires at least one red bar; 'conditional_pass' requires at least one yellow",
+        "enforcement": "runtime"
+      }
+    ]
+  },
+
+  "default_store": "workspace"
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "reachability",
+  "name": "Reachability",
+  "description": "Must-see beats (plot keystones, required items) are reachable from at least one path without paradoxes. Gateway keys are obtainable.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "error",
+
+  "applies_to": {
+    "artifact_types": ["section", "section_brief"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate whether critical content is reachable. Identify keystones and verify at least one viable path exists to each.",
+      "criteria": [
+        {
+          "name": "keystone_reachability",
+          "description": "All must-see beats and plot keystones can be reached via at least one viable path.",
+          "weight": 0.5,
+          "examples": {
+            "good": ["Multiple paths lead to the critical revelation", "Key item can be obtained through several routes"],
+            "bad": ["Critical plot point is behind an impossible gate", "No valid path exists to required content"]
+          }
+        },
+        {
+          "name": "gateway_key_obtainability",
+          "description": "If a gateway is required, at least one route exists to obtain its condition.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["The foreman's token can be earned through dialogue or bribery", "Multiple ways to satisfy gate condition"],
+            "bad": ["Locked content with no key", "Gate requires item that cannot be obtained"]
+          }
+        },
+        {
+          "name": "dependency_chain_reasonability",
+          "description": "Chains of dependencies are not unrealistically deep or complex.",
+          "weight": 0.15,
+          "examples": {
+            "good": ["Gate requires 2-3 reasonable prerequisite actions", "Dependencies are intuitive"],
+            "bad": ["Requires 10 specific actions in exact order", "Byzantine requirements chain"]
+          }
+        }
+      ],
+      "pass_threshold": 1.0,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Add an alternative path to locked content or remove the lock. Reduce dependency depth by providing a second route. Ensure at least one path to every gateway key exists."
+}

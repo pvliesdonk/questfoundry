@@ -1,0 +1,54 @@
+{
+  "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
+  "id": "gateways",
+  "name": "Gateways",
+  "description": "Conditions (codewords, items, states) are consistent across sections and can be enforced by the Player-Narrator without leaks. Conditions are clear and in-world.",
+
+  "enforcement": "llm",
+  "blocking": "gate",
+  "severity": "error",
+
+  "applies_to": {
+    "artifact_types": ["section"]
+  },
+
+  "check": {
+    "type": "llm_rubric",
+    "rubric": {
+      "instructions": "Evaluate gateway quality. Conditions must be consistent, clear, enforceable by the Player-Narrator, and expressed in-world without exposing mechanics.",
+      "criteria": [
+        {
+          "name": "condition_clarity",
+          "description": "Each gateway states a single clear condition that can be understood in-world.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["If you bear the foreman's token, proceed to section 42", "If Kestrel trusts you, she reveals the truth"],
+            "bad": ["If FLAG_47 is true", "Requires state: FOREMAN_BRIBED=1"]
+          }
+        },
+        {
+          "name": "pn_enforceability",
+          "description": "A plausible in-world way exists for the PN to enforce the condition without exposing internals.",
+          "weight": 0.35,
+          "examples": {
+            "good": ["Player shows the token when asked", "PN can ask 'Has Kestrel vouched for you?'"],
+            "bad": ["No way to check condition in-world", "Requires meta-knowledge to enforce"]
+          }
+        },
+        {
+          "name": "condition_consistency",
+          "description": "Negative conditions don't contradict positive checks elsewhere. Conditions are consistent across the topology.",
+          "weight": 0.3,
+          "examples": {
+            "good": ["Same condition used consistently throughout", "No contradictory gate requirements"],
+            "bad": ["Section A requires token, Section B says 'unless you have the token'", "Conflicting state requirements"]
+          }
+        }
+      ],
+      "pass_threshold": 1.0,
+      "output_format": "detailed"
+    }
+  },
+
+  "failure_guidance": "Rewrite ambiguous conditions in diegetic, in-world terms. Add catch-up or fail-forward beats for hidden unwinnable states. Ensure the Player-Narrator can enforce gates using world-consistent dialogue."
+}

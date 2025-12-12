@@ -1,0 +1,39 @@
+{
+  "$schema": "../../meta/schemas/knowledge/knowledge-layer.schema.json",
+  "layers": [
+    {
+      "layer": "constitution",
+      "access_pattern": "always_in_prompt",
+      "description": "Inviolable principles that all agents must follow. Always included in system prompts.",
+      "max_tokens": 1500
+    },
+    {
+      "layer": "must_know",
+      "access_pattern": "always_in_prompt",
+      "description": "Core concepts essential for the agent's role. Summaries always in prompt; agents can consult for details.",
+      "max_tokens": 1500
+    },
+    {
+      "layer": "should_know",
+      "access_pattern": "menu_in_prompt",
+      "description": "Contextual knowledge shown as a menu in the prompt. Agents see titles/summaries and can request full content.",
+      "max_tokens": 500
+    },
+    {
+      "layer": "role_specific",
+      "access_pattern": "on_demand",
+      "description": "Detailed guidance specific to each agent's role. Loaded when agent is activated or on explicit request.",
+      "retrieval_tool": "consult_knowledge",
+      "cache_duration_seconds": 3600
+    },
+    {
+      "layer": "lookup",
+      "access_pattern": "explicit_query",
+      "description": "Large corpus for RAG-based search. Agents must explicitly query using consult_knowledge tool.",
+      "retrieval_tool": "consult_knowledge"
+    }
+  ],
+
+  "total_prompt_budget_tokens": 4000,
+  "lookup_result_max_tokens": 2000
+}
