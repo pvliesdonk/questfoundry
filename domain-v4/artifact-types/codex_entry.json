@@ -1,0 +1,147 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "codex_entry",
+  "name": "Codex Entry",
+  "description": "Player-safe glossary entry. Diegetic explanation of a term, entity, place, or concept that players can read without spoilers. Written as an in-world scholar would write it. Derived from canon by Codex Curator, validated by Gatekeeper for spoiler leaks.",
+  "category": "reference",
+
+  "fields": [
+    {
+      "name": "entry_id",
+      "type": "string",
+      "description": "Unique identifier (format: CX-NNN)",
+      "required": true
+    },
+    {
+      "name": "term",
+      "type": "string",
+      "description": "The word, name, or phrase being defined",
+      "required": true
+    },
+    {
+      "name": "category",
+      "type": "string",
+      "description": "Classification for organization",
+      "enum": ["person", "place", "faction", "concept", "item", "event", "creature", "procedure"],
+      "required": true
+    },
+    {
+      "name": "short_definition",
+      "type": "string",
+      "description": "One-sentence definition for quick reference (max 100 chars)",
+      "required": true
+    },
+    {
+      "name": "full_entry",
+      "type": "text",
+      "description": "Complete diegetic explanation in in-world voice",
+      "required": true
+    },
+    {
+      "name": "pronunciation",
+      "type": "string",
+      "description": "Phonetic guide if term is unusual"
+    },
+    {
+      "name": "aliases",
+      "type": "array",
+      "description": "Alternative names or spellings",
+      "items_type": "string"
+    },
+    {
+      "name": "related_terms",
+      "type": "array",
+      "description": "References to other codex entries",
+      "items_type": "string"
+    },
+    {
+      "name": "first_appearance",
+      "type": "string",
+      "description": "Section anchor where players first encounter this term"
+    },
+    {
+      "name": "canon_source",
+      "type": "object",
+      "description": "Reference to source canon pack and entry",
+      "properties": [
+        {
+          "name": "pack_id",
+          "type": "string",
+          "description": "Canon pack this derives from"
+        },
+        {
+          "name": "entry_id",
+          "type": "string",
+          "description": "Specific canon entry"
+        }
+      ],
+      "required": true
+    },
+    {
+      "name": "spoiler_omissions",
+      "type": "array",
+      "description": "Canon facts intentionally omitted (for Gatekeeper reference, not exported)",
+      "items_type": "string"
+    },
+    {
+      "name": "diegetic_source",
+      "type": "string",
+      "description": "In-world attribution (e.g., 'From the Chronicles of the Third Age')"
+    },
+    {
+      "name": "accessibility",
+      "type": "object",
+      "description": "Accessibility features",
+      "properties": [
+        {
+          "name": "reading_level",
+          "type": "string",
+          "description": "Approximate reading level",
+          "enum": ["basic", "intermediate", "advanced"]
+        },
+        {
+          "name": "content_notes",
+          "type": "array",
+          "items_type": "string",
+          "description": "Any content warnings"
+        }
+      ]
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Entry is being written by Codex Curator"
+      },
+      {
+        "id": "review",
+        "name": "Review",
+        "description": "Entry is being validated for spoilers and style"
+      },
+      {
+        "id": "validated",
+        "name": "Validated",
+        "description": "Entry has passed Gatekeeper check, ready for export"
+      },
+      {
+        "id": "published",
+        "name": "Published",
+        "description": "Entry has been exported in a release",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "review" },
+      { "from": "review", "to": "draft" },
+      { "from": "review", "to": "validated" },
+      { "from": "validated", "to": "review" },
+      { "from": "validated", "to": "published" }
+    ]
+  },
+
+  "default_store": "codex"
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "lore_weaver_procedures",
+  "name": "Lore Weaver Procedures",
+  "layer": "role_specific",
+
+  "summary": "Procedures for building canon: cause chains, timeline anchoring, consistency checking, and canon pack organization.",
+
+  "keywords": ["canon", "lore", "worldbuilding", "timeline", "consistency"],
+
+  "triggers": [
+    "building world bible",
+    "creating canon packs",
+    "resolving timeline questions",
+    "checking lore consistency"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Lore Weaver Procedures\n\nProcedures for building and maintaining the world bible (canon).\n\n---\n\n### Canon Pack Organization\n\n**Principle**: Group related lore into portable, thematic containers.\n\n**Common Pack Types**:\n1. **Era Packs** - Timeline-bounded (\"Age of Founding\", \"The Collapse\")\n2. **Faction Packs** - Group-focused (\"The Guild's Secrets\", \"Crown Politics\")\n3. **Metaphysics Packs** - Rules of the world (\"How Magic Works\", \"The Afterlife\")\n4. **Geography Packs** - Place-focused (\"The Eastern Territories\")\n\n**Scope Decision**:\n- `book` scope: Lore specific to one story\n- `world` scope: Lore shareable across multiple books\n\n---\n\n### Cause Chains\n\n**Principle**: Every fact needs a cause. \"It just is\" is not canon.\n\n**Procedure**:\n1. State the truth\n2. Ask \"Why?\" or \"How did this come to be?\"\n3. Document the cause\n4. If cause is unknown, mark as open question\n\n**Example**:\n- Truth: \"The Guild controls the waterfront\"\n- Cause: \"After the Collapse, they were the only organization with intact logistics\"\n- Deeper cause: \"Their founder foresaw the crisis and stockpiled resources\"\n\n---\n\n### Timeline Anchoring\n\n**Principle**: Events must have temporal relationships. Floating events create continuity errors.\n\n**Anchor Types**:\n1. **Absolute** - Fixed date/time (\"Year 347 of the New Era\")\n2. **Relative** - Relationship to other events (\"Three years after the Founding\")\n3. **Sequence** - Order without duration (\"After X but before Y\")\n\n**Procedure**:\n1. Every event gets a timeline_position\n2. Create timeline anchors for major reference points\n3. Cross-reference new events against existing anchors\n4. Flag impossible sequences (effect before cause)\n\n---\n\n### Consistency Checking\n\n**Before finalizing a canon pack**:\n\n1. **Internal Consistency**\n   - Do entries within this pack contradict each other?\n   - Are cause chains complete?\n   - Are timeline positions compatible?\n\n2. **External Consistency**\n   - Does this pack contradict other canon packs?\n   - Do faction motivations still make sense?\n   - Are metaphysical rules still consistent?\n\n3. **Narrative Feasibility**\n   - Can the story use this lore as intended?\n   - Does this enable or block narrative possibilities?\n\n**If Conflict Found**:\n- Do NOT silently overwrite\n- Raise a hook for resolution\n- Document both versions until resolved\n\n---\n\n### Spoiler Classification\n\n**Spoiler Levels**:\n- `minor`: Background flavor that adds depth but doesn't change experience\n- `major`: Reveals that affect player understanding or strategy\n- `critical`: Twists, secrets, or outcomes that would ruin the experience\n\n**Codex Derivation**:\n- `minor` spoilers: May appear in codex with careful phrasing\n- `major` spoilers: Must be omitted or heavily obscured\n- `critical` spoilers: Never appear in codex under any circumstances"
+  },
+
+  "applicable_to": {
+    "agents": ["lore_weaver"]
+  },
+
+  "tags": ["canon", "worldbuilding", "procedures"]
+}

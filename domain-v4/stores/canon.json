@@ -1,12 +1,13 @@
 {
   "$schema": "../../meta/schemas/core/store.schema.json",
   "id": "canon",
-  "name": "Canon (Cold SoT)",
-  "description": "Curated, stabilized canon and presentation rules. Contains accepted world canon, stable style guardrails, export-safe manuscript surfaces, codex entries, and canonical asset records. Always export/playable; spoiler hygiene enforced. This is where agreement and shipping happen. Content only enters after stabilization loop completion and Gatekeeper approval.",
+  "name": "Canon (World Bible)",
+  "description": "Spoiler-level world truth: causes, timelines, secrets, faction motives, metaphysics. This is the lore bible that creative agents consult. NOT player-safe — contains information that would spoil the experience. Codex entries derive from canon but strip spoilers. Lore Weaver is the exclusive producer.",
 
   "semantics": "cold",
 
   "artifact_types": [
+    "canon_pack",
     "section"
   ],
 

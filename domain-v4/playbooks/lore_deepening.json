@@ -1,0 +1,294 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "lore_deepening",
+  "name": "Lore Deepening",
+  "version": "1.0.0",
+  "purpose": "Expand the world bible (canon) and derive player-safe glossary entries (codex). Build the lore that creative agents need, then surface what players can safely see.",
+
+  "description": "Lore Deepening builds depth: the causes behind events, the secrets factions hide, the rules of the metaphysics. Lore Weaver creates Canon Packs—portable containers of world truth. Codex Curator then distills player-safe entries from that truth. Style Lead ensures codex entries maintain diegetic voice. Gatekeeper validates that no spoilers leak into the codex.",
+
+  "triggers": [
+    {
+      "condition": "Story Spark identifies canon gaps or feasibility concerns",
+      "priority": 1
+    },
+    {
+      "condition": "Researcher delivers findings that need integration into world bible",
+      "priority": 2
+    },
+    {
+      "condition": "New book or major expansion requires shared lore foundation",
+      "priority": 1
+    },
+    {
+      "condition": "Hooks accepted that require new world truth",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [],
+    "optional_artifacts": [
+      {
+        "type": "research_memo",
+        "alias": "research_findings",
+        "description": "Research findings to integrate into canon",
+        "state": "approved"
+      },
+      {
+        "type": "hook_card",
+        "alias": "lore_hooks",
+        "description": "Accepted hooks requiring world truth",
+        "state": "accepted"
+      }
+    ],
+    "context_requirements": [
+      "Existing canon packs (if any)",
+      "Style guidance from workspace",
+      "Structure needs from Story Spark"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "canon_pack",
+        "alias": "canon_packs",
+        "description": "New or updated canon packs",
+        "state": "ready"
+      }
+    ],
+    "optional_artifacts": [
+      {
+        "type": "codex_entry",
+        "alias": "codex_entries",
+        "description": "Player-safe glossary entries derived from canon",
+        "state": "validated"
+      },
+      {
+        "type": "hook_card",
+        "alias": "new_hooks",
+        "description": "Hooks for ambiguities discovered during lore work",
+        "state": "proposed"
+      }
+    ],
+    "context_requirements": [
+      "Canon consistency notes in workspace"
+    ]
+  },
+
+  "entry_phase": "canon_expansion",
+
+  "phases": {
+    "canon_expansion": {
+      "name": "Canon Expansion",
+      "purpose": "Build or extend the world bible with causes, timelines, secrets, and metaphysical rules",
+
+      "steps": {
+        "assess_scope": {
+          "action": "Review inputs to determine what canon needs building: new themes, timeline gaps, faction motivations, metaphysical rules.",
+          "specific_agent": "lore_weaver",
+          "guidance": "Identify what creative agents will need to reference. Group related lore into thematic packs. Check for contradictions with existing canon.",
+          "outputs": [
+            {
+              "name": "scope_assessment",
+              "description": "What canon packs to create/update and why"
+            }
+          ]
+        },
+        "build_canon": {
+          "action": "Create or update canon packs with world truth. Document causes, timelines, and relationships.",
+          "depends_on": ["assess_scope"],
+          "specific_agent": "lore_weaver",
+          "guidance": "Every fact needs a cause. Every event needs a timeline position. Mark open questions as such—don't paper over gaps with vague language.",
+          "inputs": [
+            {
+              "name": "scope_assessment",
+              "from_step": "assess_scope"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "canon_packs",
+              "artifact_type": "canon_pack",
+              "description": "New or updated canon packs"
+            }
+          ]
+        },
+        "consistency_check": {
+          "action": "Verify new canon doesn't contradict established world truth.",
+          "depends_on": ["build_canon"],
+          "specific_agent": "lore_weaver",
+          "guidance": "Cross-reference timelines, faction relationships, and metaphysical constraints. Raise hooks for unresolvable contradictions.",
+          "inputs": [
+            {
+              "name": "canon_packs",
+              "from_step": "build_canon"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "consistency_notes",
+              "description": "Notes on canon consistency, any conflicts found"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All requested lore topics have canon coverage",
+        "Canon packs have cause chains and timeline anchors",
+        "No unaddressed contradictions with existing canon"
+      ],
+
+      "on_success": {
+        "next_phases": ["codex_derivation"]
+      }
+    },
+
+    "codex_derivation": {
+      "name": "Codex Derivation",
+      "purpose": "Transform canon into player-safe glossary entries with diegetic voice",
+      "depends_on": ["canon_expansion"],
+
+      "steps": {
+        "identify_codex_needs": {
+          "action": "Determine which canon elements need player-facing codex entries.",
+          "specific_agent": "codex_curator",
+          "guidance": "Not everything in canon needs a codex entry. Focus on terms players will encounter, places they'll visit, entities they'll meet. Skip secrets they shouldn't know.",
+          "inputs": [
+            {
+              "name": "canon_packs",
+              "from_step": "build_canon",
+              "from_phase": "canon_expansion"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "codex_plan",
+              "description": "List of entries to create with spoiler boundaries"
+            }
+          ]
+        },
+        "write_entries": {
+          "action": "Create codex entries in diegetic voice, stripping all spoilers.",
+          "depends_on": ["identify_codex_needs"],
+          "specific_agent": "codex_curator",
+          "guidance": "Write as an in-world scholar would. Use accessible language. Never reveal secrets, motivations, or outcomes that would spoil play. When in doubt, leave it out.",
+          "inputs": [
+            {
+              "name": "codex_plan",
+              "from_step": "identify_codex_needs"
+            },
+            {
+              "name": "canon_packs",
+              "from_step": "build_canon",
+              "from_phase": "canon_expansion"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "codex_entries",
+              "artifact_type": "codex_entry",
+              "description": "Draft codex entries"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All planned terms have codex entries",
+        "Entries use diegetic voice consistently",
+        "No obvious spoilers in entry text"
+      ],
+
+      "on_success": {
+        "next_phases": ["style_safety_gate"]
+      },
+
+      "is_rework_target": true
+    },
+
+    "style_safety_gate": {
+      "name": "Style & Safety Gate",
+      "purpose": "Validate codex entries for voice consistency and spoiler leaks",
+      "depends_on": ["codex_derivation"],
+
+      "steps": {
+        "style_review": {
+          "action": "Review codex entries for diegetic voice, accessible language, and style consistency.",
+          "specific_agent": "style_lead",
+          "guidance": "Entries should feel written by the same in-world author. Flag any meta-language, game-mechanical references, or inconsistent register.",
+          "inputs": [
+            {
+              "name": "codex_entries",
+              "from_step": "write_entries",
+              "from_phase": "codex_derivation"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "style_notes",
+              "description": "Style feedback and edit suggestions"
+            }
+          ]
+        },
+        "spoiler_check": {
+          "action": "Validate that no codex entry reveals spoiler-level information.",
+          "depends_on": ["style_review"],
+          "specific_agent": "gatekeeper",
+          "guidance": "Compare each entry against its canon source. Flag any information that would reveal secrets, outcomes, or hidden motivations. This is a safety gate—be conservative.",
+          "inputs": [
+            {
+              "name": "codex_entries",
+              "from_step": "write_entries",
+              "from_phase": "codex_derivation"
+            },
+            {
+              "name": "canon_packs",
+              "from_step": "build_canon",
+              "from_phase": "canon_expansion"
+            },
+            {
+              "name": "style_notes",
+              "from_step": "style_review"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "safety_report",
+              "artifact_type": "gatecheck_report",
+              "description": "Spoiler check results"
+            }
+          ]
+        }
+      },
+
+      "quality_checkpoint": {
+        "criteria": ["style", "integrity"],
+        "validator_archetype": "validator",
+        "pass_threshold": "all"
+      },
+
+      "completion_criteria": [
+        "All codex entries pass style review",
+        "No spoiler leaks detected",
+        "Gatecheck report documents validation"
+      ],
+
+      "on_success": {
+        "message": "Canon packs and codex entries ready. Canon available to creative agents, codex ready for export.",
+        "end_playbook": true
+      },
+
+      "on_failure": {
+        "next_phases": ["codex_derivation"],
+        "message": "Style or safety issues found. Return to Codex Derivation with feedback."
+      }
+    }
+  },
+
+  "quality_criteria": ["integrity", "style"],
+
+  "max_rework_cycles": 3
+}

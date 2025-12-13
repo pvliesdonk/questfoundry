@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "codex_curator_guidelines",
+  "name": "Codex Curator Guidelines",
+  "layer": "role_specific",
+
+  "summary": "Guidelines for transforming canon into player-safe codex entries: spoiler stripping, diegetic voice, and accessibility.",
+
+  "keywords": ["codex", "glossary", "diegetic", "spoilers", "player-safe"],
+
+  "triggers": [
+    "writing codex entries",
+    "stripping spoilers",
+    "diegetic voice",
+    "player-safe content"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Codex Curator Guidelines\n\nGuidance for transforming spoiler-level canon into player-safe glossary entries.\n\n---\n\n### The Diegetic Voice\n\n**Principle**: Write as an in-world scholar would. The codex exists within the fiction.\n\n**Good Example**:\n> \"The Guild of Artificers controls much of the waterfront trade. Founded in the aftermath of the Collapse, they rose to prominence through their unmatched logistical capabilities. Their current Guildmaster is known for pragmatic dealings with both Crown and common folk.\"\n\n**Bad Example**:\n> \"The Guild is a major faction in Chapter 2. Players who ally with them get access to better equipment. The Guildmaster is secretly planning to betray the Crown (revealed in Chapter 5).\"\n\n**Voice Checklist**:\n- [ ] No meta-references (\"the player\", \"this chapter\")\n- [ ] No game mechanics (\"access to\", \"unlocks\")\n- [ ] No future knowledge (\"will later\", \"eventually\")\n- [ ] Appropriate formality for an in-world document\n\n---\n\n### Spoiler Stripping\n\n**The Question**: What would an in-world scholar know and publish?\n\n**Safe to Include**:\n- Public knowledge in the world\n- Historical facts (unless they're hidden history)\n- General descriptions of places and people\n- Cultural practices and beliefs\n\n**Never Include**:\n- Secret motivations\n- Hidden identities\n- Plot twists or reveals\n- Information players are meant to discover\n\n**The Omissions Field**:\n- Document what you've left out in `spoiler_omissions`\n- This helps Gatekeeper validate your choices\n- It's never exported—players never see it\n\n---\n\n### Entry Categories\n\n| Category | What It Covers | Typical Spoiler Risk |\n|----------|----------------|---------------------|\n| person | Named individuals | High (hidden motives) |\n| place | Locations | Low-Medium |\n| faction | Groups, organizations | Medium (secret goals) |\n| concept | Ideas, philosophies | Low |\n| item | Objects, artifacts | Medium (hidden powers) |\n| event | Historical happenings | Medium (hidden causes) |\n| creature | Beings, species | Low-Medium |\n| procedure | How to do things | Low |\n\n---\n\n### Writing Process\n\n1. **Identify the term** - What do players need defined?\n2. **Find the canon source** - What does the world bible say?\n3. **Filter for spoilers** - What can an in-world scholar know?\n4. **Write the entry** - Short definition + full explanation\n5. **Document omissions** - What did you leave out and why?\n6. **Add diegetic source** - Who \"wrote\" this entry?\n\n---\n\n### Accessibility\n\n**Reading Levels**:\n- `basic`: Simple sentences, common words, short entries\n- `intermediate`: Standard prose, some specialized terms defined\n- `advanced`: Complex concepts, assumes familiarity with the world\n\n**Content Notes**:\n- Flag entries that touch on sensitive topics\n- Keep content warnings in-world when possible\n- Example: \"This entry discusses the Scourge, which involved significant loss of life.\"\n\n---\n\n### When Canon Is Missing\n\n**Don't Invent**:\n- If canon doesn't cover something, you can't make it up\n- Raise a hook for Lore Weaver to fill the gap\n- Mark the entry as blocked on lore\n\n**Temporary Solutions**:\n- Write what you can with available canon\n- Note gaps in the entry's open questions\n- Return when Lore Weaver provides the missing truth"
+  },
+
+  "applicable_to": {
+    "agents": ["codex_curator"]
+  },
+
+  "tags": ["codex", "diegetic", "spoilers", "guidelines"]
+}

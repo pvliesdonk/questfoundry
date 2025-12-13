@@ -1,0 +1,179 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "canon_pack",
+  "name": "Canon Pack",
+  "description": "Portable container of world truth. Holds spoiler-level lore: causes, timelines, secrets, faction motivations, metaphysical rules. Canon Packs can be shared across multiple books using the same world. Creative agents consult canon; players never see it. Lore Weaver is the exclusive producer.",
+  "category": "reference",
+
+  "fields": [
+    {
+      "name": "pack_id",
+      "type": "string",
+      "description": "Unique identifier (format: CP-NNN)",
+      "required": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Human-readable title for this lore collection",
+      "required": true
+    },
+    {
+      "name": "theme",
+      "type": "string",
+      "description": "Primary theme or domain (e.g., 'Faction Politics', 'Metaphysics', 'Timeline: Age of Founding')",
+      "required": true
+    },
+    {
+      "name": "scope",
+      "type": "string",
+      "description": "Whether this pack is book-specific or shared across the world",
+      "enum": ["book", "world"],
+      "required": true
+    },
+    {
+      "name": "summary",
+      "type": "text",
+      "description": "Brief overview of what this pack covers (for agent context loading)",
+      "required": true
+    },
+    {
+      "name": "entries",
+      "type": "array",
+      "description": "Individual lore entries within this pack",
+      "items": {
+        "name": "canon_entry",
+        "type": "object",
+        "properties": [
+          {
+            "name": "entry_id",
+            "type": "string",
+            "description": "Unique identifier within pack"
+          },
+          {
+            "name": "term",
+            "type": "string",
+            "description": "The concept, entity, or event being documented"
+          },
+          {
+            "name": "truth",
+            "type": "text",
+            "description": "The spoiler-level fact(s) about this term"
+          },
+          {
+            "name": "causes",
+            "type": "text",
+            "description": "What led to this / why this is true"
+          },
+          {
+            "name": "timeline_position",
+            "type": "string",
+            "description": "When this occurred or became true (relative or absolute)"
+          },
+          {
+            "name": "relationships",
+            "type": "array",
+            "items_type": "string",
+            "description": "References to related canon entries (by entry_id)"
+          },
+          {
+            "name": "spoiler_level",
+            "type": "string",
+            "description": "How sensitive this information is",
+            "enum": ["minor", "major", "critical"]
+          },
+          {
+            "name": "open_questions",
+            "type": "array",
+            "items_type": "string",
+            "description": "Unresolved aspects of this truth"
+          }
+        ]
+      },
+      "min_length": 1,
+      "required": true
+    },
+    {
+      "name": "timeline_anchors",
+      "type": "array",
+      "description": "Key temporal reference points for this pack",
+      "items": {
+        "name": "anchor",
+        "type": "object",
+        "properties": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Name of the temporal anchor"
+          },
+          {
+            "name": "description",
+            "type": "text",
+            "description": "What this anchor represents"
+          },
+          {
+            "name": "relative_to",
+            "type": "string",
+            "description": "Reference to another anchor if relative"
+          }
+        ]
+      }
+    },
+    {
+      "name": "consistency_notes",
+      "type": "text",
+      "description": "Notes on how this pack relates to other canon, any constraints"
+    },
+    {
+      "name": "source_materials",
+      "type": "array",
+      "description": "References to research memos or external sources this pack draws from",
+      "items": {
+        "name": "source",
+        "type": "object",
+        "properties": [
+          {
+            "name": "type",
+            "type": "string",
+            "description": "Type of source",
+            "enum": ["research_memo", "prior_canon", "external"]
+          },
+          {
+            "name": "reference",
+            "type": "string",
+            "description": "ID or citation"
+          }
+        ]
+      }
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Pack is being assembled by Lore Weaver"
+      },
+      {
+        "id": "ready",
+        "name": "Ready",
+        "description": "Pack is complete and available for creative agents"
+      },
+      {
+        "id": "superseded",
+        "name": "Superseded",
+        "description": "Pack has been replaced by a newer version",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "ready" },
+      { "from": "ready", "to": "draft" },
+      { "from": "ready", "to": "superseded" }
+    ]
+  },
+
+  "default_store": "canon"
+}

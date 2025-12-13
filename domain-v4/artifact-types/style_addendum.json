@@ -1,0 +1,199 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "style_addendum",
+  "name": "Style Addendum",
+  "description": "Targeted style guidance from Style Lead. Contains exemplars, edit patterns, and specific notes for maintaining voice consistency, diegetic gate phrasing, and contrastive choice labels. Style Addenda guide validation rather than prescribe exact text.",
+  "category": "guidance",
+
+  "fields": [
+    {
+      "name": "addendum_id",
+      "type": "string",
+      "description": "Unique identifier (format: SA-NNN)",
+      "required": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Human-readable title describing what this addendum addresses",
+      "required": true
+    },
+    {
+      "name": "scope",
+      "type": "string",
+      "description": "What this addendum applies to",
+      "enum": ["book", "chapter", "section", "artifact_type", "global"],
+      "required": true
+    },
+    {
+      "name": "scope_reference",
+      "type": "string",
+      "description": "Specific ID if scope is book/chapter/section (e.g., 'CH-002')"
+    },
+    {
+      "name": "category",
+      "type": "string",
+      "description": "Type of style guidance",
+      "enum": ["voice", "register", "diegetic_gates", "choice_labels", "terminology", "motifs", "accessibility"],
+      "required": true
+    },
+    {
+      "name": "summary",
+      "type": "text",
+      "description": "Brief description of the style concern and guidance",
+      "required": true
+    },
+    {
+      "name": "exemplars",
+      "type": "array",
+      "description": "Good and bad examples illustrating the guidance",
+      "items": {
+        "name": "exemplar",
+        "type": "object",
+        "properties": [
+          {
+            "name": "context",
+            "type": "string",
+            "description": "Where this example applies"
+          },
+          {
+            "name": "bad_example",
+            "type": "text",
+            "description": "What to avoid (with explanation)"
+          },
+          {
+            "name": "good_example",
+            "type": "text",
+            "description": "What to do instead"
+          },
+          {
+            "name": "rationale",
+            "type": "text",
+            "description": "Why the good example is better"
+          }
+        ]
+      },
+      "min_length": 1,
+      "required": true
+    },
+    {
+      "name": "patterns_to_avoid",
+      "type": "array",
+      "description": "Specific patterns that should be flagged during validation",
+      "items": {
+        "name": "pattern",
+        "type": "object",
+        "properties": [
+          {
+            "name": "pattern",
+            "type": "string",
+            "description": "What to look for (can be regex-like)"
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "description": "Why this is problematic"
+          },
+          {
+            "name": "severity",
+            "type": "string",
+            "description": "How serious this is",
+            "enum": ["suggestion", "warning", "error"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "patterns_to_encourage",
+      "type": "array",
+      "description": "Positive patterns that indicate good style",
+      "items": {
+        "name": "pattern",
+        "type": "object",
+        "properties": [
+          {
+            "name": "pattern",
+            "type": "string",
+            "description": "What to look for"
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "description": "Why this works well"
+          }
+        ]
+      }
+    },
+    {
+      "name": "edit_notes",
+      "type": "array",
+      "description": "Specific edit suggestions for existing content",
+      "items": {
+        "name": "edit_note",
+        "type": "object",
+        "properties": [
+          {
+            "name": "target",
+            "type": "string",
+            "description": "Section or artifact ID this applies to"
+          },
+          {
+            "name": "location",
+            "type": "string",
+            "description": "Where in the target"
+          },
+          {
+            "name": "current",
+            "type": "text",
+            "description": "What currently exists"
+          },
+          {
+            "name": "suggested",
+            "type": "text",
+            "description": "Suggested replacement"
+          },
+          {
+            "name": "rationale",
+            "type": "text",
+            "description": "Why this change"
+          }
+        ]
+      }
+    },
+    {
+      "name": "related_addenda",
+      "type": "array",
+      "description": "References to other relevant style addenda",
+      "items_type": "string"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Addendum is being written by Style Lead"
+      },
+      {
+        "id": "active",
+        "name": "Active",
+        "description": "Addendum is in effect and should be consulted during validation"
+      },
+      {
+        "id": "superseded",
+        "name": "Superseded",
+        "description": "Addendum has been replaced by newer guidance",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "active" },
+      { "from": "active", "to": "draft" },
+      { "from": "active", "to": "superseded" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

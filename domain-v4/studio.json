@@ -16,6 +16,7 @@
   "stores": [
     "stores/workspace.json",
     "stores/canon.json",
+    "stores/codex.json",
     "stores/audit.json",
     "stores/exports.json"
   ],
@@ -26,14 +27,18 @@
     "agents/plotwright.json",
     "agents/scene_smith.json",
     "agents/researcher.json",
-    "agents/book_binder.json"
+    "agents/book_binder.json",
+    "agents/lore_weaver.json",
+    "agents/codex_curator.json",
+    "agents/style_lead.json"
   ],
 
   "playbooks": [
     "playbooks/story_spark.json",
     "playbooks/scene_weave.json",
     "playbooks/hook_harvest.json",
-    "playbooks/binding_run.json"
+    "playbooks/binding_run.json",
+    "playbooks/lore_deepening.json"
   ],
 
   "artifact_types": [
@@ -43,7 +48,10 @@
     "artifact-types/gatecheck_report.json",
     "artifact-types/research_memo.json",
     "artifact-types/view_log.json",
-    "artifact-types/build_manifest.json"
+    "artifact-types/build_manifest.json",
+    "artifact-types/canon_pack.json",
+    "artifact-types/codex_entry.json",
+    "artifact-types/style_addendum.json"
   ],
 
   "tools": [
@@ -83,8 +91,8 @@
   },
 
   "metadata": {
-    "wave": 2,
-    "status": "research_and_export",
-    "notes": "Wave 2: Added Researcher and Book Binder agents. New playbook: Binding Run. New tools: web_search, web_fetch, assemble_export. New store: exports. New artifacts: research_memo, view_log, build_manifest."
+    "wave": 3,
+    "status": "canon_and_style",
+    "notes": "Wave 3: Added Lore Weaver, Codex Curator, and Style Lead agents. New playbook: Lore Deepening. New store: codex. New artifacts: canon_pack, codex_entry, style_addendum. Fixed canon store to clarify spoiler-level (not player-safe) semantics."
   }
 }

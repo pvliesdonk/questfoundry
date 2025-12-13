@@ -1,0 +1,22 @@
+{
+  "$schema": "../../meta/schemas/core/store.schema.json",
+  "id": "codex",
+  "name": "Codex (Player Glossary)",
+  "description": "Player-safe glossary entries. Diegetic explanations of terms, entities, places, and procedures. Derived from canon but with all spoilers stripped. This is what players see. Codex Curator is the exclusive producer. Entries must pass Gatekeeper validation for spoiler leaks before publishing.",
+
+  "semantics": "cold",
+
+  "artifact_types": [
+    "codex_entry"
+  ],
+
+  "workflow_intent": {
+    "consumption_guidance": "all",
+    "production_guidance": "exclusive",
+    "designated_producers": ["codex_curator"]
+  },
+
+  "retention": {
+    "type": "forever"
+  }
+}
