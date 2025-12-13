@@ -1,0 +1,178 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "shotlist",
+  "name": "Shotlist",
+  "description": "Index of Art Plans for a scope (chapter, act, or book). Tracks priorities, statuses, and budget allocation. Art Director creates shotlists to manage illustration coverage. Each entry references a full Art Plan.",
+  "category": "manifest",
+
+  "fields": [
+    {
+      "name": "shotlist_id",
+      "type": "string",
+      "description": "Unique identifier (format: SL-NNN)",
+      "required": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Descriptive title (e.g., 'Act I Illustrations')",
+      "required": true
+    },
+    {
+      "name": "scope",
+      "type": "string",
+      "description": "What this shotlist covers",
+      "enum": ["chapter", "act", "book"],
+      "required": true
+    },
+    {
+      "name": "scope_ref",
+      "type": "string",
+      "description": "Reference to the scoped element (e.g., 'act1', 'chapter-03')"
+    },
+    {
+      "name": "summary",
+      "type": "object",
+      "description": "Overview statistics",
+      "properties": [
+        {
+          "name": "total_slots",
+          "type": "integer",
+          "description": "Total number of illustration slots"
+        },
+        {
+          "name": "by_purpose",
+          "type": "object",
+          "description": "Count by purpose",
+          "properties": [
+            { "name": "clarify", "type": "integer" },
+            { "name": "recall", "type": "integer" },
+            { "name": "mood", "type": "integer" },
+            { "name": "signpost", "type": "integer" }
+          ]
+        },
+        {
+          "name": "by_priority",
+          "type": "object",
+          "description": "Count by priority",
+          "properties": [
+            { "name": "must_have", "type": "integer" },
+            { "name": "nice_to_have", "type": "integer" },
+            { "name": "optional", "type": "integer" }
+          ]
+        },
+        {
+          "name": "by_status",
+          "type": "object",
+          "description": "Count by status",
+          "properties": [
+            { "name": "draft", "type": "integer" },
+            { "name": "ready", "type": "integer" },
+            { "name": "generating", "type": "integer" },
+            { "name": "rendered", "type": "integer" },
+            { "name": "deferred", "type": "integer" }
+          ]
+        }
+      ],
+      "required": true
+    },
+    {
+      "name": "budget",
+      "type": "object",
+      "description": "Budget allocation for this scope",
+      "properties": [
+        {
+          "name": "allocated_slots",
+          "type": "integer",
+          "description": "Number of images budgeted for generation"
+        },
+        {
+          "name": "used_slots",
+          "type": "integer",
+          "description": "Number of images already generated"
+        },
+        {
+          "name": "remaining_slots",
+          "type": "integer",
+          "description": "Budget remaining"
+        }
+      ]
+    },
+    {
+      "name": "entries",
+      "type": "array",
+      "description": "List of Art Plan references with summary info",
+      "items": {
+        "name": "shotlist_entry",
+        "type": "object",
+        "properties": [
+          {
+            "name": "art_plan_ref",
+            "type": "string",
+            "description": "Reference to the Art Plan"
+          },
+          {
+            "name": "subject_summary",
+            "type": "string",
+            "description": "Brief subject for quick reference"
+          },
+          {
+            "name": "purpose",
+            "type": "string",
+            "description": "Purpose (from Art Plan)"
+          },
+          {
+            "name": "priority",
+            "type": "string",
+            "description": "Priority (from Art Plan)"
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "description": "Current status (from Art Plan)"
+          },
+          {
+            "name": "illustration_ref",
+            "type": "string",
+            "description": "Reference to generated Illustration asset (if rendered)"
+          }
+        ]
+      },
+      "required": true
+    },
+    {
+      "name": "notes",
+      "type": "text",
+      "description": "Art Director notes on coverage, gaps, or priorities"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "planning",
+        "name": "Planning",
+        "description": "Shotlist is being populated with Art Plans"
+      },
+      {
+        "id": "active",
+        "name": "Active",
+        "description": "Shotlist is ready and generation can proceed"
+      },
+      {
+        "id": "complete",
+        "name": "Complete",
+        "description": "All budgeted images have been generated",
+        "terminal": true
+      }
+    ],
+    "initial_state": "planning",
+    "transitions": [
+      { "from": "planning", "to": "active" },
+      { "from": "active", "to": "complete" },
+      { "from": "active", "to": "planning" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

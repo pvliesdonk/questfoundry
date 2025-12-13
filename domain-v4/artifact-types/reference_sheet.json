@@ -1,0 +1,235 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "reference_sheet",
+  "name": "Reference Sheet",
+  "description": "Visual reference for recurring elements: characters, locations, or objects. Ensures visual consistency across illustrations. Art Director maintains these; generate_image tool consults them for consistency.",
+  "category": "reference",
+
+  "fields": [
+    {
+      "name": "sheet_id",
+      "type": "string",
+      "description": "Unique identifier (format: RS-<subject-name>)",
+      "required": true
+    },
+    {
+      "name": "subject_type",
+      "type": "string",
+      "description": "What kind of recurring element this describes",
+      "enum": ["character", "location", "object"],
+      "required": true
+    },
+    {
+      "name": "subject_name",
+      "type": "string",
+      "description": "Name or title of the subject",
+      "required": true
+    },
+    {
+      "name": "canon_ref",
+      "type": "string",
+      "description": "Reference to canon entry for this subject (if exists)"
+    },
+    {
+      "name": "codex_ref",
+      "type": "string",
+      "description": "Reference to codex entry for this subject (if exists)"
+    },
+    {
+      "name": "appearance_frequency",
+      "type": "string",
+      "description": "How often this subject appears in illustrations",
+      "enum": ["ubiquitous", "frequent", "occasional", "rare"],
+      "required": true
+    },
+
+    {
+      "name": "character_details",
+      "type": "object",
+      "description": "Character-specific details (when subject_type=character)",
+      "condition": "subject_type == 'character'",
+      "properties": [
+        {
+          "name": "physical_description",
+          "type": "object",
+          "description": "Core physical characteristics",
+          "properties": [
+            { "name": "build", "type": "string", "description": "Body type and stature" },
+            { "name": "age_range", "type": "string", "description": "Apparent age range" },
+            { "name": "skin_tone", "type": "string", "description": "Skin tone description" },
+            { "name": "hair", "type": "string", "description": "Hair style, color, length" },
+            { "name": "eyes", "type": "string", "description": "Eye color and distinctive features" },
+            { "name": "distinguishing_features", "type": "array", "items_type": "string", "description": "Scars, tattoos, birthmarks, etc." }
+          ]
+        },
+        {
+          "name": "typical_attire",
+          "type": "object",
+          "description": "Clothing and accessories",
+          "properties": [
+            { "name": "default_outfit", "type": "text", "description": "What they usually wear" },
+            { "name": "signature_items", "type": "array", "items_type": "string", "description": "Items that identify this character" },
+            {
+              "name": "variations",
+              "type": "array",
+              "description": "Context-specific outfit variations",
+              "items": {
+                "name": "variation",
+                "type": "object",
+                "properties": [
+                  { "name": "context", "type": "string", "description": "When this variation applies" },
+                  { "name": "description", "type": "text", "description": "What's different" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "pose_and_bearing",
+          "type": "object",
+          "description": "How they carry themselves",
+          "properties": [
+            { "name": "posture", "type": "string", "description": "Default posture (rigid, relaxed, guarded, etc.)" },
+            { "name": "characteristic_gestures", "type": "array", "items_type": "string", "description": "Habits and mannerisms" },
+            { "name": "facial_expression_range", "type": "string", "description": "Typical expression range" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "location_details",
+      "type": "object",
+      "description": "Location-specific details (when subject_type=location)",
+      "condition": "subject_type == 'location'",
+      "properties": [
+        {
+          "name": "physical_description",
+          "type": "object",
+          "description": "Core physical characteristics",
+          "properties": [
+            { "name": "scale", "type": "string", "description": "Size and scope (intimate, room-sized, vast, etc.)" },
+            { "name": "architecture_style", "type": "string", "description": "Architectural period or style" },
+            { "name": "materials", "type": "string", "description": "Primary construction materials" },
+            { "name": "lighting_conditions", "type": "string", "description": "Typical lighting (dim, bright, natural, artificial)" },
+            { "name": "color_palette", "type": "string", "description": "Dominant colors" }
+          ]
+        },
+        {
+          "name": "key_features",
+          "type": "array",
+          "items_type": "string",
+          "description": "Landmarks, furniture, distinctive elements that must appear"
+        },
+        {
+          "name": "atmosphere",
+          "type": "object",
+          "description": "Mood and feel",
+          "properties": [
+            { "name": "mood", "type": "string", "description": "Emotional tone (oppressive, welcoming, mysterious)" },
+            { "name": "typical_activity", "type": "string", "description": "What usually happens here" },
+            { "name": "sounds", "type": "string", "description": "Ambient sounds (for cross-surface coherence)" }
+          ]
+        },
+        {
+          "name": "variations",
+          "type": "array",
+          "description": "Context-specific variations",
+          "items": {
+            "name": "variation",
+            "type": "object",
+            "properties": [
+              { "name": "context", "type": "string", "description": "When this variation applies (day/night, before/after event)" },
+              { "name": "description", "type": "text", "description": "What's different" }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "object_details",
+      "type": "object",
+      "description": "Object-specific details (when subject_type=object)",
+      "condition": "subject_type == 'object'",
+      "properties": [
+        {
+          "name": "physical_description",
+          "type": "object",
+          "description": "Core physical characteristics",
+          "properties": [
+            { "name": "size", "type": "string", "description": "Dimensions or scale reference" },
+            { "name": "shape", "type": "string", "description": "Overall form" },
+            { "name": "materials", "type": "string", "description": "What it's made of" },
+            { "name": "colors", "type": "string", "description": "Color scheme" },
+            { "name": "condition", "type": "string", "description": "Wear, age, state of repair" }
+          ]
+        },
+        {
+          "name": "distinctive_features",
+          "type": "array",
+          "items_type": "string",
+          "description": "Markings, engravings, unique elements"
+        },
+        {
+          "name": "context",
+          "type": "object",
+          "description": "How the object appears in scenes",
+          "properties": [
+            { "name": "typical_placement", "type": "string", "description": "Where it's usually seen" },
+            { "name": "who_uses_it", "type": "string", "description": "Associated character(s)" },
+            { "name": "significance", "type": "string", "description": "Why it matters to the story" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "reference_images",
+      "type": "array",
+      "description": "References for generation consistency",
+      "items": {
+        "name": "reference",
+        "type": "object",
+        "properties": [
+          {
+            "name": "type",
+            "type": "string",
+            "description": "Type of reference",
+            "enum": ["approved_render", "mood_reference", "style_reference", "avoid"]
+          },
+          { "name": "asset_ref", "type": "string", "description": "Reference to asset or external URL" },
+          { "name": "notes", "type": "string", "description": "What to take from this reference" }
+        ]
+      }
+    },
+    {
+      "name": "generation_notes",
+      "type": "text",
+      "description": "Technical notes for image generation (prompt fragments, consistency strategies)"
+    },
+    {
+      "name": "spoiler_level",
+      "type": "string",
+      "description": "Whether this subject's appearance is a spoiler",
+      "enum": ["safe", "minor_spoiler", "major_spoiler"],
+      "required": true
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      { "id": "draft", "name": "Draft", "description": "Sheet is being created" },
+      { "id": "active", "name": "Active", "description": "Sheet is in use for generation" },
+      { "id": "revised", "name": "Revised", "description": "Sheet has been updated" }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "active" },
+      { "from": "active", "to": "revised" },
+      { "from": "revised", "to": "active" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "art_director_heuristics",
+  "name": "Art Director Heuristics",
+  "layer": "role_specific",
+
+  "summary": "Planning heuristics for illustration coverage: purpose taxonomy, priority setting, reference sheet consistency, and caption writing.",
+
+  "keywords": ["art", "illustration", "planning", "visual", "reference sheets", "priorities"],
+
+  "triggers": [
+    "planning illustrations for a scope",
+    "creating art plans",
+    "maintaining reference sheets",
+    "writing captions or alt text"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Art Director Heuristics\n\nGuidance for visual planning: deciding WHAT to illustrate and WHY.\n\n---\n\n### The Cost Asymmetry Principle\n\n**Core Truth**: Planning is cheap, generation is expensive.\n\n- Describing 50 scenes in Art Plans: ~5000 tokens\n- Generating 50 images: $50+ in API costs\n\n**Implication**: Plan liberally, prioritize ruthlessly, generate selectively.\n\nCreate Art Plans for ALL scenes that would benefit from illustration. Priority determines what actually gets generated within budget.\n\n---\n\n### Purpose Taxonomy\n\nEvery Art Plan must answer: \"Why does this image help the reader?\"\n\n| Purpose | When to Use | Example |\n|---------|-------------|----------|\n| **clarify** | Reader can't visualize described thing | A complex mechanism, unfamiliar creature, unusual architecture |\n| **recall** | Reader needs memory anchor | Key location appearing multiple times, important NPC first appearance |\n| **mood** | Atmosphere matters more than details | Opening scene, emotional climax, tone-setting moment |\n| **signpost** | Reduce hesitation at choices | Visual distinction between paths, consequence preview |\n\n**Red Flags**:\n- \"Because it would look cool\" is not a purpose\n- Illustration for every page dilutes impact\n- Clarify should not be used for simple things readers can easily imagine\n\n---\n\n### Priority Setting\n\n**must_have**: Scene is actively confusing or emotionally crucial without image\n- Key reveals\n- Complex environments central to puzzle/choice\n- Protagonist/antagonist first appearances\n\n**nice_to_have**: Scene benefits from image but functions without it\n- Atmosphere enhancement\n- Supporting character introductions\n- Memory anchors for recurring locations\n\n**optional**: Scene could have image but value is marginal\n- Decorative scenes\n- Minor locations\n- Transitions\n\n**Budget Rule**: Generate must_have first, then nice_to_have until budget exhausted. Optional only if budget remains.\n\n---\n\n### Reference Sheet Discipline\n\nReference Sheets ensure visual consistency for recurring elements: characters, locations, and objects.\n\n**When to Create a Sheet**:\n\n*Characters*:\n- Appears in 2+ illustrations\n- Appearance is story-relevant (disguise, transformation, recognition)\n- Protagonist or major antagonist (always)\n\n*Locations*:\n- Appears in 2+ illustrations (e.g., detective's office, villain's lair)\n- Key setting that defines an act or chapter\n- Complex environment that needs consistent rendering\n\n*Objects*:\n- Significant prop appearing in multiple scenes (murder weapon, magical artifact)\n- Object whose appearance is a plot point\n\n**What to Include by Type**:\n\n*Characters*:\n1. Physical description (build, age, hair, eyes)\n2. Distinguishing features (scars, tattoos, accessories)\n3. Typical attire (with context variations)\n4. Pose/bearing (posture, gestures, expression range)\n\n*Locations*:\n1. Physical description (scale, materials, lighting)\n2. Key features (landmarks, furniture, must-have elements)\n3. Atmosphere (mood, typical activity)\n4. Variations (day/night, before/after events)\n\n*Objects*:\n1. Physical description (size, shape, materials, colors)\n2. Distinctive features (markings, wear patterns)\n3. Context (typical placement, who uses it)\n\n**Spoiler Levels** (all types):\n- **safe**: Appearance reveals nothing about plot\n- **minor_spoiler**: Details hint at significance\n- **major_spoiler**: Appearance itself is a reveal\n\n---\n\n### Caption & Alt Text Guidelines\n\n**Caption**:\n- Player-facing, atmospheric, evocative\n- One line, no techniques, no spoilers\n- Good: \"The foreman's office, dust motes dancing in lamplight\"\n- Bad: \"AI-generated image of an office using stable diffusion\"\n\n**Alt Text**:\n- Accessible, descriptive, structured\n- Format: subject + relation + location\n- Good: \"A stern foreman stands behind a cluttered desk in a dimly lit office\"\n- Bad: \"Office scene\" or \"A man\"\n\n**Red Flags**:\n- Captions that describe technique (\"rendered in\", \"illustrated in\")\n- Alt text that says \"image of\" (redundant)\n- Spoilers in either (\"the murderer's secret lair\")\n\n---\n\n### Visual Language Alignment\n\nArt Director decides WHAT and WHERE. Style Lead validates HOW.\n\n**Art Director Owns**:\n- Subject selection\n- Placement decisions\n- Priority ranking\n- Focal point specification\n\n**Style Lead Owns** (via Style Guide):\n- Palette constraints\n- Composition conventions\n- Lighting style\n- Motif consistency\n\n**Collaboration Point**: composition_hint in Art Plan should align with Style Guide conventions. When in conflict, discuss—neither role should override the other unilaterally."
+  },
+
+  "applicable_to": {
+    "agents": ["art_director"]
+  },
+
+  "tags": ["art", "planning", "visual", "heuristics"]
+}

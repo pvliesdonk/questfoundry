@@ -30,7 +30,8 @@
     "agents/book_binder.json",
     "agents/lore_weaver.json",
     "agents/codex_curator.json",
-    "agents/style_lead.json"
+    "agents/style_lead.json",
+    "agents/art_director.json"
   ],
 
   "playbooks": [
@@ -38,7 +39,8 @@
     "playbooks/scene_weave.json",
     "playbooks/hook_harvest.json",
     "playbooks/binding_run.json",
-    "playbooks/lore_deepening.json"
+    "playbooks/lore_deepening.json",
+    "playbooks/art_planning.json"
   ],
 
   "artifact_types": [
@@ -51,7 +53,15 @@
     "artifact-types/build_manifest.json",
     "artifact-types/canon_pack.json",
     "artifact-types/codex_entry.json",
-    "artifact-types/style_addendum.json"
+    "artifact-types/style_addendum.json",
+    "artifact-types/style_guide.json",
+    "artifact-types/art_plan.json",
+    "artifact-types/shotlist.json",
+    "artifact-types/reference_sheet.json"
+  ],
+
+  "asset_types": [
+    "asset-types/illustration.json"
   ],
 
   "tools": [
@@ -61,7 +71,8 @@
     "tools/delegate.json",
     "tools/web_search.json",
     "tools/web_fetch.json",
-    "tools/assemble_export.json"
+    "tools/assemble_export.json",
+    "tools/generate_image.json"
   ],
 
   "quality_criteria": [
@@ -91,8 +102,8 @@
   },
 
   "metadata": {
-    "wave": 3,
-    "status": "canon_and_style",
-    "notes": "Wave 3: Added Lore Weaver, Codex Curator, and Style Lead agents. New playbook: Lore Deepening. New store: codex. New artifacts: canon_pack, codex_entry, style_addendum. Fixed canon store to clarify spoiler-level (not player-safe) semantics."
+    "wave": 4,
+    "status": "visual_assets",
+    "notes": "Wave 4: Added Art Director agent and generate_image tool (replaces Illustrator agent). Expanded Style Lead to own unified style (prose + visual + audio). New playbook: Art Planning. New artifact types: style_guide, art_plan, shotlist, reference_sheet (generalized from character_sheet to support characters, locations, and objects). New asset type: illustration. Simplified Art Plan from v2's 36 fields to ~15 fields. Philosophy: plan everything (cheap), generate selectively (expensive)."
   }
 }

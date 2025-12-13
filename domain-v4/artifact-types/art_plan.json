@@ -1,0 +1,138 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "art_plan",
+  "name": "Art Plan",
+  "description": "Planning document for a single illustration slot. Specifies what to illustrate and why, leaving visual language details to the Style Guide. Planning is cheap—create Art Plans for ALL worthy scenes. Generation is selective based on priority and budget.",
+  "category": "document",
+
+  "fields": [
+    {
+      "name": "plan_id",
+      "type": "string",
+      "description": "Unique identifier (format: AP-NNN)",
+      "required": true
+    },
+    {
+      "name": "section_ref",
+      "type": "string",
+      "description": "Reference to the section this illustration supports (e.g., 'act1/foreman-gate')",
+      "required": true
+    },
+    {
+      "name": "purpose",
+      "type": "string",
+      "description": "Why this illustration helps: clarify (make described thing legible), recall (aid memory), mood (set atmosphere), signpost (reduce hesitation at choices)",
+      "enum": ["clarify", "recall", "mood", "signpost"],
+      "required": true
+    },
+    {
+      "name": "purpose_rationale",
+      "type": "text",
+      "description": "1-2 sentences explaining why this image helps the reader here"
+    },
+    {
+      "name": "priority",
+      "type": "string",
+      "description": "Budget allocation priority",
+      "enum": ["must_have", "nice_to_have", "optional"],
+      "required": true
+    },
+    {
+      "name": "subject",
+      "type": "text",
+      "description": "What the image shows (concrete nouns, not abstractions)",
+      "required": true
+    },
+    {
+      "name": "focal_point",
+      "type": "string",
+      "description": "What must be readable/clear at target sizes"
+    },
+    {
+      "name": "composition_hint",
+      "type": "string",
+      "description": "Brief framing guidance (e.g., 'low angle, tight on badge area'). Detailed conventions come from Style Guide."
+    },
+    {
+      "name": "caption",
+      "type": "string",
+      "description": "One-line player-safe caption (atmospheric/clarifying, no technique, no spoilers)",
+      "required": true
+    },
+    {
+      "name": "alt_text",
+      "type": "string",
+      "description": "One-sentence accessible description (subject + relation + location, spoiler-safe)",
+      "required": true
+    },
+    {
+      "name": "reference_refs",
+      "type": "array",
+      "description": "References to Reference Sheets for recurring elements in this image (characters, locations, objects)",
+      "items_type": "string"
+    },
+    {
+      "name": "placement",
+      "type": "string",
+      "description": "Where the image appears relative to prose",
+      "enum": ["section_start", "before_choice_block", "after_choice_block", "inline", "standalone"]
+    },
+    {
+      "name": "inclusion_condition",
+      "type": "text",
+      "description": "When this image should appear (e.g., 'first appearance of gate', 'after player obtains badge')"
+    },
+    {
+      "name": "exclusion_condition",
+      "type": "text",
+      "description": "When this image should NOT appear"
+    },
+    {
+      "name": "accessibility_notes",
+      "type": "text",
+      "description": "Any accessibility concerns (contrast, busy textures, content warnings)"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Plan is being created by Art Director"
+      },
+      {
+        "id": "ready",
+        "name": "Ready",
+        "description": "Plan is complete and ready for generation when budget allows"
+      },
+      {
+        "id": "generating",
+        "name": "Generating",
+        "description": "Image generation in progress"
+      },
+      {
+        "id": "rendered",
+        "name": "Rendered",
+        "description": "Image has been generated and linked",
+        "terminal": true
+      },
+      {
+        "id": "deferred",
+        "name": "Deferred",
+        "description": "Plan exists but generation deferred (plan-only release)"
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "ready" },
+      { "from": "ready", "to": "generating" },
+      { "from": "ready", "to": "deferred" },
+      { "from": "generating", "to": "rendered" },
+      { "from": "generating", "to": "ready" },
+      { "from": "deferred", "to": "ready" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

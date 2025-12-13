@@ -31,9 +31,16 @@
         "state": "ready"
       }
     ],
-    "optional_artifacts": [],
+    "optional_artifacts": [
+      {
+        "type": "style_guide",
+        "alias": "style_guide",
+        "description": "Unified style guide for prose and visual consistency",
+        "state": "active"
+      }
+    ],
     "context_requirements": [
-      "Style guardrails from workspace (register, motifs, voice patterns)",
+      "Style Guide from workspace (voice, register, visual language)",
       "Codex entries relevant to the section (player-safe references)",
       "Canon summaries if needed for accurate portrayal (request from Lore Weaver)"
     ]
@@ -120,9 +127,9 @@
 
       "steps": {
         "check_voice": {
-          "action": "Review draft sections for voice, register, and motif consistency. Flag drift and propose corrections.",
-          "agent_archetype": "validator",
-          "guidance": "Scene Smith respects the Style Lead domain. Do not fight the register—propose alternatives if something feels wrong. Sample sections for motif anchors.",
+          "action": "Review draft sections for voice, register, visual language alignment, and motif consistency. Flag drift and propose corrections.",
+          "specific_agent": "style_lead",
+          "guidance": "Style Lead reviews prose for voice consistency and visual language alignment. Cross-check against Style Guide. Flag drift but offer smallest viable fix.",
           "inputs": [
             {
               "name": "draft_sections",

@@ -1,0 +1,105 @@
+{
+  "$schema": "../../meta/schemas/core/asset-type.schema.json",
+  "id": "illustration",
+  "name": "Illustration",
+  "description": "Generated or commissioned illustration image. Linked to an Art Plan that specifies what it depicts. Manifest includes determinism log for reproducibility (kept off-surface) and references to source materials.",
+
+  "category": "image",
+
+  "mime_types": [
+    "image/png",
+    "image/jpeg",
+    "image/webp"
+  ],
+
+  "max_size_bytes": 20971520,
+
+  "manifest_fields": [
+    {
+      "name": "illustration_id",
+      "type": "string",
+      "description": "Unique identifier (format: IL-NNN)",
+      "required": true
+    },
+    {
+      "name": "source_plan_ref",
+      "type": "string",
+      "description": "Reference to the Art Plan this was generated from",
+      "required": true
+    },
+    {
+      "name": "caption",
+      "type": "string",
+      "description": "Player-safe caption (copied from Art Plan)"
+    },
+    {
+      "name": "alt_text",
+      "type": "string",
+      "description": "Accessible alt text (copied from Art Plan)",
+      "required": true
+    },
+    {
+      "name": "reference_refs",
+      "type": "array",
+      "items_type": "string",
+      "description": "Reference Sheets used for consistency (characters, locations, objects)"
+    },
+    {
+      "name": "dimensions",
+      "type": "object",
+      "description": "Image dimensions",
+      "properties": [
+        { "name": "width", "type": "integer" },
+        { "name": "height", "type": "integer" }
+      ]
+    },
+    {
+      "name": "variants",
+      "type": "array",
+      "description": "If multiple variants exist, list all",
+      "items": {
+        "name": "variant",
+        "type": "object",
+        "properties": [
+          { "name": "variant_id", "type": "string" },
+          { "name": "file_path", "type": "string" },
+          { "name": "purpose", "type": "string", "description": "Why this variant exists (crop, size, etc.)" },
+          { "name": "selected", "type": "boolean", "description": "Whether this is the primary variant" }
+        ]
+      }
+    },
+    {
+      "name": "determinism_log",
+      "type": "object",
+      "description": "Off-surface generation details for reproducibility. NEVER expose to players.",
+      "properties": [
+        { "name": "tool", "type": "string", "description": "Generation tool (e.g., 'dalle-3', 'sdxl', 'commissioned')" },
+        { "name": "prompt_used", "type": "string", "description": "Actual prompt sent to tool" },
+        { "name": "prompt_hash", "type": "string", "description": "SHA256 hash of prompt" },
+        { "name": "seed", "type": "string", "description": "Seed if deterministic generation supported" },
+        { "name": "model_version", "type": "string", "description": "Model version used" },
+        { "name": "settings", "type": "object", "description": "Tool-specific settings (cfg, steps, etc.)" },
+        { "name": "generated_at", "type": "string", "description": "ISO timestamp of generation" }
+      ]
+    },
+    {
+      "name": "approval_status",
+      "type": "string",
+      "description": "Review status",
+      "enum": ["pending_review", "approved", "needs_revision", "rejected"]
+    },
+    {
+      "name": "revision_notes",
+      "type": "string",
+      "description": "Notes if revision needed"
+    }
+  ],
+
+  "default_store": "exports",
+
+  "processing_hints": {
+    "generate_thumbnails": true,
+    "extract_metadata": true,
+    "compute_dimensions": true
+  }
+}

@@ -1,0 +1,242 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "style_guide",
+  "name": "Style Guide",
+  "description": "Unified style guide covering prose, visual, and audio aesthetics. Created and maintained by Style Lead. Defines voice, register, visual language, motif palette, and audio signature. All creative agents consult this for consistency. Style Addenda provide targeted clarifications for specific patterns.",
+  "category": "guidance",
+
+  "fields": [
+    {
+      "name": "guide_id",
+      "type": "string",
+      "description": "Unique identifier (format: SG-NNN)",
+      "required": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Title of this style guide (typically book or series name)",
+      "required": true
+    },
+    {
+      "name": "version",
+      "type": "string",
+      "description": "Semantic version for tracking changes",
+      "required": true
+    },
+    {
+      "name": "summary",
+      "type": "text",
+      "description": "Executive summary of the aesthetic vision",
+      "required": true
+    },
+    {
+      "name": "prose_style",
+      "type": "object",
+      "description": "Voice and register guidance for prose",
+      "properties": [
+        {
+          "name": "voice",
+          "type": "text",
+          "description": "Narrative voice description (perspective, tense, formality)"
+        },
+        {
+          "name": "register",
+          "type": "text",
+          "description": "Language register (genre conventions, vocabulary level)"
+        },
+        {
+          "name": "tone_spectrum",
+          "type": "text",
+          "description": "Emotional range and pacing guidance"
+        },
+        {
+          "name": "dialogue_conventions",
+          "type": "text",
+          "description": "How dialogue should read (naturalistic, stylized, etc.)"
+        },
+        {
+          "name": "banned_patterns",
+          "type": "array",
+          "items_type": "string",
+          "description": "Specific phrases or patterns to avoid"
+        },
+        {
+          "name": "exemplar_passages",
+          "type": "array",
+          "items_type": "text",
+          "description": "Example passages that exemplify the target voice"
+        }
+      ],
+      "required": true
+    },
+    {
+      "name": "visual_language",
+      "type": "object",
+      "description": "Visual style guidance for illustrations",
+      "properties": [
+        {
+          "name": "aesthetic",
+          "type": "text",
+          "description": "Overall visual aesthetic (e.g., 'noir realism', 'watercolor fantasy')"
+        },
+        {
+          "name": "palette",
+          "type": "object",
+          "description": "Color palette guidance",
+          "properties": [
+            {
+              "name": "primary_colors",
+              "type": "array",
+              "items_type": "string",
+              "description": "Dominant colors (descriptive, not hex codes)"
+            },
+            {
+              "name": "accent_colors",
+              "type": "array",
+              "items_type": "string",
+              "description": "Accent and highlight colors"
+            },
+            {
+              "name": "mood_associations",
+              "type": "text",
+              "description": "How colors map to emotional content"
+            }
+          ]
+        },
+        {
+          "name": "composition_conventions",
+          "type": "text",
+          "description": "Framing, angle, and hierarchy preferences"
+        },
+        {
+          "name": "lighting_style",
+          "type": "text",
+          "description": "Characteristic lighting (e.g., 'sodium lamp noir', 'diffuse natural')"
+        },
+        {
+          "name": "motif_palette",
+          "type": "array",
+          "description": "Visual motifs to thread throughout",
+          "items": {
+            "name": "motif",
+            "type": "object",
+            "properties": [
+              {
+                "name": "name",
+                "type": "string",
+                "description": "Motif identifier"
+              },
+              {
+                "name": "description",
+                "type": "text",
+                "description": "What this motif looks like"
+              },
+              {
+                "name": "usage",
+                "type": "text",
+                "description": "When to deploy this motif"
+              }
+            ]
+          }
+        },
+        {
+          "name": "avoid_patterns",
+          "type": "array",
+          "items_type": "string",
+          "description": "Visual patterns to avoid"
+        }
+      ]
+    },
+    {
+      "name": "audio_aesthetic",
+      "type": "object",
+      "description": "Audio style guidance (for future Wave 5)",
+      "properties": [
+        {
+          "name": "sonic_signature",
+          "type": "text",
+          "description": "Overall audio character"
+        },
+        {
+          "name": "ambient_style",
+          "type": "text",
+          "description": "Background audio approach"
+        },
+        {
+          "name": "music_guidance",
+          "type": "text",
+          "description": "Musical style and instrumentation"
+        }
+      ]
+    },
+    {
+      "name": "cross_surface_coherence",
+      "type": "object",
+      "description": "How prose, visual, and audio should relate",
+      "properties": [
+        {
+          "name": "alignment_principles",
+          "type": "text",
+          "description": "How different surfaces reinforce each other"
+        },
+        {
+          "name": "contrast_principles",
+          "type": "text",
+          "description": "When surfaces intentionally diverge for effect"
+        }
+      ]
+    },
+    {
+      "name": "accessibility_commitments",
+      "type": "object",
+      "description": "Accessibility baseline for all surfaces",
+      "properties": [
+        {
+          "name": "alt_text_standards",
+          "type": "text",
+          "description": "How alt text should be written"
+        },
+        {
+          "name": "caption_standards",
+          "type": "text",
+          "description": "Caption requirements"
+        },
+        {
+          "name": "content_warning_policy",
+          "type": "text",
+          "description": "When and how to apply content warnings"
+        }
+      ]
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Guide is being developed"
+      },
+      {
+        "id": "active",
+        "name": "Active",
+        "description": "Guide is in effect for all creative work"
+      },
+      {
+        "id": "superseded",
+        "name": "Superseded",
+        "description": "Guide has been replaced by newer version",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "active" },
+      { "from": "active", "to": "draft" },
+      { "from": "active", "to": "superseded" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

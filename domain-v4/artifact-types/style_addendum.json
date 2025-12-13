@@ -34,7 +34,7 @@
       "name": "category",
       "type": "string",
       "description": "Type of style guidance",
-      "enum": ["voice", "register", "diegetic_gates", "choice_labels", "terminology", "motifs", "accessibility"],
+      "enum": ["voice", "register", "diegetic_gates", "choice_labels", "terminology", "motifs", "accessibility", "visual_language", "visual_composition", "palette", "audio_aesthetic"],
       "required": true
     },
     {

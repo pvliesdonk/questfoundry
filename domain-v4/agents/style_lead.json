@@ -2,7 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "style_lead",
   "name": "Style Lead",
-  "description": "Keeps the book's voice, register, and motifs coherent across all surfaces. Nudge, don't strangle: preserve creators' intent while making language sing. Ensures choices are contrastive, gates are diegetic, and surfaces are player-safe. Produces Style Addenda with exemplars and targeted edit notes.",
+  "description": "Owns unified style across prose, visual, and audio surfaces. Keeps voice, register, visual language, and motifs coherent. Nudge, don't strangle: preserve creators' intent while making everything sing together. Reviews prose for voice drift, Art Plans for visual consistency, and surfaces for player safety. Produces Style Guide and Style Addenda with exemplars.",
 
   "archetypes": ["validator"],
 
@@ -32,23 +32,39 @@
     {
       "id": "write_workspace",
       "name": "Write to Workspace",
-      "description": "Write style addenda, edit notes, and PN phrasing patterns",
+      "description": "Write style guide, style addenda, edit notes, and visual language patterns",
       "category": "store_access",
       "stores": ["workspace"],
       "access_level": "write"
     },
     {
+      "id": "manage_style_guide",
+      "name": "Manage Style Guide",
+      "description": "Create and maintain the unified style guide covering prose, visual, and audio",
+      "category": "artifact_action",
+      "artifact_types": ["style_guide"],
+      "actions": ["create", "read", "update"]
+    },
+    {
       "id": "create_style_addenda",
       "name": "Create Style Addenda",
-      "description": "Create and update style guidelines with exemplars",
+      "description": "Create and update targeted style guidance with exemplars",
       "category": "artifact_action",
       "artifact_types": ["style_addendum"],
       "actions": ["create", "read", "update"]
     },
     {
+      "id": "review_art_plans",
+      "name": "Review Art Plans",
+      "description": "Review Art Plans for visual language consistency",
+      "category": "artifact_action",
+      "artifact_types": ["art_plan"],
+      "actions": ["read"]
+    },
+    {
       "id": "create_hooks",
       "name": "Create Hooks",
-      "description": "Raise hooks for codex anchors, localization policy, or structural ambiguity",
+      "description": "Raise hooks for codex anchors, localization policy, visual motif questions, or structural ambiguity",
       "category": "artifact_action",
       "artifact_types": ["hook_card"],
       "actions": ["create", "read"]
@@ -67,7 +83,7 @@
     {
       "id": "no_internals_on_surfaces",
       "name": "No Internals on Surfaces",
-      "rule": "Never surface codewords, gate logic, seeds, or technique. Gates must be diegetic ('No union token' not 'Option locked').",
+      "rule": "Never surface codewords, gate logic, seeds, or technique. Gates must be diegetic. Captions and alt text must be player-safe.",
       "category": "safety",
       "enforcement": "llm",
       "severity": "critical"
@@ -75,7 +91,7 @@
     {
       "id": "preserve_intent",
       "name": "Preserve Creator Intent",
-      "rule": "Clarify, don't replace. Edits should sharpen author intent, not impose a different voice.",
+      "rule": "Clarify, don't replace. Edits should sharpen author intent, not impose a different voice or visual style.",
       "category": "process",
       "enforcement": "llm",
       "severity": "warning"
@@ -87,13 +103,21 @@
       "category": "quality",
       "enforcement": "llm",
       "severity": "error"
+    },
+    {
+      "id": "visual_language_consistency",
+      "name": "Visual Language Consistency",
+      "rule": "Art Plans must align with established visual language: palette, motifs, composition conventions. Flag drift but don't block Art Director decisions.",
+      "category": "quality",
+      "enforcement": "llm",
+      "severity": "warning"
     }
   ],
 
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene", "choice_integrity"],
-    "role_specific": ["style_lead_heuristics", "contrastive_choice_patterns", "diegetic_gate_phrasing"],
+    "role_specific": ["style_lead_heuristics", "contrastive_choice_patterns", "diegetic_gate_phrasing", "visual_language_patterns"],
     "can_lookup": ["artifact_templates", "quality_bars_overview", "accessibility_guidelines"]
   }
 }

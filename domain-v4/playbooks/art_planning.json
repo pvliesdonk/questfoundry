@@ -1,0 +1,386 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "art_planning",
+  "name": "Art Planning",
+  "version": "1.0.0",
+  "purpose": "Plan visual content for a narrative scope. Create Art Plans for all worthy scenes (planning is cheap), organize into Shotlists with priorities, maintain Reference Sheets for consistency. Generation is separate and budget-constrained.",
+
+  "description": "Art Planning is the visual content loop. Art Director decides WHAT to illustrate and WHY—not HOW. The philosophy: plan everything worth illustrating (cheap), generate selectively based on budget (expensive). Reference Sheets ensure recurring elements (characters, locations, objects) stay visually consistent. Style Lead validates visual language alignment. Generation happens via the generate_image tool when budget and priorities align.",
+
+  "triggers": [
+    {
+      "condition": "New chapter, act, or book scope ready for visual planning",
+      "priority": 1
+    },
+    {
+      "condition": "Sections from Scene Weave approved and stable",
+      "priority": 1
+    },
+    {
+      "condition": "Reference Sheet needed for recurring element (character, location, object)",
+      "priority": 2
+    },
+    {
+      "condition": "Budget allocated for image generation",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [],
+    "optional_artifacts": [
+      {
+        "type": "section",
+        "alias": "sections",
+        "description": "Approved sections to plan illustrations for",
+        "state": "approved"
+      },
+      {
+        "type": "style_guide",
+        "alias": "style_guide",
+        "description": "Unified style guide for visual language",
+        "state": "active"
+      }
+    ],
+    "context_requirements": [
+      "Style Guide from workspace (visual language, palette, composition conventions)",
+      "Existing Reference Sheets for recurring elements",
+      "Current Shotlist if updating an existing scope",
+      "Generation budget if moving to render phase"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "art_plan",
+        "alias": "art_plans",
+        "description": "Art Plans for worthy scenes",
+        "state": "ready"
+      }
+    ],
+    "optional_artifacts": [
+      {
+        "type": "shotlist",
+        "alias": "shotlist",
+        "description": "Organized index of Art Plans with priorities",
+        "state": "active"
+      },
+      {
+        "type": "reference_sheet",
+        "alias": "reference_sheets",
+        "description": "New or updated Reference Sheets for recurring elements",
+        "state": "active"
+      },
+      {
+        "type": "hook_card",
+        "alias": "visual_hooks",
+        "description": "Questions about visual direction",
+        "state": "proposed"
+      }
+    ],
+    "context_requirements": []
+  },
+
+  "entry_phase": "art_plan_creation",
+
+  "phases": {
+    "art_plan_creation": {
+      "name": "Art Plan Creation",
+      "purpose": "Identify illustration opportunities and create Art Plans for all worthy scenes",
+
+      "steps": {
+        "survey_scope": {
+          "action": "Review sections to identify illustration opportunities. Consider: key moments, complex environments, memorable characters, important choices, atmosphere-setting scenes.",
+          "specific_agent": "art_director",
+          "guidance": "Think like a reader: where would an image help them understand, remember, or feel? Plan liberally—we can prioritize later. Look for: clarify (make things legible), recall (aid memory), mood (set atmosphere), signpost (reduce choice hesitation).",
+          "inputs": [
+            {
+              "name": "sections",
+              "artifact_type": "section"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "opportunity_list",
+              "description": "List of scenes/moments worth illustrating with rationale"
+            }
+          ]
+        },
+        "create_art_plans": {
+          "action": "Create Art Plan for each identified opportunity. Specify subject, purpose, priority, caption, and alt text.",
+          "depends_on": ["survey_scope"],
+          "specific_agent": "art_director",
+          "guidance": "Every Art Plan must have a clear purpose (clarify/recall/mood/signpost). Set realistic priorities: must_have for critical scenes, nice_to_have for enhancing scenes, optional for nice touches. Write player-safe captions and accessible alt text.",
+          "inputs": [
+            {
+              "name": "opportunity_list",
+              "from_step": "survey_scope"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "art_plans",
+              "artifact_type": "art_plan",
+              "description": "Art Plans ready for organization"
+            }
+          ]
+        },
+        "identify_reference_needs": {
+          "action": "Identify recurring elements that need Reference Sheets for visual consistency.",
+          "depends_on": ["create_art_plans"],
+          "specific_agent": "art_director",
+          "guidance": "Elements appearing in 2+ illustrations need Reference Sheets: characters (protagonists, major NPCs), key locations (recurring settings), significant objects (important props). Mark spoiler levels appropriately.",
+          "inputs": [
+            {
+              "name": "art_plans",
+              "from_step": "create_art_plans"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "reference_needs",
+              "description": "List of characters, locations, and objects requiring Reference Sheets"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All worthy scenes have Art Plans",
+        "Each Art Plan has purpose, priority, caption, and alt text",
+        "Recurring elements needing sheets are identified"
+      ],
+
+      "on_success": {
+        "next_phases": ["reference_sheet_maintenance"]
+      }
+    },
+
+    "reference_sheet_maintenance": {
+      "name": "Reference Sheet Maintenance",
+      "purpose": "Create or update Reference Sheets for recurring elements to ensure visual consistency",
+      "depends_on": ["art_plan_creation"],
+
+      "steps": {
+        "create_sheets": {
+          "action": "Create Reference Sheets for elements that need them. For characters: physical description, attire, bearing. For locations: physical description, key features, atmosphere. For objects: physical description, distinctive features, context.",
+          "specific_agent": "art_director",
+          "guidance": "Be specific enough for generation consistency but not so prescriptive that it limits artistic expression. Mark spoiler_level appropriately. Characters are most common, but don't overlook key locations (the detective's office) or significant objects (the murder weapon).",
+          "inputs": [
+            {
+              "name": "reference_needs",
+              "from_step": "identify_reference_needs",
+              "from_phase": "art_plan_creation"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "reference_sheets",
+              "artifact_type": "reference_sheet",
+              "description": "New or updated Reference Sheets"
+            }
+          ]
+        },
+        "link_sheets_to_plans": {
+          "action": "Update Art Plans with reference_refs pointing to relevant Reference Sheets.",
+          "depends_on": ["create_sheets"],
+          "specific_agent": "art_director",
+          "guidance": "Every Art Plan featuring a sheeted element should reference that sheet. This ensures generation consistency across illustrations.",
+          "inputs": [
+            {
+              "name": "art_plans",
+              "from_step": "create_art_plans",
+              "from_phase": "art_plan_creation"
+            },
+            {
+              "name": "reference_sheets",
+              "from_step": "create_sheets"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "linked_art_plans",
+              "artifact_type": "art_plan",
+              "description": "Art Plans with reference sheet links"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All identified recurring elements have Reference Sheets",
+        "Art Plans reference appropriate sheets",
+        "Spoiler levels are marked correctly"
+      ],
+
+      "on_success": {
+        "next_phases": ["shotlist_organization"]
+      },
+
+      "is_rework_target": true
+    },
+
+    "shotlist_organization": {
+      "name": "Shotlist Organization",
+      "purpose": "Organize Art Plans into a Shotlist with summary statistics and budget tracking",
+      "depends_on": ["reference_sheet_maintenance"],
+
+      "steps": {
+        "build_shotlist": {
+          "action": "Create or update Shotlist for this scope. Organize Art Plans, compute statistics by purpose/priority/status.",
+          "specific_agent": "art_director",
+          "guidance": "The Shotlist is the planning manifest. It shows what's planned, what's prioritized, and what budget remains. Use this to communicate with Showrunner about generation priorities.",
+          "inputs": [
+            {
+              "name": "linked_art_plans",
+              "from_step": "link_sheets_to_plans",
+              "from_phase": "reference_sheet_maintenance"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "shotlist",
+              "artifact_type": "shotlist",
+              "description": "Organized shotlist with statistics"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Shotlist contains all Art Plans for scope",
+        "Statistics computed for purpose, priority, and status",
+        "Budget allocation noted if provided"
+      ],
+
+      "on_success": {
+        "next_phases": ["visual_language_review"]
+      }
+    },
+
+    "visual_language_review": {
+      "name": "Visual Language Review",
+      "purpose": "Style Lead reviews Art Plans for visual language alignment before generation",
+      "depends_on": ["shotlist_organization"],
+
+      "steps": {
+        "check_visual_alignment": {
+          "action": "Review Art Plans for alignment with established visual language: palette, composition conventions, motif consistency.",
+          "specific_agent": "style_lead",
+          "guidance": "Cross-reference Art Plans against Style Guide visual language section. Flag drift but don't block Art Director decisions on WHAT to illustrate—only flag HOW concerns (composition hints that violate conventions, subjects that clash with established aesthetic).",
+          "inputs": [
+            {
+              "name": "linked_art_plans",
+              "from_step": "link_sheets_to_plans",
+              "from_phase": "reference_sheet_maintenance"
+            },
+            {
+              "name": "style_guide",
+              "artifact_type": "style_guide"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "visual_notes",
+              "description": "Visual language alignment feedback"
+            }
+          ]
+        },
+        "apply_visual_feedback": {
+          "action": "Apply Style Lead feedback to Art Plans where warranted.",
+          "depends_on": ["check_visual_alignment"],
+          "specific_agent": "art_director",
+          "condition": "Visual notes contain actionable feedback",
+          "guidance": "Art Director has final say on WHAT and WHERE. Accept HOW feedback (composition, lighting hints) that aligns with Style Guide.",
+          "inputs": [
+            {
+              "name": "visual_notes",
+              "from_step": "check_visual_alignment"
+            },
+            {
+              "name": "linked_art_plans",
+              "from_step": "link_sheets_to_plans",
+              "from_phase": "reference_sheet_maintenance"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "refined_art_plans",
+              "artifact_type": "art_plan",
+              "description": "Art Plans with visual language alignment"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All Art Plans reviewed for visual language",
+        "Feedback applied where appropriate",
+        "No critical visual language conflicts"
+      ],
+
+      "on_success": {
+        "next_phases": ["ready_for_generation"]
+      },
+
+      "on_failure": {
+        "next_phases": ["art_plan_creation"],
+        "message": "Significant visual language issues. Revise Art Plans with Style Lead guidance."
+      }
+    },
+
+    "ready_for_generation": {
+      "name": "Ready for Generation",
+      "purpose": "Mark Art Plans as ready and await budget allocation for generation",
+      "depends_on": ["visual_language_review"],
+
+      "steps": {
+        "finalize_plans": {
+          "action": "Transition Art Plans from draft to ready state. Update Shotlist statistics.",
+          "specific_agent": "art_director",
+          "guidance": "Plans are now ready for generation when budget allows. The generate_image tool can be called for any ready plan. Priority order: must_have first, then nice_to_have, then optional.",
+          "inputs": [
+            {
+              "name": "refined_art_plans",
+              "from_step": "apply_visual_feedback",
+              "from_phase": "visual_language_review"
+            },
+            {
+              "name": "shotlist",
+              "from_step": "build_shotlist",
+              "from_phase": "shotlist_organization"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "ready_art_plans",
+              "artifact_type": "art_plan",
+              "description": "Art Plans ready for generation"
+            },
+            {
+              "name": "updated_shotlist",
+              "artifact_type": "shotlist",
+              "description": "Shotlist reflecting ready status"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All reviewed Art Plans are in ready state",
+        "Shotlist reflects current status",
+        "Generation can proceed when budget is allocated"
+      ],
+
+      "on_success": {
+        "message": "Art Plans ready for generation. Call generate_image tool for individual plans as budget allows. Update Shotlist as images are rendered.",
+        "end_playbook": true
+      }
+    }
+  },
+
+  "quality_criteria": ["integrity", "style", "accessibility"],
+
+  "max_rework_cycles": 2
+}
