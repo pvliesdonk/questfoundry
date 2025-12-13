@@ -63,6 +63,11 @@ docs = [
     "sphinx-rtd-theme>=2.0",
     "sphinx-autodoc-typehints>=2.0",
 ]
+rag = [
+    # Vector search for corpus knowledge
+    "sentence-transformers>=3.0",
+    "sqlite-vec>=0.1",
+]
 
 [project.scripts]
 qf = "questfoundry.cli:app"
