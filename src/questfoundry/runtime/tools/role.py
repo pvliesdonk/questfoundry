@@ -321,6 +321,13 @@ class WriteHotSot(BaseTool):
     artifact schema before writing. Returns LLM-friendly validation
     errors if data doesn't match schema.
 
+    System Fields (auto-managed by runtime):
+    - _id: Unique instance identifier (uses key)
+    - _type: Artifact type reference
+    - _created_at: Creation timestamp
+    - _created_by: Agent that created this artifact
+    - _lifecycle_state: Write-PROTECTED - only modifiable via transition protocol
+
     Returns {success: true, ...} when write succeeds.
     Returns {success: false, missing_fields: [...], invalid_fields: [...], hint: '...'}
     when validation fails - use consult_schema to check field requirements.
@@ -331,7 +338,8 @@ class WriteHotSot(BaseTool):
         "Write to hot_store (mutable draft storage). "
         "For artifact keys (hooks, briefs, scenes, etc.), validates against schema. "
         "Inputs: key (artifact_id or path like 'hooks'), value (data to write). "
-        "Returns success:false with missing_fields, invalid_fields, hint if validation fails."
+        "Returns success:false with missing_fields, invalid_fields, hint if validation fails. "
+        "Note: _lifecycle_state cannot be set directly - use request_lifecycle_transition."
     )
 
     # State is injected by executor
@@ -341,7 +349,7 @@ class WriteHotSot(BaseTool):
     role_id: str = Field(default="unknown")
 
     def _run(self, key: str, value: Any, **kwargs: Any) -> str:
-        """Write to hot_store with artifact validation."""
+        """Write to hot_store with artifact validation and system field management."""
         # Log any unexpected kwargs for debugging
         if kwargs:
             logger.debug(f"write_hot_sot received extra kwargs: {list(kwargs.keys())}")
@@ -362,6 +370,17 @@ class WriteHotSot(BaseTool):
                     "error": "value is required",
                     "hint": "Provide a dict with artifact fields. Use consult_schema to see required fields.",
                 }
+            )
+
+        # LIFECYCLE STATE PROTECTION (meta/ spec 5.1):
+        # Strip _lifecycle_state from writes - only modifiable via transition protocol
+        lifecycle_violation = False
+        if isinstance(value, dict) and "_lifecycle_state" in value:
+            attempted_state = value.pop("_lifecycle_state")
+            lifecycle_violation = True
+            logger.warning(
+                f"LIFECYCLE VIOLATION: {self.role_id} attempted to set _lifecycle_state='{attempted_state}' "
+                f"on artifact '{key}'. Field stripped - use request_lifecycle_transition tool."
             )
 
         # Artifact validation: detect artifact type from key
@@ -411,13 +430,21 @@ class WriteHotSot(BaseTool):
             # Write raw value
             hot_store[key] = value
 
-        return json.dumps(
-            {
-                "success": True,
-                "action": "updated" if is_update else "created",
-                "key": key,
-            }
-        )
+        response: dict[str, Any] = {
+            "success": True,
+            "action": "updated" if is_update else "created",
+            "key": key,
+        }
+
+        # Include lifecycle violation notice in response
+        if lifecycle_violation:
+            response["lifecycle_violation"] = True
+            response["notice"] = (
+                "_lifecycle_state was stripped from your write. "
+                "Use request_lifecycle_transition tool to change lifecycle state."
+            )
+
+        return json.dumps(response)
 
     def _validate_artifact(self, key: str, value: dict[str, Any]) -> dict[str, Any] | None:
         """Validate artifact data if key maps to a known artifact type.

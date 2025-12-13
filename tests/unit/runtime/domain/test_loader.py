@@ -85,12 +85,13 @@ class TestLoadStudio:
         studio_path = DOMAIN_V4_PATH / "studio.json"
         studio = load_studio(studio_path)
 
-        # Domain-v4 has 9 tools
-        assert len(studio.tools) == 9
+        # Domain-v4 has 10 tools (9 original + consult_corpus)
+        assert len(studio.tools) == 10
 
         # Check some specific tools exist
         assert "delegate" in studio.tools
         assert "consult_schema" in studio.tools
+        assert "consult_corpus" in studio.tools
         assert "generate_image" in studio.tools
 
         # Check tool structure

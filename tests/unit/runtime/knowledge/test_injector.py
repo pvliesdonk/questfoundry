@@ -153,3 +153,107 @@ class TestBuildAgentPrompt:
         # Check for severity groups
         assert "CRITICAL" in prompt
         # May have Required or Guidance sections
+
+
+class TestKnowledgeLayerCompliance:
+    """Tests verifying 5-layer knowledge strategy compliance with meta/ spec."""
+
+    def test_constitution_always_injected_when_required(self, studio) -> None:
+        """Spec: constitution layer = always_in_prompt.
+
+        When agent.knowledge_requirements.constitution is True,
+        constitution MUST be fully injected.
+        """
+        for agent in studio.agents.values():
+            if agent.knowledge_requirements.constitution:
+                prompt = build_agent_prompt(agent, studio)
+                assert "# Constitution" in prompt, (
+                    f"Agent {agent.id} requires constitution but it wasn't injected"
+                )
+
+    def test_must_know_fully_injected(self, studio) -> None:
+        """Spec: must_know layer = always_in_prompt.
+
+        Entries in agent.knowledge_requirements.must_know MUST
+        have their full content injected.
+        """
+        sr = studio.agents["showrunner"]
+        prompt = build_agent_prompt(sr, studio)
+
+        # SR has must_know = ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview"]
+        for entry_id in sr.knowledge_requirements.must_know:
+            entry = studio.knowledge_entries.get(entry_id)
+            if entry:
+                # Entry name should appear (full injection)
+                assert entry.name in prompt, (
+                    f"Must-know entry '{entry_id}' not fully injected for showrunner"
+                )
+
+    def test_role_specific_shows_menu_only(self, studio) -> None:
+        """Spec: role_specific layer = on_demand.
+
+        Entries in agent.knowledge_requirements.role_specific
+        should show summary menu + consult_knowledge instruction,
+        NOT full content.
+        """
+        sr = studio.agents["showrunner"]
+        prompt = build_agent_prompt(sr, studio)
+
+        # role_specific should create "Available Reference Material" section
+        if sr.knowledge_requirements.role_specific:
+            # Check for menu pattern
+            if any(
+                e in studio.knowledge_entries
+                for e in sr.knowledge_requirements.role_specific
+            ):
+                assert "Available Reference Material" in prompt
+                assert "consult_knowledge" in prompt
+
+    def test_can_lookup_creates_hint_only(self, studio) -> None:
+        """Spec: lookup layer = explicit_query.
+
+        Entries in can_lookup should NOT be injected,
+        only hinted via query_knowledge mention.
+        """
+        sr = studio.agents["showrunner"]
+        prompt = build_agent_prompt(sr, studio)
+
+        # can_lookup should create hint but not inject content
+        if sr.knowledge_requirements.can_lookup:
+            assert "query_knowledge" in prompt or "Lookup available" in prompt
+
+    def test_applicable_to_filters_access(self, studio) -> None:
+        """Spec: applicable_to restricts who can access an entry.
+
+        Entries with applicable_to.agents or applicable_to.archetypes
+        should only be accessible by matching agents.
+        """
+        from questfoundry.runtime.knowledge.injector import _agent_can_access
+
+        # Test with an entry that has applicable_to restrictions
+        for entry in studio.knowledge_entries.values():
+            if entry.applicable_to:
+                if entry.applicable_to.agents:
+                    # Only listed agents should have access
+                    for agent in studio.agents.values():
+                        can_access = _agent_can_access(agent, entry)
+                        if agent.id in entry.applicable_to.agents:
+                            assert can_access, (
+                                f"Agent {agent.id} should access {entry.id}"
+                            )
+                        elif not entry.applicable_to.archetypes:
+                            # If no archetypes listed either, should deny
+                            assert not can_access, (
+                                f"Agent {agent.id} should NOT access {entry.id}"
+                            )
+
+    def test_all_agents_get_valid_prompts(self, studio) -> None:
+        """Verify all agents in studio get valid, non-empty prompts."""
+        for agent_id, agent in studio.agents.items():
+            prompt = build_agent_prompt(agent, studio)
+
+            assert isinstance(prompt, str), f"Agent {agent_id} prompt is not string"
+            assert len(prompt) > 100, f"Agent {agent_id} prompt is too short"
+            assert f"# Your Role: {agent.name}" in prompt, (
+                f"Agent {agent_id} missing identity section"
+            )
