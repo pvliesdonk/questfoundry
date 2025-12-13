@@ -5,6 +5,8 @@ from questfoundry.runtime.executor import (
     ExecutorResult,
     ToolExecutor,
 )
+from questfoundry.runtime.orchestrator_v4 import OrchestratorV4
+from questfoundry.runtime.playbook_tracker import PlaybookTracker
 from questfoundry.runtime.state import (
     Artifact,
     DelegationResult,
@@ -45,4 +47,7 @@ __all__ = [
     "ExecutorCallbacks",
     "ExecutorResult",
     "ToolExecutor",
+    # v4 Orchestration
+    "OrchestratorV4",
+    "PlaybookTracker",
 ]
