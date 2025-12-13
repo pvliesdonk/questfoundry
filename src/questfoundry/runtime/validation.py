@@ -255,25 +255,12 @@ def _enhance_with_schema_guidance(
 ) -> None:
     """Enhance validation error with 9.4 validate-with-feedback fields.
 
-    Adds:
-    - valid_* fields showing what values ARE valid
-    - Enhanced invalid_fields with 'provided' values
-    - Actionable hint with specific fix instructions
+    Adds actionable hints based on common mistakes. Does NOT hardcode
+    domain-specific enum values - those come from Pydantic error messages.
     """
-    # Scene-specific: add valid schemas for gates and choices
+    # Scene-specific: help with common structural mistakes
     if artifact_type == "scene":
-        result["valid_gate_schema"] = {
-            "key": "<unique_id>",
-            "gate_type": "flag | item | stat | event",
-            "description": "<optional description>",
-        }
-        result["valid_choice_schema"] = {
-            "label": "<player-visible text>",
-            "target": "<destination_scene_id>",
-            "condition": "<optional gate condition>",
-        }
-
-        # Build specific hint based on what's wrong
+        # Build specific hints based on what's wrong (structural, not enum values)
         hints = []
         gates = data.get("gates", [])
         for i, gate in enumerate(gates):
@@ -281,7 +268,7 @@ def _enhance_with_schema_guidance(
                 if "gate_id" in gate and "key" not in gate:
                     hints.append(f"gates[{i}]: rename 'gate_id' to 'key'")
                 if "condition" in gate and "gate_type" not in gate:
-                    hints.append(f"gates[{i}]: add 'gate_type' (e.g., 'flag')")
+                    hints.append(f"gates[{i}]: add 'gate_type' field")
 
         choices = data.get("choices", [])
         for i, choice in enumerate(choices):
