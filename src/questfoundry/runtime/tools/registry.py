@@ -71,18 +71,20 @@ def _get_tool_implementations() -> dict[str, type[BaseTool] | None]:
         ReadArtifact,
         WriteArtifact,
     )
+    from questfoundry.runtime.tools.validate import ValidateArtifactTool
+    from questfoundry.runtime.tools.web_fetch import WebFetchTool
 
     return {
         # Core delegation tool
         "delegate": DelegateTo,
         # Schema/validation tools
         "consult_schema": ConsultSchema,
-        "validate_artifact": None,  # TODO: Implement
+        "validate_artifact": ValidateArtifactTool,
         # Search tools
         "search_workspace": ReadHotSot,  # Maps to workspace search
         # Web tools
         "web_search": WebSearchTool,
-        "web_fetch": None,  # TODO: Implement
+        "web_fetch": WebFetchTool,
         # Export tools
         "assemble_export": None,  # TODO: Implement
         # Generation tools (external, may not be available)
