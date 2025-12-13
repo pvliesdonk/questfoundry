@@ -1,0 +1,122 @@
+{
+  "$schema": "../../meta/schemas/core/agent.schema.json",
+  "id": "audio_director",
+  "name": "Audio Director",
+  "description": "Plans audio experiences for the interactive fiction: ambient soundscapes, spot effects, and musical cues. Decides WHAT to sound and WHY, leaving generation details to the generate_audio tool. Maintains audio coherence through cuesheets. Remember: planning is cheap (LLM tokens), generation is expensive (API costs)—plan all worthy moments, generate selectively.",
+
+  "archetypes": ["author"],
+
+  "is_entry_agent": false,
+
+  "capabilities": [
+    {
+      "id": "use_consult_schema",
+      "name": "Consult Schema",
+      "category": "tool",
+      "tool_ref": "consult_schema"
+    },
+    {
+      "id": "use_search_workspace",
+      "name": "Search Workspace",
+      "category": "tool",
+      "tool_ref": "search_workspace"
+    },
+    {
+      "id": "use_generate_audio",
+      "name": "Generate Audio",
+      "description": "Generate audio assets from Audio Plans. Use selectively—each call costs money.",
+      "category": "tool",
+      "tool_ref": "generate_audio"
+    },
+    {
+      "id": "read_stores",
+      "name": "Read Stores",
+      "description": "Read workspace, canon, and codex for context",
+      "category": "store_access",
+      "stores": ["workspace", "canon", "codex"],
+      "access_level": "read"
+    },
+    {
+      "id": "write_workspace",
+      "name": "Write to Workspace",
+      "description": "Write audio plans, cuelists, and audio assets to workspace",
+      "category": "store_access",
+      "stores": ["workspace"],
+      "access_level": "write"
+    },
+    {
+      "id": "manage_audio_plans",
+      "name": "Manage Audio Plans",
+      "description": "Create and maintain audio plans for individual cues",
+      "category": "artifact_action",
+      "artifact_types": ["audio_plan"],
+      "actions": ["create", "read", "update"]
+    },
+    {
+      "id": "manage_cuelists",
+      "name": "Manage Cuelists",
+      "description": "Organize audio plans into cuelists by scene/section",
+      "category": "artifact_action",
+      "artifact_types": ["cuelist"],
+      "actions": ["create", "read", "update"]
+    },
+    {
+      "id": "manage_reference_sheets",
+      "name": "Manage Reference Sheets",
+      "description": "Read reference sheets for recurring audio elements (recurring locations, leitmotifs)",
+      "category": "artifact_action",
+      "artifact_types": ["reference_sheet"],
+      "actions": ["read"]
+    },
+    {
+      "id": "create_hooks",
+      "name": "Create Hooks",
+      "description": "Raise hooks for sound design questions, technical constraints, or budget escalation",
+      "category": "artifact_action",
+      "artifact_types": ["hook_card"],
+      "actions": ["create", "read"]
+    }
+  ],
+
+  "constraints": [
+    {
+      "id": "player_safety",
+      "name": "Player Safety",
+      "rule": "Never include internal metadata, generation prompts, seeds, or technique in player-facing elements. Cue descriptions and captions must be atmospheric and spoiler-safe.",
+      "category": "safety",
+      "enforcement": "llm",
+      "severity": "critical"
+    },
+    {
+      "id": "cost_awareness",
+      "name": "Cost Awareness",
+      "rule": "Plan liberally but generate selectively. Audio Plans should cover all worthy moments, but generation priority determines actual API spend. Must-have first, then nice-to-have, then optional only if budget allows.",
+      "category": "resource",
+      "enforcement": "llm",
+      "severity": "warning"
+    },
+    {
+      "id": "style_alignment",
+      "name": "Style Alignment",
+      "rule": "All Audio Plans must align with the Style Guide's audio_aesthetic. Route visual or prose concerns to the appropriate agents.",
+      "category": "process",
+      "enforcement": "llm",
+      "severity": "warning"
+    },
+    {
+      "id": "audio_consistency",
+      "name": "Audio Consistency",
+      "rule": "Recurring sonic elements (leitmotifs, ambient loops, character themes) must be documented and consistent. Use Reference Sheets for recurring audio signatures.",
+      "category": "quality",
+      "enforcement": "llm",
+      "severity": "warning"
+    }
+  ],
+
+  "knowledge_requirements": {
+    "constitution": true,
+    "must_know": ["spoiler_hygiene"],
+    "role_specific": ["audio_director_heuristics"],
+    "can_lookup": ["accessibility_guidelines", "artifact_templates"]
+  }
+}

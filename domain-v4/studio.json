@@ -31,7 +31,8 @@
     "agents/lore_weaver.json",
     "agents/codex_curator.json",
     "agents/style_lead.json",
-    "agents/art_director.json"
+    "agents/art_director.json",
+    "agents/audio_director.json"
   ],
 
   "playbooks": [
@@ -40,7 +41,8 @@
     "playbooks/hook_harvest.json",
     "playbooks/binding_run.json",
     "playbooks/lore_deepening.json",
-    "playbooks/art_planning.json"
+    "playbooks/art_planning.json",
+    "playbooks/audio_planning.json"
   ],
 
   "artifact_types": [
@@ -57,11 +59,14 @@
     "artifact-types/style_guide.json",
     "artifact-types/art_plan.json",
     "artifact-types/shotlist.json",
-    "artifact-types/reference_sheet.json"
+    "artifact-types/reference_sheet.json",
+    "artifact-types/audio_plan.json",
+    "artifact-types/cuelist.json"
   ],
 
   "asset_types": [
-    "asset-types/illustration.json"
+    "asset-types/illustration.json",
+    "asset-types/audio.json"
   ],
 
   "tools": [
@@ -72,7 +77,8 @@
     "tools/web_search.json",
     "tools/web_fetch.json",
     "tools/assemble_export.json",
-    "tools/generate_image.json"
+    "tools/generate_image.json",
+    "tools/generate_audio.json"
   ],
 
   "quality_criteria": [
@@ -102,8 +108,8 @@
   },
 
   "metadata": {
-    "wave": 4,
-    "status": "visual_assets",
-    "notes": "Wave 4: Added Art Director agent and generate_image tool (replaces Illustrator agent). Expanded Style Lead to own unified style (prose + visual + audio). New playbook: Art Planning. New artifact types: style_guide, art_plan, shotlist, reference_sheet (generalized from character_sheet to support characters, locations, and objects). New asset type: illustration. Simplified Art Plan from v2's 36 fields to ~15 fields. Philosophy: plan everything (cheap), generate selectively (expensive)."
+    "wave": 5,
+    "status": "audio_assets",
+    "notes": "Wave 5: Added Audio Director agent and generate_audio tool (same pattern as Wave 4 visual). New playbook: Audio Planning. New artifact types: audio_plan, cuelist. New asset type: audio. Expanded Style Guide audio_aesthetic section from placeholder to full structure. Style Lead now reviews both Art Plans and Audio Plans. Philosophy matches visual: plan everything (cheap), generate selectively (expensive). Audio differences from visual: layering complexity, trigger timing, looping behavior."
   }
 }

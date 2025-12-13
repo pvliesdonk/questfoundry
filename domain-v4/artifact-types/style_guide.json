@@ -151,22 +151,87 @@
     {
       "name": "audio_aesthetic",
       "type": "object",
-      "description": "Audio style guidance (for future Wave 5)",
+      "description": "Audio style guidance for sound design",
       "properties": [
         {
           "name": "sonic_signature",
           "type": "text",
-          "description": "Overall audio character"
+          "description": "Overall audio character: the 'sound' of this world (e.g., 'industrial noir—hums, clicks, distant machinery')"
         },
         {
           "name": "ambient_style",
-          "type": "text",
-          "description": "Background audio approach"
+          "type": "object",
+          "description": "Background audio approach",
+          "properties": [
+            {
+              "name": "general_approach",
+              "type": "text",
+              "description": "How ambient audio is used (e.g., 'sparse and intentional', 'rich layered soundscapes')"
+            },
+            {
+              "name": "density",
+              "type": "string",
+              "description": "Typical ambient density",
+              "enum": ["sparse", "moderate", "rich"]
+            },
+            {
+              "name": "signature_elements",
+              "type": "array",
+              "items_type": "string",
+              "description": "Recurring ambient elements (e.g., 'rain', 'typewriter clatter', 'distant traffic')"
+            }
+          ]
         },
         {
           "name": "music_guidance",
+          "type": "object",
+          "description": "Musical style and instrumentation",
+          "properties": [
+            {
+              "name": "genre_influences",
+              "type": "array",
+              "items_type": "string",
+              "description": "Musical genre touchpoints (e.g., 'jazz noir', 'electronic ambient')"
+            },
+            {
+              "name": "instrumentation",
+              "type": "text",
+              "description": "Preferred instruments and sounds"
+            },
+            {
+              "name": "emotional_mapping",
+              "type": "text",
+              "description": "How music relates to emotional content"
+            }
+          ]
+        },
+        {
+          "name": "spot_effect_style",
           "type": "text",
-          "description": "Musical style and instrumentation"
+          "description": "Character of one-shot sound effects (e.g., 'realistic and grounded', 'stylized and punchy')"
+        },
+        {
+          "name": "voice_guidance",
+          "type": "object",
+          "description": "Guidance for voice/narration if used",
+          "properties": [
+            {
+              "name": "narrator_character",
+              "type": "text",
+              "description": "Character of narrator voice if applicable"
+            },
+            {
+              "name": "delivery_style",
+              "type": "text",
+              "description": "How narration should be delivered"
+            }
+          ]
+        },
+        {
+          "name": "avoid_sounds",
+          "type": "array",
+          "items_type": "string",
+          "description": "Sounds to avoid in this work"
         }
       ]
     },

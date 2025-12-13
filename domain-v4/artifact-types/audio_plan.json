@@ -1,0 +1,180 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "audio_plan",
+  "name": "Audio Plan",
+  "description": "Planning document for a single audio cue. Specifies what to sound and why, leaving sonic aesthetic details to the Style Guide. Planning is cheap—create Audio Plans for ALL worthy moments. Generation is selective based on priority and budget.",
+  "category": "document",
+
+  "fields": [
+    {
+      "name": "plan_id",
+      "type": "string",
+      "description": "Unique identifier (format: AUD-NNN)",
+      "required": true
+    },
+    {
+      "name": "section_ref",
+      "type": "string",
+      "description": "Reference to the section this audio supports (e.g., 'act1/foreman-gate')",
+      "required": true
+    },
+    {
+      "name": "cue_type",
+      "type": "string",
+      "description": "Type of audio cue",
+      "enum": ["ambient", "spot", "music", "voice"],
+      "required": true
+    },
+    {
+      "name": "purpose",
+      "type": "string",
+      "description": "Why this audio helps: atmosphere (set mood), signpost (signal transition or choice), recall (memory anchor), clarify (make described thing tangible)",
+      "enum": ["atmosphere", "signpost", "recall", "clarify"],
+      "required": true
+    },
+    {
+      "name": "purpose_rationale",
+      "type": "text",
+      "description": "1-2 sentences explaining why this audio helps the player here"
+    },
+    {
+      "name": "priority",
+      "type": "string",
+      "description": "Budget allocation priority",
+      "enum": ["must_have", "nice_to_have", "optional"],
+      "required": true
+    },
+    {
+      "name": "description",
+      "type": "text",
+      "description": "What the audio sounds like (concrete sounds, not abstractions)",
+      "required": true
+    },
+    {
+      "name": "emotional_target",
+      "type": "string",
+      "description": "The feeling this cue should evoke (e.g., 'unease', 'relief', 'urgency')"
+    },
+    {
+      "name": "duration",
+      "type": "object",
+      "description": "Target duration",
+      "properties": [
+        {
+          "name": "type",
+          "type": "string",
+          "enum": ["fixed", "loop", "variable"],
+          "description": "fixed (plays once), loop (repeats seamlessly), variable (fades in/out based on context)"
+        },
+        {
+          "name": "min_seconds",
+          "type": "number",
+          "description": "Minimum duration in seconds"
+        },
+        {
+          "name": "max_seconds",
+          "type": "number",
+          "description": "Maximum duration in seconds"
+        }
+      ]
+    },
+    {
+      "name": "trigger",
+      "type": "string",
+      "description": "When this cue plays",
+      "enum": ["section_enter", "choice_presented", "choice_selected", "condition_met", "manual"]
+    },
+    {
+      "name": "trigger_condition",
+      "type": "text",
+      "description": "Specific condition if trigger is 'condition_met'"
+    },
+    {
+      "name": "layering",
+      "type": "object",
+      "description": "How this cue relates to other audio",
+      "properties": [
+        {
+          "name": "layer",
+          "type": "string",
+          "enum": ["background", "foreground", "overlay"],
+          "description": "Audio layer priority"
+        },
+        {
+          "name": "ducks_others",
+          "type": "boolean",
+          "description": "Whether this cue lowers volume of other layers"
+        },
+        {
+          "name": "exclusive_group",
+          "type": "string",
+          "description": "If set, only one cue from this group plays at a time"
+        }
+      ]
+    },
+    {
+      "name": "caption",
+      "type": "string",
+      "description": "Optional player-safe caption (for accessibility or if displayed)",
+      "required": false
+    },
+    {
+      "name": "transcript",
+      "type": "text",
+      "description": "For voice cues: the spoken text. For other cues: description of sound for accessibility."
+    },
+    {
+      "name": "reference_refs",
+      "type": "array",
+      "description": "References to Reference Sheets for recurring sonic elements (leitmotifs, location ambients)",
+      "items_type": "string"
+    },
+    {
+      "name": "accessibility_notes",
+      "type": "text",
+      "description": "Accessibility concerns (volume spikes, trigger warnings, caption requirements)"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Plan is being created by Audio Director"
+      },
+      {
+        "id": "ready",
+        "name": "Ready",
+        "description": "Plan is complete and ready for generation when budget allows"
+      },
+      {
+        "id": "generating",
+        "name": "Generating",
+        "description": "Audio generation in progress"
+      },
+      {
+        "id": "rendered",
+        "name": "Rendered",
+        "description": "Audio has been generated and linked",
+        "terminal": true
+      },
+      {
+        "id": "deferred",
+        "name": "Deferred",
+        "description": "Plan exists but generation deferred (plan-only release)"
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "ready" },
+      { "from": "ready", "to": "generating" },
+      { "from": "ready", "to": "deferred" },
+      { "from": "generating", "to": "rendered" },
+      { "from": "generating", "to": "ready" },
+      { "from": "deferred", "to": "ready" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

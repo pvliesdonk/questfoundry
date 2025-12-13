@@ -1,0 +1,124 @@
+{
+  "$schema": "../../meta/schemas/core/asset-type.schema.json",
+  "id": "audio",
+  "name": "Audio",
+  "description": "Generated or sourced audio asset. Linked to an Audio Plan that specifies what it sounds like. Manifest includes determinism log for reproducibility (kept off-surface) and references to source materials.",
+
+  "category": "audio",
+
+  "mime_types": [
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "audio/flac"
+  ],
+
+  "max_size_bytes": 52428800,
+
+  "manifest_fields": [
+    {
+      "name": "audio_id",
+      "type": "string",
+      "description": "Unique identifier (format: AU-NNN)",
+      "required": true
+    },
+    {
+      "name": "source_plan_ref",
+      "type": "string",
+      "description": "Reference to the Audio Plan this was generated from",
+      "required": true
+    },
+    {
+      "name": "cue_type",
+      "type": "string",
+      "description": "Type of audio cue (copied from Audio Plan)",
+      "enum": ["ambient", "spot", "music", "voice"],
+      "required": true
+    },
+    {
+      "name": "caption",
+      "type": "string",
+      "description": "Player-safe caption (copied from Audio Plan)"
+    },
+    {
+      "name": "transcript",
+      "type": "text",
+      "description": "Accessibility transcript (copied from Audio Plan)",
+      "required": true
+    },
+    {
+      "name": "reference_refs",
+      "type": "array",
+      "items_type": "string",
+      "description": "Reference Sheets used for consistency (leitmotifs, location ambients)"
+    },
+    {
+      "name": "duration",
+      "type": "object",
+      "description": "Audio duration and looping info",
+      "properties": [
+        { "name": "seconds", "type": "number" },
+        { "name": "is_loop", "type": "boolean" },
+        { "name": "loop_point_seconds", "type": "number", "description": "Start point for seamless loop if applicable" }
+      ]
+    },
+    {
+      "name": "technical",
+      "type": "object",
+      "description": "Technical audio properties",
+      "properties": [
+        { "name": "sample_rate", "type": "integer" },
+        { "name": "channels", "type": "integer" },
+        { "name": "bit_depth", "type": "integer" }
+      ]
+    },
+    {
+      "name": "variants",
+      "type": "array",
+      "description": "If multiple variants exist, list all",
+      "items": {
+        "name": "variant",
+        "type": "object",
+        "properties": [
+          { "name": "variant_id", "type": "string" },
+          { "name": "file_path", "type": "string" },
+          { "name": "purpose", "type": "string", "description": "Why this variant exists (format, length, etc.)" },
+          { "name": "selected", "type": "boolean", "description": "Whether this is the primary variant" }
+        ]
+      }
+    },
+    {
+      "name": "determinism_log",
+      "type": "object",
+      "description": "Off-surface generation details for reproducibility. NEVER expose to players.",
+      "properties": [
+        { "name": "tool", "type": "string", "description": "Generation tool (e.g., 'elevenlabs', 'suno', 'stock-library', 'commissioned')" },
+        { "name": "prompt_used", "type": "string", "description": "Actual prompt sent to tool" },
+        { "name": "prompt_hash", "type": "string", "description": "SHA256 hash of prompt" },
+        { "name": "seed", "type": "string", "description": "Seed if deterministic generation supported" },
+        { "name": "model_version", "type": "string", "description": "Model version used" },
+        { "name": "settings", "type": "object", "description": "Tool-specific settings" },
+        { "name": "generated_at", "type": "string", "description": "ISO timestamp of generation" }
+      ]
+    },
+    {
+      "name": "approval_status",
+      "type": "string",
+      "description": "Review status",
+      "enum": ["pending_review", "approved", "needs_revision", "rejected"]
+    },
+    {
+      "name": "revision_notes",
+      "type": "string",
+      "description": "Notes if revision needed"
+    }
+  ],
+
+  "default_store": "exports",
+
+  "processing_hints": {
+    "normalize_volume": true,
+    "extract_metadata": true,
+    "compute_duration": true
+  }
+}

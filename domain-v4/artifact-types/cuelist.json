@@ -1,0 +1,194 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "cuelist",
+  "name": "Cuelist",
+  "description": "Index of Audio Plans for a scope (chapter, act, or book). Tracks priorities, statuses, cue types, and budget allocation. Audio Director creates cuelists to manage audio coverage. Each entry references a full Audio Plan.",
+  "category": "manifest",
+
+  "fields": [
+    {
+      "name": "cuelist_id",
+      "type": "string",
+      "description": "Unique identifier (format: CL-NNN)",
+      "required": true
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "description": "Descriptive title (e.g., 'Act I Audio Cues')",
+      "required": true
+    },
+    {
+      "name": "scope",
+      "type": "string",
+      "description": "What this cuelist covers",
+      "enum": ["chapter", "act", "book"],
+      "required": true
+    },
+    {
+      "name": "scope_ref",
+      "type": "string",
+      "description": "Reference to the scoped element (e.g., 'act1', 'chapter-03')"
+    },
+    {
+      "name": "summary",
+      "type": "object",
+      "description": "Overview statistics",
+      "properties": [
+        {
+          "name": "total_cues",
+          "type": "integer",
+          "description": "Total number of audio cue slots"
+        },
+        {
+          "name": "by_cue_type",
+          "type": "object",
+          "description": "Count by cue type",
+          "properties": [
+            { "name": "ambient", "type": "integer" },
+            { "name": "spot", "type": "integer" },
+            { "name": "music", "type": "integer" },
+            { "name": "voice", "type": "integer" }
+          ]
+        },
+        {
+          "name": "by_purpose",
+          "type": "object",
+          "description": "Count by purpose",
+          "properties": [
+            { "name": "atmosphere", "type": "integer" },
+            { "name": "signpost", "type": "integer" },
+            { "name": "recall", "type": "integer" },
+            { "name": "clarify", "type": "integer" }
+          ]
+        },
+        {
+          "name": "by_priority",
+          "type": "object",
+          "description": "Count by priority",
+          "properties": [
+            { "name": "must_have", "type": "integer" },
+            { "name": "nice_to_have", "type": "integer" },
+            { "name": "optional", "type": "integer" }
+          ]
+        },
+        {
+          "name": "by_status",
+          "type": "object",
+          "description": "Count by status",
+          "properties": [
+            { "name": "draft", "type": "integer" },
+            { "name": "ready", "type": "integer" },
+            { "name": "generating", "type": "integer" },
+            { "name": "rendered", "type": "integer" },
+            { "name": "deferred", "type": "integer" }
+          ]
+        }
+      ],
+      "required": true
+    },
+    {
+      "name": "budget",
+      "type": "object",
+      "description": "Budget allocation for this scope",
+      "properties": [
+        {
+          "name": "allocated_cues",
+          "type": "integer",
+          "description": "Number of audio cues budgeted for generation"
+        },
+        {
+          "name": "used_cues",
+          "type": "integer",
+          "description": "Number of audio cues already generated"
+        },
+        {
+          "name": "remaining_cues",
+          "type": "integer",
+          "description": "Budget remaining"
+        }
+      ]
+    },
+    {
+      "name": "entries",
+      "type": "array",
+      "description": "List of Audio Plan references with summary info",
+      "items": {
+        "name": "cuelist_entry",
+        "type": "object",
+        "properties": [
+          {
+            "name": "audio_plan_ref",
+            "type": "string",
+            "description": "Reference to the Audio Plan"
+          },
+          {
+            "name": "cue_summary",
+            "type": "string",
+            "description": "Brief cue description for quick reference"
+          },
+          {
+            "name": "cue_type",
+            "type": "string",
+            "description": "Cue type (from Audio Plan)"
+          },
+          {
+            "name": "purpose",
+            "type": "string",
+            "description": "Purpose (from Audio Plan)"
+          },
+          {
+            "name": "priority",
+            "type": "string",
+            "description": "Priority (from Audio Plan)"
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "description": "Current status (from Audio Plan)"
+          },
+          {
+            "name": "audio_ref",
+            "type": "string",
+            "description": "Reference to generated Audio asset (if rendered)"
+          }
+        ]
+      },
+      "required": true
+    },
+    {
+      "name": "notes",
+      "type": "text",
+      "description": "Audio Director notes on coverage, gaps, or priorities"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "planning",
+        "name": "Planning",
+        "description": "Cuelist is being populated with Audio Plans"
+      },
+      {
+        "id": "active",
+        "name": "Active",
+        "description": "Cuelist is ready and generation can proceed"
+      },
+      {
+        "id": "complete",
+        "name": "Complete",
+        "description": "All budgeted audio cues have been generated",
+        "terminal": true
+      }
+    ],
+    "initial_state": "planning",
+    "transitions": [
+      { "from": "planning", "to": "active" },
+      { "from": "active", "to": "complete" },
+      { "from": "active", "to": "planning" }
+    ]
+  },
+
+  "default_store": "workspace"
+}

@@ -1,0 +1,132 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "generate_audio",
+  "name": "Generate Audio",
+  "description": "Generate an audio asset from an Audio Plan. Consults Style Guide for sonic aesthetic. Returns an audio asset with determinism log (kept off-surface).\n\nThis tool is expensive—use only when budget allows. Audio Plans should exist for ALL worthy moments, but generation is selective based on priority.\n\nRuntime provides implementation (TTS, music generation, sound library, commission queue, etc.).",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "audio_plan_ref": {
+        "type": "string",
+        "description": "Reference to the Audio Plan artifact (e.g., 'AUD-001')"
+      },
+      "style_guide_ref": {
+        "type": "string",
+        "description": "Reference to the Style Guide for sonic aesthetic guidance"
+      },
+      "reference_refs": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "References to Reference Sheets for recurring sonic elements (leitmotifs, location ambients)"
+      },
+      "output_format": {
+        "type": "string",
+        "enum": ["mp3", "ogg", "wav", "flac"],
+        "default": "mp3",
+        "description": "Output audio format"
+      },
+      "duration_hint": {
+        "type": "object",
+        "properties": {
+          "min_seconds": { "type": "number", "minimum": 0.5 },
+          "max_seconds": { "type": "number", "maximum": 600 }
+        },
+        "description": "Target duration range. If not specified, uses Audio Plan guidance."
+      },
+      "variants_requested": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4,
+        "default": 1,
+        "description": "Number of variants to generate for selection"
+      }
+    },
+    "required": ["audio_plan_ref"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "asset": {
+        "type": "object",
+        "description": "The generated audio asset",
+        "properties": {
+          "asset_id": { "type": "string" },
+          "file_path": { "type": "string" },
+          "file_hash": { "type": "string" },
+          "mime_type": { "type": "string" },
+          "size_bytes": { "type": "integer" },
+          "duration_seconds": { "type": "number" },
+          "sample_rate": { "type": "integer" },
+          "channels": { "type": "integer" }
+        }
+      },
+      "source_plan": {
+        "type": "string",
+        "description": "Reference to the Audio Plan this was generated from"
+      },
+      "determinism_log": {
+        "type": "object",
+        "description": "Off-surface generation details for reproducibility",
+        "properties": {
+          "tool": { "type": "string", "description": "Generation tool used (e.g., 'elevenlabs', 'suno', 'stock-library')" },
+          "prompt_hash": { "type": "string", "description": "Hash of the prompt used" },
+          "seed": { "type": ["integer", "null"], "description": "Seed if deterministic generation supported" },
+          "model_version": { "type": "string" },
+          "settings": { "type": "object", "description": "Tool-specific settings" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "variants": {
+        "type": "array",
+        "description": "If multiple variants requested, all generated options",
+        "items": {
+          "type": "object",
+          "properties": {
+            "variant_id": { "type": "string" },
+            "file_path": { "type": "string" },
+            "selected": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+
+  "timeout_ms": 180000,
+
+  "retry_policy": {
+    "max_retries": 1,
+    "initial_delay_ms": 5000,
+    "backoff_multiplier": 2,
+    "retryable_errors": ["timeout", "service_unavailable"]
+  },
+
+  "rate_limit": {
+    "requests_per_minute": 10,
+    "requests_per_agent_per_minute": 5
+  },
+
+  "cost_tier": "high",
+
+  "examples": [
+    {
+      "description": "Generate ambient soundscape for a location",
+      "input": {
+        "audio_plan_ref": "AUD-001",
+        "style_guide_ref": "SG-001",
+        "output_format": "ogg",
+        "duration_hint": { "min_seconds": 30, "max_seconds": 60 }
+      }
+    },
+    {
+      "description": "Generate spot effect with variants for selection",
+      "input": {
+        "audio_plan_ref": "AUD-015",
+        "style_guide_ref": "SG-001",
+        "output_format": "mp3",
+        "variants_requested": 2
+      }
+    }
+  ]
+}

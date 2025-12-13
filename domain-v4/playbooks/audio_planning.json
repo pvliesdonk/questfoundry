@@ -1,0 +1,386 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "audio_planning",
+  "name": "Audio Planning",
+  "version": "1.0.0",
+  "purpose": "Plan audio content for a narrative scope. Create Audio Plans for all worthy moments (planning is cheap), organize into Cuelists with priorities, maintain Reference Sheets for sonic consistency. Generation is separate and budget-constrained.",
+
+  "description": "Audio Planning is the audio content loop. Audio Director decides WHAT to sound and WHY—not HOW. The philosophy: plan everything worth sounding (cheap), generate selectively based on budget (expensive). Reference Sheets ensure recurring sonic elements (leitmotifs, location ambients) stay consistent. Style Lead validates audio aesthetic alignment. Generation happens via the generate_audio tool when budget and priorities align.",
+
+  "triggers": [
+    {
+      "condition": "New chapter, act, or book scope ready for audio planning",
+      "priority": 1
+    },
+    {
+      "condition": "Sections from Scene Weave approved and stable",
+      "priority": 1
+    },
+    {
+      "condition": "Reference Sheet needed for recurring sonic element (leitmotif, location ambient)",
+      "priority": 2
+    },
+    {
+      "condition": "Budget allocated for audio generation",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [],
+    "optional_artifacts": [
+      {
+        "type": "section",
+        "alias": "sections",
+        "description": "Approved sections to plan audio for",
+        "state": "approved"
+      },
+      {
+        "type": "style_guide",
+        "alias": "style_guide",
+        "description": "Unified style guide for audio aesthetic",
+        "state": "active"
+      }
+    ],
+    "context_requirements": [
+      "Style Guide from workspace (audio_aesthetic: sonic signature, ambient style, music guidance)",
+      "Existing Reference Sheets for recurring sonic elements",
+      "Current Cuelist if updating an existing scope",
+      "Generation budget if moving to render phase"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "audio_plan",
+        "alias": "audio_plans",
+        "description": "Audio Plans for worthy moments",
+        "state": "ready"
+      }
+    ],
+    "optional_artifacts": [
+      {
+        "type": "cuelist",
+        "alias": "cuelist",
+        "description": "Organized index of Audio Plans with priorities",
+        "state": "active"
+      },
+      {
+        "type": "reference_sheet",
+        "alias": "reference_sheets",
+        "description": "New or updated Reference Sheets for recurring sonic elements",
+        "state": "active"
+      },
+      {
+        "type": "hook_card",
+        "alias": "audio_hooks",
+        "description": "Questions about audio direction",
+        "state": "proposed"
+      }
+    ],
+    "context_requirements": []
+  },
+
+  "entry_phase": "audio_plan_creation",
+
+  "phases": {
+    "audio_plan_creation": {
+      "name": "Audio Plan Creation",
+      "purpose": "Identify audio opportunities and create Audio Plans for all worthy moments",
+
+      "steps": {
+        "survey_scope": {
+          "action": "Review sections to identify audio opportunities. Consider: atmosphere-setting moments, tension-building scenes, important choices, recurring locations, emotional beats.",
+          "specific_agent": "audio_director",
+          "guidance": "Think like a player: where would sound help them feel immersed, remember something, or notice a cue? Plan liberally—we can prioritize later. Look for: atmosphere (set mood), signpost (signal transition or choice), recall (memory anchor), clarify (make things tangible).",
+          "inputs": [
+            {
+              "name": "sections",
+              "artifact_type": "section"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "opportunity_list",
+              "description": "List of moments/scenes worth audio enhancement with rationale"
+            }
+          ]
+        },
+        "create_audio_plans": {
+          "action": "Create Audio Plan for each identified opportunity. Specify cue type, description, purpose, priority, and accessibility transcript.",
+          "depends_on": ["survey_scope"],
+          "specific_agent": "audio_director",
+          "guidance": "Every Audio Plan must have a clear purpose (atmosphere/signpost/recall/clarify) and cue type (ambient/spot/music/voice). Set realistic priorities: must_have for critical moments, nice_to_have for enhancing moments, optional for nice touches. Write accessible transcripts.",
+          "inputs": [
+            {
+              "name": "opportunity_list",
+              "from_step": "survey_scope"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio_plans",
+              "artifact_type": "audio_plan",
+              "description": "Audio Plans ready for organization"
+            }
+          ]
+        },
+        "identify_reference_needs": {
+          "action": "Identify recurring sonic elements that need Reference Sheets for consistency.",
+          "depends_on": ["create_audio_plans"],
+          "specific_agent": "audio_director",
+          "guidance": "Sonic elements appearing in 2+ cues need consistency tracking: location ambients (recurring settings like 'the office'), character leitmotifs (if character has a musical theme), significant objects with sound signatures. These can use subject_type 'location' or 'object' Reference Sheets with audio notes.",
+          "inputs": [
+            {
+              "name": "audio_plans",
+              "from_step": "create_audio_plans"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "reference_needs",
+              "description": "List of recurring sonic elements requiring Reference Sheets"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All worthy moments have Audio Plans",
+        "Each Audio Plan has cue type, purpose, priority, and transcript",
+        "Recurring sonic elements needing sheets are identified"
+      ],
+
+      "on_success": {
+        "next_phases": ["reference_sheet_maintenance"]
+      }
+    },
+
+    "reference_sheet_maintenance": {
+      "name": "Reference Sheet Maintenance",
+      "purpose": "Create or update Reference Sheets for recurring sonic elements to ensure audio consistency",
+      "depends_on": ["audio_plan_creation"],
+
+      "steps": {
+        "create_sheets": {
+          "action": "Create Reference Sheets for sonic elements that need them. For locations: characteristic ambient sounds, atmosphere. For objects: sound signatures. For characters with leitmotifs: musical theme description.",
+          "specific_agent": "audio_director",
+          "guidance": "Audio consistency matters less per-cue than visual (sounds don't need to match as precisely as faces), but key sonic signatures should be documented. Use subject_type 'location' or 'object' with audio-focused descriptions. Leitmotifs are rare—only for significant characters.",
+          "inputs": [
+            {
+              "name": "reference_needs",
+              "from_step": "identify_reference_needs",
+              "from_phase": "audio_plan_creation"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "reference_sheets",
+              "artifact_type": "reference_sheet",
+              "description": "New or updated Reference Sheets"
+            }
+          ]
+        },
+        "link_sheets_to_plans": {
+          "action": "Update Audio Plans with reference_refs pointing to relevant Reference Sheets.",
+          "depends_on": ["create_sheets"],
+          "specific_agent": "audio_director",
+          "guidance": "Every Audio Plan featuring a sheeted sonic element should reference that sheet. This ensures consistency across related cues (all 'office' ambients sound similar).",
+          "inputs": [
+            {
+              "name": "audio_plans",
+              "from_step": "create_audio_plans",
+              "from_phase": "audio_plan_creation"
+            },
+            {
+              "name": "reference_sheets",
+              "from_step": "create_sheets"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "linked_audio_plans",
+              "artifact_type": "audio_plan",
+              "description": "Audio Plans with reference sheet links"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All identified recurring sonic elements have Reference Sheets",
+        "Audio Plans reference appropriate sheets",
+        "Spoiler levels are marked correctly"
+      ],
+
+      "on_success": {
+        "next_phases": ["cuelist_organization"]
+      },
+
+      "is_rework_target": true
+    },
+
+    "cuelist_organization": {
+      "name": "Cuelist Organization",
+      "purpose": "Organize Audio Plans into a Cuelist with summary statistics and budget tracking",
+      "depends_on": ["reference_sheet_maintenance"],
+
+      "steps": {
+        "build_cuelist": {
+          "action": "Create or update Cuelist for this scope. Organize Audio Plans, compute statistics by cue type/purpose/priority/status.",
+          "specific_agent": "audio_director",
+          "guidance": "The Cuelist is the planning manifest. It shows what's planned, what's prioritized, and what budget remains. Use this to communicate with Showrunner about generation priorities.",
+          "inputs": [
+            {
+              "name": "linked_audio_plans",
+              "from_step": "link_sheets_to_plans",
+              "from_phase": "reference_sheet_maintenance"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "cuelist",
+              "artifact_type": "cuelist",
+              "description": "Organized cuelist with statistics"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Cuelist contains all Audio Plans for scope",
+        "Statistics computed for cue type, purpose, priority, and status",
+        "Budget allocation noted if provided"
+      ],
+
+      "on_success": {
+        "next_phases": ["audio_aesthetic_review"]
+      }
+    },
+
+    "audio_aesthetic_review": {
+      "name": "Audio Aesthetic Review",
+      "purpose": "Style Lead reviews Audio Plans for audio aesthetic alignment before generation",
+      "depends_on": ["cuelist_organization"],
+
+      "steps": {
+        "check_audio_alignment": {
+          "action": "Review Audio Plans for alignment with established audio aesthetic: sonic signature, ambient style, musical guidance.",
+          "specific_agent": "style_lead",
+          "guidance": "Cross-reference Audio Plans against Style Guide audio_aesthetic section. Flag drift but don't block Audio Director decisions on WHAT to sound—only flag HOW concerns (descriptions that violate sonic signature, cue types that clash with established aesthetic).",
+          "inputs": [
+            {
+              "name": "linked_audio_plans",
+              "from_step": "link_sheets_to_plans",
+              "from_phase": "reference_sheet_maintenance"
+            },
+            {
+              "name": "style_guide",
+              "artifact_type": "style_guide"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio_notes",
+              "description": "Audio aesthetic alignment feedback"
+            }
+          ]
+        },
+        "apply_audio_feedback": {
+          "action": "Apply Style Lead feedback to Audio Plans where warranted.",
+          "depends_on": ["check_audio_alignment"],
+          "specific_agent": "audio_director",
+          "condition": "Audio notes contain actionable feedback",
+          "guidance": "Audio Director has final say on WHAT and WHERE. Accept HOW feedback (sonic descriptions, layering guidance) that aligns with Style Guide.",
+          "inputs": [
+            {
+              "name": "audio_notes",
+              "from_step": "check_audio_alignment"
+            },
+            {
+              "name": "linked_audio_plans",
+              "from_step": "link_sheets_to_plans",
+              "from_phase": "reference_sheet_maintenance"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "refined_audio_plans",
+              "artifact_type": "audio_plan",
+              "description": "Audio Plans with audio aesthetic alignment"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All Audio Plans reviewed for audio aesthetic",
+        "Feedback applied where appropriate",
+        "No critical audio aesthetic conflicts"
+      ],
+
+      "on_success": {
+        "next_phases": ["ready_for_generation"]
+      },
+
+      "on_failure": {
+        "next_phases": ["audio_plan_creation"],
+        "message": "Significant audio aesthetic issues. Revise Audio Plans with Style Lead guidance."
+      }
+    },
+
+    "ready_for_generation": {
+      "name": "Ready for Generation",
+      "purpose": "Mark Audio Plans as ready and await budget allocation for generation",
+      "depends_on": ["audio_aesthetic_review"],
+
+      "steps": {
+        "finalize_plans": {
+          "action": "Transition Audio Plans from draft to ready state. Update Cuelist statistics.",
+          "specific_agent": "audio_director",
+          "guidance": "Plans are now ready for generation when budget allows. The generate_audio tool can be called for any ready plan. Priority order: must_have first, then nice_to_have, then optional.",
+          "inputs": [
+            {
+              "name": "refined_audio_plans",
+              "from_step": "apply_audio_feedback",
+              "from_phase": "audio_aesthetic_review"
+            },
+            {
+              "name": "cuelist",
+              "from_step": "build_cuelist",
+              "from_phase": "cuelist_organization"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "ready_audio_plans",
+              "artifact_type": "audio_plan",
+              "description": "Audio Plans ready for generation"
+            },
+            {
+              "name": "updated_cuelist",
+              "artifact_type": "cuelist",
+              "description": "Cuelist reflecting ready status"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All reviewed Audio Plans are in ready state",
+        "Cuelist reflects current status",
+        "Generation can proceed when budget is allocated"
+      ],
+
+      "on_success": {
+        "message": "Audio Plans ready for generation. Call generate_audio tool for individual plans as budget allows. Update Cuelist as audio is rendered.",
+        "end_playbook": true
+      }
+    }
+  },
+
+  "quality_criteria": ["integrity", "style", "accessibility"],
+
+  "max_rework_cycles": 2
+}
