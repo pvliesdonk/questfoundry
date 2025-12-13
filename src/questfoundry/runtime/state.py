@@ -80,14 +80,31 @@ class Artifact(BaseModel):
     Artifacts follow a lifecycle (typically draft -> review -> final) and
     can be stored in either the hot store (mutable) or cold store (immutable).
 
+    System Fields (per meta/ spec)
+    ------------------------------
+    These fields are managed by the runtime, not directly settable by agents:
+
+    - ``id`` (_id): Unique instance identifier
+    - ``type`` (_type): Artifact type reference
+    - ``version`` (_version): Instance version (incremented on update)
+    - ``created_at`` (_created_at): Creation timestamp
+    - ``updated_at`` (_updated_at): Last modification timestamp
+    - ``created_by`` (_created_by): Agent that created this artifact
+    - ``lifecycle_state`` (_lifecycle_state): Write-protected, use transition protocol
+
     Attributes
     ----------
     id : str
         Unique artifact identifier (e.g., "hook-001", "scene-intro").
     type : str
         Artifact type name matching an ArtifactTypeIR (e.g., "hook_card").
+    version : int
+        Instance version number, incremented on each update. Defaults to 1.
     status : str
         Current lifecycle status. Defaults to "draft".
+    lifecycle_state : str
+        Formal lifecycle state (write-protected). Defaults to "draft".
+        Use request_lifecycle_transition tool to change.
     created_at : datetime
         When the artifact was created. Defaults to now.
     updated_at : datetime
@@ -127,8 +144,14 @@ class Artifact(BaseModel):
     type: str
     """Artifact type name (matches ArtifactTypeIR.id)."""
 
+    version: int = 1
+    """Instance version number (incremented on updates)."""
+
     status: str = "draft"
     """Current lifecycle status."""
+
+    lifecycle_state: str = "draft"
+    """Formal lifecycle state (write-protected, use transition protocol)."""
 
     created_at: datetime = Field(default_factory=datetime.now)
     """Creation timestamp."""

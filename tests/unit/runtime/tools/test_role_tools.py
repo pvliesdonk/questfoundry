@@ -276,6 +276,7 @@ class TestWorkflowIntentNudging:
         workspace_store = MagicMock()
         workspace_store.id = "workspace"
         workspace_store.artifact_types = ["section_brief", "hook_card"]
+        workspace_store.semantics = "mutable"  # String, not MagicMock
         workspace_store.workflow_intent = MagicMock()
         workspace_store.workflow_intent.production_guidance = "all"
         workspace_store.workflow_intent.designated_producers = []
@@ -283,6 +284,7 @@ class TestWorkflowIntentNudging:
         codex_store = MagicMock()
         codex_store.id = "codex"
         codex_store.artifact_types = ["codex_entry"]
+        codex_store.semantics = "cold"  # String, not MagicMock
         codex_store.workflow_intent = MagicMock()
         codex_store.workflow_intent.production_guidance = "exclusive"
         codex_store.workflow_intent.designated_producers = ["codex_curator"]
@@ -290,6 +292,7 @@ class TestWorkflowIntentNudging:
         canon_store = MagicMock()
         canon_store.id = "canon"
         canon_store.artifact_types = ["canon_pack"]
+        canon_store.semantics = "cold"  # String, not MagicMock
         canon_store.workflow_intent = MagicMock()
         canon_store.workflow_intent.production_guidance = "exclusive"
         canon_store.workflow_intent.designated_producers = ["lore_weaver"]
@@ -446,3 +449,249 @@ class TestWorkflowIntentNudging:
 
         assert result["success"] is True
         assert "workflow_nudge" not in result
+
+
+class TestSystemFieldsVersion:
+    """Tests for system fields: version tracking and lifecycle_state."""
+
+    @pytest.fixture
+    def state(self):
+        """Empty state for testing."""
+        return {"hot_store": {}}
+
+    @pytest.fixture
+    def write_tool(self, state):
+        """Create WriteHotSot tool with state injected."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"
+        return tool
+
+    def test_new_artifact_gets_version_1(self, write_tool, state):
+        """Test that new artifacts start with version 1."""
+        # Use a key that doesn't trigger schema validation
+        result = json.loads(write_tool._run(
+            key="draft_1",
+            value={"type": "draft", "data": {"content": "Hello"}}
+        ))
+
+        assert result["success"] is True
+        assert result.get("version") == 1
+
+        stored = state["hot_store"]["draft_1"]
+        assert stored.version == 1
+
+    def test_update_increments_version(self, write_tool, state):
+        """Test that updating an artifact increments version."""
+        # Use non-validating key
+        write_tool._run(
+            key="draft_1",
+            value={"type": "draft", "data": {"content": "Initial"}}
+        )
+
+        # Update it
+        result = json.loads(write_tool._run(
+            key="draft_1",
+            value={"type": "draft", "data": {"content": "Updated"}}
+        ))
+
+        assert result["success"] is True
+        assert result.get("version") == 2
+        assert result.get("version_note") == "Version incremented on update"
+
+        stored = state["hot_store"]["draft_1"]
+        assert stored.version == 2
+
+    def test_multiple_updates_increment_version(self, write_tool, state):
+        """Test that multiple updates increment version correctly."""
+        # Use non-validating key
+        write_tool._run(key="draft_1", value={"type": "draft", "data": {"v": 1}})
+        write_tool._run(key="draft_1", value={"type": "draft", "data": {"v": 2}})
+        result = json.loads(write_tool._run(
+            key="draft_1", value={"type": "draft", "data": {"v": 3}}
+        ))
+
+        assert result.get("version") == 3
+        assert state["hot_store"]["draft_1"].version == 3
+
+    def test_new_artifact_gets_draft_lifecycle_state(self, write_tool, state):
+        """Test that new artifacts get lifecycle_state='draft'."""
+        # Use non-validating key
+        write_tool._run(
+            key="draft_1",
+            value={"type": "draft", "data": {"content": "Hello"}}
+        )
+
+        stored = state["hot_store"]["draft_1"]
+        assert stored.lifecycle_state == "draft"
+
+    def test_lifecycle_state_preserved_on_update(self, write_tool, state):
+        """Test that lifecycle_state is preserved when updating."""
+        from questfoundry.runtime.state import Artifact
+
+        # Create artifact with custom lifecycle_state (simulating transition)
+        state["hot_store"]["draft_1"] = Artifact(
+            id="draft_1",
+            type="draft",
+            version=1,
+            lifecycle_state="in_review",
+            created_by="scene_smith",
+            data={"content": "Initial"}
+        )
+
+        # Update it
+        result = json.loads(write_tool._run(
+            key="draft_1",
+            value={"type": "draft", "data": {"content": "Updated"}}
+        ))
+
+        assert result["success"] is True
+        stored = state["hot_store"]["draft_1"]
+        assert stored.lifecycle_state == "in_review"  # Preserved!
+        assert stored.version == 2  # But version incremented
+
+    def test_lifecycle_state_not_settable_via_write(self, write_tool, state):
+        """Test that lifecycle_state cannot be set directly via value."""
+        # Use non-validating key
+        result = json.loads(write_tool._run(
+            key="draft_1",
+            value={
+                "type": "draft",
+                "data": {"content": "Hello"},
+                "lifecycle_state": "approved"  # Should be ignored
+            }
+        ))
+
+        assert result["success"] is True
+        stored = state["hot_store"]["draft_1"]
+        # Should be default "draft", not "approved"
+        assert stored.lifecycle_state == "draft"
+
+
+class TestStoreSemanticInfo:
+    """Tests for store semantic information in responses."""
+
+    @pytest.fixture
+    def mock_studio(self):
+        """Create a mock studio with stores having different semantics."""
+        from unittest.mock import MagicMock
+
+        workspace_store = MagicMock()
+        workspace_store.id = "workspace"
+        workspace_store.artifact_types = ["section_brief", "hook_card"]
+        workspace_store.semantics = "mutable"
+        workspace_store.workflow_intent = MagicMock()
+        workspace_store.workflow_intent.production_guidance = "all"
+        workspace_store.workflow_intent.designated_producers = []
+
+        canon_store = MagicMock()
+        canon_store.id = "canon"
+        canon_store.artifact_types = ["section", "canon_pack"]
+        canon_store.semantics = "cold"
+        canon_store.workflow_intent = MagicMock()
+        canon_store.workflow_intent.production_guidance = "exclusive"
+        canon_store.workflow_intent.designated_producers = ["lore_weaver"]
+
+        exports_store = MagicMock()
+        exports_store.id = "exports"
+        exports_store.artifact_types = ["build_manifest"]
+        exports_store.semantics = "versioned"
+        exports_store.workflow_intent = MagicMock()
+        exports_store.workflow_intent.production_guidance = "exclusive"
+        exports_store.workflow_intent.designated_producers = ["book_binder"]
+
+        studio = MagicMock()
+        studio.stores = {
+            "workspace": workspace_store,
+            "canon": canon_store,
+            "exports": exports_store,
+        }
+        return studio
+
+    @pytest.fixture
+    def state(self):
+        return {"hot_store": {}}
+
+    def test_mutable_store_no_semantic_info(self, state, mock_studio):
+        """Test that mutable store artifacts don't get semantic info."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"
+        tool.studio = mock_studio
+
+        # Use non-validating key to avoid schema validation triggering
+        result = json.loads(tool._run(
+            key="workspace_draft_1",
+            value={"type": "section_brief", "data": {"title": "Test"}}
+        ))
+
+        assert result["success"] is True
+        # Mutable stores don't need semantic info
+        assert "store_semantics" not in result
+
+    def test_cold_store_includes_semantic_info(self, state, mock_studio):
+        """Test that cold store artifacts include semantic info."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "lore_weaver"  # Designated producer
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="section_1",
+            value={"type": "section", "data": {"content": "Test"}}
+        ))
+
+        assert result["success"] is True
+        assert result.get("target_store") == "canon"
+        assert result.get("store_semantics") == "cold"
+
+    def test_workflow_nudge_includes_store_semantics(self, state, mock_studio):
+        """Test that workflow nudges include store semantics."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"  # Not designated for canon
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="section_1",
+            value={"type": "section", "data": {"content": "Test"}}
+        ))
+
+        assert result["success"] is True
+        assert result.get("workflow_nudge") is True
+        assert result.get("store_semantics") == "cold"
+        assert result.get("target_store") == "canon"
+
+    def test_get_store_info_method(self, mock_studio):
+        """Test the _get_store_info helper method."""
+        tool = WriteHotSot()
+        tool.studio = mock_studio
+
+        # Mutable store
+        info = tool._get_store_info("section_brief")
+        assert info is not None
+        assert info["store_id"] == "workspace"
+        assert info["semantics"] == "mutable"
+        assert "note" not in info  # No special note for mutable
+
+        # Cold store
+        info = tool._get_store_info("section")
+        assert info is not None
+        assert info["store_id"] == "canon"
+        assert info["semantics"] == "cold"
+        assert "immutable" in info.get("note", "").lower()
+
+        # Versioned store
+        info = tool._get_store_info("build_manifest")
+        assert info is not None
+        assert info["store_id"] == "exports"
+        assert info["semantics"] == "versioned"
+        assert "version" in info.get("note", "").lower()
+
+    def test_unknown_artifact_type_no_store_info(self, mock_studio):
+        """Test that unknown artifact types return None."""
+        tool = WriteHotSot()
+        tool.studio = mock_studio
+
+        info = tool._get_store_info("unknown_type")
+        assert info is None

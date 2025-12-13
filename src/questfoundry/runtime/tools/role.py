@@ -397,6 +397,7 @@ class WriteHotSot(BaseTool):
             return {
                 "workflow_nudge": True,
                 "store": store.id,
+                "store_semantics": store.semantics,
                 "artifact_type": artifact_type,
                 "designated_producers": designated,
                 "notice": (
@@ -406,6 +407,48 @@ class WriteHotSot(BaseTool):
                     f"Consider delegating to {designated[0]} for canonical writes."
                 ),
             }
+
+        return None
+
+    def _get_store_info(self, artifact_type: str | None) -> dict[str, Any] | None:
+        """Get store information for an artifact type.
+
+        Returns store semantics info to help agents understand artifact lifecycle.
+
+        Args:
+            artifact_type: The artifact type being written
+
+        Returns:
+            Dict with store info, or None if not found
+        """
+        if not self.studio or not artifact_type:
+            return None
+
+        for store in self.studio.stores.values():
+            if artifact_type in store.artifact_types:
+                info: dict[str, Any] = {
+                    "store_id": store.id,
+                    "semantics": store.semantics,
+                }
+
+                # Add semantic-specific notes
+                if store.semantics == "cold":
+                    info["note"] = (
+                        f"After promotion to '{store.id}', artifacts become immutable. "
+                        "Edits create new versions in hot_store until re-promoted."
+                    )
+                elif store.semantics == "versioned":
+                    info["note"] = (
+                        f"Store '{store.id}' maintains version history. "
+                        "Each promotion creates a new version."
+                    )
+                elif store.semantics == "append_only":
+                    info["note"] = (
+                        f"Store '{store.id}' is append-only. "
+                        "Entries cannot be modified after creation."
+                    )
+
+                return info
 
         return None
 
@@ -487,17 +530,25 @@ class WriteHotSot(BaseTool):
             # Create or update artifact
             existing = hot_store.get(key)
             if existing and hasattr(existing, "model_dump"):
-                # Update existing artifact
+                # Update existing artifact - increment version, preserve lifecycle_state
                 existing_data = existing.model_dump()
+                preserved_lifecycle = existing_data.get("lifecycle_state", "draft")
+                preserved_version = existing_data.get("version", 1)
+
                 existing_data.update(value)
                 existing_data["updated_at"] = datetime.now()
+                existing_data["version"] = preserved_version + 1  # Increment version
+                existing_data["lifecycle_state"] = preserved_lifecycle  # Preserve lifecycle
+
                 artifact = Artifact(**existing_data)
             else:
                 # Create new artifact
                 artifact = Artifact(
                     id=key,
                     type=value.get("type", "unknown"),
+                    version=1,  # Initial version
                     status=value.get("status", "draft"),
+                    lifecycle_state="draft",  # Initial lifecycle state
                     created_by=self.role_id,
                     data=value.get("data", value),
                 )
@@ -512,6 +563,12 @@ class WriteHotSot(BaseTool):
             "key": key,
         }
 
+        # Include version info for artifact writes
+        if key in hot_store and hasattr(hot_store[key], "version"):
+            response["version"] = hot_store[key].version
+            if is_update:
+                response["version_note"] = "Version incremented on update"
+
         # Include lifecycle violation notice in response
         if lifecycle_violation:
             response["lifecycle_violation"] = True
@@ -525,12 +582,19 @@ class WriteHotSot(BaseTool):
             response["workflow_nudge"] = True
             response["designated_producers"] = workflow_nudge["designated_producers"]
             response["target_store"] = workflow_nudge["store"]
+            response["store_semantics"] = workflow_nudge.get("store_semantics")
             # Append to existing notice or create new one
             nudge_notice = workflow_nudge["notice"]
             if "notice" in response:
                 response["notice"] += f" Also: {nudge_notice}"
             else:
                 response["notice"] = nudge_notice
+        elif detected_artifact_type:
+            # No workflow violation - add store info for cold/versioned stores
+            store_info = self._get_store_info(detected_artifact_type)
+            if store_info and store_info.get("semantics") in ("cold", "versioned", "append_only"):
+                response["target_store"] = store_info["store_id"]
+                response["store_semantics"] = store_info["semantics"]
 
         return json.dumps(response)
 
