@@ -1,0 +1,151 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "assemble_export",
+  "name": "Assemble Export",
+  "description": "Assemble a player-safe export bundle from a Canon snapshot. Compiles manuscript, codex, and optional assets into distributable formats (MD/HTML/EPUB/PDF). Validates link integrity, generates navigation, and stamps front matter.\n\nThis tool does NOT edit content - it packages what exists. If integrity issues are found, they're reported for upstream fixes.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "snapshot_id": {
+        "type": "string",
+        "description": "Canon snapshot ID to export from (e.g., 'canon@2025-12-13T10:00:00Z' or a tag name)"
+      },
+      "output_formats": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["markdown", "html", "epub", "pdf"]
+        },
+        "default": ["markdown", "html"],
+        "description": "Output formats to generate"
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "include_art_plans": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include art plan captions (spoiler-safe intent only)"
+          },
+          "include_art_renders": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include rendered art assets"
+          },
+          "include_audio_plans": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include audio plan descriptions"
+          },
+          "include_audio_assets": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include audio asset files"
+          },
+          "languages": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": ["en"],
+            "description": "Language codes to include"
+          },
+          "print_friendly": {
+            "type": "boolean",
+            "default": true,
+            "description": "Generate print-friendly layout (single column, high contrast)"
+          }
+        },
+        "additionalProperties": false
+      },
+      "validate_only": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, run integrity checks without generating output"
+      }
+    },
+    "required": ["snapshot_id"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean"
+      },
+      "build_manifest_id": {
+        "type": "string",
+        "description": "ID of the generated build manifest artifact"
+      },
+      "outputs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "format": { "type": "string" },
+            "path": { "type": "string" },
+            "size_bytes": { "type": "integer" }
+          }
+        }
+      },
+      "integrity_report": {
+        "type": "object",
+        "properties": {
+          "total_anchors": { "type": "integer" },
+          "broken_links": { "type": "array", "items": { "type": "string" } },
+          "missing_alt_text": { "type": "array", "items": { "type": "string" } },
+          "orphan_pages": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "coverage": {
+        "type": "object",
+        "description": "Coverage percentages by language",
+        "additionalProperties": { "type": "number" }
+      },
+      "warnings": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  },
+
+  "timeout_ms": 120000,
+
+  "retry_policy": {
+    "max_retries": 1,
+    "initial_delay_ms": 5000,
+    "retryable_errors": ["timeout"]
+  },
+
+  "examples": [
+    {
+      "description": "Export a chapter for playtest",
+      "input": {
+        "snapshot_id": "canon@2025-12-01",
+        "output_formats": ["markdown", "html"],
+        "options": {
+          "languages": ["en"],
+          "print_friendly": true
+        }
+      }
+    },
+    {
+      "description": "Validate integrity before full export",
+      "input": {
+        "snapshot_id": "canon@2025-12-10",
+        "validate_only": true
+      }
+    },
+    {
+      "description": "Full export with art and translations",
+      "input": {
+        "snapshot_id": "release-v1.0",
+        "output_formats": ["markdown", "html", "epub", "pdf"],
+        "options": {
+          "include_art_renders": true,
+          "languages": ["en", "nl", "de"],
+          "print_friendly": true
+        }
+      }
+    }
+  ]
+}

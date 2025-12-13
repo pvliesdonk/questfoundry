@@ -1,0 +1,94 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "web_fetch",
+  "name": "Web Fetch",
+  "description": "Fetch and extract content from a specific URL. Returns cleaned text content from the page, suitable for reading and analysis. Handles HTML cleanup, removes navigation/ads, and extracts main content.\n\nBest for: deep-diving a specific source, reading full articles, extracting detailed information.\nFor discovering sources, use web_search first.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "format": "uri",
+        "description": "The URL to fetch content from"
+      },
+      "extract_mode": {
+        "type": "string",
+        "enum": ["article", "full", "summary"],
+        "default": "article",
+        "description": "article: extract main content only. full: include all text. summary: AI-generated summary of the page."
+      },
+      "max_length": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 50000,
+        "default": 10000,
+        "description": "Maximum characters to return"
+      }
+    },
+    "required": ["url"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Page title"
+      },
+      "content": {
+        "type": "string",
+        "description": "Extracted text content"
+      },
+      "url": {
+        "type": "string",
+        "description": "Final URL (may differ from input if redirected)"
+      },
+      "published_date": {
+        "type": "string",
+        "description": "Publication date if detected"
+      },
+      "word_count": {
+        "type": "integer",
+        "description": "Word count of extracted content"
+      },
+      "truncated": {
+        "type": "boolean",
+        "description": "Whether content was truncated due to max_length"
+      }
+    }
+  },
+
+  "timeout_ms": 30000,
+
+  "retry_policy": {
+    "max_retries": 2,
+    "initial_delay_ms": 2000,
+    "backoff_multiplier": 2,
+    "retryable_errors": ["timeout", "rate_limited", "service_unavailable"]
+  },
+
+  "rate_limit": {
+    "requests_per_minute": 20,
+    "requests_per_agent_per_minute": 5,
+    "burst_limit": 3
+  },
+
+  "examples": [
+    {
+      "description": "Read a Wikipedia article for fact verification",
+      "input": {
+        "url": "https://en.wikipedia.org/wiki/Containerization",
+        "extract_mode": "article",
+        "max_length": 5000
+      }
+    },
+    {
+      "description": "Get a quick summary of a research paper",
+      "input": {
+        "url": "https://example.edu/papers/rfid-security.pdf",
+        "extract_mode": "summary"
+      }
+    }
+  ]
+}

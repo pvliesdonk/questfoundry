@@ -1,0 +1,235 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "build_manifest",
+  "name": "Build Manifest",
+  "description": "Machine-readable record of an export build. Contains full configuration, integrity report, output file references, and determinism data. This is the internal counterpart to View Log - it contains everything needed to reproduce or debug a build, but is NOT player-safe.",
+  "category": "manifest",
+
+  "fields": [
+    {
+      "name": "manifest_id",
+      "type": "string",
+      "description": "Unique identifier (format: BM-YYYYMMDD-NNN)",
+      "required": true
+    },
+    {
+      "name": "view_log_ref",
+      "type": "string",
+      "description": "Reference to the player-safe view log entry",
+      "required": true
+    },
+    {
+      "name": "snapshot_id",
+      "type": "string",
+      "description": "Canon snapshot used as source",
+      "required": true
+    },
+    {
+      "name": "snapshot_hash",
+      "type": "string",
+      "description": "Content hash of the snapshot for verification"
+    },
+    {
+      "name": "created_at",
+      "type": "string",
+      "description": "ISO timestamp when build completed",
+      "required": true
+    },
+    {
+      "name": "build_config",
+      "type": "object",
+      "description": "Full configuration used for this build",
+      "properties": [
+        {
+          "name": "output_formats",
+          "type": "array",
+          "items_type": "string",
+          "description": "Formats generated"
+        },
+        {
+          "name": "include_art_plans",
+          "type": "boolean"
+        },
+        {
+          "name": "include_art_renders",
+          "type": "boolean"
+        },
+        {
+          "name": "include_audio_plans",
+          "type": "boolean"
+        },
+        {
+          "name": "include_audio_assets",
+          "type": "boolean"
+        },
+        {
+          "name": "languages",
+          "type": "array",
+          "items_type": "string"
+        },
+        {
+          "name": "print_friendly",
+          "type": "boolean"
+        }
+      ],
+      "required": true
+    },
+    {
+      "name": "outputs",
+      "type": "array",
+      "description": "Generated output files",
+      "items": {
+        "name": "output",
+        "type": "object",
+        "properties": [
+          {
+            "name": "format",
+            "type": "string"
+          },
+          {
+            "name": "path",
+            "type": "string"
+          },
+          {
+            "name": "size_bytes",
+            "type": "integer"
+          },
+          {
+            "name": "hash",
+            "type": "string",
+            "description": "Content hash for verification"
+          }
+        ]
+      },
+      "required": true
+    },
+    {
+      "name": "integrity_report",
+      "type": "object",
+      "description": "Detailed integrity check results",
+      "properties": [
+        {
+          "name": "total_sections",
+          "type": "integer"
+        },
+        {
+          "name": "total_anchors",
+          "type": "integer"
+        },
+        {
+          "name": "total_codex_entries",
+          "type": "integer"
+        },
+        {
+          "name": "broken_links",
+          "type": "array",
+          "items_type": "string",
+          "description": "List of broken link targets"
+        },
+        {
+          "name": "missing_alt_text",
+          "type": "array",
+          "items_type": "string",
+          "description": "Assets missing alt text"
+        },
+        {
+          "name": "orphan_pages",
+          "type": "array",
+          "items_type": "string",
+          "description": "Pages with no incoming links"
+        },
+        {
+          "name": "unresolved_codex_refs",
+          "type": "array",
+          "items_type": "string",
+          "description": "Codex references that don't resolve"
+        }
+      ]
+    },
+    {
+      "name": "coverage_detail",
+      "type": "object",
+      "description": "Detailed coverage breakdown",
+      "properties": [
+        {
+          "name": "by_language",
+          "type": "object",
+          "description": "Per-language: { sections_total, sections_translated, percent }"
+        },
+        {
+          "name": "art_coverage",
+          "type": "object",
+          "description": "Art assets: { planned, rendered, percent }"
+        },
+        {
+          "name": "audio_coverage",
+          "type": "object",
+          "description": "Audio assets: { planned, produced, percent }"
+        }
+      ]
+    },
+    {
+      "name": "anchor_map",
+      "type": "array",
+      "description": "Full anchor resolution map for debugging",
+      "items": {
+        "name": "anchor_entry",
+        "type": "object",
+        "properties": [
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "target",
+            "type": "string"
+          },
+          {
+            "name": "resolved",
+            "type": "boolean"
+          }
+        ]
+      }
+    },
+    {
+      "name": "warnings",
+      "type": "array",
+      "description": "Non-fatal issues encountered during build",
+      "items": {
+        "name": "warning",
+        "type": "string"
+      }
+    },
+    {
+      "name": "hooks_raised",
+      "type": "array",
+      "description": "Hook IDs created for upstream fixes",
+      "items": {
+        "name": "hook_ref",
+        "type": "string"
+      }
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "current",
+        "name": "Current",
+        "description": "This is the latest build manifest"
+      },
+      {
+        "id": "archived",
+        "name": "Archived",
+        "description": "Superseded by a newer build",
+        "terminal": true
+      }
+    ],
+    "initial_state": "current",
+    "transitions": [
+      { "from": "current", "to": "archived" }
+    ]
+  },
+
+  "default_store": "exports"
+}

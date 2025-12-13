@@ -1,0 +1,319 @@
+{
+  "$schema": "../../meta/schemas/core/playbook.schema.json",
+  "id": "binding_run",
+  "name": "Binding Run",
+  "version": "1.0.0",
+  "purpose": "Assemble a player-safe export view from a Canon snapshot. Package manuscript, codex, and optional assets without leaking spoilers or internal plumbing.",
+
+  "description": "Binding Run is the export loop. Book Binder packages what exists—no rewrites, no content changes. The focus is on integrity (all links resolve), presentation safety (no internals leak), and clear provenance (snapshot ID and options stamped). If issues are found, they're routed upstream via hooks. The output is a distributable bundle plus view log and build manifest.",
+
+  "triggers": [
+    {
+      "condition": "Milestone release (chapter, act, or full book)",
+      "priority": 1
+    },
+    {
+      "condition": "Playtest build needed for narration dry-run",
+      "priority": 2
+    },
+    {
+      "condition": "External review or distribution request",
+      "priority": 3
+    }
+  ],
+
+  "inputs": {
+    "required_artifacts": [],
+    "optional_artifacts": [
+      {
+        "type": "gatecheck_report",
+        "alias": "latest_gatecheck",
+        "description": "Latest Gatekeeper report for presentation safety notes",
+        "state": "complete"
+      }
+    ],
+    "context_requirements": [
+      "Showrunner-specified Canon snapshot ID",
+      "Export options (formats, art/audio inclusion, languages)",
+      "Current Gatekeeper notes on presentation safety"
+    ]
+  },
+
+  "outputs": {
+    "required_artifacts": [
+      {
+        "type": "build_manifest",
+        "alias": "manifest",
+        "description": "Complete build record with integrity report",
+        "state": "current"
+      },
+      {
+        "type": "view_log",
+        "alias": "view_log",
+        "description": "Player-safe export record",
+        "state": "current"
+      }
+    ],
+    "optional_artifacts": [
+      {
+        "type": "hook_card",
+        "alias": "upstream_fixes",
+        "description": "Hooks for broken links, missing content, or label issues",
+        "state": "proposed"
+      }
+    ],
+    "context_requirements": [
+      "Export bundle files (MD/HTML/EPUB/PDF as requested)",
+      "Front matter with snapshot ID, options, and coverage"
+    ]
+  },
+
+  "entry_phase": "configuration",
+
+  "phases": {
+    "configuration": {
+      "name": "Configuration",
+      "purpose": "Confirm snapshot selection and export options with Showrunner",
+
+      "steps": {
+        "confirm_snapshot": {
+          "action": "Verify the Canon snapshot ID and ensure it exists and is accessible.",
+          "specific_agent": "book_binder",
+          "guidance": "Confirm the exact snapshot identifier. Do not proceed with Hot content or mixed snapshots.",
+          "outputs": [
+            {
+              "name": "snapshot_confirmation",
+              "description": "Verified snapshot ID and timestamp"
+            }
+          ]
+        },
+        "confirm_options": {
+          "action": "Review and confirm export options: formats, art/audio inclusion, languages, print-friendly layout.",
+          "depends_on": ["confirm_snapshot"],
+          "specific_agent": "book_binder",
+          "guidance": "Get explicit confirmation from Showrunner on options. Default to conservative choices if unclear.",
+          "inputs": [
+            {
+              "name": "snapshot_confirmation",
+              "from_step": "confirm_snapshot"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "export_config",
+              "description": "Confirmed export configuration"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Snapshot ID verified and accessible",
+        "Export options explicitly confirmed"
+      ],
+
+      "on_success": {
+        "next_phases": ["integrity_check"]
+      }
+    },
+
+    "integrity_check": {
+      "name": "Integrity Check",
+      "purpose": "Validate all links, anchors, and references before assembly",
+      "depends_on": ["configuration"],
+
+      "steps": {
+        "run_integrity_check": {
+          "action": "Scan the snapshot for broken links, orphan pages, missing alt text, and unresolved codex references.",
+          "specific_agent": "book_binder",
+          "guidance": "Use validate_only mode first. Document all issues before proceeding. Critical issues should block assembly.",
+          "inputs": [
+            {
+              "name": "export_config",
+              "from_step": "confirm_options",
+              "from_phase": "configuration"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "integrity_report",
+              "description": "Full integrity check results"
+            }
+          ]
+        },
+        "create_upstream_hooks": {
+          "action": "Create hook cards for issues that require upstream fixes.",
+          "depends_on": ["run_integrity_check"],
+          "specific_agent": "book_binder",
+          "guidance": "Do not fix content in the binding step. Create hooks for Scene Smith (broken anchors), Codex Curator (missing entries), or Style Lead (label issues).",
+          "inputs": [
+            {
+              "name": "integrity_report",
+              "from_step": "run_integrity_check"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "fix_hooks",
+              "artifact_type": "hook_card",
+              "description": "Hooks for upstream teams"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Integrity report documents all issues",
+        "Critical issues have hooks created",
+        "Decision made: proceed with warnings or abort"
+      ],
+
+      "on_success": {
+        "next_phases": ["assembly"]
+      },
+
+      "on_failure": {
+        "message": "Critical integrity failures. Create hooks and await upstream fixes before re-running.",
+        "end_playbook": true
+      },
+
+      "is_rework_target": true
+    },
+
+    "assembly": {
+      "name": "Assembly",
+      "purpose": "Generate the export bundle in requested formats",
+      "depends_on": ["integrity_check"],
+
+      "steps": {
+        "assemble_bundle": {
+          "action": "Run the full export assembly for all requested formats.",
+          "specific_agent": "book_binder",
+          "guidance": "Use the assemble_export tool with confirmed configuration. Ensure all formats complete successfully.",
+          "inputs": [
+            {
+              "name": "export_config",
+              "from_step": "confirm_options",
+              "from_phase": "configuration"
+            },
+            {
+              "name": "integrity_report",
+              "from_step": "run_integrity_check",
+              "from_phase": "integrity_check"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "export_bundle",
+              "description": "Generated output files"
+            }
+          ]
+        },
+        "create_build_manifest": {
+          "action": "Create the build manifest with full configuration, integrity report, and output references.",
+          "depends_on": ["assemble_bundle"],
+          "specific_agent": "book_binder",
+          "guidance": "Include all technical details: hashes, paths, coverage percentages, warnings.",
+          "inputs": [
+            {
+              "name": "export_bundle",
+              "from_step": "assemble_bundle"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "build_manifest",
+              "artifact_type": "build_manifest"
+            }
+          ]
+        },
+        "create_view_log": {
+          "action": "Create the player-safe view log entry.",
+          "depends_on": ["create_build_manifest"],
+          "specific_agent": "book_binder",
+          "guidance": "Include only player-safe information: snapshot ID, options summary, coverage, known limitations. No internal details.",
+          "inputs": [
+            {
+              "name": "build_manifest",
+              "from_step": "create_build_manifest"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "view_log_entry",
+              "artifact_type": "view_log"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "All requested formats generated",
+        "Build manifest created with full details",
+        "View log created with player-safe summary"
+      ],
+
+      "on_success": {
+        "next_phases": ["spot_check"]
+      }
+    },
+
+    "spot_check": {
+      "name": "Spot Check",
+      "purpose": "Final presentation safety and integrity verification",
+      "depends_on": ["assembly"],
+
+      "steps": {
+        "gatekeeper_spot_check": {
+          "action": "Quick spot-check on Presentation Safety, Integrity (links), and Style (labels/captions).",
+          "specific_agent": "gatekeeper",
+          "guidance": "Focus on player-facing surfaces. Check front matter, navigation labels, and any captions. Flag but do not block unless critical.",
+          "inputs": [
+            {
+              "name": "export_bundle",
+              "from_step": "assemble_bundle",
+              "from_phase": "assembly"
+            },
+            {
+              "name": "view_log_entry",
+              "from_step": "create_view_log",
+              "from_phase": "assembly"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "spot_check_note",
+              "description": "Final verification results"
+            }
+          ]
+        }
+      },
+
+      "quality_checkpoint": {
+        "criteria": ["presentation", "integrity", "accessibility"],
+        "validator_archetype": "validator",
+        "pass_threshold": "all"
+      },
+
+      "completion_criteria": [
+        "Spot check complete",
+        "No critical presentation or integrity issues",
+        "Bundle ready for distribution"
+      ],
+
+      "on_success": {
+        "message": "Export bundle ready. View log and build manifest created. Handoff to Showrunner for distribution.",
+        "end_playbook": true
+      },
+
+      "on_failure": {
+        "next_phases": ["assembly"],
+        "message": "Spot check found issues. Document and re-run assembly if fixes are minor, or create hooks for upstream teams."
+      }
+    }
+  },
+
+  "quality_criteria": ["presentation", "integrity", "accessibility"],
+
+  "max_rework_cycles": 2
+}

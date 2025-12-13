@@ -1,0 +1,139 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "view_log",
+  "name": "View Log",
+  "description": "Append-only log of export views generated from Canon snapshots. Each entry documents what was exported, when, from which snapshot, and with what options. Player-safe: can be included in exports to show version history without revealing internal details.",
+  "category": "record",
+
+  "fields": [
+    {
+      "name": "view_id",
+      "type": "string",
+      "description": "Unique identifier (format: VIEW-YYYYMMDD-NNN)",
+      "required": true
+    },
+    {
+      "name": "snapshot_id",
+      "type": "string",
+      "description": "Canon snapshot this view was built from",
+      "required": true
+    },
+    {
+      "name": "created_at",
+      "type": "string",
+      "description": "ISO timestamp when view was generated",
+      "required": true
+    },
+    {
+      "name": "build_manifest_ref",
+      "type": "string",
+      "description": "Reference to the build manifest for this view"
+    },
+    {
+      "name": "options_summary",
+      "type": "object",
+      "description": "Player-safe summary of export options used",
+      "properties": [
+        {
+          "name": "art",
+          "type": "string",
+          "description": "Art inclusion: none, plans_only, full"
+        },
+        {
+          "name": "audio",
+          "type": "string",
+          "description": "Audio inclusion: none, plans_only, full"
+        },
+        {
+          "name": "languages",
+          "type": "array",
+          "items_type": "string",
+          "description": "Language codes included"
+        },
+        {
+          "name": "formats",
+          "type": "array",
+          "items_type": "string",
+          "description": "Output formats generated"
+        }
+      ],
+      "required": true
+    },
+    {
+      "name": "coverage",
+      "type": "object",
+      "description": "Completion percentages by language",
+      "properties": [
+        {
+          "name": "by_language",
+          "type": "object",
+          "description": "Map of language code to completion percentage"
+        }
+      ]
+    },
+    {
+      "name": "integrity_status",
+      "type": "string",
+      "description": "Overall integrity check result",
+      "enum": ["passed", "passed_with_warnings", "failed"],
+      "required": true
+    },
+    {
+      "name": "changes_since_prior",
+      "type": "array",
+      "description": "Player-safe list of changes since the prior view (titles only, no spoilers)",
+      "items": {
+        "name": "change",
+        "type": "object",
+        "properties": [
+          {
+            "name": "type",
+            "type": "string",
+            "description": "Type of change: added, updated, removed"
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "description": "Player-safe title of what changed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "known_limitations",
+      "type": "array",
+      "description": "Player-safe notes about what's incomplete or deferred",
+      "items": {
+        "name": "limitation",
+        "type": "string"
+      }
+    },
+    {
+      "name": "prior_view_ref",
+      "type": "string",
+      "description": "Reference to the previous view log entry (for diff tracking)"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "current",
+        "name": "Current",
+        "description": "This is the latest view"
+      },
+      {
+        "id": "archived",
+        "name": "Archived",
+        "description": "Superseded by a newer view",
+        "terminal": true
+      }
+    ],
+    "initial_state": "current",
+    "transitions": [
+      { "from": "current", "to": "archived" }
+    ]
+  },
+
+  "default_store": "exports"
+}

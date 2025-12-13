@@ -1,0 +1,28 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "posture_definitions",
+  "name": "Posture Definitions",
+  "layer": "role_specific",
+
+  "summary": "Definitions for research posture levels: corroborated, plausible, disputed, uncorroborated with risk ratings.",
+
+  "keywords": ["posture", "certainty", "uncertainty", "verification", "researcher"],
+
+  "triggers": [
+    "assigning posture",
+    "rating certainty",
+    "uncertainty level"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Research Posture Definitions\n\nEvery research finding must have a posture—the certainty level of the claim.\n\n### Posture Levels\n\n| Posture | Meaning | When to Use |\n|---------|---------|-------------|\n| **corroborated** | Multiple reliable sources agree | 2+ independent, reputable sources confirm the claim |\n| **plausible** | Reasonable to assume | One good source, or logical inference from established facts |\n| **disputed** | Sources conflict | Active disagreement in literature; note both positions |\n| **uncorroborated:low** | No sources, low risk | Claim is minor; error wouldn't harm the story |\n| **uncorroborated:med** | No sources, medium risk | Claim matters; error could cause plot inconsistency |\n| **uncorroborated:high** | No sources, high risk | Claim is central; error could break the story |\n\n### Posture Selection Guidelines\n\n**Use `corroborated` when:**\n- Wikipedia + one other source agree\n- Academic/government sources confirm\n- Multiple news sources report consistently\n\n**Use `plausible` when:**\n- One reliable source (encyclopedia, textbook)\n- Logical extension of corroborated facts\n- Expert opinion without contradiction\n\n**Use `disputed` when:**\n- Sources actively disagree\n- Historical debate ongoing\n- Regional/cultural variation exists\n\n**Use `uncorroborated` when:**\n- No sources found\n- Only primary sources (blogs, forums)\n- Topic too obscure for verification\n\n### Risk Assessment for Uncorroborated\n\n- **Low risk**: Flavor detail, background color, minor mechanics\n- **Medium risk**: Character motivation, plot device, world rule\n- **High risk**: Central premise, safety-critical detail, legal/medical claim\n\n### Surface Handling by Posture\n\n| Posture | Surface Treatment |\n|---------|------------------|\n| corroborated | Can state directly |\n| plausible | Can state with soft hedge (\"believed to be\") |\n| disputed | Present as in-world disagreement |\n| uncorroborated | Use neutral phrasing; avoid definitive claims |"
+  },
+
+  "applicable_to": {
+    "agents": ["researcher"]
+  },
+
+  "tags": ["research", "certainty", "methodology"]
+}

@@ -16,34 +16,44 @@
   "stores": [
     "stores/workspace.json",
     "stores/canon.json",
-    "stores/audit.json"
+    "stores/audit.json",
+    "stores/exports.json"
   ],
 
   "agents": [
     "agents/showrunner.json",
     "agents/gatekeeper.json",
     "agents/plotwright.json",
-    "agents/scene_smith.json"
+    "agents/scene_smith.json",
+    "agents/researcher.json",
+    "agents/book_binder.json"
   ],
 
   "playbooks": [
     "playbooks/story_spark.json",
     "playbooks/scene_weave.json",
-    "playbooks/hook_harvest.json"
+    "playbooks/hook_harvest.json",
+    "playbooks/binding_run.json"
   ],
 
   "artifact_types": [
     "artifact-types/section_brief.json",
     "artifact-types/section.json",
     "artifact-types/hook_card.json",
-    "artifact-types/gatecheck_report.json"
+    "artifact-types/gatecheck_report.json",
+    "artifact-types/research_memo.json",
+    "artifact-types/view_log.json",
+    "artifact-types/build_manifest.json"
   ],
 
   "tools": [
     "tools/consult_schema.json",
     "tools/validate_artifact.json",
     "tools/search_workspace.json",
-    "tools/delegate.json"
+    "tools/delegate.json",
+    "tools/web_search.json",
+    "tools/web_fetch.json",
+    "tools/assemble_export.json"
   ],
 
   "quality_criteria": [
@@ -73,8 +83,8 @@
   },
 
   "metadata": {
-    "wave": 1,
-    "status": "initial",
-    "notes": "Wave 1: Core writing studio with Showrunner, Gatekeeper, Plotwright, Scene Smith. 3 playbooks: Story Spark, Scene Weave, Hook Harvest."
+    "wave": 2,
+    "status": "research_and_export",
+    "notes": "Wave 2: Added Researcher and Book Binder agents. New playbook: Binding Run. New tools: web_search, web_fetch, assemble_export. New store: exports. New artifacts: research_memo, view_log, build_manifest."
   }
 }

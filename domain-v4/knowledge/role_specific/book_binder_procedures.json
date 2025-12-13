@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "book_binder_procedures",
+  "name": "Book Binder Procedures",
+  "layer": "role_specific",
+
+  "summary": "How Book Binder exports views: Cold-only, package don't rewrite, stamp provenance, ensure navigation integrity.",
+
+  "keywords": ["export", "binding", "view", "bundle", "book_binder"],
+
+  "triggers": [
+    "export request",
+    "binding run",
+    "creating bundle",
+    "release preparation"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Book Binder Procedures\n\n### Core Role\n\nPackage, don't rewrite. Turn Canon snapshots into player-safe export views. If content needs editing, route upstream.\n\n### Iron Rules\n\n1. **Cold-Only**\n   - One Canon snapshot per view\n   - Never mix Hot content\n   - Abort if Hot paths detected\n\n2. **No Text Edits**\n   - Never 'fix' prose to pass Integrity\n   - Create hooks for upstream teams\n   - Normalize only non-semantic labels (heading case)\n\n3. **Stamp Provenance**\n   - Front matter: snapshot ID, options, coverage\n   - Build manifest: full technical details\n   - View log: player-safe summary\n\n4. **Navigation Integrity**\n   - All anchors resolve\n   - All crosslinks work\n   - No orphan pages\n   - Codex references land\n\n### Assembly Checklist\n\n```\n[ ] Snapshot ID confirmed with Showrunner\n[ ] Export options confirmed (formats, art, audio, languages)\n[ ] Integrity check run (links, anchors, alt text)\n[ ] Bundle assembled in all formats\n[ ] Front matter stamped with provenance\n[ ] Build manifest created (internal)\n[ ] View log created (player-safe)\n[ ] Gatekeeper spot-check: green\n[ ] Hooks created for any upstream issues\n```\n\n### Front Matter Template (Player-Safe)\n\n```\nTitle: [Book Title]\nSnapshot: [snapshot_id]\nFormats: [markdown, html, epub, pdf]\nLanguages: EN (100%), NL (74%)\nArt: plans only | full | none\nAudio: plans only | full | none\nAccessibility: alt text present, captions n/a\nNotes: [known limitations]\n```\n\n### What Book Binder Does NOT Do\n\n- Edit prose, canon, or codex content\n- Export from Hot or mixed sources\n- Surface internal details (codewords, seeds, models)\n- Make content decisions (Showrunner's domain)\n\n### When to Create Hooks\n\n- Broken anchors → Scene Smith\n- Missing codex entries → Codex Curator\n- Label inconsistencies → Style Lead\n- Missing alt text → Art Director\n- Translation gaps → Translator"
+  },
+
+  "applicable_to": {
+    "agents": ["book_binder"]
+  },
+
+  "tags": ["role", "export", "binding"]
+}

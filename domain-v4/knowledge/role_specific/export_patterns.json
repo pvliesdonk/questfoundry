@@ -1,0 +1,28 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "export_patterns",
+  "name": "Export Patterns",
+  "layer": "role_specific",
+
+  "summary": "Common export configurations and their use cases: playtest builds, milestone releases, full production.",
+
+  "keywords": ["export", "bundle", "release", "formats", "book_binder"],
+
+  "triggers": [
+    "choosing export options",
+    "format selection",
+    "release type"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Export Patterns\n\nCommon export configurations for different use cases.\n\n### Playtest Build\n\n**Purpose**: Quick build for narration dry-run or internal review.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\"],\n  \"options\": {\n    \"include_art_plans\": false,\n    \"include_art_renders\": false,\n    \"include_audio_plans\": false,\n    \"include_audio_assets\": false,\n    \"languages\": [\"en\"],\n    \"print_friendly\": true\n  }\n}\n```\n\n**Characteristics**:\n- Minimal formats (MD + HTML)\n- English only\n- No art/audio\n- Fast turnaround\n\n---\n\n### Milestone Release\n\n**Purpose**: Chapter or act completion for stakeholder review.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\", \"epub\"],\n  \"options\": {\n    \"include_art_plans\": true,\n    \"include_art_renders\": false,\n    \"include_audio_plans\": true,\n    \"include_audio_assets\": false,\n    \"languages\": [\"en\"],\n    \"print_friendly\": true\n  }\n}\n```\n\n**Characteristics**:\n- Reader-friendly formats (HTML, EPUB)\n- Art/audio plans for context\n- Still primary language only\n\n---\n\n### Full Production\n\n**Purpose**: Release-ready bundle for distribution.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\", \"epub\", \"pdf\"],\n  \"options\": {\n    \"include_art_plans\": false,\n    \"include_art_renders\": true,\n    \"include_audio_plans\": false,\n    \"include_audio_assets\": true,\n    \"languages\": [\"en\", \"nl\", \"de\"],\n    \"print_friendly\": true\n  }\n}\n```\n\n**Characteristics**:\n- All formats including PDF\n- Full renders and assets (not just plans)\n- All supported languages\n- Print-ready layout\n\n---\n\n### Translation Review\n\n**Purpose**: Review translation coverage before release.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\"],\n  \"options\": {\n    \"include_art_plans\": false,\n    \"include_art_renders\": false,\n    \"include_audio_plans\": false,\n    \"include_audio_assets\": false,\n    \"languages\": [\"en\", \"nl\"],\n    \"print_friendly\": false\n  }\n}\n```\n\n**Characteristics**:\n- Side-by-side language comparison\n- Text-focused (no assets)\n- Coverage flags visible\n\n---\n\n### Format Notes\n\n| Format | Best For | Limitations |\n|--------|----------|-------------|\n| markdown | Source control, diffing | No rich styling |\n| html | Web reading, interactivity | Requires server/hosting |\n| epub | E-readers, mobile | Limited interactivity |\n| pdf | Print, archival | Static, large files |"
+  },
+
+  "applicable_to": {
+    "agents": ["book_binder", "showrunner"]
+  },
+
+  "tags": ["export", "configuration", "patterns"]
+}

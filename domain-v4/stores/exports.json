@@ -1,0 +1,31 @@
+{
+  "$schema": "../../meta/schemas/core/store.schema.json",
+  "id": "exports",
+  "name": "Exports (Views)",
+  "description": "Derived export views assembled from Canon snapshots. Contains build manifests, view logs, and generated bundles (MD/HTML/EPUB/PDF). These are derived artifacts - if lost, they can be regenerated from the Canon snapshot they reference. Never contains Hot content. Book Binder is the designated producer.",
+
+  "semantics": "versioned",
+
+  "artifact_types": [
+    "build_manifest",
+    "view_log"
+  ],
+
+  "workflow_intent": {
+    "consumption_guidance": "specified",
+    "production_guidance": "exclusive",
+    "designated_consumers": ["book_binder", "showrunner"],
+    "designated_producers": ["book_binder"]
+  },
+
+  "retention": {
+    "type": "count",
+    "max_count": 50,
+    "max_versions": 10
+  },
+
+  "asset_storage": {
+    "backend": "filesystem",
+    "prefix": "exports"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "web_search",
+  "name": "Web Search",
+  "description": "Search the web for factual information. Returns a list of relevant results with titles, snippets, and URLs. Use this to find sources for verification, corroborate claims, or discover current information.\n\nBest for: broad queries, finding multiple sources, discovering what exists.\nFor deep-diving a specific page, use web_fetch instead.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "The search query. Be specific and include relevant context for better results."
+      },
+      "max_results": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 20,
+        "default": 5,
+        "description": "Maximum number of results to return"
+      },
+      "domain_filter": {
+        "type": "string",
+        "description": "Optional: limit results to a specific domain (e.g., 'wikipedia.org', 'gov')"
+      },
+      "recency": {
+        "type": "string",
+        "enum": ["any", "day", "week", "month", "year"],
+        "default": "any",
+        "description": "Filter by content freshness"
+      }
+    },
+    "required": ["query"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "url": { "type": "string" },
+            "snippet": { "type": "string" },
+            "published_date": { "type": "string" }
+          }
+        }
+      },
+      "query_used": {
+        "type": "string",
+        "description": "The actual query sent (may differ from input)"
+      }
+    }
+  },
+
+  "timeout_ms": 15000,
+
+  "retry_policy": {
+    "max_retries": 2,
+    "initial_delay_ms": 1000,
+    "backoff_multiplier": 2,
+    "retryable_errors": ["timeout", "rate_limited", "service_unavailable"]
+  },
+
+  "rate_limit": {
+    "requests_per_minute": 30,
+    "requests_per_agent_per_minute": 10
+  },
+
+  "examples": [
+    {
+      "description": "Verify a historical claim",
+      "input": {
+        "query": "when was the first cargo ship to use containerization",
+        "max_results": 5
+      }
+    },
+    {
+      "description": "Find authoritative sources on a technical topic",
+      "input": {
+        "query": "RFID badge cloning security research",
+        "domain_filter": "edu",
+        "max_results": 3
+      }
+    }
+  ]
+}

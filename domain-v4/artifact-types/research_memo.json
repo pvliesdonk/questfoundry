@@ -1,0 +1,164 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "research_memo",
+  "name": "Research Memo",
+  "description": "Concise factual findings from Researcher. Contains question, short answer, citations, posture (certainty level), and optional neutral phrasing for surfaces. Memos are decision-ready summaries, not exhaustive dumps. They remain in Hot as reference documents and are not exported to players.",
+  "category": "document",
+
+  "fields": [
+    {
+      "name": "memo_id",
+      "type": "string",
+      "description": "Unique identifier (format: RM-NNN)",
+      "required": true
+    },
+    {
+      "name": "question",
+      "type": "text",
+      "description": "The specific question being researched (one line)",
+      "required": true
+    },
+    {
+      "name": "requestor",
+      "type": "string",
+      "description": "Agent that requested this research (e.g., plotwright, scene_smith, lore_weaver)"
+    },
+    {
+      "name": "context_ref",
+      "type": "string",
+      "description": "Reference to the artifact or TU that prompted this question"
+    },
+    {
+      "name": "short_answer",
+      "type": "text",
+      "description": "Direct, decision-ready answer in 2-5 lines",
+      "required": true
+    },
+    {
+      "name": "posture",
+      "type": "string",
+      "description": "Certainty level of the finding",
+      "enum": ["corroborated", "plausible", "disputed", "uncorroborated_low", "uncorroborated_med", "uncorroborated_high"],
+      "required": true
+    },
+    {
+      "name": "citations",
+      "type": "array",
+      "description": "Supporting sources (2-5 citations)",
+      "items": {
+        "name": "citation",
+        "type": "object",
+        "properties": [
+          {
+            "name": "source",
+            "type": "string",
+            "description": "Source name or title"
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "description": "URL if web source"
+          },
+          {
+            "name": "date_accessed",
+            "type": "string",
+            "description": "When the source was accessed (ISO date)"
+          },
+          {
+            "name": "relevance",
+            "type": "string",
+            "description": "Brief note on why this source matters"
+          }
+        ]
+      },
+      "min_length": 2,
+      "max_length": 5,
+      "required": true
+    },
+    {
+      "name": "caveats",
+      "type": "array",
+      "description": "Important limitations or edge cases",
+      "items": {
+        "name": "caveat",
+        "type": "string"
+      }
+    },
+    {
+      "name": "creative_implications",
+      "type": "object",
+      "description": "What this enables or constrains for the story",
+      "properties": [
+        {
+          "name": "affordances",
+          "type": "array",
+          "items_type": "string",
+          "description": "Things this makes possible"
+        },
+        {
+          "name": "constraints",
+          "type": "array",
+          "items_type": "string",
+          "description": "Things this forbids or limits"
+        }
+      ]
+    },
+    {
+      "name": "neutral_phrasing",
+      "type": "array",
+      "description": "Player-safe surface lines when certainty is low (1-2 options)",
+      "items": {
+        "name": "phrase",
+        "type": "string"
+      },
+      "max_length": 2
+    },
+    {
+      "name": "hooks_raised",
+      "type": "array",
+      "description": "Hook IDs created as a result of this research",
+      "items": {
+        "name": "hook_ref",
+        "type": "string"
+      }
+    },
+    {
+      "name": "handoffs",
+      "type": "array",
+      "description": "Roles that should see this memo",
+      "items": {
+        "name": "role",
+        "type": "string",
+        "enum": ["lore_weaver", "plotwright", "scene_smith", "style_lead", "codex_curator", "translator", "gatekeeper"]
+      }
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Research in progress"
+      },
+      {
+        "id": "complete",
+        "name": "Complete",
+        "description": "Research complete, ready for consumption"
+      },
+      {
+        "id": "superseded",
+        "name": "Superseded",
+        "description": "Newer research replaces this memo",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "complete" },
+      { "from": "complete", "to": "superseded" }
+    ]
+  },
+
+  "default_store": "workspace"
+}
