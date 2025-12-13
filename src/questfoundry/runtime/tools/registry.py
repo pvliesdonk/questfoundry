@@ -60,6 +60,9 @@ def _get_tool_implementations() -> dict[str, type[BaseTool] | None]:
     from questfoundry.runtime.tools.consult import (
         ConsultSchema,
     )
+    from questfoundry.runtime.tools.corpus import ConsultCorpusTool
+    from questfoundry.runtime.tools.create_artifact import CreateArtifactTool
+    from questfoundry.runtime.tools.lifecycle import RequestLifecycleTransitionTool
     from questfoundry.runtime.tools.playbook import ConsultPlaybookV4
     from questfoundry.runtime.tools.role import (
         ReadHotSot,
@@ -86,16 +89,21 @@ def _get_tool_implementations() -> dict[str, type[BaseTool] | None]:
         "web_search": WebSearchTool,
         "web_fetch": WebFetchTool,
         # Export tools
-        "assemble_export": None,  # TODO: Implement
+        "assemble_export": None,  # TODO: Implement (see issue #138)
         # Generation tools (external, may not be available)
         "generate_image": None,
         "generate_audio": None,
         # Additional mapped tools
         "consult_playbook": ConsultPlaybookV4,  # v4 playbook tool with tracker
+        "get_playbook": ConsultPlaybookV4,  # Alias - meta/ name for contextual view
         "read_artifact": ReadArtifact,
         "write_artifact": WriteArtifact,
         "read_hot_sot": ReadHotSot,
         "write_hot_sot": WriteHotSot,
+        # P1 Section 2 - Additional Tools from meta/
+        "consult_corpus": ConsultCorpusTool,  # RAG search over corpus entries
+        "create_artifact": CreateArtifactTool,  # Create with validation
+        "request_lifecycle_transition": RequestLifecycleTransitionTool,  # State change protocol
     }
 
 

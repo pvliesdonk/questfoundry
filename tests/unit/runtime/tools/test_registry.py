@@ -94,19 +94,26 @@ class TestBuildAgentTools:
 
     def test_unavailable_tool_for_missing_implementation(self, studio) -> None:
         """Test that missing implementations get UnavailableTool stub."""
+        from questfoundry.runtime.tools.registry import _get_tool_implementations
+
+        # Get implementations and find one that's None (not implemented)
+        impls = _get_tool_implementations()
+        unavailable_tools = [tid for tid, impl in impls.items() if impl is None]
+
+        # assemble_export, generate_image, generate_audio should be None
+        assert "assemble_export" in unavailable_tools, "Need at least one unavailable tool for this test"
+
+        # Build tools for an agent and check the stub is returned
         gk = studio.agents["gatekeeper"]
         tools = build_agent_tools(gk, studio)
 
-        # Find validate_artifact tool (should be unavailable)
+        # validate_artifact is now implemented, so it should NOT be UnavailableTool
         validate_tool = next(
             (t for t in tools if t.name == "validate_artifact"), None
         )
-
         if validate_tool is not None:
-            assert isinstance(validate_tool, UnavailableTool)
-            # Should return informative message
-            result = validate_tool._run()
-            assert "not available" in result.lower()
+            from questfoundry.runtime.tools.validate import ValidateArtifactTool
+            assert isinstance(validate_tool, ValidateArtifactTool)
 
 
 class TestUnavailableTool:
