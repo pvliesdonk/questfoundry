@@ -22,6 +22,13 @@
       "tool_ref": "search_workspace"
     },
     {
+      "id": "use_consult_corpus",
+      "name": "Consult Corpus",
+      "description": "Search craft guidance for diegetic voice patterns and glossary writing",
+      "category": "tool",
+      "tool_ref": "consult_corpus"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Read canon for source truth, workspace for context and style guidance",

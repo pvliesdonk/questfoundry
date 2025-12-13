@@ -190,3 +190,44 @@ class TestDifferentAgentTypes:
         # Should have terminate (entry agent) not return_to_sr
         assert "terminate" in tool_names
         assert "return_to_sr" not in tool_names
+
+
+class TestCorpusToolAssignment:
+    """Tests for consult_corpus tool assignment by role."""
+
+    def test_scene_smith_gets_corpus(self, studio) -> None:
+        """Scene Smith should have consult_corpus for prose craft."""
+        ss = studio.agents["scene_smith"]
+        tools = build_agent_tools(ss, studio)
+        tool_names = [t.name for t in tools]
+        assert "consult_corpus" in tool_names
+
+    def test_plotwright_gets_corpus(self, studio) -> None:
+        """Plotwright should have consult_corpus for story structure."""
+        pw = studio.agents["plotwright"]
+        tools = build_agent_tools(pw, studio)
+        tool_names = [t.name for t in tools]
+        assert "consult_corpus" in tool_names
+
+    def test_gatekeeper_gets_corpus(self, studio) -> None:
+        """Gatekeeper should have consult_corpus for quality validation."""
+        gk = studio.agents["gatekeeper"]
+        tools = build_agent_tools(gk, studio)
+        tool_names = [t.name for t in tools]
+        assert "consult_corpus" in tool_names
+
+    def test_researcher_has_web_not_corpus(self, studio) -> None:
+        """Researcher should have web_search but not consult_corpus."""
+        rs = studio.agents["researcher"]
+        tools = build_agent_tools(rs, studio)
+        tool_names = [t.name for t in tools]
+        assert "web_search" in tool_names
+        assert "consult_corpus" not in tool_names
+
+    def test_showrunner_has_neither_search(self, studio) -> None:
+        """Showrunner delegates - should not have web_search or consult_corpus."""
+        sr = studio.agents["showrunner"]
+        tools = build_agent_tools(sr, studio)
+        tool_names = [t.name for t in tools]
+        assert "web_search" not in tool_names
+        assert "consult_corpus" not in tool_names

@@ -28,6 +28,13 @@
       "tool_ref": "consult_schema"
     },
     {
+      "id": "use_consult_corpus",
+      "name": "Consult Corpus",
+      "description": "Search craft guidance for quality patterns and validation standards",
+      "category": "tool",
+      "tool_ref": "consult_corpus"
+    },
+    {
       "id": "read_all_stores",
       "name": "Read All Stores",
       "description": "Can read from any store to validate content",

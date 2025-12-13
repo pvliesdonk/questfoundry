@@ -79,7 +79,8 @@
     "tools/web_fetch.json",
     "tools/assemble_export.json",
     "tools/generate_image.json",
-    "tools/generate_audio.json"
+    "tools/generate_audio.json",
+    "tools/consult_corpus.json"
   ],
 
   "quality_criteria": [

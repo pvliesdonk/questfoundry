@@ -29,6 +29,13 @@
       "tool_ref": "delegate"
     },
     {
+      "id": "use_consult_corpus",
+      "name": "Consult Corpus",
+      "description": "Search craft guidance for choice architecture, hub-and-spoke patterns, story structure",
+      "category": "tool",
+      "tool_ref": "consult_corpus"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Can read workspace and canon for context",

@@ -1,0 +1,88 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "consult_corpus",
+  "name": "Consult Corpus",
+  "description": "Search the craft corpus for writing guidance and genre conventions. Use this for prose techniques, choice architecture, diegetic interface patterns, world consistency, genre conventions (fantasy/mystery/horror), and common pitfalls to avoid. Returns relevant excerpts with source attribution.\n\nPattern: consult-corpus - agent searches internal craft knowledge, NOT external web facts.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search query describing what craft guidance you need"
+      },
+      "max_results": {
+        "type": "integer",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Maximum number of excerpts to return"
+      }
+    },
+    "required": ["query"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean",
+        "description": "Whether the search completed successfully"
+      },
+      "source": {
+        "type": "string",
+        "description": "Source of results: 'shared_corpus' or 'studio_corpus'"
+      },
+      "search_method": {
+        "type": "string",
+        "description": "Search method used: 'vector' (semantic) or 'keyword'"
+      },
+      "excerpt_count": {
+        "type": "integer",
+        "description": "Number of excerpts returned"
+      },
+      "excerpts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "excerpt": {
+              "type": "string",
+              "description": "The relevant text excerpt"
+            },
+            "source_file": {
+              "type": "string",
+              "description": "The corpus file this excerpt came from"
+            },
+            "relevance_score": {
+              "type": "number",
+              "description": "Relevance score (0-1, higher is better)"
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Find guidance on writing meaningful choices",
+      "input": {
+        "query": "how to write meaningful choices for players"
+      }
+    },
+    {
+      "description": "Look up diegetic interface patterns",
+      "input": {
+        "query": "diegetic gates and locks",
+        "max_results": 5
+      }
+    },
+    {
+      "description": "Get horror genre conventions",
+      "input": {
+        "query": "horror interactive fiction conventions"
+      }
+    }
+  ]
+}

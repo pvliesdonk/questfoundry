@@ -10,6 +10,13 @@
 
   "capabilities": [
     {
+      "id": "use_consult_corpus",
+      "name": "Consult Corpus",
+      "description": "Search craft guidance for improvisation techniques, voice maintenance, genre conventions",
+      "category": "tool",
+      "tool_ref": "consult_corpus"
+    },
+    {
       "id": "read_canon",
       "name": "Read Canon",
       "description": "Read canon for world truth—used to ensure improvisation never contradicts established facts",

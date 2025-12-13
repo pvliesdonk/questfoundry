@@ -22,6 +22,13 @@
       "tool_ref": "search_workspace"
     },
     {
+      "id": "use_consult_corpus",
+      "name": "Consult Corpus",
+      "description": "Search craft guidance for genre conventions, writing patterns, style validation",
+      "category": "tool",
+      "tool_ref": "consult_corpus"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Read workspace, canon, and exports to detect drift and review surfaces",

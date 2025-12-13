@@ -29,6 +29,13 @@
       "tool_ref": "validate_artifact"
     },
     {
+      "id": "use_consult_corpus",
+      "name": "Consult Corpus",
+      "description": "Search craft guidance for prose techniques, diegetic gates, sensory grounding patterns",
+      "category": "tool",
+      "tool_ref": "consult_corpus"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Can read workspace and canon for context",

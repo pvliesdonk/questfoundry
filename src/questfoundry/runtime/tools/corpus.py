@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,9 @@ from langchain_core.tools import BaseTool
 from pydantic import Field
 
 logger = logging.getLogger(__name__)
+
+# Threshold below which a result is considered "low quality"
+LOW_RELEVANCE_THRESHOLD = 0.3
 
 # Try to import vector search
 try:
@@ -47,10 +51,12 @@ class ConsultCorpusTool(BaseTool):
 
     name: str = "consult_corpus"
     description: str = (
-        "Search corpus knowledge for relevant excerpts. "
-        "Use for writing craft advice, genre conventions, and reference material. "
-        "Input: query (what to find), max_results (optional, default 3). "
-        "Optionally: knowledge_id to search a specific corpus entry."
+        "Search the craft corpus for writing guidance and genre conventions. "
+        "Use this for: prose techniques, choice architecture, diegetic interface "
+        "patterns, world consistency, genre conventions (fantasy/mystery/horror), "
+        "and common pitfalls to avoid. "
+        "Input: query (natural language search). "
+        "Returns relevant excerpts with source attribution."
     )
 
     # Injected by registry
@@ -101,11 +107,19 @@ class ConsultCorpusTool(BaseTool):
 
     def _search_shared_corpus(self, query: str, max_results: int) -> str:
         """Search the shared QuestFoundry corpus."""
+        corpus_dir = self._find_corpus_dir()
+
         # Try vector search first
         if self._try_vector_search():
             try:
                 results = self.vector_store.search(query, k=max_results)
                 if results:
+                    # Log if best result is low quality
+                    best_score = results[0]["score"]
+                    if best_score < LOW_RELEVANCE_THRESHOLD:
+                        self._log_query(
+                            query, "vector", f"low_relevance:{best_score:.3f}", corpus_dir
+                        )
                     return json.dumps({
                         "success": True,
                         "source": "shared_corpus",
@@ -121,6 +135,9 @@ class ConsultCorpusTool(BaseTool):
                             for r in results
                         ],
                     })
+                else:
+                    # Vector search returned empty
+                    self._log_query(query, "vector", "no_results", corpus_dir)
             except Exception as e:
                 logger.warning(f"Vector search failed, falling back to keyword: {e}")
 
@@ -184,6 +201,7 @@ class ConsultCorpusTool(BaseTool):
         top_excerpts = all_excerpts[:max_results]
 
         if not top_excerpts:
+            self._log_query(query, "keyword", "no_results", corpus_dir)
             return json.dumps({
                 "success": True,
                 "source": "shared_corpus",
@@ -192,6 +210,13 @@ class ConsultCorpusTool(BaseTool):
                 "excerpts": [],
                 "message": f"No relevant excerpts found for '{query}'.",
             })
+
+        # Log if best result is low quality
+        best_score = top_excerpts[0]["relevance_score"]
+        if best_score < LOW_RELEVANCE_THRESHOLD:
+            self._log_query(
+                query, "keyword", f"low_relevance:{best_score:.3f}", corpus_dir
+            )
 
         return json.dumps({
             "success": True,
@@ -214,6 +239,39 @@ class ConsultCorpusTool(BaseTool):
             if path.exists():
                 return path
         return None
+
+    def _log_query(
+        self,
+        query: str,
+        method: str,
+        reason: str,
+        corpus_dir: Path | None,
+    ) -> None:
+        """Log a failed or low-quality query for later corpus expansion.
+
+        Appends to corpus_queries.log in the corpus directory.
+        Format: timestamp | method | reason | query
+
+        Args:
+            query: The search query
+            method: "vector" or "keyword"
+            reason: "no_results" or "low_relevance:0.123"
+            corpus_dir: Path to corpus directory (for log file location)
+        """
+        if corpus_dir is None:
+            logger.debug(f"Cannot log query (no corpus dir): {query}")
+            return
+
+        log_file = corpus_dir / "corpus_queries.log"
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            with log_file.open("a", encoding="utf-8") as f:
+                # Escape query for single-line logging
+                safe_query = query.replace("\n", " ").replace("|", "/")
+                f.write(f"{timestamp} | {method} | {reason} | {safe_query}\n")
+        except Exception as e:
+            logger.debug(f"Failed to log corpus query: {e}")
 
     def _keyword_search_content(
         self,
