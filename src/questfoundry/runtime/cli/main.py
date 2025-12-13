@@ -274,6 +274,22 @@ def ask(
             rich_help_panel=PANEL_RUNTIME,
         ),
     ] = False,
+    runtime: Annotated[
+        str,
+        typer.Option(
+            "--runtime",
+            help="Runtime version: v3 (default, uses generated/) or v4 (uses domain-v4 JSON directly)",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = "v3",
+    entry_mode: Annotated[
+        str,
+        typer.Option(
+            "--entry-mode",
+            help="Entry mode for v4 runtime: authoring or playtest",
+            rich_help_panel=PANEL_RUNTIME,
+        ),
+    ] = "authoring",
 ) -> None:
     """Talk to the studio in natural language.
 
@@ -377,15 +393,19 @@ def ask(
             )
             console.print()
 
+        # Validate runtime version
+        if runtime not in ("v3", "v4"):
+            console.print(f"[red]Error: Invalid runtime '{runtime}'. Use v3 or v4.[/red]")
+            raise typer.Exit(1)
+
         # Import runtime components
-        from questfoundry.generated.roles import ALL_ROLES
-        from questfoundry.runtime.orchestrator import Orchestrator
         from questfoundry.runtime.providers import create_llm_from_config
 
         # Check provider availability
         effective_provider = settings.llm.provider
         effective_model = settings.get_llm_model()
 
+        console.print(f"[dim]Runtime: {runtime}[/dim]")
         console.print(f"[dim]Provider: {effective_provider}[/dim]")
         console.print(f"[dim]Model: {effective_model}[/dim]")
 
@@ -433,24 +453,76 @@ def ask(
             live_context = Live(console=console, refresh_per_second=10)
             callbacks = StreamingCallbacks(console, live_context, verbose=(verbose >= 2))
 
-        # Create orchestrator
-        orchestrator = Orchestrator(
-            roles=ALL_ROLES,
-            llm=llm,
-            max_delegations=effective_max_delegations,
-            cold_store=cold_store,
-            checkpoint_store=checkpoint_store,
-            stream=stream,
-            callbacks=callbacks,
-        )
+        # Create orchestrator based on runtime version
+        if runtime == "v4":
+            # V4 runtime - direct JSON consumption
+            from questfoundry.runtime.domain import load_studio
+            from questfoundry.runtime.orchestrator_v4 import OrchestratorV4
+
+            # Load domain-v4 studio
+            domain_v4_path = Path(__file__).parents[4] / "domain-v4" / "studio.json"
+            if not domain_v4_path.exists():
+                console.print(f"[red]Error: domain-v4 not found at {domain_v4_path}[/red]")
+                raise typer.Exit(1)
+
+            studio = load_studio(domain_v4_path)
+            console.print(f"[green]+ Loaded studio: {studio.name} (v{studio.version})[/green]")
+            console.print(f"[green]+ Entry mode: {entry_mode}[/green]")
+
+            orchestrator = OrchestratorV4(
+                studio=studio,
+                llm=llm,
+                entry_mode=entry_mode,
+                max_delegations=effective_max_delegations,
+                cold_store=cold_store,
+                stream=stream,
+                callbacks=callbacks,
+            )
+        else:
+            # V3 runtime - uses generated code
+            from questfoundry.generated.roles import ALL_ROLES
+            from questfoundry.runtime.orchestrator import Orchestrator
+
+            orchestrator = Orchestrator(
+                roles=ALL_ROLES,
+                llm=llm,
+                max_delegations=effective_max_delegations,
+                cold_store=cold_store,
+                checkpoint_store=checkpoint_store,
+                stream=stream,
+                callbacks=callbacks,
+            )
 
         # Run the workflow
         console.print()
         console.print("[bold]Running workflow...[/bold]")
         console.print()
 
-        if stream and live_context:
-            with live_context:
+        if runtime == "v4":
+            # V4 runtime - simpler interface (no checkpoint support yet)
+            if resume or from_checkpoint:
+                console.print(
+                    "[yellow]Warning: --resume and --from-checkpoint not yet supported in v4 runtime[/yellow]"
+                )
+
+            if stream and live_context:
+                with live_context:
+                    final_state = _run_async(orchestrator.run(message))
+            else:
+                final_state = _run_async(orchestrator.run(message))
+        else:
+            # V3 runtime - full checkpoint support
+            if stream and live_context:
+                with live_context:
+                    final_state = _run_async(
+                        orchestrator.run(
+                            message,
+                            resume_run_id=resume,
+                            resume_checkpoint_id=from_checkpoint,
+                            force_resume=force_resume,
+                        )
+                    )
+            else:
                 final_state = _run_async(
                     orchestrator.run(
                         message,
@@ -459,15 +531,6 @@ def ask(
                         force_resume=force_resume,
                     )
                 )
-        else:
-            final_state = _run_async(
-                orchestrator.run(
-                    message,
-                    resume_run_id=resume,
-                    resume_checkpoint_id=from_checkpoint,
-                    force_resume=force_resume,
-                )
-            )
 
         # Display results
         _display_results(final_state)
