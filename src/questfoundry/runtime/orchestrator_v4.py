@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.language_models import BaseChatModel
@@ -333,6 +335,19 @@ class OrchestratorV4:
             # Inject playbook context if available
             full_prompt = inject_playbook_context(current_prompt, self.playbook_tracker)
 
+            # Generate session ID for structured logging
+            session_id = f"{self.entry_agent_id}-{entry_turn}-{uuid.uuid4().hex[:8]}"
+            session_start_time = time.perf_counter()
+
+            # Log session start
+            self._log_agent_session_start(
+                agent_id=self.entry_agent_id,
+                task=full_prompt,
+                system_prompt=entry_prompt,
+                hot_store=dict(state["hot_store"]),
+                session_id=session_id,
+            )
+
             # Run entry agent until it delegates or terminates (traced)
             async with TracedAgentTurn(
                 agent_id=self.entry_agent_id,
@@ -342,6 +357,16 @@ class OrchestratorV4:
                 extra_metadata={"entry_mode": self.entry_mode},
             ):
                 result = await entry_executor.run(full_prompt)
+
+            # Log session end
+            session_duration_ms = (time.perf_counter() - session_start_time) * 1000
+            self._log_agent_session_end(
+                agent_id=self.entry_agent_id,
+                status="completed" if result.success else "failed",
+                hot_store=dict(state["hot_store"]),
+                session_id=session_id,
+                duration_ms=session_duration_ms,
+            )
 
             if not result.success:
                 logger.error(f"Entry agent execution failed: {result.error}")
@@ -505,6 +530,19 @@ class OrchestratorV4:
             callbacks=None,  # Specialists don't stream to avoid conflicts
         )
 
+        # Generate session ID for structured logging
+        session_id = f"{role_id}-d{delegation_count}-{uuid.uuid4().hex[:8]}"
+        session_start_time = time.perf_counter()
+
+        # Log session start
+        self._log_agent_session_start(
+            agent_id=role_id,
+            task=task,
+            system_prompt=agent_prompt,
+            hot_store=dict(state["hot_store"]),
+            session_id=session_id,
+        )
+
         # Execute (traced)
         async with TracedDelegation(
             agent_id=role_id,
@@ -513,6 +551,16 @@ class OrchestratorV4:
             extra_metadata={"archetypes": agent.archetypes},
         ):
             result = await agent_executor.run(task)
+
+        # Log session end
+        session_duration_ms = (time.perf_counter() - session_start_time) * 1000
+        self._log_agent_session_end(
+            agent_id=role_id,
+            status="completed" if result.success else "failed",
+            hot_store=dict(state["hot_store"]),
+            session_id=session_id,
+            duration_ms=session_duration_ms,
+        )
 
         if not result.success:
             return DelegationResult(
@@ -643,3 +691,59 @@ class OrchestratorV4:
         # force_resume would allow bypassing version mismatch
         _ = force_resume  # Placeholder for future version comparison
         logger.debug(f"Studio version: {current_version}")
+
+    def _log_agent_session_start(
+        self,
+        agent_id: str,
+        task: str,
+        system_prompt: str,
+        hot_store: dict[str, Any],
+        session_id: str,
+    ) -> None:
+        """Log agent session start to structured JSONL logs."""
+        try:
+            from questfoundry.runtime.logging import (
+                is_structured_logging_configured,
+                log_role_session_start,
+            )
+
+            if not is_structured_logging_configured():
+                return
+
+            log_role_session_start(
+                role_id=agent_id,
+                task=task,
+                system_prompt=system_prompt,
+                hot_store=hot_store,
+                session_id=session_id,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log session start: {e}")
+
+    def _log_agent_session_end(
+        self,
+        agent_id: str,
+        status: str,
+        hot_store: dict[str, Any],
+        session_id: str,
+        duration_ms: float,
+    ) -> None:
+        """Log agent session end to structured JSONL logs."""
+        try:
+            from questfoundry.runtime.logging import (
+                is_structured_logging_configured,
+                log_role_session_end,
+            )
+
+            if not is_structured_logging_configured():
+                return
+
+            log_role_session_end(
+                role_id=agent_id,
+                status=status,
+                hot_store=hot_store,
+                session_id=session_id,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log session end: {e}")

@@ -332,6 +332,29 @@ class ToolExecutor:
         except Exception as e:
             logger.debug(f"Failed to log LLM response: {e}")
 
+    def _log_tool_execution(
+        self, tool_name: str, args: dict[str, Any], result: str, success: bool, duration_ms: float
+    ) -> None:
+        """Log tool execution to structured logs."""
+        try:
+            from questfoundry.runtime.logging import (
+                is_structured_logging_configured,
+                log_tool_execution,
+            )
+
+            if not is_structured_logging_configured():
+                return
+
+            log_tool_execution(
+                tool_name=tool_name,
+                args=args,
+                result=result,
+                success=success,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log tool execution: {e}")
+
     async def run(self, user_prompt: str) -> ExecutorResult:
         """Run the tool execution loop until done tool is called.
 
@@ -441,8 +464,13 @@ class ToolExecutor:
 
                 # Execute tool
                 self._emit("on_tool_start", tool_name, tool_args)
+                tool_start_time = time.perf_counter()
                 observation, success = await self._execute_tool(tool_name, tool_args)
+                tool_duration_ms = (time.perf_counter() - tool_start_time) * 1000
                 self._emit("on_tool_end", tool_name, observation, success)
+
+                # Log tool execution to structured logs
+                self._log_tool_execution(tool_name, tool_args, observation, success, tool_duration_ms)
 
                 # Log tool errors/warnings at appropriate level
                 if not success:
