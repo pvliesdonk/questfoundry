@@ -5,13 +5,13 @@ Tracing is auto-enabled when LANGSMITH_TRACING=true and LANGSMITH_API_KEY are se
 
 The trace hierarchy shows the complete workflow:
 - Orchestrator Run (top-level, contains loop_id and request)
-  - Role: showrunner (turn N)
+  - Agent: showrunner (turn N)
     - LLM calls (auto-traced by LangChain)
     - Tool calls
-  - Role: plotwright (task="...")
+  - Agent: plotwright (task="...")
     - LLM calls
     - Tool calls
-  - Role: showrunner (turn N+1)
+  - Agent: showrunner (turn N+1)
   - ...
 
 Usage:
@@ -22,6 +22,8 @@ Usage:
 
     # Then just run your code normally
     result = await orchestrator.run("Create a story")
+
+Supports both v3 and v4 orchestrators.
 """
 
 from __future__ import annotations
@@ -61,9 +63,12 @@ def trace_orchestrator_run(
 ) -> Callable[..., Awaitable[Any]]:
     """Decorator to trace the orchestrator run as a parent span.
 
+    Works with both v3 and v4 orchestrators.
+
     Captures:
     - loop_id: The workflow loop identifier
     - request: The user's request
+    - entry_mode: For v4, the entry mode (authoring/playtest)
     - Tags: ["orchestrator", "questfoundry"]
     """
 
@@ -72,47 +77,50 @@ def trace_orchestrator_run(
         self: Any,
         request: str | None = None,
         loop_id: str = "default",
-        resume_run_id: str | None = None,
-        resume_checkpoint_id: int | None = None,
-        force_resume: bool = False,
+        **kwargs: Any,
     ) -> Any:
         if not is_tracing_enabled():
-            return await func(
-                self, request, loop_id, resume_run_id, resume_checkpoint_id, force_resume
-            )
+            return await func(self, request, loop_id, **kwargs)
 
         try:
             from langsmith import traceable
+
+            # Build metadata from available attributes
+            metadata: dict[str, Any] = {
+                "loop_id": loop_id,
+                "request": request[:500] if request else "(resuming)",
+            }
+
+            # v3-specific resume params
+            if "resume_run_id" in kwargs:
+                metadata["resume_run_id"] = kwargs["resume_run_id"]
+            if "resume_checkpoint_id" in kwargs:
+                metadata["resume_checkpoint_id"] = kwargs["resume_checkpoint_id"]
+
+            # v4-specific: entry_mode from self
+            if hasattr(self, "entry_mode"):
+                metadata["entry_mode"] = self.entry_mode
+            if hasattr(self, "entry_agent_id"):
+                metadata["entry_agent_id"] = self.entry_agent_id
 
             @traceable(
                 name="QuestFoundry Orchestration",
                 run_type="chain",
                 tags=["orchestrator", "questfoundry"],
-                metadata={
-                    "loop_id": loop_id,
-                    "request": request[:500] if request else "(resuming)",
-                    "resume_run_id": resume_run_id,
-                    "resume_checkpoint_id": resume_checkpoint_id,
-                },
+                metadata=metadata,
             )
             async def traced_run(
                 orchestrator: Any,
                 req: str | None,
                 lid: str,
-                run_id: str | None,
-                checkpoint_id: int | None,
-                force: bool,
+                **kw: Any,
             ) -> Any:
-                return await func(orchestrator, req, lid, run_id, checkpoint_id, force)
+                return await func(orchestrator, req, lid, **kw)
 
-            return await traced_run(
-                self, request, loop_id, resume_run_id, resume_checkpoint_id, force_resume
-            )
+            return await traced_run(self, request, loop_id, **kwargs)
         except ImportError:
             logger.debug("langsmith not available, skipping tracing")
-            return await func(
-                self, request, loop_id, resume_run_id, resume_checkpoint_id, force_resume
-            )
+            return await func(self, request, loop_id, **kwargs)
 
     return wrapper
 
@@ -203,37 +211,51 @@ def trace_sr_turn(turn: int, delegation_count: int) -> Callable[[F], F]:
     return decorator
 
 
-class TracedSRTurn:
-    """Context manager for tracing SR turns within the orchestrator loop.
+class TracedAgentTurn:
+    """Context manager for tracing agent turns within the orchestrator loop.
+
+    Works with both v3 (showrunner) and v4 (any entry agent).
 
     Usage:
-        async with TracedSRTurn(turn=1, delegation_count=0):
-            result = await sr_executor.run(prompt)
+        async with TracedAgentTurn(agent_id="showrunner", turn=1, delegation_count=0):
+            result = await executor.run(prompt)
     """
 
-    def __init__(self, turn: int, delegation_count: int, prompt: str = ""):
+    def __init__(
+        self,
+        agent_id: str,
+        turn: int,
+        delegation_count: int,
+        prompt: str = "",
+        extra_metadata: dict[str, Any] | None = None,
+    ):
+        self.agent_id = agent_id
         self.turn = turn
         self.delegation_count = delegation_count
         self.prompt = prompt
+        self.extra_metadata = extra_metadata or {}
         self._trace_context: Any = None
 
-    async def __aenter__(self) -> TracedSRTurn:
+    async def __aenter__(self) -> TracedAgentTurn:
         if not is_tracing_enabled():
             return self
 
         try:
             import langsmith as ls
 
+            metadata = {
+                "agent_id": self.agent_id,
+                "turn": self.turn,
+                "delegation_count": self.delegation_count,
+                **self.extra_metadata,
+            }
+
             self._trace_context = ls.trace(
-                name="Role: showrunner",
+                name=f"Agent: {self.agent_id}",
                 run_type="chain",
-                inputs={"prompt": self.prompt[:500]},
-                tags=["role:showrunner", "questfoundry"],
-                metadata={
-                    "role_id": "showrunner",
-                    "turn": self.turn,
-                    "delegation_count": self.delegation_count,
-                },
+                inputs={"prompt": self.prompt[:500] if self.prompt else ""},
+                tags=[f"agent:{self.agent_id}", "questfoundry"],
+                metadata=metadata,
             )
             self._trace_context.__enter__()
         except ImportError:
@@ -245,6 +267,67 @@ class TracedSRTurn:
             try:
                 if exc_type is not None:
                     # Record error
+                    self._trace_context.end(error=str(exc_val))
+                else:
+                    self._trace_context.__exit__(exc_type, exc_val, exc_tb)
+            except Exception as e:
+                logger.debug(f"Error ending trace: {e}")
+
+
+# Backwards compatibility alias for v3
+TracedSRTurn = TracedAgentTurn
+
+
+class TracedDelegation:
+    """Context manager for tracing delegation execution.
+
+    Usage:
+        async with TracedDelegation(agent_id="plotwright", task="Create outline"):
+            result = await agent_executor.run(task)
+    """
+
+    def __init__(
+        self,
+        agent_id: str,
+        task: str,
+        delegation_count: int = 0,
+        extra_metadata: dict[str, Any] | None = None,
+    ):
+        self.agent_id = agent_id
+        self.task = task
+        self.delegation_count = delegation_count
+        self.extra_metadata = extra_metadata or {}
+        self._trace_context: Any = None
+
+    async def __aenter__(self) -> TracedDelegation:
+        if not is_tracing_enabled():
+            return self
+
+        try:
+            import langsmith as ls
+
+            metadata = {
+                "agent_id": self.agent_id,
+                "delegation_count": self.delegation_count,
+                **self.extra_metadata,
+            }
+
+            self._trace_context = ls.trace(
+                name=f"Delegation: {self.agent_id}",
+                run_type="chain",
+                inputs={"task": self.task[:500] if self.task else ""},
+                tags=[f"agent:{self.agent_id}", "delegation", "questfoundry"],
+                metadata=metadata,
+            )
+            self._trace_context.__enter__()
+        except ImportError:
+            pass
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._trace_context is not None:
+            try:
+                if exc_type is not None:
                     self._trace_context.end(error=str(exc_val))
                 else:
                     self._trace_context.__exit__(exc_type, exc_val, exc_tb)

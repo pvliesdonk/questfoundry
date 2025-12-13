@@ -475,6 +475,7 @@ def ask(
                 entry_mode=entry_mode,
                 max_delegations=effective_max_delegations,
                 cold_store=cold_store,
+                checkpoint_store=checkpoint_store,
                 stream=stream,
                 callbacks=callbacks,
             )
@@ -499,17 +500,26 @@ def ask(
         console.print()
 
         if runtime == "v4":
-            # V4 runtime - simpler interface (no checkpoint support yet)
-            if resume or from_checkpoint:
-                console.print(
-                    "[yellow]Warning: --resume and --from-checkpoint not yet supported in v4 runtime[/yellow]"
-                )
-
+            # V4 runtime - full checkpoint support
             if stream and live_context:
                 with live_context:
-                    final_state = _run_async(orchestrator.run(message))
+                    final_state = _run_async(
+                        orchestrator.run(
+                            message,
+                            resume_run_id=resume,
+                            resume_checkpoint_id=from_checkpoint,
+                            force_resume=force_resume,
+                        )
+                    )
             else:
-                final_state = _run_async(orchestrator.run(message))
+                final_state = _run_async(
+                    orchestrator.run(
+                        message,
+                        resume_run_id=resume,
+                        resume_checkpoint_id=from_checkpoint,
+                        force_resume=force_resume,
+                    )
+                )
         else:
             # V3 runtime - full checkpoint support
             if stream and live_context:

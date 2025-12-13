@@ -9,6 +9,7 @@ Key differences from v3 orchestrator:
 - Uses build_agent_tools for capability-driven tool building
 - Uses build_agent_prompt for knowledge injection
 - Integrates PlaybookTracker for nudging
+- Full LangSmith tracing support
 """
 
 from __future__ import annotations
@@ -36,9 +37,16 @@ from questfoundry.runtime.tools.consult import (
 from questfoundry.runtime.tools.playbook import create_consult_playbook_tool
 from questfoundry.runtime.tools.registry import build_agent_tools
 from questfoundry.runtime.tools.role import ListColdStoreKeys, ListHotStoreKeys
-from questfoundry.runtime.tools.sr import DelegateTo, ReadArtifact, Terminate, WriteArtifact
+from questfoundry.runtime.tools.sr import DelegateTo, ReadArtifact, WriteArtifact
+from questfoundry.runtime.tracing import (
+    TracedAgentTurn,
+    TracedDelegation,
+    configure_tracing,
+    trace_orchestrator_run,
+)
 
 if TYPE_CHECKING:
+    from questfoundry.runtime.checkpoint import Checkpoint, CheckpointStore
     from questfoundry.runtime.stores import ColdStore
 
 logger = logging.getLogger(__name__)
@@ -154,7 +162,8 @@ class OrchestratorV4:
         llm: BaseChatModel,
         entry_mode: str = "authoring",
         max_delegations: int = 50,
-        cold_store: "ColdStore | None" = None,
+        cold_store: ColdStore | None = None,
+        checkpoint_store: CheckpointStore | None = None,
         stream: bool = False,
         callbacks: Any = None,
     ):
@@ -163,6 +172,7 @@ class OrchestratorV4:
         self.entry_mode = entry_mode
         self.max_delegations = max_delegations
         self.cold_store = cold_store
+        self.checkpoint_store = checkpoint_store
         self.stream = stream
         self.callbacks = callbacks
 
@@ -178,30 +188,109 @@ class OrchestratorV4:
         self.entry_agent_id = entry_agent_id
         self.playbook_tracker = PlaybookTracker()
 
+    @trace_orchestrator_run
     async def run(
         self,
-        request: str,
+        request: str | None = None,
         loop_id: str = "default",
+        resume_run_id: str | None = None,
+        resume_checkpoint_id: int | None = None,
+        force_resume: bool = False,
     ) -> StudioState:
         """Execute a complete workflow for the given request.
 
         Parameters
         ----------
-        request : str
-            The user's request to process.
+        request : str | None
+            The user's request to process. Required for new workflows,
+            optional when resuming (will use original request from checkpoint).
         loop_id : str
             Loop identifier for state tracking.
+        resume_run_id : str | None
+            If provided, resume from the latest checkpoint of this run.
+        resume_checkpoint_id : int | None
+            If provided, resume from this specific checkpoint ID.
+            Takes precedence over resume_run_id.
+        force_resume : bool
+            If True, bypass studio version mismatch check when resuming.
 
         Returns
         -------
         StudioState
             Final state after workflow completion.
+
+        Notes
+        -----
+        This method is automatically traced with LangSmith when
+        LANGSMITH_TRACING=true and LANGSMITH_API_KEY are set.
         """
-        # Initialize state
-        state = create_initial_state(loop_id, request)
-        delegation_history: list[dict[str, Any]] = []
-        entry_turn = 0
-        delegation_count = 0
+        # Configure tracing (sets project name if not set)
+        configure_tracing()
+
+        # Determine if we're resuming from checkpoint
+        checkpoint: Checkpoint | None = None
+        run_id: str | None = None
+
+        if resume_checkpoint_id is not None and self.checkpoint_store:
+            checkpoint = self.checkpoint_store.get_checkpoint(resume_checkpoint_id)
+            if checkpoint is None:
+                raise ValueError(f"Checkpoint {resume_checkpoint_id} not found")
+            run_id = checkpoint.run_id
+            logger.info(f"Resuming from checkpoint {resume_checkpoint_id} (run {run_id})")
+        elif resume_run_id is not None and self.checkpoint_store:
+            checkpoint = self.checkpoint_store.get_latest_checkpoint(resume_run_id)
+            if checkpoint is None:
+                raise ValueError(f"No checkpoints found for run {resume_run_id}")
+            run_id = resume_run_id
+            logger.info(f"Resuming from latest checkpoint of run {run_id}")
+
+        # Studio version compatibility check
+        if checkpoint is not None:
+            self._check_studio_version_compatibility(checkpoint, force_resume)
+
+        # If resuming without a request, retrieve original request from the run
+        if request is None and run_id is not None and self.checkpoint_store:
+            run = self.checkpoint_store.get_run(run_id)
+            if run is None:
+                raise ValueError(f"Run {run_id} not found")
+            request = run.request
+            logger.info(f"Using original request from run: {request[:100]}...")
+
+        # Validate request is provided (either directly or from checkpoint)
+        if request is None:
+            raise ValueError("Request is required for new workflows")
+
+        # Initialize state - either fresh or from checkpoint
+        if checkpoint is not None:
+            # Restore state from checkpoint
+            state = create_initial_state(loop_id, request)
+            state["hot_store"] = checkpoint.hot_store
+            delegation_history = checkpoint.delegation_history
+            entry_turn = checkpoint.sr_turn
+            delegation_count = len(delegation_history)
+
+            # Build resume prompt
+            current_prompt = self._build_resume_prompt(request, checkpoint, delegation_history)
+            logger.info(
+                f"Restored state: turn={entry_turn}, delegations={delegation_count}, "
+                f"hot_store keys={list(state['hot_store'].keys())}"
+            )
+        else:
+            # Fresh start
+            state = create_initial_state(loop_id, request)
+            delegation_history = []
+            entry_turn = 0
+            delegation_count = 0
+            current_prompt = f"New request: {request}"
+
+            # Start new run if checkpointing is enabled
+            if self.checkpoint_store:
+                run_id = self.checkpoint_store.start_run(request, loop_id)
+                logger.info(f"Started new run: {run_id}")
+
+        # Store run_id in metadata for reference
+        if run_id:
+            state["metadata"]["run_id"] = run_id
 
         # Get entry agent
         entry_agent = self.studio.agents[self.entry_agent_id]
@@ -233,8 +322,7 @@ class OrchestratorV4:
             callbacks=self.callbacks,
         )
 
-        # Initial prompt
-        current_prompt = f"New request: {request}"
+        # current_prompt is set above (either fresh request or resume prompt)
 
         while delegation_count < self.max_delegations:
             entry_turn += 1
@@ -245,13 +333,25 @@ class OrchestratorV4:
             # Inject playbook context if available
             full_prompt = inject_playbook_context(current_prompt, self.playbook_tracker)
 
-            # Run entry agent until it delegates or terminates
-            result = await entry_executor.run(full_prompt)
+            # Run entry agent until it delegates or terminates (traced)
+            async with TracedAgentTurn(
+                agent_id=self.entry_agent_id,
+                turn=entry_turn,
+                delegation_count=delegation_count,
+                prompt=full_prompt,
+                extra_metadata={"entry_mode": self.entry_mode},
+            ):
+                result = await entry_executor.run(full_prompt)
 
             if not result.success:
                 logger.error(f"Entry agent execution failed: {result.error}")
                 state["metadata"]["error"] = result.error
                 state["metadata"]["delegation_history"] = delegation_history
+
+                # Mark run as failed
+                if self.checkpoint_store and run_id:
+                    self.checkpoint_store.complete_run(run_id, status="failed")
+
                 return state
 
             # Check what stopped execution
@@ -268,6 +368,11 @@ class OrchestratorV4:
                 state["metadata"]["playbook_progress"] = (
                     self.playbook_tracker.get_progress_summary()
                 )
+
+                # Mark run as completed
+                if self.checkpoint_store and run_id:
+                    self.checkpoint_store.complete_run(run_id, status="completed")
+
                 return state
 
             # Check for delegation (orchestrators only)
@@ -320,6 +425,23 @@ class OrchestratorV4:
                     artifact_type = artifact_key.split("/")[0] if "/" in artifact_key else artifact_key
                     self.playbook_tracker.on_artifact_created(artifact_type)
 
+            # Save checkpoint after each delegation
+            if self.checkpoint_store and run_id:
+                # Convert messages to dict format for JSON serialization
+                entry_msgs = [m.model_dump() for m in entry_executor.messages]
+
+                checkpoint_id = self.checkpoint_store.save_checkpoint(
+                    run_id=run_id,
+                    sr_turn=entry_turn,
+                    hot_store=dict(state["hot_store"]),
+                    sr_messages=entry_msgs,
+                    delegation_history=delegation_history,
+                    role_id=role_id,
+                    role_messages=None,  # v4 doesn't persist role messages yet
+                    domain_version=None,  # v4 uses studio version string instead
+                )
+                logger.info(f"Checkpoint {checkpoint_id}: {role_id} completed (turn {entry_turn})")
+
             # Format result for entry agent
             current_prompt = self._format_delegation_result(delegation_result)
 
@@ -327,6 +449,11 @@ class OrchestratorV4:
         logger.warning(f"Max delegations ({self.max_delegations}) reached")
         state["metadata"]["error"] = f"Max delegations ({self.max_delegations}) reached"
         state["metadata"]["delegation_history"] = delegation_history
+
+        # Mark run as failed
+        if self.checkpoint_store and run_id:
+            self.checkpoint_store.complete_run(run_id, status="failed")
+
         return state
 
     async def _execute_delegation(
@@ -378,8 +505,14 @@ class OrchestratorV4:
             callbacks=None,  # Specialists don't stream to avoid conflicts
         )
 
-        # Execute
-        result = await agent_executor.run(task)
+        # Execute (traced)
+        async with TracedDelegation(
+            agent_id=role_id,
+            task=task,
+            delegation_count=delegation_count,
+            extra_metadata={"archetypes": agent.archetypes},
+        ):
+            result = await agent_executor.run(task)
 
         if not result.success:
             return DelegationResult(
@@ -437,3 +570,76 @@ class OrchestratorV4:
         lines.append("What would you like to do next? Delegate to another role or terminate?")
 
         return "\n".join(lines)
+
+    def _build_resume_prompt(
+        self,
+        request: str,
+        checkpoint: Checkpoint,
+        delegation_history: list[dict[str, Any]],
+    ) -> str:
+        """Build a prompt for entry agent when resuming from checkpoint.
+
+        Summarizes previous work so the agent can continue intelligently.
+        """
+        lines = [
+            f"**RESUMING WORKFLOW** (from checkpoint {checkpoint.id})",
+            "",
+            f"**Original Request**: {request}",
+            "",
+            f"**Previous Progress**: {len(delegation_history)} delegation(s) completed",
+            "",
+        ]
+
+        # Summarize recent delegations (last 3)
+        if delegation_history:
+            lines.append("**Recent Work**:")
+            for d in delegation_history[-3:]:
+                result = d.get("result", {})
+                status = result.get("status", "?")
+                role = d.get("role", "?")
+                msg = result.get("message", "")[:100]
+                lines.append(f"- {role}: [{status}] {msg}...")
+            lines.append("")
+
+        # Hot store summary
+        if checkpoint.hot_store:
+            lines.append(f"**Hot Store**: {list(checkpoint.hot_store.keys())}")
+            lines.append("")
+
+        lines.append(
+            "Continue from where the previous run left off. "
+            "Review the hot_store artifacts and decide what to do next."
+        )
+
+        return "\n".join(lines)
+
+    def _check_studio_version_compatibility(
+        self, checkpoint: Checkpoint, force_resume: bool
+    ) -> None:
+        """Check studio version compatibility when resuming from checkpoint.
+
+        Note: v4 checkpoints don't store domain_version (that's a v3 concept).
+        This method is here for future use when we add studio version tracking.
+
+        Raises
+        ------
+        ValueError
+            If versions mismatch and force_resume is False.
+        """
+        # v4 checkpoints use studio.version string instead of domain_version int
+        # For now, we just log a warning since v4 checkpoints don't have version info yet
+        checkpoint_version = checkpoint.domain_version  # Will be None for v4 checkpoints
+        current_version = self.studio.version
+
+        if checkpoint_version is None:
+            # v4 checkpoint or legacy - no version check available
+            logger.debug(
+                f"Checkpoint {checkpoint.id} has no version info. "
+                f"Current studio version is {current_version}."
+            )
+            return
+
+        # For future: compare versions when we add version tracking to checkpoints
+        # force_resume would allow bypassing version mismatch
+        _ = force_resume  # Placeholder for future version comparison
+        logger.debug(f"Studio version: {current_version}")
