@@ -76,14 +76,23 @@ class MessageBroker(BaseModel):
         """
         # Get flow control defaults from studio
         defaults = getattr(studio, "defaults", None)
-        flow_control = {}
+        flow_control: Any = None
         if defaults and hasattr(defaults, "flow_control"):
-            flow_control = defaults.flow_control or {}
+            flow_control = defaults.flow_control
         elif isinstance(defaults, dict):
-            flow_control = defaults.get("flow_control", {})
+            flow_control = defaults.get("flow_control")
 
-        max_inbox = flow_control.get("max_inbox_size", 20)
-        max_delegations = flow_control.get("max_active_delegations", 5)
+        # Helper to safely get config values from object or dict
+        def get_fc_value(key: str, default: Any) -> Any:
+            if flow_control is None:
+                return default
+            if isinstance(flow_control, dict):
+                return flow_control.get(key, default)
+            val = getattr(flow_control, key, None)
+            return val if val is not None else default
+
+        max_inbox = get_fc_value("max_inbox_size", 20)
+        max_delegations = get_fc_value("max_active_delegations", 5)
 
         mailbox_store = MailboxStore(
             default_max_inbox_size=max_inbox,

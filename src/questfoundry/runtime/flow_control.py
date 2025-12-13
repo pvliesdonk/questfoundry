@@ -121,20 +121,29 @@ class FlowController(BaseModel):
         """
         # Get defaults from studio
         defaults = getattr(studio, "defaults", None)
-        flow_control = {}
+        flow_control: Any = None
         if defaults and hasattr(defaults, "flow_control"):
-            flow_control = defaults.flow_control or {}
+            flow_control = defaults.flow_control
         elif isinstance(defaults, dict):
-            flow_control = defaults.get("flow_control", {})
+            flow_control = defaults.get("flow_control")
+
+        # Helper to safely get config values from object or dict
+        def get_fc_value(key: str, default: Any) -> Any:
+            if flow_control is None:
+                return default
+            if isinstance(flow_control, dict):
+                return flow_control.get(key, default)
+            val = getattr(flow_control, key, None)
+            return val if val is not None else default
 
         config = FlowControlConfig(
-            max_inbox_size=flow_control.get("max_inbox_size", 20),
-            secretary_summarization_trigger=flow_control.get(
+            max_inbox_size=get_fc_value("max_inbox_size", 20),
+            secretary_summarization_trigger=get_fc_value(
                 "secretary_summarization_trigger", 10
             ),
-            max_active_delegations=flow_control.get("max_active_delegations", 5),
-            backpressure_threshold=flow_control.get("backpressure_threshold", 0.8),
-            default_message_ttl_turns=flow_control.get("default_message_ttl_turns", 24),
+            max_active_delegations=get_fc_value("max_active_delegations", 5),
+            backpressure_threshold=get_fc_value("backpressure_threshold", 0.8),
+            default_message_ttl_turns=get_fc_value("default_message_ttl_turns", 24),
         )
 
         # Collect agent overrides
@@ -142,27 +151,27 @@ class FlowController(BaseModel):
         for agent_id, agent in studio.agents.items():
             if hasattr(agent, "flow_control_override") and agent.flow_control_override:
                 override = agent.flow_control_override
+
+                # Helper to safely get override values (None means use default)
+                def get_override(key: str, default: Any) -> Any:
+                    val = getattr(override, key, None)
+                    return val if val is not None else default
+
                 override_config = FlowControlConfig(
-                    max_inbox_size=getattr(
-                        override, "max_inbox_size", config.max_inbox_size
-                    ),
-                    secretary_summarization_trigger=getattr(
-                        override,
+                    max_inbox_size=get_override("max_inbox_size", config.max_inbox_size),
+                    secretary_summarization_trigger=get_override(
                         "secretary_summarization_trigger",
                         config.secretary_summarization_trigger,
                     ),
-                    max_active_delegations=getattr(
-                        override,
+                    max_active_delegations=get_override(
                         "max_active_delegations",
                         config.max_active_delegations,
                     ),
-                    backpressure_threshold=getattr(
-                        override,
+                    backpressure_threshold=get_override(
                         "backpressure_threshold",
                         config.backpressure_threshold,
                     ),
-                    default_message_ttl_turns=getattr(
-                        override,
+                    default_message_ttl_turns=get_override(
                         "default_message_ttl_turns",
                         config.default_message_ttl_turns,
                     ),

@@ -25,10 +25,12 @@ from langchain_core.tools import BaseTool
 
 from questfoundry.runtime.domain.models import Agent, Studio
 from questfoundry.runtime.executor import ToolExecutor
+from questfoundry.runtime.flow_control import FlowController
 from questfoundry.runtime.knowledge import (
     build_agent_prompt,
     inject_playbook_context,
 )
+from questfoundry.runtime.messaging import MessageBroker
 from questfoundry.runtime.playbook_tracker import PlaybookTracker
 from questfoundry.runtime.state import DelegationResult, StudioState, create_initial_state
 from questfoundry.runtime.tools.consult import (
@@ -190,6 +192,50 @@ class OrchestratorV4:
         self.entry_agent_id = entry_agent_id
         self.playbook_tracker = PlaybookTracker()
 
+        # Initialize runtime services (Issue #140)
+        self.message_broker = MessageBroker.from_studio(studio)
+        self.flow_controller = FlowController.from_studio(studio)
+
+    async def _inject_mailbox_context(self, agent_id: str, prompt: str) -> str:
+        """Inject mailbox messages into agent prompt.
+
+        Applies the Secretary pattern if needed (summarizes overflow messages),
+        then formats messages for context injection.
+
+        Parameters
+        ----------
+        agent_id : str
+            The agent receiving context.
+        prompt : str
+            The base prompt to augment.
+
+        Returns
+        -------
+        str
+            Prompt with mailbox context prepended.
+        """
+        # Get agent's mailbox
+        mailbox = self.message_broker.get_mailbox(agent_id)
+
+        # Apply Secretary pattern if mailbox is overflowing
+        await self.flow_controller.apply_secretary_pattern(mailbox, self.llm)
+
+        # Get messages (expires stale ones based on TTL)
+        messages, digests = self.message_broker.get_messages_for_agent(agent_id)
+
+        if not messages and not digests:
+            return prompt
+
+        # Format for context
+        mailbox_context = self.flow_controller.format_messages_for_context(
+            messages, digests
+        )
+
+        if mailbox_context:
+            return f"## Mailbox Messages\n\n{mailbox_context}\n\n---\n\n{prompt}"
+
+        return prompt
+
     @trace_orchestrator_run
     async def run(
         self,
@@ -335,6 +381,11 @@ class OrchestratorV4:
             # Inject playbook context if available
             full_prompt = inject_playbook_context(current_prompt, self.playbook_tracker)
 
+            # Inject mailbox context (messages from other agents)
+            full_prompt = await self._inject_mailbox_context(
+                self.entry_agent_id, full_prompt
+            )
+
             # Generate session ID for structured logging
             session_id = f"{self.entry_agent_id}-{entry_turn}-{uuid.uuid4().hex[:8]}"
             session_start_time = time.perf_counter()
@@ -450,6 +501,15 @@ class OrchestratorV4:
                     artifact_type = artifact_key.split("/")[0] if "/" in artifact_key else artifact_key
                     self.playbook_tracker.on_artifact_created(artifact_type)
 
+            # Advance turn counter and expire stale messages (TTL pattern)
+            expired = self.message_broker.advance_turn()
+            if expired:
+                for agent_id, expired_msgs in expired.items():
+                    if expired_msgs:
+                        logger.debug(
+                            f"Expired {len(expired_msgs)} messages for agent {agent_id}"
+                        )
+
             # Save checkpoint after each delegation
             if self.checkpoint_store and run_id:
                 # Convert messages to dict format for JSON serialization
@@ -530,6 +590,9 @@ class OrchestratorV4:
             callbacks=None,  # Specialists don't stream to avoid conflicts
         )
 
+        # Inject mailbox context for delegated agent
+        task_with_mailbox = await self._inject_mailbox_context(role_id, task)
+
         # Generate session ID for structured logging
         session_id = f"{role_id}-d{delegation_count}-{uuid.uuid4().hex[:8]}"
         session_start_time = time.perf_counter()
@@ -537,7 +600,7 @@ class OrchestratorV4:
         # Log session start
         self._log_agent_session_start(
             agent_id=role_id,
-            task=task,
+            task=task_with_mailbox,
             system_prompt=agent_prompt,
             hot_store=dict(state["hot_store"]),
             session_id=session_id,
@@ -546,11 +609,11 @@ class OrchestratorV4:
         # Execute (traced)
         async with TracedDelegation(
             agent_id=role_id,
-            task=task,
+            task=task_with_mailbox,
             delegation_count=delegation_count,
             extra_metadata={"archetypes": agent.archetypes},
         ):
-            result = await agent_executor.run(task)
+            result = await agent_executor.run(task_with_mailbox)
 
         # Log session end
         session_duration_ms = (time.perf_counter() - session_start_time) * 1000
