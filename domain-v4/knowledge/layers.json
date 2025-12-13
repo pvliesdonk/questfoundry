@@ -1,35 +1,38 @@
 {
   "$schema": "../../meta/schemas/knowledge/knowledge-layer.schema.json",
+
+  "_design_note": "INJECTION STRATEGY vs SCOPE: The 'layer' field defines DEFAULT injection behavior. An agent's knowledge_requirements lists can OVERRIDE this default (e.g., placing a role_specific entry in must_know[] to always inject). The entry's applicable_to field controls SCOPE (who can reference it), independent of injection strategy.",
+
   "layers": [
     {
       "layer": "constitution",
       "access_pattern": "always_in_prompt",
-      "description": "Inviolable principles that all agents must follow. Always included in system prompts.",
+      "description": "Inviolable principles. Always injected for all agents. No override possible.",
       "max_tokens": 1500
     },
     {
       "layer": "must_know",
       "access_pattern": "always_in_prompt",
-      "description": "Core concepts essential for the agent's role. Summaries always in prompt; agents can consult for details.",
+      "description": "Critical context. Default: always injected for agents that list it. Can be global (applicable_to many) or private (applicable_to one agent).",
       "max_tokens": 1500
     },
     {
       "layer": "should_know",
       "access_pattern": "menu_in_prompt",
-      "description": "Contextual knowledge shown as a menu in the prompt. Agents see titles/summaries and can request full content.",
+      "description": "Important guidance. Default: summary in prompt, full via consult tool. Agent can override by placing in must_know[].",
       "max_tokens": 500
     },
     {
       "layer": "role_specific",
       "access_pattern": "on_demand",
-      "description": "Detailed guidance specific to each agent's role. Loaded when agent is activated or on explicit request.",
+      "description": "Specialist reference material. Default: menu/tool access. Agent can override by placing in must_know[] for always-inject. Use for detailed heuristics that expand on constraints.",
       "retrieval_tool": "consult_knowledge",
       "cache_duration_seconds": 3600
     },
     {
       "layer": "lookup",
       "access_pattern": "explicit_query",
-      "description": "Large corpus for RAG-based search. Agents must explicitly query using consult_knowledge tool.",
+      "description": "Large corpus for RAG search. Always requires explicit query. No override to always-inject (too large).",
       "retrieval_tool": "consult_knowledge"
     }
   ],

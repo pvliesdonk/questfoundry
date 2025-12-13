@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "knowledge-layer.schema.json",
   "title": "Knowledge Layer Configuration",
-  "description": "Configuration for how knowledge layers are handled at runtime. This schema defines the access patterns and constraints for each layer.",
+  "description": "Configuration for how knowledge layers are handled at runtime. DESIGN NOTE: The 'layer' field defines DEFAULT injection behavior. An agent's knowledge_requirements lists can OVERRIDE this (e.g., placing a role_specific entry in must_know[] to always inject). The entry's applicable_to field controls SCOPE (who can reference it), independent of injection strategy.",
 
   "type": "object",
   "required": ["layers"],
@@ -29,6 +29,12 @@
       "minimum": 100,
       "default": 2000,
       "description": "Maximum tokens to return from a single lookup query"
+    }
+  },
+
+  "patternProperties": {
+    "^_": {
+      "description": "Properties starting with _ are reserved for documentation/comments"
     }
   },
 

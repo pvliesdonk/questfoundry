@@ -113,15 +113,17 @@ Agent: consult("character_bible")
 Runtime: Returns full character bible content
 ```
 
-### Layer Access Patterns
+### Layer Access Patterns (Defaults)
 
-| Layer | In Prompt | Via Tool |
-|-------|-----------|----------|
+| Layer | Default In Prompt | Via Tool |
+|-------|-------------------|----------|
 | constitution | Full content | - |
 | must_know | Full content | - |
 | should_know | Summary only | Full via `consult()` |
 | role_specific | Summary only | Full via `consult()` |
 | lookup | Not included | Via `query()` with search |
+
+**Note**: These are *defaults*. An agent's `knowledge_requirements` lists can override injection strategy. For example, an agent can place a `role_specific` entry in their `must_know[]` list to always inject it. The entry's `applicable_to` field controls scope (who can reference it), independent of injection strategy.
 
 ---
 

@@ -74,15 +74,46 @@ Studios define concrete agents that implement one or more archetypes.
 
 ### Knowledge Stratification
 
-Knowledge is organized by access pattern:
+Knowledge has two independent dimensions: **injection strategy** (how it's accessed) and **scope** (who can access it).
 
-| Layer | Access Pattern | Use |
-|-------|----------------|-----|
+#### Injection Strategy (Layer)
+
+The `layer` field defines the **default** access pattern:
+
+| Layer | Default Injection | Use |
+|-------|-------------------|-----|
 | `constitution` | Always in system prompt | Inviolable principles |
-| `must_know` | Always in system prompt | Essential context |
-| `should_know` | Retrieved via tool | Important guidance |
-| `role_specific` | Retrieved when agent active | Specialist knowledge |
-| `lookup` | Explicit query required | Reference material |
+| `must_know` | Always in system prompt | Critical context |
+| `should_know` | Menu in prompt, full via tool | Important guidance |
+| `role_specific` | Menu in prompt, full via tool | Specialist knowledge |
+| `lookup` | Explicit query only | Reference material |
+
+#### Scope (applicable_to)
+
+The `applicable_to` field in a knowledge entry controls **who** can reference it:
+
+```json
+"applicable_to": {
+  "agents": ["showrunner"],        // Only these agents
+  "archetypes": ["orchestrator"],  // Or agents with this archetype
+  "playbooks": ["story_spark"]     // Or during this playbook
+}
+```
+
+#### Agent Override
+
+An agent's `knowledge_requirements` lists can **override** the default injection:
+
+```json
+"knowledge_requirements": {
+  "constitution": true,
+  "must_know": ["spoiler_hygiene", "my_critical_heuristics"],  // Always inject
+  "role_specific": ["reference_manual"],                       // Menu/tool
+  "can_lookup": ["corpus_x"]                                   // Query only
+}
+```
+
+**Key insight**: An entry with `layer: "role_specific"` can be placed in an agent's `must_know[]` list to always inject it for that agent. The agent's list is the injection strategy; the entry's `applicable_to` is the scope guard.
 
 This supports the **menu+consult** pattern: summaries in prompt, details on demand.
 
