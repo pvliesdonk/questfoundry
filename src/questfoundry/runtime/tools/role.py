@@ -328,6 +328,10 @@ class WriteHotSot(BaseTool):
     - _created_by: Agent that created this artifact
     - _lifecycle_state: Write-PROTECTED - only modifiable via transition protocol
 
+    Workflow Intent (meta/ spec):
+    - Enforces soft nudges when non-designated producers write to exclusive stores
+    - Per "open floor" principle: writes always succeed, violations are logged/nudged
+
     Returns {success: true, ...} when write succeeds.
     Returns {success: false, missing_fields: [...], invalid_fields: [...], hint: '...'}
     when validation fails - use consult_schema to check field requirements.
@@ -347,6 +351,63 @@ class WriteHotSot(BaseTool):
 
     # Role ID for tracking who wrote
     role_id: str = Field(default="unknown")
+
+    # Studio is injected by executor (for workflow intent lookup)
+    studio: Any = Field(default=None)
+
+    def _check_workflow_intent(self, artifact_type: str | None) -> dict[str, Any] | None:
+        """Check workflow intent for artifact type and return nudge if violation.
+
+        Per meta/ spec "open floor" principle:
+        - Writes always succeed (never denied)
+        - Non-designated producers get nudges for exclusive stores
+        - Violations are logged for observability
+
+        Args:
+            artifact_type: The artifact type being written (e.g., "codex_entry")
+
+        Returns:
+            Dict with workflow_nudge info if violation, None otherwise
+        """
+        if not self.studio or not artifact_type:
+            return None
+
+        # Find stores that contain this artifact type
+        for store in self.studio.stores.values():
+            if artifact_type not in store.artifact_types:
+                continue
+
+            # Check if store has exclusive production guidance
+            if not store.workflow_intent:
+                continue
+
+            if store.workflow_intent.production_guidance != "exclusive":
+                continue
+
+            # Check if current role is a designated producer
+            designated = store.workflow_intent.designated_producers
+            if self.role_id in designated:
+                continue
+
+            # Workflow intent violation - role is not designated producer
+            logger.warning(
+                f"WORKFLOW INTENT: {self.role_id} writing {artifact_type} "
+                f"to store '{store.id}' (exclusive producer: {designated})"
+            )
+            return {
+                "workflow_nudge": True,
+                "store": store.id,
+                "artifact_type": artifact_type,
+                "designated_producers": designated,
+                "notice": (
+                    f"This artifact type '{artifact_type}' belongs to store '{store.id}' "
+                    f"which has exclusive production guidance. "
+                    f"Designated producers: {', '.join(designated)}. "
+                    f"Consider delegating to {designated[0]} for canonical writes."
+                ),
+            }
+
+        return None
 
     def _run(self, key: str, value: Any, **kwargs: Any) -> str:
         """Write to hot_store with artifact validation and system field management."""
@@ -384,6 +445,7 @@ class WriteHotSot(BaseTool):
             )
 
         # Artifact validation: detect artifact type from key
+        detected_artifact_type: str | None = None
         if isinstance(value, dict):
             validation_result = self._validate_artifact(key, value)
             if validation_result is not None:
@@ -392,6 +454,20 @@ class WriteHotSot(BaseTool):
                     return json.dumps(validation_result)
                 # Use validated/normalized data
                 value = validation_result.get("validated", value)
+
+            # Detect artifact type for workflow intent check
+            # Try from value's type field, then from key pattern
+            detected_artifact_type = value.get("type")
+            if not detected_artifact_type:
+                try:
+                    from questfoundry.runtime.validation import detect_artifact_type
+                    detected_artifact_type = detect_artifact_type(key)
+                except ImportError:
+                    pass
+
+        # WORKFLOW INTENT CHECK (meta/ spec "open floor"):
+        # Check if this artifact type has exclusive store ownership
+        workflow_nudge = self._check_workflow_intent(detected_artifact_type)
 
         hot_store = self.state.setdefault("hot_store", {})
 
@@ -443,6 +519,18 @@ class WriteHotSot(BaseTool):
                 "_lifecycle_state was stripped from your write. "
                 "Use request_lifecycle_transition tool to change lifecycle state."
             )
+
+        # Include workflow intent nudge if applicable
+        if workflow_nudge:
+            response["workflow_nudge"] = True
+            response["designated_producers"] = workflow_nudge["designated_producers"]
+            response["target_store"] = workflow_nudge["store"]
+            # Append to existing notice or create new one
+            nudge_notice = workflow_nudge["notice"]
+            if "notice" in response:
+                response["notice"] += f" Also: {nudge_notice}"
+            else:
+                response["notice"] = nudge_notice
 
         return json.dumps(response)
 

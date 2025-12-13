@@ -256,3 +256,193 @@ class TestSystemFields:
         stored = state["hot_store"]["protected_artifact"]
         if isinstance(stored, dict):
             assert "_lifecycle_state" not in stored
+
+
+class TestWorkflowIntentNudging:
+    """Tests for Phase 2b workflow intent (designated_producers) nudging.
+
+    Per meta/ spec "open floor" principle:
+    - Writes always succeed (never denied)
+    - Non-designated producers get nudges for exclusive stores
+    - Designated producers write without nudges
+    """
+
+    @pytest.fixture
+    def mock_studio(self):
+        """Create a mock studio with stores having workflow intent."""
+        from unittest.mock import MagicMock
+
+        # Create mock stores with workflow intent
+        workspace_store = MagicMock()
+        workspace_store.id = "workspace"
+        workspace_store.artifact_types = ["section_brief", "hook_card"]
+        workspace_store.workflow_intent = MagicMock()
+        workspace_store.workflow_intent.production_guidance = "all"
+        workspace_store.workflow_intent.designated_producers = []
+
+        codex_store = MagicMock()
+        codex_store.id = "codex"
+        codex_store.artifact_types = ["codex_entry"]
+        codex_store.workflow_intent = MagicMock()
+        codex_store.workflow_intent.production_guidance = "exclusive"
+        codex_store.workflow_intent.designated_producers = ["codex_curator"]
+
+        canon_store = MagicMock()
+        canon_store.id = "canon"
+        canon_store.artifact_types = ["canon_pack"]
+        canon_store.workflow_intent = MagicMock()
+        canon_store.workflow_intent.production_guidance = "exclusive"
+        canon_store.workflow_intent.designated_producers = ["lore_weaver"]
+
+        studio = MagicMock()
+        studio.stores = {
+            "workspace": workspace_store,
+            "codex": codex_store,
+            "canon": canon_store,
+        }
+        return studio
+
+    @pytest.fixture
+    def state(self):
+        """Empty state for testing."""
+        return {"hot_store": {}}
+
+    def test_no_nudge_for_workspace_artifacts(self, state, mock_studio):
+        """Test that workspace artifacts (all producers) don't get nudged."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="test_brief",
+            value={"type": "section_brief", "title": "Test Brief"}
+        ))
+
+        assert result["success"] is True
+        assert "workflow_nudge" not in result
+
+    def test_nudge_for_non_designated_codex_write(self, state, mock_studio):
+        """Test that non-designated producers get nudged for codex writes."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"  # Not codex_curator
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="test_entry",
+            value={"type": "codex_entry", "title": "Test Entry"}
+        ))
+
+        assert result["success"] is True  # Write still succeeds (open floor)
+        assert result.get("workflow_nudge") is True
+        assert result.get("designated_producers") == ["codex_curator"]
+        assert result.get("target_store") == "codex"
+        assert "codex_curator" in result.get("notice", "")
+
+    def test_no_nudge_for_designated_codex_write(self, state, mock_studio):
+        """Test that designated producers don't get nudged."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "codex_curator"  # Is designated
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="test_entry",
+            value={"type": "codex_entry", "title": "Test Entry"}
+        ))
+
+        assert result["success"] is True
+        assert "workflow_nudge" not in result
+
+    def test_nudge_for_non_designated_canon_write(self, state, mock_studio):
+        """Test that non-designated producers get nudged for canon writes."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "plotwright"  # Not lore_weaver
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="test_canon",
+            value={"type": "canon_pack", "title": "Test Canon"}
+        ))
+
+        assert result["success"] is True  # Write still succeeds
+        assert result.get("workflow_nudge") is True
+        assert result.get("designated_producers") == ["lore_weaver"]
+        assert result.get("target_store") == "canon"
+
+    def test_no_nudge_when_studio_not_available(self, state):
+        """Test graceful handling when studio is not injected."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"
+        tool.studio = None  # No studio
+
+        result = json.loads(tool._run(
+            key="test_data",
+            value={"type": "codex_entry", "title": "Test"}
+        ))
+
+        assert result["success"] is True
+        assert "workflow_nudge" not in result
+
+    def test_both_lifecycle_and_workflow_violations(self, state, mock_studio):
+        """Test that both violations can occur simultaneously."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"  # Not codex_curator
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="test_entry",
+            value={
+                "type": "codex_entry",
+                "title": "Test Entry",
+                "_lifecycle_state": "approved"  # Should be stripped
+            }
+        ))
+
+        assert result["success"] is True
+        assert result.get("lifecycle_violation") is True
+        assert result.get("workflow_nudge") is True
+        # Notice should contain both violations
+        notice = result.get("notice", "")
+        assert "lifecycle" in notice.lower() or "request_lifecycle_transition" in notice
+        assert "codex_curator" in notice
+
+    def test_workflow_intent_check_method_directly(self, mock_studio):
+        """Test the _check_workflow_intent method directly."""
+        tool = WriteHotSot()
+        tool.role_id = "scene_smith"
+        tool.studio = mock_studio
+
+        # Non-exclusive store - no nudge
+        result = tool._check_workflow_intent("section_brief")
+        assert result is None
+
+        # Exclusive store, non-designated - nudge
+        result = tool._check_workflow_intent("codex_entry")
+        assert result is not None
+        assert result["workflow_nudge"] is True
+        assert result["store"] == "codex"
+
+        # Designated producer - no nudge
+        tool.role_id = "codex_curator"
+        result = tool._check_workflow_intent("codex_entry")
+        assert result is None
+
+    def test_unknown_artifact_type_no_nudge(self, state, mock_studio):
+        """Test that unknown artifact types don't trigger nudges."""
+        tool = WriteHotSot()
+        tool.state = state
+        tool.role_id = "scene_smith"
+        tool.studio = mock_studio
+
+        result = json.loads(tool._run(
+            key="unknown_key",
+            value={"type": "unknown_type", "data": {"content": "test"}}
+        ))
+
+        assert result["success"] is True
+        assert "workflow_nudge" not in result
