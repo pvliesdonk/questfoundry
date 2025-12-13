@@ -32,7 +32,8 @@
     "agents/codex_curator.json",
     "agents/style_lead.json",
     "agents/art_director.json",
-    "agents/audio_director.json"
+    "agents/audio_director.json",
+    "agents/player_narrator.json"
   ],
 
   "playbooks": [
@@ -108,8 +109,8 @@
   },
 
   "metadata": {
-    "wave": 5,
-    "status": "audio_assets",
-    "notes": "Wave 5: Added Audio Director agent and generate_audio tool (same pattern as Wave 4 visual). New playbook: Audio Planning. New artifact types: audio_plan, cuelist. New asset type: audio. Expanded Style Guide audio_aesthetic section from placeholder to full structure. Style Lead now reviews both Art Plans and Audio Plans. Philosophy matches visual: plan everything (cheap), generate selectively (expensive). Audio differences from visual: layering complexity, trigger timing, looping behavior."
+    "wave": 6,
+    "status": "complete",
+    "notes": "Wave 6: Added Player-Narrator agent (dynamic export path). PN is a performer/consumer, not an author—narrates interactive fiction to live players with agency to improvise color while never contradicting canon. No playbooks (reactive to player input, not workflow-driven). Removed Translator from original plan (localization is out of scope for now). Studio definition complete: 12 agents, 9 tools, 16 artifact types, 2 asset types, 7 playbooks."
   }
 }
