@@ -4,7 +4,10 @@ QuestFoundry Runtime - Domain-agnostic studio execution engine.
 This runtime implements the meta-model contract (meta/schemas/) and can
 execute any studio definition following that schema.
 
-Status: Phase 1 - Single Agent Execution (complete)
+Status: Phase 2 - Tool Execution (in progress)
+- Phase 0: Domain loading (complete)
+- Phase 1: Single agent execution (complete)
+- Phase 2: Tool execution (in progress)
 """
 
 from questfoundry.runtime.agent import (
@@ -14,6 +17,7 @@ from questfoundry.runtime.agent import (
     BuiltPrompt,
     ContextBuilder,
     PromptBuilder,
+    ToolCall,
     activate_agent,
     build_context,
     build_prompt,
@@ -41,6 +45,18 @@ from questfoundry.runtime.providers import (
     StreamChunk,
 )
 from questfoundry.runtime.session import Session, SessionStatus, TokenUsage, Turn, TurnStatus
+from questfoundry.runtime.tools import (
+    BaseTool,
+    CapabilityViolationError,
+    ToolContext,
+    ToolError,
+    ToolExecutionError,
+    ToolRegistry,
+    ToolResult,
+    ToolUnavailableError,
+    ToolValidationError,
+    build_agent_tools,
+)
 
 __all__ = [
     # Domain loading
@@ -75,6 +91,7 @@ __all__ = [
     # Agent Runtime
     "AgentRuntime",
     "ActivationResult",
+    "ToolCall",
     "activate_agent",
     "ContextBuilder",
     "AgentContext",
@@ -82,6 +99,17 @@ __all__ = [
     "PromptBuilder",
     "BuiltPrompt",
     "build_prompt",
+    # Tools
+    "BaseTool",
+    "ToolContext",
+    "ToolResult",
+    "ToolRegistry",
+    "ToolError",
+    "ToolValidationError",
+    "ToolExecutionError",
+    "ToolUnavailableError",
+    "CapabilityViolationError",
+    "build_agent_tools",
     # Observability
     "EventLogger",
     "EventType",

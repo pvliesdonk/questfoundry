@@ -3,26 +3,34 @@ Agent runtime for executing agent activations.
 
 The AgentRuntime handles the full lifecycle of an agent activation:
 1. Load agent and build context
-2. Build system prompt
+2. Build system prompt with tool descriptions
 3. Validate context size
 4. Execute LLM call (streaming or non-streaming)
-5. Track turn in session
+5. Parse and execute tool calls
+6. Track turn in session
 
 With observability integration:
 - JSONL event logging to project_dir/logs/events.jsonl
 - LangSmith tracing (when LANGSMITH_TRACING=true)
+
+With tool execution (Phase 2):
+- Tool registry filters tools by agent capabilities
+- Tool results are added to conversation context
+- Tool calls are logged for observability
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
+from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
     InvokeOptions,
@@ -35,6 +43,22 @@ from questfoundry.runtime.session import Session, TokenUsage, Turn
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, Studio
     from questfoundry.runtime.observability import EventLogger, TracingManager
+    from questfoundry.runtime.storage import Project
+    from questfoundry.runtime.tools import BaseTool, ToolRegistry, ToolResult
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolCall:
+    """A tool call made by the agent."""
+
+    tool_id: str
+    args: dict[str, Any]
+    result: Any = None
+    success: bool = False
+    error: str | None = None
+    execution_time_ms: float | None = None
 
 
 @dataclass
@@ -45,6 +69,7 @@ class ActivationResult:
     agent_id: str
     turn: Turn
     usage: TokenUsage | None = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
 
 class AgentRuntime:
@@ -52,8 +77,11 @@ class AgentRuntime:
     Runtime for executing agent activations.
 
     Handles context building, prompt construction, LLM invocation,
-    and session/turn management. Optionally integrates with observability
-    for JSONL event logging and LangSmith tracing.
+    tool execution, and session/turn management.
+
+    Integrations:
+    - Observability: JSONL event logging, LangSmith tracing
+    - Tools: Registry-based tool filtering and execution per agent capabilities
     """
 
     def __init__(
@@ -61,6 +89,7 @@ class AgentRuntime:
         provider: LLMProvider,
         studio: Studio,
         domain_path: Path | None = None,
+        project: Project | None = None,
         model: str = "qwen3:8b",
         context_limit: int | None = None,
         event_logger: EventLogger | None = None,
@@ -73,6 +102,7 @@ class AgentRuntime:
             provider: LLM provider to use
             studio: Loaded studio definition
             domain_path: Path to domain directory (for knowledge loading)
+            project: Optional project for tool storage access
             model: Model to use for LLM calls
             context_limit: Maximum context size (tokens), raises error if exceeded
             event_logger: Optional JSONL event logger
@@ -81,6 +111,7 @@ class AgentRuntime:
         self._provider = provider
         self._studio = studio
         self._domain_path = domain_path
+        self._project = project
         self._model = model
         self._context_limit = context_limit
         self._event_logger = event_logger
@@ -88,6 +119,106 @@ class AgentRuntime:
 
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
+        self._tool_registry: ToolRegistry | None = None
+
+    @property
+    def tool_registry(self) -> ToolRegistry | None:
+        """
+        Get the tool registry, creating it lazily.
+
+        Returns None if tools module is not available.
+        """
+        if self._tool_registry is None:
+            try:
+                from questfoundry.runtime.tools import ToolRegistry
+
+                self._tool_registry = ToolRegistry(
+                    studio=self._studio,
+                    project=self._project,
+                    domain_path=self._domain_path,
+                )
+            except ImportError:
+                logger.warning("Tools module not available, tool execution disabled", exc_info=True)
+                return None
+
+        return self._tool_registry
+
+    def get_agent_tools(self, agent: Agent, session_id: str | None = None) -> list[BaseTool]:
+        """
+        Get tools available to an agent.
+
+        Args:
+            agent: Agent to get tools for
+            session_id: Current session ID for context
+
+        Returns:
+            List of tools the agent can use (empty if tools not available)
+        """
+        if not self.tool_registry:
+            return []
+        return self.tool_registry.get_agent_tools(agent, session_id)
+
+    async def execute_tool(
+        self,
+        tool_id: str,
+        args: dict[str, Any],
+        agent: Agent,
+        session_id: str | None = None,
+    ) -> ToolResult:
+        """
+        Execute a tool.
+
+        Args:
+            tool_id: ID of tool to execute
+            args: Tool arguments
+            agent: Agent requesting tool execution
+            session_id: Current session ID
+
+        Returns:
+            ToolResult from tool execution
+
+        Raises:
+            CapabilityViolationError: If agent lacks capability
+            KeyError: If tool not found
+        """
+        if not self.tool_registry:
+            from questfoundry.runtime.tools import ToolResult
+
+            return ToolResult(
+                success=False,
+                data={},
+                error="Tool registry not available",
+            )
+
+        # Enforce capability
+        self.tool_registry.enforce_capability(agent, tool_id)
+
+        # Get and execute tool
+        tool = self.tool_registry.get_tool(tool_id, agent.id, session_id)
+
+        # Log tool call start
+        if self._event_logger:
+            self._event_logger.log(
+                EventType.TOOL_CALL_START,
+                agent_id=agent.id,
+                tool_id=tool_id,
+                args=args,
+            )
+
+        result = await tool.run(args)
+
+        # Log tool call result
+        if self._event_logger:
+            self._event_logger.log(
+                EventType.TOOL_CALL_COMPLETE,
+                agent_id=agent.id,
+                tool_id=tool_id,
+                success=result.success,
+                error=result.error,
+                execution_time_ms=result.execution_time_ms,
+            )
+
+        return result
 
     def get_agent(self, agent_id: str) -> Agent | None:
         """Get an agent by ID."""
