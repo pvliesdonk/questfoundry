@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -80,6 +80,8 @@ async def _doctor_async(domain_path: Path) -> None:
         raise typer.Exit(1)
 
     studio = result.studio
+    assert studio is not None  # Guaranteed by result.success
+
     console.print(f"[green]✓[/green] Domain: [bold]{studio.name}[/bold]")
     if studio.version:
         console.print(f"  Version: {studio.version}")
@@ -88,11 +90,13 @@ async def _doctor_async(domain_path: Path) -> None:
     entry_agents = [a for a in studio.agents if a.is_entry_agent]
     entry_names = ", ".join(a.id for a in entry_agents)
 
+    console.print(f"  {len(studio.agents)} agents (entry: {entry_names or 'none'})")
     console.print(
-        f"  {len(studio.agents)} agents (entry: {entry_names or 'none'})"
+        f"  {len(studio.tools)} tools, {len(studio.stores)} stores, {len(studio.playbooks)} playbooks"
     )
-    console.print(f"  {len(studio.tools)} tools, {len(studio.stores)} stores, {len(studio.playbooks)} playbooks")
-    console.print(f"  {len(studio.artifact_types)} artifact types, {len(studio.asset_types)} asset types")
+    console.print(
+        f"  {len(studio.artifact_types)} artifact types, {len(studio.asset_types)} asset types"
+    )
 
     # Check providers
     console.print()
@@ -102,9 +106,7 @@ async def _doctor_async(domain_path: Path) -> None:
         if provider.state == ProviderState.AVAILABLE:
             model = provider.default_model or "default"
             if provider.host:
-                console.print(
-                    f"  [green]✓[/green] {name} @ {provider.host} ({model})"
-                )
+                console.print(f"  [green]✓[/green] {name} @ {provider.host} ({model})")
             else:
                 console.print(f"  [green]✓[/green] {name} ({model})")
         elif provider.state == ProviderState.UNCONFIGURED:
@@ -124,7 +126,7 @@ async def _doctor_async(domain_path: Path) -> None:
 
 @app.command("config")
 def config_show(
-    domain: Annotated[
+    _domain: Annotated[
         Path,
         typer.Option("--domain", "-d", help="Path to domain directory"),
     ] = Path("domain-v4"),
@@ -134,13 +136,25 @@ def config_show(
 
     from questfoundry.runtime.config import load_config
 
+    # Note: _domain reserved for future use
     config = load_config()
+
+    # Build providers dict for display
+    providers_dict: dict[str, dict[str, str | None]] = {}
+    for name, provider in config.providers.items():
+        providers_dict[name] = {
+            "state": provider.state.value,
+            "host": provider.host,
+            "default_model": provider.default_model,
+            # Don't show API keys
+            "api_key": "***" if provider.api_key else None,
+        }
 
     # Build config dict for display
     config_dict = {
         "domain_path": str(config.domain_path),
         "default_provider": config.default_provider,
-        "providers": {},
+        "providers": providers_dict,
         "model_classes": config.model_classes.mappings,
         "logging": {
             "enabled": config.log_events,
@@ -151,15 +165,6 @@ def config_show(
             "project": config.langsmith_project,
         },
     }
-
-    for name, provider in config.providers.items():
-        config_dict["providers"][name] = {
-            "state": provider.state.value,
-            "host": provider.host,
-            "default_model": provider.default_model,
-            # Don't show API keys
-            "api_key": "***" if provider.api_key else None,
-        }
 
     console.print(Panel(yaml.dump(config_dict, default_flow_style=False), title="Configuration"))
 
@@ -188,6 +193,7 @@ async def _roles_async(domain_path: Path) -> None:
         raise typer.Exit(1)
 
     studio = result.studio
+    assert studio is not None  # Guaranteed by result.success
 
     table = Table(title=f"Agents in {studio.name}")
     table.add_column("ID", style="cyan")
@@ -227,7 +233,7 @@ def projects_list(
 
     if not projects:
         console.print(f"[dim]No projects found in {projects_dir}[/dim]")
-        console.print(f"[dim]Create one with: qf projects create <name>[/dim]")
+        console.print("[dim]Create one with: qf projects create <name>[/dim]")
         return
 
     table = Table(title="Projects")
@@ -257,7 +263,7 @@ def projects_create(
         typer.Option("--dir", "-d", help="Projects directory"),
     ] = Path("projects"),
     description: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--description", help="Project description"),
     ] = None,
     studio: Annotated[
@@ -276,7 +282,7 @@ def projects_create(
         console.print(f"[red]✗ Project already exists at {project_path}[/red]")
         raise typer.Exit(1)
 
-    project = Project.create(
+    Project.create(
         path=project_path,
         name=name,
         description=description,
@@ -305,7 +311,7 @@ def projects_info(
         project = Project.open(project_path)
     except FileNotFoundError:
         console.print(f"[red]✗ Project not found: {project_id}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     info = project.info
     if not info:
@@ -315,10 +321,10 @@ def projects_info(
     panel_content = f"""
 [bold]Name:[/bold] {info.name}
 [bold]ID:[/bold] {info.id}
-[bold]Description:[/bold] {info.description or '-'}
-[bold]Studio:[/bold] {info.studio_id or '-'}
-[bold]Created:[/bold] {info.created_at.strftime('%Y-%m-%d %H:%M')}
-[bold]Updated:[/bold] {info.updated_at.strftime('%Y-%m-%d %H:%M')}
+[bold]Description:[/bold] {info.description or "-"}
+[bold]Studio:[/bold] {info.studio_id or "-"}
+[bold]Created:[/bold] {info.created_at.strftime("%Y-%m-%d %H:%M")}
+[bold]Updated:[/bold] {info.updated_at.strftime("%Y-%m-%d %H:%M")}
 
 [bold]Path:[/bold] {project_path}
 [bold]Database:[/bold] {project.db_path}

@@ -1,4 +1,4 @@
-# Pre-commit hooks for QuestFoundry mono-repo
+# Pre-commit hooks for QuestFoundry
 # See https://pre-commit.com for more information
 
 repos:
@@ -7,130 +7,76 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(spec/|lib/python/src/questfoundry/resources/|webui/pwa/node_modules/)
+        exclude: ^(_archive/|spec/)
       - id: end-of-file-fixer
-        exclude: ^(spec/|lib/python/src/questfoundry/resources/|webui/pwa/node_modules/)
+        exclude: ^(_archive/|spec/)
       - id: check-yaml
-        exclude: &node_modules_exclude ^(.*/)?node_modules/
+        exclude: ^_archive/
       - id: check-json
-        exclude: *node_modules_exclude
+        exclude: ^_archive/
       - id: check-toml
-        exclude: *node_modules_exclude
+        exclude: ^_archive/
       - id: check-added-large-files
         args: ["--maxkb=1000"]
-        exclude: *node_modules_exclude
+        exclude: ^_archive/
       - id: check-merge-conflict
-        exclude: *node_modules_exclude
+        exclude: ^_archive/
       - id: check-case-conflict
-        exclude: *node_modules_exclude
+        exclude: ^_archive/
       - id: mixed-line-ending
-        exclude: *node_modules_exclude
+        exclude: ^_archive/
 
-  # Python: Ruff (linting and formatting) - lib/compiler
+  # Python: Ruff (linting and formatting) - src/questfoundry
   - repo: local
     hooks:
-      - id: ruff-lib-compiler
-        name: ruff (lib/compiler)
+      - id: ruff-questfoundry
+        name: ruff (questfoundry)
         entry: ruff check --fix --no-cache
         language: python
         types_or: [python, pyi]
-        files: ^lib/compiler/
+        files: ^src/questfoundry/
         additional_dependencies:
           - ruff==0.14.5
-      - id: ruff-format-lib-compiler
-        name: ruff format (lib/compiler)
+      - id: ruff-format-questfoundry
+        name: ruff format (questfoundry)
         entry: ruff format --no-cache
         language: python
         types_or: [python, pyi]
-        files: ^lib/compiler/
+        files: ^src/questfoundry/
         additional_dependencies:
           - ruff==0.14.5
 
-  # Python: Ruff (linting and formatting) - cli/prompt_generator
+  # Python: Ruff (linting and formatting) - tests
   - repo: local
     hooks:
-      - id: ruff-cli-prompt-generator
-        name: ruff (cli/prompt_generator)
+      - id: ruff-tests
+        name: ruff (tests)
         entry: ruff check --fix --no-cache
         language: python
         types_or: [python, pyi]
-        files: ^cli/prompt_generator/
+        files: ^tests/
         additional_dependencies:
           - ruff==0.14.5
-      - id: ruff-format-cli-prompt-generator
-        name: ruff format (cli/prompt_generator)
+      - id: ruff-format-tests
+        name: ruff format (tests)
         entry: ruff format --no-cache
         language: python
         types_or: [python, pyi]
-        files: ^cli/prompt_generator/
+        files: ^tests/
         additional_dependencies:
           - ruff==0.14.5
 
-  # Python: Ruff (linting and formatting) - lib/python
-  # --no-cache has been disabled due to a locking problem, probably from the check and format hook fighting.
+  # Python: Type checking with mypy - src/questfoundry
+  # Note: Uses language: system to access project dependencies via uv
   - repo: local
     hooks:
-      - id: ruff-lib-python
-        name: ruff (lib/python)
-        entry: ruff check --fix --no-cache
-        language: python
+      - id: mypy-questfoundry
+        name: mypy (questfoundry)
+        entry: uv run mypy
+        language: system
         types_or: [python, pyi]
-        files: ^lib/python/
-        additional_dependencies:
-          - ruff==0.14.4
-      - id: ruff-format-lib-python
-        name: ruff format (lib/python)
-        entry: ruff format --no-cache
-        language: python
-        types_or: [python, pyi]
-        files: ^lib/python/
-        additional_dependencies:
-          - ruff==0.14.4
-
-  # Python: Type checking with mypy - lib/compiler
-  - repo: local
-    hooks:
-      - id: mypy-lib-compiler
-        name: mypy (lib/compiler)
-        entry: mypy
-        language: python
-        types_or: [python, pyi]
-        files: ^lib/compiler/src/
-        args: [--config-file=lib/compiler/pyproject.toml]
-        additional_dependencies:
-          - mypy==1.11.2
-
-  # Python: Type checking with mypy - cli/prompt_generator
-  # Note: Skipped in pre-commit because it requires local questfoundry_compiler dependency
-  # This is properly checked in CI via the typecheck-cli-prompt-generator job
-  # - repo: local
-  #   hooks:
-  #     - id: mypy-cli-prompt-generator
-  #       name: mypy (cli/prompt_generator)
-  #       entry: mypy
-  #       language: python
-  #       types_or: [python, pyi]
-  #       files: ^cli/prompt_generator/src/
-  #       args: [--config-file=cli/prompt_generator/pyproject.toml]
-  #       additional_dependencies:
-  #         - mypy==1.11.2
-  #         - typer>=0.9.0
-  #         - rich>=13.0.0
-  #         - questionary>=2.0.0
-  #         - pyyaml>=6.0
-
-  # Python: Type checking with mypy - lib/python
-  - repo: local
-    hooks:
-      - id: mypy-lib-python
-        name: mypy (lib/python)
-        entry: mypy
-        language: python
-        types_or: [python, pyi]
-        files: ^lib/python/src/
-        args: [--config-file=lib/python/pyproject.toml]
-        additional_dependencies:
-          - mypy==1.11.2
+        files: ^src/questfoundry/
+        args: [--config-file=pyproject.toml]
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
@@ -138,7 +84,7 @@ repos:
     hooks:
       - id: markdownlint
         args: [--fix]
-        exclude: ^(lib/python/src/questfoundry/resources/|lib/python/docs/|(.*/)?node_modules/)
+        exclude: ^(_archive/|docs/design/)
 
   # Commitizen for commit message format
   - repo: https://github.com/commitizen-tools/commitizen

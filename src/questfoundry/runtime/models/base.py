@@ -12,15 +12,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from questfoundry.runtime.models.enums import (
-    Archetype,
-    ArtifactCategory,
     AssetCategory,
     EnforcementType,
     KnowledgeLayer,
     StoreSemantics,
 )
 from questfoundry.runtime.models.fields import FieldDefinition
-
 
 # =============================================================================
 # Supporting Models (nested within main models)

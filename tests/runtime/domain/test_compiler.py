@@ -8,8 +8,6 @@ Tests cover:
 - Artifact type compilation with system fields
 """
 
-import pytest
-
 from questfoundry.runtime.domain.compiler import (
     compile_artifact_type_schema,
     compile_schema,
@@ -43,9 +41,7 @@ class TestCompileSchema:
 
     def test_compile_string_field(self):
         """compile_schema handles string fields."""
-        fields = [
-            FieldDefinition(name="name", type=FieldType.STRING, required=True)
-        ]
+        fields = [FieldDefinition(name="name", type=FieldType.STRING, required=True)]
         schema = compile_schema(fields)
 
         assert "name" in schema["properties"]
@@ -54,45 +50,35 @@ class TestCompileSchema:
 
     def test_compile_text_field(self):
         """compile_schema handles text fields (long strings)."""
-        fields = [
-            FieldDefinition(name="content", type=FieldType.TEXT)
-        ]
+        fields = [FieldDefinition(name="content", type=FieldType.TEXT)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["content"]["type"] == "string"
 
     def test_compile_integer_field(self):
         """compile_schema handles integer fields."""
-        fields = [
-            FieldDefinition(name="count", type=FieldType.INTEGER)
-        ]
+        fields = [FieldDefinition(name="count", type=FieldType.INTEGER)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["count"]["type"] == "integer"
 
     def test_compile_number_field(self):
         """compile_schema handles number (float) fields."""
-        fields = [
-            FieldDefinition(name="score", type=FieldType.NUMBER)
-        ]
+        fields = [FieldDefinition(name="score", type=FieldType.NUMBER)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["score"]["type"] == "number"
 
     def test_compile_boolean_field(self):
         """compile_schema handles boolean fields."""
-        fields = [
-            FieldDefinition(name="active", type=FieldType.BOOLEAN)
-        ]
+        fields = [FieldDefinition(name="active", type=FieldType.BOOLEAN)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["active"]["type"] == "boolean"
 
     def test_compile_date_field(self):
         """compile_schema handles date fields."""
-        fields = [
-            FieldDefinition(name="created", type=FieldType.DATE)
-        ]
+        fields = [FieldDefinition(name="created", type=FieldType.DATE)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["created"]["type"] == "string"
@@ -100,9 +86,7 @@ class TestCompileSchema:
 
     def test_compile_datetime_field(self):
         """compile_schema handles datetime fields."""
-        fields = [
-            FieldDefinition(name="timestamp", type=FieldType.DATETIME)
-        ]
+        fields = [FieldDefinition(name="timestamp", type=FieldType.DATETIME)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["timestamp"]["type"] == "string"
@@ -110,9 +94,7 @@ class TestCompileSchema:
 
     def test_compile_uri_field(self):
         """compile_schema handles URI fields."""
-        fields = [
-            FieldDefinition(name="link", type=FieldType.URI)
-        ]
+        fields = [FieldDefinition(name="link", type=FieldType.URI)]
         schema = compile_schema(fields)
 
         assert schema["properties"]["link"]["type"] == "string"

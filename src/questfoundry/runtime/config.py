@@ -91,9 +91,7 @@ class RuntimeConfig:
         name = name or self.default_provider
         return self.providers.get(name)
 
-    def get_model_for_class(
-        self, model_class: str, provider: str | None = None
-    ) -> str | None:
+    def get_model_for_class(self, model_class: str, provider: str | None = None) -> str | None:
         """Resolve model class to concrete model."""
         provider = provider or self.default_provider
         return self.model_classes.resolve(model_class, provider)

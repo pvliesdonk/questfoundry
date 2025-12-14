@@ -65,7 +65,7 @@ class TestProjectCreation:
         """Project.create creates directory structure."""
         project_path = tmp_path / "my-story"
 
-        project = Project.create(
+        _project = Project.create(
             path=project_path,
             name="My Story",
             description="A test story",

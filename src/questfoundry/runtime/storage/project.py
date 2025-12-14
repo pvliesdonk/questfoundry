@@ -342,9 +342,7 @@ class Project:
     def get_artifact(self, artifact_id: str) -> dict[str, Any] | None:
         """Get an artifact by ID."""
         conn = self._get_connection()
-        row = conn.execute(
-            "SELECT * FROM artifacts WHERE _id = ?", (artifact_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM artifacts WHERE _id = ?", (artifact_id,)).fetchone()
 
         if row is None:
             return None
@@ -367,7 +365,7 @@ class Project:
         self,
         artifact_id: str,
         data: dict[str, Any],
-        updated_by: str | None = None,
+        _updated_by: str | None = None,
     ) -> dict[str, Any] | None:
         """
         Update an artifact.
@@ -375,7 +373,7 @@ class Project:
         Args:
             artifact_id: Artifact ID to update
             data: New data (merged with existing)
-            updated_by: Agent ID making the update
+            _updated_by: Agent ID making the update (reserved for future audit)
 
         Returns:
             Updated artifact or None if not found

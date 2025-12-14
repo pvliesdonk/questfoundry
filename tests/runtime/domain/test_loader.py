@@ -8,8 +8,6 @@ Implementation should make these tests pass.
 import json
 from pathlib import Path
 
-import pytest
-
 
 class TestLoadResult:
     """Tests for LoadResult dataclass."""
@@ -160,8 +158,10 @@ class TestLoadStudio:
 
         assert not result.success
         assert len(result.errors) > 0
-        assert any("not found" in e.message.lower() or "not exist" in e.message.lower()
-                   for e in result.errors)
+        assert any(
+            "not found" in e.message.lower() or "not exist" in e.message.lower()
+            for e in result.errors
+        )
 
     async def test_load_studio_missing_studio_json_returns_error(self, tmp_path: Path):
         """load_studio returns error when studio.json is missing."""

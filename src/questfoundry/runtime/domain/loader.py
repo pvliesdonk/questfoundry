@@ -159,7 +159,7 @@ async def _resolve_all_refs(
         "quality_criteria": QualityCriteria,
     }
 
-    for key, model_class in ref_keys.items():
+    for key, _model_class in ref_keys.items():
         if key not in raw:
             resolved[key] = []
             continue

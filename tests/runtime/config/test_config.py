@@ -13,8 +13,6 @@ Tests cover:
 import os
 from pathlib import Path
 
-import pytest
-
 from questfoundry.runtime.config import (
     ModelClassMapping,
     ProviderConfig,
@@ -90,9 +88,7 @@ class TestModelClassMapping:
 
     def test_model_class_mapping_unknown_provider(self):
         """ModelClassMapping returns None for unknown provider."""
-        mapping = ModelClassMapping(
-            mappings={"creative": {"ollama": "qwen3:8b"}}
-        )
+        mapping = ModelClassMapping(mappings={"creative": {"ollama": "qwen3:8b"}})
 
         assert mapping.resolve("creative", "unknown") is None
 
@@ -132,7 +128,7 @@ class TestRuntimeConfig:
             default_provider="ollama",
             providers={
                 "ollama": ProviderConfig(name="ollama", host="http://localhost:11434"),
-            }
+            },
         )
 
         provider = config.get_provider(None)
@@ -214,11 +210,13 @@ model_classes:
 
     def test_load_config_cli_overrides(self):
         """load_config applies CLI overrides."""
-        config = load_config(cli_overrides={
-            "domain": "cli-domain",
-            "provider": "openai",
-            "log": True,
-        })
+        config = load_config(
+            cli_overrides={
+                "domain": "cli-domain",
+                "provider": "openai",
+                "log": True,
+            }
+        )
 
         assert config.domain_path == Path("cli-domain")
         assert config.default_provider == "openai"
@@ -233,9 +231,9 @@ model_classes:
         # Clear existing env var if set
         monkeypatch.delenv("OLLAMA_HOST", raising=False)
 
-        config = load_config(env_file=env_file)
+        _config = load_config(env_file=env_file)
 
-        # The env file should set OLLAMA_HOST
+        # The env file should set OLLAMA_HOST (load_config loads dotenv)
         assert os.getenv("OLLAMA_HOST") == "http://env-host:11434"
 
     def test_provider_states_updated(self):
