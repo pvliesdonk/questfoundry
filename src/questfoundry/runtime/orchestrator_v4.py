@@ -30,7 +30,11 @@ from questfoundry.runtime.knowledge import (
     build_agent_prompt,
     inject_playbook_context,
 )
-from questfoundry.runtime.messaging import MessageBroker
+from questfoundry.runtime.messaging import (
+    MessageBroker,
+    MessageType,
+    MessagePriority,
+)
 from questfoundry.runtime.playbook_tracker import PlaybookTracker
 from questfoundry.runtime.state import DelegationResult, StudioState, create_initial_state
 from questfoundry.runtime.tools.consult import (
@@ -589,6 +593,20 @@ class OrchestratorV4:
         # Register the delegation (tracks active_delegations for bouncer)
         self.message_broker.register_delegation(role_id)
 
+        # Send delegation_request message (audit trail + mailbox population)
+        delegation_msg = self.message_broker.send_message(
+            msg_type=MessageType.DELEGATION_REQUEST,
+            sender=self.entry_agent_id,
+            recipient=role_id,
+            payload={
+                "task_description": task,
+                "delegation_count": delegation_count,
+            },
+            priority=MessagePriority.HIGH,
+            ttl_turns=-1,  # Never expire delegation requests
+        )
+        correlation_id = delegation_msg.id
+
         try:
             # Build agent tools and prompt
             agent_tools = build_agent_tools(
@@ -669,6 +687,19 @@ class OrchestratorV4:
             self.message_broker.complete_delegation(role_id)
 
         if not result.success:
+            # Send delegation_response for failure
+            self.message_broker.send_message(
+                msg_type=MessageType.DELEGATION_RESPONSE,
+                sender=role_id,
+                recipient=self.entry_agent_id,
+                payload={
+                    "status": "rejected",
+                    "message": f"Agent execution failed: {result.error}",
+                    "artifact_ids": [],
+                },
+                priority=MessagePriority.HIGH,
+                correlation_id=correlation_id,
+            )
             return DelegationResult(
                 role_id=role_id,
                 status="failed",
@@ -679,11 +710,27 @@ class OrchestratorV4:
 
         # Extract result from done_tool_result
         done_result = result.done_tool_result or {}
+        artifacts = done_result.get("artifacts", [])
+
+        # Send delegation_response for success
+        self.message_broker.send_message(
+            msg_type=MessageType.DELEGATION_RESPONSE,
+            sender=role_id,
+            recipient=self.entry_agent_id,
+            payload={
+                "status": "completed",
+                "message": done_result.get("message", "Task completed."),
+                "artifact_ids": artifacts,
+            },
+            priority=MessagePriority.NORMAL,
+            correlation_id=correlation_id,
+        )
+
         return DelegationResult(
             role_id=role_id,
             status=done_result.get("status", "completed"),
             message=done_result.get("message", "Task completed."),
-            artifacts=done_result.get("artifacts", []),
+            artifacts=artifacts,
             recommendation=done_result.get("recommendation"),
         )
 
