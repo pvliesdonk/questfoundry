@@ -159,16 +159,16 @@ class ValidateArtifactTool(BaseTool):
         """Format schema validation errors into the output format."""
         errors: list[dict[str, Any]] = []
 
-        # Handle missing fields
-        for field in result.get("missing_fields", []):
+        # Handle missing fields (validation.py returns None for empty lists)
+        for field in result.get("missing_fields") or []:
             errors.append({
                 "field": field,
                 "error": "Required field is missing",
                 "suggested_fix": f"Add the '{field}' field with a valid value",
             })
 
-        # Handle invalid fields
-        for field_info in result.get("invalid_fields", []):
+        # Handle invalid fields (validation.py returns None for empty lists)
+        for field_info in result.get("invalid_fields") or []:
             if isinstance(field_info, dict):
                 errors.append({
                     "field": field_info.get("field", "unknown"),
