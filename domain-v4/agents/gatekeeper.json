@@ -111,8 +111,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["quality_bars_detailed", "spoiler_hygiene", "presentation_patterns"],
-    "role_specific": ["gatekeeper_heuristics", "bar_by_bar_checklist"],
-    "can_lookup": ["artifact_templates", "pair_guides", "escalation_rules"]
+    "must_know": ["quality_bars_overview", "spoiler_hygiene"],
+    "role_specific": ["gatekeeper_heuristics"]
   }
 }

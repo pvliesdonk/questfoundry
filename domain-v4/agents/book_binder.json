@@ -117,7 +117,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["sources_of_truth", "spoiler_hygiene"],
-    "role_specific": ["book_binder_procedures", "export_patterns", "front_matter_template"],
-    "can_lookup": ["artifact_templates", "quality_bars_overview", "accessibility_guidelines"]
+    "role_specific": ["book_binder_procedures", "export_patterns"],
+    "can_lookup": ["accessibility_guidelines"]
   }
 }

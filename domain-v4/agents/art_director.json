@@ -133,7 +133,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
-    "role_specific": ["art_director_heuristics", "illustration_purpose_taxonomy", "visual_composition_basics"],
-    "can_lookup": ["artifact_templates", "quality_bars_overview", "accessibility_guidelines"]
+    "role_specific": ["art_director_heuristics"],
+    "can_lookup": ["accessibility_guidelines"]
   }
 }

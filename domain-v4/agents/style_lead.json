@@ -140,7 +140,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene", "choice_integrity"],
-    "role_specific": ["style_lead_heuristics", "contrastive_choice_patterns", "diegetic_gate_phrasing", "visual_language_patterns"],
-    "can_lookup": ["artifact_templates", "quality_bars_overview", "accessibility_guidelines"]
+    "role_specific": ["style_lead_heuristics"],
+    "can_lookup": ["accessibility_guidelines"]
   }
 }

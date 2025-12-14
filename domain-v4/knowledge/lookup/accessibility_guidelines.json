@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "accessibility_guidelines",
+  "name": "Accessibility Guidelines",
+  "layer": "lookup",
+
+  "summary": "Baseline requirements for player-facing surfaces: perceivable, operable, understandable, robust, and kind by default.",
+
+  "keywords": ["accessibility", "alt text", "captions", "headings", "navigation", "content warnings", "WCAG"],
+
+  "triggers": [
+    "writing alt text",
+    "accessibility review",
+    "export formatting",
+    "content warnings",
+    "screen reader compatibility"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Accessibility Guidelines\n\n### Principles\n\n- **Perceivable**: Provide text equivalents and clear structure\n- **Operable**: Navigation is predictable; links and anchors work\n- **Understandable**: Language is clear; reading order makes sense; no hidden mechanics\n- **Robust**: Surfaces degrade gracefully across formats (MD/HTML/EPUB/PDF)\n- **Kind by default**: Content warnings and sensory safety are normal, not special\n\n### Global Requirements\n\n1. **Headings & structure**: Logical hierarchy (`#`, `##`, `###`); one H1 per document\n2. **Links & anchors**: Descriptive text ('See Salvage Permits')—never 'click here'\n3. **Contrast & color**: Don't rely on color alone to convey state or grouping\n4. **Language & register**: Plain, direct sentences; avoid jargon unless codex covers it\n\n### Art (Captions & Alt Text)\n\n- **Caption (player-safe)**: Mood/affordance, not a twist\n- **Alt text (required)**: One sentence with concrete nouns/relations; avoid 'image of...'\n  - Good: 'A scarred bulkhead with spent extinguishers; a foreman's shadow reaches across the deck.'\n- **Decorative images**: Mark as such (`role=\"presentation\"`) or provide meaningful alt text\n\n### Audio\n\n- **Text equivalents**: Concise, descriptive lines for ambience/foley/stingers\n  - Example: '[Low mechanical hum; distant footsteps on metal grating.]'\n- **Loudness & dynamics**: Avoid startle peaks; provide fade/ramp guidance\n- **Safety notes**: Call out harsh cues in front matter ('Contains intermittent alarm tones.')\n\n### Content Notes (CW)\n\n- Put brief, non-spoiling content warnings in front matter\n- Keep CW phrasing neutral; no plot reveals\n- Example: 'Contains: violence (industrial accident), confinement, alarm sounds'\n\n### Checklist\n\n- [ ] Every image has alt text or is explicitly decorative\n- [ ] Captions are spoiler-safe and in register\n- [ ] Text equivalents present for each audio cue\n- [ ] Headings reflect narrative hierarchy\n- [ ] Links resolve in all export formats\n- [ ] Content notes present without spoilers"
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator", "validator"],
+    "agents": ["art_director", "audio_director", "book_binder", "style_lead", "gatekeeper"]
+  },
+
+  "tags": ["accessibility", "player-facing", "quality"]
+}

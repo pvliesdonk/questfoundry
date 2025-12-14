@@ -1,0 +1,30 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "prose_patterns",
+  "name": "Prose Patterns",
+  "layer": "role_specific",
+
+  "summary": "Paragraph structure, beat integration, and cadence patterns for narrative prose writing.",
+
+  "keywords": ["prose", "paragraphs", "beats", "cadence", "scenes", "micro-beats"],
+
+  "triggers": [
+    "writing section prose",
+    "scene drafting",
+    "paragraph structure",
+    "beat integration"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Prose Patterns\n\n### Paragraph Cadence\n\n**Default Target: 3+ paragraphs per full scene**\n\n1. **Lead image + motion**: Opening sensory details and action\n2. **Goal/vector + friction**: Character intent and obstacles\n3. **Choice setup**: Context for upcoming decision\n\n### Micro-beats\n\n**Transit-only micro-beats** (brief passages between scenes) may be 1 paragraph if explicitly framed. The next full scene must carry reflection and affordances.\n\n**Auto-extension rule**: If draft is <3 paragraphs and not a designated micro-beat, extend with movement/vector paragraph before presenting choices.\n\n### Beat Integration\n\nParse briefs to extract:\n- Planned beats (story moments)\n- Required choices (player decision points)\n- Canon callbacks (lore integration)\n- State effects (world changes)\n- Gateway conditions (choice availability)\n\n### Style Self-Check (Minimum)\n\n- **Register match**: Voice aligns with style guide for this story\n- **Paragraph consistency**: Voice doesn't waver within or between paragraphs\n- **Contrastive choices**: Options are meaningfully different\n- **No meta phrasing**: Choices are diegetic, not UI instructions\n- **PN-safe gateways**: No codewords or state leaks in gateway hints\n- **Altered-hub returns**: Add second unmistakable diegetic cue on return if subtlety risks confusion\n\n### Common Pitfalls\n\n- **Cosmetic choices**: Options that lead to same outcome\n- **Meta phrasing**: 'Click here' or 'Choose wisely'\n- **Spoiler choice text**: Previewing consequences in option label\n- **Register breaks**: Modern idioms in historical settings\n- **Thin scenes**: <3 paragraphs without micro-beat justification\n- **Weak diegetic cues**: Subtle returns that players might miss"
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator"],
+    "agents": ["scene_smith"]
+  },
+
+  "tags": ["prose", "style", "drafting"]
+}

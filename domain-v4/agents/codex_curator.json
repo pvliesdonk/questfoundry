@@ -100,7 +100,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
-    "role_specific": ["codex_curator_guidelines", "diegetic_writing_patterns", "spoiler_classification"],
-    "can_lookup": ["artifact_templates", "accessibility_guidelines"]
+    "role_specific": ["codex_curator_guidelines"],
+    "can_lookup": ["accessibility_guidelines"]
   }
 }

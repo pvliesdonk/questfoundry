@@ -107,7 +107,6 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["diegetic_gates", "choice_integrity", "topology_patterns"],
-    "role_specific": ["plotwright_heuristics", "section_brief_template", "gateway_patterns"],
-    "can_lookup": ["artifact_templates", "pair_guides", "loop_procedures"]
+    "role_specific": ["plotwright_heuristics"]
   }
 }

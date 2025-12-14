@@ -101,7 +101,6 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["sources_of_truth", "spoiler_hygiene"],
-    "role_specific": ["researcher_heuristics", "research_memo_template", "posture_definitions"],
-    "can_lookup": ["artifact_templates", "quality_bars_overview"]
+    "role_specific": ["researcher_heuristics", "posture_definitions"]
   }
 }

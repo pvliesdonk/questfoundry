@@ -99,8 +99,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene", "hook_usage"],
-    "role_specific": ["lore_weaver_procedures", "canon_pack_structure", "timeline_mapping"],
-    "can_lookup": ["artifact_templates", "quality_bars_overview"]
+    "must_know": ["spoiler_hygiene"],
+    "role_specific": ["lore_weaver_procedures"]
   }
 }

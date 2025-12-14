@@ -112,7 +112,6 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["diegetic_gates", "spoiler_hygiene"],
-    "role_specific": ["player_narrator_heuristics"],
-    "can_lookup": ["quality_bars_overview"]
+    "role_specific": ["player_narrator_heuristics"]
   }
 }

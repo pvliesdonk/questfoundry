@@ -123,7 +123,6 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene", "choice_integrity", "diegetic_gates"],
-    "role_specific": ["scene_smith_heuristics", "prose_patterns", "gate_phrasing_examples"],
-    "can_lookup": ["style_addendum", "artifact_templates", "pair_guides"]
+    "role_specific": ["scene_smith_heuristics", "prose_patterns"]
   }
 }
