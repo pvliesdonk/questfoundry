@@ -32,6 +32,9 @@ class ConsultSchemaTool(BaseTool):
         _ = _include_examples  # Silence unused variable warning until implemented
 
         # Find artifact type in studio
+        # TODO: Consider caching artifact type lookups in a dict by ID for O(1) access.
+        # Current linear search is fine for small numbers of artifact types but could
+        # be optimized if studios grow large.
         artifact_type = None
         for at in self._context.studio.artifact_types:
             if at.id == artifact_type_id:

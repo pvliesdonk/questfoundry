@@ -115,6 +115,9 @@ class SearchWorkspaceTool(BaseTool):
             params.append(created_after)
 
         # Text search in JSON data
+        # TODO: LIKE on JSON data is inefficient for large datasets.
+        # Consider implementing FTS5 (Full-Text Search) for better performance.
+        # See: https://www.sqlite.org/fts5.html
         if query:
             # SQLite JSON search - searches text representation of data
             sql += " AND data LIKE ?"
@@ -134,6 +137,9 @@ class SearchWorkspaceTool(BaseTool):
             summary = self._build_summary(row["_type"], data)
 
             # Skip if related_to filter doesn't match
+            # TODO: Filtering in Python is inefficient - consider using SQLite's
+            # json_each() or json_extract() for SQL-level filtering of relationships.
+            # This would also allow proper LIMIT application.
             if related_to and not self._is_related(data, related_to):
                 continue
 

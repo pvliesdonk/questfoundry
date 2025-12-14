@@ -51,7 +51,14 @@ class WebSearchTool(BaseTool):
         return self._is_healthy
 
     def _check_searxng_health(self) -> bool:
-        """Check if SearXNG is reachable."""
+        """Check if SearXNG is reachable.
+
+        NOTE: This is a blocking HTTP call. While not ideal in async context,
+        it's only called once per tool instance (result is cached) and happens
+        during tool availability checking, not during execute().
+
+        TODO: Consider lazy async health check on first execute() call instead.
+        """
         try:
             import httpx
 

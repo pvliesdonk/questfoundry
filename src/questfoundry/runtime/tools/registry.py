@@ -79,7 +79,11 @@ class ToolRegistry:
         self._tool_cache: dict[str, BaseTool] = {}
 
     def get_tool_definition(self, tool_id: str) -> Tool | None:
-        """Get a tool definition by ID."""
+        """Get a tool definition by ID.
+
+        TODO: Consider building a dict[str, Tool] index on init for O(1) lookups.
+        Current linear search is acceptable for typical studio sizes (~10-20 tools).
+        """
         for tool in self._studio.tools:
             if tool.id == tool_id:
                 return tool

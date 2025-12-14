@@ -138,7 +138,7 @@ class AgentRuntime:
                     domain_path=self._domain_path,
                 )
             except ImportError:
-                logger.warning("Tools module not available")
+                logger.warning("Tools module not available, tool execution disabled", exc_info=True)
                 return None
 
         return self._tool_registry

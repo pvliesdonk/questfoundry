@@ -12,6 +12,7 @@ Features:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -40,6 +41,10 @@ class WebFetchTool(BaseTool):
     Extracts article text using trafilatura, with regex fallback.
     """
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._rate_limit_lock = asyncio.Lock()
+
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute URL fetch."""
         url = args.get("url", "")
@@ -61,7 +66,7 @@ class WebFetchTool(BaseTool):
             )
 
         # Rate limiting
-        self._enforce_rate_limit()
+        await self._enforce_rate_limit()
 
         try:
             # Fetch content
@@ -88,17 +93,18 @@ class WebFetchTool(BaseTool):
         except Exception as e:
             raise ToolExecutionError(f"Web fetch failed: {e}") from e
 
-    def _enforce_rate_limit(self) -> None:
-        """Enforce minimum interval between requests."""
+    async def _enforce_rate_limit(self) -> None:
+        """Enforce minimum interval between requests (async-safe)."""
         global _last_request_time
 
-        now = time.time()
-        elapsed = now - _last_request_time
+        async with self._rate_limit_lock:
+            now = time.time()
+            elapsed = now - _last_request_time
 
-        if elapsed < MIN_REQUEST_INTERVAL:
-            time.sleep(MIN_REQUEST_INTERVAL - elapsed)
+            if elapsed < MIN_REQUEST_INTERVAL:
+                await asyncio.sleep(MIN_REQUEST_INTERVAL - elapsed)
 
-        _last_request_time = time.time()
+            _last_request_time = time.time()
 
     async def _fetch_url(self, url: str) -> str:
         """Fetch URL content."""

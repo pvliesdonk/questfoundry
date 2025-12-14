@@ -23,12 +23,15 @@ What Phase 3 (#147) will add:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
 
 from questfoundry.runtime.tools.base import BaseTool, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.registry import register_tool
+
+logger = logging.getLogger(__name__)
 
 
 @register_tool("delegate")
@@ -184,9 +187,13 @@ class DelegateTool(BaseTool):
                 ),
             )
             conn.commit()
-        except Exception:
+        except Exception as e:
             # Non-fatal - delegation still works, just not persisted
-            pass
+            logger.warning(
+                "Failed to persist delegation %s: %s",
+                delegation.get("delegation_id"),
+                e,
+            )
 
 
 # =============================================================================

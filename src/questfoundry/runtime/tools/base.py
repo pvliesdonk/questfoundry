@@ -7,8 +7,10 @@ They are defined declaratively in domain/tools/*.json and implemented here.
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -82,7 +84,7 @@ class ToolContext:
     session_id: str | None = None
 
     # Additional context that may be needed
-    domain_path: Any = None  # Path to domain directory
+    domain_path: Path | None = None  # Path to domain directory
 
 
 class BaseTool(ABC):
@@ -167,12 +169,15 @@ class BaseTool(ABC):
                 expected_type = prop_schema.get("type")
 
                 # Basic type checking
+                # Note: bool check comes before int because bool is a subclass of int
                 if expected_type == "string" and not isinstance(value, str):
                     raise ToolValidationError(f"Field '{field_name}' must be a string")
-                elif expected_type == "integer" and not isinstance(value, int):
-                    raise ToolValidationError(f"Field '{field_name}' must be an integer")
                 elif expected_type == "boolean" and not isinstance(value, bool):
                     raise ToolValidationError(f"Field '{field_name}' must be a boolean")
+                elif expected_type == "integer" and (
+                    not isinstance(value, int) or isinstance(value, bool)
+                ):
+                    raise ToolValidationError(f"Field '{field_name}' must be an integer")
                 elif expected_type == "array" and not isinstance(value, list):
                     raise ToolValidationError(f"Field '{field_name}' must be an array")
                 elif expected_type == "object" and not isinstance(value, dict):
@@ -214,8 +219,6 @@ class BaseTool(ABC):
         Returns:
             ToolResult with execution outcome
         """
-        import time
-
         start_time = time.time()
 
         try:

@@ -25,6 +25,53 @@ logger = logging.getLogger(__name__)
 # Set to True when sqlite-vec and embeddings are configured
 VECTOR_SEARCH_AVAILABLE = False
 
+# Common stop words to filter out during tokenization
+_STOP_WORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+    }
+)
+
 
 @dataclass
 class CorpusExcerpt:
@@ -214,54 +261,11 @@ class ConsultCorpusTool(BaseTool):
         return excerpts
 
     def _tokenize(self, text: str) -> list[str]:
-        """Tokenize text into words."""
+        """Tokenize text into words, filtering stop words."""
         # Simple word tokenization
         words = re.findall(r"\b[a-z]{2,}\b", text)
-        # Remove common stop words
-        stop_words = {
-            "the",
-            "a",
-            "an",
-            "and",
-            "or",
-            "but",
-            "in",
-            "on",
-            "at",
-            "to",
-            "for",
-            "of",
-            "with",
-            "by",
-            "from",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "been",
-            "being",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "will",
-            "would",
-            "could",
-            "should",
-            "may",
-            "might",
-            "must",
-            "this",
-            "that",
-            "these",
-            "those",
-            "it",
-            "its",
-        }
-        return [w for w in words if w not in stop_words]
+        # Remove common stop words (using module-level constant)
+        return [w for w in words if w not in _STOP_WORDS]
 
     async def _vector_search(
         self, query: str, corpus: dict[str, str], max_results: int
