@@ -1,12 +1,31 @@
 """
-QuestFoundry Runtime - Cleanroom Implementation
+QuestFoundry Runtime - Domain-agnostic studio execution engine.
 
-This runtime is being rebuilt from scratch based on meta/ schemas.
-See RUNTIME-CLEANROOM-BRIEF.md for design principles and phases.
+This runtime implements the meta-model contract (meta/schemas/) and can
+execute any studio definition following that schema.
 
-Previous implementation archived at: _archive/runtime-v3/
-
-Status: Phase 1 - Not yet implemented
+Status: Phase 0 - Foundation (in progress)
 """
 
-# Placeholder - implementation follows RUNTIME-CLEANROOM-BRIEF.md phases
+from questfoundry.runtime.domain import LoadError, LoadResult, load_studio
+from questfoundry.runtime.models import (
+    Archetype,
+    FieldType,
+    MessageType,
+    StoreSemantics,
+    Studio,
+)
+
+__all__ = [
+    # Domain loading
+    "LoadError",
+    "LoadResult",
+    "load_studio",
+    # Enums
+    "Archetype",
+    "FieldType",
+    "MessageType",
+    "StoreSemantics",
+    # Models
+    "Studio",
+]
