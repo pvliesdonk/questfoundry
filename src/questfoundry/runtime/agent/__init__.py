@@ -14,12 +14,18 @@ from questfoundry.runtime.agent.prompt import (
     PromptSection,
     build_prompt,
 )
-from questfoundry.runtime.agent.runtime import ActivationResult, AgentRuntime, activate_agent
+from questfoundry.runtime.agent.runtime import (
+    ActivationResult,
+    AgentRuntime,
+    ToolCall,
+    activate_agent,
+)
 
 __all__ = [
     # Runtime
     "AgentRuntime",
     "ActivationResult",
+    "ToolCall",
     "activate_agent",
     # Context
     "ContextBuilder",

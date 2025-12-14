@@ -42,6 +42,10 @@ class EventType(str, Enum):
     # Knowledge events
     KNOWLEDGE_INJECT = "knowledge_inject"
 
+    # Tool events
+    TOOL_CALL_START = "tool_call_start"
+    TOOL_CALL_COMPLETE = "tool_call_complete"
+
 
 class EventLogger:
     """
