@@ -574,80 +574,99 @@ class OrchestratorV4:
                 recommendation="Delegate to an existing agent.",
             )
 
-        # Build agent tools and prompt
-        agent_tools = build_agent_tools(
-            agent,
-            self.studio,
-            state,
-            self.cold_store,
-            self.playbook_tracker,
-        )
-        agent_prompt = build_agent_prompt(agent, self.studio)
-
-        # Create agent executor
-        agent_executor = ToolExecutor(
-            llm=self.llm,
-            tools=agent_tools,
-            done_tool_name="return_to_sr",
-            system_prompt=agent_prompt,
-            stream=self.stream,
-            callbacks=None,  # Specialists don't stream to avoid conflicts
-        )
-
-        # Inject mailbox context for delegated agent
-        task_with_mailbox = await self._inject_mailbox_context(role_id, task)
-
-        # Generate session ID for structured logging
-        session_id = f"{role_id}-d{delegation_count}-{uuid.uuid4().hex[:8]}"
-        session_start_time = time.perf_counter()
-
-        # Log session start
-        self._log_agent_session_start(
-            agent_id=role_id,
-            task=task_with_mailbox,
-            system_prompt=agent_prompt,
-            hot_store=dict(state["hot_store"]),
-            session_id=session_id,
-        )
-
-        # Log delegation start to delegations.jsonl
-        if is_structured_logging_configured():
-            log_delegation(
-                from_role=self.entry_agent_id,
-                to_role=role_id,
-                task=task,
-                delegation_id=session_id,
-                status="started",
+        # Check backpressure (bouncer pattern)
+        can_accept, rejection_reason = self.message_broker.check_delegation_capacity(role_id)
+        if not can_accept:
+            logger.warning(f"Delegation rejected (backpressure): {rejection_reason}")
+            return DelegationResult(
+                role_id=role_id,
+                status="failed",
+                message=rejection_reason,
+                artifacts=[],
+                recommendation="Try delegating to a different agent or wait for current tasks to complete.",
             )
 
-        # Execute (traced)
-        async with TracedDelegation(
-            agent_id=role_id,
-            task=task_with_mailbox,
-            delegation_count=delegation_count,
-            extra_metadata={"archetypes": agent.archetypes},
-        ):
-            result = await agent_executor.run(task_with_mailbox)
+        # Register the delegation (tracks active_delegations for bouncer)
+        self.message_broker.register_delegation(role_id)
 
-        # Log session end
-        session_duration_ms = (time.perf_counter() - session_start_time) * 1000
-        self._log_agent_session_end(
-            agent_id=role_id,
-            status="completed" if result.success else "failed",
-            hot_store=dict(state["hot_store"]),
-            session_id=session_id,
-            duration_ms=session_duration_ms,
-        )
+        try:
+            # Build agent tools and prompt
+            agent_tools = build_agent_tools(
+                agent,
+                self.studio,
+                state,
+                self.cold_store,
+                self.playbook_tracker,
+            )
+            agent_prompt = build_agent_prompt(agent, self.studio)
 
-        # Log delegation completion to delegations.jsonl
-        if is_structured_logging_configured():
-            log_delegation(
-                from_role=self.entry_agent_id,
-                to_role=role_id,
-                task=task,
-                delegation_id=session_id,
+            # Create agent executor
+            agent_executor = ToolExecutor(
+                llm=self.llm,
+                tools=agent_tools,
+                done_tool_name="return_to_sr",
+                system_prompt=agent_prompt,
+                stream=self.stream,
+                callbacks=None,  # Specialists don't stream to avoid conflicts
+            )
+
+            # Inject mailbox context for delegated agent
+            task_with_mailbox = await self._inject_mailbox_context(role_id, task)
+
+            # Generate session ID for structured logging
+            session_id = f"{role_id}-d{delegation_count}-{uuid.uuid4().hex[:8]}"
+            session_start_time = time.perf_counter()
+
+            # Log session start
+            self._log_agent_session_start(
+                agent_id=role_id,
+                task=task_with_mailbox,
+                system_prompt=agent_prompt,
+                hot_store=dict(state["hot_store"]),
+                session_id=session_id,
+            )
+
+            # Log delegation start to delegations.jsonl
+            if is_structured_logging_configured():
+                log_delegation(
+                    from_role=self.entry_agent_id,
+                    to_role=role_id,
+                    task=task,
+                    delegation_id=session_id,
+                    status="started",
+                )
+
+            # Execute (traced)
+            async with TracedDelegation(
+                agent_id=role_id,
+                task=task_with_mailbox,
+                delegation_count=delegation_count,
+                extra_metadata={"archetypes": agent.archetypes},
+            ):
+                result = await agent_executor.run(task_with_mailbox)
+
+            # Log session end
+            session_duration_ms = (time.perf_counter() - session_start_time) * 1000
+            self._log_agent_session_end(
+                agent_id=role_id,
                 status="completed" if result.success else "failed",
+                hot_store=dict(state["hot_store"]),
+                session_id=session_id,
+                duration_ms=session_duration_ms,
             )
+
+            # Log delegation completion to delegations.jsonl
+            if is_structured_logging_configured():
+                log_delegation(
+                    from_role=self.entry_agent_id,
+                    to_role=role_id,
+                    task=task,
+                    delegation_id=session_id,
+                    status="completed" if result.success else "failed",
+                )
+        finally:
+            # Complete delegation tracking (bouncer pattern) - always decrement
+            self.message_broker.complete_delegation(role_id)
 
         if not result.success:
             return DelegationResult(
