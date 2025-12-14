@@ -1,18 +1,19 @@
 """Corpus vector store for semantic search over studio knowledge.
 
 This module provides vector-based semantic search over corpus knowledge entries
-(genre conventions, writing craft guides, etc.). It uses sentence-transformers
-for embeddings and sqlite-vec for vector storage/search.
+(genre conventions, writing craft guides, etc.). It uses configurable embeddings
+providers (Ollama, OpenAI, or sentence-transformers) and sqlite-vec for storage.
 
 The corpus is STUDIO knowledge (shared across all projects), not project
 knowledge. Vectors are cached in ~/.questfoundry/cache/ and automatically
 rebuilt when corpus content changes.
 
-Dependencies (optional [rag] extra):
-- sentence-transformers: For computing text embeddings
-- sqlite-vec: SQLite extension for vector similarity search
+Embeddings Providers (in priority order):
+1. Ollama - Lightweight, runs locally, no torch dependency (recommended)
+2. OpenAI - API-based, requires OPENAI_API_KEY
+3. sentence-transformers - Local with torch (~2GB), optional [rag] extra
 
-Falls back gracefully to keyword search if dependencies aren't installed.
+Falls back gracefully to keyword search if no provider is available.
 """
 
 from __future__ import annotations
@@ -26,23 +27,21 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Check for optional dependencies
-VECTOR_SEARCH_AVAILABLE = False
-_import_error: str | None = None
+# Check for sqlite-vec (required for vector storage)
+SQLITE_VEC_AVAILABLE = False
+_sqlite_vec_error: str | None = None
 
 try:
     import sqlite_vec
-    from sentence_transformers import SentenceTransformer
 
-    VECTOR_SEARCH_AVAILABLE = True
+    SQLITE_VEC_AVAILABLE = True
 except ImportError as e:
-    _import_error = str(e)
-    logger.debug(f"Vector search not available: {e}")
+    _sqlite_vec_error = str(e)
+    logger.debug(f"sqlite-vec not available: {e}")
 
-
-# Default embedding model - good balance of speed and quality
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
-EMBEDDING_DIM = 384  # Dimension for all-MiniLM-L6-v2
+# Embeddings provider is checked lazily - no torch import at module load
+_embeddings_available: bool | None = None
+_embeddings_error: str | None = None
 
 # Chunking parameters
 CHUNK_SIZE = 500  # Target characters per chunk
@@ -73,11 +72,33 @@ def compute_corpus_hash(corpus_dir: Path) -> str:
     return hasher.hexdigest()[:16]  # Short hash is sufficient
 
 
+def _check_embeddings_available() -> tuple[bool, str | None]:
+    """Check if any embeddings provider is available."""
+    global _embeddings_available, _embeddings_error
+
+    if _embeddings_available is not None:
+        return _embeddings_available, _embeddings_error
+
+    try:
+        # Try to detect a provider (doesn't create it yet)
+        from questfoundry.runtime.knowledge.embeddings import _detect_provider
+
+        _detect_provider()
+        _embeddings_available = True
+        _embeddings_error = None
+    except Exception as e:
+        _embeddings_available = False
+        _embeddings_error = str(e)
+
+    return _embeddings_available, _embeddings_error
+
+
 class CorpusVectorStore:
     """Vector store for corpus knowledge with automatic indexing.
 
     Provides semantic search over corpus markdown files using
-    sentence-transformers embeddings and sqlite-vec for storage.
+    configurable embeddings (Ollama, OpenAI, or sentence-transformers)
+    and sqlite-vec for storage.
 
     Usage:
         store = CorpusVectorStore(corpus_dir)
@@ -88,21 +109,26 @@ class CorpusVectorStore:
     def __init__(
         self,
         corpus_dir: Path,
-        model_name: str = DEFAULT_MODEL,
+        embeddings_provider: str | None = None,
+        embeddings_model: str | None = None,
         cache_dir: Path | None = None,
     ):
         """Initialize the corpus vector store.
 
         Args:
             corpus_dir: Path to the corpus markdown files
-            model_name: Sentence transformer model to use
+            embeddings_provider: Provider name ('ollama', 'openai', 'sentence-transformers')
+                                 If None, auto-detects available provider.
+            embeddings_model: Model name (uses provider default if None)
             cache_dir: Where to store the vector database (default: ~/.questfoundry/cache)
         """
         self.corpus_dir = Path(corpus_dir)
-        self.model_name = model_name
+        self.embeddings_provider = embeddings_provider
+        self.embeddings_model = embeddings_model
         self.cache_dir = cache_dir or get_cache_dir()
 
-        self._model: Any = None
+        self._embeddings: Any = None
+        self._embedding_dim: int | None = None
         self._db_path: Path | None = None
         self._conn: sqlite3.Connection | None = None
         self._indexed = False
@@ -110,12 +136,18 @@ class CorpusVectorStore:
     @property
     def is_available(self) -> bool:
         """Check if vector search is available (dependencies installed)."""
-        return VECTOR_SEARCH_AVAILABLE
+        if not SQLITE_VEC_AVAILABLE:
+            return False
+        available, _ = _check_embeddings_available()
+        return available
 
     @property
     def unavailable_reason(self) -> str | None:
         """Get reason why vector search is unavailable."""
-        return _import_error
+        if not SQLITE_VEC_AVAILABLE:
+            return _sqlite_vec_error
+        _, error = _check_embeddings_available()
+        return error
 
     def ensure_indexed(self, force: bool = False) -> bool:
         """Ensure the corpus is indexed, building if necessary.
@@ -126,16 +158,24 @@ class CorpusVectorStore:
         Returns:
             True if index is ready, False if unavailable
         """
-        if not VECTOR_SEARCH_AVAILABLE:
+        if not SQLITE_VEC_AVAILABLE:
             logger.info(
-                "Vector search not available. Install with: "
-                "uv pip install questfoundry[rag]"
+                "sqlite-vec not available. Install with: "
+                "uv pip install sqlite-vec"
             )
+            return False
+
+        available, error = _check_embeddings_available()
+        if not available:
+            logger.info(f"No embeddings provider available: {error}")
             return False
 
         # Compute current corpus hash
         corpus_hash = compute_corpus_hash(self.corpus_dir)
-        self._db_path = self.cache_dir / f"corpus_vectors_{corpus_hash}.db"
+
+        # Include provider/model in cache key for cache invalidation on change
+        provider_key = f"{self.embeddings_provider or 'auto'}_{self.embeddings_model or 'default'}"
+        self._db_path = self.cache_dir / f"corpus_vectors_{corpus_hash}_{provider_key}.db"
 
         # Check if we need to rebuild
         if not force and self._db_path.exists():
@@ -164,12 +204,26 @@ class CorpusVectorStore:
 
     def _build_index(self) -> None:
         """Build the vector index from corpus files."""
-        if not VECTOR_SEARCH_AVAILABLE:
-            raise RuntimeError("Vector search dependencies not installed")
+        import struct
 
-        # Load the embedding model
-        logger.info(f"Loading embedding model: {self.model_name}")
-        self._model = SentenceTransformer(self.model_name)
+        from questfoundry.runtime.knowledge.embeddings import (
+            get_embedding_dimension,
+            get_embeddings,
+        )
+
+        # Get embeddings provider
+        logger.info(
+            f"Loading embeddings: provider={self.embeddings_provider or 'auto'}, "
+            f"model={self.embeddings_model or 'default'}"
+        )
+        self._embeddings = get_embeddings(
+            provider=self.embeddings_provider,
+            model=self.embeddings_model,
+        )
+
+        # Determine embedding dimension
+        model_name = self.embeddings_model or "nomic-embed-text"
+        self._embedding_dim = get_embedding_dimension(model_name)
 
         # Create database
         assert self._db_path is not None
@@ -201,7 +255,7 @@ class CorpusVectorStore:
         # Create vector table with sqlite-vec
         conn.execute(f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS corpus_embeddings
-            USING vec0(embedding float[{EMBEDDING_DIM}])
+            USING vec0(embedding float[{self._embedding_dim}])
         """)
 
         # Process each corpus file
@@ -213,28 +267,33 @@ class CorpusVectorStore:
             content = file_path.read_text(encoding="utf-8")
             chunks = self._chunk_text(content)
 
-            for idx, chunk in enumerate(chunks):
-                # Insert chunk text
-                cursor = conn.execute(
-                    "INSERT INTO corpus_chunks (file_name, chunk_idx, chunk_text) "
-                    "VALUES (?, ?, ?)",
-                    (file_path.name, idx, chunk),
-                )
-                chunk_id = cursor.lastrowid
+            # Batch embed all chunks for efficiency
+            if chunks:
+                embeddings = self._embeddings.embed_documents(chunks)
 
-                # Compute and insert embedding
-                embedding = self._model.encode(chunk, normalize_embeddings=True)
-                conn.execute(
-                    "INSERT INTO corpus_embeddings (rowid, embedding) VALUES (?, ?)",
-                    (chunk_id, embedding.tobytes()),
-                )
+                for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+                    # Insert chunk text
+                    cursor = conn.execute(
+                        "INSERT INTO corpus_chunks (file_name, chunk_idx, chunk_text) "
+                        "VALUES (?, ?, ?)",
+                        (file_path.name, idx, chunk),
+                    )
+                    chunk_id = cursor.lastrowid
 
-                total_chunks += 1
+                    # Convert embedding to bytes and insert
+                    embedding_bytes = struct.pack(f"{len(embedding)}f", *embedding)
+                    conn.execute(
+                        "INSERT INTO corpus_embeddings (rowid, embedding) VALUES (?, ?)",
+                        (chunk_id, embedding_bytes),
+                    )
+
+                    total_chunks += 1
 
         # Store metadata
+        model_info = f"{self.embeddings_provider or 'auto'}:{self.embeddings_model or 'default'}"
         conn.execute(
             "INSERT OR REPLACE INTO corpus_meta (key, value) VALUES (?, ?)",
-            ("model", self.model_name),
+            ("model", model_info),
         )
         conn.execute(
             "INSERT OR REPLACE INTO corpus_meta (key, value) VALUES (?, ?)",
@@ -302,14 +361,25 @@ class CorpusVectorStore:
         Returns:
             List of dicts with: file_name, chunk_text, score
         """
-        if not self._indexed or not VECTOR_SEARCH_AVAILABLE:
+        import struct
+
+        if not self._indexed or not SQLITE_VEC_AVAILABLE:
             raise RuntimeError("Corpus not indexed. Call ensure_indexed() first.")
 
-        if self._model is None:
-            self._model = SentenceTransformer(self.model_name)
+        # Lazily load embeddings provider if needed
+        if self._embeddings is None:
+            from questfoundry.runtime.knowledge.embeddings import get_embeddings
 
-        # Encode query
-        query_embedding = self._model.encode(query, normalize_embeddings=True)
+            self._embeddings = get_embeddings(
+                provider=self.embeddings_provider,
+                model=self.embeddings_model,
+            )
+
+        # Encode query using the embeddings provider
+        query_embedding = self._embeddings.embed_query(query)
+
+        # Convert to bytes for sqlite-vec
+        query_bytes = struct.pack(f"{len(query_embedding)}f", *query_embedding)
 
         # Open connection if needed
         assert self._db_path is not None
@@ -331,7 +401,7 @@ class CorpusVectorStore:
             ORDER BY e.distance
             LIMIT ?
             """,
-            (query_embedding.tobytes(), k),
+            (query_bytes, k),
         ).fetchall()
 
         conn.close()

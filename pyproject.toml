@@ -64,9 +64,20 @@ docs = [
     "sphinx-autodoc-typehints>=2.0",
 ]
 rag = [
-    # Vector search for corpus knowledge
-    "sentence-transformers>=3.0",
+    # Core vector search storage
     "sqlite-vec>=0.1",
+    # Lightweight Ollama embeddings (recommended)
+    "langchain-ollama>=0.2",
+]
+rag-openai = [
+    # OpenAI embeddings (requires OPENAI_API_KEY)
+    "sqlite-vec>=0.1",
+    "langchain-openai>=0.2",
+]
+rag-local = [
+    # Heavy local embeddings with torch (~2GB) - not recommended
+    "sqlite-vec>=0.1",
+    "sentence-transformers>=3.0",
 ]
 
 [project.scripts]
