@@ -20,6 +20,11 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.tools import BaseTool
 from pydantic import Field, ValidationError
 
+from questfoundry.runtime.logging import (
+    is_structured_logging_configured,
+    log_state_operation,
+)
+
 if TYPE_CHECKING:
     from questfoundry.runtime.stores import ColdStore
 
@@ -270,6 +275,13 @@ class ReadHotSot(BaseTool):
         # Try direct artifact lookup first
         if key in hot_store:
             artifact = hot_store[key]
+            # Log read operation to state.jsonl
+            if is_structured_logging_configured():
+                log_state_operation(
+                    operation="read",
+                    store="hot_store",
+                    key=key,
+                )
             return json.dumps(
                 {
                     "success": True,
@@ -281,6 +293,13 @@ class ReadHotSot(BaseTool):
         # Try dot-path navigation
         value = self._get_nested(hot_store, key)
         if value is not None:
+            # Log read operation to state.jsonl
+            if is_structured_logging_configured():
+                log_state_operation(
+                    operation="read",
+                    store="hot_store",
+                    key=key,
+                )
             return json.dumps(
                 {
                     "success": True,
@@ -595,6 +614,17 @@ class WriteHotSot(BaseTool):
             if store_info and store_info.get("semantics") in ("cold", "versioned", "append_only"):
                 response["target_store"] = store_info["store_id"]
                 response["store_semantics"] = store_info["semantics"]
+
+        # Log state operation to state.jsonl
+        if is_structured_logging_configured():
+            log_state_operation(
+                operation="write",
+                store="hot_store",
+                key=key,
+                value=value,
+                artifact_type=detected_artifact_type,
+                role=self.role_id,
+            )
 
         return json.dumps(response)
 

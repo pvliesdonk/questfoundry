@@ -42,11 +42,15 @@ __all__ = [
     "configure_structured_logging",
     "get_llm_logger",
     "get_tools_logger",
+    "get_state_logger",
+    "get_delegations_logger",
     "log_llm_request",
     "log_llm_response",
     "log_role_session_start",
     "log_role_session_end",
     "log_tool_execution",
+    "log_state_operation",
+    "log_delegation",
 ]
 
 
@@ -102,13 +106,20 @@ class _JsonlFormatter(logging.Formatter):
             "duration_ms",
             # Tool execution fields
             "tool",
-            "args",
+            "tool_args",  # Renamed from 'args' to avoid LogRecord conflict
             "result",
             "success",
             # State fields
             "artifact",
+            "artifact_type",
             "key",
             "value",
+            "store",
+            "operation",
+            # Delegation fields
+            "from_role",
+            "to_role",
+            "delegation_id",
             # Session markers
             "session_id",
             "task",
@@ -309,6 +320,8 @@ def reset_logging() -> None:
 # Domain-specific logger accessors
 _llm_logger: logging.Logger | None = None
 _tools_logger: logging.Logger | None = None
+_state_logger: logging.Logger | None = None
+_delegations_logger: logging.Logger | None = None
 
 
 def get_llm_logger() -> logging.Logger:
@@ -325,6 +338,22 @@ def get_tools_logger() -> logging.Logger:
     if _tools_logger is None:
         _tools_logger = logging.getLogger("qf.tools")
     return _tools_logger
+
+
+def get_state_logger() -> logging.Logger:
+    """Get the state logger for hot/cold store operations."""
+    global _state_logger
+    if _state_logger is None:
+        _state_logger = logging.getLogger("qf.state")
+    return _state_logger
+
+
+def get_delegations_logger() -> logging.Logger:
+    """Get the delegations logger for role delegations."""
+    global _delegations_logger
+    if _delegations_logger is None:
+        _delegations_logger = logging.getLogger("qf.delegations")
+    return _delegations_logger
 
 
 def log_llm_request(
@@ -498,7 +527,7 @@ def log_role_session_end(
 
 def log_tool_execution(
     tool_name: str,
-    args: dict[str, Any],
+    tool_args: dict[str, Any],
     result: Any,
     success: bool,
     role: str | None = None,
@@ -510,7 +539,7 @@ def log_tool_execution(
     ----------
     tool_name : str
         Name of the tool executed.
-    args : dict[str, Any]
+    tool_args : dict[str, Any]
         Arguments passed to the tool.
     result : Any
         Result returned by the tool.
@@ -521,7 +550,7 @@ def log_tool_execution(
     duration_ms : float | None
         Execution time in milliseconds.
     """
-    logger = get_llm_logger()
+    logger = get_tools_logger()  # Use tools logger, not LLM logger
     # Truncate large results
     result_str = str(result)
     if len(result_str) > 2000:
@@ -532,10 +561,101 @@ def log_tool_execution(
         extra={
             "event": "tool_execution",
             "tool": tool_name,
-            "args": args,
+            "tool_args": tool_args,  # Renamed from 'args' to avoid LogRecord conflict
             "result": result_str,
             "success": success,
             "role": role,
             "duration_ms": duration_ms,
+        },
+    )
+
+
+def log_state_operation(
+    operation: str,
+    store: str,
+    key: str,
+    value: Any = None,
+    artifact_type: str | None = None,
+    role: str | None = None,
+) -> None:
+    """Log a hot/cold store operation for VCR recording.
+
+    Parameters
+    ----------
+    operation : str
+        The operation type: 'read', 'write', 'delete'.
+    store : str
+        The store name: 'hot_store', 'cold_store', etc.
+    key : str
+        The artifact key.
+    value : Any
+        The value being written (for write operations).
+    artifact_type : str | None
+        The detected artifact type.
+    role : str | None
+        The role performing the operation.
+    """
+    logger = get_state_logger()
+    # Truncate large values
+    value_str = None
+    if value is not None:
+        value_str = str(value)
+        if len(value_str) > 2000:
+            value_str = value_str[:2000] + "... [truncated]"
+
+    logger.info(
+        f"state_{operation}",
+        extra={
+            "event": f"state_{operation}",
+            "operation": operation,
+            "store": store,
+            "key": key,
+            "value": value_str,
+            "artifact_type": artifact_type,
+            "role": role,
+        },
+    )
+
+
+def log_delegation(
+    from_role: str,
+    to_role: str,
+    task: str,
+    delegation_id: str | None = None,
+    artifacts: list[str] | None = None,
+    status: str = "started",
+) -> None:
+    """Log a role delegation for VCR recording.
+
+    Parameters
+    ----------
+    from_role : str
+        The role delegating the task.
+    to_role : str
+        The role receiving the delegation.
+    task : str
+        The task being delegated.
+    delegation_id : str | None
+        Unique identifier for this delegation.
+    artifacts : list[str] | None
+        Artifact IDs being passed to the delegate.
+    status : str
+        Delegation status: 'started', 'completed', 'failed'.
+    """
+    logger = get_delegations_logger()
+    # Truncate long tasks
+    task_str = task
+    if len(task) > 1000:
+        task_str = task[:1000] + "... [truncated]"
+
+    logger.info(
+        f"delegation_{status}",
+        extra={
+            "event": f"delegation_{status}",
+            "from_role": from_role,
+            "to_role": to_role,
+            "task": task_str,
+            "delegation_id": delegation_id,
+            "artifact": artifacts,  # Uses 'artifact' field from VCR_FIELDS
         },
     )

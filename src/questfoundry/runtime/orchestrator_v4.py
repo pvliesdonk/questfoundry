@@ -42,6 +42,10 @@ from questfoundry.runtime.tools.playbook import create_consult_playbook_tool
 from questfoundry.runtime.tools.registry import build_agent_tools
 from questfoundry.runtime.tools.role import ListColdStoreKeys, ListHotStoreKeys
 from questfoundry.runtime.tools.sr import DelegateTo, ReadArtifact, WriteArtifact
+from questfoundry.runtime.logging import (
+    is_structured_logging_configured,
+    log_delegation,
+)
 from questfoundry.runtime.tracing import (
     TracedAgentTurn,
     TracedDelegation,
@@ -606,6 +610,16 @@ class OrchestratorV4:
             session_id=session_id,
         )
 
+        # Log delegation start to delegations.jsonl
+        if is_structured_logging_configured():
+            log_delegation(
+                from_role=self.entry_agent_id,
+                to_role=role_id,
+                task=task,
+                delegation_id=session_id,
+                status="started",
+            )
+
         # Execute (traced)
         async with TracedDelegation(
             agent_id=role_id,
@@ -624,6 +638,16 @@ class OrchestratorV4:
             session_id=session_id,
             duration_ms=session_duration_ms,
         )
+
+        # Log delegation completion to delegations.jsonl
+        if is_structured_logging_configured():
+            log_delegation(
+                from_role=self.entry_agent_id,
+                to_role=role_id,
+                task=task,
+                delegation_id=session_id,
+                status="completed" if result.success else "failed",
+            )
 
         if not result.success:
             return DelegationResult(

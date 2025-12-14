@@ -347,7 +347,7 @@ class ToolExecutor:
 
             log_tool_execution(
                 tool_name=tool_name,
-                args=args,
+                tool_args=args,
                 result=result,
                 success=success,
                 duration_ms=duration_ms,
