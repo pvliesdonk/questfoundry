@@ -6,31 +6,71 @@ Commands:
 - config show: Display resolved configuration
 - roles: List agents with archetypes and capabilities
 - projects: Manage story projects
+- ask: Interactive session with agents
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
+
+if TYPE_CHECKING:
+    from questfoundry.runtime import AgentRuntime
+    from questfoundry.runtime.models import Agent, Studio
+    from questfoundry.runtime.providers import OllamaProvider
+    from questfoundry.runtime.session import Session
+    from questfoundry.runtime.storage import Project
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.table import Table
+
+# Global verbosity level (set by callback)
+_verbosity: int = 0
+
+console = Console()
+
+
+def _configure_logging(verbosity: int) -> None:
+    """Configure logging based on verbosity level."""
+    global _verbosity
+    _verbosity = verbosity
+
+    if verbosity == 0:
+        level = logging.WARNING
+    elif verbosity == 1:
+        level = logging.INFO
+    else:  # 2+
+        level = logging.DEBUG
+
+    # Configure root logger with Rich handler
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=verbosity >= 2)],
+        force=True,
+    )
+
+    # Also set questfoundry logger
+    logging.getLogger("questfoundry").setLevel(level)
+
+
+def _verbosity_callback(_ctx: typer.Context, value: int) -> int:
+    """Process verbosity level and configure logging."""
+    _configure_logging(value)
+    return value
+
 
 app = typer.Typer(
     name="qf",
     help="QuestFoundry - AI-powered interactive fiction studio",
     no_args_is_help=True,
 )
-console = Console()
-
-
-# Global options
-def verbose_callback(value: int) -> int:
-    """Process verbosity level."""
-    return value
 
 
 # =============================================================================
@@ -215,7 +255,7 @@ async def _roles_async(domain_path: Path) -> None:
 # Projects Subcommand
 # =============================================================================
 
-projects_app = typer.Typer(help="Manage story projects")
+projects_app = typer.Typer(help="Manage story projects", no_args_is_help=True)
 app.add_typer(projects_app, name="projects")
 
 
@@ -292,6 +332,337 @@ def projects_create(
     console.print(f"[green]✓[/green] Created project [bold]{name}[/bold]")
     console.print(f"  Path: {project_path}")
     console.print(f"  Studio: {studio}")
+
+
+# =============================================================================
+# Ask Command - Interactive Session
+# =============================================================================
+
+
+@app.command()
+def ask(
+    project: Annotated[
+        str | None,
+        typer.Argument(help="Project ID (auto-creates 'default' if omitted)"),
+    ] = None,
+    prompt: Annotated[str | None, typer.Argument(help="Prompt (omit for REPL mode)")] = None,
+    entry_agent: Annotated[
+        str | None,
+        typer.Option("--entry-agent", "-e", help="Entry agent ID"),
+    ] = None,
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    projects_dir: Annotated[
+        Path,
+        typer.Option("--projects-dir", "-p", help="Projects directory"),
+    ] = Path("projects"),
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="Model to use"),
+    ] = None,
+    verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity (-v: info+tokens, -vv: debug+timing, -vvv: full prompts)",
+            callback=_verbosity_callback,
+        ),
+    ] = 0,
+) -> None:
+    """Interactive session or single-shot query with an agent."""
+    # Auto-create default project if not specified
+    if project is None:
+        project = "default"
+        _ensure_default_project(projects_dir)
+
+    if prompt:
+        asyncio.run(_ask_single(project, prompt, entry_agent, domain, projects_dir, model))
+    else:
+        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, model))
+
+
+def _ensure_default_project(projects_dir: Path) -> None:
+    """Create the default project if it doesn't exist."""
+    from questfoundry.runtime.storage import Project
+
+    default_path = projects_dir / "default"
+    if not default_path.exists():
+        console.print("[dim]Creating default project...[/dim]")
+        Project.create(
+            path=default_path,
+            name="Default Project",
+            description="Auto-created default project for quick sessions",
+            studio_id="questfoundry",
+        )
+        console.print("[green]✓[/green] Created default project")
+        console.print()
+
+
+async def _setup_runtime(
+    project_id: str,
+    entry_agent_id: str | None,
+    domain_path: Path,
+    projects_dir: Path,
+    model: str | None,
+) -> tuple[Project, Studio, AgentRuntime, Agent, Session, OllamaProvider]:
+    """
+    Set up the runtime components for an ask session.
+
+    Returns:
+        Tuple of (project, studio, runtime, agent, session, provider)
+    """
+    from questfoundry.runtime import AgentRuntime, load_studio
+    from questfoundry.runtime.config import load_config
+    from questfoundry.runtime.providers import OllamaProvider
+    from questfoundry.runtime.session import Session
+    from questfoundry.runtime.storage import Project
+
+    logger = logging.getLogger("questfoundry.cli")
+
+    # Load configuration
+    logger.debug("Loading configuration...")
+    config = load_config()
+
+    # Load project
+    project_path = projects_dir / project_id
+    logger.debug(f"Opening project at {project_path}")
+    try:
+        project = Project.open(project_path)
+    except FileNotFoundError:
+        console.print(f"[red]✗ Project not found: {project_id}[/red]")
+        console.print(f"[dim]Expected at: {project_path}[/dim]")
+        raise typer.Exit(1) from None
+
+    # Load domain
+    logger.debug(f"Loading domain from {domain_path}")
+    result = await load_studio(domain_path)
+    if not result.success or not result.studio:
+        console.print("[red]✗ Failed to load domain[/red]")
+        for error in result.errors:
+            console.print(f"  [red]• {error.message}[/red]")
+        project.close()
+        raise typer.Exit(1)
+
+    studio: Studio = result.studio
+    logger.info(f"Loaded studio: {studio.name} ({len(studio.agents)} agents)")
+
+    # Get provider and model from config
+    provider_config = config.providers.get(config.default_provider)
+    host: str = (
+        provider_config.host
+        if provider_config and provider_config.host
+        else "http://localhost:11434"
+    )
+    model_to_use: str = model or (
+        provider_config.default_model
+        if provider_config and provider_config.default_model
+        else "qwen3:8b"
+    )
+
+    # Create provider
+    logger.debug(f"Connecting to Ollama at {host}")
+    provider = OllamaProvider(host=host)
+
+    # Check provider availability
+    if not await provider.check_availability():
+        console.print(f"[red]✗ Ollama not available at {host}[/red]")
+        console.print("[dim]Start Ollama with: ollama serve[/dim]")
+        project.close()
+        raise typer.Exit(1)
+
+    logger.info(f"Using model: {model_to_use}")
+
+    # Create runtime
+    runtime = AgentRuntime(
+        provider=provider,
+        studio=studio,
+        domain_path=domain_path,
+        model=model_to_use,
+    )
+
+    # Get entry agent
+    if entry_agent_id:
+        agent = runtime.get_agent(entry_agent_id)
+        if not agent:
+            console.print(f"[red]✗ Agent not found: {entry_agent_id}[/red]")
+            available = [a.id for a in studio.agents]
+            console.print(f"[dim]Available: {', '.join(available)}[/dim]")
+            project.close()
+            raise typer.Exit(1)
+    else:
+        agent = runtime.get_entry_agent()
+        if not agent:
+            console.print("[red]✗ No entry agent defined in studio[/red]")
+            project.close()
+            raise typer.Exit(1)
+
+    logger.info(f"Entry agent: {agent.name} ({agent.id})")
+
+    # Create session
+    session = Session.create(project=project, entry_agent=agent.id)
+    logger.debug(f"Created session: {session.id}")
+
+    return project, studio, runtime, agent, session, provider
+
+
+async def _stream_response(
+    runtime: AgentRuntime, agent: Agent, user_input: str, session: Session
+) -> str:
+    """Stream a response from the agent and return full content."""
+    import time
+
+    from rich.live import Live
+    from rich.text import Text
+
+    logger = logging.getLogger("questfoundry.cli")
+
+    full_content = ""
+    start_time = time.time()
+    final_usage = None
+
+    # Show prompt at -vvv
+    if _verbosity >= 3:
+        context = runtime.build_context(agent)
+        messages = runtime.build_messages(agent, user_input, context)
+        console.print()
+        console.print("[dim]─── Prompt ───[/dim]")
+        for msg in messages:
+            role_color = {"system": "yellow", "user": "green", "assistant": "blue"}.get(
+                msg.role, "white"
+            )
+            console.print(f"[{role_color}]{msg.role}:[/{role_color}]")
+            # Truncate long system prompts
+            content = msg.content
+            if msg.role == "system" and len(content) > 2000:
+                content = content[:2000] + f"\n... ({len(msg.content)} chars total)"
+            console.print(f"[dim]{content}[/dim]")
+            console.print()
+        console.print("[dim]─── Response ───[/dim]")
+
+    with Live(Text(""), console=console, refresh_per_second=10) as live:
+        async for chunk in runtime.activate_streaming(agent, user_input, session):
+            if chunk.done:
+                final_usage = chunk
+            else:
+                full_content += chunk.content
+                live.update(Text(full_content))
+
+    duration_ms = (time.time() - start_time) * 1000
+
+    # Show token usage at -v+
+    if _verbosity >= 1 and final_usage:
+        tokens_info = []
+        if final_usage.prompt_tokens:
+            tokens_info.append(f"prompt: {final_usage.prompt_tokens}")
+        if final_usage.completion_tokens:
+            tokens_info.append(f"completion: {final_usage.completion_tokens}")
+        if final_usage.total_tokens:
+            tokens_info.append(f"total: {final_usage.total_tokens}")
+        if tokens_info:
+            console.print(f"[dim]tokens: {', '.join(tokens_info)}[/dim]")
+
+    # Show timing at -vv+
+    if _verbosity >= 2:
+        console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
+        logger.debug(f"Response generated in {duration_ms:.0f}ms")
+
+    return full_content
+
+
+async def _ask_single(
+    project_id: str,
+    prompt: str,
+    entry_agent_id: str | None,
+    domain_path: Path,
+    projects_dir: Path,
+    model: str | None,
+) -> None:
+    """Execute a single-shot query."""
+    from questfoundry.runtime.providers import ContextOverflowError, ProviderError
+
+    project, _studio, runtime, agent, session, provider = await _setup_runtime(
+        project_id, entry_agent_id, domain_path, projects_dir, model
+    )
+
+    try:
+        console.print(f"[dim]{agent.name}:[/dim]")
+        await _stream_response(runtime, agent, prompt, session)
+        console.print()
+    except ContextOverflowError as e:
+        console.print(f"[red]✗ Context overflow: {e}[/red]")
+    except ProviderError as e:
+        console.print(f"[red]✗ Provider error: {e}[/red]")
+    finally:
+        await provider.close()
+        project.close()
+
+
+async def _ask_repl(
+    project_id: str,
+    entry_agent_id: str | None,
+    domain_path: Path,
+    projects_dir: Path,
+    model: str | None,
+) -> None:
+    """Run interactive REPL mode."""
+    from questfoundry.runtime.providers import ContextOverflowError, ProviderError
+
+    project, _studio, runtime, agent, session, provider = await _setup_runtime(
+        project_id, entry_agent_id, domain_path, projects_dir, model
+    )
+
+    # Print header
+    console.print()
+    console.print("[bold]QuestFoundry Interactive Session[/bold]")
+    console.print(f"Project: [cyan]{project_id}[/cyan]")
+    console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
+    console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
+    console.print()
+
+    try:
+        while True:
+            try:
+                # Get input
+                user_input = console.input("[bold]> [/bold]")
+
+                # Check for exit
+                if user_input.lower() in ("exit", "quit", "/exit", "/quit"):
+                    break
+
+                if not user_input.strip():
+                    continue
+
+                # Stream response
+                console.print(f"[dim]{agent.name}:[/dim]")
+                await _stream_response(runtime, agent, user_input, session)
+                console.print()
+
+            except ContextOverflowError as e:
+                console.print(f"[red]✗ Context overflow: {e}[/red]")
+                console.print("[dim]Try a shorter message or start a new session[/dim]")
+                console.print()
+            except ProviderError as e:
+                console.print(f"[red]✗ Provider error: {e}[/red]")
+                console.print()
+
+    except (KeyboardInterrupt, EOFError):
+        console.print()
+
+    finally:
+        # Show session summary
+        console.print()
+        console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
+        await provider.close()
+        project.close()
+
+
+# =============================================================================
+# Projects Subcommand
+# =============================================================================
 
 
 @projects_app.command("info")
