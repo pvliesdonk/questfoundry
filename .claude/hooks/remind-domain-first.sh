@@ -4,13 +4,13 @@
 
 TOOL_INPUT="$CLAUDE_TOOL_INPUT"
 
-# Check if editing runtime code (not generated, not tests)
+# Check if editing runtime code (not tests)
 if echo "$TOOL_INPUT" | grep -q "src/questfoundry/runtime/"; then
     # Only remind, don't block
-    echo "REMINDER: When modifying runtime code, verify against domain knowledge first."
-    echo "  - Artifact schemas: domain/ontology/artifacts.md"
-    echo "  - Role behaviors: domain/roles/*.md"
-    echo "  - Workflow flows: domain/loops/*.md"
+    echo "REMINDER: When modifying runtime code, verify against domain-v4 knowledge first."
+    echo "  - Artifact schemas: domain-v4/artifacts/*.json"
+    echo "  - Agent behaviors: domain-v4/agents/*.json"
+    echo "  - Studio config: domain-v4/studio.json"
     echo ""
 fi
 

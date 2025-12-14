@@ -390,7 +390,7 @@ class TestAllQualityBars:
 
     def test_all_bars_have_tools(self) -> None:
         """Verify all 8 quality bars have corresponding evaluation tools."""
-        from questfoundry.generated.models.enums import QualityBar
+        from questfoundry.runtime.types import QualityBar
 
         tool_bar_mapping = {
             EvaluateIntegrity: QualityBar.INTEGRITY,

@@ -38,7 +38,7 @@ from typing import Any, Literal
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
-from questfoundry.generated.models.enums import QualityBar
+from questfoundry.runtime.types import QualityBar
 
 logger = logging.getLogger(__name__)
 

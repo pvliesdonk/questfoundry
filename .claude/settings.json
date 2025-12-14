@@ -19,7 +19,6 @@
             "Bash(export:*)",
             "Bash(gh:*)",
             "Bash(timeout 600 uv run qf ask:*)",
-            "Bash(qf compile:*)",
             "Bash(rm:*)",
             "Bash(mkdir:*)",
             "Bash(sqlite3:*)",
@@ -33,23 +32,10 @@
             "Bash(tail:*)"
         ],
         "deny": [],
-        "ask": [
-            "Write(src/questfoundry/domain/**)",
-            "Edit(src/questfoundry/domain/**)",
-            "MultiEdit(src/questfoundry/domain/**)"
-        ]
+        "ask": []
     },
     "hooks": {
         "PreToolUse": [
-            {
-                "matcher": "Edit|Write|MultiEdit",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-generated-edits.sh"
-                    }
-                ]
-            },
             {
                 "matcher": "Edit|Write|MultiEdit",
                 "hooks": [

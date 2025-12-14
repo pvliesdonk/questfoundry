@@ -274,14 +274,7 @@ def ask(
             rich_help_panel=PANEL_RUNTIME,
         ),
     ] = False,
-    runtime: Annotated[
-        str,
-        typer.Option(
-            "--runtime",
-            help="Runtime version: v3 (default, uses generated/) or v4 (uses domain-v4 JSON directly)",
-            rich_help_panel=PANEL_RUNTIME,
-        ),
-    ] = "v3",
+    # runtime flag removed - v4 is now the only runtime
     entry_mode: Annotated[
         str,
         typer.Option(
@@ -393,11 +386,6 @@ def ask(
             )
             console.print()
 
-        # Validate runtime version
-        if runtime not in ("v3", "v4"):
-            console.print(f"[red]Error: Invalid runtime '{runtime}'. Use v3 or v4.[/red]")
-            raise typer.Exit(1)
-
         # Import runtime components
         from questfoundry.runtime.providers import create_llm_from_config
 
@@ -405,7 +393,7 @@ def ask(
         effective_provider = settings.llm.provider
         effective_model = settings.get_llm_model()
 
-        console.print(f"[dim]Runtime: {runtime}[/dim]")
+        console.print("[dim]Runtime: v4[/dim]")
         console.print(f"[dim]Provider: {effective_provider}[/dim]")
         console.print(f"[dim]Model: {effective_model}[/dim]")
 
@@ -453,65 +441,38 @@ def ask(
             live_context = Live(console=console, refresh_per_second=10)
             callbacks = StreamingCallbacks(console, live_context, verbose=(verbose >= 2))
 
-        # Create orchestrator based on runtime version
-        if runtime == "v4":
-            # V4 runtime - direct JSON consumption
-            from questfoundry.runtime.domain import load_studio
-            from questfoundry.runtime.orchestrator_v4 import OrchestratorV4
+        # Create orchestrator (v4 runtime)
+        from questfoundry.runtime.domain import load_studio
+        from questfoundry.runtime.orchestrator_v4 import OrchestratorV4
 
-            # Load domain-v4 studio
-            domain_v4_path = Path(__file__).parents[4] / "domain-v4" / "studio.json"
-            if not domain_v4_path.exists():
-                console.print(f"[red]Error: domain-v4 not found at {domain_v4_path}[/red]")
-                raise typer.Exit(1)
+        # Load domain-v4 studio
+        domain_v4_path = Path(__file__).parents[4] / "domain-v4" / "studio.json"
+        if not domain_v4_path.exists():
+            console.print(f"[red]Error: domain-v4 not found at {domain_v4_path}[/red]")
+            raise typer.Exit(1)
 
-            studio = load_studio(domain_v4_path)
-            console.print(f"[green]+ Loaded studio: {studio.name} (v{studio.version})[/green]")
-            console.print(f"[green]+ Entry mode: {entry_mode}[/green]")
+        studio = load_studio(domain_v4_path)
+        console.print(f"[green]+ Loaded studio: {studio.name} (v{studio.version})[/green]")
+        console.print(f"[green]+ Entry mode: {entry_mode}[/green]")
 
-            orchestrator = OrchestratorV4(
-                studio=studio,
-                llm=llm,
-                entry_mode=entry_mode,
-                max_delegations=effective_max_delegations,
-                cold_store=cold_store,
-                checkpoint_store=checkpoint_store,
-                stream=stream,
-                callbacks=callbacks,
-            )
-        else:
-            # V3 runtime - uses generated code
-            from questfoundry.generated.roles import ALL_ROLES
-            from questfoundry.runtime.orchestrator import Orchestrator
-
-            orchestrator = Orchestrator(
-                roles=ALL_ROLES,
-                llm=llm,
-                max_delegations=effective_max_delegations,
-                cold_store=cold_store,
-                checkpoint_store=checkpoint_store,
-                stream=stream,
-                callbacks=callbacks,
-            )
+        orchestrator = OrchestratorV4(
+            studio=studio,
+            llm=llm,
+            entry_mode=entry_mode,
+            max_delegations=effective_max_delegations,
+            cold_store=cold_store,
+            checkpoint_store=checkpoint_store,
+            stream=stream,
+            callbacks=callbacks,
+        )
 
         # Run the workflow
         console.print()
         console.print("[bold]Running workflow...[/bold]")
         console.print()
 
-        if runtime == "v4":
-            # V4 runtime - full checkpoint support
-            if stream and live_context:
-                with live_context:
-                    final_state = _run_async(
-                        orchestrator.run(
-                            message,
-                            resume_run_id=resume,
-                            resume_checkpoint_id=from_checkpoint,
-                            force_resume=force_resume,
-                        )
-                    )
-            else:
+        if stream and live_context:
+            with live_context:
                 final_state = _run_async(
                     orchestrator.run(
                         message,
@@ -521,26 +482,14 @@ def ask(
                     )
                 )
         else:
-            # V3 runtime - full checkpoint support
-            if stream and live_context:
-                with live_context:
-                    final_state = _run_async(
-                        orchestrator.run(
-                            message,
-                            resume_run_id=resume,
-                            resume_checkpoint_id=from_checkpoint,
-                            force_resume=force_resume,
-                        )
-                    )
-            else:
-                final_state = _run_async(
-                    orchestrator.run(
-                        message,
-                        resume_run_id=resume,
-                        resume_checkpoint_id=from_checkpoint,
-                        force_resume=force_resume,
-                    )
+            final_state = _run_async(
+                orchestrator.run(
+                    message,
+                    resume_run_id=resume,
+                    resume_checkpoint_id=from_checkpoint,
+                    force_resume=force_resume,
                 )
+            )
 
         # Display results
         _display_results(final_state)
@@ -708,8 +657,8 @@ def doctor(
     Verifies:
     - Provider availability (Ollama, Google, OpenAI)
     - Configuration
-    - Role definitions
-    - Generated models
+    - Domain-v4 studio loading
+    - Agent definitions
 
     Provider States:
     - [green]ready[/green]: Configured and connected
@@ -783,37 +732,38 @@ def doctor(
     console.print(table)
     console.print()
 
-    # Check roles
-    console.print("[bold]Checking roles...[/bold]")
+    # Check domain-v4 studio
+    console.print("[bold]Checking domain-v4...[/bold]")
     try:
-        from questfoundry.generated.roles import ALL_ROLES
+        from questfoundry.runtime.domain import load_studio
 
-        console.print(f"  [green]+ {len(ALL_ROLES)} roles loaded[/green]")
+        domain_v4_path = Path(__file__).parents[4] / "domain-v4" / "studio.json"
+        studio = load_studio(domain_v4_path)
+        console.print(f"  [green]+ Studio loaded: {studio.name} (v{studio.version})[/green]")
+        console.print(f"  [green]+ {len(studio.agents)} agents defined[/green]")
         if verbose >= 1:
-            for role_id, role in ALL_ROLES.items():
-                console.print(f"    - {role.abbr}: {role_id} ({role.archetype})")
-    except ImportError as e:
-        console.print(f"  [red]- Could not load roles: {e}[/red]")
+            for agent in studio.agents:
+                console.print(f"    - {agent.abbr}: {agent.id} ({agent.archetype})")
+    except Exception as e:
+        console.print(f"  [red]- Could not load studio: {e}[/red]")
 
-    # Check generated models
+    # Check artifacts
     console.print()
-    console.print("[bold]Checking generated models...[/bold]")
+    console.print("[bold]Checking artifact schemas...[/bold]")
     try:
-        from questfoundry.generated.models import (
-            Brief,
-            CanonEntry,
-            GatecheckReport,
-            HookCard,
-            Scene,
-        )
+        from questfoundry.runtime.domain import load_studio
 
-        models_list = [Brief, CanonEntry, HookCard, Scene, GatecheckReport]
-        console.print(f"  [green]+ {len(models_list)} artifact models available[/green]")
-        if verbose >= 1:
-            for m in models_list:
-                console.print(f"    - {m.__name__}")
-    except ImportError as e:
-        console.print(f"  [red]- Could not load models: {e}[/red]")
+        domain_v4_path = Path(__file__).parents[4] / "domain-v4" / "studio.json"
+        studio = load_studio(domain_v4_path)
+        artifact_count = len(studio.artifacts) if studio.artifacts else 0
+        console.print(f"  [green]+ {artifact_count} artifact types defined[/green]")
+        if verbose >= 1 and studio.artifacts:
+            for artifact in studio.artifacts[:5]:
+                console.print(f"    - {artifact.name}")
+            if artifact_count > 5:
+                console.print(f"    ... and {artifact_count - 5} more")
+    except Exception as e:
+        console.print(f"  [red]- Could not load artifacts: {e}[/red]")
 
     console.print()
 
@@ -831,29 +781,30 @@ def roles(
         ),
     ] = 0,
 ) -> None:
-    """List available specialist roles."""
+    """List available specialist agents."""
     try:
-        from questfoundry.generated.roles import ALL_ROLES
+        from questfoundry.runtime.domain import load_studio
 
-        table = Table(title="Available Roles")
+        domain_v4_path = Path(__file__).parents[4] / "domain-v4" / "studio.json"
+        studio = load_studio(domain_v4_path)
+
+        table = Table(title="Available Agents")
         table.add_column("Code", style="cyan")
-        table.add_column("Role ID", style="bold")
+        table.add_column("Agent ID", style="bold")
         table.add_column("Archetype")
         table.add_column("Mandate", max_width=50)
         if verbose >= 1:
             table.add_column("Agency")
 
-        for role_id, role in ALL_ROLES.items():
-            row = [role.abbr, role_id, role.archetype, role.mandate]
+        for agent in studio.agents:
+            row = [agent.abbr, agent.id, agent.archetype, agent.mandate or ""]
             if verbose >= 1:
-                row.append(
-                    str(role.agency.value) if hasattr(role.agency, "value") else str(role.agency)
-                )
+                row.append(str(agent.agency) if agent.agency else "")
             table.add_row(*row)
 
         console.print(table)
-    except ImportError as e:
-        console.print(f"[red]Error loading roles: {e}[/red]")
+    except Exception as e:
+        console.print(f"[red]Error loading agents: {e}[/red]")
         raise typer.Exit(1) from e
 
 
