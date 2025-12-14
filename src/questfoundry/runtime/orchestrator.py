@@ -306,7 +306,10 @@ class Orchestrator:
 
             # Run SR until it calls delegate_to or terminate (traced)
             async with TracedSRTurn(
-                turn=sr_turn, delegation_count=delegation_count, prompt=sr_prompt_msg
+                agent_id="showrunner",
+                turn=sr_turn,
+                delegation_count=delegation_count,
+                prompt=sr_prompt_msg,
             ):
                 sr_result = await sr_executor.run(sr_prompt_msg)
 
