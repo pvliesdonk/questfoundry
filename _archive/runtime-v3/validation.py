@@ -32,15 +32,14 @@ logger = logging.getLogger(__name__)
 
 
 # Artifact type -> Pydantic model class mapping
-# Uses the generated ARTIFACT_REGISTRY from the domain compiler
+# Compiled from domain-v4 artifact type definitions
 _ARTIFACT_MODELS: dict[str, type[BaseModel]] | None = None
 
 
 def _get_artifact_models() -> dict[str, type[BaseModel]]:
     """Get mapping of artifact type names to Pydantic model classes.
 
-    Uses the generated ARTIFACT_REGISTRY from the domain compiler,
-    which maps artifact IDs (snake_case) to their Pydantic model classes.
+    Uses the v4 domain loader to compile artifact models from domain-v4.
     """
     global _ARTIFACT_MODELS
     if _ARTIFACT_MODELS is not None:
@@ -49,51 +48,61 @@ def _get_artifact_models() -> dict[str, type[BaseModel]]:
     _ARTIFACT_MODELS = {}
 
     try:
-        from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
+        from questfoundry.runtime.domain import get_default_studio
+        from questfoundry.runtime.domain.artifact_compiler import compile_artifact_type
 
-        # Copy the generated registry
-        _ARTIFACT_MODELS.update(ARTIFACT_REGISTRY)
+        studio = get_default_studio()
+
+        # Compile all artifact types
+        for artifact_id, artifact_type in studio.artifact_types.items():
+            _ARTIFACT_MODELS[artifact_id] = compile_artifact_type(artifact_type)
 
         # Add common aliases (plural forms, kebab-case, etc.)
         alias_map = {
             # Plurals
-            "briefs": "brief",
-            "acts": "act",
-            "chapters": "chapter",
-            "scenes": "scene",
-            "sequences": "sequence",
-            "beats": "beat",
             "hooks": "hook_card",
-            "characters": "character",
-            "locations": "location",
-            "items": "item",
-            "relationships": "relationship",
-            "events": "event",
-            "facts": "fact",
-            "timelines": "timeline",
-            "shotlists": "shotlist",
-            "audio_plans": "audio_plan",
-            "translation_packs": "translation_pack",
             "canon_entries": "canon_entry",
+            "codex_entries": "codex_entry",
             "gatecheck_reports": "gatecheck_report",
+            "section_briefs": "section_brief",
+            "research_memos": "research_memo",
+            "build_manifests": "build_manifest",
+            "canon_packs": "canon_pack",
+            "style_addendums": "style_addendum",
+            "style_guides": "style_guide",
+            "art_plans": "art_plan",
+            "shotlists": "shotlist",
+            "reference_sheets": "reference_sheet",
+            "audio_plans": "audio_plan",
+            "cuelists": "cuelist",
+            "view_logs": "view_log",
             # Kebab-case
             "canon-entry": "canon_entry",
+            "codex-entry": "codex_entry",
             "gatecheck-report": "gatecheck_report",
             "hook-card": "hook_card",
             "audio-plan": "audio_plan",
-            "translation-pack": "translation_pack",
+            "section-brief": "section_brief",
+            "research-memo": "research_memo",
+            "build-manifest": "build_manifest",
+            "canon-pack": "canon_pack",
+            "style-addendum": "style_addendum",
+            "style-guide": "style_guide",
+            "art-plan": "art_plan",
+            "reference-sheet": "reference_sheet",
+            "view-log": "view_log",
             # Short forms
             "hook": "hook_card",
             "gatecheck": "gatecheck_report",
         }
 
         for alias, canonical in alias_map.items():
-            if canonical in ARTIFACT_REGISTRY:
-                _ARTIFACT_MODELS[alias] = ARTIFACT_REGISTRY[canonical]
+            if canonical in _ARTIFACT_MODELS:
+                _ARTIFACT_MODELS[alias] = _ARTIFACT_MODELS[canonical]
 
         logger.debug(f"Loaded {len(_ARTIFACT_MODELS)} artifact model mappings")
     except ImportError as e:
-        logger.warning(f"Could not load generated models: {e}")
+        logger.warning(f"Could not load domain models: {e}")
 
     return _ARTIFACT_MODELS
 
@@ -289,15 +298,15 @@ def _enhance_with_schema_guidance(
 def detect_artifact_type(key: str) -> str | None:
     """Detect artifact type from hot_sot key.
 
-    Uses the generated ARTIFACT_REGISTRY to detect types from keys like:
-    - Exact matches: "scene", "act", "chapter"
-    - Numbered keys: "scene_1", "act_2", "chapter_3"
-    - Collection keys: "scenes", "acts", "hooks"
+    Uses the artifact models from domain-v4 to detect types from keys like:
+    - Exact matches: "section", "hook_card", "codex_entry"
+    - Numbered keys: "section_1", "hook_card_2"
+    - Collection keys: "hooks", "codex_entries"
 
     Parameters
     ----------
     key : str
-        The hot_sot key (e.g., "hooks", "briefs", "scene_1", "act_2").
+        The hot_sot key (e.g., "hooks", "section_1", "codex_entry").
 
     Returns
     -------
@@ -315,32 +324,25 @@ def detect_artifact_type(key: str) -> str | None:
 
     # Try exact match first (handles plurals and aliases via _get_artifact_models)
     if top_key in models:
-        # Return the canonical artifact type ID
+        # Return the canonical artifact type ID by finding non-alias key
         model = models[top_key]
-        # Find the canonical name from ARTIFACT_REGISTRY
-        try:
-            from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
-
-            for artifact_id, cls in ARTIFACT_REGISTRY.items():
-                if cls is model:
+        # Find the canonical (non-alias) name
+        for artifact_id, cls in models.items():
+            # Canonical IDs use snake_case and match the model name
+            if cls is model and "_" in artifact_id or artifact_id == artifact_id.lower():
+                # Prefer IDs that don't contain hyphens (aliases)
+                if "-" not in artifact_id:
                     return artifact_id
-        except ImportError:
-            pass
         # Fallback: return the key if it's a known model
         return top_key
 
-    # Try prefix match for numbered keys (e.g., scene_1, act_2)
+    # Try prefix match for numbered keys (e.g., section_1, hook_card_2)
     # Extract the prefix before any trailing digits/underscores
     match = re.match(r"^([a-z_]+?)_?\d+$", top_key)
     if match:
         prefix = match.group(1)
-        # Check if prefix matches any registry entry
-        try:
-            from questfoundry.generated.models.artifacts import ARTIFACT_REGISTRY
-
-            if prefix in ARTIFACT_REGISTRY:
-                return prefix
-        except ImportError:
-            pass
+        # Check if prefix matches any artifact type
+        if prefix in models:
+            return prefix
 
     return None

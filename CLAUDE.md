@@ -1,71 +1,75 @@
 # Claude Code Guidelines (QuestFoundry)
 
-## Critical Rules (Enforced by Hooks)
+## Current State: Cleanroom Rebuild
 
-Rules in `.claude/rules/` are **automatically loaded** and survive context compaction:
+The runtime and CLI are being rebuilt from scratch. See `RUNTIME-CLEANROOM-BRIEF.md`.
 
-| Rule File | What It Covers |
-|-----------|---------------|
-| `domain-first.md` | Domain knowledge (domain-v4/) is source of truth |
-| `cold-store.md` | Who writes where (only LK writes cold_store) |
-| `testing.md` | E2E requires 900s timeout, use checkpoints |
+**What exists:**
+
+- `meta/` — Domain-agnostic schemas (the contract)
+- `domain-v4/` — QuestFoundry domain instances
+- `src/questfoundry/` — Empty runtime placeholder
+
+**What's archived:**
+
+- `_archive/runtime-v3/` — Old runtime (reference only)
+- `_archive/tests-v3/` — Old tests
+- `_archive/docs-current-v3/` — Old documentation
 
 ## Repository Structure
 
 ```text
-domain-v4/              # Source of truth (JSON)
+meta/                   # Domain-agnostic schemas (stable)
+├── schemas/core/       # Agent, Store, Tool, Artifact schemas
+├── schemas/governance/ # Quality criteria schemas
+└── docs/               # Meta-model documentation
+
+domain-v4/              # QuestFoundry instances (JSON)
 ├── studio.json         # Main studio config
-├── agents/             # Agent definitions
-├── artifacts/          # Artifact schemas
-├── playbooks/          # Workflow definitions
+├── agents/             # 12 agent definitions
+├── stores/             # 5 store definitions
+├── tools/              # 9 tool definitions
+├── playbooks/          # 7 workflow definitions
 └── knowledge/          # Knowledge base
 
 src/questfoundry/
-├── runtime/            # V4 execution engine
-│   ├── domain/         # JSON loader & models
-│   ├── tools/          # Agent tools
-│   ├── messaging/      # Message broker
-│   └── orchestrator_v4.py
-└── cli.py              # CLI entry point
+├── runtime/            # CLEANROOM REBUILD IN PROGRESS
+└── cli.py              # Minimal placeholder
 
-_archive/               # Deprecated v3 code (preserved for reference)
-└── domain-v3/          # Old MyST domain files
+_archive/               # Previous implementations (git preserves all)
 ```
 
 ## Quick Commands
 
 ```bash
-uv run qf ask "message" --project myproject  # Run with v4 runtime
-uv run qf doctor                              # Check system status
-uv run qf roles                               # List available agents
-uv run pytest                                 # Run tests
-uv run ruff check src/                        # Lint
+uv run qf status    # Show cleanroom rebuild status
+uv run qf version   # Show version
 ```
 
-## When Reasoning About How Things Work
+## Design Principles
 
-1. **FIRST**: Check `domain-v4/` for design intent (JSON files)
-2. **THEN**: Check if code matches domain
-3. **IF MISMATCH**: Code is wrong, fix it to match domain
+1. **meta/ is the contract** — Runtime must implement meta/ schemas
+2. **domain-v4/ is instance data** — Load at runtime, don't hardcode
+3. **Reference, don't import** — Old code in _archive/ for reference only
 
-## Architecture
+## Agents (from domain-v4/)
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for full design. See `AGENTS.md` for agent policies.
-
-## The 8 Core Agents
-
-| Agent | Abbr | Key Responsibility |
-|-------|------|-------------------|
-| Showrunner | SR | Orchestration |
-| Lorekeeper | LK | **Only writer to cold_store** |
-| Narrator | NR | Run the game |
-| Publisher | PB | Export artifacts |
-| Creative Director | CD | Sensory coherence |
-| Plotwright | PW | Story structure |
-| Scene Smith | SS | Prose writing |
-| Gatekeeper | GK | Quality validation |
+| Agent | Archetype | Key Responsibility |
+|-------|-----------|-------------------|
+| Showrunner | Orchestrator | Hub-and-spoke delegation |
+| Lorekeeper | Librarian | Canon management |
+| Plotwright | Architect | Story structure |
+| Scene Smith | Author | Prose writing |
+| Gatekeeper | Validator | Quality enforcement |
+| Researcher | Fact Checker | Plausibility |
+| Style Lead | Curator | Aesthetic coherence |
+| Lore Weaver | Synthesizer | Canon deepening |
+| Codex Curator | Documentarian | Player-safe entries |
+| Art Director | Planner | Visual planning |
+| Audio Director | Planner | Audio planning |
+| Book Binder | Publisher | Static export |
 
 ## Commits
 
 Format: `type(scope): subject`
-Scopes: `domain`, `runtime`, `cli`
+Scopes: `meta`, `domain`, `runtime`, `cli`

@@ -82,7 +82,7 @@ def validate_studio(studio: "Studio") -> ValidationResult:  # noqa: F821
     Raises:
         DomainValidationError: If validation fails with errors
     """
-    from questfoundry.runtime.domain.models import Studio
+    from questfoundry.runtime.domain.metamodel import Studio
 
     assert isinstance(studio, Studio)
 

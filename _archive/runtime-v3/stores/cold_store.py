@@ -48,6 +48,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+# TODO: This file needs v4 overhaul - see issue #142
+# These imports are from v3 generated/ and need to be replaced with v4 domain loader
 from questfoundry.generated.models.artifacts import Choice, ColdAct, ColdChapter, ColdSection, Gate
 from questfoundry.generated.models.enums import Visibility
 

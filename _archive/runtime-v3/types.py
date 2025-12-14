@@ -8,50 +8,18 @@ The key abstractions:
 - ChatLLM: LLM that supports tool calling
 - ToolDef: Tool definition with name, description, schema
 - Message types: System, Human, AI, Tool messages
+
+NOTE: Domain types (artifact schemas, enums, etc.) are NOT defined here.
+Domain knowledge comes from domain-v4/ and is loaded dynamically.
+See runtime/domain/ for domain loading infrastructure.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
-
-# =============================================================================
-# Quality Bars Enum
-# =============================================================================
-
-
-class QualityBar(str, Enum):
-    """The 8 quality bars that must pass before merging to Cold SoT.
-
-    These are enforced by the Gatekeeper agent.
-    """
-
-    INTEGRITY = "integrity"
-    """No contradictions with existing canon."""
-
-    REACHABILITY = "reachability"
-    """Critical content is accessible to players."""
-
-    NONLINEARITY = "nonlinearity"
-    """Branches matter and lead to meaningfully different outcomes."""
-
-    GATEWAYS = "gateways"
-    """Gate conditions are enforceable and testable."""
-
-    STYLE = "style"
-    """Voice is consistent with established tone."""
-
-    DETERMINISM = "determinism"
-    """Reproducible where promised (same input → same output)."""
-
-    PRESENTATION = "presentation"
-    """Spoiler-safe, player surfaces are clean."""
-
-    ACCESSIBILITY = "accessibility"
-    """Navigation clear, sensory considerations respected."""
 
 # =============================================================================
 # Message Types

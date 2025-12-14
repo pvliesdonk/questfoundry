@@ -20,16 +20,18 @@ When reasoning about how something **should** work:
 
 | Question | Where to Look |
 |----------|---------------|
-| What artifacts exist? | `domain-v4/artifacts/*.json` |
+| What is the contract? | `meta/schemas/core/*.schema.json` |
+| What artifacts exist? | `domain-v4/artifact-types/*.json` |
 | What do agents do? | `domain-v4/agents/*.json` |
+| What stores exist? | `domain-v4/stores/*.json` |
 | How do workflows flow? | `domain-v4/playbooks/*.json` |
 | What knowledge is required? | `domain-v4/knowledge/` |
 | Studio configuration? | `domain-v4/studio.json` |
 
-## Example: Cold Store Schema
+## Example: Store Schema
 
-**Wrong approach:** "I'll read cold_store.py to understand the schema"
-**Right approach:** "I'll check domain-v4/artifacts/ for store fields, then verify code matches"
+**Wrong approach:** "I'll read _archive/runtime-v3/stores/cold_store.py to understand the schema"
+**Right approach:** "I'll check meta/schemas/core/store.schema.json for the contract, then domain-v4/stores/ for instances"
 
 ## When Code and Domain Disagree
 

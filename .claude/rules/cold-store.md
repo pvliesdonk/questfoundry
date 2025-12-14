@@ -1,45 +1,46 @@
-# Cold Store: Who Writes Where
+# Cold Store: Design Principles
 
-## Three-Tier Storage Model
+> **Note**: Runtime is being rebuilt. These are design principles from `meta/`, not current implementation.
 
-```
-hot_store (drafts) -> cold_store (canon) -> Views (filtered exports)
-```
+## Storage Model (from meta/schemas/core/store.schema.json)
 
-| Store | Writers | Readers | Persistence |
-|-------|---------|---------|-------------|
-| hot_store | All roles | All roles | Session only |
-| cold_store | **ONLY Lorekeeper (LK)** | All roles | Permanent (SQLite) |
-| Views | Publisher (PB) | Players | Export artifacts |
+Stores have `semantics`:
 
-## Mindset
+- `hot` — Working memory, mutable, ephemeral
+- `cold` — Committed canon, append-only, permanent
+- `versioned` — Immutable snapshots for export
+- `ephemeral` — Session-only scratch space
 
-> "Hot = discover & argue. Cold = agree & ship."
+## Lifecycle States (from meta/)
 
-- hot_store: Working memory, mutable, internal, ephemeral
-- cold_store: Committed canon, append-only, survives sessions
+Artifacts have `_lifecycle_state`:
 
-## Cold Store Tables
+- `draft` — Initial creation
+- `review` — Pending validation
+- `approved` — Passed quality gates
+- `cold` — Committed to canon
 
-| Table | Content Types | Purpose |
-|-------|--------------|---------|
-| sections | scene | Narrative prose |
-| codex | character, location, item, relationship | Player-safe encyclopedia |
-| canon | canon_entry, event, fact, timeline | Internal world facts (can have spoilers) |
-| acts | act | Story structure |
-| chapters | chapter | Story structure |
+**Key insight**: "Cold" is a lifecycle state, not a separate type. Any artifact can become cold.
+
+## Write Permissions
+
+From `domain-v4/stores/*.json`:
+
+| Store | Exclusive Writer | Semantics |
+|-------|-----------------|-----------|
+| canon | Lorekeeper | cold |
+| codex | Codex Curator | cold |
+| workspace | (all agents) | hot |
+| scratch | (all agents) | ephemeral |
+| exports | Book Binder | versioned |
 
 ## Critical Rule
 
-**Only Lorekeeper calls `promote_to_canon()`.**
+**Lorekeeper owns lifecycle transitions to `cold`.**
 
-If testing cold_store writes, the workflow MUST reach Lorekeeper.
-If cold_store is empty after a run, check if LK was invoked.
+The runtime must enforce this via the `request_lifecycle_transition` tool.
 
 ## Domain Reference
 
-See `domain/ontology/artifacts.md` for the `store:` field on each artifact type:
-
-- `store: hot` - Ephemeral only
-- `store: cold` - Must be promoted
-- `store: both` - Starts hot, promote when approved
+See `domain-v4/stores/` for store definitions.
+See `meta/schemas/core/store.schema.json` for the schema.

@@ -1771,7 +1771,15 @@ docs = [
     { name = "sphinx-rtd-theme" },
 ]
 rag = [
+    { name = "langchain-ollama" },
+    { name = "sqlite-vec" },
+]
+rag-local = [
     { name = "sentence-transformers" },
+    { name = "sqlite-vec" },
+]
+rag-openai = [
+    { name = "langchain-openai" },
     { name = "sqlite-vec" },
 ]
 
@@ -1782,7 +1790,9 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=0.3" },
     { name = "langchain-google-genai", specifier = ">=2.1" },
     { name = "langchain-ollama", specifier = ">=0.2" },
+    { name = "langchain-ollama", marker = "extra == 'rag'", specifier = ">=0.2" },
     { name = "langchain-openai", specifier = ">=0.2" },
+    { name = "langchain-openai", marker = "extra == 'rag-openai'", specifier = ">=0.2" },
     { name = "langgraph", specifier = ">=0.2" },
     { name = "langsmith", specifier = ">=0.4.56" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
@@ -1796,16 +1806,18 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
-    { name = "sentence-transformers", marker = "extra == 'rag'", specifier = ">=3.0" },
+    { name = "sentence-transformers", marker = "extra == 'rag-local'", specifier = ">=3.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=2.0" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = ">=2.0" },
     { name = "sqlite-vec", marker = "extra == 'rag'", specifier = ">=0.1" },
+    { name = "sqlite-vec", marker = "extra == 'rag-local'", specifier = ">=0.1" },
+    { name = "sqlite-vec", marker = "extra == 'rag-openai'", specifier = ">=0.1" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "typer", specifier = ">=0.12" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev", "docs", "rag"]
+provides-extras = ["dev", "docs", "rag", "rag-openai", "rag-local"]
 
 [[package]]
 name = "regex"

@@ -3,15 +3,21 @@
 The loader:
 1. Reads studio.json as the entry point
 2. Resolves all $ref paths to actual JSON files
-3. Validates and constructs Pydantic models
+3. Validates and constructs Pydantic models (from metamodel.py)
 4. Returns a complete Studio object ready for runtime use
+
+The metamodel types match meta/schemas/core/*.schema.json.
+Domain instances are loaded from domain-v4/.
 """
 
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from questfoundry.runtime.domain.models import (
+from pydantic import BaseModel
+
+from questfoundry.runtime.domain.metamodel import (
     Agent,
     ArtifactType,
     AssetType,
@@ -28,7 +34,13 @@ from questfoundry.runtime.domain.models import (
 )
 from questfoundry.runtime.domain.validation import validate_studio
 
+if TYPE_CHECKING:
+    pass
+
 logger = logging.getLogger(__name__)
+
+# Module-level cache for loaded studios
+_studio_cache: dict[Path, Studio] = {}
 
 
 class DomainLoadError(Exception):
@@ -37,11 +49,12 @@ class DomainLoadError(Exception):
     pass
 
 
-def load_studio(studio_path: Path) -> Studio:
+def load_studio(studio_path: Path, *, use_cache: bool = True) -> Studio:
     """Load a studio from its studio.json file.
 
     Args:
         studio_path: Path to the studio.json file
+        use_cache: If True (default), return cached studio if available
 
     Returns:
         A fully resolved Studio object
@@ -50,6 +63,12 @@ def load_studio(studio_path: Path) -> Studio:
         DomainLoadError: If loading fails
         ValidationError: If validation fails
     """
+    studio_path = studio_path.resolve()
+
+    if use_cache and studio_path in _studio_cache:
+        logger.debug(f"Returning cached studio from: {studio_path}")
+        return _studio_cache[studio_path]
+
     if not studio_path.exists():
         raise DomainLoadError(f"Studio file not found: {studio_path}")
 
@@ -121,6 +140,9 @@ def load_studio(studio_path: Path) -> Studio:
     # Validate cross-references
     validate_studio(studio)
 
+    # Cache the loaded studio
+    _studio_cache[studio_path] = studio
+
     logger.info(
         f"Loaded studio '{studio.name}' with "
         f"{len(agents)} agents, {len(playbooks)} playbooks, "
@@ -128,6 +150,66 @@ def load_studio(studio_path: Path) -> Studio:
     )
 
     return studio
+
+
+def get_default_studio_path() -> Path:
+    """Get the default path to domain-v4/studio.json.
+
+    Returns the path relative to the questfoundry package root.
+    """
+    # Navigate from this file to domain-v4/studio.json
+    # This file is at: src/questfoundry/runtime/domain/loader.py
+    # domain-v4 is at: domain-v4/studio.json (repo root)
+    package_root = Path(__file__).parents[4]  # Up to repo root
+    return package_root / "domain-v4" / "studio.json"
+
+
+def get_default_studio(*, use_cache: bool = True) -> Studio:
+    """Load the default QuestFoundry studio from domain-v4.
+
+    This is a convenience function for the common case.
+
+    Args:
+        use_cache: If True (default), return cached studio if available
+
+    Returns:
+        The loaded Studio object
+    """
+    return load_studio(get_default_studio_path(), use_cache=use_cache)
+
+
+def get_artifact_model(artifact_type_id: str) -> type[BaseModel]:
+    """Get a compiled Pydantic model for an artifact type.
+
+    This combines loading the studio and compiling the artifact type
+    into a single convenient function.
+
+    Args:
+        artifact_type_id: The artifact type ID (e.g., "section", "hook_card")
+
+    Returns:
+        A dynamically created Pydantic model class
+
+    Raises:
+        KeyError: If the artifact type is not found
+    """
+    from questfoundry.runtime.domain.artifact_compiler import compile_artifact_type
+
+    studio = get_default_studio()
+
+    if artifact_type_id not in studio.artifact_types:
+        raise KeyError(f"Unknown artifact type: {artifact_type_id}")
+
+    return compile_artifact_type(studio.artifact_types[artifact_type_id])
+
+
+def clear_cache() -> None:
+    """Clear the studio cache.
+
+    Useful for testing or when domain files change.
+    """
+    _studio_cache.clear()
+    logger.debug("Cleared studio cache")
 
 
 def _load_json(path: Path) -> dict:
