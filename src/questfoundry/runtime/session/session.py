@@ -109,7 +109,7 @@ class Session:
         turn_rows = conn.execute(
             """
             SELECT id, session_id, turn_number, agent_id, input, output,
-                   started_at, ended_at, token_usage
+                   started_at, ended_at, token_usage, status
             FROM turns
             WHERE session_id = ?
             ORDER BY turn_number
@@ -123,6 +123,13 @@ class Session:
                 usage_data = json.loads(turn_row["token_usage"])
                 usage = TokenUsage.from_dict(usage_data)
 
+            # Load status from DB, fallback to guessing for backwards compatibility
+            status_str = turn_row["status"] if turn_row["status"] else None
+            if status_str:
+                status = TurnStatus(status_str)
+            else:
+                status = TurnStatus.COMPLETED if turn_row["output"] else TurnStatus.PENDING
+
             turn = Turn(
                 db_id=turn_row["id"],
                 turn_number=turn_row["turn_number"],
@@ -135,7 +142,7 @@ class Session:
                     datetime.fromisoformat(turn_row["ended_at"]) if turn_row["ended_at"] else None
                 ),
                 usage=usage,
-                status=TurnStatus.COMPLETED if turn_row["output"] else TurnStatus.PENDING,
+                status=status,
             )
             session.turns.append(turn)
 
@@ -189,8 +196,8 @@ class Session:
             conn = self._project._get_connection()
             cursor = conn.execute(
                 """
-                INSERT INTO turns (session_id, turn_number, agent_id, input, started_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO turns (session_id, turn_number, agent_id, input, started_at, status)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     self.id,
@@ -198,6 +205,7 @@ class Session:
                     agent_id,
                     user_input,
                     turn.started_at.isoformat(),
+                    turn.status.value,
                 ),
             )
             turn.db_id = cursor.lastrowid
@@ -227,13 +235,14 @@ class Session:
             conn.execute(
                 """
                 UPDATE turns
-                SET output = ?, ended_at = ?, token_usage = ?
+                SET output = ?, ended_at = ?, token_usage = ?, status = ?
                 WHERE id = ?
                 """,
                 (
                     output,
                     turn.ended_at.isoformat() if turn.ended_at else None,
                     json.dumps(usage.to_dict()) if usage else None,
+                    turn.status.value,
                     turn.db_id,
                 ),
             )
@@ -255,12 +264,13 @@ class Session:
             conn.execute(
                 """
                 UPDATE turns
-                SET output = ?, ended_at = ?
+                SET output = ?, ended_at = ?, status = ?
                 WHERE id = ?
                 """,
                 (
                     error_message,
                     turn.ended_at.isoformat() if turn.ended_at else None,
+                    turn.status.value,
                     turn.db_id,
                 ),
             )

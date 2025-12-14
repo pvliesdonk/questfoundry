@@ -246,6 +246,7 @@ class Project:
                 started_at TEXT NOT NULL,
                 ended_at TEXT,
                 token_usage JSON,
+                status TEXT DEFAULT 'pending',
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
 

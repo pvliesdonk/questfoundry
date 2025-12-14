@@ -18,7 +18,9 @@ from questfoundry.runtime.providers.base import (
     ProviderUnavailableError,
     StreamChunk,
 )
+from questfoundry.runtime.providers.google import GoogleProvider
 from questfoundry.runtime.providers.ollama import OllamaProvider
+from questfoundry.runtime.providers.openai import OpenAIProvider
 
 __all__ = [
     # Base types
@@ -34,4 +36,6 @@ __all__ = [
     "ContextOverflowError",
     # Implementations
     "OllamaProvider",
+    "OpenAIProvider",
+    "GoogleProvider",
 ]

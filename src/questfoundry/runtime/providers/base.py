@@ -127,7 +127,7 @@ class LLMProvider(ABC):
         ...
 
     @abstractmethod
-    def stream(
+    async def stream(
         self,
         messages: list[LLMMessage],
         model: str,
@@ -148,7 +148,7 @@ class LLMProvider(ABC):
             ProviderUnavailableError: If provider is not reachable
             ProviderError: For other errors
         """
-        ...
+        yield StreamChunk(content="")
 
     @abstractmethod
     async def check_availability(self) -> bool:

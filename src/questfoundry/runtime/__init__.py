@@ -4,7 +4,7 @@ QuestFoundry Runtime - Domain-agnostic studio execution engine.
 This runtime implements the meta-model contract (meta/schemas/) and can
 execute any studio definition following that schema.
 
-Status: Phase 1 - Single Agent Execution (in progress)
+Status: Phase 1 - Single Agent Execution (complete)
 """
 
 from questfoundry.runtime.agent import (
@@ -27,13 +27,16 @@ from questfoundry.runtime.models import (
     StoreSemantics,
     Studio,
 )
+from questfoundry.runtime.observability import EventLogger, EventType, TracingManager
 from questfoundry.runtime.providers import (
     ContextOverflowError,
+    GoogleProvider,
     InvokeOptions,
     LLMMessage,
     LLMProvider,
     LLMResponse,
     OllamaProvider,
+    OpenAIProvider,
     ProviderError,
     StreamChunk,
 )
@@ -61,6 +64,8 @@ __all__ = [
     "ProviderError",
     "ContextOverflowError",
     "OllamaProvider",
+    "OpenAIProvider",
+    "GoogleProvider",
     # Sessions
     "Session",
     "SessionStatus",
@@ -77,4 +82,8 @@ __all__ = [
     "PromptBuilder",
     "BuiltPrompt",
     "build_prompt",
+    # Observability
+    "EventLogger",
+    "EventType",
+    "TracingManager",
 ]

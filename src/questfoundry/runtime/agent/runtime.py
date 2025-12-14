@@ -7,10 +7,15 @@ The AgentRuntime handles the full lifecycle of an agent activation:
 3. Validate context size
 4. Execute LLM call (streaming or non-streaming)
 5. Track turn in session
+
+With observability integration:
+- JSONL event logging to project_dir/logs/events.jsonl
+- LangSmith tracing (when LANGSMITH_TRACING=true)
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +34,7 @@ from questfoundry.runtime.session import Session, TokenUsage, Turn
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, Studio
+    from questfoundry.runtime.observability import EventLogger, TracingManager
 
 
 @dataclass
@@ -46,7 +52,8 @@ class AgentRuntime:
     Runtime for executing agent activations.
 
     Handles context building, prompt construction, LLM invocation,
-    and session/turn management.
+    and session/turn management. Optionally integrates with observability
+    for JSONL event logging and LangSmith tracing.
     """
 
     def __init__(
@@ -56,6 +63,8 @@ class AgentRuntime:
         domain_path: Path | None = None,
         model: str = "qwen3:8b",
         context_limit: int | None = None,
+        event_logger: EventLogger | None = None,
+        tracing_manager: TracingManager | None = None,
     ):
         """
         Initialize agent runtime.
@@ -66,12 +75,16 @@ class AgentRuntime:
             domain_path: Path to domain directory (for knowledge loading)
             model: Model to use for LLM calls
             context_limit: Maximum context size (tokens), raises error if exceeded
+            event_logger: Optional JSONL event logger
+            tracing_manager: Optional LangSmith tracing manager
         """
         self._provider = provider
         self._studio = studio
         self._domain_path = domain_path
         self._model = model
         self._context_limit = context_limit
+        self._event_logger = event_logger
+        self._tracing_manager = tracing_manager
 
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
@@ -186,15 +199,46 @@ class AgentRuntime:
         """
         # Start turn
         turn = session.start_turn(agent.id, user_input)
+        start_time = time.time()
+
+        # Log turn start
+        if self._event_logger:
+            self._event_logger.turn_start(
+                session_id=session.id,
+                turn_id=turn.turn_number,
+                agent_id=agent.id,
+                input_text=user_input,
+            )
 
         try:
             # Build context and messages
             context = self.build_context(agent)
-            history = session.get_history()[:-2] if len(session.turns) > 1 else None
+
+            # Log context building
+            if self._event_logger:
+                self._event_logger.context_build(
+                    session_id=session.id,
+                    agent_id=agent.id,
+                    knowledge_count=len(context.must_know_entries),
+                    total_chars=context.total_tokens * 4,  # Rough estimate,
+                )
+
+            history = session.get_history()[:-1] if len(session.turns) > 1 else None
             messages = self.build_messages(agent, user_input, context, history)
 
             # Validate context size
             self.validate_context_size(messages)
+
+            # Log LLM call start
+            estimated_tokens = self.estimate_tokens(messages)
+            if self._event_logger:
+                self._event_logger.llm_call_start(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    model=self._model,
+                    provider=self._provider.name,
+                    prompt_tokens=estimated_tokens,
+                )
 
             # Invoke LLM
             response = await self._provider.invoke(messages, self._model, options)
@@ -206,6 +250,26 @@ class AgentRuntime:
                 total_tokens=response.total_tokens,
             )
             session.complete_turn(turn, response.content, usage)
+            duration_ms = (time.time() - start_time) * 1000
+
+            # Log completion
+            if self._event_logger:
+                self._event_logger.llm_call_complete(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    model=self._model,
+                    completion_tokens=response.completion_tokens,
+                    total_tokens=response.total_tokens,
+                    duration_ms=response.duration_ms,
+                )
+                self._event_logger.turn_complete(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    output_length=len(response.content),
+                    prompt_tokens=response.prompt_tokens,
+                    completion_tokens=response.completion_tokens,
+                    duration_ms=duration_ms,
+                )
 
             return ActivationResult(
                 content=response.content,
@@ -216,6 +280,13 @@ class AgentRuntime:
 
         except Exception as e:
             session.error_turn(turn, str(e))
+            # Log error
+            if self._event_logger:
+                self._event_logger.turn_error(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    error=str(e),
+                )
             raise
 
     async def activate_streaming(
@@ -243,15 +314,46 @@ class AgentRuntime:
         """
         # Start turn
         turn = session.start_turn(agent.id, user_input)
+        start_time = time.time()
+
+        # Log turn start
+        if self._event_logger:
+            self._event_logger.turn_start(
+                session_id=session.id,
+                turn_id=turn.turn_number,
+                agent_id=agent.id,
+                input_text=user_input,
+            )
 
         try:
             # Build context and messages
             context = self.build_context(agent)
-            history = session.get_history()[:-2] if len(session.turns) > 1 else None
+
+            # Log context building
+            if self._event_logger:
+                self._event_logger.context_build(
+                    session_id=session.id,
+                    agent_id=agent.id,
+                    knowledge_count=len(context.must_know_entries),
+                    total_chars=context.total_tokens * 4,  # Rough estimate,
+                )
+
+            history = session.get_history()[:-1] if len(session.turns) > 1 else None
             messages = self.build_messages(agent, user_input, context, history)
 
             # Validate context size
             self.validate_context_size(messages)
+
+            # Log LLM call start
+            estimated_tokens = self.estimate_tokens(messages)
+            if self._event_logger:
+                self._event_logger.llm_call_start(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    model=self._model,
+                    provider=self._provider.name,
+                    prompt_tokens=estimated_tokens,
+                )
 
             # Collect response for turn completion
             full_content = ""
@@ -272,9 +374,36 @@ class AgentRuntime:
 
             # Complete turn after streaming finishes
             session.complete_turn(turn, full_content, final_usage)
+            duration_ms = (time.time() - start_time) * 1000
+
+            # Log completion
+            if self._event_logger:
+                self._event_logger.llm_call_complete(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    model=self._model,
+                    completion_tokens=final_usage.completion_tokens if final_usage else None,
+                    total_tokens=final_usage.total_tokens if final_usage else None,
+                    duration_ms=duration_ms,
+                )
+                self._event_logger.turn_complete(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    output_length=len(full_content),
+                    prompt_tokens=final_usage.prompt_tokens if final_usage else None,
+                    completion_tokens=final_usage.completion_tokens if final_usage else None,
+                    duration_ms=duration_ms,
+                )
 
         except Exception as e:
             session.error_turn(turn, str(e))
+            # Log error
+            if self._event_logger:
+                self._event_logger.turn_error(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    error=str(e),
+                )
             raise
 
 
