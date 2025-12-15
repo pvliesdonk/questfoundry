@@ -76,8 +76,15 @@ class ActivationResult:
     stop_reason: str | None = None  # "delegate", "terminate", "max_iterations", None
 
 
-# Tool names that are "stop tools" - calling them returns control to orchestrator
-STOP_TOOL_NAMES = frozenset({"delegate", "terminate", "return_to_orchestrator"})
+# Tool names that are "stop tools" - calling them returns control to orchestrator/human
+STOP_TOOL_NAMES = frozenset(
+    {
+        "delegate",  # Delegation to another agent
+        "terminate",  # End workflow
+        "return_to_orchestrator",  # Delegatee returns to orchestrator
+        "request_clarification",  # Ask human for clarification
+    }
+)
 
 # Maximum consecutive failures before giving up
 MAX_CONSECUTIVE_FAILURES = 3
