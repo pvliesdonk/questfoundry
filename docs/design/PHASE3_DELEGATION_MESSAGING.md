@@ -1,12 +1,30 @@
 # Phase 3: Delegation & Messaging
 
 > **Issue**: #147
-> **Status**: Planned
+> **Status**: ✅ Implemented
 > **Parent**: #143 (V4 Runtime Cleanroom Rebuild)
+> **Branch**: `epic/phase3-delegation-messaging`
 
 ## Overview
 
 Build async-first messaging infrastructure and delegation flow for hub-and-spoke orchestration. Showrunner delegates work to specialist agents, receives results, and decides next steps.
+
+## Implementation Summary
+
+| Component | Status | Tests |
+|-----------|--------|-------|
+| `messaging/types.py` | ✅ Complete | 6 tests |
+| `messaging/message.py` | ✅ Complete | 15 tests |
+| `messaging/mailbox.py` | ✅ Complete | 12 tests |
+| `messaging/broker.py` | ✅ Complete | 8 tests |
+| `messaging/logger.py` | ✅ Complete | 3 tests |
+| `delegation/tracker.py` | ✅ Complete | 15 tests |
+| `delegation/bouncer.py` | ✅ Complete | 12 tests |
+| `delegation/executor.py` | ✅ Complete | 23 tests |
+| `tools/delegate.py` | ✅ Wired to broker | 9 tests |
+| `storage/project.py` | ✅ Schema updated | 19 tests |
+| Integration tests | ✅ Complete | 10 tests |
+| **Total** | **✅ Complete** | **350 tests** |
 
 ## Key Design Decisions
 
@@ -405,3 +423,83 @@ CREATE INDEX idx_playbook_instances_status ON playbook_instances(status);
 - `meta/schemas/core/delegation.schema.json` - Delegation contract
 - `domain-v4/playbooks/*.json` - Playbook definitions with max_rework_cycles
 - `domain-v4/agents/*.json` - Agent capabilities and delegation limits
+
+---
+
+## Implementation Notes
+
+### Files Created
+
+**Messaging Module** (`src/questfoundry/runtime/messaging/`):
+- `types.py` - MessageType, MessageStatus, MessagePriority, PlaybookStatus enums
+- `message.py` - Message dataclass with factory functions (create_delegation_request, etc.)
+- `mailbox.py` - AsyncMailbox with priority queue and TTL expiration
+- `broker.py` - AsyncMessageBroker for routing, persistence, and turn management
+- `logger.py` - MessageLogger for JSONL audit trail
+- `__init__.py` - Public API exports
+
+**Delegation Module** (`src/questfoundry/runtime/delegation/`):
+- `tracker.py` - PlaybookTracker and PlaybookInstance for rework budget tracking
+- `bouncer.py` - DelegationBouncer for pre-flight checks (concurrent limits, budget)
+- `executor.py` - AsyncDelegationExecutor for full delegation lifecycle
+- `__init__.py` - Public API exports
+
+**Modified Files**:
+- `tools/base.py` - Added `broker` field to ToolContext
+- `tools/delegate.py` - Wired to AsyncMessageBroker, removed Phase 2 stubs
+- `storage/project.py` - Extended messages schema, added playbook_instances table
+
+### Test Files
+
+- `tests/runtime/messaging/test_types.py` - Enum tests
+- `tests/runtime/messaging/test_message.py` - Message and factory tests
+- `tests/runtime/messaging/test_mailbox.py` - AsyncMailbox tests
+- `tests/runtime/messaging/test_broker.py` - AsyncMessageBroker tests
+- `tests/runtime/messaging/test_logger.py` - MessageLogger tests
+- `tests/runtime/delegation/test_tracker.py` - PlaybookTracker tests
+- `tests/runtime/delegation/test_bouncer.py` - DelegationBouncer tests
+- `tests/runtime/delegation/test_executor.py` - AsyncDelegationExecutor tests
+- `tests/runtime/delegation/test_integration.py` - Full flow integration tests
+- `tests/runtime/tools/test_delegate.py` - Updated for broker integration
+
+### Key Implementation Details
+
+1. **Priority Queue**: Messages are ordered by priority (-10 to +10), with escalations at +10
+2. **TTL Expiration**: Messages expire after N turns via `broker.advance_turn()`
+3. **Rework Budget**: First visit to `is_rework_target` phase doesn't count; subsequent visits do
+4. **Auto-escalation**: When budget exhausted, creates ESCALATION message automatically
+5. **Playbook Status**: Tracked as ACTIVE -> COMPLETED or ESCALATED
+
+### Usage Example
+
+```python
+from questfoundry.runtime.messaging import AsyncMessageBroker, create_delegation_request
+from questfoundry.runtime.delegation import (
+    AsyncDelegationExecutor,
+    DelegationBouncer,
+    PlaybookTracker,
+)
+
+# Create infrastructure
+broker = AsyncMessageBroker()
+tracker = PlaybookTracker()
+bouncer = DelegationBouncer()
+executor = AsyncDelegationExecutor(broker, bouncer, tracker, activator)
+
+# Start playbook
+instance = await tracker.start_playbook("scene_weave", max_rework_cycles=3)
+
+# Create and send delegation
+msg = create_delegation_request(
+    from_agent="showrunner",
+    to_agent="scene_smith",
+    task="Write the opening scene",
+    playbook_id="scene_weave",
+    playbook_instance_id=instance.instance_id,
+    phase_id="prose_drafting",
+)
+await broker.send(msg)
+
+# Execute delegation
+result = await executor.execute(msg)
+```
