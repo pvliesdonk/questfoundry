@@ -172,7 +172,7 @@ class AsyncMessageBroker:
             return
 
         try:
-            conn = self._project.get_connection()  # type: ignore[attr-defined]
+            conn = self._project._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -219,7 +219,7 @@ class AsyncMessageBroker:
             return
 
         try:
-            conn = self._project.get_connection()  # type: ignore[attr-defined]
+            conn = self._project._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE messages SET status = ?, processed_at = datetime('now') WHERE message_id = ?",
@@ -353,7 +353,7 @@ class AsyncMessageBroker:
             return 0
 
         try:
-            conn = self._project.get_connection()  # type: ignore[attr-defined]
+            conn = self._project._get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """

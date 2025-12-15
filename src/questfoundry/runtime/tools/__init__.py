@@ -20,6 +20,7 @@ Usage:
 # Import tool implementations to trigger registration
 from questfoundry.runtime.tools import (
     consult_corpus,  # noqa: F401
+    consult_playbook,  # noqa: F401
     consult_schema,  # noqa: F401
     delegate,  # noqa: F401
     request_clarification,  # noqa: F401

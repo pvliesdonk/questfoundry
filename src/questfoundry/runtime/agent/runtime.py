@@ -510,6 +510,18 @@ class AgentRuntime:
                 input_text=user_input,
             )
 
+        # Start turn tracing if enabled
+        turn_ctx = None
+        callbacks = None
+        if self._tracing_manager:
+            turn_ctx = self._tracing_manager.turn(
+                turn_id=turn.turn_number,
+                user_input=user_input,
+                agent_id=agent.id,
+            )
+            turn_ctx.__enter__()
+            callbacks = self._tracing_manager.get_langchain_callbacks()
+
         try:
             # Build context and messages
             context = self.build_context(agent)
@@ -553,9 +565,13 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
-                # Invoke LLM with tools
+                # Invoke LLM with tools and tracing callbacks
                 response = await self._provider.invoke(
-                    messages, self._model, options, tools=tool_schemas if tool_schemas else None
+                    messages,
+                    self._model,
+                    options,
+                    tools=tool_schemas if tool_schemas else None,
+                    callbacks=callbacks,
                 )
 
                 # Accumulate token usage
@@ -658,6 +674,20 @@ class AgentRuntime:
                     duration_ms=duration_ms,
                 )
 
+            # End turn tracing with success
+            if turn_ctx and self._tracing_manager:
+                self._tracing_manager.end_turn(
+                    output=final_content,
+                    token_usage={
+                        "prompt_tokens": usage.prompt_tokens or 0,
+                        "completion_tokens": usage.completion_tokens or 0,
+                        "total_tokens": usage.total_tokens or 0,
+                    }
+                    if usage
+                    else None,
+                )
+                turn_ctx.__exit__(None, None, None)
+
             return ActivationResult(
                 content=final_content,
                 agent_id=agent.id,
@@ -668,6 +698,11 @@ class AgentRuntime:
             )
 
         except Exception as e:
+            # End turn tracing with error
+            if turn_ctx and self._tracing_manager:
+                self._tracing_manager.end_turn(error=str(e))
+                turn_ctx.__exit__(type(e), e, e.__traceback__)
+
             session.error_turn(turn, str(e))
             # Log error
             if self._event_logger:
@@ -722,6 +757,18 @@ class AgentRuntime:
                 input_text=user_input,
             )
 
+        # Start turn tracing if enabled
+        turn_ctx = None
+        callbacks = None
+        if self._tracing_manager:
+            turn_ctx = self._tracing_manager.turn(
+                turn_id=turn.turn_number,
+                user_input=user_input,
+                agent_id=agent.id,
+            )
+            turn_ctx.__enter__()
+            callbacks = self._tracing_manager.get_langchain_callbacks()
+
         try:
             # Build context and messages
             context = self.build_context(agent)
@@ -765,9 +812,13 @@ class AgentRuntime:
                 iteration_content = ""
                 pending_tool_calls: list[ToolCallRequest] | None = None
 
-                # Stream from provider with tools
+                # Stream from provider with tools and tracing callbacks
                 async for chunk in self._provider.stream(
-                    messages, self._model, options, tools=tool_schemas if tool_schemas else None
+                    messages,
+                    self._model,
+                    options,
+                    tools=tool_schemas if tool_schemas else None,
+                    callbacks=callbacks,
                 ):
                     iteration_content += chunk.content
 
@@ -882,7 +933,26 @@ class AgentRuntime:
                     duration_ms=duration_ms,
                 )
 
+            # End turn tracing with success
+            if turn_ctx and self._tracing_manager:
+                self._tracing_manager.end_turn(
+                    output=full_content,
+                    token_usage={
+                        "prompt_tokens": final_usage.prompt_tokens or 0,
+                        "completion_tokens": final_usage.completion_tokens or 0,
+                        "total_tokens": final_usage.total_tokens or 0,
+                    }
+                    if final_usage
+                    else None,
+                )
+                turn_ctx.__exit__(None, None, None)
+
         except Exception as e:
+            # End turn tracing with error
+            if turn_ctx and self._tracing_manager:
+                self._tracing_manager.end_turn(error=str(e))
+                turn_ctx.__exit__(type(e), e, e.__traceback__)
+
             session.error_turn(turn, str(e))
             # Log error
             if self._event_logger:

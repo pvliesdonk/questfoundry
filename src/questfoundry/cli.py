@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from questfoundry.runtime import AgentRuntime
     from questfoundry.runtime.messaging import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio
-    from questfoundry.runtime.observability import EventLogger
+    from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -440,16 +441,17 @@ async def _setup_runtime(
     EventLogger | None,
     Path | None,
     AsyncMessageBroker,
+    TracingManager | None,
 ]:
     """
     Set up the runtime components for an ask session.
 
     Returns:
-        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path, broker)
+        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path, broker, tracing_manager)
     """
     from questfoundry.runtime import AgentRuntime, load_studio
     from questfoundry.runtime.config import load_config
-    from questfoundry.runtime.observability import EventLogger
+    from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -520,6 +522,11 @@ async def _setup_runtime(
         event_logger = EventLogger(log_path, direct_file=True)
         logger.info(f"Event logging to: {log_path}")
 
+    # Create LangSmith tracing manager (auto-detects LANGSMITH_TRACING env var)
+    tracing_manager = TracingManager(project_name="questfoundry")
+    if tracing_manager.enabled:
+        logger.info("LangSmith tracing enabled")
+
     # Create message broker for delegation routing
     from questfoundry.runtime.messaging import AsyncMessageBroker
 
@@ -533,6 +540,7 @@ async def _setup_runtime(
         domain_path=domain_path,
         model=model_to_use,
         event_logger=event_logger,
+        tracing_manager=tracing_manager if tracing_manager.enabled else None,
         broker=broker,
     )
 
@@ -562,7 +570,18 @@ async def _setup_runtime(
     if event_logger:
         event_logger.session_start(session_id=session.id, agent_id=agent.id, project_id=project_id)
 
-    return project, studio, runtime, agent, session, provider, event_logger, log_path, broker
+    return (
+        project,
+        studio,
+        runtime,
+        agent,
+        session,
+        provider,
+        event_logger,
+        log_path,
+        broker,
+        tracing_manager,
+    )
 
 
 async def _stream_response(
@@ -812,47 +831,57 @@ async def _ask_single(
         event_logger,
         log_path,
         broker,
+        tracing_manager,
     ) = await _setup_runtime(
         project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
 
-    try:
-        console.print(f"[dim]{agent.name}:[/dim]")
-        await _stream_response(runtime, agent, prompt, session)
-        console.print()
+    # Wrap execution in LangSmith session tracing
+    with (
+        tracing_manager.session(session.id, agent.id, project_id)
+        if tracing_manager
+        else nullcontext()
+    ):
+        try:
+            console.print(f"[dim]{agent.name}:[/dim]")
+            await _stream_response(runtime, agent, prompt, session)
+            console.print()
 
-        # Handle clarification requests in a loop
-        # Agent may ask multiple questions before completing
-        while True:
-            clarifications = await _handle_clarification_requests(broker)
-            if not clarifications:
-                break
+            # Handle clarification requests in a loop
+            # Agent may ask multiple questions before completing
+            while True:
+                clarifications = await _handle_clarification_requests(broker)
+                if not clarifications:
+                    break
 
-            # Re-activate agent with the clarification response context
-            # The response was sent to agent's mailbox - agent will receive it
-            for clarification in clarifications:
-                from_agent = clarification["from_agent"]
-                answer = clarification["answer"]
+                # Re-activate agent with the clarification response context
+                # The response was sent to agent's mailbox - agent will receive it
+                for clarification in clarifications:
+                    from_agent = clarification["from_agent"]
+                    answer = clarification["answer"]
 
-                console.print()
-                console.print(f"[dim]{from_agent} (continuing):[/dim]")
+                    console.print()
+                    console.print(f"[dim]{from_agent} (continuing):[/dim]")
 
-                # Build a context message for the agent with the clarification response
-                context_msg = f"[Customer response to your question: {answer}]"
-                await _stream_response(runtime, agent, context_msg, session)
-                console.print()
+                    # Build a context message for the agent with the clarification response
+                    context_msg = f"[Customer response to your question: {answer}]"
+                    await _stream_response(runtime, agent, context_msg, session)
+                    console.print()
 
-    except ContextOverflowError as e:
-        console.print(f"[red]✗ Context overflow: {e}[/red]")
-    except ProviderError as e:
-        console.print(f"[red]✗ Provider error: {e}[/red]")
-    finally:
-        # Log session end and flush
-        if event_logger:
-            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-            console.print(f"[dim]Events logged to: {log_path}[/dim]")
-        await provider.close()
-        project.close()
+        except ContextOverflowError as e:
+            console.print(f"[red]✗ Context overflow: {e}[/red]")
+        except ProviderError as e:
+            console.print(f"[red]✗ Provider error: {e}[/red]")
+        finally:
+            # End session tracing
+            if tracing_manager:
+                tracing_manager.end_session(turn_count=session.turn_count)
+            # Log session end and flush
+            if event_logger:
+                event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+                console.print(f"[dim]Events logged to: {log_path}[/dim]")
+            await provider.close()
+            project.close()
 
 
 async def _ask_repl(
@@ -877,6 +906,7 @@ async def _ask_repl(
         event_logger,
         log_path,
         broker,
+        tracing_manager,
     ) = await _setup_runtime(
         project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
@@ -888,68 +918,79 @@ async def _ask_repl(
     console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
     if log_path:
         console.print(f"Logging: [dim]{log_path}[/dim]")
+    if tracing_manager:
+        console.print("[dim]LangSmith tracing: enabled[/dim]")
     console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
     console.print()
 
-    try:
-        while True:
-            try:
-                # Get input
-                user_input = console.input("[bold]> [/bold]")
+    # Wrap execution in LangSmith session tracing
+    with (
+        tracing_manager.session(session.id, agent.id, project_id)
+        if tracing_manager
+        else nullcontext()
+    ):
+        try:
+            while True:
+                try:
+                    # Get input
+                    user_input = console.input("[bold]> [/bold]")
 
-                # Check for exit
-                if user_input.lower() in ("exit", "quit", "/exit", "/quit"):
-                    break
-
-                if not user_input.strip():
-                    continue
-
-                # Stream response
-                console.print(f"[dim]{agent.name}:[/dim]")
-                await _stream_response(runtime, agent, user_input, session)
-                console.print()
-
-                # Handle clarification requests
-                # Agent may ask questions before completing
-                while True:
-                    clarifications = await _handle_clarification_requests(broker)
-                    if not clarifications:
+                    # Check for exit
+                    if user_input.lower() in ("exit", "quit", "/exit", "/quit"):
                         break
 
-                    # Re-activate agent with the clarification response context
-                    for clarification in clarifications:
-                        from_agent = clarification["from_agent"]
-                        answer = clarification["answer"]
+                    if not user_input.strip():
+                        continue
 
-                        console.print()
-                        console.print(f"[dim]{from_agent} (continuing):[/dim]")
+                    # Stream response
+                    console.print(f"[dim]{agent.name}:[/dim]")
+                    await _stream_response(runtime, agent, user_input, session)
+                    console.print()
 
-                        # Build context message for the agent
-                        context_msg = f"[Customer response to your question: {answer}]"
-                        await _stream_response(runtime, agent, context_msg, session)
-                        console.print()
+                    # Handle clarification requests
+                    # Agent may ask questions before completing
+                    while True:
+                        clarifications = await _handle_clarification_requests(broker)
+                        if not clarifications:
+                            break
 
-            except ContextOverflowError as e:
-                console.print(f"[red]✗ Context overflow: {e}[/red]")
-                console.print("[dim]Try a shorter message or start a new session[/dim]")
-                console.print()
-            except ProviderError as e:
-                console.print(f"[red]✗ Provider error: {e}[/red]")
-                console.print()
+                        # Re-activate agent with the clarification response context
+                        for clarification in clarifications:
+                            from_agent = clarification["from_agent"]
+                            answer = clarification["answer"]
 
-    except (KeyboardInterrupt, EOFError):
-        console.print()
+                            console.print()
+                            console.print(f"[dim]{from_agent} (continuing):[/dim]")
 
-    finally:
-        # Log session end and flush
-        if event_logger:
-            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-            console.print(f"[dim]Events logged to: {log_path}[/dim]")
-        # Show session summary
-        console.print()
-        console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
-        await provider.close()
-        project.close()
+                            # Build context message for the agent
+                            context_msg = f"[Customer response to your question: {answer}]"
+                            await _stream_response(runtime, agent, context_msg, session)
+                            console.print()
+
+                except ContextOverflowError as e:
+                    console.print(f"[red]✗ Context overflow: {e}[/red]")
+                    console.print("[dim]Try a shorter message or start a new session[/dim]")
+                    console.print()
+                except ProviderError as e:
+                    console.print(f"[red]✗ Provider error: {e}[/red]")
+                    console.print()
+
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+
+        finally:
+            # End session tracing
+            if tracing_manager:
+                tracing_manager.end_session(turn_count=session.turn_count)
+            # Log session end and flush
+            if event_logger:
+                event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+                console.print(f"[dim]Events logged to: {log_path}[/dim]")
+            # Show session summary
+            console.print()
+            console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
+            await provider.close()
+            project.close()
 
 
 # =============================================================================

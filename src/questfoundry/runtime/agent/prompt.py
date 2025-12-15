@@ -102,60 +102,70 @@ class PromptBuilder:
         """
         self.reset()
 
-        # 1. Agent Identity (highest priority)
+        # Priority ordering: actionable content first, reference material later
+        # Higher priority = appears earlier in prompt
+        #
+        # Actionable (what to do NOW):
+        #   identity (100), agents (95), tools (90), playbooks (85)
+        # Operational (how to behave):
+        #   capabilities (80), constraints (75)
+        # Reference (background knowledge):
+        #   constitution (65), must_know (60), stores (55), artifact_types (50)
+
+        # 1. Agent Identity (highest priority - who you are)
         identity = self._build_identity_section(agent)
         self.add_section("identity", identity, priority=100)
 
-        # 2. Constitution
-        if constitution_text:
-            self.add_section(
-                "constitution", self._format_constitution(constitution_text), priority=90
-            )
-
-        # 3. Must Know
-        if must_know_entries:
-            must_know = self._build_must_know_section(must_know_entries)
-            self.add_section("must_know", must_know, priority=80)
-
-        # 4. Constraints
-        if agent.constraints:
-            constraints = self._build_constraints_section(agent)
-            self.add_section("constraints", constraints, priority=70)
-
-        # 5. Capabilities
-        if agent.capabilities:
-            capabilities = self._build_capabilities_section(agent)
-            self.add_section("capabilities", capabilities, priority=60)
-
-        # 6. Available Tools (important for function calling)
-        if tool_schemas:
-            tools_section = self._build_tools_section(tool_schemas)
-            self.add_section("tools", tools_section, priority=55)
-
-        # 7. Available Playbooks (for orchestrators)
-        if playbooks_menu:
-            playbooks_section = self._build_playbooks_section(playbooks_menu)
-            self.add_section("playbooks", playbooks_section, priority=52)
-
-        # 7b. Available Agents for Delegation (high priority for orchestrators)
+        # 2. Available Agents for Delegation (actionable - who to delegate to)
         if agents_menu:
             agents_section = self._build_agents_section(agents_menu)
-            self.add_section("agents", agents_section, priority=75)  # High priority
+            self.add_section("agents", agents_section, priority=95)
 
-        # 8. Store Access (what stores you can read/write)
+        # 3. Available Tools (actionable - how to act)
+        if tool_schemas:
+            tools_section = self._build_tools_section(tool_schemas)
+            self.add_section("tools", tools_section, priority=90)
+
+        # 4. Available Playbooks (actionable - workflow guidance)
+        if playbooks_menu:
+            playbooks_section = self._build_playbooks_section(playbooks_menu)
+            self.add_section("playbooks", playbooks_section, priority=85)
+
+        # 5. Capabilities (operational - what you can do)
+        if agent.capabilities:
+            capabilities = self._build_capabilities_section(agent)
+            self.add_section("capabilities", capabilities, priority=80)
+
+        # 6. Constraints (operational - what not to do)
+        if agent.constraints:
+            constraints = self._build_constraints_section(agent)
+            self.add_section("constraints", constraints, priority=75)
+
+        # 7. Constitution (reference - principles)
+        if constitution_text:
+            self.add_section(
+                "constitution", self._format_constitution(constitution_text), priority=65
+            )
+
+        # 8. Must Know (reference - knowledge including operational guidelines)
+        if must_know_entries:
+            must_know = self._build_must_know_section(must_know_entries)
+            self.add_section("must_know", must_know, priority=60)
+
+        # 9. Store Access (reference - what stores you can read/write)
         if stores_menu:
             stores_section = self._build_stores_section(stores_menu)
-            self.add_section("stores", stores_section, priority=51)
+            self.add_section("stores", stores_section, priority=55)
 
-        # 9. Artifact Types (what types you can create - enables consult-schema pattern)
+        # 10. Artifact Types (reference - what types you can create)
         if artifact_types_menu:
             artifact_types_section = self._build_artifact_types_section(artifact_types_menu)
             self.add_section("artifact_types", artifact_types_section, priority=50)
 
-        # 10. Available Knowledge Menu
+        # 11. Available Knowledge Menu
         if role_specific_menu:
             menu = self._build_knowledge_menu(role_specific_menu)
-            self.add_section("knowledge_menu", menu, priority=49)
+            self.add_section("knowledge_menu", menu, priority=45)
 
         return self._assemble()
 
@@ -259,7 +269,7 @@ class PromptBuilder:
         """Build the available playbooks menu.
 
         Args:
-            playbooks: List of playbook menu items with id, name, purpose, triggers
+            playbooks: List of playbook menu items with id, name, purpose, triggers, workflow
 
         Returns:
             Formatted playbooks section for the prompt
@@ -274,10 +284,15 @@ class PromptBuilder:
             name = pb.get("name", pb.get("id", "Unknown"))
             purpose = pb.get("purpose", "")
             triggers = pb.get("triggers", [])
+            workflow = pb.get("workflow", "")
             pb_id = pb.get("id", "")
 
             lines.append(f"### {name} (`{pb_id}`)")
             lines.append(f"{purpose}\n")
+
+            # Include workflow summary showing delegation sequence
+            if workflow:
+                lines.append(f"**Workflow:** {workflow}\n")
 
             if triggers:
                 lines.append("**When to use:**")

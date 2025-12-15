@@ -34,6 +34,13 @@
       "tool_ref": "consult_schema"
     },
     {
+      "id": "use_consult_playbook",
+      "name": "Consult Playbook",
+      "description": "Get full details of playbooks including phases, steps, agents, and completion criteria",
+      "category": "tool",
+      "tool_ref": "consult_playbook"
+    },
+    {
       "id": "use_request_clarification",
       "name": "Request Clarification from Customer",
       "description": "Can ask the customer clarifying questions",
@@ -103,7 +110,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview", "showrunner_operating_principles"],
+    "must_know": ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview", "showrunner_operating_principles", "runtime_guidelines"],
     "role_specific": []
   },
 

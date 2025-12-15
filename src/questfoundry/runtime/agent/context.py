@@ -315,6 +315,7 @@ class ContextBuilder:
         - name: Human-readable name
         - purpose: What this playbook accomplishes
         - triggers: When to use this playbook
+        - workflow: Summary of phases and key agents (for orchestrator guidance)
         """
         triggers = []
         if playbook.triggers:
@@ -324,12 +325,53 @@ class ContextBuilder:
                 else:
                     triggers.append(str(t))
 
+        # Build workflow summary from phases
+        workflow_summary = self._build_workflow_summary(playbook)
+
         return {
             "id": playbook.id,
             "name": playbook.name or playbook.id,
             "purpose": playbook.purpose or "",
             "triggers": triggers,
+            "workflow": workflow_summary,
         }
+
+    def _build_workflow_summary(self, playbook: Playbook) -> str:
+        """Build a condensed workflow summary from playbook phases.
+
+        Returns a string like:
+        "topology_design (plotwright) -> brief_creation (plotwright) -> preview_gate (gatekeeper)"
+        """
+        if not playbook.phases:
+            return ""
+
+        # Extract phase info
+        phase_summaries = []
+        for phase_id, phase in playbook.phases.items():
+            # Get the primary agent for this phase from steps
+            agents = set()
+            if isinstance(phase, dict):
+                steps = phase.get("steps", {})
+                for step in steps.values():
+                    if isinstance(step, dict):
+                        if step.get("specific_agent"):
+                            agents.add(step["specific_agent"])
+                        elif step.get("agent_archetype"):
+                            agents.add(f"[{step['agent_archetype']}]")
+
+                phase_name = phase.get("name", phase_id)
+            else:
+                phase_name = phase_id
+
+            if agents:
+                agents_str = "/".join(sorted(agents))
+                phase_summaries.append(f"{phase_name} ({agents_str})")
+            else:
+                phase_summaries.append(phase_name)
+
+        # Order by dependency if possible, otherwise use dict order
+        # For now, just join in definition order
+        return " -> ".join(phase_summaries)
 
     def _extract_stores_access(self, agent: Agent, studio: Studio) -> list[dict[str, Any]]:
         """Extract stores the agent can access from capabilities.

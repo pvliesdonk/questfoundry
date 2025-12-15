@@ -72,6 +72,7 @@
 
   "tools": [
     "tools/consult_schema.json",
+    "tools/consult_playbook.json",
     "tools/validate_artifact.json",
     "tools/search_workspace.json",
     "tools/delegate.json",
