@@ -21,6 +21,7 @@ import typer
 if TYPE_CHECKING:
     from questfoundry.runtime import AgentRuntime
     from questfoundry.runtime.models import Agent, Studio
+    from questfoundry.runtime.observability import EventLogger
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -343,7 +344,7 @@ def projects_create(
 def ask(
     project: Annotated[
         str | None,
-        typer.Argument(help="Project ID (auto-creates 'default' if omitted)"),
+        typer.Argument(help="Project ID (auto-creates if doesn't exist)"),
     ] = None,
     prompt: Annotated[str | None, typer.Argument(help="Prompt (omit for REPL mode)")] = None,
     entry_agent: Annotated[
@@ -356,12 +357,20 @@ def ask(
     ] = Path("domain-v4"),
     projects_dir: Annotated[
         Path,
-        typer.Option("--projects-dir", "-p", help="Projects directory"),
+        typer.Option("--projects-dir", help="Projects directory"),
     ] = Path("projects"),
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", "-p", help="LLM provider (e.g., ollama, anthropic)"),
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option("--model", "-m", help="Model to use"),
     ] = None,
+    log: Annotated[
+        bool,
+        typer.Option("--log", "-l", help="Write JSONL event log to project_dir/logs/events.jsonl"),
+    ] = False,
     verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
         int,
         typer.Option(
@@ -374,31 +383,41 @@ def ask(
     ] = 0,
 ) -> None:
     """Interactive session or single-shot query with an agent."""
-    # Auto-create default project if not specified
+    # Auto-create project if not specified or doesn't exist
     if project is None:
         project = "default"
-        _ensure_default_project(projects_dir)
+    _ensure_project(project, projects_dir)
 
     if prompt:
-        asyncio.run(_ask_single(project, prompt, entry_agent, domain, projects_dir, model))
+        asyncio.run(
+            _ask_single(project, prompt, entry_agent, domain, projects_dir, provider, model, log)
+        )
     else:
-        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, model))
+        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, provider, model, log))
 
 
-def _ensure_default_project(projects_dir: Path) -> None:
-    """Create the default project if it doesn't exist."""
+def _ensure_project(project_id: str, projects_dir: Path) -> None:
+    """Create the project if it doesn't exist."""
     from questfoundry.runtime.storage import Project
 
-    default_path = projects_dir / "default"
-    if not default_path.exists():
-        console.print("[dim]Creating default project...[/dim]")
+    project_path = projects_dir / project_id
+    if not project_path.exists():
+        # Generate a nice name from the ID
+        name = project_id.replace("-", " ").replace("_", " ").title()
+        if project_id == "default":
+            name = "Default Project"
+            description = "Auto-created default project for quick sessions"
+        else:
+            description = f"Auto-created project: {name}"
+
+        console.print(f"[dim]Creating project '{project_id}'...[/dim]")
         Project.create(
-            path=default_path,
-            name="Default Project",
-            description="Auto-created default project for quick sessions",
+            path=project_path,
+            name=name,
+            description=description,
             studio_id="questfoundry",
         )
-        console.print("[green]✓[/green] Created default project")
+        console.print(f"[green]✓[/green] Created project [bold]{name}[/bold]")
         console.print()
 
 
@@ -407,16 +426,21 @@ async def _setup_runtime(
     entry_agent_id: str | None,
     domain_path: Path,
     projects_dir: Path,
+    provider_name: str | None,
     model: str | None,
-) -> tuple[Project, Studio, AgentRuntime, Agent, Session, OllamaProvider]:
+    log: bool = False,
+) -> tuple[
+    Project, Studio, AgentRuntime, Agent, Session, OllamaProvider, EventLogger | None, Path | None
+]:
     """
     Set up the runtime components for an ask session.
 
     Returns:
-        Tuple of (project, studio, runtime, agent, session, provider)
+        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path)
     """
     from questfoundry.runtime import AgentRuntime, load_studio
     from questfoundry.runtime.config import load_config
+    from questfoundry.runtime.observability import EventLogger
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -450,31 +474,42 @@ async def _setup_runtime(
     studio: Studio = result.studio
     logger.info(f"Loaded studio: {studio.name} ({len(studio.agents)} agents)")
 
-    # Get provider and model from config
-    provider_config = config.providers.get(config.default_provider)
-    host: str = (
-        provider_config.host
-        if provider_config and provider_config.host
-        else "http://localhost:11434"
-    )
-    model_to_use: str = model or (
-        provider_config.default_model
-        if provider_config and provider_config.default_model
-        else "qwen3:8b"
-    )
+    # Determine which provider to use
+    selected_provider = provider_name or config.default_provider
+    provider_config = config.providers.get(selected_provider)
+
+    if not provider_config:
+        console.print(f"[red]✗ Provider not found: {selected_provider}[/red]")
+        available = list(config.providers.keys())
+        console.print(f"[dim]Available: {', '.join(available)}[/dim]")
+        project.close()
+        raise typer.Exit(1)
+
+    host: str = provider_config.host or "http://localhost:11434"
+    model_to_use: str = model or provider_config.default_model or "qwen3:8b"
 
     # Create provider
-    logger.debug(f"Connecting to Ollama at {host}")
+    logger.debug(f"Connecting to {selected_provider} at {host}")
     provider = OllamaProvider(host=host)
 
     # Check provider availability
     if not await provider.check_availability():
-        console.print(f"[red]✗ Ollama not available at {host}[/red]")
+        console.print(f"[red]✗ {selected_provider} not available at {host}[/red]")
         console.print("[dim]Start Ollama with: ollama serve[/dim]")
         project.close()
         raise typer.Exit(1)
 
-    logger.info(f"Using model: {model_to_use}")
+    logger.info(f"Using provider: {selected_provider}, model: {model_to_use}")
+
+    # Create event logger if logging enabled
+    event_logger: EventLogger | None = None
+    log_path: Path | None = None
+    if log:
+        # Log to project_dir/logs/events.jsonl
+        log_path = project_path / "logs" / "events.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        event_logger = EventLogger(log_path, direct_file=True)
+        logger.info(f"Event logging to: {log_path}")
 
     # Create runtime
     runtime = AgentRuntime(
@@ -482,6 +517,7 @@ async def _setup_runtime(
         studio=studio,
         domain_path=domain_path,
         model=model_to_use,
+        event_logger=event_logger,
     )
 
     # Get entry agent
@@ -506,7 +542,11 @@ async def _setup_runtime(
     session = Session.create(project=project, entry_agent=agent.id)
     logger.debug(f"Created session: {session.id}")
 
-    return project, studio, runtime, agent, session, provider
+    # Log session start
+    if event_logger:
+        event_logger.session_start(session_id=session.id, agent_id=agent.id, project_id=project_id)
+
+    return project, studio, runtime, agent, session, provider, event_logger, log_path
 
 
 async def _stream_response(
@@ -579,13 +619,24 @@ async def _ask_single(
     entry_agent_id: str | None,
     domain_path: Path,
     projects_dir: Path,
+    provider_name: str | None,
     model: str | None,
+    log: bool = False,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
 
-    project, _studio, runtime, agent, session, provider = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, model
+    (
+        project,
+        _studio,
+        runtime,
+        agent,
+        session,
+        provider,
+        event_logger,
+        log_path,
+    ) = await _setup_runtime(
+        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
 
     try:
@@ -597,6 +648,10 @@ async def _ask_single(
     except ProviderError as e:
         console.print(f"[red]✗ Provider error: {e}[/red]")
     finally:
+        # Log session end and flush
+        if event_logger:
+            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+            console.print(f"[dim]Events logged to: {log_path}[/dim]")
         await provider.close()
         project.close()
 
@@ -606,13 +661,24 @@ async def _ask_repl(
     entry_agent_id: str | None,
     domain_path: Path,
     projects_dir: Path,
+    provider_name: str | None,
     model: str | None,
+    log: bool = False,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
 
-    project, _studio, runtime, agent, session, provider = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, model
+    (
+        project,
+        _studio,
+        runtime,
+        agent,
+        session,
+        provider,
+        event_logger,
+        log_path,
+    ) = await _setup_runtime(
+        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
 
     # Print header
@@ -620,6 +686,8 @@ async def _ask_repl(
     console.print("[bold]QuestFoundry Interactive Session[/bold]")
     console.print(f"Project: [cyan]{project_id}[/cyan]")
     console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
+    if log_path:
+        console.print(f"Logging: [dim]{log_path}[/dim]")
     console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
     console.print()
 
@@ -653,6 +721,10 @@ async def _ask_repl(
         console.print()
 
     finally:
+        # Log session end and flush
+        if event_logger:
+            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+            console.print(f"[dim]Events logged to: {log_path}[/dim]")
         # Show session summary
         console.print()
         console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")

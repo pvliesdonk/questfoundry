@@ -216,15 +216,47 @@ class Project:
                 message_id TEXT UNIQUE NOT NULL,
                 message_type TEXT NOT NULL,
                 from_agent TEXT NOT NULL,
-                to_agent TEXT NOT NULL,
+                to_agent TEXT,  -- NULL for broadcast messages
                 payload JSON NOT NULL,
                 created_at TEXT NOT NULL,
                 processed_at TEXT,
-                status TEXT DEFAULT 'pending'
+                status TEXT DEFAULT 'pending',
+                -- Phase 3: Correlation and threading
+                correlation_id TEXT,       -- Links request/response pairs
+                in_reply_to TEXT,          -- Message ID this replies to
+                delegation_id TEXT,        -- Delegation this belongs to
+                -- Phase 3: Playbook context
+                playbook_id TEXT,          -- Which playbook this is part of
+                playbook_instance_id TEXT, -- Specific playbook execution
+                phase_id TEXT,             -- Current phase in playbook
+                -- Phase 3: Priority and TTL
+                priority INTEGER DEFAULT 0,  -- -10 to +10
+                ttl_turns INTEGER,           -- Expire after N turns
+                turn_created INTEGER         -- Turn number when created
             );
 
             CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_agent, status);
             CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(message_type);
+            CREATE INDEX IF NOT EXISTS idx_messages_correlation ON messages(correlation_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_delegation ON messages(delegation_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_playbook ON messages(playbook_instance_id);
+
+            -- Playbook instances: track playbook executions and rework budgets
+            CREATE TABLE IF NOT EXISTS playbook_instances (
+                instance_id TEXT PRIMARY KEY,
+                playbook_id TEXT NOT NULL,
+                max_rework_cycles INTEGER NOT NULL,
+                rework_count INTEGER DEFAULT 0,
+                current_phase TEXT,
+                rework_target_visits JSON DEFAULT '{}',  -- {phase_id: visit_count}
+                initiating_agent TEXT,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                status TEXT DEFAULT 'active'  -- active, completed, escalated
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_playbook_instances_status ON playbook_instances(status);
+            CREATE INDEX IF NOT EXISTS idx_playbook_instances_playbook ON playbook_instances(playbook_id);
 
             -- Sessions: track interaction sessions
             CREATE TABLE IF NOT EXISTS sessions (

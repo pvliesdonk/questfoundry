@@ -37,11 +37,22 @@ class ContextOverflowError(ProviderError):
 
 
 @dataclass
+class ToolCallRequest:
+    """A tool call requested by the LLM."""
+
+    id: str  # Unique ID for the tool call
+    name: str  # Tool name/ID
+    arguments: dict[str, Any]  # Parsed arguments
+
+
+@dataclass
 class LLMMessage:
     """A message in the conversation."""
 
-    role: str  # "system", "user", "assistant"
+    role: str  # "system", "user", "assistant", "tool"
     content: str
+    tool_call_id: str | None = None  # For tool result messages
+    name: str | None = None  # Tool name for tool result messages
 
 
 @dataclass
@@ -60,8 +71,16 @@ class LLMResponse:
     # Timing
     duration_ms: float | None = None
 
+    # Tool calls requested by the LLM
+    tool_calls: list[ToolCallRequest] | None = None
+
     # Raw response for debugging
     raw: Any = None
+
+    @property
+    def has_tool_calls(self) -> bool:
+        """Check if response contains tool calls."""
+        return bool(self.tool_calls)
 
 
 @dataclass
@@ -75,6 +94,9 @@ class StreamChunk:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+
+    # Tool calls (populated on final chunk if LLM requested tools)
+    tool_calls: list[ToolCallRequest] | None = None
 
 
 @dataclass
@@ -108,17 +130,19 @@ class LLMProvider(ABC):
         messages: list[LLMMessage],
         model: str,
         options: InvokeOptions | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         """
         Send messages to the LLM and get a response.
 
         Args:
-            messages: Conversation messages (system, user, assistant)
+            messages: Conversation messages (system, user, assistant, tool)
             model: Model identifier (e.g., 'qwen3:8b', 'gpt-4o')
             options: Invocation options (temperature, max_tokens, etc.)
+            tools: Optional list of tool schemas for function calling
 
         Returns:
-            LLMResponse with content and metadata
+            LLMResponse with content and metadata (may include tool_calls)
 
         Raises:
             ProviderUnavailableError: If provider is not reachable
@@ -132,14 +156,16 @@ class LLMProvider(ABC):
         messages: list[LLMMessage],
         model: str,
         options: InvokeOptions | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream response chunks from the LLM.
 
         Args:
-            messages: Conversation messages (system, user, assistant)
+            messages: Conversation messages (system, user, assistant, tool)
             model: Model identifier (e.g., 'qwen3:8b', 'gpt-4o')
             options: Invocation options (temperature, max_tokens, etc.)
+            tools: Optional list of tool schemas for function calling
 
         Yields:
             StreamChunk with content, final chunk has done=True and usage stats
@@ -147,6 +173,9 @@ class LLMProvider(ABC):
         Raises:
             ProviderUnavailableError: If provider is not reachable
             ProviderError: For other errors
+
+        Note:
+            Tool calls in streaming mode are accumulated and returned in the final chunk.
         """
         yield StreamChunk(content="")
 

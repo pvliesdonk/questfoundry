@@ -81,28 +81,44 @@ class TestAskCommandHelp:
 
             # Should have created default project
             assert (
-                "Creating default project" in result.stdout
-                or "Created default project" in result.stdout
+                "Creating project 'default'" in result.stdout or "Created project" in result.stdout
             )
 
 
 class TestAskProjectErrors:
-    """Tests for project-related errors."""
+    """Tests for project auto-creation behavior."""
 
-    def test_ask_project_not_found(self, tmp_path: Path) -> None:
-        """ask exits with error when project not found."""
-        result = runner.invoke(
-            app,
-            [
-                "ask",
-                "nonexistent",
-                "Hello",
-                "--projects-dir",
-                str(tmp_path / "projects"),
+    def test_ask_project_auto_created(self, tmp_path: Path) -> None:
+        """ask auto-creates project if it doesn't exist."""
+        # Mock domain loading to fail so we can test project creation
+        failed_result = LoadResult(
+            studio=None,
+            errors=[
+                LoadError(
+                    path="domain-v4",
+                    message="Test domain error",
+                    severity="error",
+                )
             ],
         )
+
+        with patch("questfoundry.runtime.load_studio", new_callable=AsyncMock) as mock_load:
+            mock_load.return_value = failed_result
+
+            result = runner.invoke(
+                app,
+                [
+                    "ask",
+                    "nonexistent",
+                    "Hello",
+                    "--projects-dir",
+                    str(tmp_path / "projects"),
+                ],
+            )
+
+        # Project should be auto-created, then fail on domain load
+        assert "Creating project" in result.stdout
         assert result.exit_code == 1
-        assert "Project not found" in result.stdout
 
 
 class TestAskDomainErrors:
@@ -206,7 +222,7 @@ class TestAskProviderErrors:
             )
 
             assert result.exit_code == 1
-            assert "Ollama not available" in result.stdout
+            assert "not available" in result.stdout.lower()
 
 
 class TestAskSingleShot:

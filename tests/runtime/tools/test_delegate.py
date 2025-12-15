@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from questfoundry.runtime.messaging import AsyncMessageBroker
 from questfoundry.runtime.tools.base import ToolContext, ToolValidationError
 from questfoundry.runtime.tools.delegate import DelegateTool
 
@@ -68,7 +69,8 @@ class TestDelegateTool:
         assert result.success is True
         assert "delegation_id" in result.data
         assert result.data["assigned_to"] == "scene_smith"
-        assert result.data["status"] == "pending"
+        # Without broker, status is "created" (not routed)
+        assert result.data["status"] == "created"
 
     @pytest.mark.asyncio
     async def test_delegate_by_archetype(self):
@@ -172,11 +174,19 @@ class TestDelegateTool:
         assert "Cannot delegate to self" in result.error
 
     @pytest.mark.asyncio
-    async def test_delegation_includes_phase2_warning(self):
-        """Verify that delegation includes warning about partial implementation."""
+    async def test_delegation_routes_via_broker(self):
+        """Verify that delegation routes via broker when available."""
         studio = make_mock_studio_with_agents()
         definition = make_mock_definition()
-        context = ToolContext(studio=studio, agent_id="showrunner")
+
+        # Create mock broker
+        broker = AsyncMock(spec=AsyncMessageBroker)
+
+        context = ToolContext(
+            studio=studio,
+            agent_id="showrunner",
+            broker=broker,
+        )
         tool = DelegateTool(definition, context)
 
         result = await tool.execute(
@@ -187,8 +197,15 @@ class TestDelegateTool:
         )
 
         assert result.success is True
-        assert "_phase2_warning" in result.data
-        assert "Phase 3" in result.data["_phase2_warning"]
+        assert result.data["status"] == "sent"
+        assert "message_id" in result.data
+
+        # Verify broker.send was called
+        broker.send.assert_called_once()
+        message = broker.send.call_args[0][0]
+        assert message.to_agent == "scene_smith"
+        assert message.from_agent == "showrunner"
+        assert message.payload["task"] == "Write section prose"
 
     @pytest.mark.asyncio
     async def test_delegation_with_context(self):
