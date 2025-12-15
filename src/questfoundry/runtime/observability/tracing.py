@@ -94,6 +94,7 @@ class TracingManager:
             yield None
             return
 
+        run = None
         try:
             from langsmith import trace
 
@@ -125,13 +126,19 @@ class TracingManager:
                 yield run
 
         except ImportError:
-            logger.warning("langsmith package not installed")
+            logger.warning("langsmith package not installed - disabling tracing")
             self._enabled = False
             yield None
 
-        except Exception as e:
-            logger.warning(f"Failed to create session trace: {e}")
-            yield None
+        except Exception:
+            # If setup failed before yield, yield None so caller has a context
+            # If exception was thrown INTO the generator (after yield), re-raise
+            if run is None:
+                # Setup failed - yield None to let caller proceed without tracing
+                yield None
+            else:
+                # Exception thrown after yield - re-raise to propagate properly
+                raise
 
         finally:
             self._session_run_id = None
@@ -160,6 +167,7 @@ class TracingManager:
             yield None
             return
 
+        run = None
         try:
             from langsmith import trace
 
@@ -189,9 +197,20 @@ class TracingManager:
                 logger.debug(f"Started LangSmith turn trace: Turn {turn_id}")
                 yield run
 
-        except Exception as e:
-            logger.warning(f"Failed to create turn trace: {e}")
+        except ImportError:
+            logger.warning("langsmith package not installed - disabling tracing")
+            self._enabled = False
             yield None
+
+        except Exception:
+            # If setup failed before yield, yield None so caller has a context
+            # If exception was thrown INTO the generator (after yield), re-raise
+            if run is None:
+                # Setup failed - yield None to let caller proceed without tracing
+                yield None
+            else:
+                # Exception thrown after yield - re-raise to propagate properly
+                raise
 
         finally:
             self._turn_run_id = None
