@@ -81,6 +81,7 @@ class PromptBuilder:
         playbooks_menu: list[dict[str, Any]] | None = None,
         stores_menu: list[dict[str, Any]] | None = None,
         artifact_types_menu: list[dict[str, Any]] | None = None,
+        agents_menu: list[dict[str, Any]] | None = None,
     ) -> BuiltPrompt:
         """
         Build the system prompt for an agent.
@@ -94,6 +95,7 @@ class PromptBuilder:
             playbooks_menu: List of {id, name, purpose, triggers} for available playbooks
             stores_menu: List of {id, name, description, semantics, access} for accessible stores
             artifact_types_menu: List of {id, name, description, category, actions} for workable types
+            agents_menu: List of {id, name, description, archetypes, specialties} for delegation
 
         Returns:
             Built prompt with text and metadata
@@ -134,6 +136,11 @@ class PromptBuilder:
         if playbooks_menu:
             playbooks_section = self._build_playbooks_section(playbooks_menu)
             self.add_section("playbooks", playbooks_section, priority=52)
+
+        # 7b. Available Agents for Delegation (high priority for orchestrators)
+        if agents_menu:
+            agents_section = self._build_agents_section(agents_menu)
+            self.add_section("agents", agents_section, priority=75)  # High priority
 
         # 8. Store Access (what stores you can read/write)
         if stores_menu:
@@ -281,6 +288,67 @@ class PromptBuilder:
 
         return "\n".join(lines)
 
+    def _build_agents_section(self, agents: list[dict[str, Any]]) -> str:
+        """Build the delegation agents section.
+
+        This is a CRITICAL section for orchestrators. It tells them WHO they can
+        delegate to and provides explicit instructions about delegation behavior.
+
+        Args:
+            agents: List of agent menu items with id, name, description, archetypes, specialties
+
+        Returns:
+            Formatted agents section for the prompt
+        """
+        lines = ["## Orchestrator Output Guidelines\n"]
+
+        # CRITICAL: Output format guidance (from v3 architecture)
+        lines.append(
+            "**Your responses should primarily consist of:**\n"
+            "1. **Tool calls** - `delegate`, `consult_schema`, `terminate`\n"
+            "2. **Brief status updates** - 1-2 sentences explaining what you're doing\n\n"
+            "**DO NOT** write paragraphs of narrative content. If you find yourself writing "
+            "story prose, character descriptions, or scene details, **STOP** and delegate "
+            "to the appropriate specialist agent instead.\n"
+        )
+
+        lines.append("\n## Delegation Protocol\n")
+
+        # Delegation instructions
+        lines.append(
+            "As an orchestrator, you coordinate work by DELEGATING tasks to specialist agents. "
+            "You do NOT perform specialist work yourself.\n\n"
+            "- When a task requires creating content (stories, sections, prose): delegate to creators\n"
+            "- When a task requires validation or quality checks: delegate to validators\n"
+            "- When a task requires research or fact-checking: delegate to researchers\n"
+            "- When a task requires managing knowledge or documentation: delegate to curators\n\n"
+            "Use the `delegate` tool to assign work. Always specify:\n"
+            "1. `to_agent`: The agent ID to delegate to\n"
+            "2. `task`: Clear description of what needs to be done\n"
+            "3. `expected_outputs`: What artifacts should be produced\n"
+        )
+
+        lines.append("\n## Available Agents\n")
+
+        for ag in agents:
+            name = ag.get("name", ag.get("id", "Unknown"))
+            ag_id = ag.get("id", "")
+            description = ag.get("description", "")
+            archetypes = ag.get("archetypes", [])
+            specialties = ag.get("specialties", [])
+
+            archetypes_str = ", ".join(archetypes) if archetypes else "general"
+            lines.append(f"### {name} (`{ag_id}`) - {archetypes_str}")
+            lines.append(f"{description}\n")
+
+            if specialties:
+                lines.append("**Specialties:**")
+                for spec in specialties[:3]:  # Limit to avoid bloat
+                    lines.append(f"- {spec}")
+                lines.append("")
+
+        return "\n".join(lines)
+
     def _build_tools_section(self, tool_schemas: list[dict[str, Any]]) -> str:
         """Build the available tools section.
 
@@ -404,6 +472,7 @@ def build_prompt(
     playbooks_menu: list[dict[str, Any]] | None = None,
     stores_menu: list[dict[str, Any]] | None = None,
     artifact_types_menu: list[dict[str, Any]] | None = None,
+    agents_menu: list[dict[str, Any]] | None = None,
 ) -> BuiltPrompt:
     """Build a prompt for an agent."""
     builder = PromptBuilder()
@@ -416,4 +485,5 @@ def build_prompt(
         playbooks_menu=playbooks_menu,
         stores_menu=stores_menu,
         artifact_types_menu=artifact_types_menu,
+        agents_menu=agents_menu,
     )

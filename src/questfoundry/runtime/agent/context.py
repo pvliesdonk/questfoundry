@@ -42,6 +42,9 @@ class AgentContext:
     # Artifact types menu (shows what types agent can create/read/update)
     artifact_types_menu: list[dict[str, Any]] = field(default_factory=list)
 
+    # Agents menu (for orchestrators - shows agents available for delegation)
+    agents_menu: list[dict[str, Any]] = field(default_factory=list)
+
     # Token estimates for context budget
     constitution_tokens: int = 0
     must_know_tokens: int = 0
@@ -49,6 +52,7 @@ class AgentContext:
     playbooks_tokens: int = 0
     stores_tokens: int = 0
     artifact_types_tokens: int = 0
+    agents_tokens: int = 0
 
     # Rough estimate: 4 chars per token
     CHARS_PER_TOKEN: int = 4
@@ -63,6 +67,7 @@ class AgentContext:
             + self.playbooks_tokens
             + self.stores_tokens
             + self.artifact_types_tokens
+            + self.agents_tokens
         )
 
 
@@ -137,6 +142,16 @@ class ContextBuilder:
                 context.playbooks_menu.append(menu_item)
                 context.playbooks_tokens += (
                     len(menu_item.get("purpose", "")) // self.CHARS_PER_TOKEN
+                )
+
+        # 4b. Agents menu (for orchestrator agents - who can they delegate to?)
+        if self._is_orchestrator(agent) and studio.agents:
+            # Build list of agents this orchestrator can delegate to
+            delegatable_agents = self._extract_delegatable_agents(agent, studio)
+            for agent_item in delegatable_agents:
+                context.agents_menu.append(agent_item)
+                context.agents_tokens += (
+                    len(agent_item.get("description", "")) // self.CHARS_PER_TOKEN
                 )
 
         # 5. Stores menu (from agent capabilities)
@@ -283,11 +298,14 @@ class ContextBuilder:
 
     def _is_orchestrator(self, agent: Agent) -> bool:
         """Check if agent has orchestrator archetype."""
-        from questfoundry.runtime.models import Archetype
-
         if not agent.archetypes:
             return False
-        return any(a == Archetype.ORCHESTRATOR for a in agent.archetypes)
+        # Handle both string and Archetype enum values
+        for a in agent.archetypes:
+            arch_str = a.value if hasattr(a, "value") else str(a)
+            if arch_str == "orchestrator":
+                return True
+        return False
 
     def _format_playbook_for_menu(self, playbook: Playbook) -> dict[str, Any]:
         """Format a playbook for the playbooks menu.
@@ -404,6 +422,69 @@ class ContextBuilder:
                     "description": at.description or "",
                     "category": at.category or "document",
                     "actions": sorted(action_set),
+                }
+            )
+
+        return result
+
+    def _extract_delegatable_agents(self, agent: Agent, studio: Studio) -> list[dict[str, Any]]:
+        """Extract agents this orchestrator can delegate to.
+
+        Checks the agent's capabilities for delegation permissions and
+        returns a menu of available agents with their roles and responsibilities.
+
+        Returns a list of dicts with:
+        - id: Agent identifier
+        - name: Human-readable name
+        - description: What this agent does
+        - archetypes: Agent archetypes (orchestrator, creator, validator, etc.)
+        - specialties: Key capabilities/domains
+        """
+        result: list[dict[str, Any]] = []
+
+        # Check if agent has delegation capability
+        # For now, any capability with category="delegation" enables delegation to all agents
+        # TODO: Add fine-grained delegation control when meta/ schemas support it
+        has_delegation_capability = False
+
+        if agent.capabilities:
+            for cap in agent.capabilities:
+                if cap.category == "delegation":
+                    has_delegation_capability = True
+                    break
+
+        if not has_delegation_capability:
+            return result
+
+        # Build menu of delegatable agents (all agents except self)
+        for target_agent in studio.agents or []:
+            # Don't include self
+            if target_agent.id == agent.id:
+                continue
+
+            # Extract key specialties from capabilities
+            specialties = []
+            if target_agent.capabilities:
+                for cap in target_agent.capabilities[:3]:  # First 3 capabilities
+                    if cap.description:
+                        specialties.append(cap.description)
+                    elif cap.name:
+                        specialties.append(cap.name)
+
+            archetypes = []
+            if target_agent.archetypes:
+                # Handle both string and Archetype enum values
+                archetypes = [
+                    a.value if hasattr(a, "value") else str(a) for a in target_agent.archetypes
+                ]
+
+            result.append(
+                {
+                    "id": target_agent.id,
+                    "name": target_agent.name,
+                    "description": target_agent.description or "",
+                    "archetypes": archetypes,
+                    "specialties": specialties,
                 }
             )
 

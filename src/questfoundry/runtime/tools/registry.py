@@ -22,6 +22,7 @@ from questfoundry.runtime.tools.base import (
 )
 
 if TYPE_CHECKING:
+    from questfoundry.runtime.messaging.broker import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio, Tool
     from questfoundry.runtime.storage import Project
 
@@ -64,6 +65,7 @@ class ToolRegistry:
         studio: Studio,
         project: Project | None = None,
         domain_path: Any = None,
+        broker: AsyncMessageBroker | None = None,
     ):
         """
         Initialize tool registry.
@@ -72,10 +74,12 @@ class ToolRegistry:
             studio: Loaded studio with tool definitions
             project: Optional project for tools that need storage
             domain_path: Path to domain directory
+            broker: Message broker for delegation routing
         """
         self._studio = studio
         self._project = project
         self._domain_path = domain_path
+        self._broker = broker
         self._tool_cache: dict[str, BaseTool] = {}
 
     def get_tool_definition(self, tool_id: str) -> Tool | None:
@@ -126,6 +130,7 @@ class ToolRegistry:
             agent_id=agent_id,
             session_id=session_id,
             domain_path=self._domain_path,
+            broker=self._broker,
         )
 
         # Get implementation class
@@ -248,6 +253,7 @@ def build_agent_tools(
     project: Project | None = None,
     domain_path: Any = None,
     session_id: str | None = None,
+    broker: AsyncMessageBroker | None = None,
 ) -> list[BaseTool]:
     """
     Convenience function to build tools for an agent.
@@ -258,9 +264,10 @@ def build_agent_tools(
         project: Optional project for storage
         domain_path: Path to domain directory
         session_id: Current session ID
+        broker: Message broker for delegation routing
 
     Returns:
         List of tools the agent can use
     """
-    registry = ToolRegistry(studio, project, domain_path)
+    registry = ToolRegistry(studio, project, domain_path, broker)
     return registry.get_agent_tools(agent, session_id)

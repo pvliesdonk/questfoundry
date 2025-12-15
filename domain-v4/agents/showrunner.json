@@ -96,8 +96,8 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview"],
-    "role_specific": ["showrunner_operating_principles"]
+    "must_know": ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview", "showrunner_operating_principles"],
+    "role_specific": []
   },
 
   "flow_control_override": {

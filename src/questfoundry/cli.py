@@ -511,6 +511,12 @@ async def _setup_runtime(
         event_logger = EventLogger(log_path, direct_file=True)
         logger.info(f"Event logging to: {log_path}")
 
+    # Create message broker for delegation routing
+    from questfoundry.runtime.messaging import AsyncMessageBroker
+
+    broker = AsyncMessageBroker(project=project)
+    logger.debug("Created message broker for delegation routing")
+
     # Create runtime
     runtime = AgentRuntime(
         provider=provider,
@@ -518,6 +524,7 @@ async def _setup_runtime(
         domain_path=domain_path,
         model=model_to_use,
         event_logger=event_logger,
+        broker=broker,
     )
 
     # Get entry agent
@@ -550,7 +557,11 @@ async def _setup_runtime(
 
 
 async def _stream_response(
-    runtime: AgentRuntime, agent: Agent, user_input: str, session: Session
+    runtime: AgentRuntime,
+    agent: Agent,
+    user_input: str,
+    session: Session,
+    process_delegations: bool = True,
 ) -> str:
     """Stream a response from the agent and return full content."""
     import time
@@ -609,6 +620,24 @@ async def _stream_response(
     if _verbosity >= 2:
         console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
+
+    # Process any pending delegations
+    if process_delegations:
+        delegation_results = await runtime.process_pending_delegations(session)
+        if delegation_results:
+            console.print()
+            console.print(f"[dim]── Processed {len(delegation_results)} delegation(s) ──[/dim]")
+            for result in delegation_results:
+                status = "[green]✓[/green]" if result.get("success") else "[red]✗[/red]"
+                to_agent = result.get("to_agent", "unknown")
+                task_preview = result.get("task", "")[:40]
+                console.print(f"  {status} {to_agent}: {task_preview}...")
+                if result.get("success") and _verbosity >= 2:
+                    # Show delegatee response at -vv+
+                    response_preview = str(result.get("result", ""))[:200]
+                    console.print(f"    [dim]{response_preview}...[/dim]")
+                elif not result.get("success"):
+                    console.print(f"    [red]{result.get('error', 'Unknown error')}[/red]")
 
     return full_content
 

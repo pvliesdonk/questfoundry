@@ -73,6 +73,14 @@ class ActivationResult:
     turn: Turn
     usage: TokenUsage | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
+    stop_reason: str | None = None  # "delegate", "terminate", "max_iterations", None
+
+
+# Tool names that are "stop tools" - calling them returns control to orchestrator
+STOP_TOOL_NAMES = frozenset({"delegate", "terminate", "return_to_orchestrator"})
+
+# Maximum consecutive failures before giving up
+MAX_CONSECUTIVE_FAILURES = 3
 
 
 class AgentRuntime:
@@ -97,6 +105,7 @@ class AgentRuntime:
         context_limit: int | None = None,
         event_logger: EventLogger | None = None,
         tracing_manager: TracingManager | None = None,
+        broker: Any | None = None,
     ):
         """
         Initialize agent runtime.
@@ -110,6 +119,7 @@ class AgentRuntime:
             context_limit: Maximum context size (tokens), raises error if exceeded
             event_logger: Optional JSONL event logger
             tracing_manager: Optional LangSmith tracing manager
+            broker: Message broker for delegation routing
         """
         self._provider = provider
         self._studio = studio
@@ -119,6 +129,7 @@ class AgentRuntime:
         self._context_limit = context_limit
         self._event_logger = event_logger
         self._tracing_manager = tracing_manager
+        self._broker = broker
 
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
@@ -139,6 +150,7 @@ class AgentRuntime:
                     studio=self._studio,
                     project=self._project,
                     domain_path=self._domain_path,
+                    broker=self._broker,
                 )
             except ImportError:
                 logger.warning("Tools module not available, tool execution disabled", exc_info=True)
@@ -280,7 +292,7 @@ class AgentRuntime:
         if context is None:
             context = self.build_context(agent)
 
-        # Build system prompt with tool descriptions, playbooks, stores, and artifact types
+        # Build system prompt with tool descriptions, playbooks, stores, artifact types, and agents
         prompt = build_prompt(
             agent=agent,
             constitution_text=context.constitution_text,
@@ -290,6 +302,7 @@ class AgentRuntime:
             playbooks_menu=context.playbooks_menu,
             stores_menu=context.stores_menu,
             artifact_types_menu=context.artifact_types_menu,
+            agents_menu=context.agents_menu,
         )
 
         messages: list[LLMMessage] = []
@@ -400,6 +413,56 @@ class AgentRuntime:
             )
         return messages
 
+    def _is_orchestrator(self, agent: Agent) -> bool:
+        """Check if an agent is an orchestrator."""
+        return "orchestrator" in [
+            a.value if hasattr(a, "value") else str(a) for a in agent.archetypes
+        ]
+
+    def _build_tool_nudge_message(self, agent: Agent) -> str:
+        """
+        Build a nudge message when the LLM doesn't make tool calls.
+
+        Based on the v3 executor's validate-with-feedback pattern.
+        """
+        if self._is_orchestrator(agent):
+            return (
+                "You must use tools to do your work and communicate results. "
+                "Your response contained no tool calls.\n\n"
+                "As an orchestrator, you MUST either:\n"
+                "1. Call `delegate` to assign work to a specialist agent, OR\n"
+                "2. Call `terminate` if the workflow is complete\n\n"
+                "Do NOT generate content directly - delegate to specialists. "
+                "Do NOT respond with plain text - you MUST make a tool call."
+            )
+        else:
+            return (
+                "You must use tools to do your work and communicate results. "
+                "Your response contained no tool calls.\n\n"
+                "Please either:\n"
+                "1. Call a tool to continue your work, OR\n"
+                "2. Call `return_to_orchestrator` to report your work is complete\n\n"
+                "Do NOT respond with plain text - you MUST make a tool call."
+            )
+
+    def _check_for_stop_tool(
+        self,
+        tool_calls: list[ToolCall],
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """
+        Check if any tool call is a stop tool.
+
+        Returns:
+            Tuple of (stop_tool_name, stop_tool_result) or (None, None)
+        """
+        for tc in tool_calls:
+            if tc.tool_id in STOP_TOOL_NAMES and tc.success:
+                # Parse result to check if it actually succeeded
+                result = tc.result
+                if isinstance(result, dict) and result.get("success", True):
+                    return tc.tool_id, result
+        return None, None
+
     async def activate(
         self,
         agent: Agent,
@@ -407,6 +470,7 @@ class AgentRuntime:
         session: Session,
         options: InvokeOptions | None = None,
         max_tool_iterations: int = 10,
+        enforce_tool_usage: bool = True,
     ) -> ActivationResult:
         """
         Activate an agent (non-streaming) with tool call support.
@@ -417,6 +481,7 @@ class AgentRuntime:
             session: Session to track the turn in
             options: LLM invocation options
             max_tool_iterations: Maximum number of tool call iterations
+            enforce_tool_usage: If True, nudge LLM when it doesn't make tool calls
 
         Returns:
             ActivationResult with response content and turn
@@ -465,8 +530,10 @@ class AgentRuntime:
             total_prompt_tokens = 0
             total_completion_tokens = 0
             response: LLMResponse | None = None
+            stop_reason: str | None = None
+            consecutive_failures = 0  # Track no-tool-call failures
 
-            # Tool call loop
+            # Tool call loop with enforcement
             for iteration in range(max_tool_iterations):
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
@@ -503,14 +570,54 @@ class AgentRuntime:
 
                 # Check for tool calls
                 if not response.has_tool_calls or not response.tool_calls:
-                    # No tool calls, we're done
-                    break
+                    # No tool calls - check if we should enforce tool usage
+                    if enforce_tool_usage and tool_schemas:
+                        consecutive_failures += 1
+                        logger.warning(
+                            "No tool calls in iteration %d (failure %d/%d)",
+                            iteration + 1,
+                            consecutive_failures,
+                            MAX_CONSECUTIVE_FAILURES,
+                        )
+
+                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                            logger.error(
+                                "Max consecutive failures (%d) reached without tool calls",
+                                MAX_CONSECUTIVE_FAILURES,
+                            )
+                            stop_reason = "max_failures"
+                            break
+
+                        # Add assistant message and nudge
+                        messages.append(
+                            LLMMessage(role="assistant", content=response.content or "")
+                        )
+                        nudge = self._build_tool_nudge_message(agent)
+                        messages.append(LLMMessage(role="user", content=nudge))
+                        continue
+                    else:
+                        # Tool enforcement disabled or no tools - we're done
+                        break
+
+                # Reset failure count on successful tool calls
+                consecutive_failures = 0
 
                 # Execute tool calls
                 tool_calls = response.tool_calls  # Already checked not None
                 logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
                 tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
                 all_tool_calls.extend(tool_results)
+
+                # Check for stop tools
+                stop_tool, stop_result = self._check_for_stop_tool(tool_results)
+                if stop_tool:
+                    logger.info("Stop tool '%s' called, ending activation", stop_tool)
+                    stop_reason = stop_tool
+                    # Still add the messages for context
+                    messages.append(LLMMessage(role="assistant", content=response.content or ""))
+                    tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
+                    messages.extend(tool_messages)
+                    break
 
                 # Add assistant message with tool calls (empty content)
                 messages.append(LLMMessage(role="assistant", content=response.content or ""))
@@ -550,6 +657,7 @@ class AgentRuntime:
                 turn=turn,
                 usage=usage,
                 tool_calls=all_tool_calls,
+                stop_reason=stop_reason,
             )
 
         except Exception as e:
@@ -569,19 +677,23 @@ class AgentRuntime:
         user_input: str,
         session: Session,
         options: InvokeOptions | None = None,
+        enforce_tool_usage: bool = True,
+        max_iterations: int = 5,
     ) -> AsyncIterator[StreamChunk]:
         """
         Activate an agent with streaming response.
 
-        Note: For tool calling with multi-iteration loops, use activate() instead.
-        Streaming mode provides tools to the LLM but handles tool calls in a single pass.
-        If tool calls are detected, they are executed and a follow-up response is streamed.
+        With enforce_tool_usage=True (default), if the LLM doesn't make tool calls,
+        it will be nudged and given another chance to use tools. This implements
+        the validate-with-feedback pattern from v3.
 
         Args:
             agent: The agent to activate
             user_input: User's input message
             session: Session to track the turn in
             options: LLM invocation options
+            enforce_tool_usage: If True, nudge LLM when it doesn't make tool calls
+            max_iterations: Maximum streaming iterations for enforcement loop
 
         Yields:
             StreamChunk with content
@@ -625,67 +737,120 @@ class AgentRuntime:
             # Validate context size
             self.validate_context_size(messages)
 
-            # Log LLM call start
-            estimated_tokens = self.estimate_tokens(messages)
-            if self._event_logger:
-                self._event_logger.llm_call_start(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    model=self._model,
-                    provider=self._provider.name,
-                    prompt_tokens=estimated_tokens,
-                )
-
             # Collect response for turn completion
             full_content = ""
             final_usage: TokenUsage | None = None
-            pending_tool_calls: list[ToolCallRequest] | None = None
+            consecutive_failures = 0
 
-            # Stream from provider with tools
-            async for chunk in self._provider.stream(
-                messages, self._model, options, tools=tool_schemas if tool_schemas else None
-            ):
-                full_content += chunk.content
-
-                if chunk.done:
-                    final_usage = TokenUsage(
-                        prompt_tokens=chunk.prompt_tokens,
-                        completion_tokens=chunk.completion_tokens,
-                        total_tokens=chunk.total_tokens,
+            # Streaming loop with enforcement
+            for iteration in range(max_iterations):
+                # Log LLM call start
+                estimated_tokens = self.estimate_tokens(messages)
+                if self._event_logger:
+                    self._event_logger.llm_call_start(
+                        session_id=session.id,
+                        turn_id=turn.turn_number,
+                        model=self._model,
+                        provider=self._provider.name,
+                        prompt_tokens=estimated_tokens,
                     )
-                    # Check for tool calls in final chunk
-                    if chunk.tool_calls:
-                        pending_tool_calls = chunk.tool_calls
 
-                yield chunk
+                iteration_content = ""
+                pending_tool_calls: list[ToolCallRequest] | None = None
 
-            # Handle tool calls if present (single pass for streaming)
-            if pending_tool_calls:
-                logger.info(
-                    f"Executing {len(pending_tool_calls)} tool calls from streaming response"
-                )
-                tool_results = await self._execute_tool_calls(pending_tool_calls, agent, session.id)
+                # Stream from provider with tools
+                async for chunk in self._provider.stream(
+                    messages, self._model, options, tools=tool_schemas if tool_schemas else None
+                ):
+                    iteration_content += chunk.content
 
-                # Add assistant message and tool results
-                messages.append(LLMMessage(role="assistant", content=full_content))
-                tool_messages = self._tool_results_to_messages(pending_tool_calls, tool_results)
-                messages.extend(tool_messages)
-
-                # Stream follow-up response (without tools to prevent infinite loops)
-                async for chunk in self._provider.stream(messages, self._model, options):
-                    full_content += chunk.content
-
-                    # Update usage if done and we have previous usage to accumulate
-                    if chunk.done and final_usage and chunk.prompt_tokens:
-                        final_usage = TokenUsage(
-                            prompt_tokens=(final_usage.prompt_tokens or 0) + chunk.prompt_tokens,
-                            completion_tokens=(final_usage.completion_tokens or 0)
-                            + (chunk.completion_tokens or 0),
-                            total_tokens=(final_usage.total_tokens or 0)
-                            + (chunk.total_tokens or 0),
-                        )
+                    if chunk.done:
+                        if final_usage is None:
+                            final_usage = TokenUsage(
+                                prompt_tokens=chunk.prompt_tokens,
+                                completion_tokens=chunk.completion_tokens,
+                                total_tokens=chunk.total_tokens,
+                            )
+                        elif chunk.prompt_tokens:
+                            # Accumulate usage across iterations
+                            final_usage = TokenUsage(
+                                prompt_tokens=(final_usage.prompt_tokens or 0)
+                                + chunk.prompt_tokens,
+                                completion_tokens=(final_usage.completion_tokens or 0)
+                                + (chunk.completion_tokens or 0),
+                                total_tokens=(final_usage.total_tokens or 0)
+                                + (chunk.total_tokens or 0),
+                            )
+                        # Check for tool calls in final chunk
+                        if chunk.tool_calls:
+                            pending_tool_calls = chunk.tool_calls
 
                     yield chunk
+
+                full_content += iteration_content
+
+                # Handle tool calls if present
+                if pending_tool_calls:
+                    consecutive_failures = 0  # Reset on tool call
+                    logger.info(
+                        f"Executing {len(pending_tool_calls)} tool calls from streaming response"
+                    )
+                    tool_results = await self._execute_tool_calls(
+                        pending_tool_calls, agent, session.id
+                    )
+
+                    # Check for stop tools
+                    stop_tool, _ = self._check_for_stop_tool(tool_results)
+                    if stop_tool:
+                        logger.info("Stop tool '%s' called, ending streaming", stop_tool)
+                        # Add messages for completeness
+                        messages.append(LLMMessage(role="assistant", content=iteration_content))
+                        tool_messages = self._tool_results_to_messages(
+                            pending_tool_calls, tool_results
+                        )
+                        messages.extend(tool_messages)
+                        break
+
+                    # Add assistant message and tool results
+                    messages.append(LLMMessage(role="assistant", content=iteration_content))
+                    tool_messages = self._tool_results_to_messages(pending_tool_calls, tool_results)
+                    messages.extend(tool_messages)
+
+                    # Continue streaming with tool results in context
+                    # (next iteration will stream with updated messages)
+                    continue
+
+                # No tool calls - check if we should enforce
+                if enforce_tool_usage and tool_schemas:
+                    consecutive_failures += 1
+                    logger.warning(
+                        "No tool calls in streaming iteration %d (failure %d/%d)",
+                        iteration + 1,
+                        consecutive_failures,
+                        MAX_CONSECUTIVE_FAILURES,
+                    )
+
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.error(
+                            "Max consecutive failures (%d) reached in streaming",
+                            MAX_CONSECUTIVE_FAILURES,
+                        )
+                        break
+
+                    # Add nudge and continue streaming
+                    messages.append(LLMMessage(role="assistant", content=iteration_content))
+                    nudge = self._build_tool_nudge_message(agent)
+                    messages.append(LLMMessage(role="user", content=nudge))
+
+                    # Yield a marker chunk to indicate retry
+                    yield StreamChunk(
+                        content="\n\n[Retrying with tool guidance...]\n\n",
+                        done=False,
+                    )
+                    continue
+
+                # No enforcement or no tools - we're done
+                break
 
             # Complete turn after streaming finishes
             session.complete_turn(turn, full_content, final_usage)
@@ -720,6 +885,166 @@ class AgentRuntime:
                     error=str(e),
                 )
             raise
+
+    async def process_pending_delegations(
+        self,
+        session: Session,
+        max_depth: int = 5,
+        _current_depth: int = 0,
+    ) -> list[dict[str, Any]]:
+        """
+        Process any pending delegation_request messages.
+
+        After an orchestrator delegates work, this method processes
+        the pending delegations by activating the delegatee agents.
+
+        Args:
+            session: Current session
+            max_depth: Maximum delegation depth to prevent infinite loops
+            _current_depth: Current depth (internal recursion tracking)
+
+        Returns:
+            List of delegation results
+        """
+        if not self._broker:
+            logger.debug("No broker available, skipping delegation processing")
+            return []
+
+        if _current_depth >= max_depth:
+            logger.warning("Max delegation depth %d reached, stopping", max_depth)
+            return []
+
+        from questfoundry.runtime.messaging import create_delegation_response
+        from questfoundry.runtime.messaging.types import MessageType
+
+        results = []
+
+        # Check all agents for pending delegation_requests
+        for agent in self._studio.agents:
+            mailbox = await self._broker.get_mailbox(agent.id)
+
+            # Collect all messages first, then filter
+            all_messages = []
+            while True:
+                msg = await mailbox.get_nowait()
+                if msg is None:
+                    break
+                all_messages.append(msg)
+
+            # Separate delegation requests from other messages
+            delegation_requests = []
+            other_messages = []
+            for msg in all_messages:
+                if msg.type == MessageType.DELEGATION_REQUEST:
+                    delegation_requests.append(msg)
+                else:
+                    other_messages.append(msg)
+
+            # Put non-delegation messages back
+            for msg in other_messages:
+                await mailbox.put(msg)
+
+            # Process delegation requests
+            for msg in delegation_requests:
+                delegation_id = msg.delegation_id or msg.id
+                task = msg.payload.get("task", "")
+                context_data = msg.payload.get("context", {})
+
+                logger.info(
+                    "Processing delegation %s: %s -> %s (task: %s)",
+                    delegation_id,
+                    msg.from_agent,
+                    msg.to_agent,
+                    task[:50] + "..." if len(task) > 50 else task,
+                )
+
+                try:
+                    # Get the delegatee agent
+                    delegatee = self.get_agent(agent.id)
+                    if not delegatee:
+                        raise ValueError(f"Agent not found: {agent.id}")
+
+                    # Build the task prompt including context
+                    task_prompt = f"You have been delegated a task.\n\nTask: {task}"
+                    if context_data:
+                        task_prompt += f"\n\nContext: {json.dumps(context_data, indent=2)}"
+
+                    # Activate the delegatee (non-streaming for delegations)
+                    activation_result = await self.activate(
+                        agent=delegatee,
+                        user_input=task_prompt,
+                        session=session,
+                        max_tool_iterations=5,
+                    )
+
+                    # Create success response
+                    response_msg = create_delegation_response(
+                        from_agent=agent.id,
+                        to_agent=msg.from_agent,
+                        delegation_id=delegation_id,
+                        success=True,
+                        result={"content": activation_result.content},
+                        in_reply_to=msg.id,
+                        playbook_id=msg.playbook_id,
+                        playbook_instance_id=msg.playbook_instance_id,
+                        phase_id=msg.phase_id,
+                    )
+                    await self._broker.send(response_msg)
+
+                    results.append(
+                        {
+                            "delegation_id": delegation_id,
+                            "from_agent": msg.from_agent,
+                            "to_agent": agent.id,
+                            "task": task,
+                            "success": True,
+                            "result": activation_result.content,
+                        }
+                    )
+
+                    logger.info(
+                        "Delegation %s completed successfully",
+                        delegation_id,
+                    )
+
+                    # Recursively process any delegations the delegatee made
+                    nested_results = await self.process_pending_delegations(
+                        session=session,
+                        max_depth=max_depth,
+                        _current_depth=_current_depth + 1,
+                    )
+                    results.extend(nested_results)
+
+                except Exception as e:
+                    logger.error(
+                        "Delegation %s failed: %s",
+                        delegation_id,
+                        e,
+                    )
+
+                    # Create failure response
+                    response_msg = create_delegation_response(
+                        from_agent=agent.id,
+                        to_agent=msg.from_agent,
+                        delegation_id=delegation_id,
+                        success=False,
+                        error=str(e),
+                        in_reply_to=msg.id,
+                    )
+                    await self._broker.send(response_msg)
+
+                    results.append(
+                        {
+                            "delegation_id": delegation_id,
+                            "from_agent": msg.from_agent,
+                            "to_agent": agent.id,
+                            "task": task,
+                            "success": False,
+                            "error": str(e),
+                        }
+                    )
+
+        return results
 
 
 async def activate_agent(
