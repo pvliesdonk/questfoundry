@@ -14,12 +14,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
 if TYPE_CHECKING:
     from questfoundry.runtime import AgentRuntime
+    from questfoundry.runtime.messaging import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio
     from questfoundry.runtime.observability import EventLogger
     from questfoundry.runtime.providers import OllamaProvider
@@ -430,13 +431,21 @@ async def _setup_runtime(
     model: str | None,
     log: bool = False,
 ) -> tuple[
-    Project, Studio, AgentRuntime, Agent, Session, OllamaProvider, EventLogger | None, Path | None
+    Project,
+    Studio,
+    AgentRuntime,
+    Agent,
+    Session,
+    OllamaProvider,
+    EventLogger | None,
+    Path | None,
+    AsyncMessageBroker,
 ]:
     """
     Set up the runtime components for an ask session.
 
     Returns:
-        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path)
+        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path, broker)
     """
     from questfoundry.runtime import AgentRuntime, load_studio
     from questfoundry.runtime.config import load_config
@@ -553,7 +562,7 @@ async def _setup_runtime(
     if event_logger:
         event_logger.session_start(session_id=session.id, agent_id=agent.id, project_id=project_id)
 
-    return project, studio, runtime, agent, session, provider, event_logger, log_path
+    return project, studio, runtime, agent, session, provider, event_logger, log_path, broker
 
 
 async def _stream_response(
@@ -642,6 +651,144 @@ async def _stream_response(
     return full_content
 
 
+async def _handle_clarification_requests(
+    broker: AsyncMessageBroker,
+) -> list[dict[str, Any]]:
+    """
+    Check for and handle clarification requests from agents.
+
+    Returns list of clarification requests that were found (for logging/debugging).
+    The requests are handled interactively - user input is collected and responses sent.
+    """
+    from questfoundry.runtime.messaging import create_message
+    from questfoundry.runtime.messaging.types import MessageType
+
+    logger = logging.getLogger("questfoundry.cli")
+
+    # Get the "customer" mailbox (special mailbox for human communication)
+    mailbox = await broker.get_mailbox("customer")
+    pending = await mailbox.get_all_pending()
+
+    clarification_requests = [
+        msg for msg in pending if msg.type == MessageType.CLARIFICATION_REQUEST
+    ]
+
+    if not clarification_requests:
+        return []
+
+    handled = []
+
+    for request in clarification_requests:
+        payload = request.payload
+        question = payload.get("question", "")
+        context = payload.get("context")
+        options = payload.get("options", [])
+        default_option = payload.get("default_option")
+
+        # Display the clarification request
+        console.print()
+        console.print(
+            Panel(
+                f"[bold]{question}[/bold]",
+                title=f"[yellow]Question from {request.from_agent}[/yellow]",
+                border_style="yellow",
+            )
+        )
+
+        if context:
+            console.print(f"[dim]Context: {context}[/dim]")
+
+        # Display options if provided
+        if options:
+            console.print()
+            console.print("[bold]Options:[/bold]")
+            for i, opt in enumerate(options, 1):
+                opt_id = opt.get("id", str(i))
+                opt_desc = opt.get("description", "")
+                opt_impl = opt.get("implications", "")
+                marker = " [dim](recommended)[/dim]" if opt_id == default_option else ""
+                console.print(f"  [{i}] [cyan]{opt_id}[/cyan]: {opt_desc}{marker}")
+                if opt_impl:
+                    console.print(f"      [dim]→ {opt_impl}[/dim]")
+            console.print()
+            console.print("[dim]Enter option number, option ID, or type your own answer[/dim]")
+
+        # Capture user response
+        try:
+            user_response = console.input("[bold yellow]Answer> [/bold yellow]")
+        except (KeyboardInterrupt, EOFError):
+            user_response = ""
+
+        # Resolve option selection if applicable
+        selected_option = None
+        answer = user_response
+
+        if options and user_response.strip():
+            # Check if user entered a number
+            if user_response.strip().isdigit():
+                idx = int(user_response.strip()) - 1
+                if 0 <= idx < len(options):
+                    selected_option = options[idx].get("id")
+                    answer = options[idx].get("description", selected_option)
+
+            # Check if user entered an option ID
+            elif not selected_option:
+                for opt in options:
+                    if opt.get("id", "").lower() == user_response.strip().lower():
+                        selected_option = opt.get("id")
+                        answer = opt.get("description", selected_option)
+                        break
+
+        # Use default if no response and default exists
+        if not user_response.strip() and default_option:
+            selected_option = default_option
+            for opt in options:
+                if opt.get("id") == default_option:
+                    answer = opt.get("description", default_option)
+                    break
+            console.print(f"[dim]Using default: {default_option}[/dim]")
+
+        # Build response payload
+        response_payload: dict[str, Any] = {
+            "answer": answer,
+            "question": question,  # Echo back for context
+        }
+        if selected_option:
+            response_payload["selected_option"] = selected_option
+
+        # Send clarification response back to the agent
+        response_msg = create_message(
+            message_type=MessageType.CLARIFICATION_RESPONSE,
+            from_agent="customer",
+            to_agent=request.from_agent,
+            payload=response_payload,
+            correlation_id=request.correlation_id,
+            in_reply_to=request.id,
+        )
+
+        await broker.send(response_msg)
+
+        logger.info(
+            "Clarification response sent to %s: %s",
+            request.from_agent,
+            answer[:50] + "..." if len(answer) > 50 else answer,
+        )
+
+        # Mark request as processed (remove from mailbox)
+        # The get_all_pending already removed them; we just don't put them back
+
+        handled.append(
+            {
+                "from_agent": request.from_agent,
+                "question": question,
+                "answer": answer,
+                "selected_option": selected_option,
+            }
+        )
+
+    return handled
+
+
 async def _ask_single(
     project_id: str,
     prompt: str,
@@ -664,6 +811,7 @@ async def _ask_single(
         provider,
         event_logger,
         log_path,
+        broker,
     ) = await _setup_runtime(
         project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
@@ -672,6 +820,28 @@ async def _ask_single(
         console.print(f"[dim]{agent.name}:[/dim]")
         await _stream_response(runtime, agent, prompt, session)
         console.print()
+
+        # Handle clarification requests in a loop
+        # Agent may ask multiple questions before completing
+        while True:
+            clarifications = await _handle_clarification_requests(broker)
+            if not clarifications:
+                break
+
+            # Re-activate agent with the clarification response context
+            # The response was sent to agent's mailbox - agent will receive it
+            for clarification in clarifications:
+                from_agent = clarification["from_agent"]
+                answer = clarification["answer"]
+
+                console.print()
+                console.print(f"[dim]{from_agent} (continuing):[/dim]")
+
+                # Build a context message for the agent with the clarification response
+                context_msg = f"[Customer response to your question: {answer}]"
+                await _stream_response(runtime, agent, context_msg, session)
+                console.print()
+
     except ContextOverflowError as e:
         console.print(f"[red]✗ Context overflow: {e}[/red]")
     except ProviderError as e:
@@ -706,6 +876,7 @@ async def _ask_repl(
         provider,
         event_logger,
         log_path,
+        broker,
     ) = await _setup_runtime(
         project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
@@ -737,6 +908,26 @@ async def _ask_repl(
                 console.print(f"[dim]{agent.name}:[/dim]")
                 await _stream_response(runtime, agent, user_input, session)
                 console.print()
+
+                # Handle clarification requests
+                # Agent may ask questions before completing
+                while True:
+                    clarifications = await _handle_clarification_requests(broker)
+                    if not clarifications:
+                        break
+
+                    # Re-activate agent with the clarification response context
+                    for clarification in clarifications:
+                        from_agent = clarification["from_agent"]
+                        answer = clarification["answer"]
+
+                        console.print()
+                        console.print(f"[dim]{from_agent} (continuing):[/dim]")
+
+                        # Build context message for the agent
+                        context_msg = f"[Customer response to your question: {answer}]"
+                        await _stream_response(runtime, agent, context_msg, session)
+                        console.print()
 
             except ContextOverflowError as e:
                 console.print(f"[red]✗ Context overflow: {e}[/red]")
