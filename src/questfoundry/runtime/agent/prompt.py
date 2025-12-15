@@ -7,7 +7,7 @@ Constructs the system prompt from agent definition and injected knowledge.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent
@@ -77,6 +77,10 @@ class PromptBuilder:
         constitution_text: str | None = None,
         must_know_entries: list[dict[str, str]] | None = None,
         role_specific_menu: list[dict[str, str]] | None = None,
+        tool_schemas: list[dict[str, Any]] | None = None,
+        playbooks_menu: list[dict[str, Any]] | None = None,
+        stores_menu: list[dict[str, Any]] | None = None,
+        artifact_types_menu: list[dict[str, Any]] | None = None,
     ) -> BuiltPrompt:
         """
         Build the system prompt for an agent.
@@ -86,6 +90,10 @@ class PromptBuilder:
             constitution_text: Full constitution text to inject
             must_know_entries: List of {id, name, content} for must_know knowledge
             role_specific_menu: List of {id, name, summary} for available knowledge
+            tool_schemas: List of tool schemas from ToolRegistry.get_langchain_tools()
+            playbooks_menu: List of {id, name, purpose, triggers} for available playbooks
+            stores_menu: List of {id, name, description, semantics, access} for accessible stores
+            artifact_types_menu: List of {id, name, description, category, actions} for workable types
 
         Returns:
             Built prompt with text and metadata
@@ -117,10 +125,30 @@ class PromptBuilder:
             capabilities = self._build_capabilities_section(agent)
             self.add_section("capabilities", capabilities, priority=60)
 
-        # 6. Available Knowledge Menu
+        # 6. Available Tools (important for function calling)
+        if tool_schemas:
+            tools_section = self._build_tools_section(tool_schemas)
+            self.add_section("tools", tools_section, priority=55)
+
+        # 7. Available Playbooks (for orchestrators)
+        if playbooks_menu:
+            playbooks_section = self._build_playbooks_section(playbooks_menu)
+            self.add_section("playbooks", playbooks_section, priority=52)
+
+        # 8. Store Access (what stores you can read/write)
+        if stores_menu:
+            stores_section = self._build_stores_section(stores_menu)
+            self.add_section("stores", stores_section, priority=51)
+
+        # 9. Artifact Types (what types you can create - enables consult-schema pattern)
+        if artifact_types_menu:
+            artifact_types_section = self._build_artifact_types_section(artifact_types_menu)
+            self.add_section("artifact_types", artifact_types_section, priority=50)
+
+        # 10. Available Knowledge Menu
         if role_specific_menu:
             menu = self._build_knowledge_menu(role_specific_menu)
-            self.add_section("knowledge_menu", menu, priority=50)
+            self.add_section("knowledge_menu", menu, priority=49)
 
         return self._assemble()
 
@@ -220,6 +248,134 @@ class PromptBuilder:
 
         return "\n".join(lines)
 
+    def _build_playbooks_section(self, playbooks: list[dict[str, Any]]) -> str:
+        """Build the available playbooks menu.
+
+        Args:
+            playbooks: List of playbook menu items with id, name, purpose, triggers
+
+        Returns:
+            Formatted playbooks section for the prompt
+        """
+        lines = ["## Available Playbooks\n"]
+        lines.append(
+            "These are the production workflows available in this studio. "
+            "Choose the appropriate playbook based on the task at hand:\n"
+        )
+
+        for pb in playbooks:
+            name = pb.get("name", pb.get("id", "Unknown"))
+            purpose = pb.get("purpose", "")
+            triggers = pb.get("triggers", [])
+            pb_id = pb.get("id", "")
+
+            lines.append(f"### {name} (`{pb_id}`)")
+            lines.append(f"{purpose}\n")
+
+            if triggers:
+                lines.append("**When to use:**")
+                for trigger in triggers:
+                    if trigger:
+                        lines.append(f"- {trigger}")
+                lines.append("")
+
+        return "\n".join(lines)
+
+    def _build_tools_section(self, tool_schemas: list[dict[str, Any]]) -> str:
+        """Build the available tools section.
+
+        Args:
+            tool_schemas: List of tool schemas in LangChain format
+                          Each has: name, description, parameters
+
+        Returns:
+            Formatted tools section for the prompt
+        """
+        lines = ["## Available Tools\n"]
+        lines.append("You have access to the following tools. Use them to accomplish your tasks:\n")
+
+        for tool in tool_schemas:
+            name = tool.get("name", "unknown")
+            description = tool.get("description", "No description")
+            parameters = tool.get("parameters", {})
+
+            lines.append(f"### {name}")
+            lines.append(f"{description}\n")
+
+            # Format parameters if present
+            properties = parameters.get("properties", {})
+            required = parameters.get("required", [])
+
+            if properties:
+                lines.append("**Parameters:**")
+                for param_name, param_info in properties.items():
+                    param_type = param_info.get("type", "any")
+                    param_desc = param_info.get("description", "")
+                    is_required = param_name in required
+                    req_marker = " (required)" if is_required else ""
+                    lines.append(f"- `{param_name}` ({param_type}){req_marker}: {param_desc}")
+                lines.append("")
+
+        lines.append(
+            "To use a tool, specify a function call with the tool name and required parameters."
+        )
+
+        return "\n".join(lines)
+
+    def _build_stores_section(self, stores: list[dict[str, Any]]) -> str:
+        """Build the store access section.
+
+        Args:
+            stores: List of store menu items with id, name, description, semantics, access
+
+        Returns:
+            Formatted stores section for the prompt
+        """
+        lines = ["## Your Store Access\n"]
+        lines.append("You can access the following stores:\n")
+
+        for store in stores:
+            name = store.get("name", store.get("id", "Unknown"))
+            store_id = store.get("id", "")
+            description = store.get("description", "")
+            semantics = store.get("semantics", "unknown")
+            access = store.get("access", "read")
+
+            lines.append(f"- **{name}** (`{store_id}`): {access} access, {semantics} storage")
+            if description:
+                lines.append(f"  {description}")
+
+        return "\n".join(lines)
+
+    def _build_artifact_types_section(self, artifact_types: list[dict[str, Any]]) -> str:
+        """Build the artifact types section.
+
+        Args:
+            artifact_types: List of artifact type menu items with id, name, description, category, actions
+
+        Returns:
+            Formatted artifact types section for the prompt
+        """
+        lines = ["## Artifact Types You Can Work With\n"]
+        lines.append(
+            "You can create, read, or update the following artifact types. "
+            "Use `consult_schema` to get full field definitions before creating artifacts:\n"
+        )
+
+        for at in artifact_types:
+            name = at.get("name", at.get("id", "Unknown"))
+            at_id = at.get("id", "")
+            description = at.get("description", "")
+            category = at.get("category", "document")
+            actions = at.get("actions", ["read"])
+
+            actions_str = ", ".join(actions)
+            lines.append(f"- **{name}** (`{at_id}`): [{actions_str}] ({category})")
+            if description:
+                lines.append(f"  {description}")
+
+        return "\n".join(lines)
+
     def _assemble(self) -> BuiltPrompt:
         """Assemble sections into final prompt."""
         # Sort by priority (descending)
@@ -244,6 +400,10 @@ def build_prompt(
     constitution_text: str | None = None,
     must_know_entries: list[dict[str, str]] | None = None,
     role_specific_menu: list[dict[str, str]] | None = None,
+    tool_schemas: list[dict[str, Any]] | None = None,
+    playbooks_menu: list[dict[str, Any]] | None = None,
+    stores_menu: list[dict[str, Any]] | None = None,
+    artifact_types_menu: list[dict[str, Any]] | None = None,
 ) -> BuiltPrompt:
     """Build a prompt for an agent."""
     builder = PromptBuilder()
@@ -252,4 +412,8 @@ def build_prompt(
         constitution_text=constitution_text,
         must_know_entries=must_know_entries,
         role_specific_menu=role_specific_menu,
+        tool_schemas=tool_schemas,
+        playbooks_menu=playbooks_menu,
+        stores_menu=stores_menu,
+        artifact_types_menu=artifact_types_menu,
     )

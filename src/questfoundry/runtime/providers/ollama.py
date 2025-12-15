@@ -10,6 +10,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 from langchain_ollama import ChatOllama
@@ -22,6 +23,7 @@ from questfoundry.runtime.providers.base import (
     ProviderError,
     ProviderUnavailableError,
     StreamChunk,
+    ToolCallRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,34 +60,15 @@ class OllamaProvider(LLMProvider):
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
-    async def invoke(
-        self,
-        messages: list[LLMMessage],
-        model: str,
-        options: InvokeOptions | None = None,
-    ) -> LLMResponse:
-        """
-        Send messages to Ollama and get a response.
-
-        Uses langchain-ollama for the actual invocation.
-        """
-        options = options or InvokeOptions()
-
-        # Check availability first
-        if not await self.check_availability():
-            raise ProviderUnavailableError(f"Ollama not available at {self._host}")
-
-        # Build langchain ChatOllama
-        llm = ChatOllama(
-            model=model,
-            base_url=self._host,
-            temperature=options.temperature,
-            num_predict=options.max_tokens,
-            stop=options.stop_sequences if options.stop_sequences else None,
+    def _convert_messages(self, messages: list[LLMMessage]) -> list[Any]:
+        """Convert LLMMessages to LangChain message format."""
+        from langchain_core.messages import (
+            AIMessage,
+            BaseMessage,
+            HumanMessage,
+            SystemMessage,
+            ToolMessage,
         )
-
-        # Convert messages to langchain format
-        from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
         langchain_messages: list[BaseMessage] = []
         for msg in messages:
@@ -95,6 +78,68 @@ class OllamaProvider(LLMProvider):
                 langchain_messages.append(HumanMessage(content=msg.content))
             elif msg.role == "assistant":
                 langchain_messages.append(AIMessage(content=msg.content))
+            elif msg.role == "tool":
+                # Tool result message
+                langchain_messages.append(
+                    ToolMessage(
+                        content=msg.content,
+                        tool_call_id=msg.tool_call_id or "",
+                        name=msg.name,
+                    )
+                )
+        return langchain_messages
+
+    def _parse_tool_calls(self, response: Any) -> list[ToolCallRequest] | None:
+        """Parse tool calls from LangChain AIMessage response."""
+        tool_calls = getattr(response, "tool_calls", None)
+        if not tool_calls:
+            return None
+
+        result = []
+        for tc in tool_calls:
+            result.append(
+                ToolCallRequest(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("args", {}),
+                )
+            )
+        return result if result else None
+
+    async def invoke(
+        self,
+        messages: list[LLMMessage],
+        model: str,
+        options: InvokeOptions | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResponse:
+        """
+        Send messages to Ollama and get a response.
+
+        Uses langchain-ollama for the actual invocation.
+        Supports tool binding when tools are provided.
+        """
+        options = options or InvokeOptions()
+
+        # Check availability first
+        if not await self.check_availability():
+            raise ProviderUnavailableError(f"Ollama not available at {self._host}")
+
+        # Build langchain ChatOllama
+        llm: Any = ChatOllama(
+            model=model,
+            base_url=self._host,
+            temperature=options.temperature,
+            num_predict=options.max_tokens,
+            stop=options.stop_sequences if options.stop_sequences else None,
+        )
+
+        # Bind tools if provided
+        if tools:
+            llm = llm.bind_tools(tools)
+
+        # Convert messages to langchain format
+        langchain_messages = self._convert_messages(messages)
 
         # Invoke with timeout
         start_time = time.time()
@@ -126,6 +171,9 @@ class OllamaProvider(LLMProvider):
         if isinstance(content, list):
             content = str(content[0]) if content else ""
 
+        # Parse tool calls from response
+        tool_calls = self._parse_tool_calls(response)
+
         return LLMResponse(
             content=content,
             model=model,
@@ -134,6 +182,7 @@ class OllamaProvider(LLMProvider):
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             duration_ms=duration_ms,
+            tool_calls=tool_calls,
             raw=response,
         )
 
@@ -142,11 +191,13 @@ class OllamaProvider(LLMProvider):
         messages: list[LLMMessage],
         model: str,
         options: InvokeOptions | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream response chunks from Ollama.
 
         Uses langchain-ollama's astream for streaming.
+        Tool calls are accumulated and returned in the final chunk.
         """
         options = options or InvokeOptions()
 
@@ -155,7 +206,7 @@ class OllamaProvider(LLMProvider):
             raise ProviderUnavailableError(f"Ollama not available at {self._host}")
 
         # Build langchain ChatOllama
-        llm = ChatOllama(
+        llm: Any = ChatOllama(
             model=model,
             base_url=self._host,
             temperature=options.temperature,
@@ -163,23 +214,19 @@ class OllamaProvider(LLMProvider):
             stop=options.stop_sequences if options.stop_sequences else None,
         )
 
-        # Convert messages to langchain format
-        from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+        # Bind tools if provided
+        if tools:
+            llm = llm.bind_tools(tools)
 
-        langchain_messages: list[BaseMessage] = []
-        for msg in messages:
-            if msg.role == "system":
-                langchain_messages.append(SystemMessage(content=msg.content))
-            elif msg.role == "user":
-                langchain_messages.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                langchain_messages.append(AIMessage(content=msg.content))
+        # Convert messages to langchain format
+        langchain_messages = self._convert_messages(messages)
 
         # Stream with timeout
         try:
             prompt_tokens: int | None = None
             completion_tokens: int | None = None
             total_tokens: int | None = None
+            accumulated_tool_calls: list[ToolCallRequest] = []
 
             async for chunk in llm.astream(langchain_messages):
                 # Extract content from chunk
@@ -194,18 +241,24 @@ class OllamaProvider(LLMProvider):
                     completion_tokens = usage_metadata.get("output_tokens")
                     total_tokens = usage_metadata.get("total_tokens")
 
+                # Accumulate tool calls from streaming chunks
+                chunk_tool_calls = self._parse_tool_calls(chunk)
+                if chunk_tool_calls:
+                    accumulated_tool_calls.extend(chunk_tool_calls)
+
                 yield StreamChunk(
                     content=content,
                     done=False,
                 )
 
-            # Final chunk with done=True and usage stats
+            # Final chunk with done=True, usage stats, and accumulated tool calls
             yield StreamChunk(
                 content="",
                 done=True,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
+                tool_calls=accumulated_tool_calls if accumulated_tool_calls else None,
             )
 
         except Exception as e:

@@ -21,6 +21,7 @@ With tool execution (Phase 2):
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -36,7 +37,9 @@ from questfoundry.runtime.providers import (
     InvokeOptions,
     LLMMessage,
     LLMProvider,
+    LLMResponse,
     StreamChunk,
+    ToolCallRequest,
 )
 from questfoundry.runtime.session import Session, TokenUsage, Turn
 
@@ -238,12 +241,28 @@ class AgentRuntime:
         """Build context for an agent."""
         return self._context_builder.build(agent, self._studio)
 
+    def get_tool_schemas(self, agent: Agent, session_id: str | None = None) -> list[dict[str, Any]]:
+        """
+        Get LangChain-compatible tool schemas for an agent.
+
+        Args:
+            agent: Agent to get tools for
+            session_id: Current session ID
+
+        Returns:
+            List of tool schemas (empty if no tools available)
+        """
+        if not self.tool_registry:
+            return []
+        return self.tool_registry.get_langchain_tools(agent, session_id)
+
     def build_messages(
         self,
         agent: Agent,
         user_input: str,
         context: AgentContext | None = None,
         history: list[dict[str, str]] | None = None,
+        tool_schemas: list[dict[str, Any]] | None = None,
     ) -> list[LLMMessage]:
         """
         Build messages for LLM invocation.
@@ -253,6 +272,7 @@ class AgentRuntime:
             user_input: User's input message
             context: Pre-built context (built if not provided)
             history: Conversation history [{role, content}, ...]
+            tool_schemas: Optional list of tool schemas to include in prompt
 
         Returns:
             List of LLMMessage for the provider
@@ -260,12 +280,16 @@ class AgentRuntime:
         if context is None:
             context = self.build_context(agent)
 
-        # Build system prompt
+        # Build system prompt with tool descriptions, playbooks, stores, and artifact types
         prompt = build_prompt(
             agent=agent,
             constitution_text=context.constitution_text,
             must_know_entries=context.must_know_entries,
             role_specific_menu=context.role_specific_menu,
+            tool_schemas=tool_schemas,
+            playbooks_menu=context.playbooks_menu,
+            stores_menu=context.stores_menu,
+            artifact_types_menu=context.artifact_types_menu,
         )
 
         messages: list[LLMMessage] = []
@@ -305,21 +329,94 @@ class AgentRuntime:
                 f"({self._context_limit} tokens). Reduce knowledge or use larger model."
             )
 
+    async def _execute_tool_calls(
+        self,
+        tool_calls: list[ToolCallRequest],
+        agent: Agent,
+        session_id: str | None = None,
+    ) -> list[ToolCall]:
+        """
+        Execute a list of tool calls.
+
+        Args:
+            tool_calls: List of tool call requests from LLM
+            agent: Agent making the calls
+            session_id: Current session ID
+
+        Returns:
+            List of ToolCall results
+        """
+        results = []
+        for tc in tool_calls:
+            tool_call = ToolCall(tool_id=tc.name, args=tc.arguments)
+            start_time = time.time()
+
+            try:
+                result = await self.execute_tool(tc.name, tc.arguments, agent, session_id)
+                tool_call.result = result.data
+                tool_call.success = result.success
+                tool_call.error = result.error
+                tool_call.execution_time_ms = result.execution_time_ms
+            except Exception as e:
+                tool_call.success = False
+                tool_call.error = str(e)
+                tool_call.execution_time_ms = (time.time() - start_time) * 1000
+                logger.warning(f"Tool call failed: {tc.name} - {e}")
+
+            results.append(tool_call)
+
+        return results
+
+    def _tool_results_to_messages(
+        self,
+        tool_calls: list[ToolCallRequest],
+        tool_results: list[ToolCall],
+    ) -> list[LLMMessage]:
+        """
+        Convert tool call results to LLM messages.
+
+        Args:
+            tool_calls: Original tool call requests (with IDs)
+            tool_results: Executed tool results
+
+        Returns:
+            List of tool result messages for the LLM
+        """
+        messages = []
+        for tc, result in zip(tool_calls, tool_results, strict=True):
+            # Format the result as JSON
+            if result.success:
+                content = json.dumps(result.result) if result.result else "{}"
+            else:
+                content = json.dumps({"error": result.error or "Tool execution failed"})
+
+            messages.append(
+                LLMMessage(
+                    role="tool",
+                    content=content,
+                    tool_call_id=tc.id,
+                    name=tc.name,
+                )
+            )
+        return messages
+
     async def activate(
         self,
         agent: Agent,
         user_input: str,
         session: Session,
         options: InvokeOptions | None = None,
+        max_tool_iterations: int = 10,
     ) -> ActivationResult:
         """
-        Activate an agent (non-streaming).
+        Activate an agent (non-streaming) with tool call support.
 
         Args:
             agent: The agent to activate
             user_input: User's input message
             session: Session to track the turn in
             options: LLM invocation options
+            max_tool_iterations: Maximum number of tool call iterations
 
         Returns:
             ActivationResult with response content and turn
@@ -354,59 +451,105 @@ class AgentRuntime:
                     total_chars=context.total_tokens * 4,  # Rough estimate,
                 )
 
+            # Get tool schemas for this agent
+            tool_schemas = self.get_tool_schemas(agent, session.id)
+
             history = session.get_history()[:-1] if len(session.turns) > 1 else None
-            messages = self.build_messages(agent, user_input, context, history)
+            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
             # Validate context size
             self.validate_context_size(messages)
 
-            # Log LLM call start
-            estimated_tokens = self.estimate_tokens(messages)
-            if self._event_logger:
-                self._event_logger.llm_call_start(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    model=self._model,
-                    provider=self._provider.name,
-                    prompt_tokens=estimated_tokens,
+            # Track all tool calls made during this activation
+            all_tool_calls: list[ToolCall] = []
+            total_prompt_tokens = 0
+            total_completion_tokens = 0
+            response: LLMResponse | None = None
+
+            # Tool call loop
+            for iteration in range(max_tool_iterations):
+                # Log LLM call start
+                estimated_tokens = self.estimate_tokens(messages)
+                if self._event_logger:
+                    self._event_logger.llm_call_start(
+                        session_id=session.id,
+                        turn_id=turn.turn_number,
+                        model=self._model,
+                        provider=self._provider.name,
+                        prompt_tokens=estimated_tokens,
+                    )
+
+                # Invoke LLM with tools
+                response = await self._provider.invoke(
+                    messages, self._model, options, tools=tool_schemas if tool_schemas else None
                 )
 
-            # Invoke LLM
-            response = await self._provider.invoke(messages, self._model, options)
+                # Accumulate token usage
+                if response.prompt_tokens:
+                    total_prompt_tokens += response.prompt_tokens
+                if response.completion_tokens:
+                    total_completion_tokens += response.completion_tokens
+
+                # Log LLM call complete
+                if self._event_logger:
+                    self._event_logger.llm_call_complete(
+                        session_id=session.id,
+                        turn_id=turn.turn_number,
+                        model=self._model,
+                        completion_tokens=response.completion_tokens,
+                        total_tokens=response.total_tokens,
+                        duration_ms=response.duration_ms,
+                    )
+
+                # Check for tool calls
+                if not response.has_tool_calls or not response.tool_calls:
+                    # No tool calls, we're done
+                    break
+
+                # Execute tool calls
+                tool_calls = response.tool_calls  # Already checked not None
+                logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
+                tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
+                all_tool_calls.extend(tool_results)
+
+                # Add assistant message with tool calls (empty content)
+                messages.append(LLMMessage(role="assistant", content=response.content or ""))
+
+                # Add tool result messages
+                tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
+                messages.extend(tool_messages)
 
             # Complete turn
             usage = TokenUsage(
-                prompt_tokens=response.prompt_tokens,
-                completion_tokens=response.completion_tokens,
-                total_tokens=response.total_tokens,
+                prompt_tokens=total_prompt_tokens or response.prompt_tokens if response else None,
+                completion_tokens=total_completion_tokens or response.completion_tokens
+                if response
+                else None,
+                total_tokens=(total_prompt_tokens + total_completion_tokens)
+                if total_prompt_tokens
+                else None,
             )
-            session.complete_turn(turn, response.content, usage)
+            final_content = response.content if response else ""
+            session.complete_turn(turn, final_content, usage)
             duration_ms = (time.time() - start_time) * 1000
 
-            # Log completion
+            # Log turn completion
             if self._event_logger:
-                self._event_logger.llm_call_complete(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    model=self._model,
-                    completion_tokens=response.completion_tokens,
-                    total_tokens=response.total_tokens,
-                    duration_ms=response.duration_ms,
-                )
                 self._event_logger.turn_complete(
                     session_id=session.id,
                     turn_id=turn.turn_number,
-                    output_length=len(response.content),
-                    prompt_tokens=response.prompt_tokens,
-                    completion_tokens=response.completion_tokens,
+                    output_length=len(final_content),
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
                     duration_ms=duration_ms,
                 )
 
             return ActivationResult(
-                content=response.content,
+                content=final_content,
                 agent_id=agent.id,
                 turn=turn,
                 usage=usage,
+                tool_calls=all_tool_calls,
             )
 
         except Exception as e:
@@ -429,6 +572,10 @@ class AgentRuntime:
     ) -> AsyncIterator[StreamChunk]:
         """
         Activate an agent with streaming response.
+
+        Note: For tool calling with multi-iteration loops, use activate() instead.
+        Streaming mode provides tools to the LLM but handles tool calls in a single pass.
+        If tool calls are detected, they are executed and a follow-up response is streamed.
 
         Args:
             agent: The agent to activate
@@ -469,8 +616,11 @@ class AgentRuntime:
                     total_chars=context.total_tokens * 4,  # Rough estimate,
                 )
 
+            # Get tool schemas for this agent
+            tool_schemas = self.get_tool_schemas(agent, session.id)
+
             history = session.get_history()[:-1] if len(session.turns) > 1 else None
-            messages = self.build_messages(agent, user_input, context, history)
+            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
             # Validate context size
             self.validate_context_size(messages)
@@ -489,9 +639,12 @@ class AgentRuntime:
             # Collect response for turn completion
             full_content = ""
             final_usage: TokenUsage | None = None
+            pending_tool_calls: list[ToolCallRequest] | None = None
 
-            # Stream from provider
-            async for chunk in self._provider.stream(messages, self._model, options):
+            # Stream from provider with tools
+            async for chunk in self._provider.stream(
+                messages, self._model, options, tools=tool_schemas if tool_schemas else None
+            ):
                 full_content += chunk.content
 
                 if chunk.done:
@@ -500,8 +653,39 @@ class AgentRuntime:
                         completion_tokens=chunk.completion_tokens,
                         total_tokens=chunk.total_tokens,
                     )
+                    # Check for tool calls in final chunk
+                    if chunk.tool_calls:
+                        pending_tool_calls = chunk.tool_calls
 
                 yield chunk
+
+            # Handle tool calls if present (single pass for streaming)
+            if pending_tool_calls:
+                logger.info(
+                    f"Executing {len(pending_tool_calls)} tool calls from streaming response"
+                )
+                tool_results = await self._execute_tool_calls(pending_tool_calls, agent, session.id)
+
+                # Add assistant message and tool results
+                messages.append(LLMMessage(role="assistant", content=full_content))
+                tool_messages = self._tool_results_to_messages(pending_tool_calls, tool_results)
+                messages.extend(tool_messages)
+
+                # Stream follow-up response (without tools to prevent infinite loops)
+                async for chunk in self._provider.stream(messages, self._model, options):
+                    full_content += chunk.content
+
+                    # Update usage if done and we have previous usage to accumulate
+                    if chunk.done and final_usage and chunk.prompt_tokens:
+                        final_usage = TokenUsage(
+                            prompt_tokens=(final_usage.prompt_tokens or 0) + chunk.prompt_tokens,
+                            completion_tokens=(final_usage.completion_tokens or 0)
+                            + (chunk.completion_tokens or 0),
+                            total_tokens=(final_usage.total_tokens or 0)
+                            + (chunk.total_tokens or 0),
+                        )
+
+                    yield chunk
 
             # Complete turn after streaming finishes
             session.complete_turn(turn, full_content, final_usage)

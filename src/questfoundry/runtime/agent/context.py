@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
+    from questfoundry.runtime.models import Agent, KnowledgeEntry, Playbook, Studio
 
 
 @dataclass
@@ -33,10 +33,22 @@ class AgentContext:
     # Role-specific knowledge menu (available for lookup)
     role_specific_menu: list[dict[str, str]] = field(default_factory=list)
 
+    # Playbooks menu (for orchestrator agents)
+    playbooks_menu: list[dict[str, Any]] = field(default_factory=list)
+
+    # Stores menu (shows which stores agent can access)
+    stores_menu: list[dict[str, Any]] = field(default_factory=list)
+
+    # Artifact types menu (shows what types agent can create/read/update)
+    artifact_types_menu: list[dict[str, Any]] = field(default_factory=list)
+
     # Token estimates for context budget
     constitution_tokens: int = 0
     must_know_tokens: int = 0
     menu_tokens: int = 0
+    playbooks_tokens: int = 0
+    stores_tokens: int = 0
+    artifact_types_tokens: int = 0
 
     # Rough estimate: 4 chars per token
     CHARS_PER_TOKEN: int = 4
@@ -44,7 +56,14 @@ class AgentContext:
     @property
     def total_tokens(self) -> int:
         """Estimated total tokens for all context."""
-        return self.constitution_tokens + self.must_know_tokens + self.menu_tokens
+        return (
+            self.constitution_tokens
+            + self.must_know_tokens
+            + self.menu_tokens
+            + self.playbooks_tokens
+            + self.stores_tokens
+            + self.artifact_types_tokens
+        )
 
 
 class ContextBuilder:
@@ -110,6 +129,29 @@ class ContextBuilder:
                 menu_item = self._format_entry_for_menu(entry)
                 context.role_specific_menu.append(menu_item)
                 context.menu_tokens += len(menu_item.get("summary", "")) // self.CHARS_PER_TOKEN
+
+        # 4. Playbooks menu (for orchestrator agents)
+        if self._is_orchestrator(agent) and studio.playbooks:
+            for playbook in studio.playbooks:
+                menu_item = self._format_playbook_for_menu(playbook)
+                context.playbooks_menu.append(menu_item)
+                context.playbooks_tokens += (
+                    len(menu_item.get("purpose", "")) // self.CHARS_PER_TOKEN
+                )
+
+        # 5. Stores menu (from agent capabilities)
+        stores_access = self._extract_stores_access(agent, studio)
+        for store_item in stores_access:
+            context.stores_menu.append(store_item)
+            context.stores_tokens += len(store_item.get("description", "")) // self.CHARS_PER_TOKEN
+
+        # 6. Artifact types menu (from agent capabilities)
+        artifact_types_access = self._extract_artifact_types_access(agent, studio)
+        for at_item in artifact_types_access:
+            context.artifact_types_menu.append(at_item)
+            context.artifact_types_tokens += (
+                len(at_item.get("description", "")) // self.CHARS_PER_TOKEN
+            )
 
         return context
 
@@ -238,6 +280,134 @@ class ContextBuilder:
             "name": entry.name or entry.id,
             "summary": entry.summary or "",
         }
+
+    def _is_orchestrator(self, agent: Agent) -> bool:
+        """Check if agent has orchestrator archetype."""
+        from questfoundry.runtime.models import Archetype
+
+        if not agent.archetypes:
+            return False
+        return any(a == Archetype.ORCHESTRATOR for a in agent.archetypes)
+
+    def _format_playbook_for_menu(self, playbook: Playbook) -> dict[str, Any]:
+        """Format a playbook for the playbooks menu.
+
+        Returns a dict with:
+        - id: Playbook identifier
+        - name: Human-readable name
+        - purpose: What this playbook accomplishes
+        - triggers: When to use this playbook
+        """
+        triggers = []
+        if playbook.triggers:
+            for t in playbook.triggers:
+                if isinstance(t, dict):
+                    triggers.append(t.get("condition", ""))
+                else:
+                    triggers.append(str(t))
+
+        return {
+            "id": playbook.id,
+            "name": playbook.name or playbook.id,
+            "purpose": playbook.purpose or "",
+            "triggers": triggers,
+        }
+
+    def _extract_stores_access(self, agent: Agent, studio: Studio) -> list[dict[str, Any]]:
+        """Extract stores the agent can access from capabilities.
+
+        Returns a list of dicts with:
+        - id: Store identifier
+        - name: Human-readable name
+        - description: What this store contains
+        - semantics: Storage behavior (hot/cold/versioned/ephemeral)
+        - access: 'read', 'write', or 'read/write'
+        """
+        # Build a lookup of stores by ID
+        stores_by_id = {s.id: s for s in (studio.stores or [])}
+
+        # Collect store access from capabilities
+        stores_access: dict[str, set[str]] = {}  # store_id -> set of access levels
+
+        if agent.capabilities:
+            for cap in agent.capabilities:
+                if cap.category == "store_access" and cap.stores:
+                    access = cap.access_level or "read"
+                    for store_id in cap.stores:
+                        if store_id not in stores_access:
+                            stores_access[store_id] = set()
+                        stores_access[store_id].add(access)
+
+        # Build menu items
+        result = []
+        for store_id, access_levels in stores_access.items():
+            store = stores_by_id.get(store_id)
+            if not store:
+                continue
+
+            # Combine access levels
+            if "read" in access_levels and "write" in access_levels:
+                access_str = "read/write"
+            elif "write" in access_levels:
+                access_str = "write"
+            else:
+                access_str = "read"
+
+            result.append(
+                {
+                    "id": store.id,
+                    "name": store.name,
+                    "description": store.description or "",
+                    "semantics": store.semantics.value if store.semantics else "unknown",
+                    "access": access_str,
+                }
+            )
+
+        return result
+
+    def _extract_artifact_types_access(self, agent: Agent, studio: Studio) -> list[dict[str, Any]]:
+        """Extract artifact types the agent can work with from capabilities.
+
+        Returns a list of dicts with:
+        - id: Artifact type identifier
+        - name: Human-readable name
+        - description: What this type represents
+        - category: Type category (document, record, etc.)
+        - actions: List of allowed actions (create, read, update, delete)
+        """
+        # Build a lookup of artifact types by ID
+        types_by_id = {at.id: at for at in (studio.artifact_types or [])}
+
+        # Collect artifact type access from capabilities
+        types_access: dict[str, set[str]] = {}  # type_id -> set of actions
+
+        if agent.capabilities:
+            for cap in agent.capabilities:
+                if cap.category == "artifact_action" and cap.artifact_types:
+                    actions = cap.actions or ["read"]
+                    for type_id in cap.artifact_types:
+                        if type_id not in types_access:
+                            types_access[type_id] = set()
+                        types_access[type_id].update(actions)
+
+        # Build menu items
+        result = []
+        for type_id, action_set in types_access.items():
+            at = types_by_id.get(type_id)
+            if not at:
+                continue
+
+            result.append(
+                {
+                    "id": at.id,
+                    "name": at.name,
+                    "description": at.description or "",
+                    "category": at.category or "document",
+                    "actions": sorted(action_set),
+                }
+            )
+
+        return result
 
 
 # Convenience function

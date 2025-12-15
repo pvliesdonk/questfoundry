@@ -21,6 +21,7 @@ import typer
 if TYPE_CHECKING:
     from questfoundry.runtime import AgentRuntime
     from questfoundry.runtime.models import Agent, Studio
+    from questfoundry.runtime.observability import EventLogger
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -366,6 +367,10 @@ def ask(
         str | None,
         typer.Option("--model", "-m", help="Model to use"),
     ] = None,
+    log: Annotated[
+        bool,
+        typer.Option("--log", "-l", help="Write JSONL event log to project_dir/logs/events.jsonl"),
+    ] = False,
     verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
         int,
         typer.Option(
@@ -385,10 +390,10 @@ def ask(
 
     if prompt:
         asyncio.run(
-            _ask_single(project, prompt, entry_agent, domain, projects_dir, provider, model)
+            _ask_single(project, prompt, entry_agent, domain, projects_dir, provider, model, log)
         )
     else:
-        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, provider, model))
+        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, provider, model, log))
 
 
 def _ensure_project(project_id: str, projects_dir: Path) -> None:
@@ -423,15 +428,19 @@ async def _setup_runtime(
     projects_dir: Path,
     provider_name: str | None,
     model: str | None,
-) -> tuple[Project, Studio, AgentRuntime, Agent, Session, OllamaProvider]:
+    log: bool = False,
+) -> tuple[
+    Project, Studio, AgentRuntime, Agent, Session, OllamaProvider, EventLogger | None, Path | None
+]:
     """
     Set up the runtime components for an ask session.
 
     Returns:
-        Tuple of (project, studio, runtime, agent, session, provider)
+        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path)
     """
     from questfoundry.runtime import AgentRuntime, load_studio
     from questfoundry.runtime.config import load_config
+    from questfoundry.runtime.observability import EventLogger
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -492,12 +501,23 @@ async def _setup_runtime(
 
     logger.info(f"Using provider: {selected_provider}, model: {model_to_use}")
 
+    # Create event logger if logging enabled
+    event_logger: EventLogger | None = None
+    log_path: Path | None = None
+    if log:
+        # Log to project_dir/logs/events.jsonl
+        log_path = project_path / "logs" / "events.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        event_logger = EventLogger(log_path, direct_file=True)
+        logger.info(f"Event logging to: {log_path}")
+
     # Create runtime
     runtime = AgentRuntime(
         provider=provider,
         studio=studio,
         domain_path=domain_path,
         model=model_to_use,
+        event_logger=event_logger,
     )
 
     # Get entry agent
@@ -522,7 +542,11 @@ async def _setup_runtime(
     session = Session.create(project=project, entry_agent=agent.id)
     logger.debug(f"Created session: {session.id}")
 
-    return project, studio, runtime, agent, session, provider
+    # Log session start
+    if event_logger:
+        event_logger.session_start(session_id=session.id, agent_id=agent.id, project_id=project_id)
+
+    return project, studio, runtime, agent, session, provider, event_logger, log_path
 
 
 async def _stream_response(
@@ -597,12 +621,22 @@ async def _ask_single(
     projects_dir: Path,
     provider_name: str | None,
     model: str | None,
+    log: bool = False,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
 
-    project, _studio, runtime, agent, session, provider = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model
+    (
+        project,
+        _studio,
+        runtime,
+        agent,
+        session,
+        provider,
+        event_logger,
+        log_path,
+    ) = await _setup_runtime(
+        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
 
     try:
@@ -614,6 +648,10 @@ async def _ask_single(
     except ProviderError as e:
         console.print(f"[red]✗ Provider error: {e}[/red]")
     finally:
+        # Log session end and flush
+        if event_logger:
+            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+            console.print(f"[dim]Events logged to: {log_path}[/dim]")
         await provider.close()
         project.close()
 
@@ -625,12 +663,22 @@ async def _ask_repl(
     projects_dir: Path,
     provider_name: str | None,
     model: str | None,
+    log: bool = False,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
 
-    project, _studio, runtime, agent, session, provider = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model
+    (
+        project,
+        _studio,
+        runtime,
+        agent,
+        session,
+        provider,
+        event_logger,
+        log_path,
+    ) = await _setup_runtime(
+        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
     )
 
     # Print header
@@ -638,6 +686,8 @@ async def _ask_repl(
     console.print("[bold]QuestFoundry Interactive Session[/bold]")
     console.print(f"Project: [cyan]{project_id}[/cyan]")
     console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
+    if log_path:
+        console.print(f"Logging: [dim]{log_path}[/dim]")
     console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
     console.print()
 
@@ -671,6 +721,10 @@ async def _ask_repl(
         console.print()
 
     finally:
+        # Log session end and flush
+        if event_logger:
+            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+            console.print(f"[dim]Events logged to: {log_path}[/dim]")
         # Show session summary
         console.print()
         console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")

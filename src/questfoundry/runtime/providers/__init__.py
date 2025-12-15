@@ -17,6 +17,7 @@ from questfoundry.runtime.providers.base import (
     ProviderError,
     ProviderUnavailableError,
     StreamChunk,
+    ToolCallRequest,
 )
 from questfoundry.runtime.providers.google import GoogleProvider
 from questfoundry.runtime.providers.ollama import OllamaProvider
@@ -29,6 +30,7 @@ __all__ = [
     "LLMResponse",
     "StreamChunk",
     "InvokeOptions",
+    "ToolCallRequest",
     # Exceptions
     "ProviderError",
     "ProviderUnavailableError",

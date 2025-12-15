@@ -51,20 +51,28 @@ class EventLogger:
     """
     Logs structured events to JSONL files.
 
-    Events are appended to project_dir/logs/events.jsonl in JSON Lines format.
-    Each line is a complete JSON object with timestamp, event type, and payload.
+    Can be initialized in two modes:
+    1. Project mode: Logs to project_dir/logs/events.jsonl
+    2. File mode: Logs directly to a specified file path
     """
 
-    def __init__(self, project_path: Path):
+    def __init__(self, path: Path, *, direct_file: bool = False):
         """
-        Initialize event logger for a project.
+        Initialize event logger.
 
         Args:
-            project_path: Path to the project directory
+            path: Either project directory or direct file path
+            direct_file: If True, path is treated as the output file path.
+                        If False (default), path is project dir and logs go
+                        to path/logs/events.jsonl
         """
-        self._project_path = project_path
-        self._logs_dir = project_path / "logs"
-        self._events_file = self._logs_dir / "events.jsonl"
+        if direct_file:
+            self._events_file = path
+            self._logs_dir = path.parent
+        else:
+            self._project_path = path
+            self._logs_dir = path / "logs"
+            self._events_file = self._logs_dir / "events.jsonl"
         self._ensure_logs_dir()
 
     def _ensure_logs_dir(self) -> None:

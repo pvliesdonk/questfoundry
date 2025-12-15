@@ -11,6 +11,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 
 from questfoundry.runtime.providers.base import (
     InvokeOptions,
@@ -92,12 +93,16 @@ class OpenAIProvider(LLMProvider):
         messages: list[LLMMessage],
         model: str,
         options: InvokeOptions | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         """
         Send messages to OpenAI and get a response.
 
         Uses langchain-openai for the actual invocation.
+        Note: tools parameter accepted but not yet implemented.
         """
+        # TODO: Implement tool support for OpenAI
+        _ = tools  # Acknowledge but not yet used
         options = options or InvokeOptions()
 
         llm = self._get_llm(model, options)
@@ -151,12 +156,16 @@ class OpenAIProvider(LLMProvider):
         messages: list[LLMMessage],
         model: str,
         options: InvokeOptions | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream response chunks from OpenAI.
 
         Uses langchain-openai's astream for streaming.
+        Note: tools parameter accepted but not yet implemented.
         """
+        # TODO: Implement tool support for OpenAI
+        _ = tools  # Acknowledge but not yet used
         options = options or InvokeOptions()
 
         llm = self._get_llm(model, options)
