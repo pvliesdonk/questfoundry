@@ -308,11 +308,13 @@ class AsyncDelegationExecutor:
 
     def _extract_context(self, delegation: Message) -> DelegationContext:
         """Extract DelegationContext from a message."""
+        if not delegation.to_agent:
+            raise ValueError("Delegation message must have a to_agent")
         payload = delegation.payload
         return DelegationContext(
             delegation_id=delegation.delegation_id or delegation.id,
             from_agent=delegation.from_agent,
-            to_agent=delegation.to_agent or "",
+            to_agent=delegation.to_agent,
             task=payload.get("task", ""),
             context=payload.get("context", {}),
             playbook_id=delegation.playbook_id,
@@ -386,7 +388,7 @@ class AsyncDelegationExecutor:
             playbook_instance_id=ctx.playbook_instance_id,
             phase_id=ctx.phase_id,
             rework_count=details.get("rework_count") if details else None,
-            attempted_resolutions=details.get("rework_target_visits", {}).keys()
+            attempted_resolutions=list(details.get("rework_target_visits", {}).keys())
             if details
             else None,
             suggested_action="Orchestrator review required",

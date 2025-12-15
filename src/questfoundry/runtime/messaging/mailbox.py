@@ -223,6 +223,11 @@ class AsyncMailbox:
                         if not message_ids:
                             del self._by_correlation[correlation_id]
                         message.status = MessageStatus.DELIVERED
+                        # Rebuild heap to remove stale entry
+                        self._queue = [
+                            item for item in self._queue if item.message.id in self._pending
+                        ]
+                        heapq.heapify(self._queue)
                         return message
         return None
 
@@ -276,6 +281,11 @@ class AsyncMailbox:
                     message.type.value,
                     message.ttl_turns or 0,
                 )
+
+            # Rebuild heap to remove stale entries
+            if expired_count > 0:
+                self._queue = [item for item in self._queue if item.message.id in self._pending]
+                heapq.heapify(self._queue)
 
         return expired_count
 

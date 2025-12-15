@@ -375,22 +375,22 @@ class AsyncMessageBroker:
             for row in cursor.fetchall():
                 message = Message.from_dict(
                     {
-                        "id": row[0],
-                        "type": row[1],
-                        "from_agent": row[2],
-                        "to_agent": row[3],
-                        "payload": json.loads(row[4]) if row[4] else {},
-                        "timestamp": row[5],
-                        "status": row[6],
-                        "correlation_id": row[7],
-                        "in_reply_to": row[8],
-                        "delegation_id": row[9],
-                        "playbook_id": row[10],
-                        "playbook_instance_id": row[11],
-                        "phase_id": row[12],
-                        "priority": row[13] or 0,
-                        "ttl_turns": row[14],
-                        "turn_created": row[15],
+                        "id": row["message_id"],
+                        "type": row["message_type"],
+                        "from_agent": row["from_agent"],
+                        "to_agent": row["to_agent"],
+                        "payload": json.loads(row["payload"]) if row["payload"] else {},
+                        "timestamp": row["created_at"],
+                        "status": row["status"],
+                        "correlation_id": row["correlation_id"],
+                        "in_reply_to": row["in_reply_to"],
+                        "delegation_id": row["delegation_id"],
+                        "playbook_id": row["playbook_id"],
+                        "playbook_instance_id": row["playbook_instance_id"],
+                        "phase_id": row["phase_id"],
+                        "priority": row["priority"] or 0,
+                        "ttl_turns": row["ttl_turns"],
+                        "turn_created": row["turn_created"],
                     }
                 )
                 await mailbox.put(message)

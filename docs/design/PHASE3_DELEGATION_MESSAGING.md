@@ -42,6 +42,7 @@ Build async-first messaging infrastructure and delegation flow for hub-and-spoke
 ### Async-First (No Technical Debt)
 
 All primitives designed for async from the start:
+
 - `asyncio.Queue` for mailboxes
 - `asyncio.Event` for completion signals
 - `asyncio.Lock` for thread-safe operations
@@ -50,6 +51,7 @@ All primitives designed for async from the start:
 ### Domain-Aligned Loop Termination
 
 The domain model prevents infinite loops via:
+
 - **Playbook-scoped rework budgets** (`max_rework_cycles: 1-3` per playbook)
 - **Phase DAGs** (no cycles in graph itself; only `is_rework_target` phases loop back)
 - **Lifecycle terminal states** (`cold`, `archived`, `superseded`, `canonized`)
@@ -276,6 +278,7 @@ class AsyncDelegationExecutor:
 ## 10. Loop Termination Strategy
 
 ### What Causes Loops (Legitimate)
+
 1. **Quality gate failures** -> return to `is_rework_target` phase
 2. **Feedback incorporation** -> draft/review cycles on artifacts
 3. **Clarification requests** -> request/response pairs
@@ -293,7 +296,8 @@ class AsyncDelegationExecutor:
    - Enforced by lifecycle state machine
 
 4. **Escalation on exhaustion** - When budget hit, create escalation message:
-   ```python
+
+```python
    Message(
        type=MessageType.ESCALATION,
        payload={
@@ -305,7 +309,7 @@ class AsyncDelegationExecutor:
            "suggested_action": "Orchestrator review required"
        }
    )
-   ```
+```
 
 ### Why NOT Depth Limits
 
@@ -398,10 +402,12 @@ CREATE INDEX idx_playbook_instances_status ON playbook_instances(status);
 ## 14. Test Strategy
 
 **Unit tests:**
+
 - `tests/runtime/messaging/` - AsyncMailbox, AsyncMessageBroker, Message
 - `tests/runtime/delegation/` - PlaybookTracker, DelegationBouncer, AsyncDelegationExecutor
 
 **Integration tests:**
+
 - `test_sr_delegates_to_specialist_and_receives_response`
 - `test_playbook_rework_budget_exhaustion_triggers_escalation`
 - `test_rework_target_phase_allows_loop_back`
@@ -431,6 +437,7 @@ CREATE INDEX idx_playbook_instances_status ON playbook_instances(status);
 ### Files Created
 
 **Messaging Module** (`src/questfoundry/runtime/messaging/`):
+
 - `types.py` - MessageType, MessageStatus, MessagePriority, PlaybookStatus enums
 - `message.py` - Message dataclass with factory functions (create_delegation_request, etc.)
 - `mailbox.py` - AsyncMailbox with priority queue and TTL expiration
@@ -439,12 +446,14 @@ CREATE INDEX idx_playbook_instances_status ON playbook_instances(status);
 - `__init__.py` - Public API exports
 
 **Delegation Module** (`src/questfoundry/runtime/delegation/`):
+
 - `tracker.py` - PlaybookTracker and PlaybookInstance for rework budget tracking
 - `bouncer.py` - DelegationBouncer for pre-flight checks (concurrent limits, budget)
 - `executor.py` - AsyncDelegationExecutor for full delegation lifecycle
 - `__init__.py` - Public API exports
 
 **Modified Files**:
+
 - `tools/base.py` - Added `broker` field to ToolContext
 - `tools/delegate.py` - Wired to AsyncMessageBroker, removed Phase 2 stubs
 - `storage/project.py` - Extended messages schema, added playbook_instances table
