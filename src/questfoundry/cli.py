@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -373,6 +374,14 @@ def ask(
         bool,
         typer.Option("--log", "-l", help="Write JSONL event log to project_dir/logs/events.jsonl"),
     ] = False,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive mode (default: auto-detect TTY)",
+        ),
+    ] = None,
     verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
         int,
         typer.Option(
@@ -390,12 +399,29 @@ def ask(
         project = "default"
     _ensure_project(project, projects_dir)
 
+    # Determine interactive mode: explicit flag > TTY detection
+    is_interactive = interactive if interactive is not None else sys.stdin.isatty()
+
     if prompt:
         asyncio.run(
-            _ask_single(project, prompt, entry_agent, domain, projects_dir, provider, model, log)
+            _ask_single(
+                project,
+                prompt,
+                entry_agent,
+                domain,
+                projects_dir,
+                provider,
+                model,
+                log,
+                is_interactive,
+            )
         )
     else:
-        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, provider, model, log))
+        asyncio.run(
+            _ask_repl(
+                project, entry_agent, domain, projects_dir, provider, model, log, is_interactive
+            )
+        )
 
 
 def _ensure_project(project_id: str, projects_dir: Path) -> None:
@@ -431,6 +457,7 @@ async def _setup_runtime(
     provider_name: str | None,
     model: str | None,
     log: bool = False,
+    interactive: bool = True,
 ) -> tuple[
     Project,
     Studio,
@@ -542,6 +569,7 @@ async def _setup_runtime(
         event_logger=event_logger,
         tracing_manager=tracing_manager if tracing_manager.enabled else None,
         broker=broker,
+        interactive=interactive,
     )
 
     # Get entry agent
@@ -817,6 +845,7 @@ async def _ask_single(
     provider_name: str | None,
     model: str | None,
     log: bool = False,
+    interactive: bool = True,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -833,7 +862,14 @@ async def _ask_single(
         broker,
         tracing_manager,
     ) = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
+        project_id,
+        entry_agent_id,
+        domain_path,
+        projects_dir,
+        provider_name,
+        model,
+        log,
+        interactive,
     )
 
     # Wrap execution in LangSmith session tracing
@@ -892,6 +928,7 @@ async def _ask_repl(
     provider_name: str | None,
     model: str | None,
     log: bool = False,
+    interactive: bool = True,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -908,7 +945,14 @@ async def _ask_repl(
         broker,
         tracing_manager,
     ) = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
+        project_id,
+        entry_agent_id,
+        domain_path,
+        projects_dir,
+        provider_name,
+        model,
+        log,
+        interactive,
     )
 
     # Print header

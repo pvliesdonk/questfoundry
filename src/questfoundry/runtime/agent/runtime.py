@@ -113,6 +113,7 @@ class AgentRuntime:
         event_logger: EventLogger | None = None,
         tracing_manager: TracingManager | None = None,
         broker: Any | None = None,
+        interactive: bool = True,
     ):
         """
         Initialize agent runtime.
@@ -127,6 +128,7 @@ class AgentRuntime:
             event_logger: Optional JSONL event logger
             tracing_manager: Optional LangSmith tracing manager
             broker: Message broker for delegation routing
+            interactive: Whether running in interactive mode (affects tool availability)
         """
         self._provider = provider
         self._studio = studio
@@ -137,6 +139,7 @@ class AgentRuntime:
         self._event_logger = event_logger
         self._tracing_manager = tracing_manager
         self._broker = broker
+        self._interactive = interactive
 
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
@@ -158,6 +161,7 @@ class AgentRuntime:
                     project=self._project,
                     domain_path=self._domain_path,
                     broker=self._broker,
+                    interactive=self._interactive,
                 )
             except ImportError:
                 logger.warning("Tools module not available, tool execution disabled", exc_info=True)

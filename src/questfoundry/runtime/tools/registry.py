@@ -50,6 +50,10 @@ def register_tool(tool_id: str) -> Callable[[type[BaseTool]], type[BaseTool]]:
     return decorator
 
 
+# Tools that require interactive mode (human input via terminal)
+INTERACTIVE_ONLY_TOOLS = frozenset({"request_clarification"})
+
+
 class ToolRegistry:
     """
     Registry for tool management.
@@ -66,6 +70,7 @@ class ToolRegistry:
         project: Project | None = None,
         domain_path: Any = None,
         broker: AsyncMessageBroker | None = None,
+        interactive: bool = True,
     ):
         """
         Initialize tool registry.
@@ -75,11 +80,13 @@ class ToolRegistry:
             project: Optional project for tools that need storage
             domain_path: Path to domain directory
             broker: Message broker for delegation routing
+            interactive: Whether running in interactive mode (disables human-input tools if False)
         """
         self._studio = studio
         self._project = project
         self._domain_path = domain_path
         self._broker = broker
+        self._interactive = interactive
         self._tool_cache: dict[str, BaseTool] = {}
 
     def get_tool_definition(self, tool_id: str) -> Tool | None:
@@ -165,6 +172,11 @@ class ToolRegistry:
         allowed_tool_ids = self._get_agent_tool_refs(agent)
 
         for tool_id in allowed_tool_ids:
+            # Skip interactive-only tools when not in interactive mode
+            if not self._interactive and tool_id in INTERACTIVE_ONLY_TOOLS:
+                logger.debug(f"Skipping interactive-only tool '{tool_id}' in non-interactive mode")
+                continue
+
             try:
                 tool = self.get_tool(tool_id, agent.id, session_id)
                 tools.append(tool)
