@@ -512,3 +512,176 @@ await broker.send(msg)
 # Execute delegation
 result = await executor.execute(msg)
 ```
+
+---
+
+## 15. Human-Agent Communication
+
+### request_clarification Tool
+
+Agents can request clarification from humans via the `request_clarification` tool. This enables interactive workflows where agents can ask questions when they need additional information.
+
+```python
+# Tool definition in domain-v4/tools/request_clarification.json
+{
+  "id": "request_clarification",
+  "name": "Request Clarification",
+  "description": "Request clarification from the human user when additional information is needed",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "question": {"type": "string"},
+      "context": {"type": "string"},
+      "options": {"type": "array", "items": {"type": "object"}},
+      "default_option": {"type": "string"}
+    },
+    "required": ["question"]
+  }
+}
+```
+
+**Message Flow:**
+
+1. Agent calls `request_clarification` tool
+2. Tool creates `CLARIFICATION_REQUEST` message to "customer" mailbox
+3. CLI detects pending clarification requests
+4. User is prompted for input
+5. `CLARIFICATION_RESPONSE` sent back to requesting agent
+6. Agent receives response and continues
+
+### Interactive Mode Detection
+
+The CLI automatically detects whether it's running in interactive mode (TTY) and filters tools accordingly:
+
+```bash
+# Auto-detect (default)
+qf ask -p ollama project "prompt"
+
+# Force non-interactive (for scripts/CI)
+qf ask --no-interactive -p ollama project "prompt"
+# Or: qf ask -I -p ollama project "prompt"
+
+# Force interactive
+qf ask --interactive -p ollama project "prompt"
+# Or: qf ask -i -p ollama project "prompt"
+```
+
+**Implementation:**
+
+- `sys.stdin.isatty()` for auto-detection
+- `--interactive` / `--no-interactive` flags for override
+- `INTERACTIVE_ONLY_TOOLS` in `ToolRegistry` filters tools
+- When non-interactive: `request_clarification` tool is hidden from agents
+
+---
+
+## 16. Observability Enhancements
+
+### LangSmith Hierarchical Tracing
+
+The runtime now supports proper hierarchical tracing in LangSmith:
+
+```
+Session: {session_id}
+└── Turn 1 (chain)
+    └── LLM Call (llm)
+        ├── Input: [system, user messages]
+        └── Output: [assistant response]
+└── Turn 2 (chain)
+    └── LLM Call (llm)
+└── ...
+```
+
+**Enable tracing:**
+
+```bash
+export LANGSMITH_TRACING=true
+qf ask -p ollama project "prompt"
+```
+
+**Implementation:**
+
+- `TracingManager` in `runtime/observability/tracing.py`
+- Uses `langsmith.trace()` context manager for proper parent-child linking
+- Session-level trace wraps entire session
+- Turn-level traces nest under session
+- LLM calls automatically nest via LangChain auto-tracing
+
+### consult_playbook Tool
+
+Agents can query playbook metadata for workflow guidance:
+
+```python
+# Returns structured playbook information
+{
+  "playbook_id": "scene_weave",
+  "name": "Scene Weave",
+  "description": "...",
+  "phases": [...],
+  "max_rework_cycles": 3,
+  "expected_outputs": [...]
+}
+```
+
+---
+
+## 17. Agent Behavior Improvements
+
+### Tool Usage Enforcement for Orchestrators
+
+Orchestrators are now required to use tools (delegate, terminate, consult_*) rather than generating prose directly. This ensures proper hub-and-spoke delegation.
+
+**Implementation:**
+
+- `enforce_tool_usage` parameter in `runtime.activate()`
+- If LLM returns text without tool calls, runtime prompts for tool usage
+- Maximum of 3 retries before accepting text response
+- Applied only to orchestrator archetypes
+
+### Domain Knowledge Exposure
+
+Agents now receive domain knowledge in their prompts:
+
+- **Agents menu**: List of available agents they can delegate to
+- **Stores menu**: Available stores with semantics (hot/cold/versioned)
+- **Artifact types menu**: Types they can create/modify
+- **Playbooks menu**: Available workflows to consult
+
+### Prompt Section Ordering
+
+System prompts now follow optimal ordering for model comprehension:
+
+1. Core identity (role, archetype)
+2. Constitutional knowledge (always present)
+3. Must-know knowledge (critical context)
+4. Available tools (with schemas)
+5. Domain menus (agents, stores, artifacts, playbooks)
+6. Guidelines (output format, behavior)
+
+---
+
+## 18. CLI Improvements
+
+### Auto-Project Creation
+
+Projects are now created automatically if they don't exist:
+
+```bash
+qf ask -p ollama my_new_project "Hello"
+# Creates projects/my_new_project/ automatically
+```
+
+### Provider Flag
+
+Explicit provider selection via `--provider` / `-p`:
+
+```bash
+qf ask -p ollama project "prompt"
+qf ask --provider anthropic project "prompt"
+```
+
+### Verbosity Levels
+
+- `-v`: Show token usage
+- `-vv`: Show timing and debug info
+- `-vvv`: Show full prompts sent to LLM
