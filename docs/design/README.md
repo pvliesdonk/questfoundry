@@ -10,6 +10,7 @@ Architecture and design documentation for the v4 runtime cleanroom rebuild.
 | [PHASE1_SINGLE_AGENT.md](PHASE1_SINGLE_AGENT.md) | LLM providers, sessions, agent runtime | #145 | Complete |
 | [PHASE2_TOOL_EXECUTION.md](PHASE2_TOOL_EXECUTION.md) | Tool infrastructure, registry, capability filtering | #146 | Complete |
 | [PHASE3_DELEGATION_MESSAGING.md](PHASE3_DELEGATION_MESSAGING.md) | Async messaging, delegation, playbook tracking | #147 | Complete |
+| [TOOL_CALLING_FIXES.md](TOOL_CALLING_FIXES.md) | Streaming tool calls, conversation flow fixes | — | Reference |
 
 ## Master Tracking
 
