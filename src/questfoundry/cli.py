@@ -13,15 +13,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
+from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
 if TYPE_CHECKING:
     from questfoundry.runtime import AgentRuntime
+    from questfoundry.runtime.messaging import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio
-    from questfoundry.runtime.observability import EventLogger
+    from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -371,6 +374,14 @@ def ask(
         bool,
         typer.Option("--log", "-l", help="Write JSONL event log to project_dir/logs/events.jsonl"),
     ] = False,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive mode (default: auto-detect TTY)",
+        ),
+    ] = None,
     verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
         int,
         typer.Option(
@@ -388,12 +399,29 @@ def ask(
         project = "default"
     _ensure_project(project, projects_dir)
 
+    # Determine interactive mode: explicit flag > TTY detection
+    is_interactive = interactive if interactive is not None else sys.stdin.isatty()
+
     if prompt:
         asyncio.run(
-            _ask_single(project, prompt, entry_agent, domain, projects_dir, provider, model, log)
+            _ask_single(
+                project,
+                prompt,
+                entry_agent,
+                domain,
+                projects_dir,
+                provider,
+                model,
+                log,
+                is_interactive,
+            )
         )
     else:
-        asyncio.run(_ask_repl(project, entry_agent, domain, projects_dir, provider, model, log))
+        asyncio.run(
+            _ask_repl(
+                project, entry_agent, domain, projects_dir, provider, model, log, is_interactive
+            )
+        )
 
 
 def _ensure_project(project_id: str, projects_dir: Path) -> None:
@@ -429,18 +457,28 @@ async def _setup_runtime(
     provider_name: str | None,
     model: str | None,
     log: bool = False,
+    interactive: bool = True,
 ) -> tuple[
-    Project, Studio, AgentRuntime, Agent, Session, OllamaProvider, EventLogger | None, Path | None
+    Project,
+    Studio,
+    AgentRuntime,
+    Agent,
+    Session,
+    OllamaProvider,
+    EventLogger | None,
+    Path | None,
+    AsyncMessageBroker,
+    TracingManager | None,
 ]:
     """
     Set up the runtime components for an ask session.
 
     Returns:
-        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path)
+        Tuple of (project, studio, runtime, agent, session, provider, event_logger, log_path, broker, tracing_manager)
     """
     from questfoundry.runtime import AgentRuntime, load_studio
     from questfoundry.runtime.config import load_config
-    from questfoundry.runtime.observability import EventLogger
+    from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.providers import OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
@@ -511,6 +549,17 @@ async def _setup_runtime(
         event_logger = EventLogger(log_path, direct_file=True)
         logger.info(f"Event logging to: {log_path}")
 
+    # Create LangSmith tracing manager (auto-detects LANGSMITH_TRACING env var)
+    tracing_manager = TracingManager(project_name="questfoundry")
+    if tracing_manager.enabled:
+        logger.info("LangSmith tracing enabled")
+
+    # Create message broker for delegation routing
+    from questfoundry.runtime.messaging import AsyncMessageBroker
+
+    broker = AsyncMessageBroker(project=project)
+    logger.debug("Created message broker for delegation routing")
+
     # Create runtime
     runtime = AgentRuntime(
         provider=provider,
@@ -518,6 +567,9 @@ async def _setup_runtime(
         domain_path=domain_path,
         model=model_to_use,
         event_logger=event_logger,
+        tracing_manager=tracing_manager if tracing_manager.enabled else None,
+        broker=broker,
+        interactive=interactive,
     )
 
     # Get entry agent
@@ -546,11 +598,26 @@ async def _setup_runtime(
     if event_logger:
         event_logger.session_start(session_id=session.id, agent_id=agent.id, project_id=project_id)
 
-    return project, studio, runtime, agent, session, provider, event_logger, log_path
+    return (
+        project,
+        studio,
+        runtime,
+        agent,
+        session,
+        provider,
+        event_logger,
+        log_path,
+        broker,
+        tracing_manager,
+    )
 
 
 async def _stream_response(
-    runtime: AgentRuntime, agent: Agent, user_input: str, session: Session
+    runtime: AgentRuntime,
+    agent: Agent,
+    user_input: str,
+    session: Session,
+    process_delegations: bool = True,
 ) -> str:
     """Stream a response from the agent and return full content."""
     import time
@@ -610,7 +677,163 @@ async def _stream_response(
         console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
+    # Process any pending delegations
+    if process_delegations:
+        delegation_results = await runtime.process_pending_delegations(session)
+        if delegation_results:
+            console.print()
+            console.print(f"[dim]── Processed {len(delegation_results)} delegation(s) ──[/dim]")
+            for result in delegation_results:
+                status = "[green]✓[/green]" if result.get("success") else "[red]✗[/red]"
+                to_agent = result.get("to_agent", "unknown")
+                task_preview = result.get("task", "")[:40]
+                console.print(f"  {status} {to_agent}: {task_preview}...")
+                if result.get("success") and _verbosity >= 2:
+                    # Show delegatee response at -vv+
+                    response_preview = str(result.get("result", ""))[:200]
+                    console.print(f"    [dim]{response_preview}...[/dim]")
+                elif not result.get("success"):
+                    console.print(f"    [red]{result.get('error', 'Unknown error')}[/red]")
+
     return full_content
+
+
+async def _handle_clarification_requests(
+    broker: AsyncMessageBroker,
+) -> list[dict[str, Any]]:
+    """
+    Check for and handle clarification requests from agents.
+
+    Returns list of clarification requests that were found (for logging/debugging).
+    The requests are handled interactively - user input is collected and responses sent.
+    """
+    from questfoundry.runtime.messaging import create_message
+    from questfoundry.runtime.messaging.types import MessageType
+
+    logger = logging.getLogger("questfoundry.cli")
+
+    # Get the "customer" mailbox (special mailbox for human communication)
+    mailbox = await broker.get_mailbox("customer")
+    pending = await mailbox.get_all_pending()
+
+    clarification_requests = [
+        msg for msg in pending if msg.type == MessageType.CLARIFICATION_REQUEST
+    ]
+
+    if not clarification_requests:
+        return []
+
+    handled = []
+
+    for request in clarification_requests:
+        payload = request.payload
+        question = payload.get("question", "")
+        context = payload.get("context")
+        options = payload.get("options", [])
+        default_option = payload.get("default_option")
+
+        # Display the clarification request
+        console.print()
+        console.print(
+            Panel(
+                f"[bold]{question}[/bold]",
+                title=f"[yellow]Question from {request.from_agent}[/yellow]",
+                border_style="yellow",
+            )
+        )
+
+        if context:
+            console.print(f"[dim]Context: {context}[/dim]")
+
+        # Display options if provided
+        if options:
+            console.print()
+            console.print("[bold]Options:[/bold]")
+            for i, opt in enumerate(options, 1):
+                opt_id = opt.get("id", str(i))
+                opt_desc = opt.get("description", "")
+                opt_impl = opt.get("implications", "")
+                marker = " [dim](recommended)[/dim]" if opt_id == default_option else ""
+                console.print(f"  [{i}] [cyan]{opt_id}[/cyan]: {opt_desc}{marker}")
+                if opt_impl:
+                    console.print(f"      [dim]→ {opt_impl}[/dim]")
+            console.print()
+            console.print("[dim]Enter option number, option ID, or type your own answer[/dim]")
+
+        # Capture user response
+        try:
+            user_response = console.input("[bold yellow]Answer> [/bold yellow]")
+        except (KeyboardInterrupt, EOFError):
+            user_response = ""
+
+        # Resolve option selection if applicable
+        selected_option = None
+        answer = user_response
+
+        if options and user_response.strip():
+            # Check if user entered a number
+            if user_response.strip().isdigit():
+                idx = int(user_response.strip()) - 1
+                if 0 <= idx < len(options):
+                    selected_option = options[idx].get("id")
+                    answer = options[idx].get("description", selected_option)
+
+            # Check if user entered an option ID
+            elif not selected_option:
+                for opt in options:
+                    if opt.get("id", "").lower() == user_response.strip().lower():
+                        selected_option = opt.get("id")
+                        answer = opt.get("description", selected_option)
+                        break
+
+        # Use default if no response and default exists
+        if not user_response.strip() and default_option:
+            selected_option = default_option
+            for opt in options:
+                if opt.get("id") == default_option:
+                    answer = opt.get("description", default_option)
+                    break
+            console.print(f"[dim]Using default: {default_option}[/dim]")
+
+        # Build response payload
+        response_payload: dict[str, Any] = {
+            "answer": answer,
+            "question": question,  # Echo back for context
+        }
+        if selected_option:
+            response_payload["selected_option"] = selected_option
+
+        # Send clarification response back to the agent
+        response_msg = create_message(
+            message_type=MessageType.CLARIFICATION_RESPONSE,
+            from_agent="customer",
+            to_agent=request.from_agent,
+            payload=response_payload,
+            correlation_id=request.correlation_id,
+            in_reply_to=request.id,
+        )
+
+        await broker.send(response_msg)
+
+        logger.info(
+            "Clarification response sent to %s: %s",
+            request.from_agent,
+            answer[:50] + "..." if len(answer) > 50 else answer,
+        )
+
+        # Mark request as processed (remove from mailbox)
+        # The get_all_pending already removed them; we just don't put them back
+
+        handled.append(
+            {
+                "from_agent": request.from_agent,
+                "question": question,
+                "answer": answer,
+                "selected_option": selected_option,
+            }
+        )
+
+    return handled
 
 
 async def _ask_single(
@@ -622,6 +845,7 @@ async def _ask_single(
     provider_name: str | None,
     model: str | None,
     log: bool = False,
+    interactive: bool = True,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -635,25 +859,65 @@ async def _ask_single(
         provider,
         event_logger,
         log_path,
+        broker,
+        tracing_manager,
     ) = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
+        project_id,
+        entry_agent_id,
+        domain_path,
+        projects_dir,
+        provider_name,
+        model,
+        log,
+        interactive,
     )
 
-    try:
-        console.print(f"[dim]{agent.name}:[/dim]")
-        await _stream_response(runtime, agent, prompt, session)
-        console.print()
-    except ContextOverflowError as e:
-        console.print(f"[red]✗ Context overflow: {e}[/red]")
-    except ProviderError as e:
-        console.print(f"[red]✗ Provider error: {e}[/red]")
-    finally:
-        # Log session end and flush
-        if event_logger:
-            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-            console.print(f"[dim]Events logged to: {log_path}[/dim]")
-        await provider.close()
-        project.close()
+    # Wrap execution in LangSmith session tracing
+    with (
+        tracing_manager.session(session.id, agent.id, project_id)
+        if tracing_manager
+        else nullcontext()
+    ):
+        try:
+            console.print(f"[dim]{agent.name}:[/dim]")
+            await _stream_response(runtime, agent, prompt, session)
+            console.print()
+
+            # Handle clarification requests in a loop
+            # Agent may ask multiple questions before completing
+            while True:
+                clarifications = await _handle_clarification_requests(broker)
+                if not clarifications:
+                    break
+
+                # Re-activate agent with the clarification response context
+                # The response was sent to agent's mailbox - agent will receive it
+                for clarification in clarifications:
+                    from_agent = clarification["from_agent"]
+                    answer = clarification["answer"]
+
+                    console.print()
+                    console.print(f"[dim]{from_agent} (continuing):[/dim]")
+
+                    # Build a context message for the agent with the clarification response
+                    context_msg = f"[Customer response to your question: {answer}]"
+                    await _stream_response(runtime, agent, context_msg, session)
+                    console.print()
+
+        except ContextOverflowError as e:
+            console.print(f"[red]✗ Context overflow: {e}[/red]")
+        except ProviderError as e:
+            console.print(f"[red]✗ Provider error: {e}[/red]")
+        finally:
+            # End session tracing
+            if tracing_manager:
+                tracing_manager.end_session(turn_count=session.turn_count)
+            # Log session end and flush
+            if event_logger:
+                event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+                console.print(f"[dim]Events logged to: {log_path}[/dim]")
+            await provider.close()
+            project.close()
 
 
 async def _ask_repl(
@@ -664,6 +928,7 @@ async def _ask_repl(
     provider_name: str | None,
     model: str | None,
     log: bool = False,
+    interactive: bool = True,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -677,8 +942,17 @@ async def _ask_repl(
         provider,
         event_logger,
         log_path,
+        broker,
+        tracing_manager,
     ) = await _setup_runtime(
-        project_id, entry_agent_id, domain_path, projects_dir, provider_name, model, log
+        project_id,
+        entry_agent_id,
+        domain_path,
+        projects_dir,
+        provider_name,
+        model,
+        log,
+        interactive,
     )
 
     # Print header
@@ -688,48 +962,79 @@ async def _ask_repl(
     console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
     if log_path:
         console.print(f"Logging: [dim]{log_path}[/dim]")
+    if tracing_manager:
+        console.print("[dim]LangSmith tracing: enabled[/dim]")
     console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
     console.print()
 
-    try:
-        while True:
-            try:
-                # Get input
-                user_input = console.input("[bold]> [/bold]")
+    # Wrap execution in LangSmith session tracing
+    with (
+        tracing_manager.session(session.id, agent.id, project_id)
+        if tracing_manager
+        else nullcontext()
+    ):
+        try:
+            while True:
+                try:
+                    # Get input
+                    user_input = console.input("[bold]> [/bold]")
 
-                # Check for exit
-                if user_input.lower() in ("exit", "quit", "/exit", "/quit"):
-                    break
+                    # Check for exit
+                    if user_input.lower() in ("exit", "quit", "/exit", "/quit"):
+                        break
 
-                if not user_input.strip():
-                    continue
+                    if not user_input.strip():
+                        continue
 
-                # Stream response
-                console.print(f"[dim]{agent.name}:[/dim]")
-                await _stream_response(runtime, agent, user_input, session)
-                console.print()
+                    # Stream response
+                    console.print(f"[dim]{agent.name}:[/dim]")
+                    await _stream_response(runtime, agent, user_input, session)
+                    console.print()
 
-            except ContextOverflowError as e:
-                console.print(f"[red]✗ Context overflow: {e}[/red]")
-                console.print("[dim]Try a shorter message or start a new session[/dim]")
-                console.print()
-            except ProviderError as e:
-                console.print(f"[red]✗ Provider error: {e}[/red]")
-                console.print()
+                    # Handle clarification requests
+                    # Agent may ask questions before completing
+                    while True:
+                        clarifications = await _handle_clarification_requests(broker)
+                        if not clarifications:
+                            break
 
-    except (KeyboardInterrupt, EOFError):
-        console.print()
+                        # Re-activate agent with the clarification response context
+                        for clarification in clarifications:
+                            from_agent = clarification["from_agent"]
+                            answer = clarification["answer"]
 
-    finally:
-        # Log session end and flush
-        if event_logger:
-            event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-            console.print(f"[dim]Events logged to: {log_path}[/dim]")
-        # Show session summary
-        console.print()
-        console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
-        await provider.close()
-        project.close()
+                            console.print()
+                            console.print(f"[dim]{from_agent} (continuing):[/dim]")
+
+                            # Build context message for the agent
+                            context_msg = f"[Customer response to your question: {answer}]"
+                            await _stream_response(runtime, agent, context_msg, session)
+                            console.print()
+
+                except ContextOverflowError as e:
+                    console.print(f"[red]✗ Context overflow: {e}[/red]")
+                    console.print("[dim]Try a shorter message or start a new session[/dim]")
+                    console.print()
+                except ProviderError as e:
+                    console.print(f"[red]✗ Provider error: {e}[/red]")
+                    console.print()
+
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+
+        finally:
+            # End session tracing
+            if tracing_manager:
+                tracing_manager.end_session(turn_count=session.turn_count)
+            # Log session end and flush
+            if event_logger:
+                event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
+                console.print(f"[dim]Events logged to: {log_path}[/dim]")
+            # Show session summary
+            console.print()
+            console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
+            await provider.close()
+            project.close()
 
 
 # =============================================================================

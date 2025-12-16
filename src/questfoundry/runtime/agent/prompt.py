@@ -81,6 +81,7 @@ class PromptBuilder:
         playbooks_menu: list[dict[str, Any]] | None = None,
         stores_menu: list[dict[str, Any]] | None = None,
         artifact_types_menu: list[dict[str, Any]] | None = None,
+        agents_menu: list[dict[str, Any]] | None = None,
     ) -> BuiltPrompt:
         """
         Build the system prompt for an agent.
@@ -94,61 +95,77 @@ class PromptBuilder:
             playbooks_menu: List of {id, name, purpose, triggers} for available playbooks
             stores_menu: List of {id, name, description, semantics, access} for accessible stores
             artifact_types_menu: List of {id, name, description, category, actions} for workable types
+            agents_menu: List of {id, name, description, archetypes, specialties} for delegation
 
         Returns:
             Built prompt with text and metadata
         """
         self.reset()
 
-        # 1. Agent Identity (highest priority)
+        # Priority ordering: actionable content first, reference material later
+        # Higher priority = appears earlier in prompt
+        #
+        # Actionable (what to do NOW):
+        #   identity (100), agents (95), tools (90), playbooks (85)
+        # Operational (how to behave):
+        #   capabilities (80), constraints (75)
+        # Reference (background knowledge):
+        #   constitution (65), must_know (60), stores (55), artifact_types (50)
+
+        # 1. Agent Identity (highest priority - who you are)
         identity = self._build_identity_section(agent)
         self.add_section("identity", identity, priority=100)
 
-        # 2. Constitution
-        if constitution_text:
-            self.add_section(
-                "constitution", self._format_constitution(constitution_text), priority=90
-            )
+        # 2. Available Agents for Delegation (actionable - who to delegate to)
+        if agents_menu:
+            agents_section = self._build_agents_section(agents_menu)
+            self.add_section("agents", agents_section, priority=95)
 
-        # 3. Must Know
-        if must_know_entries:
-            must_know = self._build_must_know_section(must_know_entries)
-            self.add_section("must_know", must_know, priority=80)
-
-        # 4. Constraints
-        if agent.constraints:
-            constraints = self._build_constraints_section(agent)
-            self.add_section("constraints", constraints, priority=70)
-
-        # 5. Capabilities
-        if agent.capabilities:
-            capabilities = self._build_capabilities_section(agent)
-            self.add_section("capabilities", capabilities, priority=60)
-
-        # 6. Available Tools (important for function calling)
+        # 3. Available Tools (actionable - how to act)
         if tool_schemas:
             tools_section = self._build_tools_section(tool_schemas)
-            self.add_section("tools", tools_section, priority=55)
+            self.add_section("tools", tools_section, priority=90)
 
-        # 7. Available Playbooks (for orchestrators)
+        # 4. Available Playbooks (actionable - workflow guidance)
         if playbooks_menu:
             playbooks_section = self._build_playbooks_section(playbooks_menu)
-            self.add_section("playbooks", playbooks_section, priority=52)
+            self.add_section("playbooks", playbooks_section, priority=85)
 
-        # 8. Store Access (what stores you can read/write)
+        # 5. Capabilities (operational - what you can do)
+        if agent.capabilities:
+            capabilities = self._build_capabilities_section(agent)
+            self.add_section("capabilities", capabilities, priority=80)
+
+        # 6. Constraints (operational - what not to do)
+        if agent.constraints:
+            constraints = self._build_constraints_section(agent)
+            self.add_section("constraints", constraints, priority=75)
+
+        # 7. Constitution (reference - principles)
+        if constitution_text:
+            self.add_section(
+                "constitution", self._format_constitution(constitution_text), priority=65
+            )
+
+        # 8. Must Know (reference - knowledge including operational guidelines)
+        if must_know_entries:
+            must_know = self._build_must_know_section(must_know_entries)
+            self.add_section("must_know", must_know, priority=60)
+
+        # 9. Store Access (reference - what stores you can read/write)
         if stores_menu:
             stores_section = self._build_stores_section(stores_menu)
-            self.add_section("stores", stores_section, priority=51)
+            self.add_section("stores", stores_section, priority=55)
 
-        # 9. Artifact Types (what types you can create - enables consult-schema pattern)
+        # 10. Artifact Types (reference - what types you can create)
         if artifact_types_menu:
             artifact_types_section = self._build_artifact_types_section(artifact_types_menu)
             self.add_section("artifact_types", artifact_types_section, priority=50)
 
-        # 10. Available Knowledge Menu
+        # 11. Available Knowledge Menu
         if role_specific_menu:
             menu = self._build_knowledge_menu(role_specific_menu)
-            self.add_section("knowledge_menu", menu, priority=49)
+            self.add_section("knowledge_menu", menu, priority=45)
 
         return self._assemble()
 
@@ -252,7 +269,7 @@ class PromptBuilder:
         """Build the available playbooks menu.
 
         Args:
-            playbooks: List of playbook menu items with id, name, purpose, triggers
+            playbooks: List of playbook menu items with id, name, purpose, triggers, workflow
 
         Returns:
             Formatted playbooks section for the prompt
@@ -267,16 +284,82 @@ class PromptBuilder:
             name = pb.get("name", pb.get("id", "Unknown"))
             purpose = pb.get("purpose", "")
             triggers = pb.get("triggers", [])
+            workflow = pb.get("workflow", "")
             pb_id = pb.get("id", "")
 
             lines.append(f"### {name} (`{pb_id}`)")
             lines.append(f"{purpose}\n")
+
+            # Include workflow summary showing delegation sequence
+            if workflow:
+                lines.append(f"**Workflow:** {workflow}\n")
 
             if triggers:
                 lines.append("**When to use:**")
                 for trigger in triggers:
                     if trigger:
                         lines.append(f"- {trigger}")
+                lines.append("")
+
+        return "\n".join(lines)
+
+    def _build_agents_section(self, agents: list[dict[str, Any]]) -> str:
+        """Build the delegation agents section.
+
+        This is a CRITICAL section for orchestrators. It tells them WHO they can
+        delegate to and provides explicit instructions about delegation behavior.
+
+        Args:
+            agents: List of agent menu items with id, name, description, archetypes, specialties
+
+        Returns:
+            Formatted agents section for the prompt
+        """
+        lines = ["## Orchestrator Output Guidelines\n"]
+
+        # CRITICAL: Output format guidance (from v3 architecture)
+        lines.append(
+            "**Your responses should primarily consist of:**\n"
+            "1. **Tool calls** - `delegate`, `consult_schema`, `terminate`\n"
+            "2. **Brief status updates** - 1-2 sentences explaining what you're doing\n\n"
+            "**DO NOT** write paragraphs of narrative content. If you find yourself writing "
+            "story prose, character descriptions, or scene details, **STOP** and delegate "
+            "to the appropriate specialist agent instead.\n"
+        )
+
+        lines.append("\n## Delegation Protocol\n")
+
+        # Delegation instructions
+        lines.append(
+            "As an orchestrator, you coordinate work by DELEGATING tasks to specialist agents. "
+            "You do NOT perform specialist work yourself.\n\n"
+            "- When a task requires creating content (stories, sections, prose): delegate to creators\n"
+            "- When a task requires validation or quality checks: delegate to validators\n"
+            "- When a task requires research or fact-checking: delegate to researchers\n"
+            "- When a task requires managing knowledge or documentation: delegate to curators\n\n"
+            "Use the `delegate` tool to assign work. Always specify:\n"
+            "1. `to_agent`: The agent ID to delegate to\n"
+            "2. `task`: Clear description of what needs to be done\n"
+            "3. `expected_outputs`: What artifacts should be produced\n"
+        )
+
+        lines.append("\n## Available Agents\n")
+
+        for ag in agents:
+            name = ag.get("name", ag.get("id", "Unknown"))
+            ag_id = ag.get("id", "")
+            description = ag.get("description", "")
+            archetypes = ag.get("archetypes", [])
+            specialties = ag.get("specialties", [])
+
+            archetypes_str = ", ".join(archetypes) if archetypes else "general"
+            lines.append(f"### {name} (`{ag_id}`) - {archetypes_str}")
+            lines.append(f"{description}\n")
+
+            if specialties:
+                lines.append("**Specialties:**")
+                for spec in specialties[:3]:  # Limit to avoid bloat
+                    lines.append(f"- {spec}")
                 lines.append("")
 
         return "\n".join(lines)
@@ -404,6 +487,7 @@ def build_prompt(
     playbooks_menu: list[dict[str, Any]] | None = None,
     stores_menu: list[dict[str, Any]] | None = None,
     artifact_types_menu: list[dict[str, Any]] | None = None,
+    agents_menu: list[dict[str, Any]] | None = None,
 ) -> BuiltPrompt:
     """Build a prompt for an agent."""
     builder = PromptBuilder()
@@ -416,4 +500,5 @@ def build_prompt(
         playbooks_menu=playbooks_menu,
         stores_menu=stores_menu,
         artifact_types_menu=artifact_types_menu,
+        agents_menu=agents_menu,
     )

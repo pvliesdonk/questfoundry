@@ -1,0 +1,67 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "consult_playbook",
+  "name": "Consult Playbook",
+  "description": "Retrieve full details for a playbook/workflow. Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how to orchestrate a workflow.\n\nPattern: menu+consult - prompt includes summary menu, this tool provides full details on demand.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "playbook_id": {
+        "type": "string",
+        "description": "The ID of the playbook to retrieve (e.g., 'story_spark', 'scene_weave'). If omitted, lists all available playbooks."
+      }
+    }
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Playbook identifier"
+      },
+      "name": {
+        "type": "string",
+        "description": "Human-readable name"
+      },
+      "purpose": {
+        "type": "string",
+        "description": "What this playbook accomplishes"
+      },
+      "description": {
+        "type": "string",
+        "description": "Detailed description of the workflow"
+      },
+      "triggers": {
+        "type": "array",
+        "description": "Conditions that should trigger this playbook"
+      },
+      "entry_phase": {
+        "type": "string",
+        "description": "The phase to start with"
+      },
+      "phases": {
+        "type": "array",
+        "description": "Ordered list of phases with steps, agents, and criteria"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Human-readable summary of the entire workflow"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Get full details for the Story Spark workflow",
+      "input": {
+        "playbook_id": "story_spark"
+      }
+    },
+    {
+      "description": "List all available playbooks",
+      "input": {}
+    }
+  ]
+}

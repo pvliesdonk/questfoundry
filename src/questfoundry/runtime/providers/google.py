@@ -87,6 +87,7 @@ class GoogleProvider(LLMProvider):
         model: str,
         options: InvokeOptions | None = None,
         tools: list[dict[str, Any]] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> LLMResponse:
         """
         Send messages to Google Gemini and get a response.
@@ -96,6 +97,7 @@ class GoogleProvider(LLMProvider):
         """
         # TODO: Implement tool support for Google
         _ = tools  # Acknowledge but not yet used
+        _ = callbacks  # Acknowledge but not yet used
         options = options or InvokeOptions()
 
         llm = self._get_llm(model, options)
@@ -150,6 +152,7 @@ class GoogleProvider(LLMProvider):
         model: str,
         options: InvokeOptions | None = None,
         tools: list[dict[str, Any]] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream response chunks from Google Gemini.
@@ -159,6 +162,7 @@ class GoogleProvider(LLMProvider):
         """
         # TODO: Implement tool support for Google
         _ = tools  # Acknowledge but not yet used
+        _ = callbacks  # Acknowledge but not yet used
         options = options or InvokeOptions()
 
         llm = self._get_llm(model, options)

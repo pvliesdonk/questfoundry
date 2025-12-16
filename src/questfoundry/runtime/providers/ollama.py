@@ -112,6 +112,7 @@ class OllamaProvider(LLMProvider):
         model: str,
         options: InvokeOptions | None = None,
         tools: list[dict[str, Any]] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> LLMResponse:
         """
         Send messages to Ollama and get a response.
@@ -141,11 +142,14 @@ class OllamaProvider(LLMProvider):
         # Convert messages to langchain format
         langchain_messages = self._convert_messages(messages)
 
+        # Build config with callbacks for LangSmith tracing
+        config = {"callbacks": callbacks} if callbacks else None
+
         # Invoke with timeout
         start_time = time.time()
         try:
             response = await asyncio.wait_for(
-                llm.ainvoke(langchain_messages),
+                llm.ainvoke(langchain_messages, config=config),
                 timeout=options.timeout_seconds,
             )
         except TimeoutError as e:
@@ -192,6 +196,7 @@ class OllamaProvider(LLMProvider):
         model: str,
         options: InvokeOptions | None = None,
         tools: list[dict[str, Any]] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream response chunks from Ollama.
@@ -221,6 +226,9 @@ class OllamaProvider(LLMProvider):
         # Convert messages to langchain format
         langchain_messages = self._convert_messages(messages)
 
+        # Build config with callbacks for LangSmith tracing
+        config = {"callbacks": callbacks} if callbacks else None
+
         # Stream with timeout
         try:
             prompt_tokens: int | None = None
@@ -228,7 +236,7 @@ class OllamaProvider(LLMProvider):
             total_tokens: int | None = None
             accumulated_tool_calls: list[ToolCallRequest] = []
 
-            async for chunk in llm.astream(langchain_messages):
+            async for chunk in llm.astream(langchain_messages, config=config):
                 # Extract content from chunk
                 content = chunk.content
                 if isinstance(content, list):

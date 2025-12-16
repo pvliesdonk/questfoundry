@@ -131,6 +131,7 @@ class LLMProvider(ABC):
         model: str,
         options: InvokeOptions | None = None,
         tools: list[dict[str, Any]] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> LLMResponse:
         """
         Send messages to the LLM and get a response.
@@ -140,6 +141,7 @@ class LLMProvider(ABC):
             model: Model identifier (e.g., 'qwen3:8b', 'gpt-4o')
             options: Invocation options (temperature, max_tokens, etc.)
             tools: Optional list of tool schemas for function calling
+            callbacks: Optional LangChain callbacks for tracing
 
         Returns:
             LLMResponse with content and metadata (may include tool_calls)
@@ -157,6 +159,7 @@ class LLMProvider(ABC):
         model: str,
         options: InvokeOptions | None = None,
         tools: list[dict[str, Any]] | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Stream response chunks from the LLM.
@@ -166,6 +169,7 @@ class LLMProvider(ABC):
             model: Model identifier (e.g., 'qwen3:8b', 'gpt-4o')
             options: Invocation options (temperature, max_tokens, etc.)
             tools: Optional list of tool schemas for function calling
+            callbacks: Optional LangChain callbacks for tracing
 
         Yields:
             StreamChunk with content, final chunk has done=True and usage stats

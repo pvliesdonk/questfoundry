@@ -295,7 +295,7 @@ class TestOllamaProviderStream:
             "total_tokens": 13,
         }
 
-        async def mock_astream(_messages: list) -> AsyncMock:  # type: ignore[misc]
+        async def mock_astream(_messages: list, **_kwargs: object) -> AsyncMock:  # type: ignore[misc]
             for chunk in [chunk1, chunk2, chunk3]:
                 yield chunk
 

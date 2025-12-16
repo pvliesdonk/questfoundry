@@ -304,6 +304,10 @@ class Project:
         project = cls(path)
         if not project.exists():
             raise FileNotFoundError(f"Project not found at {path}")
+
+        # Ensure database schema exists (handles interrupted creates or schema upgrades)
+        project._init_database()
+
         return project
 
     def close(self) -> None:
