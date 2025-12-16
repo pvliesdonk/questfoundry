@@ -403,6 +403,17 @@ class AsyncMessageBroker:
             logger.warning("Failed to load messages for %s: %s", agent_id, e)
             return 0
 
+    def get_agent_ids(self) -> list[str]:
+        """
+        Get IDs of all agents with mailboxes.
+
+        Used by CheckpointManager to iterate over mailboxes for state capture.
+
+        Returns:
+            List of agent IDs with active mailboxes
+        """
+        return list(self._mailboxes.keys())
+
     async def get_stats(self) -> dict[str, Any]:
         """
         Get broker statistics.

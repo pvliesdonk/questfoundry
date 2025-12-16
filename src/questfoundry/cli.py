@@ -665,11 +665,14 @@ async def _setup_runtime(
         # Load the existing session
         session = Session.load(project=project, session_id=checkpoint.session_id)
         if not session:
-            # Session no longer exists in DB, create new one
-            console.print("[yellow]Warning: Session not found, creating new session[/yellow]")
-            session = Session.create(project=project, entry_agent=agent.id)
-        else:
-            logger.info(f"Restored session: {session.id}")
+            # Session not found - checkpoint is orphaned, cannot restore
+            console.print(
+                f"[red]✗ Session not found: {checkpoint.session_id}[/red]\n"
+                "[dim]The checkpoint references a session that no longer exists in the database.[/dim]"
+            )
+            project.close()
+            raise typer.Exit(1)
+        logger.info(f"Restored session: {session.id}")
 
         # Restore checkpoint state (mailbox states, etc.)
         restore_info = await checkpoint_manager.restore_from_checkpoint(
@@ -684,7 +687,7 @@ async def _setup_runtime(
 
         # Restore context usage tracking to runtime
         if checkpoint.context_usage:
-            runtime._context_usage = checkpoint.context_usage
+            runtime.restore_context_usage(checkpoint.context_usage)
     else:
         # Create new session
         session = Session.create(project=project, entry_agent=agent.id)

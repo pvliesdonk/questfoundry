@@ -244,32 +244,26 @@ class CheckpointManager:
 
 ### Automatic Checkpoints
 
-After each orchestrator (Showrunner) turn completes:
+After each orchestrator turn completes (determined by agent archetype, not entry status):
 
 ```python
 class AgentRuntime:
-    async def run_turn(self, ...):
+    def _is_orchestrator(self, agent: Agent) -> bool:
+        """Check if an agent is an orchestrator by archetype."""
+        return "orchestrator" in [a.value for a in agent.archetypes]
+
+    async def activate(self, ...):
         # ... execute turn ...
 
-        # Auto-checkpoint after orchestrator turns
-        if agent_id == self._entry_agent and self._checkpoint_manager:
-            checkpoint = await self._checkpoint_manager.create_checkpoint(
-                session=self._session,
-                broker=self._broker,
-                tracker=self._playbook_tracker,
-                checkpoint_id=f"cp_turn_{session.turn_count:03d}",
-            )
-            logger.info(f"Auto-checkpoint created: {checkpoint.id}")
+        # Auto-checkpoint after orchestrator turns (uses archetype check)
+        if self._is_orchestrator(agent) and self._checkpoint_manager:
+            await self._create_auto_checkpoint(session)
 ```
 
 ### Manual Checkpoints
 
-Via CLI:
-
-```bash
-# Create manual checkpoint during interactive session
-qf checkpoint create --project my_story --name "before_twist"
-```
+Manual checkpoint creation is planned for a future release. Currently, checkpoints
+are created automatically after orchestrator turns.
 
 ### Configurable Frequency
 
@@ -508,13 +502,27 @@ Rolling window of checkpoints with configurable retention policy.
 1. **Serialization merged into models**: Instead of separate `serialization.py`,
    `to_dict`/`from_dict` methods are on the model classes directly.
 
-2. **Retention policy**: Implemented with configurable `max_checkpoints` (default 10).
-   Oldest checkpoints are automatically deleted when limit exceeded.
+2. **Per-session retention policy**: Implemented with configurable `max_checkpoints`
+   (default 10) per session. Each session maintains its own rolling window of
+   checkpoints, preventing one session's checkpoints from evicting another's.
 
 3. **Context tracking**: Integrated into `AgentRuntime._update_context_usage()`.
-   Logs warning when approaching limit (100K tokens default).
+   Logs warning when approaching limit (100K tokens default). Restored via
+   `restore_context_usage()` method for proper encapsulation.
 
 4. **Auto-checkpoint trigger**: After orchestrator turns in `AgentRuntime.activate()`.
+   Uses archetype check (`_is_orchestrator()`) rather than entry agent comparison.
+   Respects `checkpoint_frequency` configuration.
+
+5. **Atomic writes**: Checkpoints use write-to-temp-then-rename pattern to prevent
+   corruption from concurrent access or interrupted writes.
+
+6. **Checkpoint IDs include session prefix**: Format is `cp_{session_prefix}_{turn:03d}`
+   to prevent collisions when multiple sessions create checkpoints.
+
+7. **Encapsulation**: CheckpointManager accesses broker and tracker state through
+   public APIs (`get_agent_ids()`, `get_all_pending()`, `get_all_instances()`,
+   `restore_instances()`) rather than internal fields.
 
 ### Test Coverage
 

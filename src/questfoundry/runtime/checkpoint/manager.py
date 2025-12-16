@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.checkpoint.models import (
@@ -94,24 +96,28 @@ class CheckpointManager:
         """
         turn_number = session.turn_count
 
-        # Generate checkpoint ID if not provided
+        # Generate checkpoint ID if not provided (includes session_id to prevent collisions)
         if checkpoint_id is None:
-            checkpoint_id = f"cp_turn_{turn_number:03d}"
+            # Use short session ID prefix for readability
+            session_prefix = session.id[:8] if len(session.id) > 8 else session.id
+            checkpoint_id = f"cp_{session_prefix}_{turn_number:03d}"
 
-        # Capture mailbox states
+        # Capture mailbox states using broker's public API
         mailbox_states: dict[str, list[dict[str, Any]]] = {}
-        for agent_id, mailbox in broker._mailboxes.items():
-            mailbox_states[agent_id] = [msg.to_dict() for msg in mailbox._pending.values()]
+        for agent_id in broker.get_agent_ids():
+            mailbox = await broker.get_mailbox(agent_id)
+            pending = await mailbox.get_all_pending()
+            mailbox_states[agent_id] = [msg.to_dict() for msg in pending]
 
         # Capture active delegations
         active_delegations: list[DelegationSnapshot] = []
         # Note: Would need access to delegation tracker to capture in-flight delegations
         # For now, we capture pending delegation messages from mailboxes
 
-        # Capture playbook instances
+        # Capture playbook instances using tracker's public API
         playbook_instances: list[dict[str, Any]] = []
         if tracker:
-            for instance in tracker._instances.values():
+            for instance in tracker.get_all_instances():
                 playbook_instances.append(instance.to_dict())
 
         # Create checkpoint
@@ -134,8 +140,8 @@ class CheckpointManager:
         # Save to disk
         self._save_checkpoint(checkpoint)
 
-        # Enforce retention policy
-        self._enforce_retention()
+        # Enforce retention policy for this session
+        self._enforce_retention(session_id=session.id)
 
         logger.info(
             "Created checkpoint %s for session %s at turn %d",
@@ -147,14 +153,36 @@ class CheckpointManager:
         return checkpoint
 
     def _save_checkpoint(self, checkpoint: Checkpoint) -> None:
-        """Save checkpoint to disk."""
+        """
+        Save checkpoint to disk using atomic write.
+
+        Uses write-to-temp-then-rename pattern to prevent corruption
+        from concurrent access or interrupted writes.
+        """
         checkpoint_path = self._checkpoints_dir / f"{checkpoint.id}.json"
         checkpoint_data = checkpoint.to_dict()
 
-        with open(checkpoint_path, "w") as f:
-            json.dump(checkpoint_data, f, indent=2)
+        try:
+            # Write to temporary file first, then rename (atomic operation)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=self._checkpoints_dir,
+                suffix=".tmp",
+                delete=False,
+            ) as f:
+                json.dump(checkpoint_data, f, indent=2)
+                temp_path = Path(f.name)
 
-        logger.debug("Saved checkpoint to %s", checkpoint_path)
+            # Atomic rename (on POSIX systems)
+            temp_path.rename(checkpoint_path)
+            logger.debug("Saved checkpoint to %s", checkpoint_path)
+
+        except (OSError, TypeError, ValueError) as e:
+            # Clean up temp file if it exists
+            if "temp_path" in locals() and temp_path.exists():
+                temp_path.unlink()
+            logger.error("Failed to save checkpoint to %s: %s", checkpoint_path, e)
+            raise RuntimeError(f"Failed to save checkpoint: {e}") from e
 
     def load_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
         """
@@ -183,8 +211,19 @@ class CheckpointManager:
             logger.debug("Loaded checkpoint %s", checkpoint_id)
             return checkpoint
 
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error("Failed to load checkpoint %s: %s", checkpoint_id, e)
+        except json.JSONDecodeError as e:
+            logger.error(
+                "Failed to load checkpoint %s: file is not valid JSON or is corrupted: %s",
+                checkpoint_id,
+                e,
+            )
+            return None
+        except KeyError as e:
+            logger.error(
+                "Failed to load checkpoint %s: missing required field: %s",
+                checkpoint_id,
+                e,
+            )
             return None
 
     def _migrate_checkpoint(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -273,25 +312,48 @@ class CheckpointManager:
         logger.info("Deleted checkpoint: %s", checkpoint_id)
         return True
 
-    def _enforce_retention(self) -> None:
+    def _enforce_retention(self, session_id: str | None = None) -> None:
         """
-        Enforce checkpoint retention policy.
+        Enforce checkpoint retention policy per session.
 
-        Deletes oldest checkpoints if we exceed max_checkpoints.
+        Deletes oldest checkpoints per session if we exceed max_checkpoints.
+        This prevents one session's checkpoints from evicting another's.
+
+        Args:
+            session_id: If provided, only enforce for this session.
+                       If None, enforce for all sessions.
         """
         if self._config.max_checkpoints == 0:
             return  # Unlimited retention
 
-        checkpoints = self.list_checkpoints()
+        if session_id:
+            # Enforce for specific session
+            checkpoints = self.list_checkpoints(session_id=session_id)
+            if len(checkpoints) > self._config.max_checkpoints:
+                to_delete = checkpoints[self._config.max_checkpoints :]
+                for cp in to_delete:
+                    self.delete_checkpoint(cp.id)
+                    logger.debug(
+                        "Deleted checkpoint %s (retention policy, session %s)",
+                        cp.id,
+                        session_id,
+                    )
+        else:
+            # Gather unique session IDs
+            session_ids: set[str] = set()
+            for checkpoint_file in self._checkpoints_dir.glob("*.json"):
+                try:
+                    with open(checkpoint_file) as f:
+                        data = json.load(f)
+                    sid = data.get("session_id")
+                    if sid:
+                        session_ids.add(sid)
+                except Exception:
+                    continue
 
-        if len(checkpoints) <= self._config.max_checkpoints:
-            return
-
-        # Delete oldest checkpoints
-        to_delete = checkpoints[self._config.max_checkpoints :]
-        for cp in to_delete:
-            self.delete_checkpoint(cp.id)
-            logger.debug("Deleted checkpoint %s (retention policy)", cp.id)
+            # Enforce per session
+            for sid in session_ids:
+                self._enforce_retention(session_id=sid)
 
     async def restore_from_checkpoint(
         self,
@@ -340,14 +402,15 @@ class CheckpointManager:
 
                 mailboxes_restored += 1
 
-        # Restore playbook instances
+        # Restore playbook instances using tracker's public API
         if tracker and checkpoint.playbook_instances:
             from questfoundry.runtime.delegation.tracker import PlaybookInstance
 
-            for instance_data in checkpoint.playbook_instances:
-                instance = PlaybookInstance.from_dict(instance_data)
-                tracker._instances[instance.instance_id] = instance
-                playbooks_restored += 1
+            instances = [
+                PlaybookInstance.from_dict(instance_data)
+                for instance_data in checkpoint.playbook_instances
+            ]
+            playbooks_restored = tracker.restore_instances(instances)
 
         logger.info(
             "Restored from checkpoint %s: %d mailboxes, %d messages, %d playbooks",

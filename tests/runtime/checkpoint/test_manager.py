@@ -90,13 +90,15 @@ class TestCheckpointManager:
             broker=mock_broker,
         )
 
-        assert checkpoint.id == "cp_turn_005"
+        # Checkpoint ID includes session prefix (first 8 chars) and turn number
+        # session_id="session_123" -> prefix="session_", turn=5 -> "cp_session__005"
+        assert checkpoint.id == "cp_session__005"
         assert checkpoint.session_id == "session_123"
         assert checkpoint.turn_number == 5
         assert checkpoint.session_status == SessionStatus.ACTIVE
 
         # Verify file was created
-        checkpoint_path = manager._checkpoints_dir / "cp_turn_005.json"
+        checkpoint_path = manager._checkpoints_dir / "cp_session__005.json"
         assert checkpoint_path.exists()
 
     @pytest.mark.asyncio

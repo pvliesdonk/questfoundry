@@ -333,9 +333,9 @@ class AsyncMailbox:
         """
         Deserialize mailbox state from checkpoint.
 
-        Note: This creates a mailbox synchronously with pending messages.
-        The caller should use restore_messages() to properly add messages
-        to the queue structure.
+        Creates a mailbox synchronously with pending messages restored.
+        Messages are added directly to the internal priority queue and
+        correlation index structures (bypassing the async put() method).
 
         Args:
             data: Dictionary from to_dict()

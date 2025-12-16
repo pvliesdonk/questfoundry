@@ -474,23 +474,42 @@ class AgentRuntime:
         """
         Create an automatic checkpoint after orchestrator turn.
 
+        Respects checkpoint_frequency from config (every N orchestrator turns).
+
         Args:
             session: Current session
         """
         if not self._checkpoint_manager or not self._broker:
             return
 
+        # Check checkpoint frequency (skip if not at frequency interval)
+        config = self._checkpoint_manager.config
+        if (
+            config.checkpoint_frequency > 1
+            and session.turn_count % config.checkpoint_frequency != 0
+        ):
+            return
+
         try:
+            # Let manager generate checkpoint ID (includes session_id)
             checkpoint = await self._checkpoint_manager.create_checkpoint(
                 session=session,
                 broker=self._broker,
                 tracker=self._playbook_tracker,
                 context_usage=self._context_usage,
-                checkpoint_id=f"cp_turn_{session.turn_count:03d}",
             )
             logger.info("Auto-checkpoint created: %s", checkpoint.id)
         except Exception as e:
             logger.error("Failed to create auto-checkpoint: %s", e)
+
+    def restore_context_usage(self, context_usage: dict[str, Any]) -> None:
+        """
+        Restore context usage tracking from checkpoint.
+
+        Args:
+            context_usage: Dict of agent_id -> ContextUsage from checkpoint
+        """
+        self._context_usage = context_usage
 
     def _build_tool_nudge_message(self, agent: Agent) -> str:
         """
