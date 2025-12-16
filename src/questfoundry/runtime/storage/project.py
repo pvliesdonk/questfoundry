@@ -439,6 +439,39 @@ class Project:
 
         return self.get_artifact(artifact_id)
 
+    def delete_artifact(self, artifact_id: str) -> bool:
+        """
+        Delete an artifact.
+
+        Args:
+            artifact_id: Artifact ID to delete
+
+        Returns:
+            True if deleted, False if not found
+
+        Note:
+            Store semantics enforcement should be done at the tool level
+            via StoreManager before calling this method.
+        """
+        conn = self._get_connection()
+
+        # Check if exists
+        existing = conn.execute(
+            "SELECT _id FROM artifacts WHERE _id = ?", (artifact_id,)
+        ).fetchone()
+
+        if existing is None:
+            return False
+
+        # Delete any version history
+        conn.execute("DELETE FROM artifact_versions WHERE artifact_id = ?", (artifact_id,))
+
+        # Delete the artifact
+        conn.execute("DELETE FROM artifacts WHERE _id = ?", (artifact_id,))
+        conn.commit()
+
+        return True
+
     def query_artifacts(
         self,
         artifact_type: str | None = None,
@@ -498,6 +531,126 @@ class Project:
             )
 
         return results
+
+    # Version history operations
+
+    def save_version(
+        self,
+        artifact_id: str,
+        created_by: str | None = None,
+    ) -> int | None:
+        """
+        Save the current state of an artifact as a version snapshot.
+
+        This should be called BEFORE updating an artifact in a versioned store.
+        The snapshot preserves the complete artifact state including system fields.
+
+        Args:
+            artifact_id: Artifact ID to snapshot
+            created_by: Agent ID creating the version
+
+        Returns:
+            The version number saved, or None if artifact not found
+        """
+        artifact = self.get_artifact(artifact_id)
+        if artifact is None:
+            return None
+
+        conn = self._get_connection()
+        now = datetime.now().isoformat()
+        version: int = artifact["_version"]
+
+        # Save complete artifact data (user fields only for storage efficiency)
+        user_data = {k: v for k, v in artifact.items() if not k.startswith("_")}
+
+        conn.execute(
+            """
+            INSERT INTO artifact_versions (artifact_id, version, data, created_at, created_by)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (artifact_id, version, json.dumps(user_data), now, created_by),
+        )
+        conn.commit()
+
+        return version
+
+    def get_artifact_versions(
+        self,
+        artifact_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """
+        Get version history for an artifact.
+
+        Args:
+            artifact_id: Artifact ID
+            limit: Maximum versions to return
+
+        Returns:
+            List of version snapshots, newest first
+        """
+        conn = self._get_connection()
+
+        rows = conn.execute(
+            """
+            SELECT version, data, created_at, created_by
+            FROM artifact_versions
+            WHERE artifact_id = ?
+            ORDER BY version DESC
+            LIMIT ?
+            """,
+            (artifact_id, limit),
+        ).fetchall()
+
+        versions = []
+        for row in rows:
+            versions.append(
+                {
+                    "version": row["version"],
+                    "data": json.loads(row["data"]),
+                    "created_at": row["created_at"],
+                    "created_by": row["created_by"],
+                }
+            )
+
+        return versions
+
+    def get_artifact_at_version(
+        self,
+        artifact_id: str,
+        version: int,
+    ) -> dict[str, Any] | None:
+        """
+        Get a specific version of an artifact.
+
+        Args:
+            artifact_id: Artifact ID
+            version: Version number to retrieve
+
+        Returns:
+            Artifact data at that version, or None if not found
+        """
+        conn = self._get_connection()
+
+        row = conn.execute(
+            """
+            SELECT data, created_at, created_by
+            FROM artifact_versions
+            WHERE artifact_id = ? AND version = ?
+            """,
+            (artifact_id, version),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "artifact_id": artifact_id,
+            "version": version,
+            "data": json.loads(row["data"]),
+            "created_at": row["created_at"],
+            "created_by": row["created_by"],
+        }
 
 
 def list_projects(projects_dir: Path) -> list[Project]:
