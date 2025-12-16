@@ -105,8 +105,8 @@ class PromptBuilder:
         # Priority ordering: actionable content first, reference material later
         # Higher priority = appears earlier in prompt
         #
-        # Identity & Delegation (who you are, who to work with):
-        #   identity (100), agents (95), behavioral (92)
+        # Identity & Behavior (who you are, how to behave):
+        #   identity (100), behavioral (98), agents (95)
         # Actionable (what to do NOW):
         #   tools (90), playbooks (85)
         # Operational (how to behave):
@@ -127,7 +127,7 @@ class PromptBuilder:
         # V3 pattern: This was critical for keeping models on track
         archetypes = [a.value if hasattr(a, "value") else str(a) for a in (agent.archetypes or [])]
         behavioral = self._build_behavioral_guidance(archetypes)
-        self.add_section("behavioral", behavioral, priority=92)
+        self.add_section("behavioral", behavioral, priority=98)
 
         # 4. Available Tools (actionable - how to act)
         if tool_schemas:
@@ -287,7 +287,8 @@ class PromptBuilder:
 
         for pb in playbooks:
             name = pb.get("name", pb.get("id", "Unknown"))
-            purpose = (pb.get("purpose", "") or "")[:80]
+            # Use summary (preferred) or fall back to purpose
+            purpose = pb.get("summary") or pb.get("purpose", "")
             pb_id = pb.get("id", "")
             lines.append(f"- **{name}** (`{pb_id}`): {purpose}")
 
@@ -313,8 +314,9 @@ class PromptBuilder:
             name = ag.get("name", ag.get("id", "Unknown"))
             archetypes = ag.get("archetypes", [])
             archetypes_str = ", ".join(archetypes[:2]) if archetypes else "general"
+            # Use summary (preferred) or fall back to first specialty
             specialties = ag.get("specialties", [])
-            spec = specialties[0][:40] if specialties else ""
+            spec = ag.get("summary") or (specialties[0] if specialties else "")
             lines.append(f"| {name} | {archetypes_str} | {spec} |")
 
         lines.append("")
@@ -339,7 +341,8 @@ class PromptBuilder:
 
         for tool in tool_schemas:
             name = tool.get("name", "unknown")
-            desc = (tool.get("description", "") or "").split("\n")[0][:80]
+            # Use first line of description (no truncation - keep domain data short instead)
+            desc = (tool.get("description", "") or "").split("\n")[0]
             lines.append(f"- **{name}**: {desc}")
 
         return "\n".join(lines)
@@ -410,15 +413,42 @@ class PromptBuilder:
         if "orchestrator" in archetypes_lower:
             lines.extend(
                 [
+                    "## CRITICAL: First Action Must Be consult_playbook",
+                    "",
+                    "**Your VERY FIRST action must be to call the consult_playbook tool** with",
+                    "playbook_id='story_spark' to understand the workflow for new story requests.",
+                    "",
+                    "Example tool call:",
+                    "```",
+                    "consult_playbook(playbook_id='story_spark')",
+                    "```",
+                    "",
+                    "This will tell you:",
+                    "- What workflow steps are recommended",
+                    "- Which roles to delegate to and in what order",
+                    "- What quality gates apply",
+                    "",
+                    "## Workflow Pattern",
+                    "",
+                    "1. User request arrives",
+                    "2. IMMEDIATELY call consult_playbook with playbook_id='story_spark'",
+                    "3. Follow the playbook's steps (typically: plotwright -> scene_smith)",
+                    "4. Pass artifact IDs between delegations",
+                    "5. Delegate to gatekeeper for quality validation",
+                    "",
+                    "## Output Format",
+                    "",
                     "Your responses should consist of:",
-                    "1. **Tool calls** - delegate, consult_playbook, terminate",
+                    "1. **Tool calls** - consult_playbook, delegate",
                     "2. **Brief status updates** - 1-2 sentences",
                     "",
-                    "DO NOT write narrative content. Delegate creative work.",
+                    "**NEVER generate story content yourself.** If your response contains more",
+                    "than 2-3 sentences that aren't a tool call, you're doing it wrong.",
+                    "",
+                    "## Anti-Pattern Reminder",
                     "",
                     "WRONG: The detective entered the dimly lit room, her footsteps echoing...",
-                    "CORRECT: I'll delegate scene writing to the appropriate specialist.",
-                    "         [delegate(to_agent='scene_smith', task='Write entrance scene')]",
+                    "RIGHT: [makes consult_playbook tool call with playbook_id='story_spark']",
                 ]
             )
         elif any(a in archetypes_lower for a in ["creator", "author", "writer"]):

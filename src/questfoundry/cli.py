@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from questfoundry.runtime.messaging import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio
     from questfoundry.runtime.observability import EventLogger, TracingManager
-    from questfoundry.runtime.providers import OllamaProvider
+    from questfoundry.runtime.providers import LLMProvider, OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
 from rich.console import Console
@@ -382,6 +382,13 @@ def ask(
             help="Enable/disable interactive mode (default: auto-detect TTY)",
         ),
     ] = None,
+    stream: Annotated[
+        bool,
+        typer.Option(
+            "--stream/--no-stream",
+            help="Enable/disable streaming output (default: streaming enabled)",
+        ),
+    ] = True,
     verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
         int,
         typer.Option(
@@ -414,6 +421,7 @@ def ask(
                 model,
                 log,
                 is_interactive,
+                stream,
             )
         )
     else:
@@ -464,7 +472,7 @@ async def _setup_runtime(
     AgentRuntime,
     Agent,
     Session,
-    OllamaProvider,
+    LLMProvider,
     EventLogger | None,
     Path | None,
     AsyncMessageBroker,
@@ -523,17 +531,35 @@ async def _setup_runtime(
         project.close()
         raise typer.Exit(1)
 
-    host: str = provider_config.host or "http://localhost:11434"
     model_to_use: str = model or provider_config.default_model or "qwen3:8b"
 
-    # Create provider
-    logger.debug(f"Connecting to {selected_provider} at {host}")
-    provider = OllamaProvider(host=host)
+    # Create provider based on type
+    from questfoundry.runtime.providers import OpenAIProvider
+
+    provider: OllamaProvider | OpenAIProvider
+    if selected_provider == "openai":
+        logger.debug("Connecting to OpenAI API")
+        try:
+            provider = OpenAIProvider()
+        except Exception as e:
+            console.print(f"[red]✗ OpenAI provider error: {e}[/red]")
+            project.close()
+            raise typer.Exit(1) from None
+    else:
+        # Default to Ollama for ollama or any other provider
+        host: str = provider_config.host or "http://localhost:11434"
+        logger.debug(f"Connecting to {selected_provider} at {host}")
+        provider = OllamaProvider(host=host)
 
     # Check provider availability
     if not await provider.check_availability():
-        console.print(f"[red]✗ {selected_provider} not available at {host}[/red]")
-        console.print("[dim]Start Ollama with: ollama serve[/dim]")
+        if selected_provider == "openai":
+            console.print("[red]✗ OpenAI API not available[/red]")
+            console.print("[dim]Check OPENAI_API_KEY environment variable[/dim]")
+        else:
+            host = provider_config.host or "http://localhost:11434"
+            console.print(f"[red]✗ {selected_provider} not available at {host}[/red]")
+            console.print("[dim]Start Ollama with: ollama serve[/dim]")
         project.close()
         raise typer.Exit(1)
 
@@ -698,6 +724,84 @@ async def _stream_response(
     return full_content
 
 
+async def _invoke_response(
+    runtime: AgentRuntime,
+    agent: Agent,
+    user_input: str,
+    session: Session,
+    process_delegations: bool = True,
+) -> str:
+    """Invoke agent without streaming (single response)."""
+    import time
+
+    logger = logging.getLogger("questfoundry.cli")
+
+    start_time = time.time()
+
+    # Show prompt at -vvv
+    if _verbosity >= 3:
+        context = runtime.build_context(agent)
+        messages = runtime.build_messages(agent, user_input, context)
+        console.print()
+        console.print("[dim]─── Prompt ───[/dim]")
+        for msg in messages:
+            role_color = {"system": "yellow", "user": "green", "assistant": "blue"}.get(
+                msg.role, "white"
+            )
+            console.print(f"[{role_color}]{msg.role}:[/{role_color}]")
+            content = msg.content
+            if msg.role == "system" and len(content) > 2000:
+                content = content[:2000] + f"\n... ({len(msg.content)} chars total)"
+            console.print(f"[dim]{content}[/dim]")
+            console.print()
+        console.print("[dim]─── Response ───[/dim]")
+
+    # Non-streaming activation
+    result = await runtime.activate(agent, user_input, session)
+    full_content = result.content
+
+    # Print the response
+    console.print(full_content)
+
+    duration_ms = (time.time() - start_time) * 1000
+
+    # Show token usage at -v+
+    if _verbosity >= 1 and result.usage:
+        tokens_info = []
+        if result.usage.prompt_tokens:
+            tokens_info.append(f"prompt: {result.usage.prompt_tokens}")
+        if result.usage.completion_tokens:
+            tokens_info.append(f"completion: {result.usage.completion_tokens}")
+        if result.usage.total_tokens:
+            tokens_info.append(f"total: {result.usage.total_tokens}")
+        if tokens_info:
+            console.print(f"[dim]tokens: {', '.join(tokens_info)}[/dim]")
+
+    # Show timing at -vv+
+    if _verbosity >= 2:
+        console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
+        logger.debug(f"Response generated in {duration_ms:.0f}ms")
+
+    # Process any pending delegations
+    if process_delegations:
+        delegation_results = await runtime.process_pending_delegations(session)
+        if delegation_results:
+            console.print()
+            console.print(f"[dim]── Processed {len(delegation_results)} delegation(s) ──[/dim]")
+            for dr in delegation_results:
+                status = "[green]✓[/green]" if dr.get("success") else "[red]✗[/red]"
+                to_agent = dr.get("to_agent", "unknown")
+                task_preview = dr.get("task", "")[:40]
+                console.print(f"  {status} {to_agent}: {task_preview}...")
+                if dr.get("success") and _verbosity >= 2:
+                    response_preview = str(dr.get("result", ""))[:200]
+                    console.print(f"    [dim]{response_preview}...[/dim]")
+                elif not dr.get("success"):
+                    console.print(f"    [red]{dr.get('error', 'Unknown error')}[/red]")
+
+    return full_content
+
+
 async def _handle_clarification_requests(
     broker: AsyncMessageBroker,
 ) -> list[dict[str, Any]]:
@@ -846,6 +950,7 @@ async def _ask_single(
     model: str | None,
     log: bool = False,
     interactive: bool = True,
+    stream: bool = True,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -872,6 +977,9 @@ async def _ask_single(
         interactive,
     )
 
+    # Select response function based on streaming preference
+    respond = _stream_response if stream else _invoke_response
+
     # Wrap execution in LangSmith session tracing
     with (
         tracing_manager.session(session.id, agent.id, project_id)
@@ -880,7 +988,7 @@ async def _ask_single(
     ):
         try:
             console.print(f"[dim]{agent.name}:[/dim]")
-            await _stream_response(runtime, agent, prompt, session)
+            await respond(runtime, agent, prompt, session)
             console.print()
 
             # Handle clarification requests in a loop
@@ -901,7 +1009,7 @@ async def _ask_single(
 
                     # Build a context message for the agent with the clarification response
                     context_msg = f"[Customer response to your question: {answer}]"
-                    await _stream_response(runtime, agent, context_msg, session)
+                    await respond(runtime, agent, context_msg, session)
                     console.print()
 
         except ContextOverflowError as e:

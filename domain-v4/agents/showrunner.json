@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "showrunner",
   "name": "Showrunner",
+  "summary": "Orchestrates workflows, delegates to specialists",
   "description": "The orchestrator who activates roles, sets scope, and owns stabilization cadence. Keeps momentum high and changes small. Wakes only the roles needed for each TU, runs focused loops, and makes the next step obvious. Protects player surfaces by routing debates through the right neighbors.",
 
   "archetypes": ["orchestrator"],

@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "scene_smith",
   "name": "Scene Smith",
+  "summary": "Writes prose sections with dialogue and choices",
   "description": "Shows the world, hides the gears. Writes clean beats and contrastive choices from Plotwright briefs. Keeps phrasing in register and enforces gates diegetically. Files hooks when fixes need structure or canon. Primary agent for Scene Weave loop.",
 
   "archetypes": ["creator"],

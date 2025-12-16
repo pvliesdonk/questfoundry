@@ -640,14 +640,26 @@ class AgentRuntime:
                 if stop_tool:
                     logger.info("Stop tool '%s' called, ending activation", stop_tool)
                     stop_reason = stop_tool
-                    # Still add the messages for context
-                    messages.append(LLMMessage(role="assistant", content=response.content or ""))
+                    # Still add the messages for context - include tool_calls for proper conversation flow
+                    messages.append(
+                        LLMMessage(
+                            role="assistant",
+                            content=response.content or "",
+                            tool_calls=response.tool_calls,
+                        )
+                    )
                     tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
                     messages.extend(tool_messages)
                     break
 
-                # Add assistant message with tool calls (empty content)
-                messages.append(LLMMessage(role="assistant", content=response.content or ""))
+                # Add assistant message with tool calls for proper LangChain conversation flow
+                messages.append(
+                    LLMMessage(
+                        role="assistant",
+                        content=response.content or "",
+                        tool_calls=response.tool_calls,
+                    )
+                )
 
                 # Add tool result messages
                 tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
@@ -865,16 +877,28 @@ class AgentRuntime:
                     stop_tool, _ = self._check_for_stop_tool(tool_results)
                     if stop_tool:
                         logger.info("Stop tool '%s' called, ending streaming", stop_tool)
-                        # Add messages for completeness
-                        messages.append(LLMMessage(role="assistant", content=iteration_content))
+                        # Add messages for completeness - include tool_calls for proper conversation flow
+                        messages.append(
+                            LLMMessage(
+                                role="assistant",
+                                content=iteration_content,
+                                tool_calls=pending_tool_calls,
+                            )
+                        )
                         tool_messages = self._tool_results_to_messages(
                             pending_tool_calls, tool_results
                         )
                         messages.extend(tool_messages)
                         break
 
-                    # Add assistant message and tool results
-                    messages.append(LLMMessage(role="assistant", content=iteration_content))
+                    # Add assistant message with tool calls for proper LangChain conversation flow
+                    messages.append(
+                        LLMMessage(
+                            role="assistant",
+                            content=iteration_content,
+                            tool_calls=pending_tool_calls,
+                        )
+                    )
                     tool_messages = self._tool_results_to_messages(pending_tool_calls, tool_results)
                     messages.extend(tool_messages)
 

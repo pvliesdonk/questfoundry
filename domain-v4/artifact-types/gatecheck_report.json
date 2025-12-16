@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "gatecheck_report",
   "name": "Gatecheck Report",
+  "summary": "Quality validation results",
   "description": "Gatekeeper's formal assessment of a TU or View against the 8 quality bars. Names each bar status (green/yellow/red), cites the smallest viable fix, and routes to the correct owner. Examples must be player-safe; never paste Hot content.",
   "category": "feedback",
 

@@ -2,16 +2,17 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_playbook",
   "name": "Consult Playbook",
-  "description": "Retrieve full details for a playbook/workflow. Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how to orchestrate a workflow.\n\nPattern: menu+consult - prompt includes summary menu, this tool provides full details on demand.",
+  "description": "Retrieve full details for a playbook/workflow. REQUIRED: You MUST provide the playbook_id parameter (e.g., 'story_spark'). Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how to orchestrate a workflow.",
 
   "input_schema": {
     "type": "object",
     "properties": {
       "playbook_id": {
         "type": "string",
-        "description": "The ID of the playbook to retrieve (e.g., 'story_spark', 'scene_weave'). If omitted, lists all available playbooks."
+        "description": "The ID of the playbook to retrieve (e.g., 'story_spark', 'scene_weave'). See prompt for available playbook IDs."
       }
-    }
+    },
+    "required": ["playbook_id"]
   },
 
   "output_schema": {
@@ -60,8 +61,10 @@
       }
     },
     {
-      "description": "List all available playbooks",
-      "input": {}
+      "description": "Get full details for the Scene Weave workflow",
+      "input": {
+        "playbook_id": "scene_weave"
+      }
     }
   ]
 }

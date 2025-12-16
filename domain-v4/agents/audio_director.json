@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "audio_director",
   "name": "Audio Director",
+  "summary": "Plans audio assets and soundscapes",
   "description": "Plans audio experiences for the interactive fiction: ambient soundscapes, spot effects, and musical cues. Decides WHAT to sound and WHY, leaving generation details to the generate_audio tool. Maintains audio coherence through cuesheets. Remember: planning is cheap (LLM tokens), generation is expensive (API costs)—plan all worthy moments, generate selectively.",
 
   "archetypes": ["author"],

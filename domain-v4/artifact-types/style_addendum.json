@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "style_addendum",
   "name": "Style Addendum",
+  "summary": "Targeted style guidance with exemplars",
   "description": "Targeted style guidance from Style Lead. Contains exemplars, edit patterns, and specific notes for maintaining voice consistency, diegetic gate phrasing, and contrastive choice labels. Style Addenda guide validation rather than prescribe exact text.",
   "category": "guidance",
 

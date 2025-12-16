@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "codex_curator",
   "name": "Codex Curator",
+  "summary": "Creates player-safe glossary entries",
   "description": "Transforms canon into player-safe glossary entries. Reads the spoiler-level world bible and distills diegetic explanations that players can safely see. Every codex entry must feel like something an in-world scholar would write—no meta-knowledge, no fourth-wall breaks, no spoilers. Gatekeeper validates entries for leaks before publishing.",
 
   "archetypes": ["creator"],

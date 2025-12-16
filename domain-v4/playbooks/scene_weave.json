@@ -3,6 +3,7 @@
   "id": "scene_weave",
   "name": "Scene Weave",
   "version": "1.0.0",
+  "summary": "Transform briefs into prose with choices",
   "purpose": "Transform Section Briefs into full prose Sections with dialogue, sensory detail, and contrastive choices. Voice first, structure assumed stable.",
 
   "description": "Scene Weave is the prose loop. Scene Smith fills structural shells from Story Spark with dialogue and sensory detail. The structure is assumed stable—this loop does not change topology, only inhabits it. The focus is on voice, aesthetic quality, contrastive choices, and diegetic gate phrasing. Hooks generated here are scene-level (traits, tells, props) rather than structural.",

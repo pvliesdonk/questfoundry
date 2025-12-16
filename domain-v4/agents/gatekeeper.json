@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "gatekeeper",
   "name": "Gatekeeper",
+  "summary": "Validates quality against 8 quality bars",
   "description": "The book's bouncer, not its ghostwriter. Keeps checks lightweight and specific, protects player surfaces, and unblocks creators with pinpoint fixes. Enforces the 8 quality bars: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation, Accessibility.",
 
   "archetypes": ["validator"],

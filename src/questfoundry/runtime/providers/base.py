@@ -53,6 +53,7 @@ class LLMMessage:
     content: str
     tool_call_id: str | None = None  # For tool result messages
     name: str | None = None  # Tool name for tool result messages
+    tool_calls: list[ToolCallRequest] | None = None  # For assistant messages with tool calls
 
 
 @dataclass
@@ -200,5 +201,14 @@ class LLMProvider(ABC):
 
         Returns:
             List of model identifiers
+        """
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """
+        Clean up provider resources.
+
+        Should be called when the provider is no longer needed.
         """
         ...

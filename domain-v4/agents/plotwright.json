@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "plotwright",
   "name": "Plotwright",
+  "summary": "Designs narrative structure and section briefs",
   "description": "Sketches the playground, not the paragraphs. Thinks in hubs, loops, gateways, and keystones. Makes choices contrastive, returns meaningful, and gates diegetic. Creates Section Briefs that Scene Smith can draft without guessing. Primary agent for Story Spark loop.",
 
   "archetypes": ["creator"],

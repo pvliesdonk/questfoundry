@@ -24,6 +24,11 @@
       "description": "What this playbook accomplishes. Used by orchestrator to select appropriate playbook."
     },
 
+    "summary": {
+      "$ref": "_definitions.schema.json#/$defs/summary",
+      "description": "Concise one-liner for prompt menus. Use purpose for full explanation."
+    },
+
     "description": {
       "$ref": "_definitions.schema.json#/$defs/markdown_text",
       "description": "Detailed description of when and how to use this playbook"

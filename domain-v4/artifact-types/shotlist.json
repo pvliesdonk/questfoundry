@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "shotlist",
   "name": "Shotlist",
+  "summary": "Index of Art Plans for a scope",
   "description": "Index of Art Plans for a scope (chapter, act, or book). Tracks priorities, statuses, and budget allocation. Art Director creates shotlists to manage illustration coverage. Each entry references a full Art Plan.",
   "category": "manifest",
 

@@ -3,6 +3,7 @@
   "id": "story_spark",
   "name": "Story Spark",
   "version": "1.0.0",
+  "summary": "Design story structure and produce Section Briefs",
   "purpose": "Design or reshape narrative topology (hubs, loops, gateways, codewords) and produce Section Briefs for Scene Weave. Structure first, prose second.",
 
   "description": "Story Spark is the structure loop. Plotwright sketches the playground—not the paragraphs. The focus is on meaningful nonlinearity: hubs that fan out, loops that return with difference, gateways that gate diegetically. The output is Section Briefs that Scene Smith can draft without guessing intent. This loop explicitly does NOT write prose; it hands off structural shells to Scene Weave.",

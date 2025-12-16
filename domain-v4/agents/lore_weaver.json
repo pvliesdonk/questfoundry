@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "lore_weaver",
   "name": "Lore Weaver",
+  "summary": "Creates canon packs and world truth",
   "description": "Builds and maintains the canon—the spoiler-level world bible. Creates causes behind events, secret histories, faction motivations, metaphysical rules, and timeline anchors. Works from Showrunner briefs and Researcher findings. Canon Packs are portable lore containers shareable across multiple books. Codex Curator derives player-safe entries from this truth.",
 
   "archetypes": ["creator"],

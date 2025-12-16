@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "view_log",
   "name": "View Log",
+  "summary": "Export version history",
   "description": "Append-only log of export views generated from Canon snapshots. Each entry documents what was exported, when, from which snapshot, and with what options. Player-safe: can be included in exports to show version history without revealing internal details.",
   "category": "record",
 

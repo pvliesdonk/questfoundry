@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "research_memo",
   "name": "Research Memo",
+  "summary": "Factual findings from Researcher",
   "description": "Concise factual findings from Researcher. Contains question, short answer, citations, posture (certainty level), and optional neutral phrasing for surfaces. Memos are decision-ready summaries, not exhaustive dumps. They remain in Hot as reference documents and are not exported to players.",
   "category": "document",
 

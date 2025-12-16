@@ -23,6 +23,11 @@
       "description": "What this agent does and why it exists"
     },
 
+    "summary": {
+      "$ref": "_definitions.schema.json#/$defs/summary",
+      "description": "Concise one-liner for delegation menus. Use description for full explanation."
+    },
+
     "archetypes": {
       "type": "array",
       "items": {

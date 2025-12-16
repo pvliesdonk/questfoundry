@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "researcher",
   "name": "Researcher",
+  "summary": "Verifies plausibility and real-world facts",
   "description": "Context-preserving fact service. Corroborates claims, estimates uncertainty, and returns concise memos so creative agents can stay focused on their work. Absorbs web-browsing context cost on behalf of callers. Provides posture (corroborated/plausible/disputed/uncorroborated) and player-safe neutral phrasing.",
 
   "archetypes": ["researcher"],

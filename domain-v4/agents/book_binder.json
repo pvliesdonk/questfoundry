@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "book_binder",
   "name": "Book Binder",
+  "summary": "Exports final content to static formats",
   "description": "Turns Canon snapshots into player-safe export views. Package, don't rewrite. Assembles bundles (MD/HTML/EPUB/PDF), stamps front matter with snapshot ID and options, ensures navigation integrity, and maintains view logs. If text changes are needed, routes upstream - never edits in the binding step.",
 
   "archetypes": ["creator"],
