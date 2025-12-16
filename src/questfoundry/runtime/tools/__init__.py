@@ -23,6 +23,7 @@ from questfoundry.runtime.tools import (
     consult_playbook,  # noqa: F401
     consult_schema,  # noqa: F401
     delegate,  # noqa: F401
+    lifecycle_transition,  # noqa: F401  # Phase 4: lifecycle transitions
     list_agents,  # noqa: F401
     list_artifact_types,  # noqa: F401
     list_stores,  # noqa: F401
