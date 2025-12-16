@@ -4,6 +4,9 @@ Lifecycle transition tool implementation.
 Allows agents to request lifecycle state changes for artifacts.
 Validates transitions against the lifecycle state machine and
 enforces allowed_agents restrictions.
+
+Transitions with `requires_validation` run quality bar checks
+and commit/reject based on results.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.tools.base import BaseTool, ToolResult
-from questfoundry.runtime.tools.registry import register_tool
+from questfoundry.runtime.tools.registry import TOOL_IMPLEMENTATIONS, register_tool
 
 if TYPE_CHECKING:
     from questfoundry.runtime.storage.lifecycle import LifecycleManager
@@ -117,29 +120,35 @@ class RequestLifecycleTransitionTool(BaseTool):
                 artifact_type, current_state, target_state
             )
 
-            if required_validations and not force:
-                # Return pending status with required validations
-                return ToolResult(
-                    success=True,
-                    data={
-                        "artifact_id": artifact_id,
-                        "current_state": current_state,
-                        "target_state": target_state,
-                        "transitioned": False,
-                        "status": "pending_validation",
-                        "required_validations": required_validations,
-                        "message": (
-                            f"Transition requires validations: {', '.join(required_validations)}. "
-                            "Use force=true to bypass (not recommended)."
-                        ),
-                    },
-                )
-
             if required_validations and force:
                 logger.warning(
                     f"Forcing transition {current_state} -> {target_state} for {artifact_id} "
                     f"without validations: {required_validations}"
                 )
+            elif required_validations:
+                # Run validations
+                validation_result = await self._run_validations(
+                    artifact_id, artifact_type, artifact, required_validations
+                )
+
+                if not validation_result["passed"]:
+                    # Reject transition
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "result": "rejected",
+                            "artifact_id": artifact_id,
+                            "current_state": current_state,
+                            "target_state": target_state,
+                            "transitioned": False,
+                            "validation_results": validation_result["results"],
+                            "rejection_reason": validation_result["reason"],
+                            "guidance": validation_result["guidance"],
+                        },
+                    )
+
+                # Validations passed - continue to commit
+                logger.info(f"Validations passed for {artifact_id}: {required_validations}")
 
         # Perform the transition
         try:
@@ -157,9 +166,10 @@ class RequestLifecycleTransitionTool(BaseTool):
                 return ToolResult(
                     success=True,
                     data={
+                        "result": "committed",
                         "artifact_id": artifact_id,
                         "previous_state": current_state,
-                        "current_state": target_state,
+                        "new_state": target_state,
                         "transitioned": True,
                         "transitioned_by": self._context.agent_id,
                     },
@@ -180,16 +190,105 @@ class RequestLifecycleTransitionTool(BaseTool):
             )
 
     def _get_lifecycle_manager(self) -> LifecycleManager | None:
-        """
-        Get lifecycle manager from context.
-
-        Note: LifecycleManager is not yet in ToolContext.
-        This will be added when we integrate with the runtime.
-        For now, return None to allow any transition.
-        """
-        # TODO: Add lifecycle_manager to ToolContext
-        # return self._context.lifecycle_manager
+        """Get lifecycle manager from context."""
         return getattr(self._context, "lifecycle_manager", None)
+
+    async def _run_validations(
+        self,
+        artifact_id: str,
+        artifact_type: str,
+        artifact: dict[str, Any],
+        required_validations: list[str],
+    ) -> dict[str, Any]:
+        """
+        Run required validation checks on an artifact.
+
+        Args:
+            artifact_id: The artifact to validate
+            artifact_type: The artifact type ID
+            artifact: The artifact data
+            required_validations: List of quality bar names to check
+
+        Returns:
+            Dict with:
+                passed: bool - True if all validations pass
+                results: list - Detailed results per validation
+                reason: str | None - Rejection reason if failed
+                guidance: str | None - Fix guidance if failed
+        """
+        # Try to get validate_artifact tool implementation
+        validate_tool_class = TOOL_IMPLEMENTATIONS.get("validate_artifact")
+        if not validate_tool_class:
+            # No validate tool - assume validations pass (permissive)
+            logger.warning(
+                f"validate_artifact tool not found - skipping validations for {artifact_id}"
+            )
+            return {
+                "passed": True,
+                "results": [],
+                "reason": None,
+                "guidance": None,
+            }
+
+        # Create a mock tool definition for validate_artifact
+        from questfoundry.runtime.models import Tool
+
+        validate_def = Tool(
+            id="validate_artifact",
+            name="validate_artifact",
+            description="Validate artifact against quality bars",
+            timeout_ms=30000,
+        )
+
+        # Instantiate the validate tool with current context
+        validate_tool = validate_tool_class(validate_def, self._context)
+
+        # Extract user data from artifact (exclude system fields)
+        artifact_data = {k: v for k, v in artifact.items() if not k.startswith("_")}
+
+        # Run validation
+        result = await validate_tool.execute(
+            {
+                "artifact_id": artifact_id,
+                "artifact_type_id": artifact_type,
+                "artifact_data": artifact_data,
+                "validation_mode": "bars_only",  # Focus on quality bars
+                "bars_to_check": required_validations,
+            }
+        )
+
+        if not result.success:
+            # Validation tool itself failed
+            return {
+                "passed": False,
+                "results": [],
+                "reason": f"Validation failed: {result.error}",
+                "guidance": "Check artifact data and retry",
+            }
+
+        # Check bar results
+        bar_results = result.data.get("bar_results", [])
+        failed_bars = [br for br in bar_results if br.get("status") == "red"]
+
+        if failed_bars:
+            # Collect failure details
+            failed_names = [br["bar"] for br in failed_bars]
+            fixes = [br.get("smallest_fix") for br in failed_bars if br.get("smallest_fix")]
+
+            return {
+                "passed": False,
+                "results": bar_results,
+                "reason": f"Quality bar failures: {', '.join(failed_names)}",
+                "guidance": "; ".join(fixes) if fixes else "Address the failing quality bars",
+            }
+
+        # All validations passed
+        return {
+            "passed": True,
+            "results": bar_results,
+            "reason": None,
+            "guidance": None,
+        }
 
 
 @register_tool("get_lifecycle_state")

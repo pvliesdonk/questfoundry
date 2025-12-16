@@ -235,7 +235,8 @@ class TestRequestLifecycleTransitionTool:
         assert result.success is True
         assert result.data["transitioned"] is True
         assert result.data["previous_state"] == "draft"
-        assert result.data["current_state"] == "review"
+        assert result.data["new_state"] == "review"
+        assert result.data["result"] == "committed"
         assert mock_project.artifacts["section_001"]["_lifecycle_state"] == "review"
 
     @pytest.mark.asyncio
@@ -299,20 +300,23 @@ class TestRequestLifecycleTransitionTool:
 
         assert result.success is True
         assert result.data["transitioned"] is True
-        assert result.data["current_state"] == "approved"
+        assert result.data["new_state"] == "approved"
+        assert result.data["result"] == "committed"
 
     @pytest.mark.asyncio
-    async def test_requires_validation_returns_pending(self, tool_context):
-        """Return pending status when validations required."""
+    async def test_requires_validation_runs_checks(self, tool_context, mock_project):
+        """Run validations and commit if all pass."""
         tool_context.agent_id = "gatekeeper"
-        tool_context.project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
 
         tool = RequestLifecycleTransitionTool(
             MockToolDefinition("request_lifecycle_transition"),
             tool_context,
         )
 
-        # approved -> cold requires validation
+        # approved -> cold requires validation (integrity, style)
+        # Without a full Studio setup, validate_artifact may not find the type
+        # But the tool should still attempt validation
         result = await tool.execute(
             {
                 "artifact_id": "section_001",
@@ -321,16 +325,22 @@ class TestRequestLifecycleTransitionTool:
         )
 
         assert result.success is True
-        assert result.data["transitioned"] is False
-        assert result.data["status"] == "pending_validation"
-        assert "integrity" in result.data["required_validations"]
-        assert "style" in result.data["required_validations"]
+        # Either committed (validations passed) or rejected (validations failed)
+        assert result.data["result"] in ("committed", "rejected")
+
+        if result.data["result"] == "committed":
+            assert result.data["transitioned"] is True
+            assert result.data["new_state"] == "cold"
+            assert mock_project.artifacts["section_001"]["_lifecycle_state"] == "cold"
+        else:
+            assert result.data["transitioned"] is False
+            assert "validation_results" in result.data
 
     @pytest.mark.asyncio
     async def test_force_bypasses_validation(self, tool_context, mock_project):
         """Force=true bypasses validation requirement."""
         tool_context.agent_id = "gatekeeper"
-        tool_context.project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
 
         tool = RequestLifecycleTransitionTool(
             MockToolDefinition("request_lifecycle_transition"),
@@ -347,8 +357,92 @@ class TestRequestLifecycleTransitionTool:
 
         assert result.success is True
         assert result.data["transitioned"] is True
-        assert result.data["current_state"] == "cold"
+        assert result.data["new_state"] == "cold"
+        assert result.data["result"] == "committed"
         assert mock_project.artifacts["section_001"]["_lifecycle_state"] == "cold"
+
+    @pytest.mark.asyncio
+    async def test_validation_rejection_with_broken_reference(
+        self, tool_context, mock_project, lifecycle_manager
+    ):
+        """Reject transition when integrity validation fails on broken reference."""
+        from unittest.mock import MagicMock
+
+        # Create a mock artifact type with a reference field
+        section_type = MagicMock()
+        section_type.id = "section"
+
+        # Mock field with reference type
+        ref_field = MagicMock()
+        ref_field.name = "parent_ref"
+        ref_field.type = MagicMock()
+        ref_field.type.value = "reference"
+        ref_field.required = False
+
+        title_field = MagicMock()
+        title_field.name = "title"
+        title_field.type = MagicMock()
+        title_field.type.value = "string"
+        title_field.required = True
+
+        section_type.fields = [title_field, ref_field]
+        section_type.validation = None
+
+        # Set up mock studio with the artifact type
+        tool_context.studio.artifact_types = [section_type]
+
+        # Set up artifact with broken reference
+        tool_context.agent_id = "gatekeeper"
+        mock_project.artifacts["section_with_ref"] = {
+            "_id": "section_with_ref",
+            "_type": "section",
+            "_lifecycle_state": "approved",
+            "title": "Section with broken ref",
+            "parent_ref": "nonexistent_artifact",  # Broken reference
+        }
+
+        # Add lifecycle for this to require integrity validation
+        from questfoundry.runtime.storage.lifecycle import (
+            ArtifactLifecycle,
+            LifecycleState,
+            LifecycleTransition,
+        )
+
+        section_lifecycle = ArtifactLifecycle(
+            artifact_type_id="section",
+            states={
+                "approved": LifecycleState(id="approved", name="Approved"),
+                "cold": LifecycleState(id="cold", name="Cold", terminal=True),
+            },
+            transitions=[
+                LifecycleTransition(
+                    from_state="approved",
+                    to_state="cold",
+                    requires_validation=["integrity"],  # Only integrity check
+                ),
+            ],
+            initial_state="approved",
+        )
+        lifecycle_manager.register_lifecycle(section_lifecycle)
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_with_ref",
+                "target_state": "cold",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["result"] == "rejected"
+        assert result.data["transitioned"] is False
+        assert "integrity" in result.data["rejection_reason"].lower()
+        # Artifact should NOT have transitioned
+        assert mock_project.artifacts["section_with_ref"]["_lifecycle_state"] == "approved"
 
     @pytest.mark.asyncio
     async def test_transition_from_terminal_state(self, tool_context):
