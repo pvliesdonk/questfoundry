@@ -206,7 +206,7 @@ class StoreManager:
             logger.warning(f"Stores directory not found: {stores_dir}")
             return cls(stores)
 
-        for store_file in stores_dir.glob("*.json"):
+        for store_file in sorted(stores_dir.glob("*.json")):
             try:
                 data = json.loads(store_file.read_text())
                 store = StoreDefinition.from_dict(data)
@@ -283,7 +283,12 @@ class StoreManager:
         """
         store = self._stores.get(store_id)
         if store and store.exclusive_producers:
-            # Return first designated producer (usually only one for exclusive stores)
+            # Warn if multiple exclusive producers configured (may indicate domain issue)
+            if len(store.exclusive_producers) > 1:
+                logger.warning(
+                    f"Store '{store_id}' has multiple exclusive producers: "
+                    f"{store.exclusive_producers}. This may indicate a domain configuration issue."
+                )
             return store.exclusive_producers[0]
         return None
 

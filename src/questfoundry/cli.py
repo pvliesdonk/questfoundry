@@ -1186,54 +1186,56 @@ def artifacts_list(
     from questfoundry.runtime.storage import Project
 
     project_path = projects_dir / project_id
+    project = None
 
     try:
         project = Project.open(project_path)
+
+        artifacts = project.query_artifacts(
+            artifact_type=artifact_type,
+            store=store,
+            lifecycle_state=lifecycle_state,
+            limit=limit,
+        )
+
+        if not artifacts:
+            console.print("[dim]No artifacts found[/dim]")
+            return
+
+        table = Table(title=f"Artifacts in {project_id}")
+        table.add_column("ID", style="cyan")
+        table.add_column("Type", style="green")
+        table.add_column("Store")
+        table.add_column("State")
+        table.add_column("Version")
+        table.add_column("Updated")
+        table.add_column("Created By", style="dim")
+
+        for artifact in artifacts:
+            updated = artifact.get("_updated_at", "")
+            if updated:
+                # Shorten timestamp
+                updated = updated[:16].replace("T", " ")
+
+            table.add_row(
+                artifact.get("_id", "-"),
+                artifact.get("_type", "-"),
+                artifact.get("_store", "-"),
+                artifact.get("_lifecycle_state", "-"),
+                str(artifact.get("_version", 1)),
+                updated,
+                artifact.get("_created_by") or "-",
+            )
+
+        console.print(table)
+        console.print(f"[dim]Showing {len(artifacts)} artifact(s)[/dim]")
+
     except FileNotFoundError:
         console.print(f"[red]✗ Project not found: {project_id}[/red]")
         raise typer.Exit(1) from None
-
-    artifacts = project.query_artifacts(
-        artifact_type=artifact_type,
-        store=store,
-        lifecycle_state=lifecycle_state,
-        limit=limit,
-    )
-
-    if not artifacts:
-        console.print("[dim]No artifacts found[/dim]")
-        project.close()
-        return
-
-    table = Table(title=f"Artifacts in {project_id}")
-    table.add_column("ID", style="cyan")
-    table.add_column("Type", style="green")
-    table.add_column("Store")
-    table.add_column("State")
-    table.add_column("Version")
-    table.add_column("Updated")
-    table.add_column("Created By", style="dim")
-
-    for artifact in artifacts:
-        updated = artifact.get("_updated_at", "")
-        if updated:
-            # Shorten timestamp
-            updated = updated[:16].replace("T", " ")
-
-        table.add_row(
-            artifact.get("_id", "-"),
-            artifact.get("_type", "-"),
-            artifact.get("_store", "-"),
-            artifact.get("_lifecycle_state", "-"),
-            str(artifact.get("_version", 1)),
-            updated,
-            artifact.get("_created_by", "-"),
-        )
-
-    console.print(table)
-    console.print(f"[dim]Showing {len(artifacts)} artifact(s)[/dim]")
-
-    project.close()
+    finally:
+        if project:
+            project.close()
 
 
 @artifacts_app.command("show")
@@ -1255,57 +1257,57 @@ def artifacts_show(
     from questfoundry.runtime.storage import Project
 
     project_path = projects_dir / project_id
+    project = None
 
     try:
         project = Project.open(project_path)
+
+        if version is not None:
+            # Get specific version
+            version_data = project.get_artifact_at_version(artifact_id, version)
+            if not version_data:
+                console.print(f"[red]✗ Version {version} not found for: {artifact_id}[/red]")
+                raise typer.Exit(1)
+
+            console.print(Panel(f"[dim]Version {version}[/dim]", title=f"Artifact: {artifact_id}"))
+            console.print(f"[bold]Created At:[/bold] {version_data.get('created_at') or '-'}")
+            console.print(f"[bold]Created By:[/bold] {version_data.get('created_by') or '-'}")
+            console.print()
+            console.print("[bold]Data:[/bold]")
+            console.print(json.dumps(version_data.get("data", {}), indent=2))
+        else:
+            # Get current artifact
+            artifact = project.get_artifact(artifact_id)
+            if not artifact:
+                console.print(f"[red]✗ Artifact not found: {artifact_id}[/red]")
+                raise typer.Exit(1)
+
+            # Separate system fields from user data
+            user_data = {k: v for k, v in artifact.items() if not k.startswith("_")}
+
+            console.print(Panel(f"[cyan]{artifact_id}[/cyan]", title="Artifact"))
+
+            # System metadata
+            console.print("[bold]Metadata:[/bold]")
+            console.print(f"  Type: [green]{artifact.get('_type') or '-'}[/green]")
+            console.print(f"  Store: {artifact.get('_store') or '-'}")
+            console.print(f"  State: {artifact.get('_lifecycle_state') or '-'}")
+            console.print(f"  Version: {artifact.get('_version', 1)}")
+            console.print(f"  Created: {artifact.get('_created_at') or '-'}")
+            console.print(f"  Updated: {artifact.get('_updated_at') or '-'}")
+            console.print(f"  Created By: {artifact.get('_created_by') or '-'}")
+            console.print()
+
+            # User data
+            console.print("[bold]Data:[/bold]")
+            console.print(json.dumps(user_data, indent=2))
+
     except FileNotFoundError:
         console.print(f"[red]✗ Project not found: {project_id}[/red]")
         raise typer.Exit(1) from None
-
-    if version is not None:
-        # Get specific version
-        version_data = project.get_artifact_at_version(artifact_id, version)
-        if not version_data:
-            console.print(f"[red]✗ Version {version} not found for: {artifact_id}[/red]")
+    finally:
+        if project:
             project.close()
-            raise typer.Exit(1)
-
-        console.print(Panel(f"[dim]Version {version}[/dim]", title=f"Artifact: {artifact_id}"))
-        console.print(f"[bold]Created At:[/bold] {version_data.get('created_at', '-')}")
-        console.print(f"[bold]Created By:[/bold] {version_data.get('created_by', '-')}")
-        console.print()
-        console.print("[bold]Data:[/bold]")
-        console.print(json.dumps(version_data.get("data", {}), indent=2))
-    else:
-        # Get current artifact
-        artifact = project.get_artifact(artifact_id)
-        if not artifact:
-            console.print(f"[red]✗ Artifact not found: {artifact_id}[/red]")
-            project.close()
-            raise typer.Exit(1)
-
-        # Separate system fields from user data
-        system_fields = {k: v for k, v in artifact.items() if k.startswith("_")}
-        user_data = {k: v for k, v in artifact.items() if not k.startswith("_")}
-
-        console.print(Panel(f"[cyan]{artifact_id}[/cyan]", title="Artifact"))
-
-        # System metadata
-        console.print("[bold]Metadata:[/bold]")
-        console.print(f"  Type: [green]{system_fields.get('_type', '-')}[/green]")
-        console.print(f"  Store: {system_fields.get('_store', '-')}")
-        console.print(f"  State: {system_fields.get('_lifecycle_state', '-')}")
-        console.print(f"  Version: {system_fields.get('_version', 1)}")
-        console.print(f"  Created: {system_fields.get('_created_at', '-')}")
-        console.print(f"  Updated: {system_fields.get('_updated_at', '-')}")
-        console.print(f"  Created By: {system_fields.get('_created_by', '-')}")
-        console.print()
-
-        # User data
-        console.print("[bold]Data:[/bold]")
-        console.print(json.dumps(user_data, indent=2))
-
-    project.close()
 
 
 @artifacts_app.command("versions")
@@ -1325,47 +1327,49 @@ def artifacts_versions(
     from questfoundry.runtime.storage import Project
 
     project_path = projects_dir / project_id
+    project = None
 
     try:
         project = Project.open(project_path)
+
+        # Check artifact exists
+        artifact = project.get_artifact(artifact_id)
+        if not artifact:
+            console.print(f"[red]✗ Artifact not found: {artifact_id}[/red]")
+            raise typer.Exit(1)
+
+        versions = project.get_artifact_versions(artifact_id, limit=limit)
+
+        if not versions:
+            console.print(f"[dim]No version history for: {artifact_id}[/dim]")
+            console.print(f"[dim]Current version: {artifact.get('_version', 1)}[/dim]")
+            return
+
+        table = Table(title=f"Version History: {artifact_id}")
+        table.add_column("Version", style="cyan")
+        table.add_column("Created At")
+        table.add_column("Created By")
+
+        for ver in versions:
+            table.add_row(
+                str(ver.get("version", "-")),
+                ver.get("created_at") or "-",
+                ver.get("created_by") or "-",
+            )
+
+        console.print(table)
+        console.print(f"[dim]Current version: {artifact.get('_version', 1)}[/dim]")
+        console.print(
+            f"[dim]Use 'qf artifacts show {project_id} {artifact_id} --version N' "
+            "to view a version[/dim]"
+        )
+
     except FileNotFoundError:
         console.print(f"[red]✗ Project not found: {project_id}[/red]")
         raise typer.Exit(1) from None
-
-    # Check artifact exists
-    artifact = project.get_artifact(artifact_id)
-    if not artifact:
-        console.print(f"[red]✗ Artifact not found: {artifact_id}[/red]")
-        project.close()
-        raise typer.Exit(1)
-
-    versions = project.get_artifact_versions(artifact_id, limit=limit)
-
-    if not versions:
-        console.print(f"[dim]No version history for: {artifact_id}[/dim]")
-        console.print(f"[dim]Current version: {artifact.get('_version', 1)}[/dim]")
-        project.close()
-        return
-
-    table = Table(title=f"Version History: {artifact_id}")
-    table.add_column("Version", style="cyan")
-    table.add_column("Created At")
-    table.add_column("Created By")
-
-    for ver in versions:
-        table.add_row(
-            str(ver.get("version", "-")),
-            ver.get("created_at", "-"),
-            ver.get("created_by", "-") or "-",
-        )
-
-    console.print(table)
-    console.print(f"[dim]Current version: {artifact.get('_version', 1)}[/dim]")
-    console.print(
-        f"[dim]Use 'qf artifacts show {project_id} {artifact_id} --version N' to view a version[/dim]"
-    )
-
-    project.close()
+    finally:
+        if project:
+            project.close()
 
 
 @projects_app.command("info")

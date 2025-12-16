@@ -45,6 +45,7 @@ class StoreSemantics(str, Enum):
 ### Workflow Intent
 
 From store schema, `workflow_intent` provides:
+
 - `consumption_guidance`: Which agents should load this store into context
 - `production_guidance`: Who should produce data here (`all`, `specified`, `exclusive`)
 - `designated_producers`: For `exclusive` stores, the single owner agent
@@ -60,6 +61,7 @@ From store schema, `workflow_intent` provides:
 Each artifact type defines its own lifecycle in `domain-v4/artifact-types/*.json`:
 
 **Example: `section.json`**
+
 ```json
 {
   "lifecycle": {
@@ -112,6 +114,7 @@ From `meta/schemas/core/artifact-type.schema.json`:
 ### Gatekeeper's Role
 
 From `domain-v4/agents/gatekeeper.json`:
+
 - Has `block_cold_merge` capability: "Authority to block merges to Cold SoT when quality bars fail"
 - Writes `gatecheck_report` artifacts to workspace
 - Evaluates artifacts and requests `gatecheck → approved` or `gatecheck → draft`
@@ -502,6 +505,7 @@ brief_opening       section_brief  draft    workspace  2024-12-16 09:15
 ## 11. Test Strategy
 
 **Unit tests:**
+
 - `tests/runtime/storage/test_store_manager.py` - Load stores, resolve defaults
 - `tests/runtime/storage/test_exclusive_writer.py` - Policy enforcement
 - `tests/runtime/storage/test_artifact_lifecycle.py` - State machine, transitions
@@ -509,6 +513,7 @@ brief_opening       section_brief  draft    workspace  2024-12-16 09:15
 - `tests/runtime/tools/test_lifecycle_transition.py` - Transition flow
 
 **Integration tests:**
+
 - `test_artifact_creation_in_workspace`
 - `test_exclusive_writer_warning_on_canon_violation`
 - `test_lifecycle_transition_draft_to_review`

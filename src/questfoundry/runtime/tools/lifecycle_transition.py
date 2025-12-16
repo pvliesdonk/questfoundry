@@ -231,6 +231,7 @@ class RequestLifecycleTransitionTool(BaseTool):
             }
 
         # Create a mock tool definition for validate_artifact
+        # Import here to avoid circular dependency (models imports from tools)
         from questfoundry.runtime.models import Tool
 
         validate_def = Tool(
