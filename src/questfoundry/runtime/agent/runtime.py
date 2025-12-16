@@ -44,6 +44,8 @@ from questfoundry.runtime.providers import (
 from questfoundry.runtime.session import Session, TokenUsage, Turn
 
 if TYPE_CHECKING:
+    from questfoundry.runtime.checkpoint import CheckpointManager, ContextUsage
+    from questfoundry.runtime.delegation.tracker import PlaybookTracker
     from questfoundry.runtime.models import Agent, Studio
     from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.storage import Project
@@ -114,6 +116,8 @@ class AgentRuntime:
         tracing_manager: TracingManager | None = None,
         broker: Any | None = None,
         interactive: bool = True,
+        checkpoint_manager: CheckpointManager | None = None,
+        playbook_tracker: PlaybookTracker | None = None,
     ):
         """
         Initialize agent runtime.
@@ -129,6 +133,8 @@ class AgentRuntime:
             tracing_manager: Optional LangSmith tracing manager
             broker: Message broker for delegation routing
             interactive: Whether running in interactive mode (affects tool availability)
+            checkpoint_manager: Optional checkpoint manager for auto-checkpointing
+            playbook_tracker: Optional playbook tracker for checkpoint state
         """
         self._provider = provider
         self._studio = studio
@@ -140,6 +146,11 @@ class AgentRuntime:
         self._tracing_manager = tracing_manager
         self._broker = broker
         self._interactive = interactive
+        self._checkpoint_manager = checkpoint_manager
+        self._playbook_tracker = playbook_tracker
+
+        # Context usage tracking per agent
+        self._context_usage: dict[str, ContextUsage] = {}
 
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
@@ -430,6 +441,57 @@ class AgentRuntime:
             a.value if hasattr(a, "value") else str(a) for a in agent.archetypes
         ]
 
+    def _update_context_usage(self, agent_id: str, usage: TokenUsage) -> None:
+        """
+        Update context usage tracking for an agent.
+
+        Args:
+            agent_id: Agent ID to update
+            usage: Token usage from turn
+        """
+        from questfoundry.runtime.checkpoint import ContextUsage
+
+        if agent_id not in self._context_usage:
+            self._context_usage[agent_id] = ContextUsage(agent_id=agent_id)
+
+        ctx_usage = self._context_usage[agent_id]
+        ctx_usage.add_usage(
+            input_tokens=usage.prompt_tokens or 0,
+            output_tokens=usage.completion_tokens or 0,
+        )
+
+        # Log warning if approaching limit
+        if ctx_usage.at_warning and not ctx_usage.at_limit:
+            logger.warning(
+                "Agent %s approaching context limit: %d/%d tokens (%.1f%%)",
+                agent_id,
+                ctx_usage.total_tokens,
+                ctx_usage.limit,
+                ctx_usage.usage_percent,
+            )
+
+    async def _create_auto_checkpoint(self, session: Session) -> None:
+        """
+        Create an automatic checkpoint after orchestrator turn.
+
+        Args:
+            session: Current session
+        """
+        if not self._checkpoint_manager or not self._broker:
+            return
+
+        try:
+            checkpoint = await self._checkpoint_manager.create_checkpoint(
+                session=session,
+                broker=self._broker,
+                tracker=self._playbook_tracker,
+                context_usage=self._context_usage,
+                checkpoint_id=f"cp_turn_{session.turn_count:03d}",
+            )
+            logger.info("Auto-checkpoint created: %s", checkpoint.id)
+        except Exception as e:
+            logger.error("Failed to create auto-checkpoint: %s", e)
+
     def _build_tool_nudge_message(self, agent: Agent) -> str:
         """
         Build a nudge message when the LLM doesn't make tool calls.
@@ -703,6 +765,14 @@ class AgentRuntime:
                     else None,
                 )
                 turn_ctx.__exit__(None, None, None)
+
+            # Update context usage tracking
+            if usage:
+                self._update_context_usage(agent.id, usage)
+
+            # Auto-checkpoint after orchestrator turns
+            if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
+                await self._create_auto_checkpoint(session)
 
             return ActivationResult(
                 content=final_content,

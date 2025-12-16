@@ -11,7 +11,7 @@ import asyncio
 import heapq
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.messaging.types import MessageStatus, MessageType
 
@@ -315,3 +315,55 @@ class AsyncMailbox:
             self._by_correlation.clear()
             self._not_empty.clear()
             return count
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serialize mailbox state for checkpointing.
+
+        Returns:
+            Dictionary with agent_id and pending messages.
+        """
+        return {
+            "agent_id": self._agent_id,
+            "pending_messages": [msg.to_dict() for msg in self._pending.values()],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AsyncMailbox:
+        """
+        Deserialize mailbox state from checkpoint.
+
+        Note: This creates a mailbox synchronously with pending messages.
+        The caller should use restore_messages() to properly add messages
+        to the queue structure.
+
+        Args:
+            data: Dictionary from to_dict()
+
+        Returns:
+            AsyncMailbox with pending messages restored
+        """
+        # Import here to avoid circular dependency
+        from questfoundry.runtime.messaging.message import Message
+
+        mailbox = cls(agent_id=data["agent_id"])
+
+        # Restore pending messages directly (not through async put)
+        for msg_data in data.get("pending_messages", []):
+            message = Message.from_dict(msg_data)
+            mailbox._pending[message.id] = message
+
+            # Add to priority queue
+            heapq.heappush(mailbox._queue, PrioritizedMessage.from_message(message))
+
+            # Index by correlation ID if present
+            if message.correlation_id:
+                if message.correlation_id not in mailbox._by_correlation:
+                    mailbox._by_correlation[message.correlation_id] = []
+                mailbox._by_correlation[message.correlation_id].append(message.id)
+
+        # Set not_empty event if we have messages
+        if mailbox._pending:
+            mailbox._not_empty.set()
+
+        return mailbox

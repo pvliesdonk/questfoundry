@@ -389,6 +389,14 @@ def ask(
             help="Enable/disable streaming output (default: streaming enabled)",
         ),
     ] = True,
+    from_checkpoint: Annotated[
+        str | None,
+        typer.Option(
+            "--from-checkpoint",
+            "-c",
+            help="Resume from checkpoint ID (use 'latest' for most recent)",
+        ),
+    ] = None,
     verbose: Annotated[  # noqa: ARG001 - callback sets global _verbosity
         int,
         typer.Option(
@@ -422,12 +430,21 @@ def ask(
                 log,
                 is_interactive,
                 stream,
+                from_checkpoint,
             )
         )
     else:
         asyncio.run(
             _ask_repl(
-                project, entry_agent, domain, projects_dir, provider, model, log, is_interactive
+                project,
+                entry_agent,
+                domain,
+                projects_dir,
+                provider,
+                model,
+                log,
+                is_interactive,
+                from_checkpoint,
             )
         )
 
@@ -466,6 +483,7 @@ async def _setup_runtime(
     model: str | None,
     log: bool = False,
     interactive: bool = True,
+    from_checkpoint: str | None = None,
 ) -> tuple[
     Project,
     Studio,
@@ -586,6 +604,12 @@ async def _setup_runtime(
     broker = AsyncMessageBroker(project=project)
     logger.debug("Created message broker for delegation routing")
 
+    # Create checkpoint manager for auto-checkpointing and resumption
+    from questfoundry.runtime.checkpoint import CheckpointManager
+
+    checkpoint_manager = CheckpointManager(project)
+    logger.debug("Created checkpoint manager")
+
     # Create runtime
     runtime = AgentRuntime(
         provider=provider,
@@ -596,6 +620,7 @@ async def _setup_runtime(
         tracing_manager=tracing_manager if tracing_manager.enabled else None,
         broker=broker,
         interactive=interactive,
+        checkpoint_manager=checkpoint_manager,
     )
 
     # Get entry agent
@@ -616,9 +641,54 @@ async def _setup_runtime(
 
     logger.info(f"Entry agent: {agent.name} ({agent.id})")
 
-    # Create session
-    session = Session.create(project=project, entry_agent=agent.id)
-    logger.debug(f"Created session: {session.id}")
+    # Handle checkpoint resumption or create new session
+    if from_checkpoint:
+        # Load checkpoint
+        if from_checkpoint == "latest":
+            checkpoint = checkpoint_manager.get_latest_checkpoint()
+            if not checkpoint:
+                console.print("[red]✗ No checkpoints found[/red]")
+                project.close()
+                raise typer.Exit(1)
+        else:
+            checkpoint = checkpoint_manager.load_checkpoint(from_checkpoint)
+            if not checkpoint:
+                console.print(f"[red]✗ Checkpoint not found: {from_checkpoint}[/red]")
+                project.close()
+                raise typer.Exit(1)
+
+        console.print(f"[dim]Resuming from checkpoint: {checkpoint.id}[/dim]")
+        console.print(
+            f"[dim]  Session: {checkpoint.session_id}, Turn: {checkpoint.turn_number}[/dim]"
+        )
+
+        # Load the existing session
+        session = Session.load(project=project, session_id=checkpoint.session_id)
+        if not session:
+            # Session no longer exists in DB, create new one
+            console.print("[yellow]Warning: Session not found, creating new session[/yellow]")
+            session = Session.create(project=project, entry_agent=agent.id)
+        else:
+            logger.info(f"Restored session: {session.id}")
+
+        # Restore checkpoint state (mailbox states, etc.)
+        restore_info = await checkpoint_manager.restore_from_checkpoint(
+            checkpoint=checkpoint,
+            broker=broker,
+        )
+        logger.info(
+            "Restored checkpoint: %d mailboxes, %d messages",
+            restore_info["mailboxes_restored"],
+            restore_info["messages_restored"],
+        )
+
+        # Restore context usage tracking to runtime
+        if checkpoint.context_usage:
+            runtime._context_usage = checkpoint.context_usage
+    else:
+        # Create new session
+        session = Session.create(project=project, entry_agent=agent.id)
+        logger.debug(f"Created session: {session.id}")
 
     # Log session start
     if event_logger:
@@ -951,6 +1021,7 @@ async def _ask_single(
     log: bool = False,
     interactive: bool = True,
     stream: bool = True,
+    from_checkpoint: str | None = None,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -975,6 +1046,7 @@ async def _ask_single(
         model,
         log,
         interactive,
+        from_checkpoint,
     )
 
     # Select response function based on streaming preference
@@ -1037,6 +1109,7 @@ async def _ask_repl(
     model: str | None,
     log: bool = False,
     interactive: bool = True,
+    from_checkpoint: str | None = None,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -1061,6 +1134,7 @@ async def _ask_repl(
         model,
         log,
         interactive,
+        from_checkpoint,
     )
 
     # Print header
@@ -1426,6 +1500,209 @@ def projects_info(
             console.print(f"  {t}: {count}")
 
     project.close()
+
+
+# =============================================================================
+# Checkpoints Subcommand
+# =============================================================================
+
+checkpoints_app = typer.Typer(help="Manage session checkpoints", no_args_is_help=True)
+app.add_typer(checkpoints_app, name="checkpoints")
+
+
+@checkpoints_app.command("list")
+def checkpoints_list(
+    project_id: Annotated[str, typer.Argument(help="Project ID")],
+    projects_dir: Annotated[
+        Path,
+        typer.Option("--dir", "-d", help="Projects directory"),
+    ] = Path("projects"),
+    session_id: Annotated[
+        str | None,
+        typer.Option("--session", "-s", help="Filter by session ID"),
+    ] = None,
+) -> None:
+    """List checkpoints in a project."""
+    from questfoundry.runtime.checkpoint import CheckpointManager
+    from questfoundry.runtime.storage import Project
+
+    project_path = projects_dir / project_id
+    project = None
+
+    try:
+        project = Project.open(project_path)
+        manager = CheckpointManager(project)
+
+        checkpoints = manager.list_checkpoints(session_id=session_id)
+
+        if not checkpoints:
+            console.print("[dim]No checkpoints found[/dim]")
+            return
+
+        table = Table(title=f"Checkpoints in {project_id}")
+        table.add_column("ID", style="cyan")
+        table.add_column("Session", style="dim")
+        table.add_column("Turn", style="green", justify="right")
+        table.add_column("Created")
+        table.add_column("Summary")
+
+        for cp in checkpoints:
+            created = cp.created_at.strftime("%Y-%m-%d %H:%M")
+            summary = cp.summary[:40] + "..." if cp.summary and len(cp.summary) > 40 else cp.summary
+            table.add_row(
+                cp.id,
+                cp.session_id[:12] + "..." if len(cp.session_id) > 12 else cp.session_id,
+                str(cp.turn_number),
+                created,
+                summary or "-",
+            )
+
+        console.print(table)
+        console.print(f"[dim]Showing {len(checkpoints)} checkpoint(s)[/dim]")
+
+    except FileNotFoundError:
+        console.print(f"[red]✗ Project not found: {project_id}[/red]")
+        raise typer.Exit(1) from None
+    finally:
+        if project:
+            project.close()
+
+
+@checkpoints_app.command("show")
+def checkpoints_show(
+    project_id: Annotated[str, typer.Argument(help="Project ID")],
+    checkpoint_id: Annotated[str, typer.Argument(help="Checkpoint ID")],
+    projects_dir: Annotated[
+        Path,
+        typer.Option("--dir", "-d", help="Projects directory"),
+    ] = Path("projects"),
+) -> None:
+    """Show checkpoint details."""
+    from questfoundry.runtime.checkpoint import CheckpointManager
+    from questfoundry.runtime.storage import Project
+
+    project_path = projects_dir / project_id
+    project = None
+
+    try:
+        project = Project.open(project_path)
+        manager = CheckpointManager(project)
+
+        checkpoint = manager.load_checkpoint(checkpoint_id)
+        if not checkpoint:
+            console.print(f"[red]✗ Checkpoint not found: {checkpoint_id}[/red]")
+            raise typer.Exit(1)
+
+        console.print(Panel(f"[cyan]{checkpoint.id}[/cyan]", title="Checkpoint"))
+
+        # Metadata
+        console.print("[bold]Metadata:[/bold]")
+        console.print(f"  Session: {checkpoint.session_id}")
+        console.print(f"  Turn: [green]{checkpoint.turn_number}[/green]")
+        console.print(f"  Status: {checkpoint.session_status.value}")
+        console.print(f"  Entry Agent: {checkpoint.entry_agent}")
+        console.print(f"  Created: {checkpoint.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        console.print(f"  Schema Version: {checkpoint.schema_version}")
+
+        # Summary
+        if checkpoint.summary:
+            console.print()
+            console.print(f"[bold]Summary:[/bold] {checkpoint.summary}")
+
+        # Mailbox States
+        console.print()
+        console.print("[bold]Mailbox States:[/bold]")
+        for agent_id, messages in checkpoint.mailbox_states.items():
+            console.print(f"  {agent_id}: {len(messages)} pending message(s)")
+
+        # Active Delegations
+        if checkpoint.active_delegations:
+            console.print()
+            console.print("[bold]Active Delegations:[/bold]")
+            for deleg in checkpoint.active_delegations:
+                console.print(
+                    f"  - {deleg.delegation_id}: {deleg.from_agent} → {deleg.to_agent} "
+                    f"({deleg.status})"
+                )
+
+        # Playbook Instances
+        if checkpoint.playbook_instances:
+            console.print()
+            console.print(f"[bold]Playbook Instances:[/bold] {len(checkpoint.playbook_instances)}")
+            for pb in checkpoint.playbook_instances:
+                console.print(f"  - {pb.get('playbook_id', '-')}: {pb.get('status', '-')}")
+
+        # Context Usage
+        if checkpoint.context_usage:
+            console.print()
+            console.print("[bold]Context Usage:[/bold]")
+            for agent_id, usage in checkpoint.context_usage.items():
+                pct = usage.usage_percent
+                console.print(
+                    f"  {agent_id}: {usage.total_tokens:,} / {usage.limit:,} tokens ({pct:.1f}%)"
+                )
+
+    except FileNotFoundError:
+        console.print(f"[red]✗ Project not found: {project_id}[/red]")
+        raise typer.Exit(1) from None
+    finally:
+        if project:
+            project.close()
+
+
+@checkpoints_app.command("delete")
+def checkpoints_delete(
+    project_id: Annotated[str, typer.Argument(help="Project ID")],
+    checkpoint_id: Annotated[str, typer.Argument(help="Checkpoint ID")],
+    projects_dir: Annotated[
+        Path,
+        typer.Option("--dir", "-d", help="Projects directory"),
+    ] = Path("projects"),
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+) -> None:
+    """Delete a checkpoint."""
+    from questfoundry.runtime.checkpoint import CheckpointManager
+    from questfoundry.runtime.storage import Project
+
+    project_path = projects_dir / project_id
+    project = None
+
+    try:
+        project = Project.open(project_path)
+        manager = CheckpointManager(project)
+
+        # Check if checkpoint exists
+        checkpoint = manager.load_checkpoint(checkpoint_id)
+        if not checkpoint:
+            console.print(f"[red]✗ Checkpoint not found: {checkpoint_id}[/red]")
+            raise typer.Exit(1)
+
+        # Confirm deletion
+        if not force:
+            console.print(f"Checkpoint: [cyan]{checkpoint_id}[/cyan]")
+            console.print(f"Session: {checkpoint.session_id}")
+            console.print(f"Turn: {checkpoint.turn_number}")
+            confirm = typer.confirm("Are you sure you want to delete this checkpoint?")
+            if not confirm:
+                console.print("[dim]Cancelled[/dim]")
+                return
+
+        # Delete
+        if manager.delete_checkpoint(checkpoint_id):
+            console.print(f"[green]✓[/green] Deleted checkpoint: {checkpoint_id}")
+        else:
+            console.print(f"[red]✗ Failed to delete checkpoint: {checkpoint_id}[/red]")
+            raise typer.Exit(1)
+
+    except FileNotFoundError:
+        console.print(f"[red]✗ Project not found: {project_id}[/red]")
+        raise typer.Exit(1) from None
+    finally:
+        if project:
+            project.close()
 
 
 if __name__ == "__main__":
