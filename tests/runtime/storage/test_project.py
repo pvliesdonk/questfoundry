@@ -290,6 +290,121 @@ class TestArtifactQueries:
         assert len(results) == 1
 
 
+class TestVersionHistory:
+    """Tests for artifact version history."""
+
+    @pytest.fixture
+    def project(self, tmp_path: Path) -> Project:
+        """Create a test project."""
+        project = Project.create(tmp_path / "test", name="Test")
+        yield project
+        project.close()
+
+    def test_save_version(self, project: Project):
+        """save_version creates a version snapshot."""
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "Original", "content": "First version"},
+        )
+
+        version = project.save_version("section-001", created_by="scene_smith")
+
+        assert version == 1
+
+    def test_save_version_nonexistent(self, project: Project):
+        """save_version returns None for nonexistent artifact."""
+        version = project.save_version("nonexistent")
+        assert version is None
+
+    def test_get_artifact_versions(self, project: Project):
+        """get_artifact_versions retrieves version history."""
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "V1", "content": "First"},
+        )
+
+        # Save version 1
+        project.save_version("section-001")
+
+        # Update to v2
+        project.update_artifact("section-001", data={"title": "V2"})
+
+        # Save version 2
+        project.save_version("section-001")
+
+        # Update to v3
+        project.update_artifact("section-001", data={"title": "V3"})
+
+        versions = project.get_artifact_versions("section-001")
+
+        assert len(versions) == 2
+        # Newest first
+        assert versions[0]["version"] == 2
+        assert versions[0]["data"]["title"] == "V2"
+        assert versions[1]["version"] == 1
+        assert versions[1]["data"]["title"] == "V1"
+
+    def test_get_artifact_versions_empty(self, project: Project):
+        """get_artifact_versions returns empty list when no versions."""
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "Test"},
+        )
+
+        versions = project.get_artifact_versions("section-001")
+        assert versions == []
+
+    def test_get_artifact_at_version(self, project: Project):
+        """get_artifact_at_version retrieves specific version."""
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "V1", "content": "First"},
+        )
+
+        # Save and update
+        project.save_version("section-001")
+        project.update_artifact("section-001", data={"title": "V2"})
+
+        project.save_version("section-001")
+        project.update_artifact("section-001", data={"title": "V3"})
+
+        # Get version 1
+        v1 = project.get_artifact_at_version("section-001", 1)
+        assert v1 is not None
+        assert v1["data"]["title"] == "V1"
+
+        # Get version 2
+        v2 = project.get_artifact_at_version("section-001", 2)
+        assert v2 is not None
+        assert v2["data"]["title"] == "V2"
+
+        # Non-existent version
+        v99 = project.get_artifact_at_version("section-001", 99)
+        assert v99 is None
+
+    def test_delete_artifact_removes_versions(self, project: Project):
+        """delete_artifact also removes version history."""
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "Test"},
+        )
+
+        project.save_version("section-001")
+        project.save_version("section-001")
+
+        # Delete artifact
+        project.delete_artifact("section-001")
+
+        # Version history should be empty
+        versions = project.get_artifact_versions("section-001")
+        assert versions == []
+
+
 class TestListProjects:
     """Tests for list_projects function."""
 

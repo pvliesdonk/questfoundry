@@ -327,6 +327,7 @@ class UpdateArtifactTool(BaseTool):
 
         # Check store semantics
         store_id = existing.get("_store")
+        save_version = False
         if store_id and self._context.store_manager:
             store = self._context.store_manager.get_store(store_id)
             if store and not store.allows_updates():
@@ -338,21 +339,37 @@ class UpdateArtifactTool(BaseTool):
                         "Store does not allow updates."
                     ),
                 )
+            # Check if store requires version history
+            if store and store.requires_version_history():
+                save_version = True
 
         # Update artifact
         try:
+            # Save version history before update for versioned stores
+            version_saved = None
+            if save_version:
+                version_saved = self._context.project.save_version(
+                    artifact_id=artifact_id,
+                    created_by=self._context.agent_id,
+                )
+                logger.debug(f"Saved version {version_saved} for {artifact_id}")
+
             updated = self._context.project.update_artifact(
                 artifact_id=artifact_id,
                 data=data,
             )
 
             if updated:
+                result_data = {
+                    "artifact": updated,
+                    "artifact_id": artifact_id,
+                }
+                if version_saved is not None:
+                    result_data["version_saved"] = version_saved
+
                 return ToolResult(
                     success=True,
-                    data={
-                        "artifact": updated,
-                        "artifact_id": artifact_id,
-                    },
+                    data=result_data,
                 )
             else:
                 return ToolResult(
