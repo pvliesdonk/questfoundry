@@ -40,6 +40,7 @@ for builder in tool_call_builders.values():
 ```
 
 **Files Changed**:
+
 - `src/questfoundry/runtime/providers/openai.py`
 - `src/questfoundry/runtime/providers/ollama.py`
 
@@ -50,11 +51,13 @@ for builder in tool_call_builders.values():
 **Root Cause**: LangChain requires `AIMessage` objects to have `tool_calls` attached so it can associate subsequent `ToolMessage` results. The V4 runtime's intermediate `LLMMessage` format didn't preserve `tool_calls`, breaking this association.
 
 **Fix**:
+
 1. Added `tool_calls` field to `LLMMessage` dataclass
 2. Updated message conversion to preserve `tool_calls` on `AIMessage`
 3. Updated runtime to store `tool_calls` on assistant messages
 
 **Files Changed**:
+
 - `src/questfoundry/runtime/providers/base.py` - Added `tool_calls` field
 - `src/questfoundry/runtime/providers/openai.py` - Preserve in conversion
 - `src/questfoundry/runtime/providers/ollama.py` - Preserve in conversion
@@ -71,6 +74,7 @@ uv run qf ask --no-stream -p ollama "create a story"
 ```
 
 **Files Changed**:
+
 - `src/questfoundry/cli.py` - Added `--no-stream` flag and `_invoke_response()` function
 
 ## Gap Identified: Artifact Persistence
@@ -78,6 +82,7 @@ uv run qf ask --no-stream -p ollama "create a story"
 ### Current State
 
 Agents like `scene_smith` have capabilities to create artifacts:
+
 - `create_sections` - "Create and update section prose"
 - `write_workspace` - "Can write draft sections"
 
@@ -86,12 +91,14 @@ However, there is **no tool to actually save artifacts**. The model generates co
 ### Observed Behavior
 
 From OpenAI test logs:
-```
+
+```text
 tool_call_start: validate_artifact, args: {artifact_id: "scene_1", artifact_type_id: "section"}
 tool_call_complete: success=false, error="No artifact data provided or found"
 ```
 
 The model:
+
 1. Generates section content in its response
 2. Tries to validate `artifact_id="scene_1"`
 3. Fails because nothing was ever saved
@@ -99,6 +106,7 @@ The model:
 ### Resolution
 
 This gap will be addressed by **Phase 4: Storage & Lifecycle** (Issue #148), which includes:
+
 - Store Manager with CRUD operations
 - Artifact Storage with schema validation on write
 - Lifecycle state management (draft -> review -> approved -> cold)
@@ -106,6 +114,7 @@ This gap will be addressed by **Phase 4: Storage & Lifecycle** (Issue #148), whi
 ### Workaround (Not Recommended)
 
 The `validate_artifact` tool supports inline `artifact_data`:
+
 ```json
 validate_artifact(artifact_type_id="section", artifact_data={...content...})
 ```
