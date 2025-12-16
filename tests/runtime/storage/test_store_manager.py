@@ -475,13 +475,11 @@ class TestStoreManagerWithRealDomain:
     """Tests using real domain-v4 stores."""
 
     @pytest.fixture
-    def manager(self) -> StoreManager:
+    def manager(self, domain_v4_path: Path) -> StoreManager:
         """Load store manager from real domain."""
-        # tests/runtime/storage/test_store_manager.py -> repo root
-        domain_path = Path(__file__).parent.parent.parent.parent / "domain-v4"
-        if not domain_path.exists():
+        if not domain_v4_path.exists():
             pytest.skip("domain-v4 not found")
-        return StoreManager.from_domain(domain_path)
+        return StoreManager.from_domain(domain_v4_path)
 
     def test_loads_all_stores(self, manager: StoreManager):
         """All domain stores are loaded."""

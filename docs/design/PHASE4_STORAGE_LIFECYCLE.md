@@ -108,7 +108,13 @@ From `meta/schemas/core/artifact-type.schema.json`:
 3. Runtime responds:
    |-> "committed" - state changed
    |-> "rejected" - criteria failed, guidance provided
-   |-> "deferred" - needs orchestrator decision
+   |-> "deferred" - needs orchestrator decision (e.g., multi-agent approval)
+
+Note on "deferred": This result indicates that the transition cannot be
+immediately committed and requires external resolution. The orchestrator
+(Showrunner) is notified via a message to its inbox containing the pending
+transition details. Resolution occurs when the orchestrator or designated
+approver explicitly commits or rejects the transition.
 ```
 
 ### Gatekeeper's Role
@@ -252,6 +258,25 @@ class ExclusiveWriterEnforcer:
             asyncio.create_task(self._emit_nudge(broker, agent_id, store_id, designated))
 
         return ExclusiveWriterCheck(allowed=True, warning=warning, violation_logged=True)
+
+    async def _emit_nudge(
+        self,
+        broker: MessageBroker,
+        agent_id: str,
+        store_id: str,
+        designated: str,
+    ) -> None:
+        """Send workflow nudge to orchestrator about exclusive writer violation."""
+        await broker.send(
+            to_agent="showrunner",
+            message_type="workflow_nudge",
+            content={
+                "violation": "exclusive_writer",
+                "agent": agent_id,
+                "store": store_id,
+                "designated_producer": designated,
+            },
+        )
 ```
 
 ---
@@ -420,48 +445,58 @@ async def request_lifecycle_transition(
 
 ## 8. Store Semantics Enforcement
 
-Enforcement in `Project` methods:
+Enforcement happens at the **tool level** (`UpdateArtifactTool`, `DeleteArtifactTool`),
+not in `Project` methods. This keeps `Project` as a simple data access layer while
+tools handle policy enforcement.
 
 ```python
-class Project:
-    def __init__(self, path: Path, store_manager: StoreManager | None = None):
-        self._store_manager = store_manager
+class UpdateArtifactTool(BaseTool):
+    """Respects store semantics (blocks updates to cold/append_only stores)."""
 
-    def create_artifact(self, ..., store: str | None = None) -> dict[str, Any]:
-        """Create artifact - allowed for all semantics."""
-        # Existing implementation
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        # ... validation ...
 
-    def update_artifact(self, artifact_id: str, data: dict, ...) -> dict[str, Any] | None:
-        """Update artifact - blocked for cold/append_only stores."""
-        existing = self.get_artifact(artifact_id)
-        if existing and self._store_manager:
-            store = existing.get("_store")
-            if store:
-                store_def = self._store_manager.get_store(store)
-                if store_def and store_def.semantics in (StoreSemantics.COLD, StoreSemantics.APPEND_ONLY):
-                    raise StoreSemanticViolation(
-                        f"Cannot update artifact in {store_def.semantics} store '{store}'"
-                    )
-                if store_def and store_def.semantics == StoreSemantics.VERSIONED:
-                    self._save_version(artifact_id, existing)
-        # Continue with update
+        # Check store semantics
+        store_id = existing.get("_store")
+        if store_id and self._context.store_manager:
+            store = self._context.store_manager.get_store(store_id)
+            if store and not store.allows_updates():
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error=(
+                        f"Cannot update artifact in {store.semantics.value} store '{store_id}'. "
+                        "Use request_lifecycle_transition to move it to an editable store first."
+                    ),
+                )
 
-    def delete_artifact(self, artifact_id: str) -> bool:
-        """Delete artifact - blocked for cold/append_only stores."""
-        existing = self.get_artifact(artifact_id)
-        if existing and self._store_manager:
-            store = existing.get("_store")
-            if store:
-                store_def = self._store_manager.get_store(store)
-                if store_def and store_def.semantics in (StoreSemantics.COLD, StoreSemantics.APPEND_ONLY):
-                    raise StoreSemanticViolation(
-                        f"Cannot delete artifact from {store_def.semantics} store '{store}'"
-                    )
-        # Continue with delete
+        # Continue with update via Project.update_artifact()
 
-    def _save_version(self, artifact_id: str, artifact: dict) -> None:
-        """Save artifact version to artifact_versions table."""
+
+class DeleteArtifactTool(BaseTool):
+    """Respects store semantics (blocks deletes from cold/append_only stores)."""
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        # ... validation ...
+
+        # Check store semantics
+        store_id = existing.get("_store")
+        if store_id and self._context.store_manager:
+            store = self._context.store_manager.get_store(store_id)
+            if store and not store.allows_deletes():
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error=(
+                        f"Cannot delete artifact from {store.semantics.value} store '{store_id}'."
+                    ),
+                )
+
+        # Continue with delete via Project.delete_artifact()
 ```
+
+`Project` methods remain simple data operations. Version history for `versioned` stores
+is handled by `Project._save_version()` called from `update_artifact()`.
 
 ---
 
@@ -491,14 +526,16 @@ brief_opening       section_brief  draft    workspace  2024-12-16 09:15
 | Step | Files | Description |
 |------|-------|-------------|
 | 1 | `storage/store_manager.py` | StoreManager, load from domain |
-| 2 | `tools/save_artifact.py` | Agent tool to persist artifacts |
-| 3 | `storage/project.py` | Add semantics enforcement to update/delete |
+| 2 | `storage/project.py` | Version history support for versioned stores |
+| 3 | `tools/save_artifact.py` | SaveArtifact, UpdateArtifact, DeleteArtifact tools with semantics enforcement |
 | 4 | `storage/exclusive_writer.py` | ExclusiveWriterEnforcer with configurable policy |
-| 5 | `storage/artifact_lifecycle.py` | ArtifactLifecycle, LifecycleRegistry |
-| 6 | `tools/request_lifecycle_transition.py` | Transition request tool |
-| 7 | `storage/project.py` | Version history for versioned stores |
-| 8 | `tools/get_artifact.py`, `tools/list_artifacts.py` | Query tools |
-| 9 | `cli.py` | `qf artifacts` subcommand |
+| 5 | `storage/lifecycle.py` | ArtifactLifecycle, LifecycleManager |
+| 6 | `tools/lifecycle_transition.py` | Transition request and state query tools |
+| 7 | `tools/get_artifact.py`, `tools/list_artifacts.py` | Query tools |
+| 8 | `cli.py` | `qf artifacts` subcommand |
+
+Note: Store semantics enforcement (blocking updates/deletes on cold/append_only)
+happens at the tool level (step 3), not in Project methods.
 
 ---
 
