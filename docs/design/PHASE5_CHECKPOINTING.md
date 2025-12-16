@@ -13,12 +13,14 @@ limits gracefully through token tracking and summarization triggers.
 ## 1. Problem Statement
 
 Long-running sessions can be interrupted by:
+
 - Network failures
 - Context limit exhaustion
 - User-initiated pauses
 - System restarts
 
 Without checkpointing, all progress is lost. The runtime needs to:
+
 1. Save state at meaningful points (after orchestrator turns)
 2. Resume from any checkpoint
 3. Track context usage to prevent mid-turn failures
@@ -419,7 +421,7 @@ qf checkpoints delete --project my_story cp_turn_005
 ## 10. Implementation Order
 
 | Step | Files | Description |
-|------|-------|-------------|
+| ------ | ------- | ------------- |
 | 1 | `checkpoint/models.py` | Checkpoint, ContextUsage, CheckpointInfo dataclasses |
 | 2 | `checkpoint/serialization.py` | JSON serialization helpers |
 | 3 | `checkpoint/manager.py` | CheckpointManager with save/load/list/delete |
@@ -479,3 +481,43 @@ coordination via checkpoint locks.
 ### Automatic Cleanup
 
 Rolling window of checkpoints with configurable retention policy.
+
+---
+
+## 13. Implementation Status
+
+**Status**: ✅ Complete
+
+**PR**: #158
+
+### Implemented Components
+
+| Component | File | Status |
+| ----------- | ------ | -------- |
+| Checkpoint models | `checkpoint/models.py` | ✅ Complete |
+| CheckpointManager | `checkpoint/manager.py` | ✅ Complete |
+| Mailbox serialization | `messaging/mailbox.py` | ✅ Complete |
+| Auto-checkpoint | `agent/runtime.py` | ✅ Complete |
+| Context tracking | `agent/runtime.py` | ✅ Complete |
+| CLI: checkpoints | `cli.py` | ✅ Complete |
+| CLI: --from-checkpoint | `cli.py` | ✅ Complete |
+| Unit tests | `tests/runtime/checkpoint/` | ✅ Complete (65 tests) |
+
+### Key Implementation Notes
+
+1. **Serialization merged into models**: Instead of separate `serialization.py`,
+   `to_dict`/`from_dict` methods are on the model classes directly.
+
+2. **Retention policy**: Implemented with configurable `max_checkpoints` (default 10).
+   Oldest checkpoints are automatically deleted when limit exceeded.
+
+3. **Context tracking**: Integrated into `AgentRuntime._update_context_usage()`.
+   Logs warning when approaching limit (100K tokens default).
+
+4. **Auto-checkpoint trigger**: After orchestrator turns in `AgentRuntime.activate()`.
+
+### Test Coverage
+
+- `test_models.py`: 21 tests for dataclass serialization
+- `test_manager.py`: 23 tests for manager operations
+- `test_mailbox.py`: 7 tests for mailbox serialization (added)
