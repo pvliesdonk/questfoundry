@@ -1,0 +1,40 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "list_stores",
+  "name": "List Stores",
+  "description": "List all available stores with their semantics and descriptions. Use this to discover what stores exist and understand their access patterns (hot, cold, versioned, ephemeral).",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "stores": {
+        "type": "array",
+        "description": "List of stores with id, name, semantics, description"
+      },
+      "count": {
+        "type": "integer",
+        "description": "Number of stores"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Discover available stores",
+      "input": {},
+      "output": {
+        "stores": [
+          {"id": "workspace", "name": "Workspace", "semantics": "hot", "description": "Working memory for drafts and in-progress work"},
+          {"id": "canon", "name": "Canon Store", "semantics": "cold", "description": "Permanent storage for approved artifacts"}
+        ],
+        "count": 2
+      }
+    }
+  ]
+}

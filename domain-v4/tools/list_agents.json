@@ -1,0 +1,40 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "list_agents",
+  "name": "List Agents",
+  "description": "List all agents available for delegation. Use this to discover what specialist agents exist and their archetypes before delegating work. Returns a compact list with id, name, archetypes, and brief description.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "agents": {
+        "type": "array",
+        "description": "List of agents with id, name, archetypes, description"
+      },
+      "count": {
+        "type": "integer",
+        "description": "Number of agents"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Discover available agents for delegation",
+      "input": {},
+      "output": {
+        "agents": [
+          {"id": "plotwright", "name": "Plotwright", "archetypes": ["architect"], "description": "Designs story topology and structure"},
+          {"id": "scene_smith", "name": "Scene Smith", "archetypes": ["author", "creator"], "description": "Transforms skeleton scenes into engaging prose"}
+        ],
+        "count": 2
+      }
+    }
+  ]
+}

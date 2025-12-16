@@ -1,0 +1,45 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "list_artifact_types",
+  "name": "List Artifact Types",
+  "description": "List all available artifact types with brief descriptions. Use this to discover what artifact types exist before consulting their full schemas. Returns a compact list with id, name, category, and brief description for each type.",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "artifact_types": {
+        "type": "array",
+        "description": "List of artifact types with id, name, category, description"
+      },
+      "count": {
+        "type": "integer",
+        "description": "Number of artifact types"
+      },
+      "hint": {
+        "type": "string",
+        "description": "Hint for next action"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Discover available artifact types",
+      "input": {},
+      "output": {
+        "artifact_types": [
+          {"id": "section", "name": "Section", "category": "narrative", "description": "Story section with prose, choices, and gates"},
+          {"id": "section_brief", "name": "Section Brief", "category": "planning", "description": "Structural outline before prose writing"}
+        ],
+        "count": 2,
+        "hint": "Use consult_schema(artifact_type_id) for full field definitions."
+      }
+    }
+  ]
+}
