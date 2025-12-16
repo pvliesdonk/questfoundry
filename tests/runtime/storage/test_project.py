@@ -209,6 +209,24 @@ class TestArtifactOperations:
         )
         assert result is None
 
+    def test_delete_artifact(self, project: Project):
+        """delete_artifact removes artifact."""
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "Test"},
+        )
+
+        result = project.delete_artifact("section-001")
+
+        assert result is True
+        assert project.get_artifact("section-001") is None
+
+    def test_delete_nonexistent_artifact(self, project: Project):
+        """delete_artifact returns False for nonexistent artifact."""
+        result = project.delete_artifact("nonexistent")
+        assert result is False
+
 
 class TestArtifactQueries:
     """Tests for artifact queries."""

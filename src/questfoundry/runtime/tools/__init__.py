@@ -27,6 +27,7 @@ from questfoundry.runtime.tools import (
     list_artifact_types,  # noqa: F401
     list_stores,  # noqa: F401
     request_clarification,  # noqa: F401
+    save_artifact,  # noqa: F401  # Phase 4: artifact persistence
     search_workspace,  # noqa: F401
     stubs,  # noqa: F401
     validate_artifact,  # noqa: F401

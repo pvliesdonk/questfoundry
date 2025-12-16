@@ -439,6 +439,39 @@ class Project:
 
         return self.get_artifact(artifact_id)
 
+    def delete_artifact(self, artifact_id: str) -> bool:
+        """
+        Delete an artifact.
+
+        Args:
+            artifact_id: Artifact ID to delete
+
+        Returns:
+            True if deleted, False if not found
+
+        Note:
+            Store semantics enforcement should be done at the tool level
+            via StoreManager before calling this method.
+        """
+        conn = self._get_connection()
+
+        # Check if exists
+        existing = conn.execute(
+            "SELECT _id FROM artifacts WHERE _id = ?", (artifact_id,)
+        ).fetchone()
+
+        if existing is None:
+            return False
+
+        # Delete any version history
+        conn.execute("DELETE FROM artifact_versions WHERE artifact_id = ?", (artifact_id,))
+
+        # Delete the artifact
+        conn.execute("DELETE FROM artifacts WHERE _id = ?", (artifact_id,))
+        conn.commit()
+
+        return True
+
     def query_artifacts(
         self,
         artifact_type: str | None = None,
