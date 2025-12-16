@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "audio_plan",
   "name": "Audio Plan",
+  "summary": "Audio cue planning document",
   "description": "Planning document for a single audio cue. Specifies what to sound and why, leaving sonic aesthetic details to the Style Guide. Planning is cheap—create Audio Plans for ALL worthy moments. Generation is selective based on priority and budget.",
   "category": "document",
 

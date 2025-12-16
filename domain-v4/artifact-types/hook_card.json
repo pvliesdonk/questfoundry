@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "hook_card",
   "name": "Hook Card",
+  "summary": "Captured idea for triage",
   "description": "A small, traceable follow-up capturing a new need or uncertainty without derailing current work. Hooks are classified, routed to the correct owner, and developed through loops. The player-safe summary is clean; spoilers live in hot_details only.",
   "category": "record",
 

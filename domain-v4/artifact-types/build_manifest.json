@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "build_manifest",
   "name": "Build Manifest",
+  "summary": "Machine-readable export build record",
   "description": "Machine-readable record of an export build. Contains full configuration, integrity report, output file references, and determinism data. This is the internal counterpart to View Log - it contains everything needed to reproduce or debug a build, but is NOT player-safe.",
   "category": "manifest",
 

@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "art_plan",
   "name": "Art Plan",
+  "summary": "Visual illustration planning document",
   "description": "Planning document for a single illustration slot. Specifies what to illustrate and why, leaving visual language details to the Style Guide. Planning is cheap—create Art Plans for ALL worthy scenes. Generation is selective based on priority and budget.",
   "category": "document",
 

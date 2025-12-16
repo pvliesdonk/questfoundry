@@ -105,8 +105,10 @@ class PromptBuilder:
         # Priority ordering: actionable content first, reference material later
         # Higher priority = appears earlier in prompt
         #
+        # Identity & Behavior (who you are, how to behave):
+        #   identity (100), behavioral (98), agents (95)
         # Actionable (what to do NOW):
-        #   identity (100), agents (95), tools (90), playbooks (85)
+        #   tools (90), playbooks (85)
         # Operational (how to behave):
         #   capabilities (80), constraints (75)
         # Reference (background knowledge):
@@ -121,48 +123,54 @@ class PromptBuilder:
             agents_section = self._build_agents_section(agents_menu)
             self.add_section("agents", agents_section, priority=95)
 
-        # 3. Available Tools (actionable - how to act)
+        # 3. Behavioral Guidance (operational - WRONG/CORRECT examples by archetype)
+        # V3 pattern: This was critical for keeping models on track
+        archetypes = [a.value if hasattr(a, "value") else str(a) for a in (agent.archetypes or [])]
+        behavioral = self._build_behavioral_guidance(archetypes)
+        self.add_section("behavioral", behavioral, priority=98)
+
+        # 4. Available Tools (actionable - how to act)
         if tool_schemas:
             tools_section = self._build_tools_section(tool_schemas)
             self.add_section("tools", tools_section, priority=90)
 
-        # 4. Available Playbooks (actionable - workflow guidance)
+        # 5. Available Playbooks (actionable - workflow guidance)
         if playbooks_menu:
             playbooks_section = self._build_playbooks_section(playbooks_menu)
             self.add_section("playbooks", playbooks_section, priority=85)
 
-        # 5. Capabilities (operational - what you can do)
+        # 6. Capabilities (operational - what you can do)
         if agent.capabilities:
             capabilities = self._build_capabilities_section(agent)
             self.add_section("capabilities", capabilities, priority=80)
 
-        # 6. Constraints (operational - what not to do)
+        # 7. Constraints (operational - what not to do)
         if agent.constraints:
             constraints = self._build_constraints_section(agent)
             self.add_section("constraints", constraints, priority=75)
 
-        # 7. Constitution (reference - principles)
+        # 8. Constitution (reference - principles)
         if constitution_text:
             self.add_section(
                 "constitution", self._format_constitution(constitution_text), priority=65
             )
 
-        # 8. Must Know (reference - knowledge including operational guidelines)
+        # 9. Must Know (reference - knowledge including operational guidelines)
         if must_know_entries:
             must_know = self._build_must_know_section(must_know_entries)
             self.add_section("must_know", must_know, priority=60)
 
-        # 9. Store Access (reference - what stores you can read/write)
+        # 10. Store Access (reference - what stores you can read/write)
         if stores_menu:
             stores_section = self._build_stores_section(stores_menu)
             self.add_section("stores", stores_section, priority=55)
 
-        # 10. Artifact Types (reference - what types you can create)
+        # 11. Artifact Types (reference - what types you can create)
         if artifact_types_menu:
             artifact_types_section = self._build_artifact_types_section(artifact_types_menu)
             self.add_section("artifact_types", artifact_types_section, priority=50)
 
-        # 11. Available Knowledge Menu
+        # 12. Available Knowledge Menu
         if role_specific_menu:
             menu = self._build_knowledge_menu(role_specific_menu)
             self.add_section("knowledge_menu", menu, priority=45)
@@ -266,196 +274,239 @@ class PromptBuilder:
         return "\n".join(lines)
 
     def _build_playbooks_section(self, playbooks: list[dict[str, Any]]) -> str:
-        """Build the available playbooks menu.
+        """Build compact playbooks menu.
 
         Args:
             playbooks: List of playbook menu items with id, name, purpose, triggers, workflow
 
         Returns:
-            Formatted playbooks section for the prompt
+            Compact formatted playbooks section for the prompt
         """
         lines = ["## Available Playbooks\n"]
-        lines.append(
-            "These are the production workflows available in this studio. "
-            "Choose the appropriate playbook based on the task at hand:\n"
-        )
+        lines.append("Use `consult_playbook(id)` to get full workflow steps and outputs.\n")
 
         for pb in playbooks:
             name = pb.get("name", pb.get("id", "Unknown"))
-            purpose = pb.get("purpose", "")
-            triggers = pb.get("triggers", [])
-            workflow = pb.get("workflow", "")
+            # Use summary (preferred) or fall back to purpose
+            purpose = pb.get("summary") or pb.get("purpose", "")
             pb_id = pb.get("id", "")
-
-            lines.append(f"### {name} (`{pb_id}`)")
-            lines.append(f"{purpose}\n")
-
-            # Include workflow summary showing delegation sequence
-            if workflow:
-                lines.append(f"**Workflow:** {workflow}\n")
-
-            if triggers:
-                lines.append("**When to use:**")
-                for trigger in triggers:
-                    if trigger:
-                        lines.append(f"- {trigger}")
-                lines.append("")
+            lines.append(f"- **{name}** (`{pb_id}`): {purpose}")
 
         return "\n".join(lines)
 
     def _build_agents_section(self, agents: list[dict[str, Any]]) -> str:
-        """Build the delegation agents section.
+        """Build compact delegation agents table.
 
-        This is a CRITICAL section for orchestrators. It tells them WHO they can
-        delegate to and provides explicit instructions about delegation behavior.
+        V3 pattern: Compact table format instead of full descriptions.
+        Details available via list_agents() or consulting agent charters.
 
         Args:
             agents: List of agent menu items with id, name, description, archetypes, specialties
 
         Returns:
-            Formatted agents section for the prompt
+            Compact formatted agents section for the prompt
         """
-        lines = ["## Orchestrator Output Guidelines\n"]
-
-        # CRITICAL: Output format guidance (from v3 architecture)
-        lines.append(
-            "**Your responses should primarily consist of:**\n"
-            "1. **Tool calls** - `delegate`, `consult_schema`, `terminate`\n"
-            "2. **Brief status updates** - 1-2 sentences explaining what you're doing\n\n"
-            "**DO NOT** write paragraphs of narrative content. If you find yourself writing "
-            "story prose, character descriptions, or scene details, **STOP** and delegate "
-            "to the appropriate specialist agent instead.\n"
-        )
-
-        lines.append("\n## Delegation Protocol\n")
-
-        # Delegation instructions
-        lines.append(
-            "As an orchestrator, you coordinate work by DELEGATING tasks to specialist agents. "
-            "You do NOT perform specialist work yourself.\n\n"
-            "- When a task requires creating content (stories, sections, prose): delegate to creators\n"
-            "- When a task requires validation or quality checks: delegate to validators\n"
-            "- When a task requires research or fact-checking: delegate to researchers\n"
-            "- When a task requires managing knowledge or documentation: delegate to curators\n\n"
-            "Use the `delegate` tool to assign work. Always specify:\n"
-            "1. `to_agent`: The agent ID to delegate to\n"
-            "2. `task`: Clear description of what needs to be done\n"
-            "3. `expected_outputs`: What artifacts should be produced\n"
-        )
-
-        lines.append("\n## Available Agents\n")
+        lines = ["## Available Agents for Delegation\n"]
+        lines.append("| Agent | Archetype | Specialty |")
+        lines.append("|-------|-----------|-----------|")
 
         for ag in agents:
             name = ag.get("name", ag.get("id", "Unknown"))
-            ag_id = ag.get("id", "")
-            description = ag.get("description", "")
             archetypes = ag.get("archetypes", [])
+            archetypes_str = ", ".join(archetypes[:2]) if archetypes else "general"
+            # Use summary (preferred) or fall back to first specialty
             specialties = ag.get("specialties", [])
+            spec = ag.get("summary") or (specialties[0] if specialties else "")
+            lines.append(f"| {name} | {archetypes_str} | {spec} |")
 
-            archetypes_str = ", ".join(archetypes) if archetypes else "general"
-            lines.append(f"### {name} (`{ag_id}`) - {archetypes_str}")
-            lines.append(f"{description}\n")
-
-            if specialties:
-                lines.append("**Specialties:**")
-                for spec in specialties[:3]:  # Limit to avoid bloat
-                    lines.append(f"- {spec}")
-                lines.append("")
+        lines.append("")
+        lines.append("Use `delegate(to_agent, task, expected_outputs)` to assign work.")
 
         return "\n".join(lines)
 
     def _build_tools_section(self, tool_schemas: list[dict[str, Any]]) -> str:
-        """Build the available tools section.
+        """Build compact tools list.
+
+        V3 pattern: Name + first line of description only.
+        LangChain already provides full parameter schemas to the model.
 
         Args:
             tool_schemas: List of tool schemas in LangChain format
                           Each has: name, description, parameters
 
         Returns:
-            Formatted tools section for the prompt
+            Compact formatted tools section for the prompt
         """
-        lines = ["## Available Tools\n"]
-        lines.append("You have access to the following tools. Use them to accomplish your tasks:\n")
+        lines = ["## Your Tools\n"]
 
         for tool in tool_schemas:
             name = tool.get("name", "unknown")
-            description = tool.get("description", "No description")
-            parameters = tool.get("parameters", {})
-
-            lines.append(f"### {name}")
-            lines.append(f"{description}\n")
-
-            # Format parameters if present
-            properties = parameters.get("properties", {})
-            required = parameters.get("required", [])
-
-            if properties:
-                lines.append("**Parameters:**")
-                for param_name, param_info in properties.items():
-                    param_type = param_info.get("type", "any")
-                    param_desc = param_info.get("description", "")
-                    is_required = param_name in required
-                    req_marker = " (required)" if is_required else ""
-                    lines.append(f"- `{param_name}` ({param_type}){req_marker}: {param_desc}")
-                lines.append("")
-
-        lines.append(
-            "To use a tool, specify a function call with the tool name and required parameters."
-        )
+            # Use first line of description (no truncation - keep domain data short instead)
+            desc = (tool.get("description", "") or "").split("\n")[0]
+            lines.append(f"- **{name}**: {desc}")
 
         return "\n".join(lines)
 
     def _build_stores_section(self, stores: list[dict[str, Any]]) -> str:
-        """Build the store access section.
+        """Build compact stores menu.
+
+        V3 pattern: Compact list with semantics and access level.
 
         Args:
             stores: List of store menu items with id, name, description, semantics, access
 
         Returns:
-            Formatted stores section for the prompt
+            Compact formatted stores section for the prompt
         """
         lines = ["## Your Store Access\n"]
-        lines.append("You can access the following stores:\n")
 
         for store in stores:
             name = store.get("name", store.get("id", "Unknown"))
-            store_id = store.get("id", "")
-            description = store.get("description", "")
             semantics = store.get("semantics", "unknown")
             access = store.get("access", "read")
-
-            lines.append(f"- **{name}** (`{store_id}`): {access} access, {semantics} storage")
-            if description:
-                lines.append(f"  {description}")
+            lines.append(f"- **{name}**: {access} ({semantics})")
 
         return "\n".join(lines)
 
     def _build_artifact_types_section(self, artifact_types: list[dict[str, Any]]) -> str:
-        """Build the artifact types section.
+        """Build compact artifact types menu.
+
+        V3 pattern: Compact list with consult hint for full schemas.
+        Types are already role-specific (filtered in context.py).
 
         Args:
             artifact_types: List of artifact type menu items with id, name, description, category, actions
 
         Returns:
-            Formatted artifact types section for the prompt
+            Compact formatted artifact types section for the prompt
         """
-        lines = ["## Artifact Types You Can Work With\n"]
-        lines.append(
-            "You can create, read, or update the following artifact types. "
-            "Use `consult_schema` to get full field definitions before creating artifacts:\n"
-        )
+        lines = ["## Artifact Types\n"]
+        lines.append("Use `consult_schema(id)` for full field definitions.\n")
 
         for at in artifact_types:
             name = at.get("name", at.get("id", "Unknown"))
             at_id = at.get("id", "")
-            description = at.get("description", "")
             category = at.get("category", "document")
             actions = at.get("actions", ["read"])
-
             actions_str = ", ".join(actions)
             lines.append(f"- **{name}** (`{at_id}`): [{actions_str}] ({category})")
-            if description:
-                lines.append(f"  {description}")
+
+        return "\n".join(lines)
+
+    def _build_behavioral_guidance(self, archetypes: list[str]) -> str:
+        """Build archetype-specific behavioral guidance with WRONG/CORRECT examples.
+
+        V3 pattern: Explicit examples of what NOT to do and what TO do.
+        This was critical for keeping models on track.
+
+        Args:
+            archetypes: List of archetype strings for the agent
+
+        Returns:
+            Formatted behavioral guidance section
+        """
+        lines = ["## Output Guidelines\n"]
+
+        # Normalize archetypes to lowercase for matching
+        archetypes_lower = [a.lower() for a in archetypes]
+
+        if "orchestrator" in archetypes_lower:
+            lines.extend(
+                [
+                    "## CRITICAL: First Action Must Be consult_playbook",
+                    "",
+                    "**Your VERY FIRST action must be to call the consult_playbook tool** with",
+                    "playbook_id='story_spark' to understand the workflow for new story requests.",
+                    "",
+                    "Example tool call:",
+                    "```",
+                    "consult_playbook(playbook_id='story_spark')",
+                    "```",
+                    "",
+                    "This will tell you:",
+                    "- What workflow steps are recommended",
+                    "- Which roles to delegate to and in what order",
+                    "- What quality gates apply",
+                    "",
+                    "## Workflow Pattern",
+                    "",
+                    "1. User request arrives",
+                    "2. IMMEDIATELY call consult_playbook with playbook_id='story_spark'",
+                    "3. Follow the playbook's steps (typically: plotwright -> scene_smith)",
+                    "4. Pass artifact IDs between delegations",
+                    "5. Delegate to gatekeeper for quality validation",
+                    "",
+                    "## Output Format",
+                    "",
+                    "Your responses should consist of:",
+                    "1. **Tool calls** - consult_playbook, delegate",
+                    "2. **Brief status updates** - 1-2 sentences",
+                    "",
+                    "**NEVER generate story content yourself.** If your response contains more",
+                    "than 2-3 sentences that aren't a tool call, you're doing it wrong.",
+                    "",
+                    "## Anti-Pattern Reminder",
+                    "",
+                    "WRONG: The detective entered the dimly lit room, her footsteps echoing...",
+                    "RIGHT: [makes consult_playbook tool call with playbook_id='story_spark']",
+                ]
+            )
+        elif any(a in archetypes_lower for a in ["creator", "author", "writer"]):
+            lines.extend(
+                [
+                    "CRITICAL: Write artifacts to storage BEFORE returning.",
+                    "",
+                    "WRONG: Returning without persisting work",
+                    "CORRECT: write_artifact(key='scene_1', value={...}) THEN return_to_sr(...)",
+                    "",
+                    "Always call write_artifact for each piece of content you create,",
+                    "then return_to_sr with the list of artifact IDs.",
+                ]
+            )
+        elif any(a in archetypes_lower for a in ["validator", "auditor", "guardian"]):
+            lines.extend(
+                [
+                    "CRITICAL: Read artifacts before approving.",
+                    "",
+                    "WRONG: Approving without inspection",
+                    "CORRECT: read_artifact('scene_1') -> check criteria -> report findings",
+                    "",
+                    "Always read each artifact, evaluate against quality criteria,",
+                    "then return with detailed validation results.",
+                ]
+            )
+        elif any(a in archetypes_lower for a in ["architect", "planner", "designer"]):
+            lines.extend(
+                [
+                    "CRITICAL: Design structure, leave content empty for creators.",
+                    "",
+                    "WRONG: Writing prose content in structural artifacts",
+                    "CORRECT: Create skeleton with content='' for creators to fill",
+                    "",
+                    "Your role is topology - the 'bones' that prose hangs on.",
+                    "Scene Smith fills the actual prose content.",
+                ]
+            )
+        elif any(a in archetypes_lower for a in ["librarian", "curator", "archivist"]):
+            lines.extend(
+                [
+                    "CRITICAL: List existing artifacts before promoting.",
+                    "",
+                    "WRONG: Promoting only what was explicitly mentioned",
+                    "CORRECT: list_hot_store_keys() -> promote ALL matching artifacts",
+                    "",
+                    "Always discover what exists, then process everything.",
+                ]
+            )
+        else:
+            # Generic guidance for any role
+            lines.extend(
+                [
+                    "1. Read relevant artifacts before acting",
+                    "2. Persist your work with write_artifact before returning",
+                    "3. Return with status, artifacts list, and recommendation",
+                ]
+            )
 
         return "\n".join(lines)
 

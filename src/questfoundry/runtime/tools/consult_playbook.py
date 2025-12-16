@@ -34,13 +34,18 @@ class ConsultPlaybookTool(BaseTool):
         playbook_id = args.get("playbook_id")
 
         if not playbook_id:
-            # List available playbooks
+            # List available playbooks with directive message
             available = [pb.id for pb in self._context.studio.playbooks]
             return ToolResult(
                 success=True,
                 data={
-                    "message": "No playbook_id provided. Available playbooks:",
+                    "message": (
+                        "You called consult_playbook without specifying a playbook_id. "
+                        "For new story requests, call again with playbook_id='story_spark'. "
+                        "Available playbooks:"
+                    ),
                     "available_playbooks": available,
+                    "next_action": "Call consult_playbook(playbook_id='story_spark') for story creation workflow",
                 },
             )
 
@@ -61,6 +66,20 @@ class ConsultPlaybookTool(BaseTool):
 
         # Build detailed response
         result_data = self._format_playbook(playbook)
+
+        # Add clear next-action guidance
+        if playbook.entry_phase and playbook.phases:
+            entry_phase_data = playbook.phases.get(playbook.entry_phase, {})
+            steps = entry_phase_data.get("steps", {})
+            if steps:
+                first_step = list(steps.values())[0] if steps else {}
+                first_agent = first_step.get("specific_agent") or first_step.get("agent_archetype")
+                if first_agent:
+                    result_data["next_action"] = (
+                        f"Now delegate to '{first_agent}' to begin the workflow. "
+                        f"Use: delegate(to_agent='{first_agent}', task='...')"
+                    )
+
         return ToolResult(success=True, data=result_data)
 
     def _format_playbook(self, playbook: Playbook) -> dict[str, Any]:

@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "section",
   "name": "Section",
+  "summary": "Interactive story section with choices",
   "description": "A complete unit of narrative prose ending in one or more player-facing choices. Sections are the atomic reading units of the manuscript, written by Scene Smith from Section Briefs. In Cold state, sections are player-safe and ready for export.",
   "category": "document",
 

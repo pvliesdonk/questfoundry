@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "cuelist",
   "name": "Cuelist",
+  "summary": "Index of Audio Plans for a scope",
   "description": "Index of Audio Plans for a scope (chapter, act, or book). Tracks priorities, statuses, cue types, and budget allocation. Audio Director creates cuelists to manage audio coverage. Each entry references a full Audio Plan.",
   "category": "manifest",
 

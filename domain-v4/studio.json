@@ -82,7 +82,10 @@
     "tools/generate_image.json",
     "tools/generate_audio.json",
     "tools/consult_corpus.json",
-    "tools/request_clarification.json"
+    "tools/request_clarification.json",
+    "tools/list_artifact_types.json",
+    "tools/list_stores.json",
+    "tools/list_agents.json"
   ],
 
   "quality_criteria": [
@@ -112,8 +115,8 @@
   },
 
   "metadata": {
-    "wave": 6,
+    "wave": 7,
     "status": "complete",
-    "notes": "Wave 6: Added Player-Narrator agent (dynamic export path). PN is a performer/consumer, not an author—narrates interactive fiction to live players with agency to improvise color while never contradicting canon. No playbooks (reactive to player input, not workflow-driven). Removed Translator from original plan (localization is out of scope for now). Studio definition complete: 12 agents, 11 tools, 16 artifact types, 2 asset types, 7 playbooks."
+    "notes": "Wave 7: Added list_* tools for explicit discovery (list_artifact_types, list_stores, list_agents). V3 pattern: compact menus in prompt with consult tools for full details. Studio definition: 12 agents, 15 tools, 16 artifact types, 2 asset types, 7 playbooks."
   }
 }

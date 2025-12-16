@@ -26,6 +26,12 @@
       "description": "A brief explanation of purpose or function"
     },
 
+    "summary": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "A concise one-line summary for compact display in menus and prompts"
+    },
+
     "markdown_text": {
       "type": "string",
       "description": "Longer-form text content, may contain markdown formatting"

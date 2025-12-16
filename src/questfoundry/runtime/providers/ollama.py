@@ -77,7 +77,15 @@ class OllamaProvider(LLMProvider):
             elif msg.role == "user":
                 langchain_messages.append(HumanMessage(content=msg.content))
             elif msg.role == "assistant":
-                langchain_messages.append(AIMessage(content=msg.content))
+                # Include tool_calls on AIMessage if present
+                if msg.tool_calls:
+                    tool_calls = [
+                        {"id": tc.id, "name": tc.name, "args": tc.arguments}
+                        for tc in msg.tool_calls
+                    ]
+                    langchain_messages.append(AIMessage(content=msg.content, tool_calls=tool_calls))
+                else:
+                    langchain_messages.append(AIMessage(content=msg.content))
             elif msg.role == "tool":
                 # Tool result message
                 langchain_messages.append(
@@ -234,7 +242,9 @@ class OllamaProvider(LLMProvider):
             prompt_tokens: int | None = None
             completion_tokens: int | None = None
             total_tokens: int | None = None
-            accumulated_tool_calls: list[ToolCallRequest] = []
+            # Track tool call chunks by index to accumulate incrementally
+            # Key: index, Value: {"id": str, "name": str, "args_json": str}
+            tool_call_builders: dict[int, dict[str, str]] = {}
 
             async for chunk in llm.astream(langchain_messages, config=config):
                 # Extract content from chunk
@@ -249,24 +259,56 @@ class OllamaProvider(LLMProvider):
                     completion_tokens = usage_metadata.get("output_tokens")
                     total_tokens = usage_metadata.get("total_tokens")
 
-                # Accumulate tool calls from streaming chunks
-                chunk_tool_calls = self._parse_tool_calls(chunk)
-                if chunk_tool_calls:
-                    accumulated_tool_calls.extend(chunk_tool_calls)
+                # Accumulate tool call chunks (args come as JSON string fragments)
+                tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+                if tool_call_chunks:
+                    for tcc in tool_call_chunks:
+                        idx = tcc.get("index", 0)
+                        if idx not in tool_call_builders:
+                            tool_call_builders[idx] = {"id": "", "name": "", "args_json": ""}
+
+                        builder = tool_call_builders[idx]
+                        if tcc.get("id"):
+                            builder["id"] = tcc["id"]
+                        if tcc.get("name"):
+                            builder["name"] = tcc["name"]
+                        if tcc.get("args"):
+                            builder["args_json"] += tcc["args"]
 
                 yield StreamChunk(
                     content=content,
                     done=False,
                 )
 
-            # Final chunk with done=True, usage stats, and accumulated tool calls
+            # Parse accumulated tool calls
+            import json
+
+            final_tool_calls = []
+            for _idx, builder in tool_call_builders.items():
+                if builder["name"] and builder["id"]:
+                    # Parse the accumulated JSON args
+                    try:
+                        args = json.loads(builder["args_json"]) if builder["args_json"] else {}
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse tool call args: {builder['args_json']}")
+                        args = {}
+
+                    final_tool_calls.append(
+                        ToolCallRequest(
+                            id=builder["id"],
+                            name=builder["name"],
+                            arguments=args,
+                        )
+                    )
+
+            # Final chunk with done=True, usage stats, and parsed tool calls
             yield StreamChunk(
                 content="",
                 done=True,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
-                tool_calls=accumulated_tool_calls if accumulated_tool_calls else None,
+                tool_calls=final_tool_calls if final_tool_calls else None,
             )
 
         except Exception as e:

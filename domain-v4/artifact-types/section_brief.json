@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "section_brief",
   "name": "Section Brief",
+  "summary": "Structure spec for scene_smith",
   "description": "Writing instructions from Plotwright to Scene Smith for drafting a specific section. Defines goal, beats, choice intents, and expected outcomes. Section Briefs are the bridge between Story Spark (structure) and Scene Weave (prose). They remain in Hot as working documents and are not exported to players.",
   "category": "document",
 

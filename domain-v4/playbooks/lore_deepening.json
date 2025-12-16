@@ -3,6 +3,7 @@
   "id": "lore_deepening",
   "name": "Lore Deepening",
   "version": "1.0.0",
+  "summary": "Build canon and player-safe codex entries",
   "purpose": "Expand the world bible (canon) and derive player-safe glossary entries (codex). Build the lore that creative agents need, then surface what players can safely see.",
 
   "description": "Lore Deepening builds depth: the causes behind events, the secrets factions hide, the rules of the metaphysics. Lore Weaver creates Canon Packs—portable containers of world truth. Codex Curator then distills player-safe entries from that truth. Style Lead ensures codex entries maintain diegetic voice. Gatekeeper validates that no spoilers leak into the codex.",

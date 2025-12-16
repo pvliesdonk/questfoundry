@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "reference_sheet",
   "name": "Reference Sheet",
+  "summary": "Visual reference for recurring elements",
   "description": "Visual reference for recurring elements: characters, locations, or objects. Ensures visual consistency across illustrations. Art Director maintains these; generate_image tool consults them for consistency.",
   "category": "reference",
 

@@ -130,7 +130,9 @@ class TestLoadStudio:
         result = await load_studio(domain_v4_path)
 
         assert result.success
-        assert len(result.studio.tools) == 12
+        assert (
+            len(result.studio.tools) == 15
+        )  # Updated: +3 list tools (list_artifact_types, list_stores, list_agents)
 
     async def test_load_studio_resolves_playbook_refs(self, domain_v4_path: Path):
         """load_studio resolves playbook file references."""

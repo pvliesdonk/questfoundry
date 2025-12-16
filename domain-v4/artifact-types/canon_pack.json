@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "canon_pack",
   "name": "Canon Pack",
+  "summary": "World truth for internal use",
   "description": "Portable container of world truth. Holds spoiler-level lore: causes, timelines, secrets, faction motivations, metaphysical rules. Canon Packs can be shared across multiple books using the same world. Creative agents consult canon; players never see it. Lore Weaver is the exclusive producer.",
   "category": "reference",
 

@@ -3,6 +3,7 @@
   "id": "hook_harvest",
   "name": "Hook Harvest",
   "version": "1.0.0",
+  "summary": "Triage hooks: accept, defer, or reject",
   "purpose": "Collect, cluster, and triage hooks from creative work. Decide what advances now, what defers, and what gets rejected. Fast ideas, safe canon.",
 
   "description": "Hook Harvest is the triage loop. Showrunner sweeps up newly proposed hooks from Story Spark, Scene Weave, and other creative bursts. The goal is to remove duplicates, cluster related ideas, annotate with uncertainty and dependencies, and make clear decisions: accepted (with next loop), deferred (with wake condition), or rejected (with reason). This loop maintains velocity by keeping the hook backlog clean.",

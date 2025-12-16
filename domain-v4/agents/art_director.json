@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "art_director",
   "name": "Art Director",
+  "summary": "Plans visual assets and references",
   "description": "Plans visual content: decides WHAT to illustrate, WHERE, and WHY. Creates Art Plans for all worthy scenes (planning is cheap). Sets priorities for budget-constrained generation. Maintains Reference Sheets for visual consistency of recurring elements (characters, locations, objects). Consults Style Lead for visual language guidance. Does NOT generate images—that's handled by tools when budget allows.",
 
   "archetypes": ["creator"],

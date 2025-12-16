@@ -23,6 +23,9 @@ from questfoundry.runtime.tools import (
     consult_playbook,  # noqa: F401
     consult_schema,  # noqa: F401
     delegate,  # noqa: F401
+    list_agents,  # noqa: F401
+    list_artifact_types,  # noqa: F401
+    list_stores,  # noqa: F401
     request_clarification,  # noqa: F401
     search_workspace,  # noqa: F401
     stubs,  # noqa: F401

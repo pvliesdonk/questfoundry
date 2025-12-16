@@ -23,6 +23,11 @@
       "description": "What this artifact represents and when it is used"
     },
 
+    "summary": {
+      "$ref": "_definitions.schema.json#/$defs/summary",
+      "description": "Concise one-liner for artifact type menus. Use description for full explanation."
+    },
+
     "category": {
       "type": "string",
       "enum": [

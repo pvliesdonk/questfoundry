@@ -7,6 +7,7 @@ Uses langchain-openai for communication with OpenAI API.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -22,6 +23,7 @@ from questfoundry.runtime.providers.base import (
     ProviderError,
     ProviderUnavailableError,
     StreamChunk,
+    ToolCallRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,7 +77,13 @@ class OpenAIProvider(LLMProvider):
 
     def _convert_messages(self, messages: list[LLMMessage]):  # type: ignore[no-untyped-def]
         """Convert LLMMessage to langchain format."""
-        from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+        from langchain_core.messages import (
+            AIMessage,
+            BaseMessage,
+            HumanMessage,
+            SystemMessage,
+            ToolMessage,
+        )
 
         langchain_messages: list[BaseMessage] = []
         for msg in messages:
@@ -84,9 +92,45 @@ class OpenAIProvider(LLMProvider):
             elif msg.role == "user":
                 langchain_messages.append(HumanMessage(content=msg.content))
             elif msg.role == "assistant":
-                langchain_messages.append(AIMessage(content=msg.content))
+                # Include tool_calls on AIMessage if present
+                if msg.tool_calls:
+                    tool_calls = [
+                        {"id": tc.id, "name": tc.name, "args": tc.arguments}
+                        for tc in msg.tool_calls
+                    ]
+                    langchain_messages.append(AIMessage(content=msg.content, tool_calls=tool_calls))
+                else:
+                    langchain_messages.append(AIMessage(content=msg.content))
+            elif msg.role == "tool":
+                # Tool result message
+                langchain_messages.append(
+                    ToolMessage(
+                        content=msg.content,
+                        tool_call_id=msg.tool_call_id or "",
+                        name=msg.name,
+                    )
+                )
 
         return langchain_messages
+
+    def _parse_tool_calls(self, response: Any) -> list[ToolCallRequest] | None:
+        """Parse tool calls from LangChain AIMessage response."""
+        tool_calls = getattr(response, "tool_calls", None)
+        if not tool_calls:
+            return None
+
+        result = []
+        for tc in tool_calls:
+            # Debug: log raw tool call data
+            logger.debug(f"Raw tool call: {tc}")
+            result.append(
+                ToolCallRequest(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("args", {}),
+                )
+            )
+        return result if result else None
 
     async def invoke(
         self,
@@ -100,20 +144,24 @@ class OpenAIProvider(LLMProvider):
         Send messages to OpenAI and get a response.
 
         Uses langchain-openai for the actual invocation.
-        Note: tools parameter accepted but not yet implemented.
         """
-        # TODO: Implement tool support for OpenAI
-        _ = tools  # Acknowledge but not yet used
-        _ = callbacks  # Acknowledge but not yet used
         options = options or InvokeOptions()
 
         llm = self._get_llm(model, options)
+
+        # Bind tools if provided
+        if tools:
+            llm = llm.bind_tools(tools)
+
         langchain_messages = self._convert_messages(messages)
+
+        # Build config with callbacks for tracing
+        config = {"callbacks": callbacks} if callbacks else None
 
         start_time = time.time()
         try:
             response = await asyncio.wait_for(
-                llm.ainvoke(langchain_messages),
+                llm.ainvoke(langchain_messages, config=config),
                 timeout=options.timeout_seconds,
             )
         except TimeoutError as e:
@@ -142,6 +190,9 @@ class OpenAIProvider(LLMProvider):
         if isinstance(content, list):
             content = str(content[0]) if content else ""
 
+        # Parse tool calls from response
+        tool_calls = self._parse_tool_calls(response)
+
         return LLMResponse(
             content=content,
             model=model,
@@ -150,6 +201,7 @@ class OpenAIProvider(LLMProvider):
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             duration_ms=duration_ms,
+            tool_calls=tool_calls,
             raw=response,
         )
 
@@ -165,22 +217,30 @@ class OpenAIProvider(LLMProvider):
         Stream response chunks from OpenAI.
 
         Uses langchain-openai's astream for streaming.
-        Note: tools parameter accepted but not yet implemented.
+        Supports tool binding when tools are provided.
         """
-        # TODO: Implement tool support for OpenAI
-        _ = tools  # Acknowledge but not yet used
-        _ = callbacks  # Acknowledge but not yet used
         options = options or InvokeOptions()
 
         llm = self._get_llm(model, options)
+
+        # Bind tools if provided
+        if tools:
+            llm = llm.bind_tools(tools)
+
         langchain_messages = self._convert_messages(messages)
+
+        # Build config with callbacks for tracing
+        config = {"callbacks": callbacks} if callbacks else None
 
         try:
             prompt_tokens: int | None = None
             completion_tokens: int | None = None
             total_tokens: int | None = None
+            # Track tool call chunks by index to accumulate incrementally
+            # Key: index, Value: {"id": str, "name": str, "args_json": str}
+            tool_call_builders: dict[int, dict[str, str]] = {}
 
-            async for chunk in llm.astream(langchain_messages):
+            async for chunk in llm.astream(langchain_messages, config=config):
                 content = chunk.content
                 if isinstance(content, list):
                     content = str(content[0]) if content else ""
@@ -192,18 +252,54 @@ class OpenAIProvider(LLMProvider):
                     completion_tokens = usage_metadata.get("output_tokens")
                     total_tokens = usage_metadata.get("total_tokens")
 
+                # Accumulate tool call chunks (args come as JSON string fragments)
+                tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+                if tool_call_chunks:
+                    for tcc in tool_call_chunks:
+                        idx = tcc.get("index", 0)
+                        if idx not in tool_call_builders:
+                            tool_call_builders[idx] = {"id": "", "name": "", "args_json": ""}
+
+                        builder = tool_call_builders[idx]
+                        if tcc.get("id"):
+                            builder["id"] = tcc["id"]
+                        if tcc.get("name"):
+                            builder["name"] = tcc["name"]
+                        if tcc.get("args"):
+                            builder["args_json"] += tcc["args"]
+
                 yield StreamChunk(
                     content=content,
                     done=False,
                 )
 
-            # Final chunk with done=True and usage stats
+            # Parse accumulated tool calls
+            final_tool_calls = []
+            for _idx, builder in tool_call_builders.items():
+                if builder["name"] and builder["id"]:
+                    # Parse the accumulated JSON args
+                    try:
+                        args = json.loads(builder["args_json"]) if builder["args_json"] else {}
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse tool call args: {builder['args_json']}")
+                        args = {}
+
+                    final_tool_calls.append(
+                        ToolCallRequest(
+                            id=builder["id"],
+                            name=builder["name"],
+                            arguments=args,
+                        )
+                    )
+
+            # Final chunk with done=True, usage stats, and parsed tool calls
             yield StreamChunk(
                 content="",
                 done=True,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
+                tool_calls=final_tool_calls if final_tool_calls else None,
             )
 
         except Exception as e:

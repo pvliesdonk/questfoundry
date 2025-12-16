@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
   "id": "codex_entry",
   "name": "Codex Entry",
+  "summary": "Player-safe glossary entry",
   "description": "Player-safe glossary entry. Diegetic explanation of a term, entity, place, or concept that players can read without spoilers. Written as an in-world scholar would write it. Derived from canon by Codex Curator, validated by Gatekeeper for spoiler leaks.",
   "category": "reference",
 
