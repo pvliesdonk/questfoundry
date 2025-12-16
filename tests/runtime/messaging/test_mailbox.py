@@ -246,3 +246,164 @@ class TestAsyncMailbox:
 
         assert len(received) == 10
         assert mailbox.count_pending() == 0
+
+
+class TestMailboxSerialization:
+    """Tests for mailbox serialization (to_dict/from_dict)."""
+
+    @pytest.mark.asyncio
+    async def test_to_dict_empty(self, mailbox):
+        """Test serializing an empty mailbox."""
+        data = mailbox.to_dict()
+
+        assert data["agent_id"] == "test_agent"
+        assert data["pending_messages"] == []
+
+    @pytest.mark.asyncio
+    async def test_to_dict_with_messages(self, mailbox):
+        """Test serializing a mailbox with pending messages."""
+        await mailbox.put(make_message("msg-1", priority=5))
+        await mailbox.put(make_message("msg-2", priority=10))
+
+        data = mailbox.to_dict()
+
+        assert data["agent_id"] == "test_agent"
+        assert len(data["pending_messages"]) == 2
+
+        # Check message structure
+        msg_ids = {m["id"] for m in data["pending_messages"]}
+        assert msg_ids == {"msg-1", "msg-2"}
+
+    @pytest.mark.asyncio
+    async def test_from_dict_empty(self):
+        """Test deserializing an empty mailbox."""
+        data = {
+            "agent_id": "restored_agent",
+            "pending_messages": [],
+        }
+
+        mailbox = AsyncMailbox.from_dict(data)
+
+        assert mailbox.agent_id == "restored_agent"
+        assert mailbox.count_pending() == 0
+
+    @pytest.mark.asyncio
+    async def test_from_dict_with_messages(self):
+        """Test deserializing a mailbox with messages."""
+        data = {
+            "agent_id": "restored_agent",
+            "pending_messages": [
+                {
+                    "id": "msg-1",
+                    "type": "feedback",
+                    "from_agent": "sender",
+                    "to_agent": "restored_agent",
+                    "timestamp": "2024-12-16T10:00:00",
+                    "priority": 5,
+                    "status": "pending",
+                    "payload": {"content": "test"},
+                },
+                {
+                    "id": "msg-2",
+                    "type": "feedback",
+                    "from_agent": "sender",
+                    "to_agent": "restored_agent",
+                    "timestamp": "2024-12-16T10:00:01",
+                    "priority": 10,
+                    "status": "pending",
+                    "payload": {},
+                },
+            ],
+        }
+
+        mailbox = AsyncMailbox.from_dict(data)
+
+        assert mailbox.agent_id == "restored_agent"
+        assert mailbox.count_pending() == 2
+
+        # Messages should be retrievable with priority ordering
+        msg = await mailbox.get(timeout=0.1)
+        assert msg.id == "msg-2"  # Higher priority first
+
+        msg = await mailbox.get(timeout=0.1)
+        assert msg.id == "msg-1"
+
+    @pytest.mark.asyncio
+    async def test_roundtrip_serialization(self, mailbox):
+        """Test that to_dict -> from_dict preserves mailbox state."""
+        # Add some messages
+        await mailbox.put(make_message("msg-1", priority=5))
+        await mailbox.put(make_message("msg-2", priority=10, correlation_id="corr-123"))
+        await mailbox.put(make_message("msg-3", priority=0))
+
+        # Serialize
+        data = mailbox.to_dict()
+
+        # Deserialize
+        restored = AsyncMailbox.from_dict(data)
+
+        # Verify state preserved
+        assert restored.agent_id == mailbox.agent_id
+        assert restored.count_pending() == mailbox.count_pending()
+
+        # Verify priority ordering preserved
+        msg1 = await restored.get(timeout=0.1)
+        assert msg1.id == "msg-2"  # Priority 10
+
+        msg2 = await restored.get(timeout=0.1)
+        assert msg2.id == "msg-1"  # Priority 5
+
+        msg3 = await restored.get(timeout=0.1)
+        assert msg3.id == "msg-3"  # Priority 0
+
+    @pytest.mark.asyncio
+    async def test_from_dict_preserves_correlation_index(self):
+        """Test that from_dict restores correlation ID indexing."""
+        data = {
+            "agent_id": "agent",
+            "pending_messages": [
+                {
+                    "id": "msg-1",
+                    "type": "feedback",
+                    "from_agent": "sender",
+                    "to_agent": "agent",
+                    "timestamp": "2024-12-16T10:00:00",
+                    "priority": 0,
+                    "status": "pending",
+                    "payload": {},
+                    "correlation_id": "corr-abc",
+                },
+            ],
+        }
+
+        mailbox = AsyncMailbox.from_dict(data)
+
+        # Should be able to find message by correlation ID
+        msg = await mailbox.peek_by_correlation("corr-abc")
+        assert msg is not None
+        assert msg.id == "msg-1"
+
+    @pytest.mark.asyncio
+    async def test_from_dict_sets_not_empty_event(self):
+        """Test that from_dict sets the not_empty event when messages exist."""
+        data = {
+            "agent_id": "agent",
+            "pending_messages": [
+                {
+                    "id": "msg-1",
+                    "type": "feedback",
+                    "from_agent": "sender",
+                    "to_agent": "agent",
+                    "timestamp": "2024-12-16T10:00:00",
+                    "priority": 0,
+                    "status": "pending",
+                    "payload": {},
+                },
+            ],
+        }
+
+        mailbox = AsyncMailbox.from_dict(data)
+
+        # Should be able to get message without timeout
+        msg = await mailbox.get(timeout=0.1)
+        assert msg is not None

@@ -390,3 +390,35 @@ class PlaybookTracker:
                     self._by_playbook[inst.playbook_id].discard(inst_id)
 
             return len(to_remove)
+
+    def get_all_instances(self) -> list[PlaybookInstance]:
+        """
+        Get all playbook instances (for checkpoint serialization).
+
+        Returns:
+            List of all playbook instances
+        """
+        return list(self._instances.values())
+
+    def restore_instances(self, instances: list[PlaybookInstance]) -> int:
+        """
+        Restore playbook instances from checkpoint.
+
+        Clears existing instances and restores from the provided list.
+
+        Args:
+            instances: List of PlaybookInstance objects to restore
+
+        Returns:
+            Number of instances restored
+        """
+        self._instances.clear()
+        self._by_playbook.clear()
+
+        for instance in instances:
+            self._instances[instance.instance_id] = instance
+            if instance.playbook_id not in self._by_playbook:
+                self._by_playbook[instance.playbook_id] = set()
+            self._by_playbook[instance.playbook_id].add(instance.instance_id)
+
+        return len(instances)
