@@ -904,7 +904,8 @@ async def _handle_clarification_requests(
 
     for request in clarification_requests:
         payload = request.payload
-        question = payload.get("question", "")
+        # communicate tool uses "message" field for the question text
+        question = payload.get("message", "") or payload.get("question", "")
         context = payload.get("context")
         options = payload.get("options", [])
         default_option = payload.get("default_option")
