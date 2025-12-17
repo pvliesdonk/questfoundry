@@ -309,6 +309,29 @@ class QualityCriteria(BaseModel):
     failure_guidance: str | None = None
 
 
+class KnowledgeContent(BaseModel):
+    """Knowledge content definition."""
+
+    type: str = "inline"  # inline, file_ref, structured, corpus
+    text: str | None = None  # For inline type
+    file_path: str | None = None  # For file_ref type
+    format: str = "markdown"  # markdown, json, yaml, plain
+    data: dict[str, Any] | None = None  # For structured type
+    schema_ref: str | None = None  # For structured type
+    corpus_ref: dict[str, Any] | None = None  # For corpus type
+
+    model_config = {"extra": "allow"}
+
+
+class KnowledgeApplicability(BaseModel):
+    """What a knowledge entry applies to."""
+
+    archetypes: list[str] = Field(default_factory=list)
+    agents: list[str] = Field(default_factory=list)
+    playbooks: list[str] = Field(default_factory=list)
+    artifact_types: list[str] = Field(default_factory=list)
+
+
 class KnowledgeEntry(BaseModel):
     """Knowledge entry from knowledge-entry.schema.json."""
 
@@ -317,8 +340,20 @@ class KnowledgeEntry(BaseModel):
     summary: str | None = None
     layer: KnowledgeLayer = KnowledgeLayer.LOOKUP
 
-    content: dict[str, Any] | None = None
-    applicable_to: dict[str, Any] | None = None
+    # Discovery fields
+    keywords: list[str] = Field(default_factory=list)
+    triggers: list[str] = Field(default_factory=list)
+    discriminators: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+    # Content - can be dict or structured model
+    content: KnowledgeContent | dict[str, Any] | None = None
+    applicable_to: KnowledgeApplicability | dict[str, Any] | None = None
+    related_entries: list[str] = Field(default_factory=list)
+
+    # Versioning
+    version: str | None = None
+    last_updated: str | None = None
 
 
 class Playbook(BaseModel):
@@ -384,8 +419,9 @@ class Studio(BaseModel):
     asset_types: list[AssetType] = Field(default_factory=list)
     quality_criteria: list[QualityCriteria] = Field(default_factory=list)
 
-    # Knowledge (resolved separately)
-    knowledge_config: dict[str, Any] | None = None
+    # Knowledge system
+    knowledge_config: dict[str, Any] | None = None  # Layer configuration from layers.json
+    knowledge: dict[str, KnowledgeEntry] = Field(default_factory=dict)  # Entries by ID
 
     # References
     constitution_ref: str | None = None

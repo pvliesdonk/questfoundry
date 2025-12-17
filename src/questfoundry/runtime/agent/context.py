@@ -276,11 +276,14 @@ class ContextBuilder:
 
         if entry.content:
             if isinstance(entry.content, dict):
-                # Inline content
+                # Dict-style inline content
                 if entry.content.get("type") == "inline":
                     content = entry.content.get("text", "")
             elif isinstance(entry.content, str):
                 content = entry.content
+            elif hasattr(entry.content, "type") and entry.content.type == "inline":
+                # KnowledgeContent model
+                content = entry.content.text or ""
 
         return {
             "id": entry.id,

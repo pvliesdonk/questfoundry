@@ -21,6 +21,7 @@ Usage:
 from questfoundry.runtime.tools import (
     communicate,  # noqa: F401  # Phase 7: unified human communication
     consult_corpus,  # noqa: F401
+    consult_knowledge,  # noqa: F401  # Phase 7: knowledge menu+consult pattern
     consult_playbook,  # noqa: F401
     consult_schema,  # noqa: F401
     delegate,  # noqa: F401

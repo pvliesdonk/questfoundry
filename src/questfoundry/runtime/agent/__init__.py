@@ -5,9 +5,16 @@ This module provides the core runtime for activating agents:
 - AgentRuntime: Main runtime class
 - ContextBuilder: Gathers knowledge for agents
 - PromptBuilder: Constructs system prompts
+- KnowledgeContextBuilder: Budget-aware knowledge injection
 """
 
 from questfoundry.runtime.agent.context import AgentContext, ContextBuilder, build_context
+from questfoundry.runtime.agent.knowledge import (
+    KnowledgeBudgetConfig,
+    KnowledgeContext,
+    KnowledgeContextBuilder,
+    build_knowledge_context,
+)
 from questfoundry.runtime.agent.prompt import (
     BuiltPrompt,
     PromptBuilder,
@@ -31,6 +38,11 @@ __all__ = [
     "ContextBuilder",
     "AgentContext",
     "build_context",
+    # Knowledge
+    "KnowledgeContextBuilder",
+    "KnowledgeBudgetConfig",
+    "KnowledgeContext",
+    "build_knowledge_context",
     # Prompt
     "PromptBuilder",
     "PromptSection",
