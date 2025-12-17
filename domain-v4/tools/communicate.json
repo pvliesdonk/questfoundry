@@ -1,0 +1,132 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "communicate",
+  "name": "Communicate with Customer",
+  "description": "Send a message to the human customer. This is the ONLY way orchestrators communicate with humans - all output must go through this tool.\n\nMessage types:\n- status: Brief progress update (non-blocking)\n- question: Need input from customer (blocks until answered)\n- notification: Deliverable ready or milestone reached (non-blocking)\n- error: Something failed or needs attention (may block depending on severity)\n\nOrchestrators must end every turn with either this tool or delegate.",
+
+  "terminates_turn": true,
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "enum": ["status", "question", "notification", "error"],
+        "description": "Type of communication"
+      },
+      "message": {
+        "type": "string",
+        "description": "The message content (keep brief: 1-3 sentences for status/notification, clear question for questions)"
+      },
+      "context": {
+        "type": "string",
+        "description": "Additional context. For questions: why this input is needed. For errors: what was attempted."
+      },
+      "options": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Short identifier for this option"
+            },
+            "description": {
+              "type": "string",
+              "description": "What this option means"
+            },
+            "implications": {
+              "type": "string",
+              "description": "What choosing this option would lead to"
+            }
+          },
+          "required": ["id", "description"]
+        },
+        "description": "For questions: structured choices to present"
+      },
+      "default_option": {
+        "type": "string",
+        "description": "For questions with options: recommended choice if customer doesn't respond"
+      },
+      "artifacts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "For notifications: artifact references being presented (e.g., 'workspace:section:chapter_1_draft')"
+      },
+      "severity": {
+        "type": "string",
+        "enum": ["info", "warning", "error"],
+        "default": "info",
+        "description": "For errors: severity level. 'error' severity may block for customer decision."
+      }
+    },
+    "required": ["type", "message"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "delivered": {
+        "type": "boolean",
+        "description": "Whether the message was delivered to the customer"
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "selected_option": {
+            "type": "string",
+            "description": "For questions with options: which option was selected"
+          },
+          "answer": {
+            "type": "string",
+            "description": "For questions: the customer's free-form response"
+          }
+        },
+        "description": "For questions: the customer's response (if synchronous)"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Status update",
+      "input": {
+        "type": "status",
+        "message": "Starting story structure planning. Delegating to Plotwright."
+      }
+    },
+    {
+      "description": "Question with options",
+      "input": {
+        "type": "question",
+        "message": "What tone would you like for this story?",
+        "context": "The tone will affect word choice, pacing, and themes throughout.",
+        "options": [
+          { "id": "dark", "description": "Dark and serious", "implications": "Gothic atmosphere, moral ambiguity" },
+          { "id": "light", "description": "Light and adventurous", "implications": "Upbeat pacing, clear heroes/villains" },
+          { "id": "balanced", "description": "Balanced mix", "implications": "Varies by scene as appropriate" }
+        ],
+        "default_option": "balanced"
+      }
+    },
+    {
+      "description": "Notification with artifact",
+      "input": {
+        "type": "notification",
+        "message": "Chapter 1 draft is ready for your review.",
+        "artifacts": ["workspace:section:chapter_1_v1"]
+      }
+    },
+    {
+      "description": "Error with context",
+      "input": {
+        "type": "error",
+        "message": "Unable to reach Researcher for fact verification.",
+        "context": "Web search failed after 3 retries. Proceeding with available information.",
+        "severity": "warning"
+      }
+    }
+  ]
+}
