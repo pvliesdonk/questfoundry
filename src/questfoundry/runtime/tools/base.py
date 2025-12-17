@@ -94,6 +94,9 @@ class ToolContext:
     # Additional context that may be needed
     domain_path: Path | None = None  # Path to domain directory
 
+    # Interactive mode flag - tools requiring human input should check this
+    interactive: bool = True
+
 
 class BaseTool(ABC):
     """

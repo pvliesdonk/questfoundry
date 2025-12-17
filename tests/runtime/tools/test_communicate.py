@@ -599,3 +599,135 @@ class TestErrorSeverityEnum:
         assert ErrorSeverity.INFO.value == "info"
         assert ErrorSeverity.WARNING.value == "warning"
         assert ErrorSeverity.ERROR.value == "error"
+
+
+class TestCommunicateToolNonInteractiveMode:
+    """Tests for non-interactive mode behavior."""
+
+    @pytest.fixture
+    def non_interactive_context(
+        self, mock_studio: MagicMock, mock_broker: AsyncMock
+    ) -> ToolContext:
+        """Create a non-interactive tool context."""
+        return ToolContext(
+            studio=mock_studio,
+            agent_id="showrunner",
+            session_id="test_session",
+            broker=mock_broker,
+            interactive=False,
+        )
+
+    @pytest.fixture
+    def non_interactive_tool(
+        self, mock_tool_definition: MagicMock, non_interactive_context: ToolContext
+    ) -> CommunicateTool:
+        """Create a communicate tool in non-interactive mode."""
+        return CommunicateTool(mock_tool_definition, non_interactive_context)
+
+    async def test_question_blocked_without_default(
+        self, non_interactive_tool: CommunicateTool
+    ) -> None:
+        """Question without default_option should fail in non-interactive mode."""
+        result = await non_interactive_tool.execute(
+            {
+                "type": "question",
+                "message": "What tone do you prefer?",
+            }
+        )
+
+        assert result.success is False
+        assert result.data["type"] == "question"
+        assert result.data["status"] == "blocked"
+        assert result.data["non_interactive"] is True
+        assert "Cannot ask questions in non-interactive mode" in result.error
+
+    async def test_question_auto_answered_with_default(
+        self, non_interactive_tool: CommunicateTool
+    ) -> None:
+        """Question with default_option should auto-select in non-interactive mode."""
+        result = await non_interactive_tool.execute(
+            {
+                "type": "question",
+                "message": "What tone do you prefer?",
+                "options": [
+                    {"id": "dark", "description": "Dark and serious"},
+                    {"id": "light", "description": "Light and fun"},
+                ],
+                "default_option": "light",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["type"] == "question"
+        assert result.data["status"] == "auto_answered"
+        assert result.data["response"]["selected"] == "light"
+        assert result.data["non_interactive"] is True
+
+    async def test_status_still_works(
+        self, non_interactive_tool: CommunicateTool, mock_broker: AsyncMock
+    ) -> None:
+        """Status messages should still work in non-interactive mode."""
+        result = await non_interactive_tool.execute(
+            {
+                "type": "status",
+                "message": "Processing request...",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["type"] == "status"
+        assert result.data["delivered"] is True
+        mock_broker.send.assert_called_once()
+
+    async def test_notification_still_works(
+        self, non_interactive_tool: CommunicateTool, mock_broker: AsyncMock
+    ) -> None:
+        """Notification messages should still work in non-interactive mode."""
+        result = await non_interactive_tool.execute(
+            {
+                "type": "notification",
+                "message": "Chapter 1 complete.",
+                "artifacts": ["workspace:section:chapter_1"],
+            }
+        )
+
+        assert result.success is True
+        assert result.data["type"] == "notification"
+        assert result.data["delivered"] is True
+        mock_broker.send.assert_called_once()
+
+    async def test_error_still_works(
+        self, non_interactive_tool: CommunicateTool, mock_broker: AsyncMock
+    ) -> None:
+        """Error messages should still work in non-interactive mode."""
+        result = await non_interactive_tool.execute(
+            {
+                "type": "error",
+                "message": "Failed to connect.",
+                "severity": "warning",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["type"] == "error"
+        assert result.data["delivered"] is True
+        mock_broker.send.assert_called_once()
+
+    async def test_question_blocked_with_options_no_default(
+        self, non_interactive_tool: CommunicateTool
+    ) -> None:
+        """Question with options but no default should still fail."""
+        result = await non_interactive_tool.execute(
+            {
+                "type": "question",
+                "message": "Choose a theme",
+                "options": [
+                    {"id": "fantasy", "description": "Fantasy world"},
+                    {"id": "scifi", "description": "Science fiction"},
+                ],
+            }
+        )
+
+        assert result.success is False
+        assert result.data["status"] == "blocked"
+        assert "no default_option provided" in result.error

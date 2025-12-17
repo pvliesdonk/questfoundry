@@ -226,3 +226,41 @@ class TestBuildAgentTools:
         tool_ids = {t.id for t in tools}
         assert "consult_schema" in tool_ids
         assert "delegate" in tool_ids
+
+
+class TestToolRegistryInteractiveMode:
+    """Tests for interactive mode handling in ToolRegistry."""
+
+    def test_default_interactive_mode(self):
+        """Registry should default to interactive mode."""
+        studio, _ = make_mock_studio_with_tools()
+        registry = ToolRegistry(studio)
+
+        tool = registry.get_tool("consult_schema")
+        assert tool.context.interactive is True
+
+    def test_non_interactive_mode_passed_to_tool(self):
+        """Non-interactive flag should be passed to tool context."""
+        studio, _ = make_mock_studio_with_tools()
+        registry = ToolRegistry(studio, interactive=False)
+
+        tool = registry.get_tool("consult_schema")
+        assert tool.context.interactive is False
+
+    def test_interactive_mode_passed_to_tool(self):
+        """Interactive flag should be passed to tool context."""
+        studio, _ = make_mock_studio_with_tools()
+        registry = ToolRegistry(studio, interactive=True)
+
+        tool = registry.get_tool("consult_schema")
+        assert tool.context.interactive is True
+
+    def test_non_interactive_mode_for_agent_tools(self):
+        """Non-interactive flag should be passed to all agent tools."""
+        studio, agent = make_mock_studio_with_tools()
+        registry = ToolRegistry(studio, interactive=False)
+
+        tools = registry.get_agent_tools(agent)
+
+        for tool in tools:
+            assert tool.context.interactive is False

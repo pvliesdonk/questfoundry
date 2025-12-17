@@ -96,6 +96,39 @@ class CommunicateTool(BaseTool):
                 f"Invalid communication type '{comm_type_str}'. Valid types: {valid_types}"
             ) from None
 
+        # In non-interactive mode, questions cannot be asked
+        if comm_type == CommunicationType.QUESTION and not self._context.interactive:
+            logger.warning(
+                "Question communication blocked in non-interactive mode: %s",
+                message_text[:50] + "..." if len(message_text) > 50 else message_text,
+            )
+            # If default_option is provided, auto-select it
+            if default_option:
+                logger.info(
+                    "Auto-selecting default option '%s' in non-interactive mode", default_option
+                )
+                return ToolResult(
+                    success=True,
+                    data={
+                        "type": comm_type.value,
+                        "status": "auto_answered",
+                        "message": message_text,
+                        "response": {"selected": default_option},
+                        "non_interactive": True,
+                    },
+                )
+            # No default - return error
+            return ToolResult(
+                success=False,
+                data={
+                    "type": comm_type.value,
+                    "status": "blocked",
+                    "message": message_text,
+                    "non_interactive": True,
+                },
+                error="Cannot ask questions in non-interactive mode (no default_option provided)",
+            )
+
         # Parse severity for errors
         try:
             severity = ErrorSeverity(severity_str)
