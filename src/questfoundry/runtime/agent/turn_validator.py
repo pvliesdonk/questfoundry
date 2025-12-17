@@ -29,12 +29,6 @@ class TurnValidationConfig:
     # Maximum retries before giving up on orchestrator enforcement
     max_retries: int = 3
 
-    # Whether to allow non-terminating tool calls as intermediate steps
-    allow_intermediate_tools: bool = True
-
-    # Whether to include tool list in nudge messages
-    include_tool_hints: bool = True
-
 
 @dataclass
 class TurnValidationResult:
@@ -114,9 +108,7 @@ class TurnValidator:
         the agent must use tools-only output.
         """
         for constraint in agent.constraints:
-            if constraint.enforcement.value == "runtime" and (
-                "tools_only" in constraint.id or "tools-only" in constraint.id
-            ):
+            if constraint.enforcement.value == "runtime" and "tools_only" in constraint.id:
                 return True
         return False
 
@@ -195,21 +187,22 @@ class TurnValidator:
 
     def _build_no_tools_nudge(self) -> str:
         """Build nudge message when no tools were called."""
+        # Build dynamic tool list from actual terminating tools
+        tools_list = sorted(self._terminating_tools)
+        if tools_list:
+            tool_options = "\n".join(f"- `{t}`" for t in tools_list)
+            tool_sentence = f"You must call one of the terminating tools:\n{tool_options}"
+        else:
+            tool_sentence = "You must call a terminating tool."
+
         nudge = (
             "Your response contained no tool calls. "
             "As an orchestrator, you MUST use tools for ALL output.\n\n"
-            "You MUST either:\n"
-            "1. Call `delegate` to assign work to a specialist agent, OR\n"
-            "2. Call `communicate` to send information to another agent, OR\n"
-            "3. Call `terminate` if the workflow is complete\n\n"
+            f"{tool_sentence}\n\n"
             "Do NOT generate prose directly. "
             "Do NOT respond with plain text. "
             "You MUST make a tool call that ends your turn."
         )
-
-        if self._config.include_tool_hints and self._terminating_tools:
-            tools_list = ", ".join(f"`{t}`" for t in sorted(self._terminating_tools))
-            nudge += f"\n\nTerminating tools available: {tools_list}"
 
         return nudge
 
@@ -219,19 +212,21 @@ class TurnValidator:
     ) -> str:
         """Build nudge when tools were called but none terminate the turn."""
         tools_used = ", ".join(f"`{t}`" for t in non_terminating)
+
+        # Build dynamic tool list from actual terminating tools
+        tools_list = sorted(self._terminating_tools)
+        if tools_list:
+            tool_options = ", ".join(f"`{t}`" for t in tools_list)
+            tool_sentence = f"You must also call one of: {tool_options}"
+        else:
+            tool_sentence = "You must also call a terminating tool."
+
         nudge = (
             f"You called {tools_used}, but none of these tools terminate your turn. "
             "As an orchestrator, you MUST end your turn with a terminating tool.\n\n"
-            "After using intermediate tools, you MUST:\n"
-            "1. Call `delegate` to assign the next task, OR\n"
-            "2. Call `communicate` to relay information, OR\n"
-            "3. Call `terminate` if the workflow is complete\n\n"
+            f"{tool_sentence}\n\n"
             "Your turn is not complete until you call a terminating tool."
         )
-
-        if self._config.include_tool_hints and self._terminating_tools:
-            tools_list = ", ".join(f"`{t}`" for t in sorted(self._terminating_tools))
-            nudge += f"\n\nTerminating tools available: {tools_list}"
 
         return nudge
 

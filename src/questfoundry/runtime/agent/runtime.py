@@ -736,14 +736,21 @@ class AgentRuntime:
                         # Tool enforcement disabled or no tools - we're done
                         break
 
-                # Have tool calls - execute them
+                # Have tool calls - execute them first, then validate
                 tool_calls = response.tool_calls  # Already checked not None
 
+                # Execute tool calls (always execute, even if validation will fail)
+                logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
+                tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
+                all_tool_calls.extend(tool_results)
+
                 # Validate turn with TurnValidator (checks for terminating tools)
+                # Note: This orchestrator enforcement runs independently of enforce_tool_usage.
+                # Orchestrators with runtime enforcement always require terminating tools.
                 validation = self._turn_validator.validate_turn(agent, tool_calls)
 
                 if not validation.valid:
-                    # Orchestrator didn't use terminating tool
+                    # Orchestrator didn't use terminating tool - tools already executed above
                     consecutive_failures += 1
                     logger.warning(
                         "Turn validation failed in iteration %d (failure %d/%d): %s",
@@ -763,14 +770,7 @@ class AgentRuntime:
                         stop_reason = "max_failures"
                         break
 
-                    # Execute the non-terminating tools first (they may be useful)
-                    logger.info(
-                        f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})"
-                    )
-                    tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
-                    all_tool_calls.extend(tool_results)
-
-                    # Add assistant and tool messages
+                    # Add assistant and tool messages (tools already executed above)
                     messages.append(
                         LLMMessage(
                             role="assistant",
@@ -788,11 +788,6 @@ class AgentRuntime:
 
                 # Reset failure count on valid turn
                 consecutive_failures = 0
-
-                # Execute tool calls
-                logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
-                tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
-                all_tool_calls.extend(tool_results)
 
                 # Check for stop tools
                 stop_tool, stop_result = self._check_for_stop_tool(tool_results)
@@ -1032,11 +1027,21 @@ class AgentRuntime:
 
                 # Handle tool calls if present
                 if pending_tool_calls:
+                    # Execute tool calls first (always execute, even if validation will fail)
+                    logger.info(
+                        f"Executing {len(pending_tool_calls)} tool calls from streaming response"
+                    )
+                    tool_results = await self._execute_tool_calls(
+                        pending_tool_calls, agent, session.id
+                    )
+
                     # Validate turn with TurnValidator (checks for terminating tools)
+                    # Note: This orchestrator enforcement runs independently of enforce_tool_usage.
+                    # Orchestrators with runtime enforcement always require terminating tools.
                     validation = self._turn_validator.validate_turn(agent, pending_tool_calls)
 
                     if not validation.valid:
-                        # Orchestrator didn't use terminating tool
+                        # Orchestrator didn't use terminating tool - tools already executed above
                         consecutive_failures += 1
                         logger.warning(
                             "Turn validation failed in streaming iteration %d (failure %d/%d)",
@@ -1052,15 +1057,7 @@ class AgentRuntime:
                             )
                             break
 
-                        # Execute the non-terminating tools first
-                        logger.info(
-                            f"Executing {len(pending_tool_calls)} tool calls from streaming response"
-                        )
-                        tool_results = await self._execute_tool_calls(
-                            pending_tool_calls, agent, session.id
-                        )
-
-                        # Add assistant and tool messages
+                        # Add assistant and tool messages (tools already executed above)
                         messages.append(
                             LLMMessage(
                                 role="assistant",
@@ -1087,14 +1084,7 @@ class AgentRuntime:
                     # Valid turn - reset failure count
                     consecutive_failures = 0
 
-                    logger.info(
-                        f"Executing {len(pending_tool_calls)} tool calls from streaming response"
-                    )
-                    tool_results = await self._execute_tool_calls(
-                        pending_tool_calls, agent, session.id
-                    )
-
-                    # Check for stop tools
+                    # Check for stop tools (using already-executed results)
                     stop_tool, _ = self._check_for_stop_tool(tool_results)
                     if stop_tool:
                         logger.info("Stop tool '%s' called, ending streaming", stop_tool)

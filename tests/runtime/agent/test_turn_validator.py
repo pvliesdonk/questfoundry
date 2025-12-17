@@ -256,6 +256,23 @@ class TestValidateTurn:
         assert result.terminating_tool_id == "delegate"
         assert result.non_terminating_tools == ["search"]
 
+    def test_multiple_terminating_tools(self, mock_studio: Studio, orchestrator_agent: Agent):
+        """Should handle multiple terminating tools - uses last one as terminator."""
+        validator = TurnValidator(mock_studio)
+        tool_calls = [
+            MockToolCallRequest("delegate", {"task": "research"}),
+            MockToolCallRequest("communicate", {"message": "done"}),
+        ]
+
+        result = validator.validate_turn(orchestrator_agent, tool_calls)
+
+        assert result.valid is True
+        assert result.has_terminating_tool is True
+        # Last terminating tool in the list is recorded
+        assert result.terminating_tool_id == "communicate"
+        # No non-terminating tools in this case
+        assert result.non_terminating_tools is None
+
 
 class TestNudgeMessages:
     """Tests for nudge message generation."""
@@ -287,27 +304,15 @@ class TestNudgeMessages:
 
         assert "search" in result.nudge_message.lower()
 
-    def test_nudge_includes_tool_hints(self, mock_studio: Studio, orchestrator_agent: Agent):
-        """Nudge should include list of terminating tools when configured."""
-        config = TurnValidationConfig(include_tool_hints=True)
-        validator = TurnValidator(mock_studio, config)
+    def test_nudge_includes_dynamic_tool_list(self, mock_studio: Studio, orchestrator_agent: Agent):
+        """Nudge should include list of terminating tools dynamically."""
+        validator = TurnValidator(mock_studio)
 
         result = validator.validate_turn(orchestrator_agent, None)
 
+        # Nudge should list all terminating tools from the studio
         assert "delegate" in result.nudge_message
         assert "communicate" in result.nudge_message
-
-    def test_nudge_without_tool_hints(self, mock_studio: Studio, orchestrator_agent: Agent):
-        """Nudge should not include tool list when hints disabled."""
-        config = TurnValidationConfig(include_tool_hints=False)
-        validator = TurnValidator(mock_studio, config)
-
-        result = validator.validate_turn(orchestrator_agent, None)
-
-        # Should still have the core message
-        assert "delegate" in result.nudge_message.lower()
-        # But not the "Terminating tools available:" line
-        assert "terminating tools available" not in result.nudge_message.lower()
 
 
 class TestTurnValidationConfig:
@@ -317,19 +322,11 @@ class TestTurnValidationConfig:
         """Should have sensible defaults."""
         config = TurnValidationConfig()
         assert config.max_retries == 3
-        assert config.allow_intermediate_tools is True
-        assert config.include_tool_hints is True
 
     def test_custom_config(self):
         """Should accept custom values."""
-        config = TurnValidationConfig(
-            max_retries=5,
-            allow_intermediate_tools=False,
-            include_tool_hints=False,
-        )
+        config = TurnValidationConfig(max_retries=5)
         assert config.max_retries == 5
-        assert config.allow_intermediate_tools is False
-        assert config.include_tool_hints is False
 
 
 class TestGetTerminatingToolNames:
