@@ -25,12 +25,14 @@ This phase implements the v4 design goals: **smaller, more structured prompts** 
 **Decision**: Orchestrator agents (Showrunner) must produce all output via tool calls. No raw prose allowed.
 
 **Rationale**:
+
 - Enforcement becomes trivial (no tool call = incomplete turn)
 - All output is structured and typed
 - Runtime controls presentation, not the agent
 - Consistent with delegation pattern (specialists also return structured results)
 
 **Implementation**:
+
 ```
 Human → Runtime → Showrunner
                       ↓
@@ -46,11 +48,13 @@ Human sees: "Starting scene generation..."
 **Decision**: Add `terminates_turn: boolean` to tool-definition schema.
 
 **Rationale**:
+
 - Makes stop-tool behavior explicit in domain, not hardcoded in runtime
 - Runtime can generically enforce "orchestrators must end with terminating tool"
 - New tools can declare their turn-ending behavior
 
 **Tools with `terminates_turn: true`**:
+
 - `delegate` — hands off to another agent
 - `communicate` — sends message to human (may block for questions)
 
@@ -59,6 +63,7 @@ Human sees: "Starting scene generation..."
 **Decision**: Replace `request_clarification` with a unified `communicate` tool.
 
 **Rationale**:
+
 - Single channel for all human-facing communication
 - Structured message types enable runtime formatting
 - Questions are just one type of communication
@@ -84,6 +89,7 @@ Human sees: "Starting scene generation..."
 | `lookup` | Never shown | Via `consult_knowledge` only |
 
 **Rationale**:
+
 - Prompt size predictable and capped
 - Critical guidance always available
 - Detailed guidance accessible on demand
@@ -104,6 +110,7 @@ Human sees: "Starting scene generation..."
 ```
 
 **Rationale**:
+
 - Menu can show meaningful summaries
 - Full content retrieved via `consult_knowledge`
 - Authors control what appears inline vs on-demand
@@ -170,23 +177,25 @@ Human sees: "Starting scene generation..."
 
 ### Schema Changes (meta/)
 
-| File | Change |
-|------|--------|
-| `meta/schemas/core/tool-definition.schema.json` | Add `terminates_turn` |
-| `meta/schemas/knowledge/knowledge-entry.schema.json` | Add `summary`, `inline_budget_tokens` |
-| `meta/docs/tool-patterns.md` | New: document tools-only pattern |
-| `meta/docs/knowledge-patterns.md` | New: document menu+consult pattern |
+| File | Change | Status |
+|------|--------|--------|
+| `meta/schemas/core/tool-definition.schema.json` | Add `terminates_turn` | ✅ Done |
+| `meta/schemas/knowledge/knowledge-entry.schema.json` | (future) Add `inline_budget_tokens` | Pending |
+| `meta/docs/tool-patterns.md` | New: document tools-only pattern | ✅ Done |
+| `meta/docs/knowledge-patterns.md` | New: document menu+consult pattern | ✅ Done |
+
+Note: `summary` field already exists in knowledge-entry schema.
 
 ### Domain Changes (domain-v4/)
 
-| File | Change |
-|------|--------|
-| `domain-v4/tools/communicate.json` | New tool |
-| `domain-v4/tools/consult_knowledge.json` | New tool |
-| `domain-v4/tools/request_clarification.json` | Delete |
-| `domain-v4/tools/delegate.json` | Add `terminates_turn: true` |
-| `domain-v4/agents/showrunner.json` | Update capabilities, knowledge_requirements |
-| `domain-v4/knowledge/*.json` | Add `summary` to all entries |
+| File | Change | Status |
+|------|--------|--------|
+| `domain-v4/tools/communicate.json` | New tool | ✅ Done |
+| `domain-v4/tools/consult_knowledge.json` | New tool | ✅ Done |
+| `domain-v4/tools/request_clarification.json` | Delete | ✅ Done |
+| `domain-v4/tools/delegate.json` | Add `terminates_turn: true` | ✅ Done |
+| `domain-v4/agents/showrunner.json` | Update capabilities, constraints | ✅ Done |
+| `domain-v4/knowledge/*.json` | (already have summaries) | N/A |
 
 ### Runtime Changes (src/questfoundry/runtime/)
 
@@ -200,6 +209,7 @@ Human sees: "Starting scene generation..."
 ## Acceptance Criteria
 
 ### Tools-Only Enforcement
+
 ```python
 # Orchestrator without tool call → rejected
 response = LLMResponse(content="I'll help!", tool_calls=[])
@@ -211,6 +221,7 @@ assert validator.is_turn_complete(showrunner, response)
 ```
 
 ### Communicate Tool
+
 ```python
 # Status update
 communicate(type="status", message="Starting...")
@@ -222,6 +233,7 @@ communicate(type="question", message="What tone?", options=[...])
 ```
 
 ### Knowledge Consultation
+
 ```python
 # Prompt shows menu
 prompt = builder.build_prompt(showrunner)
@@ -234,6 +246,7 @@ assert len(result["content"]) > 500  # Full content
 ```
 
 ### Prompt Size
+
 ```python
 # Showrunner prompt under budget
 prompt = builder.build_prompt(showrunner)

@@ -215,27 +215,36 @@ Agents retrieve full knowledge content via this tool.
 
 ## Agent Knowledge Requirements
 
-Each agent declares what knowledge it needs:
+Each agent declares what knowledge it needs via the `knowledge_requirements` field:
 
 ```json
 {
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene", "runtime_guidelines"],
-    "should_know": ["delegation_patterns", "quality_bars_overview"],
-    "role_specific": ["showrunner_operating_principles"]
+    "role_specific": ["showrunner_operating_principles"],
+    "can_lookup": ["accessibility_guidelines"]
   }
 }
 ```
 
-### Override Behavior
+### Schema Fields
 
-An agent's list can **override** the entry's default layer:
+| Field | Type | Purpose |
+|-------|------|---------|
+| `constitution` | boolean | Whether to include studio constitution (usually `true`) |
+| `must_know` | array | Entry IDs to inline up to budget, overflow to menu |
+| `role_specific` | array | Entry IDs shown in menu for this agent's role |
+| `can_lookup` | array | Entry IDs accessible via `consult_knowledge` tool |
+
+### Layer vs Agent Override
+
+Knowledge entries have a default `layer` property. Agents can **override** injection behavior by placing entries in different lists:
 
 | Entry Layer | In Agent's List | Result |
 |-------------|-----------------|--------|
 | `should_know` | `must_know[]` | Inlined (budget permitting) |
-| `must_know` | `should_know[]` | Menu only |
+| `must_know` | `role_specific[]` | Menu only |
 | `role_specific` | `must_know[]` | Inlined (budget permitting) |
 
 This allows agents to promote important entries to always-inline or demote less critical ones to menu-only.
