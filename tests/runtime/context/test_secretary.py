@@ -5,6 +5,8 @@ from datetime import datetime
 import pytest
 
 from questfoundry.runtime.context import (
+    ContextSecretary,
+    ContextSummaryResult,
     MailboxSecretary,
     MailboxSummaryResult,
     Secretary,
@@ -1058,3 +1060,238 @@ class TestMailboxSummaryResult:
         assert result.digest_created is False
         assert result.summary_text is None
         assert result.action_items == []
+
+
+class TestFullSummarizationLevel:
+    """Tests for FULL level (context + mailbox summarization)."""
+
+    def test_full_level_threshold(self):
+        """Test that FULL level is triggered at 90% threshold."""
+        secretary = Secretary(
+            context_limit=1000,
+            summarization_threshold=0.7,
+            full_summarization_threshold=0.9,
+        )
+
+        # Below TOOL threshold
+        secretary.update_context_size(600, "agent_a")
+        assert secretary.get_current_level("agent_a") == SummarizationLevel.NONE
+
+        # At TOOL threshold
+        secretary.update_context_size(700, "agent_a")
+        assert secretary.get_current_level("agent_a") == SummarizationLevel.TOOL
+
+        # At FULL threshold
+        secretary.update_context_size(900, "agent_a")
+        assert secretary.get_current_level("agent_a") == SummarizationLevel.FULL
+
+    def test_should_summarize_messages_for_agent(self):
+        """Test should_summarize_messages_for_agent at FULL level."""
+        secretary = Secretary(
+            context_limit=1000,
+            summarization_threshold=0.7,
+            full_summarization_threshold=0.9,
+        )
+
+        # Below FULL threshold
+        secretary.update_context_size(800, "agent_a")
+        assert not secretary.should_summarize_messages_for_agent("agent_a")
+        assert secretary.should_summarize_tools_for_agent("agent_a")  # TOOL level
+
+        # At FULL threshold
+        secretary.update_context_size(900, "agent_a")
+        assert secretary.should_summarize_messages_for_agent("agent_a")
+        assert secretary.should_summarize_tools_for_agent("agent_a")  # Still true
+
+    def test_global_full_level(self):
+        """Test global FULL level detection."""
+        secretary = Secretary(
+            context_limit=1000,
+            summarization_threshold=0.7,
+            full_summarization_threshold=0.9,
+        )
+
+        secretary.update_context_size(950)  # Global context
+        assert secretary.current_level == SummarizationLevel.FULL
+        assert secretary.should_summarize_messages()
+
+    def test_level_decreases_when_context_shrinks(self):
+        """Test that level decreases when context is reduced."""
+        secretary = Secretary(
+            context_limit=1000,
+            summarization_threshold=0.7,
+            full_summarization_threshold=0.9,
+        )
+
+        # Start at FULL
+        secretary.update_context_size(950, "agent_a")
+        assert secretary.get_current_level("agent_a") == SummarizationLevel.FULL
+
+        # Drop to TOOL
+        secretary.update_context_size(800, "agent_a")
+        assert secretary.get_current_level("agent_a") == SummarizationLevel.TOOL
+
+        # Drop to NONE
+        secretary.update_context_size(500, "agent_a")
+        assert secretary.get_current_level("agent_a") == SummarizationLevel.NONE
+
+
+class TestContextSecretary:
+    """Tests for ContextSecretary (conversation context summarization)."""
+
+    @pytest.fixture
+    def secretary(self) -> ContextSecretary:
+        """Create a ContextSecretary with test defaults."""
+        return ContextSecretary(
+            preserve_recent_turns=3,
+            min_turns_to_summarize=5,
+        )
+
+    @pytest.fixture
+    def sample_turns(self) -> list[dict]:
+        """Create sample conversation turns."""
+        turns = []
+        for i in range(10):
+            turns.append(
+                {
+                    "role": "user" if i % 2 == 0 else "assistant",
+                    "content": f"Turn {i} content",
+                    "tool_calls": [] if i % 2 == 0 else [{"name": "search_workspace"}],
+                }
+            )
+        return turns
+
+    def test_should_summarize_below_threshold(self, secretary: ContextSecretary):
+        """Test should_summarize returns False when not enough turns."""
+        # Need 5 turns beyond the 3 preserved = 8 total minimum
+        assert not secretary.should_summarize(5)
+        assert not secretary.should_summarize(7)
+
+    def test_should_summarize_above_threshold(self, secretary: ContextSecretary):
+        """Test should_summarize returns True when enough turns."""
+        # 8 turns = 3 preserved + 5 summarizable
+        assert secretary.should_summarize(8)
+        assert secretary.should_summarize(20)
+
+    def test_select_preserves_recent_turns(
+        self, secretary: ContextSecretary, sample_turns: list[dict]
+    ):
+        """Test that recent turns are preserved."""
+        to_summarize, to_preserve = secretary.select_turns_for_summarization(sample_turns)
+
+        # Last 3 turns should be preserved
+        preserved_contents = [t["content"] for t in to_preserve]
+        assert "Turn 7 content" in preserved_contents
+        assert "Turn 8 content" in preserved_contents
+        assert "Turn 9 content" in preserved_contents
+
+    def test_select_preserves_delegation_turns(self, secretary: ContextSecretary):
+        """Test that turns with delegations are preserved."""
+        turns = [
+            {"role": "user", "content": "Regular message", "tool_calls": []},
+            {"role": "assistant", "content": "Delegation to plotwright", "tool_calls": []},
+            {"role": "user", "content": "Another message", "tool_calls": []},
+            {"role": "assistant", "content": "Response", "tool_calls": []},
+            {"role": "user", "content": "Recent 1", "tool_calls": []},
+            {"role": "assistant", "content": "Recent 2", "tool_calls": []},
+            {"role": "user", "content": "Recent 3", "tool_calls": []},
+        ]
+
+        to_summarize, to_preserve = secretary.select_turns_for_summarization(turns)
+
+        # Turn with "delegation" should be preserved
+        preserved_contents = [t["content"] for t in to_preserve]
+        assert "Delegation to plotwright" in preserved_contents
+
+    def test_select_preserves_artifact_creation_turns(self, secretary: ContextSecretary):
+        """Test that turns with artifact creation are preserved."""
+        turns = [
+            {"role": "user", "content": "Create something", "tool_calls": []},
+            {
+                "role": "assistant",
+                "content": "Creating artifact",
+                "tool_calls": [{"name": "save_artifact"}],
+            },
+            {"role": "user", "content": "Another message", "tool_calls": []},
+            {"role": "assistant", "content": "Response", "tool_calls": []},
+            {"role": "user", "content": "Recent 1", "tool_calls": []},
+            {"role": "assistant", "content": "Recent 2", "tool_calls": []},
+            {"role": "user", "content": "Recent 3", "tool_calls": []},
+        ]
+
+        to_summarize, to_preserve = secretary.select_turns_for_summarization(turns)
+
+        # Turn with save_artifact should be preserved
+        preserved_contents = [t["content"] for t in to_preserve]
+        assert "Creating artifact" in preserved_contents
+
+    def test_generate_summary(self, secretary: ContextSecretary, sample_turns: list[dict]):
+        """Test summary generation."""
+        summary = secretary.generate_summary(sample_turns[:5])
+
+        assert "5" in summary  # Number of turns
+        assert "user" in summary or "assistant" in summary  # Roles mentioned
+        assert "search_workspace" in summary  # Tool mentioned
+
+    def test_summarize_context_below_threshold(self, secretary: ContextSecretary):
+        """Test summarize_context returns empty result when below threshold."""
+        turns = [{"role": "user", "content": f"Turn {i}"} for i in range(5)]
+
+        result = secretary.summarize_context(turns)
+
+        assert result.turns_summarized == 0
+        assert not result.summary_created
+
+    def test_summarize_context_above_threshold(
+        self, secretary: ContextSecretary, sample_turns: list[dict]
+    ):
+        """Test summarize_context creates summary when above threshold."""
+        result = secretary.summarize_context(sample_turns)
+
+        assert result.turns_summarized > 0
+        assert result.turns_preserved > 0
+        assert result.summary_created
+        assert result.summary_text is not None
+
+    def test_summarize_context_preserves_minimum(
+        self, secretary: ContextSecretary, sample_turns: list[dict]
+    ):
+        """Test that at least preserve_recent_turns are preserved."""
+        result = secretary.summarize_context(sample_turns)
+
+        # Should preserve at least 3 (preserve_recent_turns)
+        assert result.turns_preserved >= 3
+
+
+class TestContextSummaryResult:
+    """Tests for ContextSummaryResult dataclass."""
+
+    def test_creation(self):
+        """Test creating a ContextSummaryResult."""
+        result = ContextSummaryResult(
+            turns_summarized=10,
+            turns_preserved=5,
+            summary_created=True,
+            summary_text="Summary of 10 turns",
+            tokens_before=5000,
+            tokens_after=2000,
+        )
+
+        assert result.turns_summarized == 10
+        assert result.turns_preserved == 5
+        assert result.summary_created is True
+        assert result.summary_text == "Summary of 10 turns"
+        assert result.tokens_before == 5000
+        assert result.tokens_after == 2000
+
+    def test_no_summary_created(self):
+        """Test result when no summary was created."""
+        result = ContextSummaryResult(
+            turns_summarized=0,
+            turns_preserved=5,
+            summary_created=False,
+        )
+
+        assert result.turns_summarized == 0
+        assert result.summary_created is False
+        assert result.summary_text is None

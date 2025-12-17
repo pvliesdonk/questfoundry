@@ -80,9 +80,11 @@ class Secretary:
     context_limit: int = 8000  # Maximum context tokens (from model)
     current_context_tokens: int = 0  # Current estimated context size
 
-    # Single threshold for tool summarization (fraction of context_limit)
-    # At 70% capacity, start compressing tool results to preserve headroom
-    summarization_threshold: float = 0.7
+    # Tiered thresholds (fraction of context_limit):
+    # - At 70% capacity: start compressing tool results (TOOL level)
+    # - At 90% capacity: also summarize messages/context (FULL level)
+    summarization_threshold: float = 0.7  # TOOL level trigger
+    full_summarization_threshold: float = 0.9  # FULL level trigger
 
     # Recency window - last N tool results are ALWAYS preserved full
     # This ensures recent work is never compressed, only older results
@@ -127,11 +129,14 @@ class Secretary:
             agent_id: Agent to check
 
         Returns:
-            SummarizationLevel.NONE if below summarization_threshold
-            SummarizationLevel.TOOL if at or above summarization_threshold
-            SummarizationLevel.FULL is reserved for future message summarization
+            SummarizationLevel.NONE if below summarization_threshold (70%)
+            SummarizationLevel.TOOL if at or above summarization_threshold (70%)
+            SummarizationLevel.FULL if at or above full_summarization_threshold (90%)
         """
-        if self.get_usage_fraction(agent_id) >= self.summarization_threshold:
+        usage = self.get_usage_fraction(agent_id)
+        if usage >= self.full_summarization_threshold:
+            return SummarizationLevel.FULL
+        if usage >= self.summarization_threshold:
             return SummarizationLevel.TOOL
         return SummarizationLevel.NONE
 
@@ -150,7 +155,10 @@ class Secretary:
     @property
     def current_level(self) -> SummarizationLevel:
         """Current level (global). Prefer get_current_level(agent_id)."""
-        if self.usage_fraction >= self.summarization_threshold:
+        usage = self.usage_fraction
+        if usage >= self.full_summarization_threshold:
+            return SummarizationLevel.FULL
+        if usage >= self.summarization_threshold:
             return SummarizationLevel.TOOL
         return SummarizationLevel.NONE
 
@@ -159,9 +167,12 @@ class Secretary:
         return self.current_level >= SummarizationLevel.TOOL
 
     def should_summarize_messages(self) -> bool:
-        """Check if full message summarization should be applied (future)."""
-        # Reserved for future implementation
+        """Check if full message summarization should be applied (global)."""
         return self.current_level >= SummarizationLevel.FULL
+
+    def should_summarize_messages_for_agent(self, agent_id: str) -> bool:
+        """Check if full message summarization should be applied for an agent."""
+        return self.get_current_level(agent_id) >= SummarizationLevel.FULL
 
     # -------------------------------------------------------------------------
     # Recency Window (per-agent)
@@ -542,7 +553,14 @@ class MailboxSecretary:
 
     def should_summarize(self, message_count: int) -> bool:
         """Check if mailbox needs summarization."""
-        return message_count > self.auto_summarize_threshold
+        needs_summary = message_count > self.auto_summarize_threshold
+        if needs_summary:
+            logger.debug(
+                "Mailbox summarization needed: %d messages > threshold %d",
+                message_count,
+                self.auto_summarize_threshold,
+            )
+        return needs_summary
 
     def select_messages_for_summarization(
         self,
@@ -590,8 +608,18 @@ class MailboxSecretary:
 
         # Only summarize if we have enough messages
         if len(to_summarize) < self.min_summarize_batch:
+            logger.debug(
+                "Mailbox: skipping summarization, only %d messages (need %d)",
+                len(to_summarize),
+                self.min_summarize_batch,
+            )
             return [], messages  # Not enough to make it worthwhile
 
+        logger.info(
+            "Mailbox: selected %d messages to summarize, preserving %d",
+            len(to_summarize),
+            len(to_preserve),
+        )
         return to_summarize, to_preserve
 
     def generate_summary(
@@ -674,6 +702,13 @@ class MailboxSecretary:
         self.total_digests_created += 1
         self.total_messages_summarized += len(to_summarize)
 
+        logger.info(
+            "Mailbox: created digest #%d, summarized %d messages, %d action items",
+            self.total_digests_created,
+            len(to_summarize),
+            len(action_items),
+        )
+
         return MailboxSummaryResult(
             messages_summarized=len(to_summarize),
             messages_preserved=len(to_preserve),
@@ -689,4 +724,239 @@ class MailboxSecretary:
             "total_messages_summarized": self.total_messages_summarized,
             "auto_summarize_threshold": self.auto_summarize_threshold,
             "preserve_recent_n": self.preserve_recent_n,
+        }
+
+
+# =============================================================================
+# Context Secretary - Full conversation context summarization
+# =============================================================================
+
+
+@dataclass
+class ContextSummaryResult:
+    """Result of summarizing conversation context."""
+
+    turns_summarized: int
+    turns_preserved: int
+    summary_created: bool
+    summary_text: str | None = None
+    tokens_before: int = 0
+    tokens_after: int = 0
+
+
+@dataclass
+class ContextSecretary:
+    """
+    Full conversation context summarization.
+
+    When context usage reaches the FULL level threshold (90%), this secretary
+    summarizes older conversation turns to free up context space while
+    preserving recent and important turns.
+
+    This is the final tier of context management:
+    - Level 0 (NONE): Full fidelity
+    - Level 1 (TOOL): Tool result summarization
+    - Level 2 (FULL): Context + mailbox summarization (this class)
+    """
+
+    # Preserve the last N turns regardless of context pressure
+    preserve_recent_turns: int = 3
+
+    # Minimum turns before summarization kicks in
+    min_turns_to_summarize: int = 5
+
+    # Statistics
+    total_summaries_created: int = 0
+    total_turns_summarized: int = 0
+
+    def should_summarize(self, turn_count: int) -> bool:
+        """
+        Check if context needs summarization based on turn count.
+
+        Note: This is a simple heuristic. The runtime should also check
+        token counts and the Secretary's current_level.
+
+        Args:
+            turn_count: Number of turns in conversation
+
+        Returns:
+            True if we have enough turns to warrant summarization
+        """
+        # Need enough turns beyond what we'll preserve
+        summarizable = turn_count - self.preserve_recent_turns
+        needs_summary = summarizable >= self.min_turns_to_summarize
+        if needs_summary:
+            logger.debug(
+                "Context summarization needed: %d summarizable turns >= %d threshold",
+                summarizable,
+                self.min_turns_to_summarize,
+            )
+        return needs_summary
+
+    def select_turns_for_summarization(
+        self,
+        turns: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """
+        Partition turns into to-summarize and to-preserve.
+
+        Preservation rules:
+        - Recent turns (last preserve_recent_turns) always preserved
+        - Turns with delegation messages preserved
+        - Turns with artifact creation preserved
+
+        Args:
+            turns: List of conversation turns (oldest first)
+
+        Returns:
+            Tuple of (turns_to_summarize, turns_to_preserve)
+        """
+        if len(turns) <= self.preserve_recent_turns:
+            return [], turns
+
+        # Recent turns always preserved
+        older_turns = turns[: -self.preserve_recent_turns]
+        recent_turns = turns[-self.preserve_recent_turns :]
+
+        to_summarize = []
+        to_preserve = list(recent_turns)  # Start with recent
+
+        for turn in older_turns:
+            if self._should_preserve_turn(turn):
+                to_preserve.append(turn)
+            else:
+                to_summarize.append(turn)
+
+        logger.info(
+            "Context: selected %d turns to summarize, preserving %d (recent=%d)",
+            len(to_summarize),
+            len(to_preserve),
+            self.preserve_recent_turns,
+        )
+        return to_summarize, to_preserve
+
+    def _should_preserve_turn(self, turn: dict[str, Any]) -> bool:
+        """
+        Check if a turn should be preserved (not summarized).
+
+        Args:
+            turn: Conversation turn dict
+
+        Returns:
+            True if turn should be preserved
+        """
+        # Check for delegation-related content
+        content = str(turn.get("content", ""))
+        if "delegation" in content.lower():
+            return True
+
+        # Check for tool calls that created artifacts
+        tool_calls = turn.get("tool_calls", [])
+        for tc in tool_calls:
+            tool_name = tc.get("name", "")
+            if tool_name in ("save_artifact", "create_artifact"):
+                return True
+
+        # Check for explicit preserve flag
+        return bool(turn.get("_preserve", False))
+
+    def generate_summary(
+        self,
+        turns: list[dict[str, Any]],
+    ) -> str:
+        """
+        Generate a summary of conversation turns.
+
+        This is a simple template-based summary. For production use,
+        this should be replaced with an LLM call using a fast model.
+
+        Args:
+            turns: Turns to summarize
+
+        Returns:
+            Summary text
+        """
+        if not turns:
+            return ""
+
+        # Count messages by role
+        role_counts: dict[str, int] = {}
+        tool_names: set[str] = set()
+
+        for turn in turns:
+            role = turn.get("role", "unknown")
+            role_counts[role] = role_counts.get(role, 0) + 1
+
+            # Track tool calls
+            for tc in turn.get("tool_calls", []):
+                tool_names.add(tc.get("name", "unknown"))
+
+        # Build summary
+        lines = [f"[Summary of {len(turns)} earlier conversation turns]"]
+
+        role_summary = ", ".join(f"{count} {role}" for role, count in role_counts.items())
+        lines.append(f"Roles: {role_summary}")
+
+        if tool_names:
+            lines.append(f"Tools used: {', '.join(sorted(tool_names))}")
+
+        return "\n".join(lines)
+
+    def summarize_context(
+        self,
+        turns: list[dict[str, Any]],
+    ) -> ContextSummaryResult:
+        """
+        Summarize conversation context if needed.
+
+        Args:
+            turns: All conversation turns (oldest first)
+
+        Returns:
+            ContextSummaryResult with summary info
+        """
+        if not self.should_summarize(len(turns)):
+            return ContextSummaryResult(
+                turns_summarized=0,
+                turns_preserved=len(turns),
+                summary_created=False,
+            )
+
+        to_summarize, to_preserve = self.select_turns_for_summarization(turns)
+
+        if not to_summarize:
+            return ContextSummaryResult(
+                turns_summarized=0,
+                turns_preserved=len(turns),
+                summary_created=False,
+            )
+
+        # Generate summary
+        summary_text = self.generate_summary(to_summarize)
+
+        # Update stats
+        self.total_summaries_created += 1
+        self.total_turns_summarized += len(to_summarize)
+
+        logger.info(
+            "Context: created summary #%d, summarized %d turns, preserved %d",
+            self.total_summaries_created,
+            len(to_summarize),
+            len(to_preserve),
+        )
+
+        return ContextSummaryResult(
+            turns_summarized=len(to_summarize),
+            turns_preserved=len(to_preserve),
+            summary_created=True,
+            summary_text=summary_text,
+        )
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get context summarization statistics."""
+        return {
+            "total_summaries_created": self.total_summaries_created,
+            "total_turns_summarized": self.total_turns_summarized,
+            "preserve_recent_turns": self.preserve_recent_turns,
+            "min_turns_to_summarize": self.min_turns_to_summarize,
         }

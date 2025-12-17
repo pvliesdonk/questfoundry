@@ -16,6 +16,8 @@ Mailbox Summarization:
 """
 
 from questfoundry.runtime.context.secretary import (
+    ContextSecretary,
+    ContextSummaryResult,
     MailboxSecretary,
     MailboxSummaryResult,
     Secretary,
@@ -25,6 +27,8 @@ from questfoundry.runtime.context.secretary import (
 )
 
 __all__ = [
+    "ContextSecretary",
+    "ContextSummaryResult",
     "MailboxSecretary",
     "MailboxSummaryResult",
     "Secretary",
