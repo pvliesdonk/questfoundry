@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from questfoundry.runtime.models.base import (
     Agent,
     ArtifactType,
@@ -300,6 +302,17 @@ def _load_knowledge_entries(
 
             # Strip $schema field
             content = _strip_schema_field(content)
+
+            # Warn about duplicate entry IDs
+            if entry_id in entries:
+                errors.append(
+                    LoadError(
+                        path=str(json_file),
+                        message=f"Duplicate knowledge entry_id '{entry_id}' - overwriting previous entry",
+                        severity="warning",
+                    )
+                )
+
             entries[entry_id] = content
 
         except json.JSONDecodeError as e:
@@ -368,7 +381,7 @@ def _build_studio(resolved: dict[str, Any]) -> Studio:
     for entry_id, entry_data in resolved.get("knowledge", {}).items():
         try:
             knowledge[entry_id] = KnowledgeEntry.model_validate(entry_data)
-        except Exception as e:
+        except ValidationError as e:
             logger.warning("Failed to parse knowledge entry '%s': %s", entry_id, e)
 
     # Build Studio

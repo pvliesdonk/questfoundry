@@ -7,7 +7,7 @@ They are used by the domain loader to hydrate loaded JSON into typed objects.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -312,10 +312,10 @@ class QualityCriteria(BaseModel):
 class KnowledgeContent(BaseModel):
     """Knowledge content definition."""
 
-    type: str = "inline"  # inline, file_ref, structured, corpus
+    type: Literal["inline", "file_ref", "structured", "corpus"] = "inline"
     text: str | None = None  # For inline type
     file_path: str | None = None  # For file_ref type
-    format: str = "markdown"  # markdown, json, yaml, plain
+    format: Literal["markdown", "json", "yaml", "plain"] = "markdown"
     data: dict[str, Any] | None = None  # For structured type
     schema_ref: str | None = None  # For structured type
     corpus_ref: dict[str, Any] | None = None  # For corpus type

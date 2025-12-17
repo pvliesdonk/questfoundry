@@ -14,11 +14,14 @@ Knowledge layers:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
+
+from questfoundry.runtime.models.base import KnowledgeContent
 
 
 @dataclass
@@ -112,6 +115,7 @@ class KnowledgeContextBuilder:
         if knowledge_req and knowledge_req.must_know:
             must_know_lines: list[str] = []
             must_know_budget = self.config.must_know_tokens
+            must_know_tokens_used = 0
 
             for entry_id in knowledge_req.must_know:
                 entry = studio.knowledge.get(entry_id)
@@ -120,38 +124,45 @@ class KnowledgeContextBuilder:
 
                 content = self._get_entry_content(entry)
                 if not content:
-                    # No content - add to menu instead
-                    menu_items.append(self._format_menu_item(entry))
-                    entries_in_menu.append(entry_id)
+                    # No content - add to menu instead (if not already there)
+                    if entry_id not in entries_in_menu:
+                        menu_items.append(self._format_menu_item(entry))
+                        entries_in_menu.append(entry_id)
                     continue
 
                 entry_tokens = self._count_tokens(content)
 
-                # Check if fits in budget
-                if used_tokens + entry_tokens <= must_know_budget:
+                # Check if fits in must_know budget
+                if must_know_tokens_used + entry_tokens <= must_know_budget:
                     must_know_lines.append(self._format_inline_entry(entry, content))
                     entries_inlined.append(entry_id)
                     used_tokens += entry_tokens
+                    must_know_tokens_used += entry_tokens
                 else:
-                    # Over budget - add to menu instead
-                    menu_items.append(self._format_menu_item(entry))
-                    entries_in_menu.append(entry_id)
+                    # Over budget - add to menu instead (if not already there)
+                    if entry_id not in entries_in_menu:
+                        menu_items.append(self._format_menu_item(entry))
+                        entries_in_menu.append(entry_id)
 
             if must_know_lines:
                 must_know_section = "## Critical Knowledge\n\n" + "\n\n".join(must_know_lines)
                 sections.append(must_know_section)
 
-        # 3. Should-know - menu only
+        # 3. Should-know - menu only (skip if already in menu)
         if knowledge_req and knowledge_req.should_know:
             for entry_id in knowledge_req.should_know:
+                if entry_id in entries_in_menu:
+                    continue
                 entry = studio.knowledge.get(entry_id)
                 if entry:
                     menu_items.append(self._format_menu_item(entry))
                     entries_in_menu.append(entry_id)
 
-        # 4. Role-specific - menu only
+        # 4. Role-specific - menu only (skip if already in menu)
         if knowledge_req and knowledge_req.role_specific:
             for entry_id in knowledge_req.role_specific:
+                if entry_id in entries_in_menu:
+                    continue
                 entry = studio.knowledge.get(entry_id)
                 if entry:
                     menu_items.append(self._format_menu_item(entry))
@@ -202,18 +213,14 @@ class KnowledgeContextBuilder:
             if content_type == "inline":
                 return content.get("text")
             elif content_type == "structured":
-                import json
-
                 return json.dumps(content.get("data", {}), indent=2)
             return content.get("text")
 
         # Handle KnowledgeContent model
-        if hasattr(content, "type"):
+        if isinstance(content, KnowledgeContent):
             if content.type == "inline":
                 return content.text
             elif content.type == "structured":
-                import json
-
                 return json.dumps(content.data or {}, indent=2)
 
         return str(content) if content else None

@@ -7,11 +7,16 @@ Implements the menu+consult pattern from meta/docs/knowledge-patterns.md.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
+from questfoundry.runtime.models.base import KnowledgeContent
 from questfoundry.runtime.tools.base import BaseTool, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.registry import register_tool
+
+# Pre-compiled regex for markdown header extraction
+_HEADER_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$")
 
 
 @register_tool("consult_knowledge")
@@ -111,8 +116,6 @@ class ConsultKnowledgeTool(BaseTool):
                 return f"(Content in file: {content.get('file_path')})"
             elif content_type == "structured":
                 # Return JSON representation of structured data
-                import json
-
                 data = content.get("data", {})
                 return json.dumps(data, indent=2)
             elif content_type == "corpus":
@@ -122,15 +125,13 @@ class ConsultKnowledgeTool(BaseTool):
                 return content.get("text")
 
         # Handle KnowledgeContent model
-        if hasattr(content, "type"):
+        if isinstance(content, KnowledgeContent):
             if content.type == "inline":
                 text = content.text
                 return str(text) if text else None
             elif content.type == "file_ref":
                 return f"(Content in file: {content.file_path})"
             elif content.type == "structured":
-                import json
-
                 return json.dumps(content.data or {}, indent=2)
             elif content.type == "corpus":
                 return "(This is a corpus entry. Use consult_corpus tool to search.)"
@@ -148,11 +149,8 @@ class ConsultKnowledgeTool(BaseTool):
         section_level = 0
         section_lines: list[str] = []
 
-        # Pattern to match markdown headers
-        header_pattern = re.compile(r"^(#{1,6})\s+(.+)$")
-
         for line in lines:
-            match = header_pattern.match(line)
+            match = _HEADER_PATTERN.match(line)
             if match:
                 level = len(match.group(1))
                 title = match.group(2).strip()
