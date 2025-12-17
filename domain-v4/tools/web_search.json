@@ -5,7 +5,7 @@
   "description": "Search the web for factual information. Returns a list of relevant results with titles, snippets, and URLs. Use this to find sources for verification, corroborate claims, or discover current information.\n\nBest for: broad queries, finding multiple sources, discovering what exists.\nFor deep-diving a specific page, use web_fetch instead.",
 
   "summarization_policy": "concise",
-  "summary_template": "Web search for '{query_used}': found results",
+  "summary_template": "Web search for '{query}': found results",
 
   "input_schema": {
     "type": "object",

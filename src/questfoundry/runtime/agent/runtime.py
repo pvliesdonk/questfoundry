@@ -478,13 +478,18 @@ class AgentRuntime:
                 summary = self._secretary.summarize_tool_result(
                     tool_id=tc.name,
                     result=result.result,
+                    arguments=tc.arguments,
                 )
 
-                # Handle DROP policy - still need to include a message for tool call flow
+                # Wrap summarized content in consistent JSON format
                 if summary.policy_applied == SummarizationPolicy.DROP:
                     content = json.dumps({"_summarized": "dropped", "_tool": tc.name})
+                elif summary.policy_applied == SummarizationPolicy.PRESERVE:
+                    # PRESERVE keeps original JSON as-is
+                    content = summary.content or "{}"
                 elif summary.content is not None:
-                    content = summary.content
+                    # ULTRA_CONCISE and CONCISE wrap text in JSON for consistency
+                    content = json.dumps({"_summarized": summary.content, "_tool": tc.name})
                 else:
                     content = "{}"
             else:

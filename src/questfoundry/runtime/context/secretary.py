@@ -92,6 +92,7 @@ class Secretary:
         tool_id: str,
         result: dict[str, Any],
         *,
+        arguments: dict[str, Any] | None = None,
         force_policy: SummarizationPolicy | None = None,
     ) -> ToolResultSummary:
         """
@@ -100,6 +101,7 @@ class Secretary:
         Args:
             tool_id: The ID of the tool that produced the result
             result: The tool's result data
+            arguments: The tool's input arguments (for template substitution)
             force_policy: Override the tool's declared policy
 
         Returns:
@@ -110,6 +112,10 @@ class Secretary:
 
         policy = force_policy or self.get_policy(tool_id)
         tool = self._tool_cache.get(tool_id)
+
+        # Merge arguments with result for template substitution
+        # Arguments take precedence for keys that exist in both
+        template_context = {**result, **(arguments or {})}
 
         if policy == SummarizationPolicy.DROP:
             self.tools_dropped += 1
@@ -124,9 +130,9 @@ class Secretary:
             )
 
         if policy == SummarizationPolicy.ULTRA_CONCISE:
-            summary = self._apply_ultra_concise(tool, result)
+            summary = self._apply_ultra_concise(tool, template_context)
             self.tools_summarized += 1
-            self.total_tokens_saved += (original_size - len(summary)) // 4
+            self.total_tokens_saved += max(0, (original_size - len(summary)) // 4)
             return ToolResultSummary(
                 tool_id=tool_id,
                 original_size=original_size,
@@ -137,9 +143,9 @@ class Secretary:
             )
 
         if policy == SummarizationPolicy.CONCISE:
-            summary = self._apply_concise(tool, result)
+            summary = self._apply_concise(tool, template_context)
             self.tools_summarized += 1
-            self.total_tokens_saved += (original_size - len(summary)) // 4
+            self.total_tokens_saved += max(0, (original_size - len(summary)) // 4)
             return ToolResultSummary(
                 tool_id=tool_id,
                 original_size=original_size,

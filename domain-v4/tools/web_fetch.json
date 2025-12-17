@@ -5,7 +5,7 @@
   "description": "Fetch and extract content from a specific URL. Returns cleaned text content from the page, suitable for reading and analysis. Handles HTML cleanup, removes navigation/ads, and extracts main content.\n\nBest for: deep-diving a specific source, reading full articles, extracting detailed information.\nFor discovering sources, use web_search first.",
 
   "summarization_policy": "concise",
-  "summary_template": "Fetched '{title}' ({word_count} words)",
+  "summary_template": "Fetched content from {url}",
 
   "input_schema": {
     "type": "object",

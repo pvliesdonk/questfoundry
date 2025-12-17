@@ -116,6 +116,49 @@ class TestSecretary:
         assert summary.was_summarized is True
         assert summary.summarized_size < summary.original_size
 
+    def test_summarize_with_arguments(self, secretary: Secretary):
+        """Test that arguments are merged with result for template substitution."""
+        # Create a tool that uses template variables from arguments
+        tool = Tool(
+            id="search_tool",
+            name="Search Tool",
+            description="Search for things",
+            summarization_policy="ultra_concise",
+            summary_template="Searched for '{query}': found {count} results",
+        )
+        secretary.register_tool(tool)
+
+        # Result only has count, query comes from arguments
+        result = {"count": 5, "items": ["a", "b", "c", "d", "e"]}
+        arguments = {"query": "test search", "limit": 10}
+
+        summary = secretary.summarize_tool_result(tool.id, result, arguments=arguments)
+
+        assert summary.policy_applied == SummarizationPolicy.ULTRA_CONCISE
+        # Template should use query from arguments and count from result
+        assert summary.content == "Searched for 'test search': found 5 results"
+        assert summary.was_summarized is True
+
+    def test_arguments_override_result_keys(self, secretary: Secretary):
+        """Test that arguments take precedence when keys exist in both."""
+        tool = Tool(
+            id="echo_tool",
+            name="Echo Tool",
+            description="Echo input",
+            summarization_policy="ultra_concise",
+            summary_template="Input: {value}",
+        )
+        secretary.register_tool(tool)
+
+        # Both have 'value' - arguments should win
+        result = {"value": "result_value", "extra": "data"}
+        arguments = {"value": "arg_value"}
+
+        summary = secretary.summarize_tool_result(tool.id, result, arguments=arguments)
+
+        # Arguments take precedence
+        assert summary.content == "Input: arg_value"
+
     def test_summarize_concise_policy(self, secretary: Secretary, tool_concise: Tool):
         """Test CONCISE policy preserves key facts."""
         secretary.register_tool(tool_concise)

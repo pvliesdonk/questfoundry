@@ -370,8 +370,11 @@ class StatusReporter:
 
         for turn in self._turns:
             tokens_str = ""
-            if turn.prompt_tokens and turn.completion_tokens:
-                tokens = (turn.prompt_tokens or 0) + (turn.completion_tokens or 0)
+            # Handle None/0 values correctly - 0 is valid, None means unknown
+            prompt = turn.prompt_tokens if turn.prompt_tokens is not None else 0
+            completion = turn.completion_tokens if turn.completion_tokens is not None else 0
+            if turn.prompt_tokens is not None or turn.completion_tokens is not None:
+                tokens = prompt + completion
                 total_tokens += tokens
                 tokens_str = f"{tokens:,}"
 
