@@ -49,7 +49,7 @@ Stores are classified by **semantics** that define their mutability and purpose:
 **Characteristics**:
 
 - **Append-only**: New versions add, don't replace
-- **Exclusive writer**: One agent controls writes (e.g., Lorekeeper owns canon)
+- **Exclusive writer**: One agent controls writes (e.g., Lore Weaver owns canon)
 - **Validated truth**: Only content that passed quality gates
 - **Permanent**: Content persists as source of truth
 
@@ -126,9 +126,9 @@ Cold stores have **exclusive writers** to maintain consistency:
 
 | Store | Exclusive Writer | Rationale |
 |-------|------------------|-----------|
-| canon | Lorekeeper | Single source of world truth |
-| codex | Codex Curator | Player-safe glossary control |
-| exports | Book Binder | Controlled publishing |
+| canon | `lore_weaver` | Single source of world truth |
+| codex | `codex_curator` | Player-safe glossary control |
+| exports | `book_binder` | Controlled publishing |
 
 Other agents can *read* these stores but must *request* writes through the owner.
 
@@ -228,7 +228,7 @@ In domain definitions, stores declare their semantics:
   "name": "Canon",
   "description": "Curated world truth",
   "semantics": "cold",
-  "exclusive_writer": "lorekeeper",
+  "exclusive_writer": "lore_weaver",
   "lifecycle_states": ["draft", "review", "approved", "cold"]
 }
 ```
