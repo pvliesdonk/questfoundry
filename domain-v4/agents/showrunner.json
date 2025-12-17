@@ -42,11 +42,11 @@
       "tool_ref": "consult_playbook"
     },
     {
-      "id": "use_request_clarification",
-      "name": "Request Clarification from Customer",
-      "description": "Can ask the customer clarifying questions",
+      "id": "use_communicate",
+      "name": "Communicate with Customer",
+      "description": "Send messages to the human customer (status, questions, notifications, errors)",
       "category": "tool",
-      "tool_ref": "request_clarification"
+      "tool_ref": "communicate"
     },
     {
       "id": "read_all_stores",
@@ -89,6 +89,14 @@
       "rule": "Never ship content from Hot. Snapshot first; Views cite that snapshot.",
       "category": "process",
       "enforcement": "llm",
+      "severity": "critical"
+    },
+    {
+      "id": "tools_only_output",
+      "name": "Tools-Only Output",
+      "rule": "ALL output must be via tool calls (delegate or communicate). Never generate raw prose or text outside of tool arguments. The runtime enforces this.",
+      "category": "process",
+      "enforcement": "runtime",
       "severity": "critical"
     },
     {
