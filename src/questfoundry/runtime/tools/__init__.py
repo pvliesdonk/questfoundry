@@ -19,6 +19,7 @@ Usage:
 
 # Import tool implementations to trigger registration
 from questfoundry.runtime.tools import (
+    communicate,  # noqa: F401  # Phase 7: unified human communication
     consult_corpus,  # noqa: F401
     consult_playbook,  # noqa: F401
     consult_schema,  # noqa: F401
@@ -27,7 +28,7 @@ from questfoundry.runtime.tools import (
     list_agents,  # noqa: F401
     list_artifact_types,  # noqa: F401
     list_stores,  # noqa: F401
-    request_clarification,  # noqa: F401
+    request_clarification,  # noqa: F401  # Legacy: to be removed after migration
     save_artifact,  # noqa: F401  # Phase 4: artifact persistence
     search_workspace,  # noqa: F401
     stubs,  # noqa: F401
