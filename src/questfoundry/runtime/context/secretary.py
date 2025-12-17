@@ -490,3 +490,203 @@ class Secretary:
             "usage_percent": self.usage_fraction * 100,
             "current_level": self.current_level.name,
         }
+
+
+# =============================================================================
+# Mailbox Secretary (Full Message Summarization)
+# =============================================================================
+
+
+@dataclass
+class MailboxSummaryResult:
+    """Result of summarizing messages in a mailbox."""
+
+    messages_summarized: int
+    messages_preserved: int
+    digest_created: bool
+    summary_text: str | None = None
+    action_items: list[str] = field(default_factory=list)
+
+
+@dataclass
+class MailboxSecretary:
+    """
+    Mailbox-level summarization for full message context management.
+
+    When an agent's mailbox exceeds auto_summarize_threshold, the MailboxSecretary
+    selects oldest, lowest-priority messages and generates a digest message
+    summarizing them. This prevents context explosion during long-running workflows.
+
+    Key behaviors:
+    - Delegations are NEVER summarized (must be processed)
+    - Recent messages (within preserve_recent_n) are preserved
+    - Higher priority messages survive summarization longer
+    - Digests preserve action_items and contains_delegations flags
+    """
+
+    # Threshold for triggering mailbox summarization (message count)
+    auto_summarize_threshold: int = 20
+
+    # Minimum messages to summarize at once (efficiency)
+    min_summarize_batch: int = 5
+
+    # Number of recent messages to always preserve
+    preserve_recent_n: int = 5
+
+    # Priority threshold - messages at or above this are never summarized
+    priority_threshold: int = 5  # MessagePriority.HIGH
+
+    # Statistics
+    total_digests_created: int = 0
+    total_messages_summarized: int = 0
+
+    def should_summarize(self, message_count: int) -> bool:
+        """Check if mailbox needs summarization."""
+        return message_count > self.auto_summarize_threshold
+
+    def select_messages_for_summarization(
+        self,
+        messages: list[Any],  # List[Message] - avoid circular import
+    ) -> tuple[list[Any], list[Any]]:
+        """
+        Select which messages to summarize vs preserve.
+
+        Selection criteria (messages are preserved if ANY apply):
+        1. Delegation messages (request or response)
+        2. High priority messages (>= priority_threshold)
+        3. Recent messages (last preserve_recent_n)
+
+        Args:
+            messages: All messages in mailbox, sorted by timestamp (oldest first)
+
+        Returns:
+            Tuple of (to_summarize, to_preserve) message lists
+        """
+        from questfoundry.runtime.messaging.types import MessageType
+
+        if len(messages) <= self.auto_summarize_threshold:
+            return [], messages  # Nothing to summarize
+
+        to_summarize = []
+        to_preserve = []
+
+        # Recent messages (last N) are always preserved
+        recent_cutoff = len(messages) - self.preserve_recent_n
+
+        for i, msg in enumerate(messages):
+            is_recent = i >= recent_cutoff
+
+            # Check preservation criteria
+            is_delegation = msg.type in (
+                MessageType.DELEGATION_REQUEST,
+                MessageType.DELEGATION_RESPONSE,
+            )
+            is_high_priority = msg.priority >= self.priority_threshold
+
+            if is_delegation or is_high_priority or is_recent:
+                to_preserve.append(msg)
+            else:
+                to_summarize.append(msg)
+
+        # Only summarize if we have enough messages
+        if len(to_summarize) < self.min_summarize_batch:
+            return [], messages  # Not enough to make it worthwhile
+
+        return to_summarize, to_preserve
+
+    def generate_summary(
+        self,
+        messages: list[Any],  # List[Message]
+    ) -> tuple[str, list[str]]:
+        """
+        Generate a summary of messages.
+
+        This is a simple template-based summary. For production use,
+        this could be replaced with an LLM call using a fast model.
+
+        Args:
+            messages: Messages to summarize
+
+        Returns:
+            Tuple of (summary_text, action_items)
+        """
+        from questfoundry.runtime.messaging.types import MessageType
+
+        # Group by sender and type
+        by_sender: dict[str, list[Any]] = {}
+        action_items: list[str] = []
+
+        for msg in messages:
+            sender = msg.from_agent
+            if sender not in by_sender:
+                by_sender[sender] = []
+            by_sender[sender].append(msg)
+
+            # Extract action items from certain message types
+            if msg.type == MessageType.FEEDBACK:
+                content = msg.payload.get("content", "")
+                if content:
+                    action_items.append(f"Feedback from {sender}: {content[:100]}...")
+
+        # Build summary
+        lines = [f"Summary of {len(messages)} older messages:"]
+
+        for sender, sender_msgs in by_sender.items():
+            types: dict[str, int] = {}
+            for msg in sender_msgs:
+                t = msg.type.value
+                types[t] = types.get(t, 0) + 1
+
+            type_summary = ", ".join(f"{count} {t}" for t, count in types.items())
+            lines.append(f"  - {sender}: {type_summary}")
+
+        summary = "\n".join(lines)
+        return summary, action_items
+
+    def summarize_mailbox(
+        self,
+        messages: list[Any],  # List[Message]
+        current_turn: int | None = None,  # noqa: ARG002 - Reserved for future use with create_digest
+    ) -> MailboxSummaryResult:
+        """
+        Summarize messages in a mailbox if needed.
+
+        Args:
+            messages: All messages in mailbox (oldest first)
+            current_turn: Current turn number for digest creation
+
+        Returns:
+            MailboxSummaryResult with summary info
+        """
+        to_summarize, to_preserve = self.select_messages_for_summarization(messages)
+
+        if not to_summarize:
+            return MailboxSummaryResult(
+                messages_summarized=0,
+                messages_preserved=len(messages),
+                digest_created=False,
+            )
+
+        # Generate summary
+        summary_text, action_items = self.generate_summary(to_summarize)
+
+        # Update stats
+        self.total_digests_created += 1
+        self.total_messages_summarized += len(to_summarize)
+
+        return MailboxSummaryResult(
+            messages_summarized=len(to_summarize),
+            messages_preserved=len(to_preserve),
+            digest_created=True,
+            summary_text=summary_text,
+            action_items=action_items,
+        )
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get mailbox summarization statistics."""
+        return {
+            "total_digests_created": self.total_digests_created,
+            "total_messages_summarized": self.total_messages_summarized,
+            "auto_summarize_threshold": self.auto_summarize_threshold,
+            "preserve_recent_n": self.preserve_recent_n,
+        }

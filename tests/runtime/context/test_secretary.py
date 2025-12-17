@@ -1,13 +1,18 @@
 """Tests for Secretary pattern context management."""
 
+from datetime import datetime
+
 import pytest
 
 from questfoundry.runtime.context import (
+    MailboxSecretary,
+    MailboxSummaryResult,
     Secretary,
     SummarizationLevel,
     SummarizationPolicy,
     ToolResultSummary,
 )
+from questfoundry.runtime.messaging import Message, MessagePriority, MessageType
 from questfoundry.runtime.models.base import Tool
 
 
@@ -857,3 +862,199 @@ class TestPerAgentIsolation:
         # Stats should accumulate globally
         assert secretary.tools_dropped == 2
         assert secretary.tools_preserved == 2  # From earlier
+
+
+class TestMailboxSecretary:
+    """Tests for MailboxSecretary (mailbox-level message summarization)."""
+
+    @pytest.fixture
+    def secretary(self) -> MailboxSecretary:
+        """Create a MailboxSecretary with test defaults."""
+        return MailboxSecretary(
+            auto_summarize_threshold=10,
+            min_summarize_batch=3,
+            preserve_recent_n=3,
+            priority_threshold=MessagePriority.HIGH,
+        )
+
+    @pytest.fixture
+    def sample_messages(self) -> list[Message]:
+        """Create sample messages for testing."""
+        messages = []
+        for i in range(15):
+            msg = Message(
+                id=f"msg-{i:03d}",
+                type=MessageType.PROGRESS_UPDATE,
+                from_agent="scene_smith",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, i, 0),
+                priority=MessagePriority.PROGRESS,
+                turn_created=i,
+            )
+            messages.append(msg)
+        return messages
+
+    def test_should_summarize_below_threshold(self, secretary: MailboxSecretary):
+        """Test should_summarize returns False below threshold."""
+        assert not secretary.should_summarize(5)  # Below 10
+
+    def test_should_summarize_at_threshold(self, secretary: MailboxSecretary):
+        """Test should_summarize returns False at exact threshold (needs to exceed)."""
+        # The threshold is 10, so exactly 10 messages doesn't trigger summarization
+        assert not secretary.should_summarize(10)
+        # But 11 messages does
+        assert secretary.should_summarize(11)
+
+    def test_should_summarize_above_threshold(self, secretary: MailboxSecretary):
+        """Test should_summarize returns True above threshold."""
+        assert secretary.should_summarize(20)
+
+    def test_select_preserves_recent_messages(
+        self, secretary: MailboxSecretary, sample_messages: list[Message]
+    ):
+        """Test that recent messages are preserved."""
+        to_summarize, to_preserve = secretary.select_messages_for_summarization(sample_messages)
+
+        # Last 3 (preserve_recent_n=3) should be preserved
+        preserved_ids = {m.id for m in to_preserve}
+        assert "msg-012" in preserved_ids
+        assert "msg-013" in preserved_ids
+        assert "msg-014" in preserved_ids
+
+    def test_select_preserves_high_priority(self, secretary: MailboxSecretary):
+        """Test that high priority messages are preserved."""
+        messages = [
+            Message(
+                id="msg-low",
+                type=MessageType.PROGRESS_UPDATE,
+                from_agent="a",
+                to_agent="b",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+                priority=MessagePriority.LOW,
+                turn_created=0,
+            ),
+            Message(
+                id="msg-high",
+                type=MessageType.ESCALATION,
+                from_agent="a",
+                to_agent="b",
+                timestamp=datetime(2025, 1, 15, 12, 1, 0),
+                priority=MessagePriority.ESCALATION,  # High priority
+                turn_created=1,
+            ),
+        ]
+
+        to_summarize, to_preserve = secretary.select_messages_for_summarization(messages)
+
+        preserved_ids = {m.id for m in to_preserve}
+        assert "msg-high" in preserved_ids
+
+    def test_select_preserves_delegations(self, secretary: MailboxSecretary):
+        """Test that delegation messages are always preserved."""
+        messages = [
+            Message(
+                id="msg-progress",
+                type=MessageType.PROGRESS_UPDATE,
+                from_agent="a",
+                to_agent="b",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+                priority=MessagePriority.PROGRESS,
+                turn_created=0,
+            ),
+            Message(
+                id="msg-delegation",
+                type=MessageType.DELEGATION_REQUEST,
+                from_agent="showrunner",
+                to_agent="plotwright",
+                timestamp=datetime(2025, 1, 15, 12, 1, 0),
+                priority=MessagePriority.DELEGATION,
+                turn_created=1,
+            ),
+        ]
+
+        to_summarize, to_preserve = secretary.select_messages_for_summarization(messages)
+
+        preserved_ids = {m.id for m in to_preserve}
+        assert "msg-delegation" in preserved_ids
+
+    def test_generate_summary_basic(self, secretary: MailboxSecretary):
+        """Test basic summary generation."""
+        messages = [
+            Message(
+                id=f"msg-{i}",
+                type=MessageType.PROGRESS_UPDATE,
+                from_agent="scene_smith",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, i, 0),
+            )
+            for i in range(5)
+        ]
+
+        summary, action_items = secretary.generate_summary(messages)
+
+        # Summary should mention count and sender
+        assert "5" in summary
+        assert "scene_smith" in summary
+
+    def test_summarize_mailbox_below_threshold(
+        self, secretary: MailboxSecretary, sample_messages: list[Message]
+    ):
+        """Test summarize_mailbox returns empty result when below threshold."""
+        # Use only 5 messages (below threshold of 10)
+        result = secretary.summarize_mailbox(sample_messages[:5], current_turn=10)
+
+        assert result.messages_summarized == 0
+        assert not result.digest_created
+
+    def test_summarize_mailbox_above_threshold(
+        self, secretary: MailboxSecretary, sample_messages: list[Message]
+    ):
+        """Test summarize_mailbox creates digest when above threshold."""
+        result = secretary.summarize_mailbox(sample_messages, current_turn=20)
+
+        assert result.messages_summarized > 0
+        assert result.messages_preserved > 0
+        assert result.digest_created
+        assert result.summary_text is not None
+
+    def test_summarize_mailbox_preserves_minimum(
+        self, secretary: MailboxSecretary, sample_messages: list[Message]
+    ):
+        """Test that at least preserve_recent_n messages are preserved."""
+        result = secretary.summarize_mailbox(sample_messages, current_turn=20)
+
+        # Should preserve at least 3 (preserve_recent_n)
+        assert result.messages_preserved >= 3
+
+
+class TestMailboxSummaryResult:
+    """Tests for MailboxSummaryResult dataclass."""
+
+    def test_creation(self):
+        """Test creating a MailboxSummaryResult."""
+        result = MailboxSummaryResult(
+            messages_summarized=10,
+            messages_preserved=5,
+            digest_created=True,
+            summary_text="Summary of 10 messages",
+            action_items=["Review feedback", "Address escalation"],
+        )
+
+        assert result.messages_summarized == 10
+        assert result.messages_preserved == 5
+        assert result.digest_created is True
+        assert result.summary_text == "Summary of 10 messages"
+        assert len(result.action_items) == 2
+
+    def test_no_digest_created(self):
+        """Test result when no digest was created."""
+        result = MailboxSummaryResult(
+            messages_summarized=0,
+            messages_preserved=5,
+            digest_created=False,
+        )
+
+        assert result.messages_summarized == 0
+        assert result.digest_created is False
+        assert result.summary_text is None
+        assert result.action_items == []
