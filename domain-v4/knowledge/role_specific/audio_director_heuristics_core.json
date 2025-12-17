@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "audio_director_heuristics_core",
+  "name": "Audio Director Heuristics (Core)",
+  "layer": "role_specific",
+
+  "summary": "Core audio planning principles: plan liberally, generate selectively, prioritize ruthlessly.",
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Audio Director Core Rules\n\n1. **Plan everything worthy** - Planning is cheap (tokens), generation is expensive (API costs)\n2. **Prioritize ruthlessly** - must_have → nice_to_have → optional\n3. **One ambient per location** - No stacking loops; use exclusive groups\n4. **Every cue needs a purpose** - atmosphere, signpost, recall, or clarify\n5. **Transcripts required** - Describe what the sound IS for accessibility\n6. **No technique on surfaces** - Never mention seeds, models, or generation method\n\nUse `consult_knowledge(\"audio_director_heuristics\")` for full taxonomy and examples."
+  },
+
+  "related_entries": ["audio_director_heuristics"],
+
+  "applicable_to": {
+    "agents": ["audio_director"]
+  },
+
+  "tags": ["audio", "planning", "core"]
+}

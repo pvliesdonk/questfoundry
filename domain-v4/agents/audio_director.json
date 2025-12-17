@@ -5,7 +5,7 @@
   "summary": "Plans audio assets and soundscapes",
   "description": "Plans audio experiences for the interactive fiction: ambient soundscapes, spot effects, and musical cues. Decides WHAT to sound and WHY, leaving generation details to the generate_audio tool. Maintains audio coherence through cuesheets. Remember: planning is cheap (LLM tokens), generation is expensive (API costs)—plan all worthy moments, generate selectively.",
 
-  "archetypes": ["author"],
+  "archetypes": ["creator"],
 
   "is_entry_agent": false,
 
@@ -117,7 +117,8 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
-    "role_specific": ["audio_director_heuristics"],
+    "should_know": ["quality_bars_overview", "sources_of_truth"],
+    "role_specific": ["audio_director_heuristics_core"],
     "can_lookup": ["accessibility_guidelines"]
   }
 }

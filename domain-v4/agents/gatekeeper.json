@@ -113,6 +113,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["quality_bars_overview", "spoiler_hygiene"],
+    "should_know": ["sources_of_truth"],
     "role_specific": ["gatekeeper_heuristics"]
   }
 }

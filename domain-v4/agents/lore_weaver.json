@@ -101,6 +101,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
+    "should_know": ["quality_bars_overview", "sources_of_truth"],
     "role_specific": ["lore_weaver_procedures"]
   }
 }

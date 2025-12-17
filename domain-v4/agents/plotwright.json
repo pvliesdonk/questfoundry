@@ -107,7 +107,8 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["diegetic_gates", "choice_integrity", "topology_patterns"],
+    "must_know": ["choice_integrity"],
+    "should_know": ["diegetic_gates", "topology_patterns", "quality_bars_overview", "sources_of_truth"],
     "role_specific": ["plotwright_heuristics"]
   }
 }

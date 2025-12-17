@@ -267,6 +267,7 @@ schemas/
 | [patterns.md](patterns.md) | General design patterns |
 | [tool-patterns.md](tool-patterns.md) | Tools-only orchestrators, `terminates_turn`, `communicate` |
 | [knowledge-patterns.md](knowledge-patterns.md) | Budget management, menu+consult, `consult_knowledge` |
+| [store-semantics.md](store-semantics.md) | Hot/cold/versioned/ephemeral store tiers, lifecycle states |
 
 ## Runtime Implementation Notes
 

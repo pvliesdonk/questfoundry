@@ -113,6 +113,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["diegetic_gates", "spoiler_hygiene"],
-    "role_specific": ["player_narrator_heuristics"]
+    "should_know": ["sources_of_truth"],
+    "role_specific": ["player_narrator_heuristics_core"]
   }
 }

@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "art_director_heuristics_core",
+  "name": "Art Director Heuristics (Core)",
+  "layer": "role_specific",
+
+  "summary": "Core visual planning principles: plan liberally, generate selectively, prioritize ruthlessly.",
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Art Director Core Rules\n\n1. **Plan everything worthy** - Planning is cheap (tokens), generation is expensive (API costs)\n2. **Prioritize ruthlessly** - must_have → nice_to_have → optional\n3. **Every image needs a purpose** - clarify, recall, mood, or signpost\n4. **Reference Sheets for recurring elements** - Characters, locations, objects appearing 2+ times\n5. **Captions are atmospheric** - No technique, no spoilers, evocative one-liners\n6. **Alt text is accessible** - Subject + relation + location format\n\nUse `consult_knowledge(\"art_director_heuristics\")` for full taxonomy and examples."
+  },
+
+  "related_entries": ["art_director_heuristics"],
+
+  "applicable_to": {
+    "agents": ["art_director"]
+  },
+
+  "tags": ["art", "planning", "core"]
+}
