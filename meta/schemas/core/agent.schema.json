@@ -105,6 +105,12 @@
           "default": [],
           "description": "IDs of must-know knowledge entries to include in system prompt"
         },
+        "should_know": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "IDs of should-know knowledge entries shown in menu with summary, full content via consult_knowledge tool"
+        },
         "role_specific": {
           "type": "array",
           "items": { "type": "string" },
