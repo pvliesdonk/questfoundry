@@ -258,6 +258,16 @@ schemas/
     └── knowledge-layer.schema.json    # Layer configuration
 ```
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [README.md](README.md) | This overview document |
+| [core.md](core.md) | Core primitive details |
+| [patterns.md](patterns.md) | General design patterns |
+| [tool-patterns.md](tool-patterns.md) | Tools-only orchestrators, `terminates_turn`, `communicate` |
+| [knowledge-patterns.md](knowledge-patterns.md) | Budget management, menu+consult, `consult_knowledge` |
+
 ## Runtime Implementation Notes
 
 When building a runtime that consumes these schemas:
