@@ -101,6 +101,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
+    "should_know": ["sources_of_truth"],
     "role_specific": ["codex_curator_guidelines"],
     "can_lookup": ["accessibility_guidelines"]
   }

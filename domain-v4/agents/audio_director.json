@@ -117,6 +117,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
+    "should_know": ["quality_bars_overview"],
     "role_specific": ["audio_director_heuristics"],
     "can_lookup": ["accessibility_guidelines"]
   }
