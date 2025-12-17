@@ -123,7 +123,8 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene", "choice_integrity", "diegetic_gates"],
+    "must_know": ["spoiler_hygiene"],
+    "should_know": ["choice_integrity", "diegetic_gates"],
     "role_specific": ["scene_smith_heuristics", "prose_patterns"]
   }
 }
