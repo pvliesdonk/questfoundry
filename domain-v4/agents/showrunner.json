@@ -42,6 +42,13 @@
       "tool_ref": "consult_playbook"
     },
     {
+      "id": "use_consult_knowledge",
+      "name": "Consult Knowledge",
+      "description": "Retrieve full content for knowledge entries shown in Knowledge Menu",
+      "category": "tool",
+      "tool_ref": "consult_knowledge"
+    },
+    {
       "id": "use_communicate",
       "name": "Communicate with Customer",
       "description": "Send messages to the human customer (status, questions, notifications, errors)",
