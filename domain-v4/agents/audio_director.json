@@ -118,7 +118,7 @@
     "constitution": true,
     "must_know": ["spoiler_hygiene"],
     "should_know": ["quality_bars_overview"],
-    "role_specific": ["audio_director_heuristics"],
+    "role_specific": ["audio_director_heuristics_core"],
     "can_lookup": ["accessibility_guidelines"]
   }
 }
