@@ -4,6 +4,8 @@
   "name": "Delegate Work",
   "description": "Formally assign work to another agent. Creates a delegation request with context, expected outputs, and quality criteria. The receiving agent will be notified and can accept, request clarification, or report completion.\n\nDelegation is the primary mechanism for work distribution in the studio. The Showrunner uses this extensively to route work to specialized agents.\n\nSee: delegation.schema.json for the full delegation protocol.",
 
+  "terminates_turn": true,
+
   "input_schema": {
     "type": "object",
     "properties": {
