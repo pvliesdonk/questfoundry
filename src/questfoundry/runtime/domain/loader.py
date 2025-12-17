@@ -24,10 +24,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from questfoundry.runtime.models.base import (
     Agent,
     ArtifactType,
     AssetType,
+    KnowledgeEntry,
     Playbook,
     QualityCriteria,
     Store,
@@ -246,7 +249,82 @@ async def _resolve_all_refs(
                 )
             )
 
+    # Load knowledge entries from knowledge/ directory
+    knowledge_dir = base_path / "knowledge"
+    knowledge_entries: dict[str, Any] = {}
+    if knowledge_dir.exists() and knowledge_dir.is_dir():
+        knowledge_entries, knowledge_errors = _load_knowledge_entries(knowledge_dir)
+        errors.extend(knowledge_errors)
+    resolved["knowledge"] = knowledge_entries
+
     return resolved, errors
+
+
+def _load_knowledge_entries(
+    knowledge_dir: Path,
+) -> tuple[dict[str, Any], list[LoadError]]:
+    """
+    Load all knowledge entries from subdirectories of knowledge/.
+
+    Knowledge entries are stored in subdirectories by layer:
+        knowledge/
+            must_know/
+                spoiler_hygiene.json
+                sources_of_truth.json
+            role_specific/
+                showrunner_operating_principles.json
+            lookup/
+                accessibility_guidelines.json
+
+    Returns a dict mapping entry_id -> entry_data.
+    """
+    errors: list[LoadError] = []
+    entries: dict[str, Any] = {}
+
+    # Recursively find all .json files in knowledge directory
+    # Skip layers.json which is the config file
+    for json_file in knowledge_dir.rglob("*.json"):
+        if json_file.name == "layers.json":
+            continue
+
+        try:
+            content = json.loads(json_file.read_text())
+            entry_id = content.get("id")
+            if not entry_id:
+                errors.append(
+                    LoadError(
+                        path=str(json_file),
+                        message=f"Knowledge entry missing 'id' field: {json_file.name}",
+                        severity="warning",
+                    )
+                )
+                continue
+
+            # Strip $schema field
+            content = _strip_schema_field(content)
+
+            # Warn about duplicate entry IDs
+            if entry_id in entries:
+                errors.append(
+                    LoadError(
+                        path=str(json_file),
+                        message=f"Duplicate knowledge entry_id '{entry_id}' - overwriting previous entry",
+                        severity="warning",
+                    )
+                )
+
+            entries[entry_id] = content
+
+        except json.JSONDecodeError as e:
+            errors.append(
+                LoadError(
+                    path=str(json_file),
+                    message=f"Invalid JSON in knowledge entry: {e}",
+                    severity="error",
+                )
+            )
+
+    return entries, errors
 
 
 def _build_studio(resolved: dict[str, Any]) -> Studio:
@@ -298,10 +376,18 @@ def _build_studio(resolved: dict[str, Any]) -> Studio:
         qc_data = _strip_schema_field(qc_data)
         quality_criteria.append(QualityCriteria.model_validate(qc_data))
 
+    # Build knowledge entries dict
+    knowledge: dict[str, KnowledgeEntry] = {}
+    for entry_id, entry_data in resolved.get("knowledge", {}).items():
+        try:
+            knowledge[entry_id] = KnowledgeEntry.model_validate(entry_data)
+        except ValidationError as e:
+            logger.warning("Failed to parse knowledge entry '%s': %s", entry_id, e)
+
     # Build Studio
     studio_data = _strip_schema_field(dict(resolved))
 
-    # Replace resolved arrays
+    # Replace resolved arrays/dicts
     studio_data["agents"] = agents
     studio_data["stores"] = stores
     studio_data["tools"] = tools
@@ -309,6 +395,7 @@ def _build_studio(resolved: dict[str, Any]) -> Studio:
     studio_data["artifact_types"] = artifact_types
     studio_data["asset_types"] = asset_types
     studio_data["quality_criteria"] = quality_criteria
+    studio_data["knowledge"] = knowledge
 
     return Studio.model_validate(studio_data)
 

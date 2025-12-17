@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.models.base import KnowledgeContent
+
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Playbook, Studio
 
@@ -276,11 +278,14 @@ class ContextBuilder:
 
         if entry.content:
             if isinstance(entry.content, dict):
-                # Inline content
+                # Dict-style inline content
                 if entry.content.get("type") == "inline":
                     content = entry.content.get("text", "")
             elif isinstance(entry.content, str):
                 content = entry.content
+            elif isinstance(entry.content, KnowledgeContent) and entry.content.type == "inline":
+                # KnowledgeContent model
+                content = entry.content.text or ""
 
         return {
             "id": entry.id,
