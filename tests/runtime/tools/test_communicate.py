@@ -52,7 +52,7 @@ def mock_tool_definition() -> MagicMock:
         "options": {"type": "array"},
         "default_option": {"type": "string"},
         "artifacts": {"type": "array"},
-        "severity": {"type": "string"},
+        "severity": {"type": "string", "enum": ["info", "warning", "error"], "default": "info"},
     }
     return definition
 
@@ -430,6 +430,37 @@ class TestCommunicateToolErrorMessage:
         assert result.success is True
         assert result.data["severity"] == "info"
         assert result.data["blocking"] is False
+
+    async def test_error_invalid_severity_raises(
+        self,
+        communicate_tool: CommunicateTool,
+    ) -> None:
+        """Error with invalid severity should raise validation error."""
+        with pytest.raises(ToolValidationError, match="Invalid severity"):
+            await communicate_tool.execute(
+                {
+                    "type": "error",
+                    "message": "Something broke.",
+                    "severity": "critical",  # not a valid severity
+                }
+            )
+
+    async def test_status_invalid_severity_defaults_to_info(
+        self,
+        communicate_tool: CommunicateTool,
+    ) -> None:
+        """Non-error types with invalid severity should default to info."""
+        # For non-error types, invalid severity is silently ignored
+        result = await communicate_tool.execute(
+            {
+                "type": "status",
+                "message": "Progress update",
+                "severity": "critical",  # invalid but ignored for status
+            }
+        )
+
+        assert result.success is True
+        # Status doesn't use severity in output, so just verify success
 
 
 class TestCommunicateToolMessageRouting:

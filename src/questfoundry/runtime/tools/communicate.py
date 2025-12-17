@@ -60,8 +60,8 @@ class CommunicateTool(BaseTool):
     This is the ONLY way orchestrators communicate with humans.
     All output must go through this tool.
 
-    This tool has terminates_turn: true, meaning calling it ends the
-    agent's turn. Orchestrators must end every turn with either
+    This tool has terminates_turn set to true, meaning calling it ends
+    the agent's turn. Orchestrators must end every turn with either
     this tool or delegate.
     """
 
@@ -100,6 +100,12 @@ class CommunicateTool(BaseTool):
         try:
             severity = ErrorSeverity(severity_str)
         except ValueError:
+            # For error type, invalid severity is an error; for others, default to INFO
+            if comm_type == CommunicationType.ERROR:
+                valid_severities = [s.value for s in ErrorSeverity]
+                raise ToolValidationError(
+                    f"Invalid severity '{severity_str}'. Valid values: {valid_severities}"
+                ) from None
             severity = ErrorSeverity.INFO
 
         # Build payload
@@ -224,7 +230,8 @@ class CommunicateTool(BaseTool):
 
         # If default_option provided, it should match an option id (if options exist)
         if default_option and options:
-            option_ids = [opt.get("id") for opt in options]
+            # After validation above, we know all options have "id" field
+            option_ids = [opt["id"] for opt in options]
             if default_option not in option_ids:
                 raise ToolValidationError(
                     f"default_option '{default_option}' not found in options: {option_ids}"
