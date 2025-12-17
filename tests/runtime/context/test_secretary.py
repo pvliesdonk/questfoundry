@@ -979,6 +979,40 @@ class TestMailboxSecretary:
         preserved_ids = {m.id for m in to_preserve}
         assert "msg-delegation" in preserved_ids
 
+    def test_preserves_delegation_response(self, secretary: MailboxSecretary):
+        """Test that delegation RESPONSES are also preserved."""
+        # Create messages with a delegation response that should be preserved
+        messages = [
+            # Old, low-priority messages (should be summarized)
+            *[
+                Message(
+                    id=f"msg-old-{i}",
+                    type=MessageType.PROGRESS_UPDATE,
+                    from_agent="agent",
+                    to_agent="showrunner",
+                    timestamp=datetime(2025, 1, 15, 12, i, 0),
+                    priority=MessagePriority.PROGRESS,
+                    turn_created=i,
+                )
+                for i in range(15)
+            ],
+            # Delegation response (should be preserved)
+            Message(
+                id="msg-delegation-response",
+                type=MessageType.DELEGATION_RESPONSE,
+                from_agent="plotwright",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, 16, 0),
+                priority=MessagePriority.DELEGATION,
+                turn_created=16,
+            ),
+        ]
+
+        to_summarize, to_preserve = secretary.select_messages_for_summarization(messages)
+
+        preserved_ids = {m.id for m in to_preserve}
+        assert "msg-delegation-response" in preserved_ids
+
     def test_generate_summary_basic(self, secretary: MailboxSecretary):
         """Test basic summary generation."""
         messages = [

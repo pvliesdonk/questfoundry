@@ -480,21 +480,28 @@ def create_digest(
     Args:
         to_agent: Agent whose mailbox is being summarized
         summary: Human-readable summary of the messages
-        original_messages: List of messages being summarized
+        original_messages: List of messages being summarized (must be non-empty)
         action_items: Extracted action items from the messages
         turn_created: Current turn number
 
     Returns:
         Digest message
+
+    Raises:
+        ValueError: If original_messages is empty
     """
+    if not original_messages:
+        raise ValueError("create_digest requires at least one message to summarize")
+
     # Extract metadata from original messages
     original_ids = [msg.id for msg in original_messages]
     original_senders = list({msg.from_agent for msg in original_messages})
     timestamps = [msg.timestamp for msg in original_messages]
 
-    # Check if any delegations are included
+    # Check if any delegations are included (request or response)
     contains_delegations = any(
-        msg.type == MessageType.DELEGATION_REQUEST for msg in original_messages
+        msg.type in (MessageType.DELEGATION_REQUEST, MessageType.DELEGATION_RESPONSE)
+        for msg in original_messages
     )
 
     # Determine urgency from priorities

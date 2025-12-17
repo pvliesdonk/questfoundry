@@ -8,7 +8,7 @@ multi-turn conversations with many tool calls.
 Tiered Summarization (progressive degradation):
 - Level 0 (NONE): Full fidelity - no summarization applied
 - Level 1 (TOOL): Tool Secretary - apply tool summarization policies
-- Level 2 (FULL): Full Secretary - also summarize/digest older messages (future)
+- Level 2 (FULL): Full Secretary - also summarize/digest older messages
 
 Summarization Policies (applied at Level 1+):
 - drop: Remove from context entirely (tool can be re-called if needed)
@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.messaging.types import MessagePriority
+
 if TYPE_CHECKING:
     from questfoundry.runtime.models.base import Tool
 
@@ -38,7 +40,7 @@ class SummarizationLevel(IntEnum):
 
     NONE = 0  # Full fidelity - no summarization
     TOOL = 1  # Apply tool summarization policies
-    FULL = 2  # Full mailbox summarization (future)
+    FULL = 2  # Full mailbox and context summarization
 
 
 class SummarizationPolicy(str, Enum):
@@ -73,7 +75,7 @@ class Secretary:
 
     This approach maximizes context fidelity when budget permits, and only
     compresses when necessary. Full message summarization (Level 2) is
-    reserved for future implementation.
+    implemented via MailboxSecretary and ContextSecretary.
     """
 
     # Context tracking - limit should match model context size
@@ -89,6 +91,9 @@ class Secretary:
     # Recency window - last N tool results are ALWAYS preserved full
     # This ensures recent work is never compressed, only older results
     preserve_recent_n: int = 5
+
+    # Maximum tool calls tracked per agent (for recency window)
+    max_tool_history: int = 100
 
     # Track summarization statistics
     total_tokens_saved: int = 0
@@ -181,7 +186,7 @@ class Secretary:
     def _get_agent_tool_calls(self, agent_id: str) -> deque[str]:
         """Get or create the tool call deque for an agent."""
         if agent_id not in self._recent_tool_calls:
-            self._recent_tool_calls[agent_id] = deque(maxlen=100)
+            self._recent_tool_calls[agent_id] = deque(maxlen=self.max_tool_history)
         return self._recent_tool_calls[agent_id]
 
     def track_tool_call(self, tool_call_id: str, agent_id: str | None = None) -> None:
@@ -198,8 +203,6 @@ class Secretary:
             agent_calls = self._get_agent_tool_calls(agent_id)
             if tool_call_id not in agent_calls:
                 agent_calls.append(tool_call_id)
-        # Also track globally for backwards compatibility
-        # (This deque doesn't exist in per-agent mode, but tests may use it)
 
     def is_recent(self, tool_call_id: str, agent_id: str | None = None) -> bool:
         """
@@ -486,8 +489,9 @@ class Secretary:
         self.tools_preserved = 0
 
     def reset_context(self) -> None:
-        """Reset context tracking to zero."""
+        """Reset context tracking to zero (global and per-agent)."""
         self.current_context_tokens = 0
+        self._agent_context_tokens.clear()
 
     def get_stats(self) -> dict[str, Any]:
         """Get summarization statistics including context info."""
@@ -545,7 +549,7 @@ class MailboxSecretary:
     preserve_recent_n: int = 5
 
     # Priority threshold - messages at or above this are never summarized
-    priority_threshold: int = 5  # MessagePriority.HIGH
+    priority_threshold: int = MessagePriority.HIGH
 
     # Statistics
     total_digests_created: int = 0

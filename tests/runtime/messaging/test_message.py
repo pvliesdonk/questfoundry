@@ -417,6 +417,39 @@ class TestDigestMessages:
         payload = msg.payload["digest"]
         assert payload["contains_delegations"] is True
 
+    def test_create_digest_with_delegation_response(self):
+        """Test that digest correctly flags DELEGATION_RESPONSE as containing delegations."""
+        original_messages = [
+            Message(
+                id="msg-1",
+                type=MessageType.DELEGATION_RESPONSE,
+                from_agent="plotwright",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+                priority=MessagePriority.DELEGATION,
+            ),
+        ]
+
+        msg = create_digest(
+            to_agent="showrunner",
+            summary="Summary with delegation response",
+            original_messages=original_messages,
+        )
+
+        payload = msg.payload["digest"]
+        assert payload["contains_delegations"] is True
+
+    def test_create_digest_empty_messages_raises(self):
+        """Test that create_digest raises ValueError for empty message list."""
+        import pytest
+
+        with pytest.raises(ValueError, match="at least one message"):
+            create_digest(
+                to_agent="showrunner",
+                summary="Summary",
+                original_messages=[],
+            )
+
     def test_create_digest_with_high_priority(self):
         """Test that digest correctly captures urgency from high priority messages."""
         original_messages = [
