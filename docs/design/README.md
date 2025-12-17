@@ -10,6 +10,9 @@ Architecture and design documentation for the v4 runtime cleanroom rebuild.
 | [PHASE1_SINGLE_AGENT.md](PHASE1_SINGLE_AGENT.md) | LLM providers, sessions, agent runtime | #145 | Complete |
 | [PHASE2_TOOL_EXECUTION.md](PHASE2_TOOL_EXECUTION.md) | Tool infrastructure, registry, capability filtering | #146 | Complete |
 | [PHASE3_DELEGATION_MESSAGING.md](PHASE3_DELEGATION_MESSAGING.md) | Async messaging, delegation, playbook tracking | #147 | Complete |
+| [PHASE4_STORAGE_LIFECYCLE.md](PHASE4_STORAGE_LIFECYCLE.md) | Store manager, lifecycle states, cold store | #148 | Pending |
+| [PHASE5_CHECKPOINTING.md](PHASE5_CHECKPOINTING.md) | Save/restore state, resumption | #149 | Complete |
+| [PHASE7_PROMPT_TOOL_ARCHITECTURE.md](PHASE7_PROMPT_TOOL_ARCHITECTURE.md) | Tools-only orchestrators, knowledge layers, prompt budgets | #159 | Design |
 | [TOOL_CALLING_FIXES.md](TOOL_CALLING_FIXES.md) | Streaming tool calls, conversation flow fixes | — | Reference |
 
 ## Master Tracking
@@ -25,8 +28,11 @@ Architecture and design documentation for the v4 runtime cleanroom rebuild.
 | 2 | Tool Execution | #146 | Complete |
 | 3 | Delegation & Messaging | #147 | Complete |
 | 4 | Storage & Lifecycle | #148 | Pending |
-| 5 | Checkpointing & Resumption | #149 | Pending |
+| 5 | Checkpointing & Resumption | #149 | Complete |
+| 7 | Prompt & Tool Architecture | #159 | Design |
 | 6 | Flow Control & Polish | #150 | Pending |
+
+**Note**: Phase 7 is inserted before Phase 6 as it establishes the tools-only orchestrator pattern that Phase 6 builds upon.
 
 ## Key References
 

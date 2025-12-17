@@ -82,7 +82,8 @@
     "tools/generate_image.json",
     "tools/generate_audio.json",
     "tools/consult_corpus.json",
-    "tools/request_clarification.json",
+    "tools/communicate.json",
+    "tools/consult_knowledge.json",
     "tools/list_artifact_types.json",
     "tools/list_stores.json",
     "tools/list_agents.json"

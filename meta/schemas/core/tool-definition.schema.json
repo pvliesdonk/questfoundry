@@ -64,6 +64,12 @@
       },
       "default": [],
       "description": "Example invocations to help agents understand usage patterns"
+    },
+
+    "terminates_turn": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, calling this tool ends the agent's turn. Runtime enforces: orchestrator agents MUST end every turn with a terminating tool call (e.g., delegate, communicate). Non-orchestrators may use prose output."
     }
   },
 
