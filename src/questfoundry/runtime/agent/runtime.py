@@ -164,8 +164,12 @@ class AgentRuntime:
         self._prompt_builder = PromptBuilder()
         self._tool_registry: ToolRegistry | None = None
 
-        # Secretary for context management via tool summarization
-        self._secretary = Secretary()
+        # Secretary for tiered context management
+        # context_limit from model determines when to start summarizing
+        self._secretary = Secretary(
+            context_limit=context_limit or 8000,  # Default 8k if not specified
+            summarization_threshold=0.7,  # Start tool summarization at 70%
+        )
         self._secretary_initialized = False
 
         # Turn validator for orchestrator enforcement
@@ -440,24 +444,47 @@ class AgentRuntime:
         self,
         tool_calls: list[ToolCallRequest],
         tool_results: list[ToolCall],
-        *,
-        apply_summarization: bool = True,
+        agent_id: str | None = None,
     ) -> list[LLMMessage]:
         """
         Convert tool call results to LLM messages.
 
-        Applies Secretary pattern summarization based on each tool's
-        summarization_policy (drop, ultra_concise, concise, preserve).
+        Uses tiered Secretary pattern:
+        - Below tool_threshold: Preserve full results (no summarization)
+        - Above tool_threshold: Apply tool summarization policies
 
         Args:
             tool_calls: Original tool call requests (with IDs)
             tool_results: Executed tool results
-            apply_summarization: Whether to apply summarization policies.
-                Set False to always preserve full results.
+            agent_id: Agent making the calls (for per-agent summarization)
 
         Returns:
             List of tool result messages for the LLM
         """
+        # Check if we should apply tool summarization based on context usage (per-agent)
+        if agent_id:
+            apply_summarization = self._secretary.should_summarize_tools_for_agent(agent_id)
+        else:
+            apply_summarization = self._secretary.should_summarize_tools()
+
+        if apply_summarization:
+            usage = (
+                self._secretary.get_usage_fraction(agent_id)
+                if agent_id
+                else self._secretary.usage_fraction
+            )
+            level = (
+                self._secretary.get_current_level(agent_id)
+                if agent_id
+                else self._secretary.current_level
+            )
+            logger.debug(
+                "Applying tool summarization for %s (context at %.1f%%, level=%s)",
+                agent_id or "global",
+                usage * 100,
+                level.name,
+            )
+
         messages = []
         for tc, result in zip(tool_calls, tool_results, strict=True):
             # Handle errors (always preserve error messages)
@@ -473,11 +500,14 @@ class AgentRuntime:
                 )
                 continue
 
-            # Apply Secretary summarization for successful results
+            # Apply Secretary summarization when above threshold
+            # Pass tool_call_id for recency tracking - recent results always preserved
             if apply_summarization and result.result:
                 summary = self._secretary.summarize_tool_result(
                     tool_id=tc.name,
                     result=result.result,
+                    tool_call_id=tc.id,
+                    agent_id=agent_id,
                     arguments=tc.arguments,
                 )
 
@@ -493,7 +523,10 @@ class AgentRuntime:
                 else:
                     content = "{}"
             else:
-                # No summarization - use raw JSON
+                # No summarization - use raw JSON (full fidelity)
+                # Still track tool call for recency window (per-agent)
+                if tc.id:
+                    self._secretary.track_tool_call(tc.id, agent_id)
                 content = json.dumps(result.result) if result.result else "{}"
 
             messages.append(
@@ -725,6 +758,10 @@ class AgentRuntime:
             # Validate context size
             self.validate_context_size(messages)
 
+            # Update Secretary's context tracking for tiered summarization (per-agent)
+            estimated_tokens = self.estimate_tokens(messages)
+            self._secretary.update_context_size(estimated_tokens, agent.id)
+
             # Track all tool calls made during this activation
             all_tool_calls: list[ToolCall] = []
             total_prompt_tokens = 0
@@ -845,7 +882,9 @@ class AgentRuntime:
                             tool_calls=response.tool_calls,
                         )
                     )
-                    tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
+                    tool_messages = self._tool_results_to_messages(
+                        tool_calls, tool_results, agent.id
+                    )
                     messages.extend(tool_messages)
 
                     # Add nudge about missing terminating tool
@@ -869,7 +908,9 @@ class AgentRuntime:
                             tool_calls=response.tool_calls,
                         )
                     )
-                    tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
+                    tool_messages = self._tool_results_to_messages(
+                        tool_calls, tool_results, agent.id
+                    )
                     messages.extend(tool_messages)
                     break
 
@@ -883,8 +924,11 @@ class AgentRuntime:
                 )
 
                 # Add tool result messages
-                tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
+                tool_messages = self._tool_results_to_messages(tool_calls, tool_results, agent.id)
                 messages.extend(tool_messages)
+
+                # Update context size for next iteration's summarization decision (per-agent)
+                self._secretary.update_context_size(self.estimate_tokens(messages), agent.id)
 
             # Complete turn
             usage = TokenUsage(
@@ -1036,6 +1080,9 @@ class AgentRuntime:
             # Validate context size
             self.validate_context_size(messages)
 
+            # Update Secretary's context tracking for tiered summarization (per-agent)
+            self._secretary.update_context_size(self.estimate_tokens(messages), agent.id)
+
             # Collect response for turn completion
             full_content = ""
             final_usage: TokenUsage | None = None
@@ -1133,7 +1180,7 @@ class AgentRuntime:
                             )
                         )
                         tool_messages = self._tool_results_to_messages(
-                            pending_tool_calls, tool_results
+                            pending_tool_calls, tool_results, agent.id
                         )
                         messages.extend(tool_messages)
 
@@ -1164,7 +1211,7 @@ class AgentRuntime:
                             )
                         )
                         tool_messages = self._tool_results_to_messages(
-                            pending_tool_calls, tool_results
+                            pending_tool_calls, tool_results, agent.id
                         )
                         messages.extend(tool_messages)
                         break
@@ -1177,8 +1224,13 @@ class AgentRuntime:
                             tool_calls=pending_tool_calls,
                         )
                     )
-                    tool_messages = self._tool_results_to_messages(pending_tool_calls, tool_results)
+                    tool_messages = self._tool_results_to_messages(
+                        pending_tool_calls, tool_results, agent.id
+                    )
                     messages.extend(tool_messages)
+
+                    # Update context size for next iteration's summarization decision (per-agent)
+                    self._secretary.update_context_size(self.estimate_tokens(messages), agent.id)
 
                     # Continue streaming with tool results in context
                     # (next iteration will stream with updated messages)
