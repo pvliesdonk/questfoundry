@@ -9,6 +9,7 @@ from questfoundry.runtime.messaging import (
     MessageType,
     create_delegation_request,
     create_delegation_response,
+    create_digest,
     create_escalation,
     create_feedback,
     create_message,
@@ -119,6 +120,37 @@ class TestMessage:
         assert not message.is_expired(15)  # 5 turns later (boundary)
         assert message.is_expired(16)  # 6 turns later (expired)
         assert message.is_expired(100)  # Way past
+
+    def test_delegation_request_never_expires(self):
+        """Test that delegation requests NEVER expire regardless of TTL."""
+        message = Message(
+            id="test-id",
+            type=MessageType.DELEGATION_REQUEST,
+            from_agent="showrunner",
+            to_agent="plotwright",
+            timestamp=datetime.now(tz=None),
+            ttl_turns=1,  # Very short TTL
+            turn_created=1,
+        )
+
+        # Even with TTL=1 and way past that, delegations don't expire
+        assert not message.is_expired(100)
+        assert not message.is_expired(1000)
+
+    def test_delegation_response_never_expires(self):
+        """Test that delegation responses NEVER expire regardless of TTL."""
+        message = Message(
+            id="test-id",
+            type=MessageType.DELEGATION_RESPONSE,
+            from_agent="plotwright",
+            to_agent="showrunner",
+            timestamp=datetime.now(tz=None),
+            ttl_turns=1,
+            turn_created=1,
+        )
+
+        assert not message.is_expired(100)
+        assert not message.is_expired(1000)
 
 
 class TestCreateMessage:
@@ -314,3 +346,181 @@ class TestProgressMessages:
         )
 
         assert msg.ttl_turns == 10
+
+
+class TestDigestMessages:
+    """Tests for digest message factory function."""
+
+    def test_create_digest_basic(self):
+        """Test creating a basic digest message."""
+        # Create some original messages to summarize
+        original_messages = [
+            Message(
+                id=f"msg-{i}",
+                type=MessageType.PROGRESS_UPDATE,
+                from_agent="scene_smith",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, i, 0),
+                priority=MessagePriority.PROGRESS,
+            )
+            for i in range(5)
+        ]
+
+        msg = create_digest(
+            to_agent="showrunner",
+            summary="Summary of 5 progress updates from scene_smith",
+            original_messages=original_messages,
+            turn_created=10,
+        )
+
+        assert msg.type == MessageType.DIGEST
+        assert msg.from_agent == "runtime"  # Digests are from runtime
+        assert msg.to_agent == "showrunner"
+        assert msg.priority == MessagePriority.DIGEST
+
+        payload = msg.payload["digest"]
+        assert payload["summary"] == "Summary of 5 progress updates from scene_smith"
+        assert payload["summarized_count"] == 5
+        assert len(payload["original_ids"]) == 5
+        assert "scene_smith" in payload["original_senders"]
+        assert payload["contains_delegations"] is False
+        # PROGRESS priority (-2) is > LOW (-5), so urgency is "normal"
+        assert payload["urgency"] == "normal"
+
+    def test_create_digest_with_delegations(self):
+        """Test that digest correctly flags contained delegations."""
+        original_messages = [
+            Message(
+                id="msg-1",
+                type=MessageType.DELEGATION_REQUEST,
+                from_agent="showrunner",
+                to_agent="plotwright",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+                priority=MessagePriority.DELEGATION,
+            ),
+            Message(
+                id="msg-2",
+                type=MessageType.PROGRESS_UPDATE,
+                from_agent="plotwright",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, 1, 0),
+                priority=MessagePriority.PROGRESS,
+            ),
+        ]
+
+        msg = create_digest(
+            to_agent="showrunner",
+            summary="Summary with delegation",
+            original_messages=original_messages,
+        )
+
+        payload = msg.payload["digest"]
+        assert payload["contains_delegations"] is True
+
+    def test_create_digest_with_delegation_response(self):
+        """Test that digest correctly flags DELEGATION_RESPONSE as containing delegations."""
+        original_messages = [
+            Message(
+                id="msg-1",
+                type=MessageType.DELEGATION_RESPONSE,
+                from_agent="plotwright",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+                priority=MessagePriority.DELEGATION,
+            ),
+        ]
+
+        msg = create_digest(
+            to_agent="showrunner",
+            summary="Summary with delegation response",
+            original_messages=original_messages,
+        )
+
+        payload = msg.payload["digest"]
+        assert payload["contains_delegations"] is True
+
+    def test_create_digest_empty_messages_raises(self):
+        """Test that create_digest raises ValueError for empty message list."""
+        import pytest
+
+        with pytest.raises(ValueError, match="at least one message"):
+            create_digest(
+                to_agent="showrunner",
+                summary="Summary",
+                original_messages=[],
+            )
+
+    def test_create_digest_with_high_priority(self):
+        """Test that digest correctly captures urgency from high priority messages."""
+        original_messages = [
+            Message(
+                id="msg-1",
+                type=MessageType.ESCALATION,
+                from_agent="gatekeeper",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+                priority=MessagePriority.ESCALATION,  # High priority
+            ),
+        ]
+
+        msg = create_digest(
+            to_agent="showrunner",
+            summary="Summary with escalation",
+            original_messages=original_messages,
+        )
+
+        payload = msg.payload["digest"]
+        assert payload["urgency"] == "high"
+
+    def test_create_digest_with_action_items(self):
+        """Test that action items are included in digest."""
+        original_messages = [
+            Message(
+                id="msg-1",
+                type=MessageType.FEEDBACK,
+                from_agent="style_lead",
+                to_agent="showrunner",
+                timestamp=datetime(2025, 1, 15, 12, 0, 0),
+            ),
+        ]
+
+        action_items = ["Review style feedback", "Address voice consistency"]
+
+        msg = create_digest(
+            to_agent="showrunner",
+            summary="Summary",
+            original_messages=original_messages,
+            action_items=action_items,
+        )
+
+        payload = msg.payload["digest"]
+        assert payload["action_items"] == action_items
+
+    def test_create_digest_time_range(self):
+        """Test that digest captures time range of original messages."""
+        original_messages = [
+            Message(
+                id="msg-1",
+                type=MessageType.FEEDBACK,
+                from_agent="a",
+                to_agent="b",
+                timestamp=datetime(2025, 1, 15, 10, 0, 0),  # Earlier
+            ),
+            Message(
+                id="msg-2",
+                type=MessageType.FEEDBACK,
+                from_agent="c",
+                to_agent="b",
+                timestamp=datetime(2025, 1, 15, 14, 0, 0),  # Later
+            ),
+        ]
+
+        msg = create_digest(
+            to_agent="b",
+            summary="Summary",
+            original_messages=original_messages,
+        )
+
+        payload = msg.payload["digest"]
+        assert payload["time_range"]["earliest"] == "2025-01-15T10:00:00"
+        assert payload["time_range"]["latest"] == "2025-01-15T14:00:00"
