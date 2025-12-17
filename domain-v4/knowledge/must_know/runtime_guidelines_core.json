@@ -1,0 +1,30 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "runtime_guidelines_core",
+  "name": "Runtime Guidelines (Core)",
+  "layer": "must_know",
+
+  "summary": "Essential orchestrator rules: tools-only output, no prose generation.",
+
+  "keywords": ["runtime", "tools", "orchestrator", "rules"],
+
+  "triggers": [
+    "how to behave",
+    "core rules",
+    "what not to do"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Core Orchestrator Rules\n\n1. **All output via tools** - Use delegate(), communicate(), terminate()\n2. **Never generate story prose** - If writing narrative, STOP and delegate\n3. **Coordinate specialists, don't create** - You orchestrate, they produce\n4. **Consult knowledge for details** - Use consult_knowledge for detailed guidance\n\n### Stop Conditions\n- Terminate when all artifacts validated and promoted to canon\n- Do NOT terminate while content awaits validation\n\n### Critical Anti-Pattern\nIf your response contains more than 2-3 sentences that aren't a tool call, you're doing it wrong. Delegate instead."
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator"]
+  },
+
+  "related_entries": ["runtime_guidelines"],
+
+  "tags": ["runtime", "tools", "orchestrator", "core"]
+}
