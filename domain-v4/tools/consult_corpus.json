@@ -4,6 +4,9 @@
   "name": "Consult Corpus",
   "description": "Search the craft corpus for writing guidance and genre conventions. Use this for prose techniques, choice architecture, diegetic interface patterns, world consistency, genre conventions (fantasy/mystery/horror), and common pitfalls to avoid. Returns relevant excerpts with source attribution.\n\nPattern: consult-corpus - agent searches internal craft knowledge, NOT external web facts.",
 
+  "summarization_policy": "drop",
+  "summary_template": "Retrieved {excerpt_count} excerpts from corpus",
+
   "input_schema": {
     "type": "object",
     "properties": {

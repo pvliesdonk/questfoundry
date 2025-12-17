@@ -35,6 +35,7 @@ from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
     TurnValidator,
 )
+from questfoundry.runtime.context import Secretary, SummarizationPolicy
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -163,6 +164,10 @@ class AgentRuntime:
         self._prompt_builder = PromptBuilder()
         self._tool_registry: ToolRegistry | None = None
 
+        # Secretary for context management via tool summarization
+        self._secretary = Secretary()
+        self._secretary_initialized = False
+
         # Turn validator for orchestrator enforcement
         self._turn_validator = TurnValidator(studio, turn_validation_config)
 
@@ -188,7 +193,26 @@ class AgentRuntime:
                 logger.warning("Tools module not available, tool execution disabled", exc_info=True)
                 return None
 
+        # Initialize secretary with tool definitions (once)
+        if not self._secretary_initialized and self._tool_registry:
+            self._initialize_secretary()
+
         return self._tool_registry
+
+    def _initialize_secretary(self) -> None:
+        """Initialize the Secretary with tool definitions for summarization."""
+        for tool in self._studio.tools:
+            self._secretary.register_tool(tool)
+        self._secretary_initialized = True
+        logger.debug(
+            "Secretary initialized with %d tools",
+            len(self._studio.tools),
+        )
+
+    @property
+    def secretary(self) -> Secretary:
+        """Get the Secretary for context management."""
+        return self._secretary
 
     def get_agent_tools(self, agent: Agent, session_id: str | None = None) -> list[BaseTool]:
         """
@@ -416,24 +440,61 @@ class AgentRuntime:
         self,
         tool_calls: list[ToolCallRequest],
         tool_results: list[ToolCall],
+        *,
+        apply_summarization: bool = True,
     ) -> list[LLMMessage]:
         """
         Convert tool call results to LLM messages.
 
+        Applies Secretary pattern summarization based on each tool's
+        summarization_policy (drop, ultra_concise, concise, preserve).
+
         Args:
             tool_calls: Original tool call requests (with IDs)
             tool_results: Executed tool results
+            apply_summarization: Whether to apply summarization policies.
+                Set False to always preserve full results.
 
         Returns:
             List of tool result messages for the LLM
         """
         messages = []
         for tc, result in zip(tool_calls, tool_results, strict=True):
-            # Format the result as JSON
-            if result.success:
-                content = json.dumps(result.result) if result.result else "{}"
-            else:
+            # Handle errors (always preserve error messages)
+            if not result.success:
                 content = json.dumps({"error": result.error or "Tool execution failed"})
+                messages.append(
+                    LLMMessage(
+                        role="tool",
+                        content=content,
+                        tool_call_id=tc.id,
+                        name=tc.name,
+                    )
+                )
+                continue
+
+            # Apply Secretary summarization for successful results
+            if apply_summarization and result.result:
+                summary = self._secretary.summarize_tool_result(
+                    tool_id=tc.name,
+                    result=result.result,
+                    arguments=tc.arguments,
+                )
+
+                # Wrap summarized content in consistent JSON format
+                if summary.policy_applied == SummarizationPolicy.DROP:
+                    content = json.dumps({"_summarized": "dropped", "_tool": tc.name})
+                elif summary.policy_applied == SummarizationPolicy.PRESERVE:
+                    # PRESERVE keeps original JSON as-is
+                    content = summary.content or "{}"
+                elif summary.content is not None:
+                    # ULTRA_CONCISE and CONCISE wrap text in JSON for consistency
+                    content = json.dumps({"_summarized": summary.content, "_tool": tc.name})
+                else:
+                    content = "{}"
+            else:
+                # No summarization - use raw JSON
+                content = json.dumps(result.result) if result.result else "{}"
 
             messages.append(
                 LLMMessage(

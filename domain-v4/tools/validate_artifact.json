@@ -4,6 +4,8 @@
   "name": "Validate Artifact",
   "description": "Validate an artifact against its type schema and the 8 quality bars. Returns validation results with specific errors and suggested fixes.\n\nQuality Bars checked:\n1. Integrity - No contradictions or dead links\n2. Reachability - Critical content accessible\n3. Nonlinearity - Branches matter\n4. Gateways - Conditions enforceable\n5. Style - Voice consistent\n6. Determinism - Reproducible where promised\n7. Presentation - Spoiler-safe\n8. Accessibility - Navigation clear\n\nPattern: validate-with-feedback - strict validation, clear rejection messages with remediation guidance.",
 
+  "summarization_policy": "preserve",
+
   "input_schema": {
     "type": "object",
     "properties": {

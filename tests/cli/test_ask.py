@@ -336,7 +336,10 @@ class TestAskREPL:
             )
 
             # REPL should have shown the header and ended cleanly
-            assert "Interactive Session" in result.stdout or "Session ended" in result.stdout
+            # New format: "Session {project}" header and "Session complete" ending
+            assert "Session" in result.stdout and (
+                "Session complete" in result.stdout or "Session ended" in result.stdout
+            )
 
     def test_ask_repl_quit(self, test_project: Project, mock_studio: Studio) -> None:
         """ask REPL mode can be exited with 'quit'."""
@@ -364,4 +367,5 @@ class TestAskREPL:
                 input="quit\n",
             )
 
-            assert "Session ended" in result.stdout
+            # New format: "Session complete" instead of "Session ended"
+            assert "Session complete" in result.stdout or "Session ended" in result.stdout

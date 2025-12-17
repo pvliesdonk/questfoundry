@@ -4,6 +4,9 @@
   "name": "List Agents",
   "description": "List all agents available for delegation. Use this to discover what specialist agents exist and their archetypes before delegating work. Returns a compact list with id, name, archetypes, and brief description.",
 
+  "summarization_policy": "drop",
+  "summary_template": "Listed {count} agents",
+
   "input_schema": {
     "type": "object",
     "properties": {},

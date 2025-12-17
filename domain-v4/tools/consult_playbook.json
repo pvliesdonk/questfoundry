@@ -4,6 +4,9 @@
   "name": "Consult Playbook",
   "description": "Retrieve full details for a playbook/workflow. REQUIRED: You MUST provide the playbook_id parameter (e.g., 'story_spark'). Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how to orchestrate a workflow.",
 
+  "summarization_policy": "drop",
+  "summary_template": "Retrieved playbook: {name}",
+
   "input_schema": {
     "type": "object",
     "properties": {

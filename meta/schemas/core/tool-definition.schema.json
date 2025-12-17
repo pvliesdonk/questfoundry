@@ -70,6 +70,16 @@
       "type": "boolean",
       "default": false,
       "description": "If true, calling this tool ends the agent's turn. Runtime enforces: orchestrator agents MUST end every turn with a terminating tool call (e.g., delegate, communicate). Non-orchestrators may use prose output."
+    },
+
+    "summarization_policy": {
+      "$ref": "#/$defs/summarization_policy",
+      "description": "How to summarize this tool's result when context needs to be compressed. Used by the Secretary pattern to manage context growth."
+    },
+
+    "summary_template": {
+      "type": "string",
+      "description": "Template for concise/ultra_concise summaries. Variables in {braces} are replaced from tool result. Example: 'Delegated to {to_agent}' or 'Schema for {artifact_type} retrieved'."
     }
   },
 
@@ -177,6 +187,13 @@
         }
       },
       "additionalProperties": false
+    },
+
+    "summarization_policy": {
+      "type": "string",
+      "enum": ["drop", "ultra_concise", "concise", "preserve"],
+      "default": "preserve",
+      "description": "Policy for summarizing tool results when compressing context:\n- drop: Remove from summarized context (tool can be re-called if needed, e.g., schema lookups)\n- ultra_concise: Single-line summary using summary_template (e.g., 'Delegated to Plotwright')\n- concise: Brief multi-line summary preserving key facts\n- preserve: Keep full result in context (default, for critical data)"
     }
   }
 }
