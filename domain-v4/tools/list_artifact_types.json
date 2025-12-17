@@ -4,6 +4,9 @@
   "name": "List Artifact Types",
   "description": "List all available artifact types with brief descriptions. Use this to discover what artifact types exist before consulting their full schemas. Returns a compact list with id, name, category, and brief description for each type.",
 
+  "summarization_policy": "drop",
+  "summary_template": "Listed {count} artifact types",
+
   "input_schema": {
     "type": "object",
     "properties": {},

@@ -29,19 +29,31 @@ if TYPE_CHECKING:
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
 from rich.console import Console
-from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.table import Table
+
+from questfoundry.cli_output import StatusReporter, create_log_handler
 
 # Global verbosity level (set by callback)
 _verbosity: int = 0
 
+# Main output console (stdout)
 console = Console()
+
+# Log console (stderr) - for logs, separated from user output
+log_console = Console(stderr=True)
+
+# Status reporter for structured output
+_status_reporter: StatusReporter | None = None
 
 
 def _configure_logging(verbosity: int) -> None:
-    """Configure logging based on verbosity level."""
-    global _verbosity
+    """Configure logging based on verbosity level.
+
+    Routes all logs to stderr via log_console, keeping stdout clean
+    for structured status output.
+    """
+    global _verbosity, _status_reporter
     _verbosity = verbosity
 
     if verbosity == 0:
@@ -51,17 +63,28 @@ def _configure_logging(verbosity: int) -> None:
     else:  # 2+
         level = logging.DEBUG
 
-    # Configure root logger with Rich handler
+    # Configure root logger with Rich handler on STDERR
+    # This keeps stdout clean for structured status output
+    handler = create_log_handler(log_console, verbosity)
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=verbosity >= 2)],
+        handlers=[handler],
         force=True,
     )
 
     # Also set questfoundry logger
     logging.getLogger("questfoundry").setLevel(level)
+
+    # Filter noisy libraries at lower verbosities
+    if verbosity < 2:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("langsmith").setLevel(logging.WARNING)
+
+    # Create status reporter
+    _status_reporter = StatusReporter(verbosity=verbosity, show_summary=True)
 
 
 def _verbosity_callback(_ctx: typer.Context, value: int) -> int:
@@ -759,7 +782,25 @@ async def _stream_response(
 
     duration_ms = (time.time() - start_time) * 1000
 
-    # Show token usage at -v+
+    # Get turn number from session (turn was created during streaming)
+    turn_number = session.turn_count
+
+    # Build usage from streaming chunk for turn completion
+    from questfoundry.runtime.session import TokenUsage
+
+    usage = None
+    if final_usage:
+        usage = TokenUsage(
+            prompt_tokens=final_usage.prompt_tokens,
+            completion_tokens=final_usage.completion_tokens,
+            total_tokens=final_usage.total_tokens,
+        )
+
+    # Report turn completion via status reporter
+    if _status_reporter:
+        _status_reporter.turn_complete(usage=usage, duration_ms=duration_ms)
+
+    # Show token usage at -v+ (to stderr)
     if _verbosity >= 1 and final_usage:
         tokens_info = []
         if final_usage.prompt_tokens:
@@ -769,30 +810,32 @@ async def _stream_response(
         if final_usage.total_tokens:
             tokens_info.append(f"total: {final_usage.total_tokens}")
         if tokens_info:
-            console.print(f"[dim]tokens: {', '.join(tokens_info)}[/dim]")
+            log_console.print(f"[dim]tokens: {', '.join(tokens_info)}[/dim]")
 
-    # Show timing at -vv+
+    # Show timing at -vv+ (to stderr)
     if _verbosity >= 2:
-        console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
+        log_console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
     # Process any pending delegations
     if process_delegations:
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
-            console.print()
-            console.print(f"[dim]── Processed {len(delegation_results)} delegation(s) ──[/dim]")
-            for result in delegation_results:
-                status = "[green]✓[/green]" if result.get("success") else "[red]✗[/red]"
-                to_agent = result.get("to_agent", "unknown")
-                task_preview = result.get("task", "")[:40]
-                console.print(f"  {status} {to_agent}: {task_preview}...")
-                if result.get("success") and _verbosity >= 2:
-                    # Show delegatee response at -vv+
-                    response_preview = str(result.get("result", ""))[:200]
-                    console.print(f"    [dim]{response_preview}...[/dim]")
-                elif not result.get("success"):
-                    console.print(f"    [red]{result.get('error', 'Unknown error')}[/red]")
+            for dr in delegation_results:
+                to_agent = dr.get("to_agent", "unknown")
+                task = dr.get("task", "")
+                success = dr.get("success", False)
+
+                # Report via status reporter
+                if _status_reporter:
+                    _status_reporter.delegation_complete(
+                        from_agent=agent.id,
+                        to_agent=to_agent,
+                        task=task,
+                        success=success,
+                        turn_number=turn_number,
+                        error=dr.get("error") if not success else None,
+                    )
 
     return full_content
 
@@ -838,7 +881,31 @@ async def _invoke_response(
 
     duration_ms = (time.time() - start_time) * 1000
 
-    # Show token usage at -v+
+    # Report tool calls and artifacts via StatusReporter
+    if _status_reporter and result.tool_calls:
+        for tc in result.tool_calls:
+            _status_reporter.tool_call(
+                tool_id=tc.tool_id,
+                success=tc.success,
+                agent_id=agent.id,
+                turn_number=result.turn.turn_number,
+                execution_time_ms=tc.execution_time_ms,
+            )
+            # Check if this was a save_artifact call
+            if tc.tool_id == "save_artifact" and tc.success and tc.result:
+                _status_reporter.artifact_created(
+                    artifact_id=tc.result.get("artifact_id", "unknown"),
+                    artifact_type=tc.result.get("artifact", {}).get("_type", "unknown"),
+                    store=tc.result.get("store", "unknown"),
+                    created_by=agent.id,
+                    turn_number=result.turn.turn_number,
+                )
+
+    # Report turn completion
+    if _status_reporter:
+        _status_reporter.turn_complete(usage=result.usage, duration_ms=duration_ms)
+
+    # Show token usage at -v+ (also goes to log_console now)
     if _verbosity >= 1 and result.usage:
         tokens_info = []
         if result.usage.prompt_tokens:
@@ -848,29 +915,32 @@ async def _invoke_response(
         if result.usage.total_tokens:
             tokens_info.append(f"total: {result.usage.total_tokens}")
         if tokens_info:
-            console.print(f"[dim]tokens: {', '.join(tokens_info)}[/dim]")
+            log_console.print(f"[dim]tokens: {', '.join(tokens_info)}[/dim]")
 
     # Show timing at -vv+
     if _verbosity >= 2:
-        console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
+        log_console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
     # Process any pending delegations
     if process_delegations:
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
-            console.print()
-            console.print(f"[dim]── Processed {len(delegation_results)} delegation(s) ──[/dim]")
             for dr in delegation_results:
-                status = "[green]✓[/green]" if dr.get("success") else "[red]✗[/red]"
                 to_agent = dr.get("to_agent", "unknown")
-                task_preview = dr.get("task", "")[:40]
-                console.print(f"  {status} {to_agent}: {task_preview}...")
-                if dr.get("success") and _verbosity >= 2:
-                    response_preview = str(dr.get("result", ""))[:200]
-                    console.print(f"    [dim]{response_preview}...[/dim]")
-                elif not dr.get("success"):
-                    console.print(f"    [red]{dr.get('error', 'Unknown error')}[/red]")
+                task = dr.get("task", "")
+                success = dr.get("success", False)
+
+                # Report via status reporter
+                if _status_reporter:
+                    _status_reporter.delegation_complete(
+                        from_agent=agent.id,
+                        to_agent=to_agent,
+                        task=task,
+                        success=success,
+                        turn_number=result.turn.turn_number,
+                        error=dr.get("error") if not success else None,
+                    )
 
     return full_content
 
@@ -1056,6 +1126,16 @@ async def _ask_single(
     # Select response function based on streaming preference
     respond = _stream_response if stream else _invoke_response
 
+    # Report session start via status reporter
+    if _status_reporter:
+        _status_reporter.session_start(
+            session_id=session.id,
+            project_id=project_id,
+            agent_name=agent.name,
+            agent_id=agent.id,
+            model=runtime._model,
+        )
+
     # Wrap execution in LangSmith session tracing
     with (
         tracing_manager.session(session.id, agent.id, project_id)
@@ -1063,7 +1143,14 @@ async def _ask_single(
         else nullcontext()
     ):
         try:
-            console.print(f"[dim]{agent.name}:[/dim]")
+            # Report turn start
+            if _status_reporter:
+                _status_reporter.turn_start(
+                    turn_number=session.turn_count + 1,
+                    agent_id=agent.id,
+                    agent_name=agent.name,
+                )
+
             await respond(runtime, agent, prompt, session)
             console.print()
 
@@ -1099,7 +1186,11 @@ async def _ask_single(
             # Log session end and flush
             if event_logger:
                 event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-                console.print(f"[dim]Events logged to: {log_path}[/dim]")
+                if _verbosity >= 1:
+                    log_console.print(f"[dim]Events logged to: {log_path}[/dim]")
+            # Report session end with summary
+            if _status_reporter:
+                _status_reporter.session_end(turn_count=session.turn_count)
             await provider.close()
             project.close()
 
@@ -1141,15 +1232,28 @@ async def _ask_repl(
         from_checkpoint,
     )
 
-    # Print header
-    console.print()
-    console.print("[bold]QuestFoundry Interactive Session[/bold]")
-    console.print(f"Project: [cyan]{project_id}[/cyan]")
-    console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
-    if log_path:
-        console.print(f"Logging: [dim]{log_path}[/dim]")
-    if tracing_manager:
-        console.print("[dim]LangSmith tracing: enabled[/dim]")
+    # Report session start via status reporter
+    if _status_reporter:
+        _status_reporter.session_start(
+            session_id=session.id,
+            project_id=project_id,
+            agent_name=agent.name,
+            agent_id=agent.id,
+            model=runtime._model,
+        )
+    else:
+        # Fallback to old-style header if no status reporter
+        console.print()
+        console.print("[bold]QuestFoundry Interactive Session[/bold]")
+        console.print(f"Project: [cyan]{project_id}[/cyan]")
+        console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
+
+    # Show extra debug info
+    if _verbosity >= 1:
+        if log_path:
+            log_console.print(f"[dim]Logging: {log_path}[/dim]")
+        if tracing_manager:
+            log_console.print("[dim]LangSmith tracing: enabled[/dim]")
     console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
     console.print()
 
@@ -1172,8 +1276,15 @@ async def _ask_repl(
                     if not user_input.strip():
                         continue
 
+                    # Report turn start
+                    if _status_reporter:
+                        _status_reporter.turn_start(
+                            turn_number=session.turn_count + 1,
+                            agent_id=agent.id,
+                            agent_name=agent.name,
+                        )
+
                     # Stream response
-                    console.print(f"[dim]{agent.name}:[/dim]")
                     await _stream_response(runtime, agent, user_input, session)
                     console.print()
 
@@ -1215,10 +1326,14 @@ async def _ask_repl(
             # Log session end and flush
             if event_logger:
                 event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-                console.print(f"[dim]Events logged to: {log_path}[/dim]")
-            # Show session summary
-            console.print()
-            console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
+                if _verbosity >= 1:
+                    log_console.print(f"[dim]Events logged to: {log_path}[/dim]")
+            # Report session end with summary
+            if _status_reporter:
+                _status_reporter.session_end(turn_count=session.turn_count)
+            else:
+                console.print()
+                console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
             await provider.close()
             project.close()
 

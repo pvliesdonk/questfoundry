@@ -4,6 +4,9 @@
   "name": "List Stores",
   "description": "List all available stores with their semantics and descriptions. Use this to discover what stores exist and understand their access patterns (hot, cold, versioned, ephemeral).",
 
+  "summarization_policy": "drop",
+  "summary_template": "Listed {count} stores",
+
   "input_schema": {
     "type": "object",
     "properties": {},

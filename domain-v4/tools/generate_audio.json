@@ -4,6 +4,9 @@
   "name": "Generate Audio",
   "description": "Generate an audio asset from an Audio Plan. Consults Style Guide for sonic aesthetic. Returns an audio asset with determinism log (kept off-surface).\n\nThis tool is expensive—use only when budget allows. Audio Plans should exist for ALL worthy moments, but generation is selective based on priority.\n\nRuntime provides implementation (TTS, music generation, sound library, commission queue, etc.).",
 
+  "summarization_policy": "ultra_concise",
+  "summary_template": "Generated audio from {source_plan}",
+
   "input_schema": {
     "type": "object",
     "properties": {

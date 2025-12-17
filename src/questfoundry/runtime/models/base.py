@@ -238,6 +238,14 @@ class Tool(BaseModel):
     examples: list[ToolExample] = Field(default_factory=list)
     terminates_turn: bool = False
 
+    # Summarization policy for Secretary pattern context management
+    # - drop: Remove from summarized context (tool can be re-called)
+    # - ultra_concise: Single-line summary using summary_template
+    # - concise: Brief multi-line summary preserving key facts
+    # - preserve: Keep full result in context (default)
+    summarization_policy: Literal["drop", "ultra_concise", "concise", "preserve"] = "preserve"
+    summary_template: str | None = None
+
 
 class ArtifactType(BaseModel):
     """Artifact type definition from artifact-type.schema.json."""
