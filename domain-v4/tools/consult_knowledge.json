@@ -1,0 +1,78 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "consult_knowledge",
+  "name": "Consult Knowledge",
+  "description": "Retrieve detailed guidance from the studio knowledge base. Use this when you need full content for entries shown in your Knowledge Menu.\n\nThe Knowledge Menu in your system prompt shows summaries of available knowledge. Use this tool to get the complete content when you need detailed guidance, examples, or procedures.\n\nCommon uses:\n- Get detailed examples when summary is insufficient\n- Retrieve full procedures or checklists\n- Access domain-specific guidance for specialized tasks",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "entry_id": {
+        "type": "string",
+        "description": "The knowledge entry ID (e.g., 'spoiler_hygiene', 'runtime_guidelines', 'style_lead_heuristics')"
+      },
+      "section": {
+        "type": "string",
+        "description": "Optional: specific section heading within the entry to retrieve. Use when you only need part of a large entry."
+      }
+    },
+    "required": ["entry_id"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "entry_id": {
+        "type": "string",
+        "description": "The requested entry ID"
+      },
+      "name": {
+        "type": "string",
+        "description": "Human-readable name of the entry"
+      },
+      "layer": {
+        "type": "string",
+        "description": "Which knowledge layer this belongs to"
+      },
+      "content": {
+        "type": "string",
+        "description": "The full content (or requested section) in markdown"
+      },
+      "related_entries": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "IDs of related knowledge entries you might also want to consult"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Get spoiler hygiene guidance",
+      "input": {
+        "entry_id": "spoiler_hygiene"
+      },
+      "output": {
+        "entry_id": "spoiler_hygiene",
+        "name": "Spoiler Hygiene",
+        "layer": "must_know",
+        "content": "## Spoiler Hygiene\n\nNever reveal future plot points...",
+        "related_entries": ["sources_of_truth", "diegetic_gating"]
+      }
+    },
+    {
+      "description": "Get specific section from runtime guidelines",
+      "input": {
+        "entry_id": "runtime_guidelines",
+        "section": "Tool Usage"
+      },
+      "output": {
+        "entry_id": "runtime_guidelines",
+        "name": "Runtime Guidelines",
+        "layer": "must_know",
+        "content": "## Tool Usage\n\nAlways use tools for...",
+        "related_entries": []
+      }
+    }
+  ]
+}
