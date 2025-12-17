@@ -131,8 +131,8 @@ class TestLoadStudio:
 
         assert result.success
         assert (
-            len(result.studio.tools) == 15
-        )  # Updated: +3 list tools (list_artifact_types, list_stores, list_agents)
+            len(result.studio.tools) == 16
+        )  # Phase 7: +communicate, +consult_knowledge, -request_clarification = net +1
 
     async def test_load_studio_resolves_playbook_refs(self, domain_v4_path: Path):
         """load_studio resolves playbook file references."""
