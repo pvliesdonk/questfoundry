@@ -88,7 +88,8 @@ STOP_TOOL_NAMES = frozenset(
         "delegate",  # Delegation to another agent
         "terminate",  # End workflow
         "return_to_orchestrator",  # Delegatee returns to orchestrator
-        "request_clarification",  # Ask human for clarification
+        "request_clarification",  # Ask human for clarification (legacy)
+        "communicate",  # Human communication (questions are blocking)
     }
 )
 
@@ -581,6 +582,11 @@ class AgentRuntime:
                 # Parse result to check if it actually succeeded
                 result = tc.result
                 if isinstance(result, dict) and result.get("success", True):
+                    # For communicate tool, only stop if it's blocking (question type)
+                    # Non-blocking types (status, notification, error with low severity) continue
+                    # Note: tc.result is already result.data, not the full ToolResult
+                    if tc.tool_id == "communicate" and not result.get("blocking", False):
+                        continue  # Non-blocking communicate, don't stop
                     return tc.tool_id, result
         return None, None
 

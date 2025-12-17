@@ -50,8 +50,11 @@ def register_tool(tool_id: str) -> Callable[[type[BaseTool]], type[BaseTool]]:
     return decorator
 
 
-# Tools that require interactive mode (human input via terminal)
-INTERACTIVE_ONLY_TOOLS = frozenset({"request_clarification"})
+# Tools that are completely disabled in non-interactive mode.
+# Note: The 'communicate' tool handles non-interactive mode internally:
+# - status, notification, error types still work
+# - question type auto-selects default_option or returns error
+INTERACTIVE_ONLY_TOOLS = frozenset({"request_clarification"})  # Deprecated, replaced by communicate
 
 
 class ToolRegistry:
@@ -138,6 +141,7 @@ class ToolRegistry:
             session_id=session_id,
             domain_path=self._domain_path,
             broker=self._broker,
+            interactive=self._interactive,
         )
 
         # Get implementation class
