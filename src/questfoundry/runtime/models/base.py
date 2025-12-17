@@ -236,6 +236,7 @@ class Tool(BaseModel):
     timeout_ms: int = 30000
     retry_policy: RetryPolicy | None = None
     examples: list[ToolExample] = Field(default_factory=list)
+    terminates_turn: bool = False
 
 
 class ArtifactType(BaseModel):

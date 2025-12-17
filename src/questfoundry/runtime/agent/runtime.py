@@ -31,6 +31,10 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
+from questfoundry.runtime.agent.turn_validator import (
+    TurnValidationConfig,
+    TurnValidator,
+)
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -118,6 +122,7 @@ class AgentRuntime:
         interactive: bool = True,
         checkpoint_manager: CheckpointManager | None = None,
         playbook_tracker: PlaybookTracker | None = None,
+        turn_validation_config: TurnValidationConfig | None = None,
     ):
         """
         Initialize agent runtime.
@@ -135,6 +140,7 @@ class AgentRuntime:
             interactive: Whether running in interactive mode (affects tool availability)
             checkpoint_manager: Optional checkpoint manager for auto-checkpointing
             playbook_tracker: Optional playbook tracker for checkpoint state
+            turn_validation_config: Optional configuration for orchestrator enforcement
         """
         self._provider = provider
         self._studio = studio
@@ -155,6 +161,9 @@ class AgentRuntime:
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
         self._tool_registry: ToolRegistry | None = None
+
+        # Turn validator for orchestrator enforcement
+        self._turn_validator = TurnValidator(studio, turn_validation_config)
 
     @property
     def tool_registry(self) -> ToolRegistry | None:
@@ -435,11 +444,18 @@ class AgentRuntime:
             )
         return messages
 
+    @property
+    def turn_validator(self) -> TurnValidator:
+        """Get the turn validator for orchestrator enforcement."""
+        return self._turn_validator
+
     def _is_orchestrator(self, agent: Agent) -> bool:
         """Check if an agent is an orchestrator."""
-        return "orchestrator" in [
-            a.value if hasattr(a, "value") else str(a) for a in agent.archetypes
-        ]
+        return self._turn_validator.is_orchestrator(agent)
+
+    def _requires_terminating_tool(self, agent: Agent) -> bool:
+        """Check if an agent requires a terminating tool to end its turn."""
+        return self._turn_validator.requires_terminating_tool(agent)
 
     def _update_context_usage(self, agent_id: str, usage: TokenUsage) -> None:
         """
@@ -511,23 +527,33 @@ class AgentRuntime:
         """
         self._context_usage = context_usage
 
-    def _build_tool_nudge_message(self, agent: Agent) -> str:
+    def _build_tool_nudge_message(
+        self,
+        agent: Agent,
+        tool_calls: list[ToolCallRequest] | None = None,
+    ) -> str:
         """
-        Build a nudge message when the LLM doesn't make tool calls.
+        Build a nudge message when the LLM doesn't comply with tool requirements.
 
-        Based on the v3 executor's validate-with-feedback pattern.
+        Uses TurnValidator to generate appropriate nudges based on:
+        - Whether any tools were called
+        - Whether a terminating tool was called (for orchestrators)
+
+        Args:
+            agent: Agent being nudged
+            tool_calls: Tool calls made (if any) - used to detect missing terminator
+
+        Returns:
+            Nudge message string
         """
-        if self._is_orchestrator(agent):
-            return (
-                "You must use tools to do your work and communicate results. "
-                "Your response contained no tool calls.\n\n"
-                "As an orchestrator, you MUST either:\n"
-                "1. Call `delegate` to assign work to a specialist agent, OR\n"
-                "2. Call `terminate` if the workflow is complete\n\n"
-                "Do NOT generate content directly - delegate to specialists. "
-                "Do NOT respond with plain text - you MUST make a tool call."
-            )
-        else:
+        # Use TurnValidator to validate and get appropriate nudge
+        result = self._turn_validator.validate_turn(agent, tool_calls)
+
+        if result.nudge_message:
+            return result.nudge_message
+
+        # Fallback for non-orchestrators without tools
+        if not self._requires_terminating_tool(agent):
             return (
                 "You must use tools to do your work and communicate results. "
                 "Your response contained no tool calls.\n\n"
@@ -536,6 +562,9 @@ class AgentRuntime:
                 "2. Call `return_to_orchestrator` to report your work is complete\n\n"
                 "Do NOT respond with plain text - you MUST make a tool call."
             )
+
+        # Shouldn't reach here, but provide sensible default
+        return "You must use tools to do your work. Your response did not complete correctly."
 
     def _check_for_stop_tool(
         self,
@@ -696,22 +725,71 @@ class AgentRuntime:
                             stop_reason = "max_failures"
                             break
 
-                        # Add assistant message and nudge
+                        # Add assistant message and nudge (no tool calls)
                         messages.append(
                             LLMMessage(role="assistant", content=response.content or "")
                         )
-                        nudge = self._build_tool_nudge_message(agent)
+                        nudge = self._build_tool_nudge_message(agent, tool_calls=None)
                         messages.append(LLMMessage(role="user", content=nudge))
                         continue
                     else:
                         # Tool enforcement disabled or no tools - we're done
                         break
 
-                # Reset failure count on successful tool calls
+                # Have tool calls - execute them
+                tool_calls = response.tool_calls  # Already checked not None
+
+                # Validate turn with TurnValidator (checks for terminating tools)
+                validation = self._turn_validator.validate_turn(agent, tool_calls)
+
+                if not validation.valid:
+                    # Orchestrator didn't use terminating tool
+                    consecutive_failures += 1
+                    logger.warning(
+                        "Turn validation failed in iteration %d (failure %d/%d): %s",
+                        iteration + 1,
+                        consecutive_failures,
+                        MAX_CONSECUTIVE_FAILURES,
+                        "missing terminating tool"
+                        if validation.non_terminating_tools
+                        else "no tools",
+                    )
+
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.error(
+                            "Max consecutive failures (%d) reached without valid turn",
+                            MAX_CONSECUTIVE_FAILURES,
+                        )
+                        stop_reason = "max_failures"
+                        break
+
+                    # Execute the non-terminating tools first (they may be useful)
+                    logger.info(
+                        f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})"
+                    )
+                    tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
+                    all_tool_calls.extend(tool_results)
+
+                    # Add assistant and tool messages
+                    messages.append(
+                        LLMMessage(
+                            role="assistant",
+                            content=response.content or "",
+                            tool_calls=response.tool_calls,
+                        )
+                    )
+                    tool_messages = self._tool_results_to_messages(tool_calls, tool_results)
+                    messages.extend(tool_messages)
+
+                    # Add nudge about missing terminating tool
+                    nudge = self._build_tool_nudge_message(agent, tool_calls)
+                    messages.append(LLMMessage(role="user", content=nudge))
+                    continue
+
+                # Reset failure count on valid turn
                 consecutive_failures = 0
 
                 # Execute tool calls
-                tool_calls = response.tool_calls  # Already checked not None
                 logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
                 tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
                 all_tool_calls.extend(tool_results)
@@ -954,7 +1032,61 @@ class AgentRuntime:
 
                 # Handle tool calls if present
                 if pending_tool_calls:
-                    consecutive_failures = 0  # Reset on tool call
+                    # Validate turn with TurnValidator (checks for terminating tools)
+                    validation = self._turn_validator.validate_turn(agent, pending_tool_calls)
+
+                    if not validation.valid:
+                        # Orchestrator didn't use terminating tool
+                        consecutive_failures += 1
+                        logger.warning(
+                            "Turn validation failed in streaming iteration %d (failure %d/%d)",
+                            iteration + 1,
+                            consecutive_failures,
+                            MAX_CONSECUTIVE_FAILURES,
+                        )
+
+                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                            logger.error(
+                                "Max consecutive failures (%d) reached in streaming",
+                                MAX_CONSECUTIVE_FAILURES,
+                            )
+                            break
+
+                        # Execute the non-terminating tools first
+                        logger.info(
+                            f"Executing {len(pending_tool_calls)} tool calls from streaming response"
+                        )
+                        tool_results = await self._execute_tool_calls(
+                            pending_tool_calls, agent, session.id
+                        )
+
+                        # Add assistant and tool messages
+                        messages.append(
+                            LLMMessage(
+                                role="assistant",
+                                content=iteration_content,
+                                tool_calls=pending_tool_calls,
+                            )
+                        )
+                        tool_messages = self._tool_results_to_messages(
+                            pending_tool_calls, tool_results
+                        )
+                        messages.extend(tool_messages)
+
+                        # Add nudge about missing terminating tool
+                        nudge = self._build_tool_nudge_message(agent, pending_tool_calls)
+                        messages.append(LLMMessage(role="user", content=nudge))
+
+                        # Yield a marker chunk to indicate retry
+                        yield StreamChunk(
+                            content="\n\n[Retrying - need terminating tool...]\n\n",
+                            done=False,
+                        )
+                        continue
+
+                    # Valid turn - reset failure count
+                    consecutive_failures = 0
+
                     logger.info(
                         f"Executing {len(pending_tool_calls)} tool calls from streaming response"
                     )
@@ -1014,7 +1146,7 @@ class AgentRuntime:
 
                     # Add nudge and continue streaming
                     messages.append(LLMMessage(role="assistant", content=iteration_content))
-                    nudge = self._build_tool_nudge_message(agent)
+                    nudge = self._build_tool_nudge_message(agent, tool_calls=None)
                     messages.append(LLMMessage(role="user", content=nudge))
 
                     # Yield a marker chunk to indicate retry

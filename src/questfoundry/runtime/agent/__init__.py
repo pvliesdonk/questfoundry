@@ -27,6 +27,12 @@ from questfoundry.runtime.agent.runtime import (
     ToolCall,
     activate_agent,
 )
+from questfoundry.runtime.agent.turn_validator import (
+    TurnValidationConfig,
+    TurnValidationResult,
+    TurnValidator,
+    create_turn_validator,
+)
 
 __all__ = [
     # Runtime
@@ -48,4 +54,9 @@ __all__ = [
     "PromptSection",
     "BuiltPrompt",
     "build_prompt",
+    # Turn Validation
+    "TurnValidator",
+    "TurnValidationConfig",
+    "TurnValidationResult",
+    "create_turn_validator",
 ]
