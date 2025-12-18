@@ -99,6 +99,10 @@ class ToolContext:
     # Interactive mode flag - tools requiring human input should check this
     interactive: bool = True
 
+    # Delegation context (for return_to_orchestrator tool)
+    delegation_id: str | None = None  # Current delegation being executed
+    delegator_agent_id: str | None = None  # Agent who delegated to us
+
 
 class BaseTool(ABC):
     """

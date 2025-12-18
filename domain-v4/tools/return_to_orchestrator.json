@@ -1,0 +1,110 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "return_to_orchestrator",
+  "name": "Return to Orchestrator",
+  "description": "Signal task completion and return control to the orchestrator (Showrunner). Use this when your delegated work is complete, blocked, or needs orchestrator decision.\n\nThis is the standard way for specialist agents to end their turn after completing delegated work. The orchestrator will receive your summary and decide next steps.\n\nNOTE: This tool is for NON-ORCHESTRATOR agents only. Orchestrators use 'delegate' or 'communicate' to end their turns.",
+
+  "terminates_turn": true,
+  "summarization_policy": "ultra_concise",
+  "summary_template": "Returned to orchestrator: {status} - {summary}",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["complete", "partial", "blocked", "needs_decision"],
+        "description": "Outcome of your work: complete (all done), partial (some done), blocked (cannot proceed), needs_decision (requires orchestrator input)"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Brief summary of what was accomplished or what's blocking progress"
+      },
+      "artifacts_produced": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "IDs of artifacts created or updated during this work"
+      },
+      "artifacts_ready_for_review": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "IDs of artifacts that are ready for quality gating"
+      },
+      "blockers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["missing_input", "quality_issue", "canon_conflict", "needs_clarification", "other"]
+            },
+            "description": { "type": "string" }
+          }
+        },
+        "description": "If blocked, what's preventing progress"
+      },
+      "recommendations": {
+        "type": "string",
+        "description": "Optional suggestions for what should happen next"
+      }
+    },
+    "required": ["status", "summary"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "acknowledged": {
+        "type": "boolean",
+        "description": "Whether the return was successfully processed"
+      },
+      "message_id": {
+        "type": "string",
+        "description": "ID of the delegation_response message sent to orchestrator"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Scene Smith completes section drafting",
+      "input": {
+        "status": "complete",
+        "summary": "Drafted section prose for SB-005 with 3 choices as specified in the brief",
+        "artifacts_produced": ["section-lighthouse-lock-v1"],
+        "artifacts_ready_for_review": ["section-lighthouse-lock-v1"],
+        "recommendations": "Ready for Gatekeeper review"
+      }
+    },
+    {
+      "description": "Plotwright blocked by missing canon",
+      "input": {
+        "status": "blocked",
+        "summary": "Cannot complete topology for Act 2 - lighthouse backstory not established",
+        "blockers": [
+          {
+            "type": "missing_input",
+            "description": "Need lighthouse history and keeper's motivation from canon"
+          }
+        ],
+        "recommendations": "Suggest delegating to Lore Weaver to establish lighthouse canon first"
+      }
+    },
+    {
+      "description": "Gatekeeper returns with quality findings",
+      "input": {
+        "status": "partial",
+        "summary": "Gatecheck complete - 6/8 bars pass, 2 need rework",
+        "artifacts_produced": ["gatecheck-section-005"],
+        "blockers": [
+          {
+            "type": "quality_issue",
+            "description": "Choice Integrity: options 2 and 3 are near-synonyms. Nonlinearity: missing return path from dead end."
+          }
+        ],
+        "recommendations": "Route back to Scene Smith with specific fixes"
+      }
+    }
+  ]
+}

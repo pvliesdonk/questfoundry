@@ -30,6 +30,7 @@ from questfoundry.runtime.tools import (
     list_artifact_types,  # noqa: F401
     list_stores,  # noqa: F401
     request_clarification,  # noqa: F401  # Legacy: to be removed after migration
+    return_to_orchestrator,  # noqa: F401  # Hub-and-spoke: specialists return to orchestrator
     save_artifact,  # noqa: F401  # Phase 4: artifact persistence
     search_workspace,  # noqa: F401
     stubs,  # noqa: F401

@@ -30,6 +30,13 @@
       "tool_ref": "consult_corpus"
     },
     {
+      "id": "use_return_to_orchestrator",
+      "name": "Return to Orchestrator",
+      "description": "Signal task completion and return control to Showrunner",
+      "category": "tool",
+      "tool_ref": "return_to_orchestrator"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Read canon for source truth, workspace for context and style guidance",
