@@ -25,7 +25,7 @@ from questfoundry.runtime.tools.base import (
 if TYPE_CHECKING:
     from questfoundry.runtime.messaging.broker import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio, Tool
-    from questfoundry.runtime.storage import Project, StoreManager
+    from questfoundry.runtime.storage import LifecycleManager, Project, StoreManager
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,7 @@ class ToolRegistry:
         broker: AsyncMessageBroker | None = None,
         interactive: bool = True,
         store_manager: StoreManager | None = None,
+        lifecycle_manager: LifecycleManager | None = None,
     ):
         """
         Initialize tool registry.
@@ -110,6 +111,8 @@ class ToolRegistry:
             domain_path: Path to domain directory
             broker: Message broker for delegation routing
             interactive: Whether running in interactive mode (disables human-input tools if False)
+            store_manager: Store manager for artifact storage
+            lifecycle_manager: Lifecycle manager for artifact state transitions
         """
         self._studio = studio
         self._project = project
@@ -117,7 +120,7 @@ class ToolRegistry:
         self._broker = broker
         self._interactive = interactive
         self._store_manager = store_manager
-        self._lifecycle_manager = None
+        self._lifecycle_manager = lifecycle_manager
         self._tool_cache: dict[str, BaseTool] = {}
 
     def get_tool_definition(self, tool_id: str) -> Tool | None:
