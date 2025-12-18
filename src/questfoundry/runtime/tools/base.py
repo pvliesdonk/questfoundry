@@ -60,6 +60,7 @@ class ToolResult:
     data: dict[str, Any]
     error: str | None = None
     execution_time_ms: float | None = None
+    fatal: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -68,6 +69,7 @@ class ToolResult:
             "data": self.data,
             "error": self.error,
             "execution_time_ms": self.execution_time_ms,
+            "fatal": self.fatal,
         }
 
 

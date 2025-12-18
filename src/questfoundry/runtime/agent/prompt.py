@@ -126,7 +126,10 @@ class PromptBuilder:
         # 3. Behavioral Guidance (operational - WRONG/CORRECT examples by archetype)
         # V3 pattern: This was critical for keeping models on track
         archetypes = [a.value if hasattr(a, "value") else str(a) for a in (agent.archetypes or [])]
-        behavioral = self._build_behavioral_guidance(archetypes)
+        has_persistence_tool = any(
+            schema.get("name") == "save_artifact" for schema in (tool_schemas or [])
+        )
+        behavioral = self._build_behavioral_guidance(archetypes, has_persistence_tool)
         self.add_section("behavioral", behavioral, priority=98)
 
         # 4. Available Tools (actionable - how to act)
@@ -393,7 +396,9 @@ class PromptBuilder:
 
         return "\n".join(lines)
 
-    def _build_behavioral_guidance(self, archetypes: list[str]) -> str:
+    def _build_behavioral_guidance(
+        self, archetypes: list[str], include_persistence_guidance: bool
+    ) -> str:
         """Build archetype-specific behavioral guidance with WRONG/CORRECT examples.
 
         V3 pattern: Explicit examples of what NOT to do and what TO do.
@@ -452,17 +457,26 @@ class PromptBuilder:
                 ]
             )
         elif any(a in archetypes_lower for a in ["creator", "author", "writer"]):
-            lines.extend(
-                [
-                    "CRITICAL: Write artifacts to storage BEFORE returning.",
-                    "",
-                    "WRONG: Returning without persisting work",
-                    "CORRECT: write_artifact(key='scene_1', value={...}) THEN return_to_sr(...)",
-                    "",
-                    "Always call write_artifact for each piece of content you create,",
-                    "then return_to_sr with the list of artifact IDs.",
-                ]
-            )
+            if include_persistence_guidance:
+                lines.extend(
+                    [
+                        "CRITICAL: Persist artifacts to storage BEFORE returning.",
+                        "",
+                        "WRONG: Returning without saving work",
+                        "CORRECT: save_artifact(artifact_type='section', data={...}) then report the artifact ID",
+                        "",
+                        "Use save_artifact for every artifact you create and list those IDs in your response.",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        "CRITICAL: Return every turn with concrete artifact references.",
+                        "",
+                        "WRONG: “Draft complete” with no artifact noted",
+                        "CORRECT: “Draft complete — ready to persist as section anchor005.”",
+                    ]
+                )
         elif any(a in archetypes_lower for a in ["validator", "auditor", "guardian"]):
             lines.extend(
                 [
@@ -500,13 +514,13 @@ class PromptBuilder:
             )
         else:
             # Generic guidance for any role
-            lines.extend(
-                [
-                    "1. Read relevant artifacts before acting",
-                    "2. Persist your work with write_artifact before returning",
-                    "3. Return with status, artifacts list, and recommendation",
-                ]
-            )
+            generic_lines = ["1. Read relevant artifacts before acting"]
+            if include_persistence_guidance:
+                generic_lines.append("2. Persist your work with save_artifact before returning")
+            else:
+                generic_lines.append("2. Document every artifact you touched before returning")
+            generic_lines.append("3. Return with status, artifacts list, and recommendation")
+            lines.extend(generic_lines)
 
         return "\n".join(lines)
 

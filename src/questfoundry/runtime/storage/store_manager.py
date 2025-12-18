@@ -14,9 +14,12 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.models.enums import StoreSemantics
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from questfoundry.runtime.models import Studio
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +220,25 @@ class StoreManager:
 
         logger.info(f"Loaded {len(stores)} store definitions")
         return cls(stores)
+
+    @classmethod
+    def from_studio(cls, studio: Studio) -> StoreManager:
+        """Build a StoreManager from an in-memory Studio model."""
+
+        stores: dict[str, StoreDefinition] = {}
+        for store in studio.stores:
+            # model_dump includes nested structures, use StoreDefinition for parity
+            store_dict = store.model_dump()
+            stores[store.id] = StoreDefinition.from_dict(store_dict)
+
+        manager = cls(stores)
+
+        # Respect artifact type default_store hints for deterministic routing
+        for artifact_type in studio.artifact_types:
+            if artifact_type.default_store:
+                manager.set_default_store(artifact_type.id, artifact_type.default_store)
+
+        return manager
 
     def get_store(self, store_id: str) -> StoreDefinition | None:
         """Get store definition by ID."""

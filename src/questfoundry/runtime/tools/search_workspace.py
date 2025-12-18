@@ -119,9 +119,9 @@ class SearchWorkspaceTool(BaseTool):
         # Consider implementing FTS5 (Full-Text Search) for better performance.
         # See: https://www.sqlite.org/fts5.html
         if query:
-            # SQLite JSON search - searches text representation of data
-            sql += " AND data LIKE ?"
-            params.append(f"%{query}%")
+            # Search both artifact ID and JSON payload for the query fragment
+            sql += " AND (_id LIKE ? OR data LIKE ?)"
+            params.extend([f"%{query}%", f"%{query}%"])
 
         # Order and limit
         sql += " ORDER BY _updated_at DESC LIMIT ?"
