@@ -53,6 +53,7 @@ from questfoundry.runtime.storage import StoreManager
 if TYPE_CHECKING:
     from questfoundry.runtime.checkpoint import CheckpointManager, ContextUsage
     from questfoundry.runtime.delegation.tracker import PlaybookTracker
+    from questfoundry.runtime.messaging import Message
     from questfoundry.runtime.models import Agent, Studio
     from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.storage import Project
@@ -1506,9 +1507,11 @@ class AgentRuntime:
 
         return results
 
-    async def get_delegation_responses(self, agent_id: str) -> list[Any]:
+    async def get_delegation_responses(self, agent_id: str) -> list[Message]:
         """
         Get pending delegation_response messages for an agent.
+
+        This properly drains the mailbox to avoid duplicates.
 
         Args:
             agent_id: Agent to check mailbox for
@@ -1522,18 +1525,31 @@ class AgentRuntime:
         from questfoundry.runtime.messaging.types import MessageType
 
         mailbox = await self._broker.get_mailbox(agent_id)
-        all_messages = await mailbox.get_all_pending()
 
-        responses = [msg for msg in all_messages if msg.type == MessageType.DELEGATION_RESPONSE]
+        # Drain the mailbox properly (same pattern as process_pending_delegations)
+        all_messages: list[Message] = []
+        while True:
+            msg = await mailbox.get_nowait()
+            if msg is None:
+                break
+            all_messages.append(msg)
+
+        # Separate responses from other messages
+        responses: list[Message] = []
+        other_messages: list[Message] = []
+        for msg in all_messages:
+            if msg.type == MessageType.DELEGATION_RESPONSE:
+                responses.append(msg)
+            else:
+                other_messages.append(msg)
 
         # Put back non-response messages
-        for msg in all_messages:
-            if msg.type != MessageType.DELEGATION_RESPONSE:
-                await mailbox.put(msg)
+        for msg in other_messages:
+            await mailbox.put(msg)
 
         return responses
 
-    def build_delegation_response_prompt(self, responses: list[Any]) -> str:
+    def build_delegation_response_prompt(self, responses: list[Message]) -> str:
         """
         Build a prompt summarizing delegation responses for the orchestrator.
 
