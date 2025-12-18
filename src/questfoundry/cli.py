@@ -1861,10 +1861,8 @@ def export(
     project_path = projects_dir / project_id
 
     # Check if project exists
-    try:
-        project = Project.open(project_path)
-        project.close()
-    except FileNotFoundError:
+    project = Project(project_path)
+    if not project.exists():
         console.print(f"[red]✗ Project not found: {project_id}[/red]")
         raise typer.Exit(1) from None
 

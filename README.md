@@ -64,7 +64,7 @@ The dusty velvet curtains swayed in an impossible breeze...
 ### Using Different Providers
 
 ```bash
-# Use Ollama (default, requires ollama serve running)
+# Use Ollama (default, requires `ollama serve` running)
 uv run qf ask my-story --provider ollama --model qwen3:8b
 
 # Use OpenAI (requires OPENAI_API_KEY)

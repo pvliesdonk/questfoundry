@@ -33,12 +33,11 @@ class PlaybookNudger:
     and produces gentle reminders when deviations are detected. Nudges are
     advisory - agents can ignore them if they have good reason.
 
-    Nudge types:
+    Nudge types used:
     - missing_output: Expected artifact from phase not produced
     - unexpected_state: Phase/step state doesn't match expectations
     - quality_gate_reminder: Upcoming quality checkpoint
-    - timeout_warning: Phase taking longer than expected
-    - consistency_concern: Potential canon/style inconsistency
+    - budget_warning: Rework budget running low or exhausted
     """
 
     def __init__(self, playbooks: dict[str, dict[str, Any]]) -> None:
@@ -75,15 +74,22 @@ class PlaybookNudger:
         if not playbook:
             return []
 
-        phases = playbook.get("phases", [])
-        phase = next((p for p in phases if p.get("id") == ctx.phase_id), None)
+        # Phases is a dict with phase_id as key
+        phases = playbook.get("phases", {})
+        phase = phases.get(ctx.phase_id)
         if not phase:
             return []
 
         nudges: list[Message] = []
 
+        # Steps is a dict with step_id as key
+        steps = phase.get("steps")
+        if not steps:
+            # A phase without steps has no expected outputs
+            return []
+
         # Get expected outputs for this phase
-        for step in phase.get("steps", []):
+        for _step_id, step in steps.items():
             expected_outputs = step.get("outputs", [])
             for output in expected_outputs:
                 output_type = output.get("artifact_type")
@@ -97,10 +103,23 @@ class PlaybookNudger:
                         artifact_types.get(aid) == output_type for aid in artifacts_produced
                     )
                 else:
-                    # Without type info, we can only check by naming convention
-                    type_found = any(
-                        output_type.lower() in aid.lower() for aid in artifacts_produced
-                    )
+                    # Without type info, check for exact type match in artifact ID
+                    # Use underscore/hyphen boundaries to avoid false positives
+                    type_lower = output_type.lower()
+                    for aid in artifacts_produced:
+                        aid_lower = aid.lower()
+                        # Check for exact match or bounded by common delimiters
+                        if (
+                            aid_lower == type_lower
+                            or aid_lower.startswith(f"{type_lower}_")
+                            or aid_lower.startswith(f"{type_lower}-")
+                            or f"_{type_lower}_" in aid_lower
+                            or f"-{type_lower}-" in aid_lower
+                            or aid_lower.endswith(f"_{type_lower}")
+                            or aid_lower.endswith(f"-{type_lower}")
+                        ):
+                            type_found = True
+                            break
 
                 if not type_found:
                     nudge = create_nudge(
@@ -136,8 +155,9 @@ class PlaybookNudger:
         if not playbook:
             return None
 
-        phases = playbook.get("phases", [])
-        phase = next((p for p in phases if p.get("id") == ctx.phase_id), None)
+        # Phases is a dict with phase_id as key
+        phases = playbook.get("phases", {})
+        phase = phases.get(ctx.phase_id)
         if not phase:
             return None
 
@@ -200,7 +220,7 @@ class PlaybookNudger:
         return create_nudge(
             from_agent="runtime",
             to_agent=ctx.agent_id,
-            nudge_type="timeout_warning",  # Using timeout_warning for budget warnings
+            nudge_type="budget_warning",
             message=message,
             playbook_id=ctx.playbook_id,
             playbook_instance_id=ctx.instance_id,
@@ -228,15 +248,17 @@ class PlaybookNudger:
         if not playbook or not previous_phase:
             return None
 
-        phases = playbook.get("phases", [])
-        prev = next((p for p in phases if p.get("id") == previous_phase), None)
+        # Phases is a dict with phase_id as key
+        phases = playbook.get("phases", {})
+        prev = phases.get(previous_phase)
         if not prev:
             return None
 
         # Check if current phase is an expected successor
-        on_success = prev.get("on_success")
-        on_failure = prev.get("on_failure")
-        expected_next = {on_success, on_failure} - {None}
+        # on_success/on_failure contain next_phases arrays
+        on_success = prev.get("on_success", {})
+        on_failure = prev.get("on_failure", {})
+        expected_next = set(on_success.get("next_phases", []) + on_failure.get("next_phases", []))
 
         if ctx.phase_id not in expected_next and expected_next:
             return create_nudge(

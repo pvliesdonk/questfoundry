@@ -475,7 +475,7 @@ def create_nudge(
     expected_output: str | None = None,
     current_state: str | None = None,
     turn_created: int | None = None,
-    ttl_turns: int = 3,  # Nudges are ephemeral, expire quickly
+    ttl_turns: int = 3,  # Short TTL since nudges are advisory hints, not persistent state
 ) -> Message:
     """
     Create a nudge message for playbook-aware guidance.
@@ -490,7 +490,7 @@ def create_nudge(
             - "missing_output": Expected artifact not produced
             - "unexpected_state": Phase/step state doesn't match expectations
             - "quality_gate_reminder": Upcoming quality checkpoint
-            - "timeout_warning": Phase taking longer than expected
+            - "budget_warning": Rework budget running low or exhausted
             - "consistency_concern": Potential canon/style inconsistency
         message: Human-readable nudge content
         playbook_id: Playbook context

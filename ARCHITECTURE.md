@@ -265,3 +265,11 @@ LANGSMITH_PROJECT=questfoundry
 - **E2E tests**: Full workflows with real LLM calls (require long timeouts)
 
 All tests in `tests/runtime/` mirror the module structure.
+
+Run tests with:
+
+```bash
+uv run pytest tests/                      # All tests
+uv run pytest tests/runtime/ -v           # Runtime tests with verbose output
+uv run pytest tests/runtime/messaging/    # Specific module
+```

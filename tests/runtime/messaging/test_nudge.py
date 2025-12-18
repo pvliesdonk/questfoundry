@@ -97,7 +97,7 @@ class TestCreateNudge:
             "missing_output",
             "unexpected_state",
             "quality_gate_reminder",
-            "timeout_warning",
+            "budget_warning",
             "consistency_concern",
         ]
 

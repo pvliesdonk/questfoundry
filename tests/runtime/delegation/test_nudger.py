@@ -9,44 +9,40 @@ from questfoundry.runtime.delegation import (
 )
 from questfoundry.runtime.messaging import MessageType
 
-# Sample playbook for testing
+# Sample playbook for testing - phases and steps are dicts with IDs as keys
 SAMPLE_PLAYBOOK = {
     "id": "test_playbook",
     "name": "Test Playbook",
-    "phases": [
-        {
-            "id": "drafting",
+    "phases": {
+        "drafting": {
             "name": "Drafting Phase",
-            "steps": [
-                {
-                    "id": "write_draft",
+            "steps": {
+                "write_draft": {
                     "outputs": [
                         {"artifact_type": "section_draft"},
                         {"artifact_type": "metadata"},
                     ],
                 }
-            ],
+            },
             "quality_checkpoint": {
                 "validator": "gatekeeper",
                 "criteria": ["voice_consistency", "structure", "canon_compliance"],
             },
-            "on_success": "review",
-            "on_failure": "drafting",
+            "on_success": {"next_phases": ["review"]},
+            "on_failure": {"next_phases": ["drafting"]},
             "is_rework_target": True,
         },
-        {
-            "id": "review",
+        "review": {
             "name": "Review Phase",
-            "steps": [{"id": "validate", "outputs": [{"artifact_type": "review_result"}]}],
-            "on_success": "export",
-            "on_failure": "drafting",
+            "steps": {"validate": {"outputs": [{"artifact_type": "review_result"}]}},
+            "on_success": {"next_phases": ["export"]},
+            "on_failure": {"next_phases": ["drafting"]},
         },
-        {
-            "id": "export",
+        "export": {
             "name": "Export Phase",
-            "steps": [{"id": "publish", "outputs": []}],
+            "steps": {"publish": {"outputs": []}},
         },
-    ],
+    },
 }
 
 
@@ -203,7 +199,7 @@ class TestPlaybookNudger:
         # Should have quality checkpoint and budget warning
         nudge_types = [n.payload["nudge_type"] for n in nudges]
         assert "quality_gate_reminder" in nudge_types
-        assert "timeout_warning" in nudge_types  # Budget warning uses this type
+        assert "budget_warning" in nudge_types
 
     def test_unknown_playbook(self, nudger, ctx):
         """Test graceful handling of unknown playbook."""
