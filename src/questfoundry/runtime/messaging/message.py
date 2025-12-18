@@ -211,6 +211,7 @@ def create_delegation_request(
     playbook_instance_id: str | None = None,
     phase_id: str | None = None,
     turn_created: int | None = None,
+    is_rework_target: bool = False,
 ) -> Message:
     """
     Create a delegation request message.
@@ -224,6 +225,7 @@ def create_delegation_request(
         playbook_instance_id: Specific playbook execution
         phase_id: Current phase
         turn_created: Current turn number
+        is_rework_target: Whether the phase is a rework target (counts against budget)
 
     Returns:
         Delegation request message
@@ -234,6 +236,7 @@ def create_delegation_request(
     payload = {
         "task": task,
         "context": context or {},
+        "is_rework_target": is_rework_target,
     }
 
     return create_message(
