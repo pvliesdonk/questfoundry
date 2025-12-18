@@ -9,21 +9,7 @@ import pytest
 from questfoundry.runtime.messaging import AsyncMessageBroker
 from questfoundry.runtime.tools.base import ToolContext, ToolValidationError
 from questfoundry.runtime.tools.delegate import DelegateTool
-
-
-def make_mock_playbook(
-    playbook_id: str,
-    phases: dict,
-    max_rework_cycles: int = 3,
-):
-    """Create mock playbook."""
-    playbook = MagicMock()
-    playbook.id = playbook_id
-    playbook.name = playbook_id.replace("_", " ").title()
-    playbook.phases = phases
-    playbook.max_rework_cycles = max_rework_cycles
-    playbook.entry_phase = next(iter(phases.keys())) if phases else None
-    return playbook
+from tests.runtime.conftest import make_mock_playbook
 
 
 def make_mock_studio_with_agents():

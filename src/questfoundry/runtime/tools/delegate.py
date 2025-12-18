@@ -54,9 +54,11 @@ class DelegateTool(BaseTool):
 
         # Auto-resolve is_rework_target from playbook definition if not explicitly set
         is_rework_target = args.get("is_rework_target")
-        if is_rework_target is None and playbook_ref and phase_ref:
-            is_rework_target = self._lookup_is_rework_target(playbook_ref, phase_ref)
-        is_rework_target = is_rework_target or False
+        if is_rework_target is None:
+            if playbook_ref and phase_ref:
+                is_rework_target = self._lookup_is_rework_target(playbook_ref, phase_ref)
+            else:
+                is_rework_target = False
 
         # Validate: must have task
         if not task:
@@ -161,5 +163,7 @@ class DelegateTool(BaseTool):
         Returns:
             True if the phase is a rework target, False otherwise
         """
-        loader = PlaybookLoader.from_playbooks(self._context.studio.playbooks)
-        return loader.is_rework_target(playbook_id, phase_id)
+        # Lazy initialization of cached PlaybookLoader
+        if not hasattr(self, "_playbook_loader"):
+            self._playbook_loader = PlaybookLoader.from_playbooks(self._context.studio.playbooks)
+        return self._playbook_loader.is_rework_target(playbook_id, phase_id)

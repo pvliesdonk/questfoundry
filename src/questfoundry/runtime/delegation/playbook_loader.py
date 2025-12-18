@@ -58,15 +58,16 @@ class PlaybookLoader:
         Returns:
             PlaybookLoader instance
         """
-        playbook_dict: dict[str, dict[str, Any]] = {}
-        for pb in playbooks:
-            playbook_dict[pb.id] = {
+        playbook_dict = {
+            pb.id: {
                 "id": pb.id,
                 "name": pb.name,
                 "phases": pb.phases,
                 "max_rework_cycles": pb.max_rework_cycles,
                 "entry_phase": pb.entry_phase,
             }
+            for pb in playbooks
+        }
         return cls(playbook_dict)
 
     def get_playbook(self, playbook_id: str) -> dict[str, Any] | None:
@@ -94,10 +95,7 @@ class PlaybookLoader:
         Returns:
             Maximum rework cycles, defaults to 3 if playbook not found
         """
-        playbook = self._playbooks.get(playbook_id)
-        if not playbook:
-            return 3  # Default from schema
-        result: int = playbook.get("max_rework_cycles", 3)
+        result: int = self._playbooks.get(playbook_id, {}).get("max_rework_cycles", 3)
         return result
 
     def is_rework_target(self, playbook_id: str, phase_id: str) -> bool:
@@ -115,15 +113,9 @@ class PlaybookLoader:
         Returns:
             True if the phase is a rework target, False otherwise
         """
-        playbook = self._playbooks.get(playbook_id)
-        if not playbook:
-            return False
-
+        playbook = self._playbooks.get(playbook_id, {})
         phases = playbook.get("phases", {})
-        phase = phases.get(phase_id)
-        if not phase:
-            return False
-
+        phase = phases.get(phase_id, {})
         result: bool = phase.get("is_rework_target", False)
         return result
 
@@ -138,12 +130,10 @@ class PlaybookLoader:
         Returns:
             Phase definition dict, or None if not found
         """
-        playbook = self._playbooks.get(playbook_id)
-        if not playbook:
-            return None
-
-        phases: dict[str, dict[str, Any]] = playbook.get("phases", {})
-        return phases.get(phase_id)
+        result: dict[str, Any] | None = (
+            self._playbooks.get(playbook_id, {}).get("phases", {}).get(phase_id)
+        )
+        return result
 
     def get_entry_phase(self, playbook_id: str) -> str | None:
         """
@@ -170,11 +160,7 @@ class PlaybookLoader:
         Returns:
             List of phase IDs that are rework targets
         """
-        playbook = self._playbooks.get(playbook_id)
-        if not playbook:
-            return []
-
-        phases = playbook.get("phases", {})
+        phases = self._playbooks.get(playbook_id, {}).get("phases", {})
         return [
             phase_id for phase_id, phase in phases.items() if phase.get("is_rework_target", False)
         ]
