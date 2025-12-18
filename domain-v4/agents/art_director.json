@@ -23,6 +23,13 @@
       "tool_ref": "search_workspace"
     },
     {
+      "id": "use_return_to_orchestrator",
+      "name": "Return to Orchestrator",
+      "description": "Signal task completion and return control to Showrunner",
+      "category": "tool",
+      "tool_ref": "return_to_orchestrator"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Read workspace for briefs and style guide, canon for world details, exports for placement context",

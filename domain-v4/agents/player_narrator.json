@@ -18,6 +18,13 @@
       "tool_ref": "consult_corpus"
     },
     {
+      "id": "use_return_to_orchestrator",
+      "name": "Return to Orchestrator",
+      "description": "Signal task completion and return control to Showrunner",
+      "category": "tool",
+      "tool_ref": "return_to_orchestrator"
+    },
+    {
       "id": "read_canon",
       "name": "Read Canon",
       "description": "Read canon for world truth—used to ensure improvisation never contradicts established facts",

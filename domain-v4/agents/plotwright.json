@@ -23,11 +23,11 @@
       "tool_ref": "consult_schema"
     },
     {
-      "id": "use_delegate_tool",
-      "name": "Use Delegate Tool",
-      "description": "Can delegate to Scene Smith when briefs are ready",
+      "id": "use_return_to_orchestrator",
+      "name": "Return to Orchestrator",
+      "description": "Signal task completion and return control to Showrunner",
       "category": "tool",
-      "tool_ref": "delegate"
+      "tool_ref": "return_to_orchestrator"
     },
     {
       "id": "use_consult_corpus",
@@ -98,7 +98,7 @@
     {
       "id": "no_direct_prose",
       "name": "No Direct Prose Writing",
-      "rule": "Write briefs and topology notes, not section prose. Delegate prose to Scene Smith.",
+      "rule": "Write briefs and topology notes, not section prose. Scene Smith handles prose—Showrunner will coordinate that handoff.",
       "category": "content",
       "enforcement": "llm",
       "severity": "warning"
