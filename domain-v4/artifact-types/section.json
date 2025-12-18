@@ -3,7 +3,7 @@
   "id": "section",
   "name": "Section",
   "summary": "Interactive story section with choices",
-  "description": "A complete unit of narrative prose ending in one or more player-facing choices. Sections are the atomic reading units of the manuscript, written by Scene Smith from Section Briefs. In Cold state, sections are player-safe and ready for export.",
+  "description": "A complete unit of narrative prose ending in one or more player-facing choices. Sections are the atomic reading units of the manuscript, written by Scene Smith from Section Briefs. Sections are drafted in workspace (draft/review/approved states), then Gatekeeper promotes approved sections to manuscript store (cold state). In Cold state, sections are player-safe and ready for export.",
   "category": "document",
 
   "fields": [

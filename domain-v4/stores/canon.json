@@ -7,8 +7,7 @@
   "semantics": "cold",
 
   "artifact_types": [
-    "canon_pack",
-    "section"
+    "canon_pack"
   ],
 
   "workflow_intent": {
