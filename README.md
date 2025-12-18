@@ -1,50 +1,18 @@
-# QuestFoundry v3
+# QuestFoundry
 
-**QuestFoundry** is an AI-powered interactive fiction studio. Write your game logic in MyST
-(Markedly Structured Text), compile it to Python, and execute it with LangGraph.
+**QuestFoundry** is an AI-powered interactive fiction studio. A multi-agent runtime orchestrates specialized agents (writers, validators, archivists) to collaboratively create and maintain story content.
 
-> **Status:** v3 alpha — architecture defined, implementation in progress
+> **Status:** v4 runtime — functional alpha with full delegation support
 
-## What's New in v3
+## Features
 
-v3 is a complete reimagining of QuestFoundry:
-
-| Aspect | v2 | v3 |
-|--------|----|----|
-| Structure | 7 numbered layers (L0-L6) | Integrated domain model |
-| Authoring | Prose + YAML/JSON separately | MyST (prose = config) |
-| Roles | 15 roles | 8 consolidated archetypes |
-| Runtime | LangChain + LangGraph | Pure LangGraph |
-| Protocol | Agent-to-agent messages | State-based routing |
-
-## The 8 Roles
-
-| Role | Archetype | Agency | Mandate |
-|------|-----------|--------|---------|
-| **Showrunner** | Product Owner | High | Manage by Exception |
-| **Lorekeeper** | Librarian | Medium | Maintain the Truth |
-| **Narrator** | Dungeon Master | High | Run the Game |
-| **Publisher** | Book Binder | Zero | Assemble the Artifact |
-| **Creative Director** | Visionary | High | Ensure Sensory Coherence |
-| **Plotwright** | Architect | Medium | Design the Topology |
-| **Scene Smith** | Writer | Medium | Fill with Prose |
-| **Gatekeeper** | Auditor | Low | Enforce Quality Bars |
-
-## Repository Structure
-
-```text
-src/questfoundry/
-├── domain/         # MyST source of truth
-│   ├── roles/      # Role definitions
-│   ├── loops/      # Workflow graphs
-│   ├── ontology/   # Artifacts, enums
-│   └── protocol/   # Intents, routing rules
-├── compiler/       # MyST → Python code generator
-├── generated/      # Auto-generated (DO NOT EDIT)
-└── runtime/        # LangGraph execution engine
-
-_archive/           # v2 content (reference only)
-```
+- **12 Specialized Agents** — Each with specific responsibilities (Showrunner orchestrates, Scene Smith writes prose, Gatekeeper validates quality, Lorekeeper manages canon)
+- **Playbook-Driven Workflows** — Declarative JSON playbooks define multi-phase workflows with quality checkpoints
+- **Domain-Aligned Loop Termination** — Rework budgets per playbook, not simplistic depth limits
+- **Artifact Versioning** — Full version history with hot/cold store semantics
+- **Interactive & Batch Modes** — REPL for exploration, single-shot for automation
+- **Checkpoint & Resume** — Save session state and resume from any checkpoint
+- **Provider Flexibility** — Works with Ollama (local) or OpenAI
 
 ## Quick Start
 
@@ -60,86 +28,147 @@ uv sync
 uv run qf version
 ```
 
-### Usage (Coming Soon)
+### Basic Usage
 
 ```bash
-# Compile domain to generated code
-qf compile
+# Check system health and provider availability
+uv run qf doctor
 
-# Run a workflow loop
-qf run story-spark
+# Create a new story project
+uv run qf projects create "My Story"
 
-# Validate without generating
-qf validate
+# Start an interactive session with the Showrunner
+uv run qf ask my-story
+
+# Single-shot query (non-interactive)
+uv run qf ask my-story "Create a mystery story outline set in a lighthouse"
 ```
 
-## How It Works
-
-### 1. Write Domain Specs in MyST
-
-```markdown
-# Showrunner
-
-:::{role-meta}
-id: showrunner
-abbr: SR
-archetype: Product Owner
-agency: high
-mandate: "Manage by Exception"
-:::
-
-The Showrunner is the primary interface for the Human Customer...
-```
-
-### 2. Compile to Python
+### Interactive Session Example
 
 ```bash
-qf compile
+$ uv run qf ask my-story
+QuestFoundry Interactive Session
+Project: my-story
+Agent: Showrunner (showrunner)
+Type 'exit' or Ctrl+D to quit
+
+> Create a short mystery story set in an abandoned theater
+
+[Showrunner activates, delegates to Plotwright for outline,
+Scene Smith drafts prose, Gatekeeper validates quality...]
+
+The dusty velvet curtains swayed in an impossible breeze...
 ```
 
-This generates:
-
-- Pydantic models from `ontology/`
-- Role configurations from `roles/`
-- LangGraph definitions from `loops/`
-
-### 3. Execute with LangGraph
+### Using Different Providers
 
 ```bash
-qf run story-spark
+# Use Ollama (default, requires `ollama serve` running)
+uv run qf ask my-story --provider ollama --model qwen3:8b
+
+# Use OpenAI (requires OPENAI_API_KEY)
+uv run qf ask my-story --provider openai --model gpt-4o
+
+# Check which providers are available
+uv run qf doctor
 ```
 
-The runtime:
+### Project Management
 
-- Loads compiled graph definitions
-- Routes messages via intents (not direct agent calls)
-- Manages hot/cold state stores
-- Connects to LLM providers (Ollama, OpenAI)
+```bash
+# List all projects
+uv run qf projects list
 
-## Key Concepts
+# Show project details
+uv run qf projects info my-story
 
-### MyST as Source of Truth
+# List artifacts in a project
+uv run qf artifacts list my-story
 
-Domain knowledge lives in MyST files with custom directives:
+# Show a specific artifact
+uv run qf artifacts show my-story artifact-id
+```
 
-- `{role-meta}`, `{role-tools}`, `{role-constraints}` — role definitions
-- `{loop-meta}`, `{graph-node}`, `{graph-edge}` — workflow graphs
-- `{artifact-type}`, `{enum-type}` — data structures
+### Checkpoints and Resume
 
-### System-as-Router
+```bash
+# Sessions auto-checkpoint after each turn
+# List checkpoints
+uv run qf checkpoints list my-story
 
-Roles don't call each other directly. They post **Intents**, and the runtime routes based on loop
-definitions:
+# Resume from the latest checkpoint
+uv run qf ask my-story --from-checkpoint latest
 
-1. Role completes work → writes to `hot_store`
-2. Role posts Intent → `handoff(status="stabilized")`
-3. Router reads loop definition → finds matching edge
-4. Router activates next role → based on condition
+# Resume from a specific checkpoint
+uv run qf ask my-story --from-checkpoint cp-abc123
+```
 
-### Hot vs Cold
+### Verbose Mode
 
-- **hot_store**: Working drafts, mutable, internal
-- **cold_store**: Committed canon, append-only, player-safe
+```bash
+# Show token counts
+uv run qf ask my-story "Hello" -v
+
+# Show timing and debug info
+uv run qf ask my-story "Hello" -vv
+
+# Show full prompts (caution: very verbose)
+uv run qf ask my-story "Hello" -vvv
+```
+
+### Event Logging
+
+```bash
+# Enable JSONL event logging to project directory
+uv run qf ask my-story --log
+
+# Events are written to projects/my-story/logs/events.jsonl
+```
+
+## The 12 Agents
+
+| Agent | Archetype | Key Responsibility |
+|-------|-----------|-------------------|
+| **Showrunner** | Orchestrator | Hub-and-spoke delegation, manages workflows |
+| **Lorekeeper** | Librarian | Canon management, lifecycle transitions |
+| **Plotwright** | Architect | Story structure and outlines |
+| **Scene Smith** | Author | Prose writing and drafting |
+| **Gatekeeper** | Validator | Quality enforcement and rework triggers |
+| **Researcher** | Fact Checker | Plausibility and consistency checking |
+| **Style Lead** | Curator | Aesthetic coherence and voice |
+| **Lore Weaver** | Synthesizer | Canon deepening and connections |
+| **Codex Curator** | Documentarian | Player-safe entries and summaries |
+| **Art Director** | Planner | Visual asset planning |
+| **Audio Director** | Planner | Audio asset planning |
+| **Book Binder** | Publisher | Static export and publishing |
+
+## Repository Structure
+
+```text
+meta/                   # Domain-agnostic schemas (the contract)
+├── schemas/core/       # Agent, Store, Tool, Artifact schemas
+├── schemas/governance/ # Quality criteria schemas
+└── docs/               # Meta-model documentation
+
+domain-v4/              # QuestFoundry domain instances (JSON)
+├── studio.json         # Main studio configuration
+├── agents/             # 12 agent definitions
+├── stores/             # Store definitions (canon, workspace, etc.)
+├── tools/              # Tool definitions
+├── playbooks/          # Workflow definitions
+└── knowledge/          # Knowledge base entries
+
+src/questfoundry/
+├── runtime/            # V4 runtime implementation
+│   ├── agent/          # Agent execution and showrunner loop
+│   ├── delegation/     # Async delegation with rework budgets
+│   ├── messaging/      # Inter-agent communication
+│   ├── providers/      # LLM provider integrations
+│   ├── storage/        # Project and artifact storage
+│   └── tools/          # Tool implementations
+└── cli.py              # Command-line interface
+```
 
 ## Development
 
@@ -147,27 +176,35 @@ definitions:
 # Install dev dependencies
 uv sync
 
-# Run checks
-uv run ruff check src/
-uv run mypy src/
+# Run tests
 uv run pytest
+
+# Run linting
+uv run ruff check src/
+
+# Run type checking
+uv run mypy src/
 
 # Format code
 uv run ruff format src/
 ```
 
-See [`AGENTS.md`](AGENTS.md) for contribution guidelines.
+## Configuration
 
-## Architecture Documentation
+QuestFoundry reads configuration from environment variables:
 
-For the complete v3 architecture, see:
+```bash
+# Ollama (default provider)
+OLLAMA_HOST=http://localhost:11434
 
-- [`src/questfoundry/domain/ARCHITECTURE.md`](src/questfoundry/domain/ARCHITECTURE.md) — Master blueprint
+# OpenAI
+OPENAI_API_KEY=sk-...
 
-For v2 reference material:
-
-- [`_archive/spec/`](_archive/spec/) — Original L0-L5 specifications
-- [`_archive/lib/`](_archive/lib/) — Previous runtime implementation
+# LangSmith tracing (optional)
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=...
+LANGSMITH_PROJECT=questfoundry
+```
 
 ## License
 

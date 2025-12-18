@@ -22,6 +22,10 @@ from questfoundry.runtime.delegation.executor import (
     DelegationContext,
     DelegationResult,
 )
+from questfoundry.runtime.delegation.nudger import (
+    NudgeContext,
+    PlaybookNudger,
+)
 from questfoundry.runtime.delegation.tracker import (
     BudgetCheckResult,
     PlaybookInstance,
@@ -43,4 +47,7 @@ __all__ = [
     "DelegationContext",
     "DelegationResult",
     "AgentActivator",
+    # Nudger
+    "PlaybookNudger",
+    "NudgeContext",
 ]

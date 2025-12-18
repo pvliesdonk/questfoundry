@@ -19,6 +19,7 @@ from questfoundry.runtime.messaging.message import (
     create_escalation,
     create_feedback,
     create_message,
+    create_nudge,
     create_progress_update,
 )
 from questfoundry.runtime.messaging.types import (
@@ -42,6 +43,7 @@ __all__ = [
     "create_digest",
     "create_escalation",
     "create_feedback",
+    "create_nudge",
     "create_progress_update",
     # Mailbox
     "AsyncMailbox",

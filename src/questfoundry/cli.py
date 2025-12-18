@@ -1824,5 +1824,83 @@ def checkpoints_delete(
             project.close()
 
 
+# =============================================================================
+# Export Command (Stub)
+# =============================================================================
+
+
+@app.command()
+def export(
+    project_id: Annotated[str, typer.Argument(help="Project ID")],
+    output_path: Annotated[
+        Path | None,
+        typer.Argument(help="Output file path (default: project_id.epub/.html)"),
+    ] = None,
+    projects_dir: Annotated[
+        Path,
+        typer.Option("--dir", "-d", help="Projects directory"),
+    ] = Path("projects"),
+    output_format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Export format (epub, html, markdown)"),
+    ] = "epub",
+) -> None:
+    """Export a project to a publishable format.
+
+    This command exports artifacts from a project into a cohesive
+    document suitable for publication or sharing. The Book Binder
+    agent handles the actual export process.
+
+    Supported formats:
+    - epub: E-book format (default)
+    - html: Web-ready HTML
+    - markdown: Plain markdown with frontmatter
+    """
+    from questfoundry.runtime.storage import Project
+
+    project_path = projects_dir / project_id
+
+    # Check if project exists
+    project = Project(project_path)
+    if not project.exists():
+        console.print(f"[red]✗ Project not found: {project_id}[/red]")
+        raise typer.Exit(1) from None
+
+    # Validate format
+    supported_formats = ["epub", "html", "markdown"]
+    if output_format not in supported_formats:
+        console.print(f"[red]✗ Unsupported format: {output_format}[/red]")
+        console.print(f"[dim]Supported: {', '.join(supported_formats)}[/dim]")
+        raise typer.Exit(1)
+
+    # Determine output path
+    if output_path is None:
+        ext_map = {"epub": ".epub", "html": ".html", "markdown": ".md"}
+        output_path = Path(f"{project_id}{ext_map[output_format]}")
+
+    # Stub implementation - show not-yet-implemented message
+    console.print()
+    console.print(
+        Panel(
+            "[yellow]Export functionality is not yet implemented.[/yellow]\n\n"
+            "This command will invoke the Book Binder agent to:\n"
+            "• Compile cold-store artifacts into a cohesive document\n"
+            "• Apply formatting for the target format\n"
+            "• Generate table of contents and navigation\n"
+            "• Package assets (images, styles) as needed\n\n"
+            f"[dim]Project: {project_id}\n"
+            f"Format: {output_format}\n"
+            f"Output: {output_path}[/dim]",
+            title="Export (Coming Soon)",
+            border_style="yellow",
+        )
+    )
+
+    console.print()
+    console.print(
+        "[dim]Track progress: https://github.com/pvliesdonk/questfoundry/issues/150[/dim]"
+    )
+
+
 if __name__ == "__main__":
     app()
