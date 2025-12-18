@@ -520,6 +520,113 @@
           "type": "boolean",
           "default": false,
           "description": "If true, this transition ends the playbook"
+        },
+        "followups": {
+          "$ref": "#/$defs/followups",
+          "description": "Guidance for orchestrator on what comes after this playbook ends"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "followups": {
+      "type": "object",
+      "description": "Guidance for orchestrator on workflow continuation after playbook completes",
+      "properties": {
+        "primary": {
+          "$ref": "#/$defs/followup_spec",
+          "description": "The main next playbook (sequential)"
+        },
+        "parallel": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/followup_spec"
+          },
+          "description": "Playbooks that can run alongside primary"
+        },
+        "conditional": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/followup_spec"
+          },
+          "description": "Playbooks triggered by specific conditions"
+        },
+        "runtime_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runtime_action_spec"
+          },
+          "description": "Non-playbook actions (e.g., cold commit, checkpoint)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "followup_spec": {
+      "type": "object",
+      "description": "Specification for a playbook that should follow",
+      "required": ["playbook"],
+      "properties": {
+        "playbook": {
+          "$ref": "_definitions.schema.json#/$defs/playbook_ref",
+          "description": "ID of the playbook to run"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Natural language condition for when this applies (LLM interprets)"
+        },
+        "artifact_condition": {
+          "type": "object",
+          "description": "Machine-checkable condition: artifact type + state exists",
+          "properties": {
+            "artifact_type": {
+              "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+              "description": "Type of artifact to check for"
+            },
+            "state": {
+              "type": "string",
+              "description": "Required lifecycle state"
+            },
+            "exists": {
+              "type": "boolean",
+              "default": true,
+              "description": "True = must exist, False = must not exist"
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": {
+          "type": "string",
+          "description": "Why this followup makes sense"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 5,
+          "description": "Priority when multiple conditions match (1=highest)"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "runtime_action_spec": {
+      "type": "object",
+      "description": "Non-playbook action to perform (e.g., cold commit)",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["commit_to_cold", "notify_user", "create_checkpoint"],
+          "description": "The runtime action to perform"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Natural language condition for when to perform this action"
+        },
+        "description": {
+          "type": "string",
+          "description": "Why this action is needed"
         }
       },
       "additionalProperties": false
