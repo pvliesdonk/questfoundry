@@ -14,6 +14,7 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.models import Tool
 from questfoundry.runtime.tools.base import (
     BaseTool,
     CapabilityViolationError,
@@ -24,9 +25,33 @@ from questfoundry.runtime.tools.base import (
 if TYPE_CHECKING:
     from questfoundry.runtime.messaging.broker import AsyncMessageBroker
     from questfoundry.runtime.models import Agent, Studio, Tool
-    from questfoundry.runtime.storage import Project
+    from questfoundry.runtime.storage import Project, StoreManager
 
 logger = logging.getLogger(__name__)
+
+
+# Implicit tool definitions injected when the domain does not enumerate
+# persistence helpers. These fulfill the meta-model contract that store
+# permissions imply basic CRUD access.
+IMPLICIT_TOOL_DEFINITIONS: dict[str, Tool] = {
+    "save_artifact": Tool(
+        id="save_artifact",
+        name="Save Artifact",
+        description="Persist an artifact to a store (validates schema and permissions).",
+    ),
+    "update_artifact": Tool(
+        id="update_artifact",
+        name="Update Artifact",
+        description="Update an existing artifact in-place when allowed by the store.",
+    ),
+    "delete_artifact": Tool(
+        id="delete_artifact",
+        name="Delete Artifact",
+        description="Delete an artifact from a store when permitted.",
+    ),
+}
+
+PERSISTENCE_TOOL_IDS = tuple(IMPLICIT_TOOL_DEFINITIONS.keys())
 
 # Registry mapping tool IDs to implementation classes
 # Populated by register_tool decorator or direct assignment
@@ -74,6 +99,7 @@ class ToolRegistry:
         domain_path: Any = None,
         broker: AsyncMessageBroker | None = None,
         interactive: bool = True,
+        store_manager: StoreManager | None = None,
     ):
         """
         Initialize tool registry.
@@ -90,6 +116,8 @@ class ToolRegistry:
         self._domain_path = domain_path
         self._broker = broker
         self._interactive = interactive
+        self._store_manager = store_manager
+        self._lifecycle_manager = None
         self._tool_cache: dict[str, BaseTool] = {}
 
     def get_tool_definition(self, tool_id: str) -> Tool | None:
@@ -98,10 +126,12 @@ class ToolRegistry:
         TODO: Consider building a dict[str, Tool] index on init for O(1) lookups.
         Current linear search is acceptable for typical studio sizes (~10-20 tools).
         """
-        for tool in self._studio.tools:
+        studio_tools = self._studio.tools or []
+        for tool in studio_tools:
             if tool.id == tool_id:
                 return tool
-        return None
+        implicit = IMPLICIT_TOOL_DEFINITIONS.get(tool_id)
+        return implicit
 
     def get_tool(
         self,
@@ -142,6 +172,8 @@ class ToolRegistry:
             domain_path=self._domain_path,
             broker=self._broker,
             interactive=self._interactive,
+            store_manager=self._store_manager,
+            lifecycle_manager=self._lifecycle_manager,
         )
 
         # Get implementation class
@@ -174,6 +206,7 @@ class ToolRegistry:
         """
         tools = []
         allowed_tool_ids = self._get_agent_tool_refs(agent)
+        allowed_tool_ids.update(self._get_implicit_tool_refs(agent))
 
         for tool_id in allowed_tool_ids:
             # Skip interactive-only tools when not in interactive mode
@@ -197,6 +230,29 @@ class ToolRegistry:
                 tool_refs.add(cap.tool_ref)
         return tool_refs
 
+    def _get_implicit_tool_refs(self, agent: Agent) -> set[str]:
+        """Determine implicit tool refs derived from store permissions."""
+
+        implicit: set[str] = set()
+
+        if self._agent_has_store_write_access(agent):
+            implicit.update(PERSISTENCE_TOOL_IDS)
+
+        return implicit
+
+    def _agent_has_store_write_access(self, agent: Agent) -> bool:
+        """Check if the agent has write access to any store."""
+
+        for cap in agent.capabilities or []:
+            if cap.category != "store_access":
+                continue
+
+            access_level = (cap.access_level or "read").lower()
+            if "write" in access_level:
+                return True
+
+        return False
+
     def check_capability(self, agent: Agent, tool_id: str) -> bool:
         """
         Check if an agent has capability to use a tool.
@@ -208,8 +264,10 @@ class ToolRegistry:
         Returns:
             True if agent can use the tool
         """
-        allowed = self._get_agent_tool_refs(agent)
-        return tool_id in allowed
+        explicit_tools = self._get_agent_tool_refs(agent)
+        implicit_tools = self._get_implicit_tool_refs(agent)
+
+        return tool_id in explicit_tools or tool_id in implicit_tools
 
     def enforce_capability(self, agent: Agent, tool_id: str) -> None:
         """
@@ -270,6 +328,7 @@ def build_agent_tools(
     domain_path: Any = None,
     session_id: str | None = None,
     broker: AsyncMessageBroker | None = None,
+    store_manager: StoreManager | None = None,
 ) -> list[BaseTool]:
     """
     Convenience function to build tools for an agent.
@@ -285,5 +344,11 @@ def build_agent_tools(
     Returns:
         List of tools the agent can use
     """
-    registry = ToolRegistry(studio, project, domain_path, broker)
+    registry = ToolRegistry(
+        studio,
+        project,
+        domain_path,
+        broker,
+        store_manager=store_manager,
+    )
     return registry.get_agent_tools(agent, session_id)

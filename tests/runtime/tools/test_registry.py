@@ -82,6 +82,14 @@ class TestToolRegistry:
         tool_def = registry.get_tool_definition("nonexistent")
         assert tool_def is None
 
+    def test_get_tool_definition_implicit_persistence(self):
+        studio, _ = make_mock_studio_with_tools()
+        registry = ToolRegistry(studio)
+
+        tool_def = registry.get_tool_definition("save_artifact")
+        assert tool_def is not None
+        assert tool_def.id == "save_artifact"
+
     def test_get_tool_returns_implementation(self):
         studio, _ = make_mock_studio_with_tools()
         registry = ToolRegistry(studio)
@@ -135,12 +143,40 @@ class TestToolRegistry:
 
         assert registry.check_capability(agent, "unknown_tool") is False
 
+    def test_check_capability_allows_implicit_persistence(self):
+        studio, agent = make_mock_studio_with_tools()
+
+        cap = MagicMock()
+        cap.tool_ref = None
+        cap.category = "store_access"
+        cap.access_level = "write"
+        cap.stores = ["workspace"]
+        agent.capabilities.append(cap)
+
+        registry = ToolRegistry(studio)
+
+        assert registry.check_capability(agent, "save_artifact") is True
+
     def test_enforce_capability_allowed(self):
         studio, agent = make_mock_studio_with_tools()
         registry = ToolRegistry(studio)
 
         # Should not raise
         registry.enforce_capability(agent, "consult_schema")
+
+    def test_enforce_capability_allows_implicit_persistence(self):
+        studio, agent = make_mock_studio_with_tools()
+
+        cap = MagicMock()
+        cap.tool_ref = None
+        cap.category = "store_access"
+        cap.access_level = "write"
+        cap.stores = ["workspace"]
+        agent.capabilities.append(cap)
+
+        registry = ToolRegistry(studio)
+
+        registry.enforce_capability(agent, "save_artifact")
 
     def test_enforce_capability_denied(self):
         studio, agent = make_mock_studio_with_tools()
@@ -195,6 +231,21 @@ class TestToolRegistry:
         unimplemented = registry.list_unimplemented_tools()
         # unknown_tool is in studio but not implemented
         assert "unknown_tool" in unimplemented
+
+    def test_agent_with_store_write_gets_persistence_tools(self):
+        studio, agent = make_mock_studio_with_tools()
+
+        cap = MagicMock()
+        cap.tool_ref = None
+        cap.category = "store_access"
+        cap.stores = ["workspace"]
+        cap.access_level = "write"
+        agent.capabilities.append(cap)
+
+        registry = ToolRegistry(studio)
+        tool_ids = {tool.id for tool in registry.get_agent_tools(agent)}
+
+        assert {"save_artifact", "update_artifact", "delete_artifact"}.issubset(tool_ids)
 
 
 class TestRegisterTool:

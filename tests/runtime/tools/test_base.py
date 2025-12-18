@@ -93,6 +93,11 @@ class TestToolResult:
         assert d["data"] == {"key": "value"}
         assert d["error"] is None
         assert d["execution_time_ms"] == 123.45
+        assert d["fatal"] is False
+
+    def test_to_dict_includes_fatal_flag(self):
+        result = ToolResult(success=False, data={}, fatal=True)
+        assert result.to_dict()["fatal"] is True
 
 
 class TestBaseTool:

@@ -638,6 +638,7 @@ async def _setup_runtime(
         provider=provider,
         studio=studio,
         domain_path=domain_path,
+        project=project,
         model=model_to_use,
         event_logger=event_logger,
         tracing_manager=tracing_manager if tracing_manager.enabled else None,

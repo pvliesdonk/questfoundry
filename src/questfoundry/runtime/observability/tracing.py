@@ -98,7 +98,9 @@ class TracingManager:
         try:
             from langsmith import trace
 
-            run_name = f"Session: {session_id[:8]}"
+            run_name = "Questfoundry Studio"
+            if project_id:
+                run_name = f"{run_name} ({project_id})"
 
             inputs = {
                 "session_id": session_id,
@@ -149,6 +151,7 @@ class TracingManager:
         turn_id: int,
         user_input: str,
         agent_id: str | None = None,
+        agent_name: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Generator[Any, None, None]:
         """
@@ -171,7 +174,8 @@ class TracingManager:
         try:
             from langsmith import trace
 
-            run_name = f"Turn {turn_id}"
+            role_label = agent_name or agent_id or f"Turn {turn_id}"
+            run_name = f"Role: {role_label}"
 
             inputs = {
                 "turn_id": turn_id,
@@ -179,9 +183,13 @@ class TracingManager:
             }
             if agent_id:
                 inputs["agent_id"] = agent_id
+            if agent_name:
+                inputs["agent_name"] = agent_name
 
             run_metadata = {
                 "turn_id": turn_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
                 **(metadata or {}),
             }
 
@@ -254,3 +262,53 @@ class TracingManager:
         """
         # With langsmith.trace(), LangChain auto-tracing nests automatically
         return []
+
+    @contextmanager
+    def tool_call(
+        self,
+        tool_name: str,
+        *,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        args: dict[str, Any] | None = None,
+    ) -> Generator[Any, None, None]:
+        """Trace a tool invocation as part of the current turn."""
+
+        if not self._enabled:
+            yield None
+            return
+
+        run = None
+        try:
+            from langsmith import trace
+
+            inputs: dict[str, Any] = {"args": args or {}}
+            if agent_id:
+                inputs["agent_id"] = agent_id
+            if agent_name:
+                inputs["agent_name"] = agent_name
+
+            metadata = {
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+            }
+
+            with trace(
+                name=tool_name,
+                run_type="tool",
+                inputs=inputs,
+                metadata=metadata,
+                project_name=self._project_name,
+            ) as run:
+                yield run
+
+        except ImportError:
+            logger.warning("langsmith package not installed - disabling tracing")
+            self._enabled = False
+            yield None
+
+        except Exception:
+            if run is None:
+                yield None
+            else:
+                raise

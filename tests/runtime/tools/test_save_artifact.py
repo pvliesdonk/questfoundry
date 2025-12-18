@@ -18,6 +18,7 @@ from questfoundry.runtime.tools.save_artifact import (
     SaveArtifactTool,
     UpdateArtifactTool,
 )
+from questfoundry.runtime.tools.search_workspace import SearchWorkspaceTool
 
 
 def make_mock_artifact_type(
@@ -132,6 +133,7 @@ class TestSaveArtifactTool:
         assert "artifact" in result.data
         assert "artifact_id" in result.data
         assert result.data["store"] == "workspace"
+        assert result.data["feedback"]["valid"] is True
 
         # Verify artifact was saved
         artifact_id = result.data["artifact_id"]
@@ -164,6 +166,7 @@ class TestSaveArtifactTool:
 
         assert result.success is True
         assert result.data["artifact_id"] == "section_001"
+        assert result.data["feedback"]["valid"] is True
 
         saved = project.get_artifact("section_001")
         assert saved is not None
@@ -190,6 +193,7 @@ class TestSaveArtifactTool:
 
         assert result.success is False
         assert "Unknown artifact type" in result.error
+        assert result.data["feedback"]["valid"] is False
 
     @pytest.mark.asyncio
     async def test_save_artifact_validation_failure(self, project: Project):
@@ -213,7 +217,8 @@ class TestSaveArtifactTool:
         )
 
         assert result.success is False
-        assert "validation_errors" in result.data
+        assert "feedback" in result.data
+        assert result.data["feedback"]["valid"] is False
         assert len(result.data["validation_errors"]) > 0
 
     @pytest.mark.asyncio
@@ -243,6 +248,7 @@ class TestSaveArtifactTool:
 
         assert result.success is False
         assert "does not accept" in result.error
+        assert result.data["feedback"]["valid"] is False
 
     @pytest.mark.asyncio
     async def test_save_artifact_exclusive_writer_warning(self, project: Project):
@@ -277,6 +283,8 @@ class TestSaveArtifactTool:
         assert "workflow_warning" in result.data
         assert "scene_smith" in result.data["workflow_warning"]
         assert "lore_weaver" in result.data["workflow_warning"]
+        warning_fields = result.data["feedback"]["warnings"]
+        assert any(w.get("field") == "store" for w in warning_fields)
 
     @pytest.mark.asyncio
     async def test_save_artifact_no_project(self):
@@ -301,6 +309,29 @@ class TestSaveArtifactTool:
 
         assert result.success is False
         assert "No project available" in result.error
+        assert result.fatal is True
+
+    @pytest.mark.asyncio
+    async def test_save_artifact_infers_type_from_id(self, project: Project):
+        """Artifact type inferred from artifact_id prefix."""
+        artifact_type = make_mock_artifact_type()
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_custom1234",
+                "data": {"title": "Derived"},
+            }
+        )
+
+        assert result.success is True
+        assert result.data["artifact_id"] == "section_custom1234"
+        assert result.data["feedback"]["valid"] is True
 
 
 class TestUpdateArtifactTool:
@@ -517,6 +548,70 @@ class TestListArtifactsTool:
 
         assert result.success is True
         assert result.data["count"] == 3
+
+
+class TestSearchWorkspaceTool:
+    """Tests for SearchWorkspaceTool."""
+
+    @pytest.fixture
+    def project_with_artifacts(self):
+        with TemporaryDirectory() as tmpdir:
+            project = Project.create(
+                path=Path(tmpdir) / "test_project",
+                name="Test Project",
+            )
+            project.create_artifact(
+                artifact_id="section_001",
+                artifact_type="section",
+                data={"title": "Section 1"},
+                store="workspace",
+            )
+            project.create_artifact(
+                artifact_id="section_002",
+                artifact_type="section",
+                data={"title": "Section 2"},
+                store="workspace",
+            )
+            project.create_artifact(
+                artifact_id="brief_001",
+                artifact_type="section_brief",
+                data={"title": "Brief 1"},
+                store="workspace",
+            )
+            yield project
+            project.close()
+
+    @pytest.mark.asyncio
+    async def test_search_by_artifact_id(self):
+        with TemporaryDirectory() as tmpdir:
+            project = Project.create(
+                path=Path(tmpdir) / "test_project",
+                name="Test Project",
+            )
+            project.create_artifact(
+                artifact_id="section_brief_abc123",
+                artifact_type="section_brief",
+                data={"title": "Searchable"},
+                store="workspace",
+            )
+
+            studio = MagicMock()
+            context = ToolContext(studio=studio, project=project)
+            tool = SearchWorkspaceTool(make_mock_definition("search_workspace"), context)
+
+            result = await tool.execute(
+                {
+                    "query": "section_brief_abc123",
+                    "artifact_types": ["section_brief"],
+                    "limit": 1,
+                }
+            )
+
+            assert result.success is True
+            assert result.data["total_count"] == 1
+            assert result.data["results"][0]["artifact_id"] == "section_brief_abc123"
+
+            project.close()
 
     @pytest.mark.asyncio
     async def test_list_artifacts_by_type(self, project_with_artifacts: Project):

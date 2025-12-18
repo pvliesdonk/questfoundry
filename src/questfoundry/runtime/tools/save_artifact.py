@@ -45,89 +45,124 @@ class SaveArtifactTool(BaseTool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute artifact save."""
-        artifact_type_id: str | None = args.get("artifact_type")
-        data = args.get("data", {})
         artifact_id: str | None = args.get("artifact_id")
+        artifact_type_id = (
+            args.get("artifact_type")
+            or args.get("artifact_type_id")
+            or self._infer_artifact_type_from_id(artifact_id)
+        )
+        data = args.get("data", {})
         store_id: str | None = args.get("store")
 
-        # Validate required fields
-        if not artifact_type_id:
-            return ToolResult(
-                success=False,
-                data={},
-                error="artifact_type is required",
+        if not isinstance(data, dict):
+            return self._failure_result(
+                "Artifact data must be an object",
+                errors=[
+                    self._error_entry(
+                        "data",
+                        "Artifact data must be a JSON object",
+                        "Provide a dictionary of field values that align with the artifact schema.",
+                    )
+                ],
             )
 
-        # Validate we have a project
         if not self._context.project:
-            return ToolResult(
-                success=False,
-                data={},
-                error="No project available - cannot save artifact",
+            return self._failure_result(
+                "No project available - cannot save artifact",
+                errors=[
+                    self._error_entry(
+                        "project",
+                        "Project storage is unavailable",
+                        "Restart the session or ensure the runtime is initialized with a project.",
+                    )
+                ],
+                fatal=True,
             )
 
-        # Validate artifact type exists
-        artifact_type = None
-        for at in self._context.studio.artifact_types:
-            if at.id == artifact_type_id:
-                artifact_type = at
-                break
+        if not artifact_type_id:
+            return self._failure_result(
+                "Unable to determine artifact type",
+                errors=[
+                    self._error_entry(
+                        "artifact_type",
+                        "Artifact type is missing or could not be inferred",
+                        "Pass artifact_type explicitly or use an artifact_id with a known prefix (e.g., section_*).",
+                    )
+                ],
+            )
 
+        artifact_type = self._get_artifact_type(artifact_type_id)
         if not artifact_type:
-            return ToolResult(
-                success=False,
-                data={},
-                error=f"Unknown artifact type: {artifact_type_id}",
+            return self._failure_result(
+                f"Unknown artifact type: {artifact_type_id}",
+                errors=[
+                    self._error_entry(
+                        "artifact_type",
+                        f"'{artifact_type_id}' is not defined in the studio",
+                        "Confirm the artifact type exists in domain/ and provide a valid identifier.",
+                    )
+                ],
             )
 
-        # Resolve store
         resolved_store_id = self._resolve_store(artifact_type_id, store_id)
-
-        # Validate store accepts this artifact type
+        workflow_warning = None
         if self._context.store_manager:
             allowed, reason = self._context.store_manager.validate_write(
                 resolved_store_id, artifact_type_id
             )
             if not allowed:
-                return ToolResult(
-                    success=False,
-                    data={},
-                    error=reason or f"Cannot write to store: {resolved_store_id}",
+                return self._failure_result(
+                    reason or f"Cannot write to store: {resolved_store_id}",
+                    errors=[
+                        self._error_entry(
+                            "store",
+                            reason
+                            or f"Store '{resolved_store_id}' rejects '{artifact_type_id}' artifacts",
+                            "Select a store that lists this artifact type or update the domain's store permissions.",
+                        )
+                    ],
                 )
 
-            # Check exclusive writer policy
             workflow_warning = self._check_exclusive_writer(resolved_store_id)
             if workflow_warning:
                 logger.warning(workflow_warning)
-
-                # Check policy - block or warn
                 if DEFAULT_EXCLUSIVE_WRITER_POLICY == ExclusiveWriterPolicy.BLOCK:
-                    return ToolResult(
-                        success=False,
-                        data={"workflow_violation": workflow_warning},
-                        error=f"Exclusive writer violation: {workflow_warning}",
+                    return self._failure_result(
+                        f"Exclusive writer violation: {workflow_warning}",
+                        errors=[
+                            self._error_entry(
+                                "store",
+                                workflow_warning,
+                                "Let the designated producer write to this store or adjust the store's workflow intent.",
+                            )
+                        ],
                     )
-                # WARN policy: continue with save (open floor principle)
-        else:
-            workflow_warning = None
 
-        # Validate artifact data against schema
-        validation_errors = self._validate_artifact_data(artifact_type, data)
-        if validation_errors:
-            return ToolResult(
-                success=False,
-                data={"validation_errors": validation_errors},
-                error=f"Artifact validation failed: {len(validation_errors)} error(s)",
+        validation_errors, validation_warnings = self._validate_artifact_data(artifact_type, data)
+        feedback_warnings = list(validation_warnings)
+        if workflow_warning:
+            feedback_warnings.append(
+                self._warning_entry(
+                    "store",
+                    workflow_warning,
+                    "Let the designated producer persist to this store when possible.",
+                )
             )
 
-        # Generate artifact ID if not provided
+        if validation_errors:
+            return self._failure_result(
+                f"Artifact validation failed: {len(validation_errors)} error(s)",
+                errors=validation_errors,
+                warnings=feedback_warnings,
+                include_validation_errors=True,
+                workflow_warning=workflow_warning,
+            )
+
         if not artifact_id:
             artifact_id = self._generate_artifact_id(artifact_type_id)
 
-        # Get initial lifecycle state
         initial_state = self._get_initial_lifecycle_state(artifact_type)
 
-        # Save to project
         try:
             artifact = self._context.project.create_artifact(
                 artifact_id=artifact_id,
@@ -137,7 +172,6 @@ class SaveArtifactTool(BaseTool):
                 created_by=self._context.agent_id,
             )
 
-            # Update lifecycle state if artifact type has lifecycle
             if initial_state and initial_state != "draft":
                 self._context.project.update_artifact(
                     artifact_id=artifact_id,
@@ -150,23 +184,26 @@ class SaveArtifactTool(BaseTool):
                 "artifact_id": artifact_id,
                 "store": resolved_store_id,
                 "lifecycle_state": artifact.get("_lifecycle_state", "draft"),
+                "feedback": self._build_feedback(True, warnings=feedback_warnings),
             }
 
-            # Include workflow warning if present (open floor principle)
             if workflow_warning:
                 result_data["workflow_warning"] = workflow_warning
 
-            return ToolResult(
-                success=True,
-                data=result_data,
-            )
+            return ToolResult(success=True, data=result_data)
 
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - defensive
             logger.exception(f"Failed to save artifact: {e}")
-            return ToolResult(
-                success=False,
-                data={},
-                error=f"Failed to save artifact: {e}",
+            return self._failure_result(
+                f"Failed to save artifact: {e}",
+                errors=[
+                    self._error_entry(
+                        None,
+                        "Unexpected error while writing the artifact",
+                        "Check the runtime logs for details and retry once the issue is resolved.",
+                    )
+                ],
+                workflow_warning=workflow_warning,
             )
 
     def _resolve_store(self, artifact_type_id: str, explicit_store: str | None) -> str:
@@ -214,42 +251,37 @@ class SaveArtifactTool(BaseTool):
 
     def _validate_artifact_data(
         self, artifact_type: Any, data: dict[str, Any]
-    ) -> list[dict[str, str]]:
-        """
-        Validate artifact data against type schema.
-
-        Returns list of validation errors.
-        """
-        errors: list[dict[str, str]] = []
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Validate artifact data against type schema."""
+        errors: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
 
         if not artifact_type.fields:
-            return errors
+            return errors, warnings
 
-        # Check required fields
         for field in artifact_type.fields:
             if field.required and field.name not in data:
+                guidance = field.description or "Provide this field as described in the schema."
                 errors.append(
-                    {
-                        "field": field.name,
-                        "error": f"Required field '{field.name}' is missing",
-                    }
+                    self._error_entry(
+                        field.name,
+                        f"Required field '{field.name}' is missing",
+                        guidance,
+                    )
                 )
 
-        # Check field types
         for field in artifact_type.fields:
             if field.name in data:
                 value = data[field.name]
-                field_type = field.type.value if field.type else "string"
-                type_error = self._check_field_type(field.name, value, field_type)
+                type_error = self._check_field_type(field, value)
                 if type_error:
                     errors.append(type_error)
 
-        return errors
+        return errors, warnings
 
-    def _check_field_type(
-        self, field_name: str, value: Any, expected_type: str
-    ) -> dict[str, str] | None:
+    def _check_field_type(self, field: Any, value: Any) -> dict[str, Any] | None:
         """Check if a field value matches the expected type."""
+        expected_type = field.type.value if getattr(field, "type", None) else "string"
         type_checks = {
             "string": lambda v: isinstance(v, str),
             "text": lambda v: isinstance(v, str),
@@ -263,13 +295,15 @@ class SaveArtifactTool(BaseTool):
 
         checker = type_checks.get(expected_type)
         if checker and not checker(value):
-            return {
-                "field": field_name,
-                "error": (
-                    f"Field '{field_name}' has wrong type. "
+            guidance = field.description or "Use the schema's expected data type for this field."
+            return self._error_entry(
+                field.name,
+                (
+                    f"Field '{field.name}' has wrong type. "
                     f"Expected {expected_type}, got {type(value).__name__}"
                 ),
-            }
+                guidance,
+            )
 
         return None
 
@@ -286,6 +320,84 @@ class SaveArtifactTool(BaseTool):
                 initial_state = lifecycle.initial_state
                 return str(initial_state) if initial_state else "draft"
         return "draft"
+
+    def _get_artifact_type(self, artifact_type_id: str) -> Any | None:
+        for at in self._context.studio.artifact_types:
+            if at.id == artifact_type_id:
+                return at
+        return None
+
+    def _failure_result(
+        self,
+        error_message: str,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        warnings: list[dict[str, Any]] | None = None,
+        fatal: bool = False,
+        include_validation_errors: bool = False,
+        workflow_warning: str | None = None,
+    ) -> ToolResult:
+        feedback = self._build_feedback(False, errors=errors, warnings=warnings)
+        data: dict[str, Any] = {"feedback": feedback}
+        if include_validation_errors:
+            data["validation_errors"] = errors or []
+        if workflow_warning:
+            data["workflow_warning"] = workflow_warning
+        return ToolResult(
+            success=False,
+            data=data,
+            error=error_message,
+            fatal=fatal,
+        )
+
+    def _build_feedback(
+        self,
+        valid: bool,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        warnings: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "valid": valid,
+            "errors": errors or [],
+            "warnings": warnings or [],
+        }
+
+    def _error_entry(
+        self,
+        field: str | None,
+        error: str,
+        guidance: str | None = None,
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {"field": field, "error": error}
+        if guidance:
+            entry["guidance"] = guidance
+        return entry
+
+    def _warning_entry(
+        self,
+        field: str | None,
+        warning: str,
+        suggestion: str | None = None,
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {"field": field, "warning": warning}
+        if suggestion:
+            entry["suggestion"] = suggestion
+        return entry
+
+    def _infer_artifact_type_from_id(self, artifact_id: str | None) -> str | None:
+        if not artifact_id or not self._context.studio.artifact_types:
+            return None
+
+        candidates = sorted(
+            (at.id for at in self._context.studio.artifact_types),
+            key=len,
+            reverse=True,
+        )
+        for candidate in candidates:
+            if artifact_id.startswith(f"{candidate}_"):
+                return candidate
+        return None
 
 
 @register_tool("update_artifact")

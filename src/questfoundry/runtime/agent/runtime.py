@@ -25,6 +25,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -47,6 +48,7 @@ from questfoundry.runtime.providers import (
     ToolCallRequest,
 )
 from questfoundry.runtime.session import Session, TokenUsage, Turn
+from questfoundry.runtime.storage import StoreManager
 
 if TYPE_CHECKING:
     from questfoundry.runtime.checkpoint import CheckpointManager, ContextUsage
@@ -54,7 +56,7 @@ if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, Studio
     from questfoundry.runtime.observability import EventLogger, TracingManager
     from questfoundry.runtime.storage import Project
-    from questfoundry.runtime.tools import BaseTool, ToolRegistry, ToolResult
+from questfoundry.runtime.tools import BaseTool, ToolExecutionError, ToolRegistry, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +165,11 @@ class AgentRuntime:
         self._context_builder = ContextBuilder(domain_path=domain_path)
         self._prompt_builder = PromptBuilder()
         self._tool_registry: ToolRegistry | None = None
+        self._store_manager: StoreManager | None = None
+        try:
+            self._store_manager = StoreManager.from_studio(studio)
+        except (KeyError, ValueError) as exc:  # pragma: no cover - defensive logging
+            logger.warning("Failed to load store manager from studio definition: %s", exc)
 
         # Secretary for tiered context management
         # context_limit from model determines when to start summarizing
@@ -192,6 +199,7 @@ class AgentRuntime:
                     domain_path=self._domain_path,
                     broker=self._broker,
                     interactive=self._interactive,
+                    store_manager=self._store_manager,
                 )
             except ImportError:
                 logger.warning("Tools module not available, tool execution disabled", exc_info=True)
@@ -280,7 +288,19 @@ class AgentRuntime:
                 args=args,
             )
 
-        result = await tool.run(args)
+        tool_trace_ctx = (
+            self._tracing_manager.tool_call(
+                tool_id,
+                agent_id=agent.id,
+                agent_name=agent.name,
+                args=args,
+            )
+            if self._tracing_manager
+            else nullcontext()
+        )
+
+        with tool_trace_ctx:
+            result = await tool.run(args)
 
         # Log tool call result
         if self._event_logger:
@@ -292,6 +312,9 @@ class AgentRuntime:
                 error=result.error,
                 execution_time_ms=result.execution_time_ms,
             )
+
+        if result.fatal:
+            raise ToolExecutionError(result.error or f"Fatal error executing tool '{tool_id}'")
 
         return result
 
@@ -732,6 +755,7 @@ class AgentRuntime:
                 turn_id=turn.turn_number,
                 user_input=user_input,
                 agent_id=agent.id,
+                agent_name=agent.name,
             )
             turn_ctx.__enter__()
             callbacks = self._tracing_manager.get_langchain_callbacks()
@@ -1054,6 +1078,7 @@ class AgentRuntime:
                 turn_id=turn.turn_number,
                 user_input=user_input,
                 agent_id=agent.id,
+                agent_name=agent.name,
             )
             turn_ctx.__enter__()
             callbacks = self._tracing_manager.get_langchain_callbacks()
