@@ -47,7 +47,7 @@
       "name": "Read All Stores",
       "description": "Can read from any store to validate content",
       "category": "store_access",
-      "stores": ["workspace", "canon", "audit"],
+      "stores": ["workspace", "canon", "manuscript", "audit"],
       "access_level": "read"
     },
     {
@@ -56,6 +56,14 @@
       "description": "Can write gatecheck reports and pre-gate notes",
       "category": "store_access",
       "stores": ["workspace"],
+      "access_level": "write"
+    },
+    {
+      "id": "write_manuscript",
+      "name": "Write to Manuscript",
+      "description": "Can promote validated sections to narrative canon after gatecheck passes",
+      "category": "store_access",
+      "stores": ["manuscript"],
       "access_level": "write"
     },
     {

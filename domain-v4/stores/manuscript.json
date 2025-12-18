@@ -1,0 +1,22 @@
+{
+  "$schema": "../../meta/schemas/core/store.schema.json",
+  "id": "manuscript",
+  "name": "Manuscript (Narrative Canon)",
+  "description": "Validated narrative sections ready for export and downstream consumption. Append-only; represents narrative canon (story prose), distinct from world-lore canon. Gatekeeper promotes approved sections here after validation passes.",
+
+  "semantics": "cold",
+
+  "artifact_types": [
+    "section"
+  ],
+
+  "workflow_intent": {
+    "consumption_guidance": "all",
+    "production_guidance": "exclusive",
+    "designated_producers": ["gatekeeper"]
+  },
+
+  "retention": {
+    "type": "forever"
+  }
+}

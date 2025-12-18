@@ -55,10 +55,10 @@ Stores are classified by **semantics** that define their mutability and purpose:
 
 **Use cases**:
 
-- Validated story sections
-- Canonical lore and world facts
+- Canonical lore and world facts (canon store)
+- Validated story sections (manuscript store)
+- Player-safe glossary entries (codex store)
 - Approved character definitions
-- Final scene prose
 
 **Key rule**: Promote to cold only after validation passes. Never bypass quality gates.
 
@@ -116,7 +116,7 @@ draft → review → approved → cold
 | `approved` | Passed validation, ready for promotion |
 | `cold` | Committed to canon (final) |
 
-**Key insight**: "Cold" is a lifecycle state, not just a store semantics. An artifact transitions to `cold` when committed to canon.
+**Key insight**: "Cold" is a lifecycle state, not just a store semantics. An artifact transitions to `cold` when committed to a cold store (canon for lore, manuscript for narrative sections, codex for glossary entries).
 
 ---
 
@@ -126,7 +126,8 @@ Cold stores have **exclusive writers** to maintain consistency:
 
 | Store | Exclusive Writer | Rationale |
 |-------|------------------|-----------|
-| canon | `lore_weaver` | Single source of world truth |
+| canon | `lore_weaver` | Single source of world truth (lore) |
+| manuscript | `gatekeeper` | Validated narrative prose (sections) |
 | codex | `codex_curator` | Player-safe glossary control |
 | exports | `book_binder` | Controlled publishing |
 
@@ -210,11 +211,11 @@ draft → cold (skipping review/approved)
 
 ### Cross-write to Cold
 
-**Wrong**: Scene Smith writing directly to canon
+**Wrong**: Scene Smith writing directly to manuscript (bypassing Gatekeeper)
 
 **Why it's wrong**: Violates exclusive writer principle. Creates conflicts.
 
-**Correct**: Request promotion via lifecycle transition tool.
+**Correct**: Request promotion via lifecycle transition tool. Gatekeeper validates and promotes to manuscript.
 
 ---
 
