@@ -48,7 +48,7 @@ from questfoundry.runtime.providers import (
     ToolCallRequest,
 )
 from questfoundry.runtime.session import Session, TokenUsage, Turn
-from questfoundry.runtime.storage import StoreManager
+from questfoundry.runtime.storage import LifecycleManager, StoreManager
 
 if TYPE_CHECKING:
     from questfoundry.runtime.checkpoint import CheckpointManager, ContextUsage
@@ -167,10 +167,17 @@ class AgentRuntime:
         self._prompt_builder = PromptBuilder()
         self._tool_registry: ToolRegistry | None = None
         self._store_manager: StoreManager | None = None
+        self._lifecycle_manager: LifecycleManager | None = None
         try:
             self._store_manager = StoreManager.from_studio(studio)
         except (KeyError, ValueError) as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to load store manager from studio definition: %s", exc)
+
+        # Initialize lifecycle manager from artifact types
+        try:
+            self._lifecycle_manager = LifecycleManager.from_artifact_types(studio.artifact_types)
+        except (KeyError, ValueError, AttributeError) as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to load lifecycle manager from studio definition: %s", exc)
 
         # Secretary for tiered context management
         # context_limit from model determines when to start summarizing
@@ -201,6 +208,7 @@ class AgentRuntime:
                     broker=self._broker,
                     interactive=self._interactive,
                     store_manager=self._store_manager,
+                    lifecycle_manager=self._lifecycle_manager,
                 )
             except ImportError:
                 logger.warning("Tools module not available, tool execution disabled", exc_info=True)
