@@ -818,7 +818,7 @@ async def _stream_response(
         log_console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
-    # Process any pending delegations
+    # Process any pending delegations and handle orchestrator follow-up
     if process_delegations:
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
@@ -837,6 +837,33 @@ async def _stream_response(
                         turn_number=turn_number,
                         error=dr.get("error") if not success else None,
                     )
+
+        # Hub-and-spoke: Give orchestrator follow-up turns after delegations complete
+        # Check if this agent is an orchestrator and has delegation responses
+        if runtime._is_orchestrator(agent):
+            responses = await runtime.get_delegation_responses(agent.id)
+            if responses:
+                # Build follow-up prompt with delegation results
+                follow_up_prompt = runtime.build_delegation_response_prompt(responses)
+                logger.debug(
+                    "Orchestrator %s has %d delegation responses, giving follow-up turn",
+                    agent.id,
+                    len(responses),
+                )
+
+                # Report follow-up turn
+                if _status_reporter:
+                    _status_reporter.turn_start(
+                        turn_number=session.turn_count + 1,
+                        agent_id=agent.id,
+                        agent_name=agent.name,
+                    )
+
+                # Recursively stream the follow-up response
+                follow_up_content = await _stream_response(
+                    runtime, agent, follow_up_prompt, session, process_delegations=True
+                )
+                full_content += "\n\n" + follow_up_content
 
     return full_content
 
@@ -923,7 +950,7 @@ async def _invoke_response(
         log_console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
-    # Process any pending delegations
+    # Process any pending delegations and handle orchestrator follow-up
     if process_delegations:
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
@@ -942,6 +969,33 @@ async def _invoke_response(
                         turn_number=result.turn.turn_number,
                         error=dr.get("error") if not success else None,
                     )
+
+        # Hub-and-spoke: Give orchestrator follow-up turns after delegations complete
+        # Check if this agent is an orchestrator and has delegation responses
+        if runtime._is_orchestrator(agent):
+            responses = await runtime.get_delegation_responses(agent.id)
+            if responses:
+                # Build follow-up prompt with delegation results
+                follow_up_prompt = runtime.build_delegation_response_prompt(responses)
+                logger.debug(
+                    "Orchestrator %s has %d delegation responses, giving follow-up turn",
+                    agent.id,
+                    len(responses),
+                )
+
+                # Report follow-up turn
+                if _status_reporter:
+                    _status_reporter.turn_start(
+                        turn_number=session.turn_count + 1,
+                        agent_id=agent.id,
+                        agent_name=agent.name,
+                    )
+
+                # Recursively invoke the follow-up response
+                follow_up_content = await _invoke_response(
+                    runtime, agent, follow_up_prompt, session, process_delegations=True
+                )
+                full_content += "\n\n" + follow_up_content
 
     return full_content
 

@@ -1506,6 +1506,89 @@ class AgentRuntime:
 
         return results
 
+    async def get_delegation_responses(self, agent_id: str) -> list[Any]:
+        """
+        Get pending delegation_response messages for an agent.
+
+        Args:
+            agent_id: Agent to check mailbox for
+
+        Returns:
+            List of delegation_response messages
+        """
+        if not self._broker:
+            return []
+
+        from questfoundry.runtime.messaging.types import MessageType
+
+        mailbox = await self._broker.get_mailbox(agent_id)
+        all_messages = await mailbox.get_all_pending()
+
+        responses = [msg for msg in all_messages if msg.type == MessageType.DELEGATION_RESPONSE]
+
+        # Put back non-response messages
+        for msg in all_messages:
+            if msg.type != MessageType.DELEGATION_RESPONSE:
+                await mailbox.put(msg)
+
+        return responses
+
+    def build_delegation_response_prompt(self, responses: list[Any]) -> str:
+        """
+        Build a prompt summarizing delegation responses for the orchestrator.
+
+        Args:
+            responses: List of delegation_response messages
+
+        Returns:
+            Prompt text describing the delegation results
+        """
+        if not responses:
+            return ""
+
+        lines = ["Your delegated work has completed. Here are the results:\n"]
+
+        for i, msg in enumerate(responses, 1):
+            from_agent = msg.from_agent
+            payload = msg.payload or {}
+            success = payload.get("success", False)
+            result = payload.get("result", {})
+
+            status = result.get("status", "complete" if success else "failed")
+            summary = result.get("summary", "No summary provided")
+            artifacts = result.get("artifacts_produced", [])
+            ready_for_review = result.get("artifacts_ready_for_review", [])
+            blockers = result.get("blockers", [])
+            recommendations = result.get("recommendations", "")
+
+            lines.append(f"## Delegation {i}: {from_agent}")
+            lines.append(f"- **Status**: {status}")
+            lines.append(f"- **Summary**: {summary}")
+
+            if artifacts:
+                lines.append(f"- **Artifacts produced**: {', '.join(artifacts)}")
+            if ready_for_review:
+                lines.append(f"- **Ready for review**: {', '.join(ready_for_review)}")
+            if blockers:
+                blocker_strs = [
+                    b.get("description", str(b)) if isinstance(b, dict) else str(b)
+                    for b in blockers
+                ]
+                lines.append(f"- **Blockers**: {'; '.join(blocker_strs)}")
+            if recommendations:
+                lines.append(f"- **Recommendations**: {recommendations}")
+
+            lines.append("")
+
+        lines.append(
+            "Based on these results, decide what to do next:\n"
+            "- Delegate to another agent if more work is needed\n"
+            "- Call communicate to ask the human a question\n"
+            "- Or return your final response if the task is complete"
+        )
+
+        return "\n".join(lines)
+
 
 async def activate_agent(
     agent_id: str,
