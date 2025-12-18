@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -36,6 +37,9 @@ from questfoundry.cli_output import StatusReporter, create_log_handler
 
 # Global verbosity level (set by callback)
 _verbosity: int = 0
+
+# Maximum recursion depth for orchestrator follow-up turns
+MAX_ORCHESTRATOR_FOLLOW_UP_DEPTH = 10
 
 # Main output console (stdout)
 console = Console()
@@ -735,12 +739,81 @@ async def _setup_runtime(
     )
 
 
+async def _handle_orchestrator_follow_up(
+    runtime: AgentRuntime,
+    agent: Agent,
+    session: Session,
+    respond_fn: Callable[..., Awaitable[str]],
+    current_depth: int,
+) -> str:
+    """
+    Handle orchestrator follow-up turns after delegations complete.
+
+    This is the hub-and-spoke pattern: after specialists return, the
+    orchestrator gets follow-up turns to decide next steps.
+
+    Args:
+        runtime: Agent runtime
+        agent: The orchestrator agent
+        session: Current session
+        respond_fn: Response function (_stream_response or _invoke_response)
+        current_depth: Current recursion depth
+
+    Returns:
+        Additional content from follow-up turns (empty string if none)
+    """
+    logger = logging.getLogger("questfoundry.cli")
+
+    if current_depth >= MAX_ORCHESTRATOR_FOLLOW_UP_DEPTH:
+        logger.warning(
+            "Max orchestrator follow-up depth (%d) reached, stopping recursion",
+            MAX_ORCHESTRATOR_FOLLOW_UP_DEPTH,
+        )
+        return ""
+
+    if not runtime._is_orchestrator(agent):
+        return ""
+
+    responses = await runtime.get_delegation_responses(agent.id)
+    if not responses:
+        return ""
+
+    # Build follow-up prompt with delegation results
+    follow_up_prompt = runtime.build_delegation_response_prompt(responses)
+    logger.debug(
+        "Orchestrator %s has %d delegation responses, giving follow-up turn (depth %d)",
+        agent.id,
+        len(responses),
+        current_depth + 1,
+    )
+
+    # Report follow-up turn start (turn number will be updated after activation)
+    if _status_reporter:
+        _status_reporter.turn_start(
+            turn_number=session.turn_count + 1,
+            agent_id=agent.id,
+            agent_name=agent.name,
+        )
+
+    # Recursively invoke the follow-up response with incremented depth
+    follow_up_content = await respond_fn(
+        runtime,
+        agent,
+        follow_up_prompt,
+        session,
+        process_delegations=True,
+        _follow_up_depth=current_depth + 1,
+    )
+    return "\n\n" + follow_up_content
+
+
 async def _stream_response(
     runtime: AgentRuntime,
     agent: Agent,
     user_input: str,
     session: Session,
     process_delegations: bool = True,
+    _follow_up_depth: int = 0,
 ) -> str:
     """Stream a response from the agent and return full content."""
     import time
@@ -818,7 +891,7 @@ async def _stream_response(
         log_console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
-    # Process any pending delegations
+    # Process any pending delegations and handle orchestrator follow-up
     if process_delegations:
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
@@ -838,6 +911,12 @@ async def _stream_response(
                         error=dr.get("error") if not success else None,
                     )
 
+        # Hub-and-spoke: Give orchestrator follow-up turns after delegations complete
+        follow_up_content = await _handle_orchestrator_follow_up(
+            runtime, agent, session, _stream_response, _follow_up_depth
+        )
+        full_content += follow_up_content
+
     return full_content
 
 
@@ -847,6 +926,7 @@ async def _invoke_response(
     user_input: str,
     session: Session,
     process_delegations: bool = True,
+    _follow_up_depth: int = 0,
 ) -> str:
     """Invoke agent without streaming (single response)."""
     import time
@@ -923,7 +1003,7 @@ async def _invoke_response(
         log_console.print(f"[dim]time: {duration_ms:.0f}ms | model: {runtime._model}[/dim]")
         logger.debug(f"Response generated in {duration_ms:.0f}ms")
 
-    # Process any pending delegations
+    # Process any pending delegations and handle orchestrator follow-up
     if process_delegations:
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
@@ -942,6 +1022,12 @@ async def _invoke_response(
                         turn_number=result.turn.turn_number,
                         error=dr.get("error") if not success else None,
                     )
+
+        # Hub-and-spoke: Give orchestrator follow-up turns after delegations complete
+        follow_up_content = await _handle_orchestrator_follow_up(
+            runtime, agent, session, _invoke_response, _follow_up_depth
+        )
+        full_content += follow_up_content
 
     return full_content
 
