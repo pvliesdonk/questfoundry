@@ -168,8 +168,8 @@ class AgentRuntime:
         self._store_manager: StoreManager | None = None
         try:
             self._store_manager = StoreManager.from_studio(studio)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Failed to load store manager: %s", exc)
+        except (KeyError, ValueError) as exc:  # pragma: no cover - defensive logging
+            logger.warning("Failed to load store manager from studio definition: %s", exc)
 
         # Secretary for tiered context management
         # context_limit from model determines when to start summarizing
