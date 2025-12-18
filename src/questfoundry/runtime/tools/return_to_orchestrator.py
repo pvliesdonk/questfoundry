@@ -73,11 +73,10 @@ class ReturnToOrchestratorTool(BaseTool):
         # Determine success based on status
         success = status in ("complete", "partial")
 
-        # Build result data
+        # Build result data (artifacts_produced passed separately to create_delegation_response)
         result_data = {
             "status": status,
             "summary": summary,
-            "artifacts_produced": artifacts_produced,
             "artifacts_ready_for_review": artifacts_ready_for_review,
         }
         if blockers:
@@ -88,7 +87,10 @@ class ReturnToOrchestratorTool(BaseTool):
         # Build error string for blocked/needs_decision
         error_msg = None
         if status == "blocked" and blockers:
-            error_msg = "; ".join(b.get("description", str(b)) for b in blockers)
+            error_msg = "; ".join(
+                (b.get("description") or str(b)) if isinstance(b, dict) else str(b)
+                for b in blockers
+            )
         elif status == "needs_decision":
             error_msg = f"Needs orchestrator decision: {summary}"
 
