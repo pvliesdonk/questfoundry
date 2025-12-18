@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from questfoundry.runtime.delegation import PlaybookLoader
 from questfoundry.runtime.messaging import create_delegation_request
 from questfoundry.runtime.tools.base import BaseTool, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.registry import register_tool
@@ -50,7 +51,14 @@ class DelegateTool(BaseTool):
         playbook_ref = args.get("playbook_ref")
         playbook_instance_id = args.get("playbook_instance_id")
         phase_ref = args.get("phase_ref")
-        is_rework_target = args.get("is_rework_target", False)
+
+        # Auto-resolve is_rework_target from playbook definition if not explicitly set
+        is_rework_target = args.get("is_rework_target")
+        if is_rework_target is None:
+            if playbook_ref and phase_ref:
+                is_rework_target = self._lookup_is_rework_target(playbook_ref, phase_ref)
+            else:
+                is_rework_target = False
 
         # Validate: must have task
         if not task:
@@ -78,21 +86,16 @@ class DelegateTool(BaseTool):
                 error="Cannot delegate to self",
             )
 
-        # Build delegation context including additional metadata
-        delegation_context = {
-            **context,
-            "is_rework_target": is_rework_target,
-        }
-
         # Create delegation request message
         message = create_delegation_request(
             from_agent=self._context.agent_id or "unknown",
             to_agent=target_agent,
             task=task,
-            context=delegation_context,
+            context=context,
             playbook_id=playbook_ref,
             playbook_instance_id=playbook_instance_id,
             phase_id=phase_ref,
+            is_rework_target=is_rework_target,
         )
 
         # Route via broker if available
@@ -144,3 +147,23 @@ class DelegateTool(BaseTool):
             return None
 
         return None
+
+    def _lookup_is_rework_target(self, playbook_id: str, phase_id: str) -> bool:
+        """
+        Look up whether a phase is a rework target from playbook definitions.
+
+        Phases marked as rework targets have their re-entries counted against
+        the playbook's rework budget. When the budget is exhausted, re-entering
+        these phases triggers escalation.
+
+        Args:
+            playbook_id: ID of the playbook
+            phase_id: ID of the phase
+
+        Returns:
+            True if the phase is a rework target, False otherwise
+        """
+        # Lazy initialization of cached PlaybookLoader
+        if not hasattr(self, "_playbook_loader"):
+            self._playbook_loader = PlaybookLoader.from_playbooks(self._context.studio.playbooks)
+        return self._playbook_loader.is_rework_target(playbook_id, phase_id)

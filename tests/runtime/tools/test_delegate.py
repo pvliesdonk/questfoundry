@@ -9,6 +9,7 @@ import pytest
 from questfoundry.runtime.messaging import AsyncMessageBroker
 from questfoundry.runtime.tools.base import ToolContext, ToolValidationError
 from questfoundry.runtime.tools.delegate import DelegateTool
+from tests.runtime.conftest import make_mock_playbook
 
 
 def make_mock_studio_with_agents():
@@ -31,6 +32,27 @@ def make_mock_studio_with_agents():
     agent3.archetypes = ["validator"]
 
     studio.agents = [agent1, agent2, agent3]
+
+    # Add playbooks for testing rework target lookup
+    studio.playbooks = [
+        make_mock_playbook(
+            "story_spark",
+            {
+                "topology_design": {"name": "Topology Design", "is_rework_target": False},
+                "brief_creation": {"name": "Brief Creation", "is_rework_target": True},
+                "preview_gate": {"name": "Preview Gate", "is_rework_target": False},
+            },
+            max_rework_cycles=3,
+        ),
+        make_mock_playbook(
+            "scene_weave",
+            {
+                "drafting": {"name": "Drafting", "is_rework_target": True},
+                "polish": {"name": "Polish", "is_rework_target": True},
+            },
+            max_rework_cycles=2,
+        ),
+    ]
 
     return studio
 
@@ -232,3 +254,129 @@ class TestDelegateTool:
 
         assert result.success is True
         assert result.data["assigned_to"] == "scene_smith"
+
+    @pytest.mark.asyncio
+    async def test_is_rework_target_auto_lookup_true(self):
+        """Test automatic lookup of is_rework_target from playbook definition."""
+        studio = make_mock_studio_with_agents()
+        definition = make_mock_definition()
+        broker = AsyncMock(spec=AsyncMessageBroker)
+        context = ToolContext(studio=studio, agent_id="showrunner", broker=broker)
+        tool = DelegateTool(definition, context)
+
+        # Delegate to a phase that is marked as rework target
+        result = await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Create briefs",
+                "playbook_ref": "story_spark",
+                "phase_ref": "brief_creation",  # This phase has is_rework_target: True
+            }
+        )
+
+        assert result.success is True
+
+        # Verify the message payload includes is_rework_target from lookup
+        broker.send.assert_called_once()
+        message = broker.send.call_args[0][0]
+        assert message.payload["is_rework_target"] is True
+
+    @pytest.mark.asyncio
+    async def test_is_rework_target_auto_lookup_false(self):
+        """Test auto-lookup returns false for non-rework target phases."""
+        studio = make_mock_studio_with_agents()
+        definition = make_mock_definition()
+        broker = AsyncMock(spec=AsyncMessageBroker)
+        context = ToolContext(studio=studio, agent_id="showrunner", broker=broker)
+        tool = DelegateTool(definition, context)
+
+        # Delegate to a phase that is NOT marked as rework target
+        result = await tool.execute(
+            {
+                "to_agent": "gatekeeper",
+                "task": "Run preview gate",
+                "playbook_ref": "story_spark",
+                "phase_ref": "preview_gate",  # This phase has is_rework_target: False
+            }
+        )
+
+        assert result.success is True
+
+        # Verify is_rework_target is false
+        message = broker.send.call_args[0][0]
+        assert message.payload["is_rework_target"] is False
+
+    @pytest.mark.asyncio
+    async def test_is_rework_target_explicit_override(self):
+        """Test that explicit is_rework_target overrides auto-lookup."""
+        studio = make_mock_studio_with_agents()
+        definition = make_mock_definition()
+        broker = AsyncMock(spec=AsyncMessageBroker)
+        context = ToolContext(studio=studio, agent_id="showrunner", broker=broker)
+        tool = DelegateTool(definition, context)
+
+        # Explicitly set is_rework_target=False even though phase has it True
+        result = await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Create briefs",
+                "playbook_ref": "story_spark",
+                "phase_ref": "brief_creation",  # Has is_rework_target: True
+                "is_rework_target": False,  # Explicit override
+            }
+        )
+
+        assert result.success is True
+
+        # Verify explicit override took precedence
+        message = broker.send.call_args[0][0]
+        assert message.payload["is_rework_target"] is False
+
+    @pytest.mark.asyncio
+    async def test_is_rework_target_without_playbook_context(self):
+        """Test is_rework_target defaults to False without playbook context."""
+        studio = make_mock_studio_with_agents()
+        definition = make_mock_definition()
+        broker = AsyncMock(spec=AsyncMessageBroker)
+        context = ToolContext(studio=studio, agent_id="showrunner", broker=broker)
+        tool = DelegateTool(definition, context)
+
+        # Delegate without playbook context
+        result = await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Write something",
+                # No playbook_ref or phase_ref
+            }
+        )
+
+        assert result.success is True
+
+        # Verify is_rework_target defaults to False
+        message = broker.send.call_args[0][0]
+        assert message.payload["is_rework_target"] is False
+
+    @pytest.mark.asyncio
+    async def test_is_rework_target_unknown_playbook(self):
+        """Test is_rework_target defaults to False for unknown playbook."""
+        studio = make_mock_studio_with_agents()
+        definition = make_mock_definition()
+        broker = AsyncMock(spec=AsyncMessageBroker)
+        context = ToolContext(studio=studio, agent_id="showrunner", broker=broker)
+        tool = DelegateTool(definition, context)
+
+        # Delegate with unknown playbook
+        result = await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Do something",
+                "playbook_ref": "nonexistent_playbook",
+                "phase_ref": "some_phase",
+            }
+        )
+
+        assert result.success is True
+
+        # Verify is_rework_target defaults to False for unknown playbook
+        message = broker.send.call_args[0][0]
+        assert message.payload["is_rework_target"] is False

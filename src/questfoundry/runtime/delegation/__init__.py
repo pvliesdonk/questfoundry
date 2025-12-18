@@ -26,6 +26,7 @@ from questfoundry.runtime.delegation.nudger import (
     NudgeContext,
     PlaybookNudger,
 )
+from questfoundry.runtime.delegation.playbook_loader import PlaybookLoader
 from questfoundry.runtime.delegation.tracker import (
     BudgetCheckResult,
     PlaybookInstance,
@@ -50,4 +51,6 @@ __all__ = [
     # Nudger
     "PlaybookNudger",
     "NudgeContext",
+    # Playbook Loader
+    "PlaybookLoader",
 ]

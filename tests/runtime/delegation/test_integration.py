@@ -26,6 +26,7 @@ from questfoundry.runtime.messaging import (
 )
 from questfoundry.runtime.tools.base import ToolContext
 from questfoundry.runtime.tools.delegate import DelegateTool
+from tests.runtime.conftest import make_mock_playbook
 
 
 def make_mock_studio():
@@ -45,6 +46,28 @@ def make_mock_studio():
         agents.append(agent)
 
     studio.agents = agents
+
+    # Add playbooks with rework target markers
+    studio.playbooks = [
+        make_mock_playbook(
+            "scene_weave",
+            {
+                "drafting": {"name": "Drafting", "is_rework_target": True},
+                "polish": {"name": "Polish", "is_rework_target": True},
+                "quality_check": {"name": "Quality Check", "is_rework_target": False},
+            },
+            max_rework_cycles=2,
+        ),
+        make_mock_playbook(
+            "story_spark",
+            {
+                "topology": {"name": "Topology", "is_rework_target": False},
+                "brief_creation": {"name": "Brief Creation", "is_rework_target": True},
+            },
+            max_rework_cycles=3,
+        ),
+    ]
+
     return studio
 
 
@@ -458,3 +481,263 @@ class TestEscalationFlow:
         # Verify playbook was marked escalated
         updated_instance = await tracker.get_instance(instance.instance_id)
         assert updated_instance.status == PlaybookStatus.ESCALATED
+
+
+class TestPlaybookLoaderIntegration:
+    """Tests for PlaybookLoader integration with delegation flow."""
+
+    @pytest.fixture
+    def broker(self):
+        return AsyncMessageBroker()
+
+    @pytest.fixture
+    def tracker(self):
+        return PlaybookTracker()
+
+    @pytest.fixture
+    def bouncer(self):
+        return DelegationBouncer()
+
+    @pytest.mark.asyncio
+    async def test_delegate_tool_auto_resolves_rework_target(self, broker):
+        """Test full flow where delegate tool auto-resolves is_rework_target."""
+        studio = make_mock_studio()
+        definition = make_mock_tool_definition()
+
+        context = ToolContext(
+            studio=studio,
+            agent_id="showrunner",
+            broker=broker,
+        )
+        tool = DelegateTool(definition, context)
+
+        # Delegate to a rework target phase
+        result = await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Write the draft",
+                "playbook_ref": "scene_weave",
+                "phase_ref": "drafting",  # is_rework_target: True
+            }
+        )
+
+        assert result.success is True
+
+        # Verify message has is_rework_target=True from auto-lookup
+        inbox = await broker.get_inbox("scene_smith")
+        assert len(inbox) == 1
+        assert inbox[0].payload["is_rework_target"] is True
+
+    @pytest.mark.asyncio
+    async def test_delegate_tool_non_rework_target_phase(self, broker):
+        """Test delegate tool with non-rework target phase."""
+        studio = make_mock_studio()
+        definition = make_mock_tool_definition()
+
+        context = ToolContext(
+            studio=studio,
+            agent_id="showrunner",
+            broker=broker,
+        )
+        tool = DelegateTool(definition, context)
+
+        # Delegate to a non-rework target phase
+        result = await tool.execute(
+            {
+                "to_agent": "gatekeeper",
+                "task": "Check quality",
+                "playbook_ref": "scene_weave",
+                "phase_ref": "quality_check",  # is_rework_target: False
+            }
+        )
+
+        assert result.success is True
+
+        inbox = await broker.get_inbox("gatekeeper")
+        assert len(inbox) == 1
+        assert inbox[0].payload["is_rework_target"] is False
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_rework_loop_with_auto_lookup(self, broker, bouncer, tracker):
+        """Test complete rework loop using PlaybookLoader auto-lookup."""
+        from questfoundry.runtime.delegation import PlaybookLoader
+
+        studio = make_mock_studio()
+        definition = make_mock_tool_definition()
+
+        # Create loader from studio playbooks
+        loader = PlaybookLoader.from_playbooks(studio.playbooks)
+
+        # Start playbook with max_rework_cycles from loader
+        max_rework = loader.get_max_rework_cycles("scene_weave")
+        instance = await tracker.start_playbook(
+            playbook_id="scene_weave",
+            max_rework_cycles=max_rework,  # Should be 2
+            initiating_agent="showrunner",
+        )
+        assert max_rework == 2
+
+        # Setup delegate tool
+        context = ToolContext(
+            studio=studio,
+            agent_id="showrunner",
+            broker=broker,
+        )
+        tool = DelegateTool(definition, context)
+
+        # Setup executor
+        activator = AsyncMock()
+        activator.activate.return_value = {"success": True, "result": {}}
+        executor = AsyncDelegationExecutor(broker, bouncer, tracker, activator)
+
+        # First delegation to drafting phase (rework target)
+        await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Write first draft",
+                "playbook_ref": "scene_weave",
+                "playbook_instance_id": instance.instance_id,
+                "phase_ref": "drafting",
+            }
+        )
+
+        # Process the delegation
+        inbox = await broker.get_inbox("scene_smith")
+        assert len(inbox) == 1
+        msg = inbox[0]
+
+        # Verify is_rework_target was auto-resolved
+        assert msg.payload["is_rework_target"] is True
+
+        result = await executor.execute(msg)
+        assert result.success is True
+
+        # Check rework tracking
+        updated_instance = await tracker.get_instance(instance.instance_id)
+        assert updated_instance.rework_target_visits["drafting"] == 1
+        assert updated_instance.rework_count == 0  # First visit doesn't count
+
+        # Clear inbox and do rework #1
+        broker._mailboxes["scene_smith"]._queue.clear()
+        await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Revise draft",
+                "playbook_ref": "scene_weave",
+                "playbook_instance_id": instance.instance_id,
+                "phase_ref": "drafting",
+            }
+        )
+
+        inbox = await broker.get_inbox("scene_smith")
+        msg = inbox[0]
+        result = await executor.execute(msg)
+        assert result.success is True
+
+        updated_instance = await tracker.get_instance(instance.instance_id)
+        assert updated_instance.rework_target_visits["drafting"] == 2
+        assert updated_instance.rework_count == 1  # First rework
+
+        # Clear inbox and do rework #2
+        broker._mailboxes["scene_smith"]._queue.clear()
+        await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "Revise again",
+                "playbook_ref": "scene_weave",
+                "playbook_instance_id": instance.instance_id,
+                "phase_ref": "drafting",
+            }
+        )
+
+        inbox = await broker.get_inbox("scene_smith")
+        msg = inbox[0]
+        result = await executor.execute(msg)
+        assert result.success is True
+
+        updated_instance = await tracker.get_instance(instance.instance_id)
+        assert updated_instance.rework_count == 2  # Second rework (at limit)
+
+        # Now rework #3 should trigger escalation
+        broker._mailboxes["scene_smith"]._queue.clear()
+        broker._mailboxes["showrunner"]._queue.clear()
+
+        await tool.execute(
+            {
+                "to_agent": "scene_smith",
+                "task": "One more revision",
+                "playbook_ref": "scene_weave",
+                "playbook_instance_id": instance.instance_id,
+                "phase_ref": "drafting",
+            }
+        )
+
+        inbox = await broker.get_inbox("scene_smith")
+        msg = inbox[0]
+        result = await executor.execute(msg)
+
+        # Should fail and escalate
+        assert result.success is False
+        assert "Escalated" in result.error
+
+        # Check for escalation message
+        sr_inbox = await broker.get_inbox("showrunner")
+        escalations = [m for m in sr_inbox if m.type == MessageType.ESCALATION]
+        assert len(escalations) == 1
+
+    @pytest.mark.asyncio
+    async def test_rework_budget_not_consumed_for_non_target_phases(self, bouncer, tracker):
+        """Test that non-rework target phases don't consume budget."""
+        # Create fresh broker for this test
+        broker = AsyncMessageBroker()
+        studio = make_mock_studio()
+        definition = make_mock_tool_definition()
+
+        instance = await tracker.start_playbook(
+            playbook_id="scene_weave",
+            max_rework_cycles=1,
+            initiating_agent="showrunner",
+        )
+
+        context = ToolContext(
+            studio=studio,
+            agent_id="showrunner",
+            broker=broker,
+        )
+        tool = DelegateTool(definition, context)
+
+        activator = AsyncMock()
+        activator.activate.return_value = {"success": True, "result": {}}
+        executor = AsyncDelegationExecutor(broker, bouncer, tracker, activator)
+
+        # Multiple visits to quality_check (is_rework_target: False)
+        # Process messages one at a time using get_next
+        for i in range(5):
+            await tool.execute(
+                {
+                    "to_agent": "gatekeeper",
+                    "task": f"Quality check iteration {i}",
+                    "playbook_ref": "scene_weave",
+                    "playbook_instance_id": instance.instance_id,
+                    "phase_ref": "quality_check",  # is_rework_target: False
+                }
+            )
+
+            # Get the mailbox and pop the message
+            mailbox = await broker.get_mailbox("gatekeeper")
+            msg = await mailbox.get(timeout=1.0)
+
+            assert msg is not None
+            # Verify auto-lookup set is_rework_target to False
+            assert msg.payload["is_rework_target"] is False
+
+            result = await executor.execute(msg)
+            assert result.success is True  # Should never escalate
+
+        # Verify budget wasn't consumed
+        # Non-rework target phases don't count against budget or track visits
+        updated_instance = await tracker.get_instance(instance.instance_id)
+        assert updated_instance.rework_count == 0
+        assert updated_instance.current_phase == "quality_check"
+        # Non-rework targets aren't tracked in rework_target_visits
+        # (only is_rework_target=True phases are tracked there)
