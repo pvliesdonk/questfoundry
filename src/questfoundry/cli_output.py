@@ -124,6 +124,10 @@ class StatusReporter:
         self._playbook_id: str | None = None
         self._start_time: datetime | None = None
 
+    def _now(self) -> datetime:
+        """Get current time. Override in tests for deterministic output."""
+        return datetime.now()
+
     # -------------------------------------------------------------------------
     # Project Status
     # -------------------------------------------------------------------------
@@ -160,7 +164,7 @@ class StatusReporter:
 
         # Last activity
         if summary.last_activity:
-            elapsed = datetime.now() - summary.last_activity
+            elapsed = self._now() - summary.last_activity
             if elapsed.total_seconds() < 60:
                 ago = "just now"
             elif elapsed.total_seconds() < 3600:
@@ -204,7 +208,7 @@ class StatusReporter:
         self._project_id = project_id
         self._playbook_id = playbook_id
         self._agent_id = agent_id
-        self._start_time = datetime.now()
+        self._start_time = self._now()
 
         if self.quiet:
             return
@@ -232,7 +236,7 @@ class StatusReporter:
         # Final status
         duration = ""
         if self._start_time:
-            elapsed = (datetime.now() - self._start_time).total_seconds()
+            elapsed = (self._now() - self._start_time).total_seconds()
             if elapsed < 60:
                 duration = f" in {elapsed:.1f}s"
             else:

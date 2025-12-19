@@ -256,6 +256,7 @@ class AgentRuntime:
         args: dict[str, Any],
         agent: Agent,
         session_id: str | None = None,
+        turn_number: int | None = None,
     ) -> ToolResult:
         """
         Execute a tool.
@@ -265,6 +266,7 @@ class AgentRuntime:
             args: Tool arguments
             agent: Agent requesting tool execution
             session_id: Current session ID
+            turn_number: Current turn number for logging
 
         Returns:
             ToolResult from tool execution
@@ -315,7 +317,7 @@ class AgentRuntime:
         if self._event_logger:
             self._event_logger.tool_call_with_result(
                 session_id=session_id or "",
-                turn_id=0,  # Not available here, but logged in context
+                turn_id=turn_number or 0,
                 agent_id=agent.id,
                 tool_id=tool_id,
                 args=args,
@@ -442,6 +444,7 @@ class AgentRuntime:
         tool_calls: list[ToolCallRequest],
         agent: Agent,
         session_id: str | None = None,
+        turn_number: int | None = None,
     ) -> list[ToolCall]:
         """
         Execute a list of tool calls.
@@ -450,6 +453,7 @@ class AgentRuntime:
             tool_calls: List of tool call requests from LLM
             agent: Agent making the calls
             session_id: Current session ID
+            turn_number: Current turn number for logging
 
         Returns:
             List of ToolCall results
@@ -460,7 +464,9 @@ class AgentRuntime:
             start_time = time.time()
 
             try:
-                result = await self.execute_tool(tc.name, tc.arguments, agent, session_id)
+                result = await self.execute_tool(
+                    tc.name, tc.arguments, agent, session_id, turn_number
+                )
                 tool_call.result = result.data
                 tool_call.success = result.success
                 tool_call.error = result.error
@@ -788,22 +794,21 @@ class AgentRuntime:
             # Get tool schemas for this agent
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
+            # Build messages once and extract system prompt for logging
+            history = session.get_history()[:-1] if len(session.turns) > 1 else None
+            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
+
             # Log system prompt for debugging
             if self._event_logger:
                 system_prompt = ""
-                for m in [self.build_messages(agent, "", context, None, tool_schemas)]:
-                    if m and m[0].role == "system":
-                        system_prompt = m[0].content
-                        break
+                if messages and messages[0].role == "system":
+                    system_prompt = messages[0].content
                 self._event_logger.prompt_build(
                     session_id=session.id,
                     agent_id=agent.id,
                     prompt_text=system_prompt,
                     tool_count=len(tool_schemas) if tool_schemas else 0,
                 )
-
-            history = session.get_history()[:-1] if len(session.turns) > 1 else None
-            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
             # Log messages sent to LLM
             if self._event_logger:
@@ -921,7 +926,9 @@ class AgentRuntime:
 
                 # Execute tool calls (always execute, even if validation will fail)
                 logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
-                tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
+                tool_results = await self._execute_tool_calls(
+                    tool_calls, agent, session.id, turn.turn_number
+                )
                 all_tool_calls.extend(tool_results)
 
                 # Validate turn with TurnValidator (checks for terminating tools)
@@ -1164,22 +1171,21 @@ class AgentRuntime:
             # Get tool schemas for this agent
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
+            # Build messages once and extract system prompt for logging
+            history = session.get_history()[:-1] if len(session.turns) > 1 else None
+            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
+
             # Log system prompt for debugging (streaming path)
             if self._event_logger:
                 system_prompt = ""
-                for m in [self.build_messages(agent, "", context, None, tool_schemas)]:
-                    if m and m[0].role == "system":
-                        system_prompt = m[0].content
-                        break
+                if messages and messages[0].role == "system":
+                    system_prompt = messages[0].content
                 self._event_logger.prompt_build(
                     session_id=session.id,
                     agent_id=agent.id,
                     prompt_text=system_prompt,
                     tool_count=len(tool_schemas) if tool_schemas else 0,
                 )
-
-            history = session.get_history()[:-1] if len(session.turns) > 1 else None
-            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
             # Log messages sent to LLM (streaming path)
             if self._event_logger:
@@ -1274,7 +1280,7 @@ class AgentRuntime:
                         f"Executing {len(pending_tool_calls)} tool calls from streaming response"
                     )
                     tool_results = await self._execute_tool_calls(
-                        pending_tool_calls, agent, session.id
+                        pending_tool_calls, agent, session.id, turn.turn_number
                     )
 
                     # Validate turn with TurnValidator (checks for terminating tools)
