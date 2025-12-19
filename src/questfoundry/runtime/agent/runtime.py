@@ -991,11 +991,15 @@ class AgentRuntime:
                 # Reset failure count on valid turn
                 consecutive_failures = 0
 
-                # Check for stop tools
+                # Check if we should stop the loop:
+                # 1. If validation found a terminating tool (for orchestrators)
+                # 2. Or if a stop tool was called (delegate, terminate, etc.)
                 stop_tool, stop_result = self._check_for_stop_tool(tool_results)
-                if stop_tool:
-                    logger.info("Stop tool '%s' called, ending activation", stop_tool)
-                    stop_reason = stop_tool
+                should_stop = stop_tool is not None or validation.terminating_tool_id is not None
+
+                if should_stop:
+                    stop_reason = stop_tool or validation.terminating_tool_id
+                    logger.info("Stopping activation: %s", stop_reason)
                     # Still add the messages for context - include tool_calls for proper conversation flow
                     messages.append(
                         LLMMessage(
@@ -1345,10 +1349,17 @@ class AgentRuntime:
                     # Valid turn - reset failure count
                     consecutive_failures = 0
 
-                    # Check for stop tools (using already-executed results)
+                    # Check if we should stop the loop:
+                    # 1. If validation found a terminating tool (for orchestrators)
+                    # 2. Or if a stop tool was called (delegate, terminate, etc.)
                     stop_tool, _ = self._check_for_stop_tool(tool_results)
-                    if stop_tool:
-                        logger.info("Stop tool '%s' called, ending streaming", stop_tool)
+                    should_stop = (
+                        stop_tool is not None or validation.terminating_tool_id is not None
+                    )
+
+                    if should_stop:
+                        stop_reason = stop_tool or validation.terminating_tool_id
+                        logger.info("Stopping streaming: %s", stop_reason)
                         # Add messages for completeness - include tool_calls for proper conversation flow
                         messages.append(
                             LLMMessage(
