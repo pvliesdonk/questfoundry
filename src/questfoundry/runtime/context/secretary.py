@@ -79,7 +79,7 @@ class Secretary:
     """
 
     # Context tracking - limit should match model context size
-    context_limit: int = 8000  # Maximum context tokens (from model)
+    context_limit: int = 128000  # Maximum context tokens (from model)
     current_context_tokens: int = 0  # Current estimated context size
 
     # Tiered thresholds (fraction of context_limit):

@@ -182,7 +182,7 @@ class AgentRuntime:
         # Secretary for tiered context management
         # context_limit from model determines when to start summarizing
         self._secretary = Secretary(
-            context_limit=context_limit or 8000,  # Default 8k if not specified
+            context_limit=context_limit or 128000,  # Default 128k for modern models
             summarization_threshold=0.7,  # Start tool summarization at 70%
         )
         self._secretary_initialized = False
