@@ -626,7 +626,7 @@ class AgentRuntime:
         """
         Create an automatic checkpoint after orchestrator turn.
 
-        Respects checkpoint_frequency from config (every N orchestrator turns).
+        Respects auto_checkpoint and checkpoint_frequency from config.
 
         Args:
             session: Current session
@@ -634,8 +634,13 @@ class AgentRuntime:
         if not self._checkpoint_manager or not self._broker:
             return
 
-        # Check checkpoint frequency (skip if not at frequency interval)
         config = self._checkpoint_manager.config
+
+        # Check if auto-checkpointing is enabled
+        if not config.auto_checkpoint:
+            return
+
+        # Check checkpoint frequency (skip if not at frequency interval)
         if (
             config.checkpoint_frequency > 1
             and session.turn_count % config.checkpoint_frequency != 0
@@ -1463,6 +1468,14 @@ class AgentRuntime:
                     else None,
                 )
                 turn_ctx.__exit__(None, None, None)
+
+            # Update context usage tracking
+            if final_usage:
+                self._update_context_usage(agent.id, final_usage)
+
+            # Auto-checkpoint after orchestrator turns
+            if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
+                await self._create_auto_checkpoint(session)
 
         except Exception as e:
             # End turn tracing with error
