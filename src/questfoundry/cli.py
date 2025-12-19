@@ -1399,6 +1399,7 @@ async def _ask_repl(
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
+    from questfoundry.runtime.session.turn import TurnStatus
 
     # Select response function based on streaming preference
     respond = _stream_response if stream else _invoke_response
@@ -1512,7 +1513,11 @@ async def _ask_repl(
                     console.print()
 
         except (KeyboardInterrupt, EOFError):
-            console.print()
+            # Cancel any in-progress turn
+            current = session.current_turn
+            if current and current.status == TurnStatus.STREAMING:
+                session.cancel_turn(current, "Interrupted by user")
+            console.print("\n[dim]Cancelled[/dim]")
 
         finally:
             # End session tracing

@@ -11,8 +11,11 @@
     "type": "object",
     "properties": {
       "query": {
-        "type": "string",
-        "description": "Text search query (searches across text fields)"
+        "oneOf": [
+          { "type": "string" },
+          { "type": "array", "items": { "type": "string" } }
+        ],
+        "description": "Text search query - single string or array of strings (OR search)"
       },
       "artifact_types": {
         "type": "array",
@@ -95,6 +98,12 @@
       "input": {
         "created_by": "plotwright",
         "lifecycle_states": ["draft"]
+      }
+    },
+    {
+      "description": "Search for multiple section briefs by ID (OR search)",
+      "input": {
+        "query": ["section_brief_abc123", "section_brief_def456", "section_brief_ghi789"]
       }
     }
   ]

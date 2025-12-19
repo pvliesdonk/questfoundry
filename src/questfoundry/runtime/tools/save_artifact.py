@@ -502,18 +502,21 @@ class UpdateArtifactTool(BaseTool):
 @register_tool("get_artifact")
 class GetArtifactTool(BaseTool):
     """
-    Retrieve an artifact by ID.
+    Retrieve artifacts by ID.
+
+    Accepts a single ID or list of IDs. Always returns an array of artifacts
+    for consistent response shape.
     """
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute artifact retrieval."""
-        artifact_id = args.get("artifact_id")
+        artifact_ids = args.get("artifact_ids")
 
-        if not artifact_id:
+        if not artifact_ids:
             return ToolResult(
                 success=False,
                 data={},
-                error="artifact_id is required",
+                error="artifact_ids is required",
             )
 
         if not self._context.project:
@@ -523,18 +526,38 @@ class GetArtifactTool(BaseTool):
                 error="No project available - cannot retrieve artifact",
             )
 
-        artifact = self._context.project.get_artifact(artifact_id)
+        # Normalize to list
+        if isinstance(artifact_ids, str):
+            artifact_ids = [artifact_ids]
 
-        if artifact:
+        # Fetch all requested artifacts
+        artifacts = []
+        not_found = []
+        for aid in artifact_ids:
+            artifact = self._context.project.get_artifact(aid)
+            if artifact:
+                artifacts.append(artifact)
+            else:
+                not_found.append(aid)
+
+        # Build response
+        data: dict[str, Any] = {
+            "artifacts": artifacts,
+            "count": len(artifacts),
+        }
+        if not_found:
+            data["not_found"] = not_found
+
+        if artifacts:
             return ToolResult(
                 success=True,
-                data={"artifact": artifact},
+                data=data,
             )
         else:
             return ToolResult(
                 success=False,
-                data={},
-                error=f"Artifact not found: {artifact_id}",
+                data=data,
+                error=f"No artifacts found for IDs: {', '.join(not_found)}",
             )
 
 
