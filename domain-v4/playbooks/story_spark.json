@@ -203,7 +203,35 @@
 
       "on_success": {
         "message": "Section Briefs ready for Scene Weave. Hooks ready for Hook Harvest.",
-        "end_playbook": true
+        "end_playbook": true,
+        "followups": {
+          "primary": {
+            "playbook": "scene_weave",
+            "artifact_condition": {
+              "artifact_type": "section_brief",
+              "state": "ready"
+            },
+            "description": "Write prose from the completed section briefs"
+          },
+          "parallel": [
+            {
+              "playbook": "hook_harvest",
+              "artifact_condition": {
+                "artifact_type": "hook_card",
+                "state": "proposed"
+              },
+              "description": "Triage hooks generated during topology design"
+            }
+          ],
+          "conditional": [
+            {
+              "playbook": "lore_deepening",
+              "condition": "Canon gaps identified in feasibility check",
+              "description": "Build missing canon before prose writing",
+              "priority": 1
+            }
+          ]
+        }
       },
 
       "on_failure": {

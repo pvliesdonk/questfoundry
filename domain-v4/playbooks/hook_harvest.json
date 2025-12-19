@@ -271,7 +271,29 @@
 
       "on_success": {
         "message": "Harvest complete. Accepted hooks routed to next loops. Showrunner has activation list.",
-        "end_playbook": true
+        "end_playbook": true,
+        "followups": {
+          "conditional": [
+            {
+              "playbook": "story_spark",
+              "condition": "Accepted hooks classified as structure-impact or topology changes",
+              "description": "Process hooks requiring structural changes to narrative topology",
+              "priority": 1
+            },
+            {
+              "playbook": "scene_weave",
+              "condition": "Accepted hooks classified as scene-level or prose needs",
+              "description": "Process hooks requiring prose additions or revisions",
+              "priority": 2
+            },
+            {
+              "playbook": "lore_deepening",
+              "condition": "Accepted hooks classified as factual or requiring canon research",
+              "description": "Build canon required by accepted hooks",
+              "priority": 3
+            }
+          ]
+        }
       }
     }
   },

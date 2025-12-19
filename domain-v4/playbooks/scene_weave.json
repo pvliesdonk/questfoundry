@@ -272,7 +272,34 @@
 
       "on_success": {
         "message": "Sections approved. Ready for Cold merge after full pipeline (Lore, Codex, etc.).",
-        "end_playbook": true
+        "end_playbook": true,
+        "followups": {
+          "runtime_actions": [
+            {
+              "action": "commit_to_cold",
+              "condition": "Gatekeeper approved all sections",
+              "description": "Commit approved sections to canon store"
+            }
+          ],
+          "parallel": [
+            {
+              "playbook": "hook_harvest",
+              "artifact_condition": {
+                "artifact_type": "hook_card",
+                "state": "proposed"
+              },
+              "description": "Triage scene hooks generated during prose drafting"
+            }
+          ],
+          "conditional": [
+            {
+              "playbook": "binding_run",
+              "condition": "All sections for current milestone are in cold store",
+              "description": "Export completed story segment for distribution",
+              "priority": 3
+            }
+          ]
+        }
       },
 
       "on_failure": {

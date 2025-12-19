@@ -279,7 +279,40 @@
 
       "on_success": {
         "message": "Canon packs and codex entries ready. Canon available to creative agents, codex ready for export.",
-        "end_playbook": true
+        "end_playbook": true,
+        "followups": {
+          "runtime_actions": [
+            {
+              "action": "commit_to_cold",
+              "condition": "Gatekeeper approved canon packs and codex entries",
+              "description": "Commit canon packs and codex entries to cold store"
+            }
+          ],
+          "parallel": [
+            {
+              "playbook": "hook_harvest",
+              "artifact_condition": {
+                "artifact_type": "hook_card",
+                "state": "proposed"
+              },
+              "description": "Triage hooks generated during lore work"
+            }
+          ],
+          "conditional": [
+            {
+              "playbook": "story_spark",
+              "condition": "Canon gaps were blocking topology design",
+              "description": "Resume structure work now that canon is available",
+              "priority": 1
+            },
+            {
+              "playbook": "scene_weave",
+              "condition": "Canon gaps were blocking prose writing",
+              "description": "Resume prose work now that canon is available",
+              "priority": 2
+            }
+          ]
+        }
       },
 
       "on_failure": {
