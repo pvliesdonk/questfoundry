@@ -84,6 +84,7 @@ class ActivationResult:
     usage: TokenUsage | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     stop_reason: str | None = None  # "delegate", "terminate", "max_iterations", None
+    session_terminated: bool = False  # True if a tool with terminates_session=True was called
 
 
 # Tool names that are "stop tools" - calling them returns control to orchestrator/human
@@ -732,6 +733,31 @@ class AgentRuntime:
                     return tc.tool_id, result
         return None, None
 
+    def _check_for_session_terminating_tool(
+        self,
+        tool_calls: list[ToolCall],
+    ) -> bool:
+        """
+        Check if any tool call has terminates_session=True.
+
+        This signals that the session should end completely (not just the turn).
+        The terminate_session tool is the primary example.
+
+        Returns:
+            True if a session-terminating tool was called successfully.
+        """
+        registry = self.tool_registry
+        if not registry:
+            return False
+
+        for tc in tool_calls:
+            if tc.success:
+                tool_def = registry.get_tool_definition(tc.tool_id)
+                if tool_def and getattr(tool_def, "terminates_session", False):
+                    logger.info("Session terminating tool called: %s", tc.tool_id)
+                    return True
+        return False
+
     async def activate(
         self,
         agent: Agent,
@@ -998,10 +1024,13 @@ class AgentRuntime:
                 # Reset failure count on valid turn
                 consecutive_failures = 0
 
-                # Check if we should stop the loop:
-                # For orchestrators: only stop on explicit stop tools (blocking communicate,
-                # delegate, terminate_session). _check_for_stop_tool already returns None
-                # for non-blocking communicate, so orchestrators continue after status updates.
+                # Check if we should stop the loop.
+                #
+                # For orchestrators: only stop on explicit stop tools (blocking
+                # communicate, delegate, terminate_session). The _check_for_stop_tool
+                # method already returns None for non-blocking communicate, so
+                # orchestrators continue after status updates.
+                #
                 # For specialists: any terminating tool returns control to orchestrator.
                 stop_tool, stop_result = self._check_for_stop_tool(tool_results)
                 if self._is_orchestrator(agent):
@@ -1090,6 +1119,9 @@ class AgentRuntime:
             if usage:
                 self._update_context_usage(agent.id, usage)
 
+            # Check if session should terminate
+            session_terminated = self._check_for_session_terminating_tool(all_tool_calls)
+
             # Auto-checkpoint after orchestrator turns
             if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
                 await self._create_auto_checkpoint(session)
@@ -1101,6 +1133,7 @@ class AgentRuntime:
                 usage=usage,
                 tool_calls=all_tool_calls,
                 stop_reason=stop_reason,
+                session_terminated=session_terminated,
             )
 
         except Exception as e:
