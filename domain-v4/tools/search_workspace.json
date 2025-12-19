@@ -27,9 +27,10 @@
       "lifecycle_states": {
         "type": "array",
         "items": {
-          "type": "string"
+          "type": "string",
+          "enum": ["draft", "review", "approved", "cold"]
         },
-        "description": "Filter by lifecycle state(s) (e.g., ['draft', 'ready'])"
+        "description": "Filter by lifecycle state(s). Valid states: draft (new/WIP), review (awaiting gating), approved (passed gates), cold (committed to canon)"
       },
       "created_by": {
         "type": "string",
@@ -80,10 +81,10 @@
 
   "examples": [
     {
-      "description": "Find all Section Briefs ready for Scene Smith",
+      "description": "Find all Section Briefs in draft state",
       "input": {
         "artifact_types": ["section_brief"],
-        "lifecycle_states": ["ready"]
+        "lifecycle_states": ["draft"]
       }
     },
     {
@@ -104,6 +105,18 @@
       "description": "Search for multiple section briefs by ID (OR search)",
       "input": {
         "query": ["section_brief_abc123", "section_brief_def456", "section_brief_ghi789"]
+      }
+    },
+    {
+      "description": "Find artifacts awaiting quality review",
+      "input": {
+        "lifecycle_states": ["review"]
+      }
+    },
+    {
+      "description": "Find approved artifacts ready for canon",
+      "input": {
+        "lifecycle_states": ["approved"]
       }
     }
   ]

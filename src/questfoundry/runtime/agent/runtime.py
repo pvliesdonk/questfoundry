@@ -1399,13 +1399,24 @@ class AgentRuntime:
                     # Valid turn - reset failure count
                     consecutive_failures = 0
 
-                    # Check if we should stop the loop:
-                    # 1. If validation found a terminating tool (for orchestrators)
-                    # 2. Or if a stop tool was called (delegate, terminate, etc.)
+                    # Check if we should stop the loop.
+                    #
+                    # For orchestrators: only stop on explicit stop tools (delegate,
+                    # blocking communicate, terminate_session). The _check_for_stop_tool
+                    # method already returns None for non-blocking communicate, so
+                    # orchestrators continue after status updates.
+                    #
+                    # For specialists: any terminating tool returns control to orchestrator.
                     stop_tool, _ = self._check_for_stop_tool(tool_results)
-                    should_stop = (
-                        stop_tool is not None or validation.terminating_tool_id is not None
-                    )
+                    if self._is_orchestrator(agent):
+                        # Orchestrators: only stop on explicit stop tools
+                        # Non-blocking communicate returns None from _check_for_stop_tool
+                        should_stop = stop_tool is not None
+                    else:
+                        # Specialists: any terminating tool returns to orchestrator
+                        should_stop = (
+                            stop_tool is not None or validation.terminating_tool_id is not None
+                        )
 
                     if should_stop:
                         stop_reason = stop_tool or validation.terminating_tool_id
