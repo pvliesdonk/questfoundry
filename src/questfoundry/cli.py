@@ -652,6 +652,13 @@ async def _setup_runtime(
     checkpoint_manager = CheckpointManager(project)
     logger.debug("Created checkpoint manager")
 
+    # Get context size from provider (model-specific)
+    context_limit = await provider.get_context_size(model_to_use)
+    if context_limit:
+        logger.info("Model %s context size: %d tokens", model_to_use, context_limit)
+    else:
+        logger.debug("Could not determine context size for %s, using default", model_to_use)
+
     # Create runtime
     runtime = AgentRuntime(
         provider=provider,
@@ -664,6 +671,7 @@ async def _setup_runtime(
         broker=broker,
         interactive=interactive,
         checkpoint_manager=checkpoint_manager,
+        context_limit=context_limit,
     )
 
     # Get entry agent

@@ -204,6 +204,22 @@ class LLMProvider(ABC):
         """
         ...
 
+    async def get_context_size(self, model: str) -> int | None:  # noqa: ARG002
+        """
+        Get the context window size for a model in tokens.
+
+        Override in providers that can query this dynamically (e.g., Ollama, Google).
+        Returns None if the provider doesn't support querying context size,
+        in which case the runtime should use a default.
+
+        Args:
+            model: Model identifier
+
+        Returns:
+            Context window size in tokens, or None if unknown
+        """
+        return None
+
     @abstractmethod
     async def close(self) -> None:
         """

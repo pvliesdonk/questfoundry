@@ -337,6 +337,49 @@ class OllamaProvider(LLMProvider):
             logger.debug(f"Failed to list Ollama models: {e}")
             return []
 
+    async def get_context_size(self, model: str) -> int | None:
+        """
+        Get context window size for an Ollama model.
+
+        Uses the /api/show endpoint to get model details.
+        """
+        try:
+            client = await self._get_client()
+            response = await client.post(
+                f"{self._host}/api/show",
+                json={"name": model},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # Context length is in model_info.context_length or
+                # can be parsed from parameters string
+                model_info = data.get("model_info", {})
+
+                # Try model_info first (structured data)
+                for key, value in model_info.items():
+                    if "context_length" in key.lower() and isinstance(value, int):
+                        return value
+
+                # Fallback: parse from parameters string
+                # Format like "num_ctx 8192" or similar
+                params = data.get("parameters", "")
+                if "num_ctx" in params:
+                    for line in params.split("\n"):
+                        if "num_ctx" in line:
+                            parts = line.split()
+                            for part in parts:
+                                if part.isdigit():
+                                    return int(part)
+
+                logger.debug(f"Could not find context size in Ollama model info for {model}")
+                return None
+            else:
+                logger.debug(f"Ollama /api/show returned {response.status_code} for {model}")
+                return None
+        except Exception as e:
+            logger.debug(f"Failed to get context size for {model}: {e}")
+            return None
+
     async def close(self) -> None:
         """Close the HTTP client."""
         if self._client:

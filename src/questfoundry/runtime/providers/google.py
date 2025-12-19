@@ -231,6 +231,28 @@ class GoogleProvider(LLMProvider):
             logger.debug(f"Failed to list Google models: {e}")
             return []
 
+    async def get_context_size(self, model: str) -> int | None:
+        """
+        Get context window size for a Google model.
+
+        Uses the genai.get_model() API to get model details.
+        """
+        try:
+            import google.generativeai as genai
+
+            genai.configure(api_key=self._api_key)
+            # Model name format: "gemini-1.5-pro" -> "models/gemini-1.5-pro"
+            model_name = f"models/{model}" if not model.startswith("models/") else model
+            model_info = genai.get_model(model_name)
+            # input_token_limit is the context window size
+            if hasattr(model_info, "input_token_limit"):
+                limit = model_info.input_token_limit
+                return int(limit) if limit is not None else None
+            return None
+        except Exception as e:
+            logger.debug(f"Failed to get context size for {model}: {e}")
+            return None
+
     async def close(self) -> None:
         """No persistent connections to close for Google."""
         pass
