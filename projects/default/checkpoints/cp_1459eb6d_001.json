@@ -1,0 +1,52 @@
+{
+  "$schema": "checkpoint-v1",
+  "id": "cp_1459eb6d_001",
+  "session_id": "1459eb6d-45f6-42ea-96da-6dcb83185339",
+  "turn_number": 1,
+  "created_at": "2025-12-19T10:49:47.126005",
+  "schema_version": 1,
+  "session_status": "active",
+  "entry_agent": "showrunner",
+  "turn_count": 1,
+  "mailbox_states": {
+    "scene_smith": [
+      {
+        "id": "e1e8f6a1-2de4-4cc6-8d16-0314bedf6ae3",
+        "type": "delegation_request",
+        "from_agent": "showrunner",
+        "to_agent": "scene_smith",
+        "timestamp": "2025-12-19T10:49:47.106249",
+        "ttl_turns": null,
+        "turn_created": null,
+        "correlation_id": "3692c489-eecb-4d86-ac55-ba02962f3016",
+        "in_reply_to": null,
+        "delegation_id": "3692c489-eecb-4d86-ac55-ba02962f3016",
+        "playbook_id": "story_spark",
+        "playbook_instance_id": null,
+        "phase_id": "story_spark_phase_1",
+        "payload": {
+          "task": "Generate section brief from story spark",
+          "context": {
+            "initial_query": "User's story request"
+          },
+          "is_rework_target": false
+        },
+        "priority": 5,
+        "status": "pending"
+      }
+    ]
+  },
+  "active_delegations": [],
+  "playbook_instances": [],
+  "context_usage": {
+    "showrunner": {
+      "agent_id": "showrunner",
+      "total_tokens": 8437,
+      "input_tokens": 7724,
+      "output_tokens": 713,
+      "limit": 128000,
+      "warning_threshold": 100000
+    }
+  },
+  "summary": null
+}

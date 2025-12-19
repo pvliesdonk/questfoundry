@@ -908,6 +908,9 @@ async def _stream_response(
 
     # Process any pending delegations and handle orchestrator follow-up
     if process_delegations:
+        # Track turn count before delegations to detect new turns
+        turn_count_before = session.turn_count
+
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
             for dr in delegation_results:
@@ -925,6 +928,18 @@ async def _stream_response(
                         turn_number=turn_number,
                         error=dr.get("error") if not success else None,
                     )
+
+            # Report delegated agent turns to StatusReporter for summary table
+            if _status_reporter:
+                for turn in session.turns[turn_count_before:]:
+                    delegated_agent = runtime.get_agent(turn.agent_id)
+                    if delegated_agent:
+                        _status_reporter.turn_start(
+                            turn_number=turn.turn_number,
+                            agent_id=turn.agent_id,
+                            agent_name=delegated_agent.name,
+                        )
+                        _status_reporter.turn_complete(usage=turn.usage)
 
         # Hub-and-spoke: Give orchestrator follow-up turns after delegations complete
         follow_up_content = await _handle_orchestrator_follow_up(
@@ -1020,6 +1035,9 @@ async def _invoke_response(
 
     # Process any pending delegations and handle orchestrator follow-up
     if process_delegations:
+        # Track turn count before delegations to detect new turns
+        turn_count_before = session.turn_count
+
         delegation_results = await runtime.process_pending_delegations(session)
         if delegation_results:
             for dr in delegation_results:
@@ -1038,6 +1056,18 @@ async def _invoke_response(
                         error=dr.get("error") if not success else None,
                     )
 
+            # Report delegated agent turns to StatusReporter for summary table
+            if _status_reporter:
+                for turn in session.turns[turn_count_before:]:
+                    delegated_agent = runtime.get_agent(turn.agent_id)
+                    if delegated_agent:
+                        _status_reporter.turn_start(
+                            turn_number=turn.turn_number,
+                            agent_id=turn.agent_id,
+                            agent_name=delegated_agent.name,
+                        )
+                        _status_reporter.turn_complete(usage=turn.usage)
+
         # Hub-and-spoke: Give orchestrator follow-up turns after delegations complete
         follow_up_content = await _handle_orchestrator_follow_up(
             runtime, agent, session, _invoke_response, _follow_up_depth
@@ -1051,7 +1081,13 @@ async def _handle_clarification_requests(
     broker: AsyncMessageBroker,
 ) -> list[dict[str, Any]]:
     """
-    Check for and handle clarification requests from agents.
+    Check for and handle customer-facing messages from agents.
+
+    Handles all message types from the communicate tool:
+    - PROGRESS_UPDATE (status): Displayed immediately
+    - COMPLETION_SIGNAL (notification): Displayed immediately
+    - ESCALATION (error): Displayed immediately
+    - CLARIFICATION_REQUEST (question): Prompts for user input
 
     Returns list of clarification requests that were found (for logging/debugging).
     The requests are handled interactively - user input is collected and responses sent.
@@ -1065,6 +1101,47 @@ async def _handle_clarification_requests(
     mailbox = await broker.get_mailbox("customer")
     pending = await mailbox.get_all_pending()
 
+    if not pending:
+        return []
+
+    # First, display all non-interactive messages (status, notification, error)
+    for msg in pending:
+        payload = msg.payload
+        message_text = payload.get("message", "")
+        from_agent = msg.from_agent
+
+        if msg.type == MessageType.PROGRESS_UPDATE:
+            # Status update - display inline
+            console.print(f"[dim][{from_agent}][/dim] {message_text}")
+
+        elif msg.type == MessageType.COMPLETION_SIGNAL:
+            # Notification - display with highlight
+            artifacts = payload.get("artifacts", [])
+            console.print()
+            console.print(
+                Panel(
+                    message_text,
+                    title=f"[green]📢 {from_agent}[/green]",
+                    border_style="green",
+                )
+            )
+            if artifacts:
+                console.print("[dim]Artifacts:[/dim]", ", ".join(artifacts))
+
+        elif msg.type == MessageType.ESCALATION:
+            # Error - display with appropriate severity styling
+            severity = payload.get("severity", "info")
+            style = {"info": "blue", "warning": "yellow", "error": "red"}.get(severity, "white")
+            console.print()
+            console.print(
+                Panel(
+                    message_text,
+                    title=f"[{style}]⚠️ {from_agent} ({severity})[/{style}]",
+                    border_style=style,
+                )
+            )
+
+    # Now filter for interactive messages (questions)
     clarification_requests = [
         msg for msg in pending if msg.type == MessageType.CLARIFICATION_REQUEST
     ]
