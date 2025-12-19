@@ -19,6 +19,7 @@ class TurnStatus(str, Enum):
     STREAMING = "streaming"
     COMPLETED = "completed"
     ERROR = "error"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -87,6 +88,12 @@ class Turn:
         self.output = error_message
         self.ended_at = datetime.now()
         self.status = TurnStatus.ERROR
+
+    def cancel(self, reason: str | None = None) -> None:
+        """Mark turn as cancelled."""
+        self.output = reason or "Cancelled by user"
+        self.ended_at = datetime.now()
+        self.status = TurnStatus.CANCELLED
 
     @property
     def duration_ms(self) -> float | None:

@@ -474,10 +474,11 @@ class TestGetArtifactTool:
         )
         tool = GetArtifactTool(definition, context)
 
-        result = await tool.execute({"artifact_id": "section_001"})
+        result = await tool.execute({"artifact_ids": "section_001"})
 
         assert result.success is True
-        assert result.data["artifact"]["title"] == "Test Section"
+        assert result.data["count"] == 1
+        assert result.data["artifacts"][0]["title"] == "Test Section"
 
     @pytest.mark.asyncio
     async def test_get_artifact_not_found(self, project_with_artifact: Project):
@@ -492,10 +493,32 @@ class TestGetArtifactTool:
         )
         tool = GetArtifactTool(definition, context)
 
-        result = await tool.execute({"artifact_id": "nonexistent"})
+        result = await tool.execute({"artifact_ids": "nonexistent"})
 
         assert result.success is False
-        assert "not found" in result.error
+        assert "nonexistent" in result.error
+        assert result.data["not_found"] == ["nonexistent"]
+
+    @pytest.mark.asyncio
+    async def test_get_multiple_artifacts(self, project_with_artifact: Project):
+        """Retrieve multiple artifacts by ID list."""
+        studio = MagicMock()
+        studio.artifact_types = []
+
+        definition = make_mock_definition("get_artifact")
+        context = ToolContext(
+            studio=studio,
+            project=project_with_artifact,
+        )
+        tool = GetArtifactTool(definition, context)
+
+        # Request multiple IDs (one exists, one doesn't)
+        result = await tool.execute({"artifact_ids": ["section_001", "nonexistent"]})
+
+        assert result.success is True
+        assert result.data["count"] == 1
+        assert result.data["not_found"] == ["nonexistent"]
+        assert result.data["artifacts"][0]["title"] == "Test Section"
 
 
 class TestListArtifactsTool:

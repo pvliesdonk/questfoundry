@@ -39,7 +39,7 @@ class SearchWorkspaceTool(BaseTool):
                 error="No project storage available",
             )
 
-        query = args.get("query")
+        query_input = args.get("query")
         artifact_types = args.get("artifact_types", [])
         lifecycle_states = args.get("lifecycle_states", [])
         created_by = args.get("created_by")
@@ -47,9 +47,17 @@ class SearchWorkspaceTool(BaseTool):
         related_to = args.get("related_to")
         limit = args.get("limit", 20)
 
+        # Normalize query to list (supports single string or array input)
+        if query_input is None:
+            queries = None
+        elif isinstance(query_input, list):
+            queries = [q.strip() for q in query_input if q and q.strip()]
+        else:
+            queries = [query_input.strip()] if query_input.strip() else None
+
         try:
-            results = self._search_artifacts(
-                query=query,
+            results, warning = self._search_artifacts(
+                queries=queries,
                 artifact_types=artifact_types,
                 lifecycle_states=lifecycle_states,
                 created_by=created_by,
@@ -58,12 +66,16 @@ class SearchWorkspaceTool(BaseTool):
                 limit=limit,
             )
 
+            data: dict[str, Any] = {
+                "results": results,
+                "total_count": len(results),
+            }
+            if warning:
+                data["warning"] = warning
+
             return ToolResult(
                 success=True,
-                data={
-                    "results": results,
-                    "total_count": len(results),
-                },
+                data=data,
             )
 
         except Exception as e:
@@ -71,18 +83,19 @@ class SearchWorkspaceTool(BaseTool):
 
     def _search_artifacts(
         self,
-        query: str | None = None,
+        queries: list[str] | None = None,
         artifact_types: list[str] | None = None,
         lifecycle_states: list[str] | None = None,
         created_by: str | None = None,
         created_after: str | None = None,
         related_to: str | None = None,
         limit: int = 20,
-    ) -> list[dict[str, Any]]:
-        """Search artifacts with filters."""
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Search artifacts with filters. Returns (results, warning)."""
         if not self._context.project:
-            return []
+            return [], None
         conn = self._context.project._get_connection()
+        warning: str | None = None
 
         # Build query dynamically
         sql = """
@@ -118,10 +131,18 @@ class SearchWorkspaceTool(BaseTool):
         # TODO: LIKE on JSON data is inefficient for large datasets.
         # Consider implementing FTS5 (Full-Text Search) for better performance.
         # See: https://www.sqlite.org/fts5.html
-        if query:
-            # Search both artifact ID and JSON payload for the query fragment
-            sql += " AND (_id LIKE ? OR data LIKE ?)"
-            params.extend([f"%{query}%", f"%{query}%"])
+        if queries:
+            if len(queries) > 1:
+                # Multiple queries: search for each with OR
+                or_clauses = " OR ".join("(_id LIKE ? OR data LIKE ?)" for _ in queries)
+                sql += f" AND ({or_clauses})"
+                for term in queries:
+                    params.extend([f"%{term}%", f"%{term}%"])
+            else:
+                # Single term - original behavior
+                # Search both artifact ID and JSON payload for the query fragment
+                sql += " AND (_id LIKE ? OR data LIKE ?)"
+                params.extend([f"%{queries[0]}%", f"%{queries[0]}%"])
 
         # Order and limit
         sql += " ORDER BY _updated_at DESC LIMIT ?"
@@ -154,7 +175,7 @@ class SearchWorkspaceTool(BaseTool):
                 }
             )
 
-        return results
+        return results, warning
 
     def _build_summary(self, artifact_type: str, data: dict[str, Any]) -> str:
         """Build a human-readable summary of an artifact."""

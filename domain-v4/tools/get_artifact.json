@@ -1,0 +1,57 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "get_artifact",
+  "name": "Get Artifact",
+  "description": "Retrieve artifacts by ID. Use this to fetch specific artifacts when you know their IDs. Accepts a single ID or list of IDs.\n\nUse search_workspace instead if you need to find artifacts by criteria (type, lifecycle state, text search).",
+
+  "summarization_policy": "concise",
+  "summary_template": "Retrieved {count} artifact(s)",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "artifact_ids": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "array", "items": { "type": "string" } }
+        ],
+        "description": "Artifact ID(s) to fetch - single string or array of strings"
+      }
+    },
+    "required": ["artifact_ids"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "artifacts": {
+        "type": "array",
+        "description": "List of artifacts found (full content)"
+      },
+      "count": {
+        "type": "integer",
+        "description": "Number of artifacts retrieved"
+      },
+      "not_found": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "IDs that were not found (only present if some IDs not found)"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Fetch a single artifact by ID",
+      "input": {
+        "artifact_ids": "section_brief_abc123"
+      }
+    },
+    {
+      "description": "Fetch multiple artifacts at once",
+      "input": {
+        "artifact_ids": ["section_brief_abc123", "section_brief_def456", "section_brief_ghi789"]
+      }
+    }
+  ]
+}

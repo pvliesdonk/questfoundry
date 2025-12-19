@@ -276,6 +276,34 @@ class Session:
             )
             conn.commit()
 
+    def cancel_turn(self, turn: Turn, reason: str | None = None) -> None:
+        """
+        Cancel a turn that was interrupted.
+
+        Args:
+            turn: The turn to cancel
+            reason: Optional cancellation reason
+        """
+        turn.cancel(reason)
+
+        # Persist to database
+        if self._project and turn.db_id:
+            conn = self._project._get_connection()
+            conn.execute(
+                """
+                UPDATE turns
+                SET output = ?, ended_at = ?, status = ?
+                WHERE id = ?
+                """,
+                (
+                    turn.output,
+                    turn.ended_at.isoformat() if turn.ended_at else None,
+                    turn.status.value,
+                    turn.db_id,
+                ),
+            )
+            conn.commit()
+
     def complete(self) -> None:
         """Mark session as completed."""
         self.status = SessionStatus.COMPLETED
