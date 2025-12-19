@@ -91,16 +91,24 @@ class ArtifactLifecycle:
         if data is None:
             return None
 
-        # Parse states
+        # Parse states (may already be LifecycleState objects)
         states = {}
         for state_data in data.get("states", []):
-            state = LifecycleState.from_dict(state_data)
+            if isinstance(state_data, dict):
+                state = LifecycleState.from_dict(state_data)
+            else:
+                # Already a LifecycleState object
+                state = state_data
             states[state.id] = state
 
-        # Parse transitions
+        # Parse transitions (may already be LifecycleTransition objects)
         transitions = []
         for trans_data in data.get("transitions", []):
-            transitions.append(LifecycleTransition.from_dict(trans_data))
+            if isinstance(trans_data, dict):
+                transitions.append(LifecycleTransition.from_dict(trans_data))
+            else:
+                # Already a LifecycleTransition object
+                transitions.append(trans_data)
 
         return cls(
             artifact_type_id=artifact_type_id,
