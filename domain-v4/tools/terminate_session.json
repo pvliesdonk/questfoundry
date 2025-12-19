@@ -1,0 +1,31 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "terminate_session",
+  "name": "Terminate Session",
+  "description": "End the current session. Use when:\n- All requested work is complete\n- User explicitly requests session end\n- Unrecoverable error prevents further progress\n\nThis is the ONLY way for orchestrators to end a session explicitly. Other tools like communicate and delegate yield control but expect to resume - they do NOT end the session.",
+  "terminates_turn": true,
+  "terminates_session": true,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "enum": ["complete", "user_requested", "error", "blocked"],
+        "description": "Why the session is ending:\n- complete: All requested work finished successfully\n- user_requested: User explicitly asked to end session\n- error: Unrecoverable error prevents further progress\n- blocked: Cannot proceed without human intervention that won't come"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Brief summary of session outcome - what was accomplished, what remains undone if any"
+      },
+      "artifacts_produced": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": [],
+        "description": "IDs of artifacts produced during session"
+      }
+    },
+    "required": ["reason", "summary"]
+  },
+  "summarization_policy": "preserve",
+  "summary_template": "Session terminated: {reason}"
+}

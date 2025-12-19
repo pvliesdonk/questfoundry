@@ -86,6 +86,7 @@
     "tools/generate_audio.json",
     "tools/consult_corpus.json",
     "tools/communicate.json",
+    "tools/terminate_session.json",
     "tools/consult_knowledge.json",
     "tools/list_artifact_types.json",
     "tools/list_stores.json",

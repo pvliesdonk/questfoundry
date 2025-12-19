@@ -34,6 +34,7 @@ from questfoundry.runtime.tools import (
     save_artifact,  # noqa: F401  # Phase 4: artifact persistence
     search_workspace,  # noqa: F401
     stubs,  # noqa: F401
+    terminate_session,  # noqa: F401  # Explicit session termination for orchestrators
     validate_artifact,  # noqa: F401
     web_fetch,  # noqa: F401
     web_search,  # noqa: F401

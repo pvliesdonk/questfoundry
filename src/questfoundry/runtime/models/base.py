@@ -237,6 +237,7 @@ class Tool(BaseModel):
     retry_policy: RetryPolicy | None = None
     examples: list[ToolExample] = Field(default_factory=list)
     terminates_turn: bool = False
+    terminates_session: bool = False  # If true, calling ends the entire session
 
     # Summarization policy for Secretary pattern context management
     # - drop: Remove from summarized context (tool can be re-called)
