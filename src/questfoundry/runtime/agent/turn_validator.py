@@ -199,9 +199,8 @@ class TurnValidator:
             "Your response contained no tool calls. "
             "As an orchestrator, you MUST use tools for ALL output.\n\n"
             f"{tool_sentence}\n\n"
-            "Do NOT generate prose directly. "
-            "Do NOT respond with plain text. "
-            "You MUST make a tool call that ends your turn."
+            "IMPORTANT: Do NOT repeat your previous response. "
+            "Simply make the required tool call without any preamble or explanation."
         )
 
         return nudge
@@ -225,7 +224,8 @@ class TurnValidator:
             f"You called {tools_used}, but none of these tools terminate your turn. "
             "As an orchestrator, you MUST end your turn with a terminating tool.\n\n"
             f"{tool_sentence}\n\n"
-            "Your turn is not complete until you call a terminating tool."
+            "IMPORTANT: Do NOT repeat your previous response. "
+            "Simply call the terminating tool without any preamble."
         )
 
         return nudge

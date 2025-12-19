@@ -696,7 +696,8 @@ class AgentRuntime:
                 "Please either:\n"
                 "1. Call a tool to continue your work, OR\n"
                 "2. Call `return_to_orchestrator` to report your work is complete\n\n"
-                "Do NOT respond with plain text - you MUST make a tool call."
+                "IMPORTANT: Do NOT repeat your previous response. "
+                "Simply make the required tool call without any preamble."
             )
 
         # Shouldn't reach here, but provide sensible default
