@@ -212,6 +212,160 @@ class TestPlaybookNudger:
         assert quality is None
 
 
+class TestPlaybookFollowupsNudge:
+    """Tests for playbook followups nudging."""
+
+    @pytest.fixture
+    def nudger(self):
+        """Create a nudger with sample playbook."""
+        return PlaybookNudger({"test_playbook": SAMPLE_PLAYBOOK})
+
+    @pytest.fixture
+    def ctx(self):
+        """Create a sample nudge context."""
+        return NudgeContext(
+            playbook_id="test_playbook",
+            instance_id="inst-001",
+            phase_id="drafting",
+            turn=5,
+            agent_id="showrunner",
+        )
+
+    def test_format_artifact_condition_basic(self, nudger):
+        """Test formatting artifact condition with all fields."""
+        cond = {
+            "artifact_type": "section_brief",
+            "state": "ready",
+            "exists": True,
+        }
+        result = nudger._format_artifact_condition(cond)
+        assert result == "section_brief in state 'ready' exists"
+
+    def test_format_artifact_condition_not_exists(self, nudger):
+        """Test formatting artifact condition with exists=False."""
+        cond = {
+            "artifact_type": "hook_card",
+            "exists": False,
+        }
+        result = nudger._format_artifact_condition(cond)
+        assert result == "hook_card does not exist"
+
+    def test_format_artifact_condition_minimal(self, nudger):
+        """Test formatting artifact condition with only type."""
+        cond = {"artifact_type": "section"}
+        result = nudger._format_artifact_condition(cond)
+        assert result == "section exists"
+
+    def test_check_playbook_followups_none(self, nudger, ctx):
+        """Test no nudge when followups is None."""
+        nudge = nudger.check_playbook_followups(ctx, None)
+        assert nudge is None
+
+    def test_check_playbook_followups_empty(self, nudger, ctx):
+        """Test no nudge when followups is empty."""
+        nudge = nudger.check_playbook_followups(ctx, {})
+        assert nudge is None
+
+    def test_check_playbook_followups_primary_only(self, nudger, ctx):
+        """Test nudge with only primary followup."""
+        followups = {
+            "primary": {
+                "playbook": "scene_weave",
+                "description": "Write prose from briefs",
+            }
+        }
+        nudge = nudger.check_playbook_followups(ctx, followups)
+
+        assert nudge is not None
+        assert nudge.type == MessageType.NUDGE
+        assert nudge.payload["nudge_type"] == "playbook_followups"
+        assert "Primary: scene_weave (Write prose from briefs)" in nudge.payload["message"]
+
+    def test_check_playbook_followups_all_types(self, nudger, ctx):
+        """Test nudge with all followup types."""
+        followups = {
+            "primary": {"playbook": "scene_weave"},
+            "parallel": [{"playbook": "hook_harvest", "description": "Triage hooks"}],
+            "conditional": [
+                {"playbook": "lore_deepening", "condition": "canon gaps identified", "priority": 1},
+                {"playbook": "story_spark", "condition": "structure changes needed", "priority": 2},
+            ],
+            "runtime_actions": [
+                {"action": "commit_to_cold", "description": "Save approved sections"}
+            ],
+        }
+        nudge = nudger.check_playbook_followups(ctx, followups)
+
+        assert nudge is not None
+        msg = nudge.payload["message"]
+        assert "Primary: scene_weave" in msg
+        assert "hook_harvest (Triage hooks)" in msg
+        assert "lore_deepening (if canon gaps identified)" in msg
+        assert "commit_to_cold (Save approved sections)" in msg
+
+    def test_check_playbook_followups_conditional_sorted(self, nudger, ctx):
+        """Test that conditional followups are sorted by priority."""
+        followups = {
+            "conditional": [
+                {"playbook": "low_priority", "condition": "c1", "priority": 5},
+                {"playbook": "high_priority", "condition": "c2", "priority": 1},
+                {"playbook": "med_priority", "condition": "c3", "priority": 3},
+            ],
+        }
+        nudge = nudger.check_playbook_followups(ctx, followups)
+
+        msg = nudge.payload["message"]
+        # high_priority should appear before med_priority before low_priority
+        assert msg.index("high_priority") < msg.index("med_priority")
+        assert msg.index("med_priority") < msg.index("low_priority")
+
+    def test_check_playbook_followups_artifact_condition(self, nudger, ctx):
+        """Test that artifact_condition is formatted when condition is absent."""
+        followups = {
+            "conditional": [
+                {
+                    "playbook": "scene_weave",
+                    "artifact_condition": {
+                        "artifact_type": "section_brief",
+                        "state": "ready",
+                    },
+                },
+            ],
+        }
+        nudge = nudger.check_playbook_followups(ctx, followups)
+
+        msg = nudge.payload["message"]
+        assert "section_brief in state 'ready' exists" in msg
+
+    def test_generate_playbook_end_nudges_no_transition(self, nudger, ctx):
+        """Test no nudges when transition is None."""
+        nudges = nudger.generate_playbook_end_nudges(ctx, None)
+        assert nudges == []
+
+    def test_generate_playbook_end_nudges_not_ending(self, nudger, ctx):
+        """Test no nudges when end_playbook is false."""
+        transition = {"end_playbook": False, "followups": {"primary": {"playbook": "x"}}}
+        nudges = nudger.generate_playbook_end_nudges(ctx, transition)
+        assert nudges == []
+
+    def test_generate_playbook_end_nudges_ending_with_followups(self, nudger, ctx):
+        """Test nudge generated when playbook ends with followups."""
+        transition = {
+            "end_playbook": True,
+            "followups": {"primary": {"playbook": "next_playbook"}},
+        }
+        nudges = nudger.generate_playbook_end_nudges(ctx, transition)
+
+        assert len(nudges) == 1
+        assert nudges[0].payload["nudge_type"] == "playbook_followups"
+
+    def test_generate_playbook_end_nudges_ending_no_followups(self, nudger, ctx):
+        """Test no nudge when playbook ends without followups."""
+        transition = {"end_playbook": True}
+        nudges = nudger.generate_playbook_end_nudges(ctx, transition)
+        assert nudges == []
+
+
 class TestNudgeContext:
     """Tests for NudgeContext dataclass."""
 

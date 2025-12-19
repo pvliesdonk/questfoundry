@@ -277,6 +277,22 @@ class PlaybookNudger:
 
         return None
 
+    def _format_artifact_condition(self, artifact_condition: dict[str, Any]) -> str:
+        """Format an artifact_condition into a human-readable string."""
+        artifact_type = artifact_condition.get("artifact_type", "artifact")
+        state = artifact_condition.get("state")
+        exists = artifact_condition.get("exists", True)
+
+        parts = [artifact_type]
+        if state:
+            parts.append(f"in state '{state}'")
+        if exists:
+            parts.append("exists")
+        else:
+            parts.append("does not exist")
+
+        return " ".join(parts)
+
     def check_playbook_followups(
         self,
         ctx: NudgeContext,
@@ -303,15 +319,22 @@ class PlaybookNudger:
         # Primary followup
         primary = followups.get("primary")
         if primary:
-            playbook_id = primary.get("playbook", "unknown")
+            playbook_id = primary.get("playbook", "?")
             desc = primary.get("description", "")
             parts.append(f"Primary: {playbook_id}" + (f" ({desc})" if desc else ""))
 
-        # Parallel options
+        # Parallel options (include descriptions for consistency)
         parallel = followups.get("parallel", [])
         if parallel:
-            parallel_ids = [f.get("playbook", "?") for f in parallel]
-            parts.append(f"Parallel options: {', '.join(parallel_ids)}")
+            parallel_items: list[str] = []
+            for f in parallel:
+                playbook_id = f.get("playbook", "?")
+                desc = f.get("description", "")
+                if desc:
+                    parallel_items.append(f"{playbook_id} ({desc})")
+                else:
+                    parallel_items.append(playbook_id)
+            parts.append(f"Parallel options: {', '.join(parallel_items)}")
 
         # Conditional followups (sorted by priority)
         conditional = followups.get("conditional", [])
@@ -320,15 +343,30 @@ class PlaybookNudger:
             cond_parts = []
             for cond in sorted_cond:
                 playbook_id = cond.get("playbook", "?")
-                condition = cond.get("condition", "")
-                cond_parts.append(f"{playbook_id} (if {condition})" if condition else playbook_id)
+                # Use natural language condition, or format artifact_condition
+                condition = cond.get("condition")
+                if not condition:
+                    artifact_cond = cond.get("artifact_condition")
+                    if artifact_cond:
+                        condition = self._format_artifact_condition(artifact_cond)
+                if condition:
+                    cond_parts.append(f"{playbook_id} (if {condition})")
+                else:
+                    cond_parts.append(playbook_id)
             parts.append(f"Conditional: {', '.join(cond_parts)}")
 
         # Runtime actions
         runtime_actions = followups.get("runtime_actions", [])
         if runtime_actions:
-            action_names = [a.get("action", "?") for a in runtime_actions]
-            parts.append(f"Runtime actions: {', '.join(action_names)}")
+            action_items: list[str] = []
+            for a in runtime_actions:
+                action = a.get("action", "?")
+                desc = a.get("description", "")
+                if desc:
+                    action_items.append(f"{action} ({desc})")
+                else:
+                    action_items.append(action)
+            parts.append(f"Runtime actions: {', '.join(action_items)}")
 
         if not parts:
             return None
@@ -336,8 +374,7 @@ class PlaybookNudger:
         message = (
             f"Playbook '{ctx.playbook_id}' is complete. "
             f"Typical followups: {'; '.join(parts)}. "
-            "In interactive mode, propose these options to the user. "
-            "In non-interactive mode, the session may end here."
+            "Consider these as potential next steps."
         )
 
         return create_nudge(
