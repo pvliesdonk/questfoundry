@@ -19,6 +19,7 @@ from questfoundry.runtime.storage.lifecycle import (
 from questfoundry.runtime.storage.project import (
     Project,
     ProjectInfo,
+    ProjectStatusSummary,
     list_projects,
 )
 from questfoundry.runtime.storage.store_manager import (
@@ -33,6 +34,7 @@ __all__ = [
     # Project
     "Project",
     "ProjectInfo",
+    "ProjectStatusSummary",
     "list_projects",
     # Store management
     "StoreManager",

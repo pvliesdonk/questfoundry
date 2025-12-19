@@ -80,9 +80,7 @@ class TestAskCommandHelp:
             )
 
             # Should have created default project
-            assert (
-                "Creating project 'default'" in result.stdout or "Created project" in result.stdout
-            )
+            assert "Creating new project" in result.stdout
 
 
 class TestAskProjectErrors:
@@ -117,7 +115,7 @@ class TestAskProjectErrors:
             )
 
         # Project should be auto-created, then fail on domain load
-        assert "Creating project" in result.stdout
+        assert "Creating new project" in result.stdout
         assert result.exit_code == 1
 
 

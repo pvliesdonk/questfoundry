@@ -20,7 +20,10 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from questfoundry.runtime.session import TokenUsage
+    from questfoundry.runtime.storage import ProjectStatusSummary
 
 
 @dataclass
@@ -120,6 +123,68 @@ class StatusReporter:
         self._agent_id: str | None = None
         self._playbook_id: str | None = None
         self._start_time: datetime | None = None
+
+    # -------------------------------------------------------------------------
+    # Project Status
+    # -------------------------------------------------------------------------
+
+    def project_created(self, project_name: str, project_path: Path) -> None:
+        """Report new project creation."""
+        if self.quiet:
+            return
+
+        self.console.print()
+        self.console.print(f"[bold green]Creating new project[/bold green] '{project_name}'")
+        self.console.print(f"  [dim]Created at {project_path}/[/dim]")
+
+    def project_resumed(self, project_name: str, summary: ProjectStatusSummary) -> None:
+        """Report existing project resumption with summary."""
+        if self.quiet:
+            return
+
+        self.console.print()
+        self.console.print(f"[bold blue]Resuming project[/bold blue] '{project_name}'")
+
+        # Check if there's any activity
+        if summary.session_count == 0:
+            self.console.print("  [dim]No sessions yet[/dim]")
+            return
+
+        # Session info
+        turns_text = "turn" if summary.total_turns == 1 else "turns"
+        sessions_text = "session" if summary.session_count == 1 else "sessions"
+        self.console.print(
+            f"  [dim]Sessions:[/dim] {summary.session_count} {sessions_text} "
+            f"({summary.total_turns} {turns_text} total)"
+        )
+
+        # Last activity
+        if summary.last_activity:
+            elapsed = datetime.now() - summary.last_activity
+            if elapsed.total_seconds() < 60:
+                ago = "just now"
+            elif elapsed.total_seconds() < 3600:
+                mins = int(elapsed.total_seconds() // 60)
+                ago = f"{mins} minute{'s' if mins != 1 else ''} ago"
+            elif elapsed.total_seconds() < 86400:
+                hours = int(elapsed.total_seconds() // 3600)
+                ago = f"{hours} hour{'s' if hours != 1 else ''} ago"
+            else:
+                days = int(elapsed.total_seconds() // 86400)
+                ago = f"{days} day{'s' if days != 1 else ''} ago"
+            self.console.print(f"  [dim]Last active:[/dim] {ago}")
+
+        # Artifact counts
+        if summary.artifacts_by_store:
+            parts = []
+            for store, count in sorted(summary.artifacts_by_store.items()):
+                parts.append(f"{count} in {store}")
+            self.console.print(f"  [dim]Artifacts:[/dim] {', '.join(parts)}")
+
+        # Active playbook
+        if summary.active_playbook:
+            playbook_id, phase = summary.active_playbook
+            self.console.print(f"  [dim]Active:[/dim] {playbook_id} (phase: {phase})")
 
     # -------------------------------------------------------------------------
     # Session Lifecycle
