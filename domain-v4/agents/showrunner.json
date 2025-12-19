@@ -63,6 +63,13 @@
       "tool_ref": "communicate"
     },
     {
+      "id": "use_terminate_session",
+      "name": "Terminate Session",
+      "description": "End the session when all work is complete, user requests it, or an unrecoverable error occurs. This is the ONLY way to end a session - other tools like communicate and delegate yield control but do NOT end the session.",
+      "category": "tool",
+      "tool_ref": "terminate_session"
+    },
+    {
       "id": "read_all_stores",
       "name": "Read All Stores",
       "description": "Can read from any store for coordination",

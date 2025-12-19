@@ -69,7 +69,13 @@
     "terminates_turn": {
       "type": "boolean",
       "default": false,
-      "description": "If true, calling this tool ends the agent's turn. Runtime enforces: orchestrator agents MUST end every turn with a terminating tool call (e.g., delegate, communicate). Non-orchestrators may use prose output."
+      "description": "If true, calling this tool ends the agent's turn (yields control). The agent suspends and expects to resume later. This does NOT mean 'I'm done with my work' - it means 'yield control, expect to continue'. Runtime enforces: orchestrator agents MUST end every turn with a terminating tool call (e.g., delegate, communicate). Non-orchestrators may use prose output."
+    },
+
+    "terminates_session": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, calling this tool ends the entire session. This is the ONLY way to signal 'I'm done with my work forever'. Only meaningful for orchestrator agents. Use for explicit session completion or fatal errors. Most tools that terminates_turn do NOT terminate session - they yield control expecting to resume."
     },
 
     "summarization_policy": {

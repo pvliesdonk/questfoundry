@@ -90,7 +90,8 @@ class ActivationResult:
 STOP_TOOL_NAMES = frozenset(
     {
         "delegate",  # Delegation to another agent
-        "terminate",  # End workflow
+        "terminate",  # End workflow (legacy name)
+        "terminate_session",  # End session explicitly
         "return_to_orchestrator",  # Delegatee returns to orchestrator
         "request_clarification",  # Ask human for clarification (legacy)
         "communicate",  # Human communication (questions are blocking)
@@ -998,10 +999,20 @@ class AgentRuntime:
                 consecutive_failures = 0
 
                 # Check if we should stop the loop:
-                # 1. If validation found a terminating tool (for orchestrators)
-                # 2. Or if a stop tool was called (delegate, terminate, etc.)
+                # For orchestrators: only stop on explicit stop tools (blocking communicate,
+                # delegate, terminate_session). _check_for_stop_tool already returns None
+                # for non-blocking communicate, so orchestrators continue after status updates.
+                # For specialists: any terminating tool returns control to orchestrator.
                 stop_tool, stop_result = self._check_for_stop_tool(tool_results)
-                should_stop = stop_tool is not None or validation.terminating_tool_id is not None
+                if self._is_orchestrator(agent):
+                    # Orchestrators: only stop on explicit stop tools
+                    # Non-blocking communicate returns None from _check_for_stop_tool
+                    should_stop = stop_tool is not None
+                else:
+                    # Specialists: any terminating tool returns to orchestrator
+                    should_stop = (
+                        stop_tool is not None or validation.terminating_tool_id is not None
+                    )
 
                 if should_stop:
                     stop_reason = stop_tool or validation.terminating_tool_id
