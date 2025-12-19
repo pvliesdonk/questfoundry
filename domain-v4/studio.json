@@ -16,6 +16,7 @@
   "stores": [
     "stores/workspace.json",
     "stores/canon.json",
+    "stores/manuscript.json",
     "stores/codex.json",
     "stores/audit.json",
     "stores/exports.json"
