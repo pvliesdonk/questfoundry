@@ -33,11 +33,13 @@ class EventType(str, Enum):
     LLM_CALL_START = "llm_call_start"
     LLM_CALL_COMPLETE = "llm_call_complete"
     LLM_CALL_ERROR = "llm_call_error"
+    LLM_RESPONSE = "llm_response"  # Full LLM response with content and tool calls
 
     # Agent events
     AGENT_ACTIVATE = "agent_activate"
     CONTEXT_BUILD = "context_build"
     PROMPT_BUILD = "prompt_build"
+    MESSAGES_SENT = "messages_sent"  # Messages sent to LLM
 
     # Knowledge events
     KNOWLEDGE_INJECT = "knowledge_inject"
@@ -45,6 +47,9 @@ class EventType(str, Enum):
     # Tool events
     TOOL_CALL_START = "tool_call_start"
     TOOL_CALL_COMPLETE = "tool_call_complete"
+
+    # Validation events
+    TURN_VALIDATION = "turn_validation"  # Turn validation results
 
 
 class EventLogger:
@@ -300,4 +305,139 @@ class EventLogger:
             knowledge_id=knowledge_id,
             layer=layer,
             char_count=char_count,
+        )
+
+    def prompt_build(
+        self,
+        session_id: str,
+        agent_id: str,
+        prompt_text: str,
+        tool_count: int,
+    ) -> None:
+        """Log system prompt building event."""
+        self.log(
+            EventType.PROMPT_BUILD,
+            session_id=session_id,
+            agent_id=agent_id,
+            prompt_length=len(prompt_text),
+            prompt_text=prompt_text,  # Full prompt for debugging
+            tool_count=tool_count,
+        )
+
+    def messages_sent(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        messages: list[dict[str, Any]],
+    ) -> None:
+        """Log messages sent to LLM."""
+        # Serialize messages for logging
+        serialized = []
+        for msg in messages:
+            m = {"role": msg.get("role", "unknown")}
+            content = msg.get("content", "")
+            # Truncate very long content but preserve tool call info
+            if len(content) > 5000:
+                m["content"] = content[:5000] + f"... [truncated, total {len(content)} chars]"
+            else:
+                m["content"] = content
+            if "tool_calls" in msg:
+                m["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                m["tool_call_id"] = msg["tool_call_id"]
+            if "name" in msg:
+                m["name"] = msg["name"]
+            serialized.append(m)
+
+        self.log(
+            EventType.MESSAGES_SENT,
+            session_id=session_id,
+            turn_id=turn_id,
+            agent_id=agent_id,
+            message_count=len(messages),
+            messages=serialized,
+        )
+
+    def llm_response(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        content: str | None,
+        tool_calls: list[dict[str, Any]] | None,
+        has_tool_calls: bool,
+    ) -> None:
+        """Log full LLM response including tool calls."""
+        self.log(
+            EventType.LLM_RESPONSE,
+            session_id=session_id,
+            turn_id=turn_id,
+            agent_id=agent_id,
+            content=content[:2000] if content and len(content) > 2000 else content,
+            content_length=len(content) if content else 0,
+            tool_calls=tool_calls,
+            has_tool_calls=has_tool_calls,
+        )
+
+    def tool_call_with_result(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        tool_id: str,
+        args: dict[str, Any],
+        success: bool,
+        result: Any,
+        error: str | None = None,
+        execution_time_ms: float | None = None,
+    ) -> None:
+        """Log tool call with full result data."""
+        # Serialize result for logging
+        result_str = None
+        if result is not None:
+            try:
+                result_str = json.dumps(result)
+                if len(result_str) > 5000:
+                    result_str = (
+                        result_str[:5000] + f"... [truncated, total {len(result_str)} chars]"
+                    )
+            except (TypeError, ValueError):
+                result_str = str(result)[:5000]
+
+        self.log(
+            EventType.TOOL_CALL_COMPLETE,
+            session_id=session_id,
+            turn_id=turn_id,
+            agent_id=agent_id,
+            tool_id=tool_id,
+            args=args,
+            success=success,
+            result=result_str,
+            error=error,
+            execution_time_ms=execution_time_ms,
+        )
+
+    def turn_validation(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        valid: bool,
+        is_orchestrator: bool,
+        tool_calls_made: list[str],
+        terminating_tool: str | None,
+        nudge_message: str | None,
+    ) -> None:
+        """Log turn validation result."""
+        self.log(
+            EventType.TURN_VALIDATION,
+            session_id=session_id,
+            turn_id=turn_id,
+            agent_id=agent_id,
+            valid=valid,
+            is_orchestrator=is_orchestrator,
+            tool_calls_made=tool_calls_made,
+            terminating_tool=terminating_tool,
+            nudge_message=nudge_message,
         )
