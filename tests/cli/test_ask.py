@@ -165,6 +165,7 @@ class TestAskAgentErrors:
 
         mock_provider = MagicMock()
         mock_provider.check_availability = AsyncMock(return_value=True)
+        mock_provider.get_context_size = AsyncMock(return_value=None)
 
         with (
             patch("questfoundry.runtime.storage.Project.open", return_value=test_project),
@@ -199,6 +200,7 @@ class TestAskProviderErrors:
 
         mock_provider = MagicMock()
         mock_provider.check_availability = AsyncMock(return_value=False)
+        mock_provider.get_context_size = AsyncMock(return_value=None)
         mock_provider.host = "http://localhost:11434"
 
         with (
@@ -232,6 +234,7 @@ class TestAskSingleShot:
 
         mock_provider = MagicMock()
         mock_provider.check_availability = AsyncMock(return_value=True)
+        mock_provider.get_context_size = AsyncMock(return_value=None)
         mock_provider.close = AsyncMock()
 
         # Mock streaming response
@@ -271,6 +274,7 @@ class TestAskSingleShot:
 
         mock_provider = MagicMock()
         mock_provider.check_availability = AsyncMock(return_value=True)
+        mock_provider.get_context_size = AsyncMock(return_value=None)
         mock_provider.close = AsyncMock()
 
         async def mock_stream(*_args, **_kwargs):
@@ -312,6 +316,7 @@ class TestAskREPL:
 
         mock_provider = MagicMock()
         mock_provider.check_availability = AsyncMock(return_value=True)
+        mock_provider.get_context_size = AsyncMock(return_value=None)
         mock_provider.close = AsyncMock()
 
         with (
@@ -345,6 +350,7 @@ class TestAskREPL:
 
         mock_provider = MagicMock()
         mock_provider.check_availability = AsyncMock(return_value=True)
+        mock_provider.get_context_size = AsyncMock(return_value=None)
         mock_provider.close = AsyncMock()
 
         with (

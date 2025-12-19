@@ -76,6 +76,7 @@
     "tools/consult_playbook.json",
     "tools/validate_artifact.json",
     "tools/search_workspace.json",
+    "tools/get_artifact.json",
     "tools/delegate.json",
     "tools/return_to_orchestrator.json",
     "tools/web_search.json",
