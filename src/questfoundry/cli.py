@@ -471,6 +471,7 @@ def ask(
                 model,
                 log,
                 is_interactive,
+                stream,
                 from_checkpoint,
             )
         )
@@ -1291,10 +1292,14 @@ async def _ask_repl(
     model: str | None,
     log: bool = False,
     interactive: bool = True,
+    stream: bool = True,
     from_checkpoint: str | None = None,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
+
+    # Select response function based on streaming preference
+    respond = _stream_response if stream else _invoke_response
 
     (
         project,
@@ -1371,8 +1376,8 @@ async def _ask_repl(
                             agent_name=agent.name,
                         )
 
-                    # Stream response
-                    await _stream_response(runtime, agent, user_input, session)
+                    # Get response (streaming or non-streaming based on flag)
+                    await respond(runtime, agent, user_input, session)
                     console.print()
 
                     # Handle clarification requests
@@ -1392,7 +1397,7 @@ async def _ask_repl(
 
                             # Build context message for the agent
                             context_msg = f"[Customer response to your question: {answer}]"
-                            await _stream_response(runtime, agent, context_msg, session)
+                            await respond(runtime, agent, context_msg, session)
                             console.print()
 
                 except ContextOverflowError as e:
