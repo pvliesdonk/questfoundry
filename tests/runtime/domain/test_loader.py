@@ -104,7 +104,9 @@ class TestLoadStudio:
         result = await load_studio(domain_v4_path)
 
         assert result.success
-        assert len(result.studio.agents) == 12
+        # Count actual agent files in domain to avoid hardcoding
+        agent_files = list((domain_v4_path / "agents").glob("*.json"))
+        assert len(result.studio.agents) == len(agent_files)
         # Check first agent is properly loaded
         showrunner = next((a for a in result.studio.agents if a.id == "showrunner"), None)
         assert showrunner is not None
@@ -118,7 +120,10 @@ class TestLoadStudio:
         result = await load_studio(domain_v4_path)
 
         assert result.success
-        assert len(result.studio.stores) == 5
+        # Count stores referenced in studio.json (not all files in directory)
+        studio_json = json.loads((domain_v4_path / "studio.json").read_text())
+        store_refs = studio_json.get("stores", [])
+        assert len(result.studio.stores) == len(store_refs)
         # Check workspace store
         workspace = next((s for s in result.studio.stores if s.id == "workspace"), None)
         assert workspace is not None
@@ -130,9 +135,9 @@ class TestLoadStudio:
         result = await load_studio(domain_v4_path)
 
         assert result.success
-        assert (
-            len(result.studio.tools) == 16
-        )  # Phase 7: +communicate, +consult_knowledge, -request_clarification = net +1
+        # Count actual tool files in domain to avoid hardcoding
+        tool_files = list((domain_v4_path / "tools").glob("*.json"))
+        assert len(result.studio.tools) == len(tool_files)
 
     async def test_load_studio_resolves_playbook_refs(self, domain_v4_path: Path):
         """load_studio resolves playbook file references."""
@@ -141,7 +146,9 @@ class TestLoadStudio:
         result = await load_studio(domain_v4_path)
 
         assert result.success
-        assert len(result.studio.playbooks) == 7
+        # Count actual playbook files in domain to avoid hardcoding
+        playbook_files = list((domain_v4_path / "playbooks").glob("*.json"))
+        assert len(result.studio.playbooks) == len(playbook_files)
 
     async def test_load_studio_resolves_artifact_type_refs(self, domain_v4_path: Path):
         """load_studio resolves artifact type file references."""
@@ -150,7 +157,9 @@ class TestLoadStudio:
         result = await load_studio(domain_v4_path)
 
         assert result.success
-        assert len(result.studio.artifact_types) == 16
+        # Count actual artifact type files in domain to avoid hardcoding
+        artifact_type_files = list((domain_v4_path / "artifact-types").glob("*.json"))
+        assert len(result.studio.artifact_types) == len(artifact_type_files)
 
     async def test_load_studio_missing_directory_returns_error(self, tmp_path: Path):
         """load_studio returns error for non-existent directory."""

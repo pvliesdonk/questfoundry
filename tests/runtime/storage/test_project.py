@@ -432,3 +432,82 @@ class TestListProjects:
         """list_projects handles nonexistent directory."""
         projects = list_projects(tmp_path / "nonexistent")
         assert projects == []
+
+
+class TestProjectStatusSummary:
+    """Tests for ProjectStatusSummary and get_status_summary()."""
+
+    @pytest.fixture
+    def project(self, tmp_path: Path) -> Project:
+        """Create a test project."""
+        project = Project.create(tmp_path / "test-status", name="Status Test")
+        yield project
+        project.close()
+
+    def test_empty_project_summary(self, project: Project):
+        """get_status_summary returns zeros for empty project."""
+        summary = project.get_status_summary()
+
+        assert summary.session_count == 0
+        assert summary.total_turns == 0
+        assert summary.last_activity is None
+        assert summary.artifacts_by_store == {}
+        assert summary.artifacts_by_state == {}
+        assert summary.active_playbook is None
+        assert summary.checkpoint_count == 0
+
+    def test_summary_with_artifacts(self, project: Project):
+        """get_status_summary counts artifacts by store and state."""
+        # Create artifacts in different stores
+        project.create_artifact(
+            artifact_id="section-001",
+            artifact_type="section",
+            data={"title": "Test"},
+            store="workspace",
+        )
+        project.create_artifact(
+            artifact_id="section-002",
+            artifact_type="section",
+            data={"title": "Another"},
+            store="workspace",
+        )
+        project.create_artifact(
+            artifact_id="canon-001",
+            artifact_type="section",
+            data={"title": "Canon section"},
+            store="canon",
+        )
+
+        summary = project.get_status_summary()
+
+        assert summary.artifacts_by_store == {"workspace": 2, "canon": 1}
+        assert summary.artifacts_by_state == {"draft": 3}
+
+    def test_summary_with_sessions(self, project: Project):
+        """get_status_summary counts sessions and turns."""
+        from questfoundry.runtime.session import Session
+
+        # Create a session with turns
+        session = Session.create(project, entry_agent="showrunner")
+        turn1 = session.start_turn(agent_id="showrunner", user_input="Hello")
+        session.complete_turn(turn1, output="Hi there")
+        turn2 = session.start_turn(agent_id="showrunner", user_input="Do something")
+        session.complete_turn(turn2, output="Done")
+
+        summary = project.get_status_summary()
+
+        assert summary.session_count == 1
+        assert summary.total_turns == 2
+        assert summary.last_activity is not None
+
+    def test_summary_checkpoint_count(self, project: Project):
+        """get_status_summary counts checkpoint files."""
+        # Create checkpoint directory and files
+        cp_dir = project.checkpoints_path
+        cp_dir.mkdir(parents=True, exist_ok=True)
+        (cp_dir / "cp_session1_001.json").write_text("{}")
+        (cp_dir / "cp_session1_002.json").write_text("{}")
+
+        summary = project.get_status_summary()
+
+        assert summary.checkpoint_count == 2

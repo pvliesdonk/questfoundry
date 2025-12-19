@@ -59,6 +59,19 @@ class ProjectInfo:
         )
 
 
+@dataclass
+class ProjectStatusSummary:
+    """Summary of project state for status display."""
+
+    session_count: int
+    total_turns: int
+    last_activity: datetime | None
+    artifacts_by_store: dict[str, int]
+    artifacts_by_state: dict[str, int]
+    active_playbook: tuple[str, str] | None  # (playbook_id, phase)
+    checkpoint_count: int
+
+
 class Project:
     """
     A QuestFoundry project.
@@ -651,6 +664,104 @@ class Project:
             "created_at": row["created_at"],
             "created_by": row["created_by"],
         }
+
+    # Status summary operations
+
+    def get_status_summary(self) -> ProjectStatusSummary:
+        """
+        Get summary of project state for status display.
+
+        Returns:
+            ProjectStatusSummary with session counts, artifact counts, etc.
+        """
+        conn = self._get_connection()
+
+        # Session count and total turns
+        session_row = conn.execute(
+            """
+            SELECT
+                COUNT(DISTINCT s.id) as session_count,
+                COALESCE(SUM(t.turn_count), 0) as total_turns
+            FROM sessions s
+            LEFT JOIN (
+                SELECT session_id, COUNT(*) as turn_count
+                FROM turns
+                GROUP BY session_id
+            ) t ON s.id = t.session_id
+            """
+        ).fetchone()
+        session_count = session_row["session_count"] if session_row else 0
+        total_turns = session_row["total_turns"] if session_row else 0
+
+        # Last activity (most recent turn end time)
+        last_row = conn.execute(
+            """
+            SELECT MAX(ended_at) as last_activity
+            FROM turns
+            WHERE ended_at IS NOT NULL
+            """
+        ).fetchone()
+        last_activity = None
+        if last_row and last_row["last_activity"]:
+            last_activity = datetime.fromisoformat(last_row["last_activity"])
+
+        # Artifact counts by store
+        store_rows = conn.execute(
+            """
+            SELECT _store, COUNT(*) as count
+            FROM artifacts
+            GROUP BY _store
+            """
+        ).fetchall()
+        artifacts_by_store: dict[str, int] = {}
+        for row in store_rows:
+            store = row["_store"] or "unassigned"
+            artifacts_by_store[store] = row["count"]
+
+        # Artifact counts by lifecycle state
+        state_rows = conn.execute(
+            """
+            SELECT _lifecycle_state, COUNT(*) as count
+            FROM artifacts
+            GROUP BY _lifecycle_state
+            """
+        ).fetchall()
+        artifacts_by_state: dict[str, int] = {}
+        for row in state_rows:
+            state = row["_lifecycle_state"] or "draft"
+            artifacts_by_state[state] = row["count"]
+
+        # Active playbook (most recent active one)
+        playbook_row = conn.execute(
+            """
+            SELECT playbook_id, current_phase
+            FROM playbook_instances
+            WHERE status = 'active'
+            ORDER BY started_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        active_playbook = None
+        if playbook_row:
+            active_playbook = (
+                playbook_row["playbook_id"],
+                playbook_row["current_phase"] or "unknown",
+            )
+
+        # Checkpoint count
+        checkpoint_count = 0
+        if self.checkpoints_path.exists():
+            checkpoint_count = len(list(self.checkpoints_path.glob("*.json")))
+
+        return ProjectStatusSummary(
+            session_count=session_count,
+            total_turns=total_turns,
+            last_activity=last_activity,
+            artifacts_by_store=artifacts_by_store,
+            artifacts_by_state=artifacts_by_state,
+            active_playbook=active_playbook,
+            checkpoint_count=checkpoint_count,
+        )
 
 
 def list_projects(projects_dir: Path) -> list[Project]:

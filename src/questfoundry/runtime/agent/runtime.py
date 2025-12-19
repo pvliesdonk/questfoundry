@@ -256,6 +256,7 @@ class AgentRuntime:
         args: dict[str, Any],
         agent: Agent,
         session_id: str | None = None,
+        turn_number: int | None = None,
     ) -> ToolResult:
         """
         Execute a tool.
@@ -265,6 +266,7 @@ class AgentRuntime:
             args: Tool arguments
             agent: Agent requesting tool execution
             session_id: Current session ID
+            turn_number: Current turn number for logging
 
         Returns:
             ToolResult from tool execution
@@ -311,13 +313,16 @@ class AgentRuntime:
         with tool_trace_ctx:
             result = await tool.run(args)
 
-        # Log tool call result
+        # Log tool call result with full data for debugging
         if self._event_logger:
-            self._event_logger.log(
-                EventType.TOOL_CALL_COMPLETE,
+            self._event_logger.tool_call_with_result(
+                session_id=session_id or "",
+                turn_id=turn_number or 0,
                 agent_id=agent.id,
                 tool_id=tool_id,
+                args=args,
                 success=result.success,
+                result=result.data,
                 error=result.error,
                 execution_time_ms=result.execution_time_ms,
             )
@@ -439,6 +444,7 @@ class AgentRuntime:
         tool_calls: list[ToolCallRequest],
         agent: Agent,
         session_id: str | None = None,
+        turn_number: int | None = None,
     ) -> list[ToolCall]:
         """
         Execute a list of tool calls.
@@ -447,6 +453,7 @@ class AgentRuntime:
             tool_calls: List of tool call requests from LLM
             agent: Agent making the calls
             session_id: Current session ID
+            turn_number: Current turn number for logging
 
         Returns:
             List of ToolCall results
@@ -457,7 +464,9 @@ class AgentRuntime:
             start_time = time.time()
 
             try:
-                result = await self.execute_tool(tc.name, tc.arguments, agent, session_id)
+                result = await self.execute_tool(
+                    tc.name, tc.arguments, agent, session_id, turn_number
+                )
                 tool_call.result = result.data
                 tool_call.success = result.success
                 tool_call.error = result.error
@@ -785,8 +794,30 @@ class AgentRuntime:
             # Get tool schemas for this agent
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
+            # Build messages once and extract system prompt for logging
             history = session.get_history()[:-1] if len(session.turns) > 1 else None
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
+
+            # Log system prompt for debugging
+            if self._event_logger:
+                system_prompt = ""
+                if messages and messages[0].role == "system":
+                    system_prompt = messages[0].content
+                self._event_logger.prompt_build(
+                    session_id=session.id,
+                    agent_id=agent.id,
+                    prompt_text=system_prompt,
+                    tool_count=len(tool_schemas) if tool_schemas else 0,
+                )
+
+            # Log messages sent to LLM
+            if self._event_logger:
+                self._event_logger.messages_sent(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    agent_id=agent.id,
+                    messages=[{"role": m.role, "content": m.content} for m in messages],
+                )
 
             # Validate context size
             self.validate_context_size(messages)
@@ -842,6 +873,23 @@ class AgentRuntime:
                         duration_ms=response.duration_ms,
                     )
 
+                # Log full LLM response for debugging
+                if self._event_logger:
+                    tool_calls_data = None
+                    if response.tool_calls:
+                        tool_calls_data = [
+                            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                            for tc in response.tool_calls
+                        ]
+                    self._event_logger.llm_response(
+                        session_id=session.id,
+                        turn_id=turn.turn_number,
+                        agent_id=agent.id,
+                        content=response.content,
+                        tool_calls=tool_calls_data,
+                        has_tool_calls=response.has_tool_calls,
+                    )
+
                 # Check for tool calls
                 if not response.has_tool_calls or not response.tool_calls:
                     # No tool calls - check if we should enforce tool usage
@@ -878,13 +926,28 @@ class AgentRuntime:
 
                 # Execute tool calls (always execute, even if validation will fail)
                 logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
-                tool_results = await self._execute_tool_calls(tool_calls, agent, session.id)
+                tool_results = await self._execute_tool_calls(
+                    tool_calls, agent, session.id, turn.turn_number
+                )
                 all_tool_calls.extend(tool_results)
 
                 # Validate turn with TurnValidator (checks for terminating tools)
                 # Note: This orchestrator enforcement runs independently of enforce_tool_usage.
                 # Orchestrators with runtime enforcement always require terminating tools.
                 validation = self._turn_validator.validate_turn(agent, tool_calls)
+
+                # Log turn validation for debugging
+                if self._event_logger:
+                    self._event_logger.turn_validation(
+                        session_id=session.id,
+                        turn_id=turn.turn_number,
+                        agent_id=agent.id,
+                        valid=validation.valid,
+                        is_orchestrator=self._is_orchestrator(agent),
+                        tool_calls_made=[tc.name for tc in tool_calls],
+                        terminating_tool=validation.terminating_tool_id,
+                        nudge_message=validation.nudge_message,
+                    )
 
                 if not validation.valid:
                     # Orchestrator didn't use terminating tool - tools already executed above
@@ -1108,8 +1171,30 @@ class AgentRuntime:
             # Get tool schemas for this agent
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
+            # Build messages once and extract system prompt for logging
             history = session.get_history()[:-1] if len(session.turns) > 1 else None
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
+
+            # Log system prompt for debugging (streaming path)
+            if self._event_logger:
+                system_prompt = ""
+                if messages and messages[0].role == "system":
+                    system_prompt = messages[0].content
+                self._event_logger.prompt_build(
+                    session_id=session.id,
+                    agent_id=agent.id,
+                    prompt_text=system_prompt,
+                    tool_count=len(tool_schemas) if tool_schemas else 0,
+                )
+
+            # Log messages sent to LLM (streaming path)
+            if self._event_logger:
+                self._event_logger.messages_sent(
+                    session_id=session.id,
+                    turn_id=turn.turn_number,
+                    agent_id=agent.id,
+                    messages=[{"role": m.role, "content": m.content} for m in messages],
+                )
 
             # Validate context size
             self.validate_context_size(messages)
@@ -1175,18 +1260,46 @@ class AgentRuntime:
 
                 # Handle tool calls if present
                 if pending_tool_calls:
+                    # Log LLM response for debugging (streaming path)
+                    if self._event_logger:
+                        tool_calls_data = [
+                            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                            for tc in pending_tool_calls
+                        ]
+                        self._event_logger.llm_response(
+                            session_id=session.id,
+                            turn_id=turn.turn_number,
+                            agent_id=agent.id,
+                            content=iteration_content,
+                            tool_calls=tool_calls_data,
+                            has_tool_calls=True,
+                        )
+
                     # Execute tool calls first (always execute, even if validation will fail)
                     logger.info(
                         f"Executing {len(pending_tool_calls)} tool calls from streaming response"
                     )
                     tool_results = await self._execute_tool_calls(
-                        pending_tool_calls, agent, session.id
+                        pending_tool_calls, agent, session.id, turn.turn_number
                     )
 
                     # Validate turn with TurnValidator (checks for terminating tools)
                     # Note: This orchestrator enforcement runs independently of enforce_tool_usage.
                     # Orchestrators with runtime enforcement always require terminating tools.
                     validation = self._turn_validator.validate_turn(agent, pending_tool_calls)
+
+                    # Log turn validation for debugging (streaming path)
+                    if self._event_logger:
+                        self._event_logger.turn_validation(
+                            session_id=session.id,
+                            turn_id=turn.turn_number,
+                            agent_id=agent.id,
+                            valid=validation.valid,
+                            is_orchestrator=self._is_orchestrator(agent),
+                            tool_calls_made=[tc.name for tc in pending_tool_calls],
+                            terminating_tool=validation.terminating_tool_id,
+                            nudge_message=validation.nudge_message,
+                        )
 
                     if not validation.valid:
                         # Orchestrator didn't use terminating tool - tools already executed above

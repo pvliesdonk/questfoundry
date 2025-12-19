@@ -439,7 +439,7 @@ def ask(
     # Auto-create project if not specified or doesn't exist
     if project is None:
         project = "default"
-    _ensure_project(project, projects_dir)
+    project_was_created = _ensure_project(project, projects_dir)
 
     # Determine interactive mode: explicit flag > TTY detection
     is_interactive = interactive if interactive is not None else sys.stdin.isatty()
@@ -458,6 +458,7 @@ def ask(
                 is_interactive,
                 stream,
                 from_checkpoint,
+                project_was_created,
             )
         )
     else:
@@ -473,12 +474,17 @@ def ask(
                 is_interactive,
                 stream,
                 from_checkpoint,
+                project_was_created,
             )
         )
 
 
-def _ensure_project(project_id: str, projects_dir: Path) -> None:
-    """Create the project if it doesn't exist."""
+def _ensure_project(project_id: str, projects_dir: Path) -> bool:
+    """Create the project if it doesn't exist.
+
+    Returns:
+        True if a new project was created, False if it already existed.
+    """
     from questfoundry.runtime.storage import Project
 
     project_path = projects_dir / project_id
@@ -491,15 +497,14 @@ def _ensure_project(project_id: str, projects_dir: Path) -> None:
         else:
             description = f"Auto-created project: {name}"
 
-        console.print(f"[dim]Creating project '{project_id}'...[/dim]")
         Project.create(
             path=project_path,
             name=name,
             description=description,
             studio_id="questfoundry",
         )
-        console.print(f"[green]✓[/green] Created project [bold]{name}[/bold]")
-        console.print()
+        return True
+    return False
 
 
 async def _setup_runtime(
@@ -512,6 +517,7 @@ async def _setup_runtime(
     log: bool = False,
     interactive: bool = True,
     from_checkpoint: str | None = None,
+    project_created: bool = False,
 ) -> tuple[
     Project,
     Studio,
@@ -552,6 +558,14 @@ async def _setup_runtime(
         console.print(f"[red]✗ Project not found: {project_id}[/red]")
         console.print(f"[dim]Expected at: {project_path}[/dim]")
         raise typer.Exit(1) from None
+
+    # Display project status
+    if _status_reporter and project.info:
+        if project_created:
+            _status_reporter.project_created(project.info.name, project.path)
+        else:
+            summary = project.get_status_summary()
+            _status_reporter.project_resumed(project.info.name, summary)
 
     # Load domain
     logger.debug(f"Loading domain from {domain_path}")
@@ -1184,6 +1198,7 @@ async def _ask_single(
     interactive: bool = True,
     stream: bool = True,
     from_checkpoint: str | None = None,
+    project_created: bool = False,
 ) -> None:
     """Execute a single-shot query."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -1209,6 +1224,7 @@ async def _ask_single(
         log,
         interactive,
         from_checkpoint,
+        project_created,
     )
 
     # Select response function based on streaming preference
@@ -1294,6 +1310,7 @@ async def _ask_repl(
     interactive: bool = True,
     stream: bool = True,
     from_checkpoint: str | None = None,
+    project_created: bool = False,
 ) -> None:
     """Run interactive REPL mode."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
@@ -1322,6 +1339,7 @@ async def _ask_repl(
         log,
         interactive,
         from_checkpoint,
+        project_created,
     )
 
     # Report session start via status reporter
