@@ -76,6 +76,7 @@
     "tools/validate_artifact.json",
     "tools/search_workspace.json",
     "tools/delegate.json",
+    "tools/return_to_orchestrator.json",
     "tools/web_search.json",
     "tools/web_fetch.json",
     "tools/assemble_export.json",
@@ -118,6 +119,6 @@
   "metadata": {
     "wave": 7,
     "status": "complete",
-    "notes": "Wave 7: Added list_* tools for explicit discovery (list_artifact_types, list_stores, list_agents). V3 pattern: compact menus in prompt with consult tools for full details. Studio definition: 12 agents, 15 tools, 16 artifact types, 2 asset types, 7 playbooks."
+    "notes": "Wave 7: Added list_* tools for explicit discovery (list_artifact_types, list_stores, list_agents). V3 pattern: compact menus in prompt with consult tools for full details. Studio definition: 12 agents, 16 tools, 16 artifact types, 2 asset types, 7 playbooks."
   }
 }
