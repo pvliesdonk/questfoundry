@@ -38,6 +38,7 @@ class PlaybookNudger:
     - unexpected_state: Phase/step state doesn't match expectations
     - quality_gate_reminder: Upcoming quality checkpoint
     - budget_warning: Rework budget running low or exhausted
+    - playbook_followups: Guidance on what typically comes next after playbook ends
     """
 
     def __init__(self, playbooks: dict[str, dict[str, Any]]) -> None:
@@ -276,6 +277,80 @@ class PlaybookNudger:
 
         return None
 
+    def check_playbook_followups(
+        self,
+        ctx: NudgeContext,
+        followups: dict[str, Any] | None,
+    ) -> Message | None:
+        """
+        Generate guidance about typical followups when a playbook ends.
+
+        This provides domain knowledge to the orchestrator about what
+        typically comes next, enabling informed proposals to the user.
+
+        Args:
+            ctx: Nudge context
+            followups: The followups object from phase transition
+
+        Returns:
+            Nudge with followup guidance, or None if no followups defined
+        """
+        if not followups:
+            return None
+
+        parts: list[str] = []
+
+        # Primary followup
+        primary = followups.get("primary")
+        if primary:
+            playbook_id = primary.get("playbook", "unknown")
+            desc = primary.get("description", "")
+            parts.append(f"Primary: {playbook_id}" + (f" ({desc})" if desc else ""))
+
+        # Parallel options
+        parallel = followups.get("parallel", [])
+        if parallel:
+            parallel_ids = [f.get("playbook", "?") for f in parallel]
+            parts.append(f"Parallel options: {', '.join(parallel_ids)}")
+
+        # Conditional followups (sorted by priority)
+        conditional = followups.get("conditional", [])
+        if conditional:
+            sorted_cond = sorted(conditional, key=lambda c: c.get("priority", 5))
+            cond_parts = []
+            for cond in sorted_cond:
+                playbook_id = cond.get("playbook", "?")
+                condition = cond.get("condition", "")
+                cond_parts.append(f"{playbook_id} (if {condition})" if condition else playbook_id)
+            parts.append(f"Conditional: {', '.join(cond_parts)}")
+
+        # Runtime actions
+        runtime_actions = followups.get("runtime_actions", [])
+        if runtime_actions:
+            action_names = [a.get("action", "?") for a in runtime_actions]
+            parts.append(f"Runtime actions: {', '.join(action_names)}")
+
+        if not parts:
+            return None
+
+        message = (
+            f"Playbook '{ctx.playbook_id}' is complete. "
+            f"Typical followups: {'; '.join(parts)}. "
+            "In interactive mode, propose these options to the user. "
+            "In non-interactive mode, the session may end here."
+        )
+
+        return create_nudge(
+            from_agent="runtime",
+            to_agent=ctx.agent_id,
+            nudge_type="playbook_followups",
+            message=message,
+            playbook_id=ctx.playbook_id,
+            playbook_instance_id=ctx.instance_id,
+            phase_id=ctx.phase_id,
+            turn_created=ctx.turn,
+        )
+
     def generate_phase_entry_nudges(
         self,
         ctx: NudgeContext,
@@ -309,5 +384,36 @@ class PlaybookNudger:
         consistency_nudge = self.check_phase_consistency(ctx, previous_phase)
         if consistency_nudge:
             nudges.append(consistency_nudge)
+
+        return nudges
+
+    def generate_playbook_end_nudges(
+        self,
+        ctx: NudgeContext,
+        transition: dict[str, Any] | None,
+    ) -> list[Message]:
+        """
+        Generate nudges when a playbook ends.
+
+        Args:
+            ctx: Nudge context
+            transition: The phase transition object (contains followups)
+
+        Returns:
+            List of nudge messages
+        """
+        nudges: list[Message] = []
+
+        if not transition:
+            return nudges
+
+        # Only generate followup nudges if playbook is ending
+        if not transition.get("end_playbook"):
+            return nudges
+
+        followups = transition.get("followups")
+        followup_nudge = self.check_playbook_followups(ctx, followups)
+        if followup_nudge:
+            nudges.append(followup_nudge)
 
         return nudges
