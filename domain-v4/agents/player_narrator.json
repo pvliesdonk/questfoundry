@@ -18,6 +18,13 @@
       "tool_ref": "consult_corpus"
     },
     {
+      "id": "use_get_artifact",
+      "name": "Get Artifact by ID",
+      "description": "Fetch artifacts by ID when you know specific artifact IDs",
+      "category": "tool",
+      "tool_ref": "get_artifact"
+    },
+    {
       "id": "use_return_to_orchestrator",
       "name": "Return to Orchestrator",
       "description": "Signal task completion and return control to Showrunner",
