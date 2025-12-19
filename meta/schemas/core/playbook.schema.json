@@ -542,7 +542,7 @@
           "items": {
             "$ref": "#/$defs/followup_spec"
           },
-          "description": "Playbooks that can run alongside primary"
+          "description": "Playbooks that may run alongside a primary followup or independently"
         },
         "conditional": {
           "type": "array",
@@ -578,6 +578,7 @@
         "artifact_condition": {
           "type": "object",
           "description": "Machine-checkable condition: artifact type + state exists",
+          "required": ["artifact_type"],
           "properties": {
             "artifact_type": {
               "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
@@ -607,7 +608,11 @@
           "description": "Priority when multiple conditions match (1=highest)"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "not": {
+        "description": "condition and artifact_condition are mutually exclusive",
+        "required": ["condition", "artifact_condition"]
+      }
     },
 
     "runtime_action_spec": {
