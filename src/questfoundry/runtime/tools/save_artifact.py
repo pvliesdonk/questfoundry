@@ -446,7 +446,8 @@ class SaveArtifactTool(BaseTool):
             }
 
         # Extract field corrections and missing fields from errors
-        field_corrections: dict[str, str] = {}
+        # field_correction_map: {provided_name: target_required_name}
+        field_correction_map: dict[str, str] = {}
         missing_required: list[str] = []
 
         if schema_info and errors:
@@ -454,25 +455,28 @@ class SaveArtifactTool(BaseTool):
             provided_names = set(schema_info.get("provided_fields", []))
 
             # Find missing required fields
-            for err in errors or []:
+            for err in errors:
                 if "Required field" in err.get("issue", "") and err.get("field"):
                     missing_required.append(err["field"])
 
             # Find field corrections via fuzzy matching
-            field_corrections = self._find_field_corrections(
-                provided_names, required_names, schema_info.get("required_fields", [])
-            )
+            # Returns {provided_name: target_name} e.g. {"section_title": "title"}
+            field_correction_map = self._find_field_corrections(provided_names, required_names)
+
+        # Determine truly missing fields (those without corrections)
+        corrected_target_fields = set(field_correction_map.values())
+        truly_missing_fields = [f for f in missing_required if f not in corrected_target_fields]
 
         # Count corrections vs truly missing
-        correctable = len(field_corrections)
-        truly_missing = len(missing_required) - correctable
+        correctable = len(field_correction_map)
+        truly_missing_count = len(truly_missing_fields)
 
         # Build recovery action message
         parts = []
         if correctable > 0:
             parts.append(f"rename {correctable} field(s)")
-        if truly_missing > 0:
-            parts.append(f"add {truly_missing} missing field(s)")
+        if truly_missing_count > 0:
+            parts.append(f"add {truly_missing_count} missing field(s)")
 
         action_summary = " and ".join(parts) if parts else "fix errors"
         recovery_action = (
@@ -486,13 +490,13 @@ class SaveArtifactTool(BaseTool):
             "recovery_action": recovery_action,
         }
 
-        # Add field corrections if any detected
-        if field_corrections:
-            feedback["field_corrections"] = field_corrections
+        # Add field corrections with human-readable format
+        if field_correction_map:
+            feedback["field_corrections"] = {
+                k: f"rename to '{v}'" for k, v in field_correction_map.items()
+            }
 
-        # Add missing required (excluding those with corrections)
-        corrected_fields = set(field_corrections.values())
-        truly_missing_fields = [f for f in missing_required if f not in corrected_fields]
+        # Add truly missing required fields
         if truly_missing_fields:
             feedback["missing_required"] = truly_missing_fields
 
@@ -507,52 +511,57 @@ class SaveArtifactTool(BaseTool):
         self,
         provided: set[str],
         required: set[str],
-        required_fields: list[dict[str, Any]],
     ) -> dict[str, str]:
         """
         Find likely field name corrections via fuzzy matching.
 
+        Returns a mapping of provided field name to target required field name.
+        Example: {"section_title": "title", "content": "prose"}
+
         Detects cases like:
-        - section_title → title (suffix match)
+        - section_title → title (suffix match with underscore separator)
         - content → prose (common synonyms)
         """
         corrections: dict[str, str] = {}
-
-        # Build lookup for required field names
-        required_lookup = {f["name"]: f for f in required_fields}
+        matched_targets: set[str] = set()  # Track which required fields are already matched
 
         for provided_name in provided:
             if provided_name in required:
                 continue  # Exact match, no correction needed
 
-            # Check for suffix/prefix matches
+            # Check for suffix/prefix matches (require underscore separator to avoid false positives)
             for req_name in required:
-                if req_name in required_lookup:
-                    # Check if provided ends with required (e.g., section_title → title)
-                    if provided_name.endswith(f"_{req_name}") or provided_name.endswith(req_name):
-                        corrections[provided_name] = f"rename to '{req_name}'"
-                        break
-                    # Check if provided starts with required (e.g., title_text → title)
-                    if provided_name.startswith(f"{req_name}_") or provided_name.startswith(
-                        req_name
-                    ):
-                        corrections[provided_name] = f"rename to '{req_name}'"
-                        break
+                if req_name in matched_targets:
+                    continue  # Already matched to another provided field
 
-        # Common semantic mappings
-        semantic_mappings = {
-            "content": ["prose", "text", "body"],
-            "text": ["prose", "content", "body"],
-            "body": ["prose", "content", "text"],
-        }
+                # Check if provided ends with required (e.g., section_title → title)
+                if provided_name.endswith(f"_{req_name}"):
+                    corrections[provided_name] = req_name
+                    matched_targets.add(req_name)
+                    break
+                # Check if provided starts with required (e.g., title_text → title)
+                if provided_name.startswith(f"{req_name}_"):
+                    corrections[provided_name] = req_name
+                    matched_targets.add(req_name)
+                    break
+
+        # Common semantic mappings (generate from synonym groups)
+        synonym_groups = [
+            {"content", "prose", "text", "body"},
+        ]
+        semantic_mappings: dict[str, list[str]] = {}
+        for group in synonym_groups:
+            for word in group:
+                semantic_mappings[word] = sorted(group - {word})
 
         for provided_name in provided:
             if provided_name in corrections:
                 continue
             if provided_name in semantic_mappings:
                 for candidate in semantic_mappings[provided_name]:
-                    if candidate in required and candidate not in corrections.values():
-                        corrections[provided_name] = f"rename to '{candidate}'"
+                    if candidate in required and candidate not in matched_targets:
+                        corrections[provided_name] = candidate
+                        matched_targets.add(candidate)
                         break
 
         return corrections

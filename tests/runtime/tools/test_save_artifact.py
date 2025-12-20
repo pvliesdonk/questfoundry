@@ -324,6 +324,9 @@ class TestSaveArtifactTool:
         assert "content" in feedback["field_corrections"]
         assert "prose" in feedback["field_corrections"]["content"]
 
+        # Since all missing fields have corrections, missing_required should be empty
+        assert "missing_required" not in feedback or not feedback["missing_required"]
+
         # Recovery action should mention the corrections
         assert "rename" in feedback["recovery_action"].lower()
 
