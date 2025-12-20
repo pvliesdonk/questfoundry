@@ -199,10 +199,38 @@
 
     "delegation_response_payload": {
       "type": "object",
-      "required": ["status"],
+      "required": ["task_completion", "summary"],
       "properties": {
-        "status": {
-          "$ref": "_definitions.schema.json#/$defs/completion_status"
+        "task_completion": {
+          "$ref": "_definitions.schema.json#/$defs/task_completion",
+          "description": "Whether the delegated task finished"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "assessment": {
+              "$ref": "_definitions.schema.json#/$defs/result_assessment",
+              "description": "Quality assessment of the work product"
+            },
+            "summary": {
+              "type": "string",
+              "description": "Brief summary of findings"
+            },
+            "details": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/issue" },
+              "description": "Detailed issues found (if any)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "recommendation": {
+          "$ref": "_definitions.schema.json#/$defs/action_recommendation",
+          "description": "Suggested next action for orchestrator"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of what was accomplished"
         },
         "artifacts_produced": {
           "type": "array",
@@ -211,21 +239,17 @@
           },
           "description": "Artifacts created as part of this delegation"
         },
+        "artifacts_ready_for_review": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref"
+          },
+          "description": "Artifacts that are ready for quality gating"
+        },
         "inline_results": {
           "type": "object",
           "additionalProperties": true,
           "description": "Small/trivial results that don't warrant full artifact persistence (e.g., suggested_title, word_count, decision). Avoid creating artifacts for ephemeral data."
-        },
-        "summary": {
-          "type": "string",
-          "description": "Human-readable summary of what was accomplished"
-        },
-        "issues": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/issue"
-          },
-          "description": "Issues encountered (for partial/failed status)"
         },
         "next_steps": {
           "type": "array",

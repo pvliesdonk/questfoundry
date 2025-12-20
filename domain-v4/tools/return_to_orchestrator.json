@@ -6,19 +6,24 @@
 
   "terminates_turn": true,
   "summarization_policy": "ultra_concise",
-  "summary_template": "Returned to orchestrator: {status} - {summary}",
+  "summary_template": "Returned to orchestrator: {result_assessment} - {summary}",
 
   "input_schema": {
     "type": "object",
     "properties": {
-      "status": {
-        "type": "string",
-        "enum": ["complete", "partial", "blocked", "needs_decision"],
-        "description": "Outcome of your work: complete (all done), partial (some done), blocked (cannot proceed), needs_decision (requires orchestrator input)"
-      },
       "summary": {
         "type": "string",
         "description": "Brief summary of what was accomplished or what's blocking progress"
+      },
+      "result_assessment": {
+        "type": "string",
+        "enum": ["pass", "partial", "fail", "skip", "info"],
+        "description": "Quality assessment of your work product: pass (all good), partial (some issues found), fail (major problems), skip (not applicable to this task), info (informational only, no quality judgment)"
+      },
+      "recommendation": {
+        "type": "string",
+        "enum": ["proceed", "rework", "escalate", "hold"],
+        "description": "What the orchestrator should do next: proceed (continue workflow), rework (route back for fixes), escalate (needs human decision), hold (blocked, cannot continue)"
       },
       "artifacts_produced": {
         "type": "array",
@@ -42,14 +47,10 @@
             "description": { "type": "string" }
           }
         },
-        "description": "If blocked, what's preventing progress"
-      },
-      "recommendations": {
-        "type": "string",
-        "description": "Optional suggestions for what should happen next"
+        "description": "If there are issues, what specifically is problematic"
       }
     },
-    "required": ["status", "summary"]
+    "required": ["summary", "result_assessment", "recommendation"]
   },
 
   "output_schema": {
@@ -68,42 +69,55 @@
 
   "examples": [
     {
-      "description": "Scene Smith completes section drafting",
+      "description": "Scene Smith completes section drafting successfully",
       "input": {
-        "status": "complete",
         "summary": "Drafted section prose for SB-005 with 3 choices as specified in the brief",
+        "result_assessment": "pass",
+        "recommendation": "proceed",
         "artifacts_produced": ["section-lighthouse-lock-v1"],
-        "artifacts_ready_for_review": ["section-lighthouse-lock-v1"],
-        "recommendations": "Ready for Gatekeeper review"
+        "artifacts_ready_for_review": ["section-lighthouse-lock-v1"]
       }
     },
     {
       "description": "Plotwright blocked by missing canon",
       "input": {
-        "status": "blocked",
         "summary": "Cannot complete topology for Act 2 - lighthouse backstory not established",
+        "result_assessment": "fail",
+        "recommendation": "hold",
         "blockers": [
           {
             "type": "missing_input",
             "description": "Need lighthouse history and keeper's motivation from canon"
           }
-        ],
-        "recommendations": "Suggest delegating to Lore Weaver to establish lighthouse canon first"
+        ]
       }
     },
     {
-      "description": "Gatekeeper returns with quality findings",
+      "description": "Gatekeeper finds quality issues that need rework",
       "input": {
-        "status": "partial",
         "summary": "Gatecheck complete - 6/8 bars pass, 2 need rework",
+        "result_assessment": "partial",
+        "recommendation": "rework",
         "artifacts_produced": ["gatecheck-section-005"],
         "blockers": [
           {
             "type": "quality_issue",
-            "description": "Choice Integrity: options 2 and 3 are near-synonyms. Nonlinearity: missing return path from dead end."
+            "description": "Choice Integrity: options 2 and 3 are near-synonyms"
+          },
+          {
+            "type": "quality_issue",
+            "description": "Nonlinearity: missing return path from dead end"
           }
-        ],
-        "recommendations": "Route back to Scene Smith with specific fixes"
+        ]
+      }
+    },
+    {
+      "description": "Gatekeeper pre-gate review (reachability is informational only)",
+      "input": {
+        "summary": "Pre-gate review complete - Integrity and Nonlinearity pass, Reachability deferred to post-Scene Weave",
+        "result_assessment": "info",
+        "recommendation": "proceed",
+        "artifacts_produced": ["pregate-report-section-briefs"]
       }
     }
   ]

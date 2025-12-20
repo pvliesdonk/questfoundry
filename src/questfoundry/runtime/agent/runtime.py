@@ -1771,37 +1771,42 @@ class AgentRuntime:
             success = payload.get("success", False)
             result = payload.get("result", {})
 
-            status = result.get("status", "complete" if success else "failed")
-            summary = result.get("summary", "No summary provided")
-            artifacts = result.get("artifacts_produced", [])
+            # New semantic model: task_completion, result.assessment, recommendation
+            task_completion = result.get("task_completion", "completed" if success else "failed")
+            result_info = result.get("result", {})
+            assessment = result_info.get("assessment", "info")
+            recommendation = result.get("recommendation", "proceed")
+            summary = result_info.get("summary") or result.get("summary", "No summary provided")
+
+            # artifacts_produced is a sibling of result in payload, not inside result
+            artifacts = payload.get("artifacts_produced", [])
             ready_for_review = result.get("artifacts_ready_for_review", [])
-            blockers = result.get("blockers", [])
-            recommendations = result.get("recommendations", "")
+            details = result_info.get("details", [])
 
             lines.append(f"## Delegation {i}: {from_agent}")
-            lines.append(f"- **Status**: {status}")
+            lines.append(f"- **Task**: {task_completion}")
+            lines.append(f"- **Assessment**: {assessment}")
+            lines.append(f"- **Recommendation**: {recommendation}")
             lines.append(f"- **Summary**: {summary}")
 
             if artifacts:
                 lines.append(f"- **Artifacts produced**: {', '.join(artifacts)}")
             if ready_for_review:
                 lines.append(f"- **Ready for review**: {', '.join(ready_for_review)}")
-            if blockers:
-                blocker_strs = [
-                    b.get("description", str(b)) if isinstance(b, dict) else str(b)
-                    for b in blockers
+            if details:
+                detail_strs = [
+                    d.get("description", str(d)) if isinstance(d, dict) else str(d) for d in details
                 ]
-                lines.append(f"- **Blockers**: {'; '.join(blocker_strs)}")
-            if recommendations:
-                lines.append(f"- **Recommendations**: {recommendations}")
+                lines.append(f"- **Issues**: {'; '.join(detail_strs)}")
 
             lines.append("")
 
         lines.append(
             "Based on these results, decide what to do next:\n"
-            "- Delegate to another agent if more work is needed\n"
-            "- Call communicate to ask the human a question\n"
-            "- Or return your final response if the task is complete"
+            "- If recommendation is 'proceed': continue the workflow\n"
+            "- If recommendation is 'rework': delegate back for fixes\n"
+            "- If recommendation is 'escalate': ask the human for guidance\n"
+            "- If recommendation is 'hold': address blockers first"
         )
 
         return "\n".join(lines)

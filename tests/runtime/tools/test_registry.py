@@ -155,7 +155,11 @@ class TestToolRegistry:
 
         registry = ToolRegistry(studio)
 
+        # Persistence tools
         assert registry.check_capability(agent, "save_artifact") is True
+        # Lifecycle tools (per meta/docs/store-semantics.md)
+        assert registry.check_capability(agent, "request_lifecycle_transition") is True
+        assert registry.check_capability(agent, "get_lifecycle_state") is True
 
     def test_enforce_capability_allowed(self):
         studio, agent = make_mock_studio_with_tools()
@@ -176,7 +180,11 @@ class TestToolRegistry:
 
         registry = ToolRegistry(studio)
 
+        # Persistence tools (should not raise)
         registry.enforce_capability(agent, "save_artifact")
+        # Lifecycle tools (should not raise - per meta/docs/store-semantics.md)
+        registry.enforce_capability(agent, "request_lifecycle_transition")
+        registry.enforce_capability(agent, "get_lifecycle_state")
 
     def test_enforce_capability_denied(self):
         studio, agent = make_mock_studio_with_tools()
@@ -245,7 +253,10 @@ class TestToolRegistry:
         registry = ToolRegistry(studio)
         tool_ids = {tool.id for tool in registry.get_agent_tools(agent)}
 
+        # Persistence tools
         assert {"save_artifact", "update_artifact", "delete_artifact"}.issubset(tool_ids)
+        # Lifecycle tools (per meta/docs/store-semantics.md)
+        assert {"request_lifecycle_transition", "get_lifecycle_state"}.issubset(tool_ids)
 
 
 class TestRegisterTool:

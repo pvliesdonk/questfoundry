@@ -49,9 +49,22 @@ IMPLICIT_TOOL_DEFINITIONS: dict[str, Tool] = {
         name="Delete Artifact",
         description="Delete an artifact from a store when permitted.",
     ),
+    # Lifecycle tools - per meta/docs/store-semantics.md, these are part of
+    # the meta-model contract for artifact lifecycle management
+    "request_lifecycle_transition": Tool(
+        id="request_lifecycle_transition",
+        name="Request Lifecycle Transition",
+        description="Request a lifecycle state transition for an artifact (draft→review→approved→cold).",
+    ),
+    "get_lifecycle_state": Tool(
+        id="get_lifecycle_state",
+        name="Get Lifecycle State",
+        description="Get the current lifecycle state of an artifact and available transitions.",
+    ),
 }
 
-PERSISTENCE_TOOL_IDS = tuple(IMPLICIT_TOOL_DEFINITIONS.keys())
+PERSISTENCE_TOOL_IDS = ("save_artifact", "update_artifact", "delete_artifact")
+LIFECYCLE_TOOL_IDS = ("request_lifecycle_transition", "get_lifecycle_state")
 
 # Registry mapping tool IDs to implementation classes
 # Populated by register_tool decorator or direct assignment
@@ -234,12 +247,20 @@ class ToolRegistry:
         return tool_refs
 
     def _get_implicit_tool_refs(self, agent: Agent) -> set[str]:
-        """Determine implicit tool refs derived from store permissions."""
+        """Determine implicit tool refs derived from store permissions.
+
+        Agents with store write access get:
+        - Persistence tools (save, update, delete)
+        - Lifecycle tools (request_lifecycle_transition, get_lifecycle_state)
+
+        These are part of the meta-model contract per meta/docs/store-semantics.md.
+        """
 
         implicit: set[str] = set()
 
         if self._agent_has_store_write_access(agent):
             implicit.update(PERSISTENCE_TOOL_IDS)
+            implicit.update(LIFECYCLE_TOOL_IDS)
 
         return implicit
 

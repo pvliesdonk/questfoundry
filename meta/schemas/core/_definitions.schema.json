@@ -266,16 +266,22 @@
       "description": "Type of inter-agent message. 'digest' is a runtime-generated summary of multiple messages (flow control). See message.schema.json for payload definitions."
     },
 
-    "completion_status": {
+    "task_completion": {
       "type": "string",
-      "enum": [
-        "success",
-        "partial",
-        "failed",
-        "blocked",
-        "cancelled"
-      ],
-      "description": "Status of a completed delegation"
+      "enum": ["completed", "blocked", "cancelled", "failed"],
+      "description": "Whether the delegated task finished. 'completed' means work is done (regardless of findings quality)."
+    },
+
+    "result_assessment": {
+      "type": "string",
+      "enum": ["pass", "partial", "fail", "skip", "info"],
+      "description": "Quality assessment of the work product. 'partial' = some issues found, 'skip' = not applicable, 'info' = informational only."
+    },
+
+    "action_recommendation": {
+      "type": "string",
+      "enum": ["proceed", "rework", "escalate", "hold"],
+      "description": "Suggested next action for orchestrator."
     }
   }
 }
