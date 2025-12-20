@@ -109,8 +109,6 @@
     "requests_per_agent_per_minute": 5
   },
 
-  "cost_tier": "high",
-
   "examples": [
     {
       "description": "Generate illustration for a signpost scene",

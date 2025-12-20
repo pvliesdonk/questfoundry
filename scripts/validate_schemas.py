@@ -19,14 +19,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 
 try:
-    import jsonschema
-    from jsonschema import Draft202012Validator, RefResolver
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
+    from referencing.exceptions import Unresolvable
+    import referencing.jsonschema
 except ImportError:
-    print("ERROR: jsonschema not installed. Run: uv sync --extra dev")
+    print("ERROR: jsonschema/referencing not installed. Run: uv sync --extra dev")
     sys.exit(1)
 
 
@@ -60,36 +60,58 @@ def resolve_schema_path(json_file: Path, schema_ref: str) -> Path | None:
     return schema_path
 
 
-def build_resolver(schema_path: Path, schema: dict) -> RefResolver:
-    """Build a resolver that can handle local $ref references."""
-    schema_dir = schema_path.parent
-    base_uri = schema_path.as_uri()
+def build_registry(schema_path: Path, repo_root: Path) -> Registry:
+    """Build a registry with the schema and all referenced schemas."""
+    loaded_schemas: dict[str, Resource] = {}
 
-    # Custom handler for file:// URIs
-    def file_handler(uri: str) -> dict:
-        # Convert file:// URI back to path using proper URL parsing
+    def load_schema_resource(path: Path) -> Resource:
+        """Load a schema file and create a Resource."""
+        uri = path.as_uri()
+        if uri in loaded_schemas:
+            return loaded_schemas[uri]
+
+        schema = load_json(path)
+        if schema is None:
+            raise ValueError(f"Failed to load schema: {path}")
+
+        resource = Resource.from_contents(
+            schema, default_specification=referencing.jsonschema.DRAFT202012
+        )
+        loaded_schemas[uri] = resource
+        return resource
+
+    def retrieve(uri: str) -> Resource:
+        """Retrieve a schema by URI for the registry."""
+        # Handle file:// URIs
         if uri.startswith("file://"):
-            parsed_uri = urlparse(uri)
-            path = Path(url2pathname(parsed_uri.path))
-        else:
-            # Relative reference
-            path = schema_dir / uri
+            path = Path(uri[7:])
+            if not path.exists():
+                raise Unresolvable(uri)
+            return load_schema_resource(path)
 
-        try:
-            with open(path) as f:
-                return json.load(f)
-        except OSError as e:
-            raise jsonschema.exceptions.RefResolutionError(
-                f"Cannot read $ref file {path}: {e}"
-            ) from e
-        except json.JSONDecodeError as e:
-            raise jsonschema.exceptions.RefResolutionError(
-                f"Invalid JSON in $ref file {path}: {e}"
-            ) from e
+        # Check if it's already loaded (by short name or full URI)
+        for loaded_uri, resource in loaded_schemas.items():
+            # Match by filename
+            if loaded_uri.endswith("/" + uri) or loaded_uri.endswith("/" + uri.lstrip("../")):
+                return resource
 
-    handlers = {"file": file_handler}
+        raise Unresolvable(uri)
 
-    return RefResolver(base_uri, schema, handlers=handlers)
+    # Pre-load all schemas in meta/schemas/ tree for cross-references
+    meta_schemas_dir = repo_root / "meta" / "schemas"
+    if meta_schemas_dir.exists():
+        for schema_file in meta_schemas_dir.rglob("*.json"):
+            try:
+                load_schema_resource(schema_file)
+            except Exception:
+                pass  # Skip files that fail to load
+
+    # Build registry with all loaded schemas
+    registry = Registry(retrieve=retrieve)
+    for uri, resource in loaded_schemas.items():
+        registry = registry.with_resource(uri, resource)
+
+    return registry
 
 
 def validate_file(
@@ -128,10 +150,10 @@ def validate_file(
     if schema is None:
         return False, [f"Failed to load schema: {schema_path}"]
 
-    # Build resolver for $ref handling
+    # Build registry for $ref handling
     try:
-        resolver = build_resolver(schema_path, schema)
-        validator = Draft202012Validator(schema, resolver=resolver)
+        registry = build_registry(schema_path, repo_root)
+        validator = Draft202012Validator(schema, registry=registry)
 
         # Validate (without $schema property)
         validation_errors = list(validator.iter_errors(data_to_validate))
@@ -141,7 +163,7 @@ def validate_file(
                 errors.append(f"  {path}: {error.message}")
             return False, errors
 
-    except jsonschema.exceptions.RefResolutionError as e:
+    except Unresolvable as e:
         return False, [f"Schema $ref resolution error: {e}"]
     except Exception as e:
         return False, [f"Validation error: {e}"]

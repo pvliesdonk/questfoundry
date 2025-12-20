@@ -4,7 +4,7 @@
   "name": "Reference Sheet",
   "summary": "Visual reference for recurring elements",
   "description": "Visual reference for recurring elements: characters, locations, or objects. Ensures visual consistency across illustrations. Art Director maintains these; generate_image tool consults them for consistency.",
-  "category": "reference",
+  "category": "record",
 
   "fields": [
     {
@@ -48,7 +48,6 @@
       "name": "character_details",
       "type": "object",
       "description": "Character-specific details (when subject_type=character)",
-      "condition": "subject_type == 'character'",
       "properties": [
         {
           "name": "physical_description",
@@ -102,7 +101,6 @@
       "name": "location_details",
       "type": "object",
       "description": "Location-specific details (when subject_type=location)",
-      "condition": "subject_type == 'location'",
       "properties": [
         {
           "name": "physical_description",
@@ -152,7 +150,6 @@
       "name": "object_details",
       "type": "object",
       "description": "Object-specific details (when subject_type=object)",
-      "condition": "subject_type == 'object'",
       "properties": [
         {
           "name": "physical_description",

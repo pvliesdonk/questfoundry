@@ -110,8 +110,6 @@
     "requests_per_agent_per_minute": 5
   },
 
-  "cost_tier": "high",
-
   "examples": [
     {
       "description": "Generate ambient soundscape for a location",
