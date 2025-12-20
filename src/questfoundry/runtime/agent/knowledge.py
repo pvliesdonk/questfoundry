@@ -21,7 +21,23 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
 
+import logging
+
 from questfoundry.runtime.models.base import KnowledgeContent
+
+logger = logging.getLogger(__name__)
+
+# Valid knowledge layers for archetype-based inclusion
+VALID_LAYERS = frozenset({"must_know", "should_know", "role_specific"})
+
+
+def _combine_entry_lists(explicit: list[str], archetype_matched: list[str]) -> list[str]:
+    """Combine explicit and archetype-matched entries, preserving order.
+
+    Explicit entries come first, then archetype-matched entries that aren't
+    already in the explicit list (to avoid duplicates).
+    """
+    return list(explicit) + [eid for eid in archetype_matched if eid not in set(explicit)]
 
 
 @dataclass
@@ -86,6 +102,9 @@ class KnowledgeContextBuilder:
         """
         Build knowledge context for an agent.
 
+        Includes both explicitly listed entries from agent.knowledge_requirements
+        and entries that match the agent's archetypes via applicable_to.archetypes.
+
         Args:
             agent: Agent definition with knowledge_requirements
             studio: Studio with knowledge entries
@@ -101,6 +120,9 @@ class KnowledgeContextBuilder:
 
         knowledge_req = agent.knowledge_requirements
 
+        # Find entries that apply to this agent's archetypes
+        archetype_entries = self._find_entries_by_archetype(agent, studio)
+
         # 1. Constitution - always inline
         constitution_section = None
         if knowledge_req and knowledge_req.constitution:
@@ -111,13 +133,18 @@ class KnowledgeContextBuilder:
                 used_tokens += self._count_tokens(constitution_section)
 
         # 2. Must-know - inline up to budget, overflow to menu
+        # Combine explicit must_know with archetype-matched must_know entries
         must_know_section = None
-        if knowledge_req and knowledge_req.must_know:
+        explicit_must_know = (knowledge_req.must_know or []) if knowledge_req else []
+        archetype_must_know = archetype_entries.get("must_know", [])
+        all_must_know = _combine_entry_lists(explicit_must_know, archetype_must_know)
+
+        if all_must_know:
             must_know_lines: list[str] = []
             must_know_budget = self.config.must_know_tokens
             must_know_tokens_used = 0
 
-            for entry_id in knowledge_req.must_know:
+            for entry_id in all_must_know:
                 entry = studio.knowledge.get(entry_id)
                 if not entry:
                     continue
@@ -148,25 +175,29 @@ class KnowledgeContextBuilder:
                 must_know_section = "## Critical Knowledge\n\n" + "\n\n".join(must_know_lines)
                 sections.append(must_know_section)
 
-        # 3. Should-know - menu only (skip if already in menu)
-        if knowledge_req and knowledge_req.should_know:
-            for entry_id in knowledge_req.should_know:
-                if entry_id in entries_in_menu:
-                    continue
-                entry = studio.knowledge.get(entry_id)
-                if entry:
-                    menu_items.append(self._format_menu_item(entry))
-                    entries_in_menu.append(entry_id)
+        # 3. Should-know - menu only (skip if already in menu or inlined)
+        explicit_should_know = (knowledge_req.should_know or []) if knowledge_req else []
+        archetype_should_know = archetype_entries.get("should_know", [])
+        all_should_know = _combine_entry_lists(explicit_should_know, archetype_should_know)
+        for entry_id in all_should_know:
+            if entry_id in entries_in_menu or entry_id in entries_inlined:
+                continue
+            entry = studio.knowledge.get(entry_id)
+            if entry:
+                menu_items.append(self._format_menu_item(entry))
+                entries_in_menu.append(entry_id)
 
-        # 4. Role-specific - menu only (skip if already in menu)
-        if knowledge_req and knowledge_req.role_specific:
-            for entry_id in knowledge_req.role_specific:
-                if entry_id in entries_in_menu:
-                    continue
-                entry = studio.knowledge.get(entry_id)
-                if entry:
-                    menu_items.append(self._format_menu_item(entry))
-                    entries_in_menu.append(entry_id)
+        # 4. Role-specific - menu only (skip if already in menu or inlined)
+        explicit_role_specific = (knowledge_req.role_specific or []) if knowledge_req else []
+        archetype_role_specific = archetype_entries.get("role_specific", [])
+        all_role_specific = _combine_entry_lists(explicit_role_specific, archetype_role_specific)
+        for entry_id in all_role_specific:
+            if entry_id in entries_in_menu or entry_id in entries_inlined:
+                continue
+            entry = studio.knowledge.get(entry_id)
+            if entry:
+                menu_items.append(self._format_menu_item(entry))
+                entries_in_menu.append(entry_id)
 
         # 5. Build menu section
         menu_section = None
@@ -261,6 +292,60 @@ class KnowledgeContextBuilder:
         use a proper tokenizer like tiktoken.
         """
         return len(text) // self.config.chars_per_token
+
+    def _find_entries_by_archetype(self, agent: Agent, studio: Studio) -> dict[str, list[str]]:
+        """
+        Find knowledge entries that apply to this agent's archetypes.
+
+        Checks each knowledge entry's applicable_to.archetypes field against
+        the agent's archetypes. Returns entries grouped by their layer.
+
+        Args:
+            agent: Agent definition with archetypes
+            studio: Studio with knowledge entries
+
+        Returns:
+            Dict mapping layer names to lists of matching entry IDs
+        """
+        result: dict[str, list[str]] = {
+            "must_know": [],
+            "should_know": [],
+            "role_specific": [],
+        }
+
+        agent_archetypes = set(getattr(agent, "archetypes", None) or [])
+        if not agent_archetypes:
+            return result
+
+        for entry_id, entry in studio.knowledge.items():
+            # Check if entry has applicable_to with archetypes
+            applicable_to = entry.applicable_to
+            if not applicable_to:
+                continue
+
+            # Handle both dict and model forms
+            if isinstance(applicable_to, dict):
+                entry_archetypes = set(applicable_to.get("archetypes", []))
+            else:
+                entry_archetypes = set(applicable_to.archetypes or [])
+
+            # Check for archetype match
+            if not entry_archetypes.intersection(agent_archetypes):
+                continue
+
+            # Add to appropriate layer bucket
+            layer = entry.layer
+            if layer in VALID_LAYERS:
+                result[layer].append(entry_id)
+            elif layer not in {"constitution", "lookup"}:
+                # Warn about unknown layers (constitution and lookup are handled separately)
+                logger.warning(
+                    "Knowledge entry '%s' has unknown layer '%s', skipping archetype inclusion",
+                    entry_id,
+                    layer,
+                )
+
+        return result
 
 
 def build_knowledge_context(

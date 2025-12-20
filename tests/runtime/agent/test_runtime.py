@@ -513,19 +513,19 @@ class TestContextSummarizationPressureGating:
         runtime = AgentRuntime(
             provider=mock_provider,
             studio=basic_studio,
-            context_limit=1000,  # Small limit
+            context_limit=1000,  # Small limit (in tokens)
         )
 
-        # Simulate high context pressure by updating the secretary's token tracking
-        runtime._secretary._agent_context_tokens["test_agent"] = 950  # 95% usage
-
-        # Create enough history to trigger turn-count-based summarization
+        # Create history that actually fills 90%+ of context
+        # Each message needs ~25 tokens to reach ~950 tokens with 40 messages
+        # JSON overhead adds ~20 chars per message, so we need ~100 char content
+        padding = "x" * 100  # ~25 tokens per message
         history = []
         for i in range(20):
-            history.append({"role": "user", "content": f"Message {i}"})
-            history.append({"role": "assistant", "content": f"Response {i}"})
+            history.append({"role": "user", "content": f"Message {i} {padding}"})
+            history.append({"role": "assistant", "content": f"Response {i} {padding}"})
 
-        # Apply summarization - should summarize because pressure is >= 90%
+        # Apply summarization - should summarize because actual history is >= 90%
         result = runtime._apply_context_summarization(history, "test_agent")
 
         # History should be summarized (fewer messages)

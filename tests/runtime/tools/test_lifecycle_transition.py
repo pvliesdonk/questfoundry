@@ -2,11 +2,17 @@
 
 import pytest
 
+from questfoundry.runtime.models.enums import StoreSemantics
 from questfoundry.runtime.storage.lifecycle import (
     ArtifactLifecycle,
     LifecycleManager,
     LifecycleState,
     LifecycleTransition,
+)
+from questfoundry.runtime.storage.store_manager import (
+    StoreDefinition,
+    StoreManager,
+    WorkflowIntent,
 )
 from questfoundry.runtime.tools.base import ToolContext
 from questfoundry.runtime.tools.lifecycle_transition import (
@@ -341,6 +347,20 @@ class TestRequestLifecycleTransitionTool:
         """Force=true bypasses validation requirement."""
         tool_context.agent_id = "gatekeeper"
         mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        # Cold transitions require a store manager
+        manuscript_store = StoreDefinition(
+            id="manuscript",
+            name="Manuscript",
+            semantics=StoreSemantics.COLD,
+            artifact_types=["section"],
+            workflow_intent=WorkflowIntent(
+                production_guidance="exclusive",
+                designated_producers=["gatekeeper"],
+            ),
+        )
+        tool_context.store_manager = StoreManager({"manuscript": manuscript_store})
 
         tool = RequestLifecycleTransitionTool(
             MockToolDefinition("request_lifecycle_transition"),
@@ -465,7 +485,7 @@ class TestRequestLifecycleTransitionTool:
 
     @pytest.mark.asyncio
     async def test_no_lifecycle_manager_allows_transition(self, mock_project):
-        """Without lifecycle manager, any transition allowed."""
+        """Without lifecycle manager, any transition allowed (for non-cold states)."""
         ctx = ToolContext(
             studio=MockStudio(),
             project=mock_project,
@@ -478,11 +498,12 @@ class TestRequestLifecycleTransitionTool:
             ctx,
         )
 
-        # Even draft -> cold works without manager
+        # draft -> review works without lifecycle manager validation
+        # (cold transitions still require store_manager regardless)
         result = await tool.execute(
             {
                 "artifact_id": "section_001",
-                "target_state": "cold",
+                "target_state": "review",
             }
         )
 
@@ -676,3 +697,371 @@ class TestGetLifecycleStateTool:
         targets = {t["target_state"] for t in transitions}
         assert "draft" in targets
         assert "approved" in targets  # Gatekeeper can see this
+
+
+class TestColdTransitionWithStoreMigration:
+    """Tests for cold transition with store migration."""
+
+    @pytest.fixture
+    def store_manager(self):
+        """Create store manager with cold stores."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+            ),
+            "manuscript": StoreDefinition(
+                id="manuscript",
+                name="Manuscript",
+                semantics=StoreSemantics.COLD,
+                artifact_types=["section"],
+                workflow_intent=WorkflowIntent(
+                    production_guidance="exclusive",
+                    designated_producers=["gatekeeper"],
+                ),
+            ),
+            "canon": StoreDefinition(
+                id="canon",
+                name="Canon",
+                semantics=StoreSemantics.COLD,
+                artifact_types=["canon_pack"],
+                workflow_intent=WorkflowIntent(
+                    production_guidance="exclusive",
+                    designated_producers=["lore_weaver"],
+                ),
+            ),
+        }
+        return StoreManager(stores)
+
+    @pytest.fixture
+    def cold_tool_context(self, mock_project, lifecycle_manager, store_manager):
+        """Create tool context with store manager."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=mock_project,
+            agent_id="gatekeeper",
+            lifecycle_manager=lifecycle_manager,
+            store_manager=store_manager,
+        )
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_migrates_store(self, cold_tool_context, mock_project):
+        """Cold transition updates both lifecycle_state and _store."""
+        # Set artifact to approved state
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            cold_tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "cold",
+                "force": True,  # Skip validation for this test
+            }
+        )
+
+        assert result.success is True
+        assert result.data["transitioned"] is True
+        assert result.data["new_state"] == "cold"
+        assert result.data["new_store"] == "manuscript"
+        assert result.data["previous_store"] == "workspace"
+
+        # Verify artifact was updated
+        artifact = mock_project.artifacts["section_001"]
+        assert artifact["_lifecycle_state"] == "cold"
+        assert artifact["_store"] == "manuscript"
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_rejects_non_exclusive_writer(
+        self, cold_tool_context, mock_project
+    ):
+        """Cold transition fails if agent is not exclusive writer."""
+        cold_tool_context.agent_id = "scene_smith"  # Not an exclusive writer
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            cold_tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "cold",
+                "force": True,
+            }
+        )
+
+        assert result.success is False
+        # Lifecycle manager rejects because scene_smith not in allowed_agents
+        assert "not allowed" in result.error.lower()
+        # Artifact should NOT have changed
+        assert mock_project.artifacts["section_001"]["_lifecycle_state"] == "approved"
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_no_cold_store_for_type(self, cold_tool_context, mock_project):
+        """Cold transition fails if no cold store accepts artifact type."""
+        # Create artifact with type that has no cold store
+        mock_project.artifacts["unknown_001"] = {
+            "_id": "unknown_001",
+            "_type": "unknown_type",  # No cold store for this
+            "_lifecycle_state": "approved",
+            "title": "Unknown Type",
+        }
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            cold_tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "unknown_001",
+                "target_state": "cold",
+                "force": True,
+            }
+        )
+
+        assert result.success is False
+        assert "No cold store accepts" in result.error
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_idempotent(self, cold_tool_context, mock_project):
+        """Repeated cold transition is idempotent."""
+        # Artifact already in cold state and manuscript store
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "cold"
+        mock_project.artifacts["section_001"]["_store"] = "manuscript"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            cold_tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "cold",
+            }
+        )
+
+        assert result.success is True
+        # Early check catches "already in target state" and returns transitioned=False
+        assert result.data.get("transitioned") is False
+        assert "already" in result.data.get("message", "").lower()
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_requires_type(self, cold_tool_context, mock_project):
+        """Cold transition fails for artifacts without _type."""
+        mock_project.artifacts["typeless"] = {
+            "_id": "typeless",
+            "_lifecycle_state": "approved",
+            "content": "No type",
+        }
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            cold_tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "typeless",
+                "target_state": "cold",
+                "force": True,
+            }
+        )
+
+        assert result.success is False
+        assert "no type" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_canon_pack_to_canon_store(self, cold_tool_context, mock_project):
+        """canon_pack goes to canon store, not manuscript."""
+        cold_tool_context.agent_id = "lore_weaver"  # Exclusive writer for canon
+        mock_project.artifacts["canon_001"] = {
+            "_id": "canon_001",
+            "_type": "canon_pack",
+            "_lifecycle_state": "approved",
+            "_store": "workspace",
+            "title": "Canon Pack",
+        }
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            cold_tool_context,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "canon_001",
+                "target_state": "cold",
+                "force": True,
+            }
+        )
+
+        assert result.success is True
+        assert result.data["new_store"] == "canon"
+
+    @pytest.mark.asyncio
+    async def test_cold_transition_without_store_manager(self, mock_project, lifecycle_manager):
+        """Cold transition fails without store manager (atomicity requirement)."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=mock_project,
+            agent_id="gatekeeper",
+            lifecycle_manager=lifecycle_manager,
+            store_manager=None,  # No store manager
+        )
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "cold",
+                "force": True,
+            }
+        )
+
+        # Cold transitions require StoreManager for atomic state + store update
+        assert result.success is False
+        assert "StoreManager not available" in result.error
+
+
+class TestDirectGatecheckToColdTransition:
+    """Tests for direct gatecheck → cold transition (Phase 4)."""
+
+    @pytest.fixture
+    def lifecycle_manager_with_direct_cold(self):
+        """Create lifecycle manager with gatecheck → cold transition."""
+        manager = LifecycleManager()
+
+        section_lifecycle = ArtifactLifecycle(
+            artifact_type_id="section",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "review": LifecycleState(id="review", name="Review"),
+                "gatecheck": LifecycleState(id="gatecheck", name="Gatecheck"),
+                "approved": LifecycleState(id="approved", name="Approved"),
+                "cold": LifecycleState(id="cold", name="Cold", terminal=True),
+            },
+            transitions=[
+                LifecycleTransition(from_state="draft", to_state="review"),
+                LifecycleTransition(from_state="review", to_state="gatecheck"),
+                LifecycleTransition(from_state="gatecheck", to_state="draft"),
+                LifecycleTransition(from_state="gatecheck", to_state="approved"),
+                # Direct gatecheck → cold for gatekeeper only
+                LifecycleTransition(
+                    from_state="gatecheck",
+                    to_state="cold",
+                    allowed_agents=["gatekeeper"],
+                    requires_validation=["integrity", "style"],
+                ),
+                LifecycleTransition(
+                    from_state="approved",
+                    to_state="cold",
+                    requires_validation=["integrity", "style"],
+                ),
+            ],
+            initial_state="draft",
+        )
+        manager.register_lifecycle(section_lifecycle)
+        return manager
+
+    @pytest.fixture
+    def store_manager(self):
+        """Create store manager with manuscript store."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+            ),
+            "manuscript": StoreDefinition(
+                id="manuscript",
+                name="Manuscript",
+                semantics=StoreSemantics.COLD,
+                artifact_types=["section"],
+                workflow_intent=WorkflowIntent(
+                    production_guidance="exclusive",
+                    designated_producers=["gatekeeper"],
+                ),
+            ),
+        }
+        return StoreManager(stores)
+
+    @pytest.mark.asyncio
+    async def test_gatekeeper_can_go_directly_to_cold(
+        self, mock_project, lifecycle_manager_with_direct_cold, store_manager
+    ):
+        """Gatekeeper can transition directly from gatecheck to cold."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=mock_project,
+            agent_id="gatekeeper",
+            lifecycle_manager=lifecycle_manager_with_direct_cold,
+            store_manager=store_manager,
+        )
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "gatecheck"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "cold",
+                "force": True,  # Skip validation
+            }
+        )
+
+        assert result.success is True
+        assert result.data["transitioned"] is True
+        assert result.data["new_state"] == "cold"
+        assert result.data["previous_state"] == "gatecheck"
+        assert result.data["new_store"] == "manuscript"
+
+    @pytest.mark.asyncio
+    async def test_non_gatekeeper_cannot_go_directly_to_cold(
+        self, mock_project, lifecycle_manager_with_direct_cold, store_manager
+    ):
+        """Non-gatekeeper cannot skip approved state."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=mock_project,
+            agent_id="scene_smith",
+            lifecycle_manager=lifecycle_manager_with_direct_cold,
+            store_manager=store_manager,
+        )
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "gatecheck"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "cold",
+                "force": True,
+            }
+        )
+
+        assert result.success is False
+        assert "not allowed" in result.error.lower()

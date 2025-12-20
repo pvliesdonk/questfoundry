@@ -318,6 +318,66 @@ class StoreManager:
         """Get all stores with the given semantics."""
         return [s for s in self._stores.values() if s.semantics == semantics]
 
+    def get_cold_store_for_artifact_type(self, artifact_type: str) -> str | None:
+        """
+        Get the cold store that accepts this artifact type.
+
+        Used during lifecycle transitions to determine where artifacts
+        should be promoted when transitioning to 'cold' state.
+
+        Args:
+            artifact_type: Artifact type ID (e.g., 'section', 'canon_pack')
+
+        Returns:
+            Store ID of the cold store, or None if no cold store accepts this type
+        """
+        for store in self._stores.values():
+            if store.semantics == StoreSemantics.COLD and artifact_type in store.artifact_types:
+                return store.id
+        return None
+
+    def is_exclusive_writer(self, store_id: str, agent_id: str) -> bool:
+        """
+        Check if an agent is authorized as an exclusive writer for a store.
+
+        For stores with exclusive production semantics, only designated producers
+        may write. For non-exclusive stores, any agent may write.
+
+        Args:
+            store_id: Store ID to check
+            agent_id: Agent ID to verify
+
+        Returns:
+            True if agent can write to the store
+        """
+        store = self._stores.get(store_id)
+        if not store:
+            return False
+
+        # Non-exclusive stores allow any agent
+        if not store.is_exclusive:
+            return True
+
+        # Exclusive stores require agent to be in designated_producers
+        return agent_id in store.exclusive_producers
+
+    def get_exclusive_writers(self, store_id: str) -> list[str]:
+        """
+        Get the list of exclusive writers for a store.
+
+        Args:
+            store_id: Store ID
+
+        Returns:
+            List of agent IDs that are exclusive writers.
+            Returns empty list if store is non-exclusive or if store doesn't exist.
+            Use get_store() first if you need to distinguish between these cases.
+        """
+        store = self._stores.get(store_id)
+        if store and store.is_exclusive:
+            return store.exclusive_producers
+        return []
+
     def get_exclusive_stores(self) -> list[StoreDefinition]:
         """Get all stores with exclusive production semantics."""
         return [s for s in self._stores.values() if s.is_exclusive]

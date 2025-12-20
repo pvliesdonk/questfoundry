@@ -528,3 +528,142 @@ class TestStoreManagerWithRealDomain:
         assert not audit.allows_updates()
         assert not audit.allows_deletes()
         assert not audit.is_exclusive
+
+
+class TestStoreManagerColdStoreHelpers:
+    """Tests for cold store transition helper methods."""
+
+    def test_get_cold_store_for_artifact_type_found(self):
+        """Get cold store that accepts a specific artifact type."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+            ),
+            "manuscript": StoreDefinition(
+                id="manuscript",
+                name="Manuscript",
+                semantics=StoreSemantics.COLD,
+                artifact_types=["section", "section_brief"],
+            ),
+            "canon": StoreDefinition(
+                id="canon",
+                name="Canon",
+                semantics=StoreSemantics.COLD,
+                artifact_types=["canon_pack"],
+            ),
+        }
+        manager = StoreManager(stores)
+
+        assert manager.get_cold_store_for_artifact_type("section") == "manuscript"
+        assert manager.get_cold_store_for_artifact_type("canon_pack") == "canon"
+
+    def test_get_cold_store_for_artifact_type_not_found(self):
+        """Returns None when no cold store accepts artifact type."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+            ),
+            "manuscript": StoreDefinition(
+                id="manuscript",
+                name="Manuscript",
+                semantics=StoreSemantics.COLD,
+                artifact_types=["section"],
+            ),
+        }
+        manager = StoreManager(stores)
+
+        # No cold store accepts "unknown_type"
+        assert manager.get_cold_store_for_artifact_type("unknown_type") is None
+
+    def test_get_cold_store_ignores_non_cold_stores(self):
+        """Only cold stores are considered."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+                artifact_types=["section"],  # Accepts section but not cold
+            ),
+        }
+        manager = StoreManager(stores)
+
+        # workspace accepts section but is not cold
+        assert manager.get_cold_store_for_artifact_type("section") is None
+
+    def test_is_exclusive_writer_authorized(self):
+        """Exclusive writer is authorized for exclusive store."""
+        stores = {
+            "manuscript": StoreDefinition(
+                id="manuscript",
+                name="Manuscript",
+                semantics=StoreSemantics.COLD,
+                workflow_intent=WorkflowIntent(
+                    production_guidance="exclusive",
+                    designated_producers=["gatekeeper"],
+                ),
+            ),
+        }
+        manager = StoreManager(stores)
+
+        assert manager.is_exclusive_writer("manuscript", "gatekeeper") is True
+        assert manager.is_exclusive_writer("manuscript", "scene_smith") is False
+
+    def test_is_exclusive_writer_non_exclusive_store(self):
+        """Any agent can write to non-exclusive store."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+            ),
+        }
+        manager = StoreManager(stores)
+
+        # Any agent can write
+        assert manager.is_exclusive_writer("workspace", "any_agent") is True
+        assert manager.is_exclusive_writer("workspace", "gatekeeper") is True
+
+    def test_is_exclusive_writer_unknown_store(self):
+        """Unknown store returns False."""
+        manager = StoreManager()
+        assert manager.is_exclusive_writer("unknown", "any_agent") is False
+
+    def test_get_exclusive_writers_exclusive_store(self):
+        """Get list of exclusive writers for a store."""
+        stores = {
+            "manuscript": StoreDefinition(
+                id="manuscript",
+                name="Manuscript",
+                semantics=StoreSemantics.COLD,
+                workflow_intent=WorkflowIntent(
+                    production_guidance="exclusive",
+                    designated_producers=["gatekeeper", "showrunner"],
+                ),
+            ),
+        }
+        manager = StoreManager(stores)
+
+        writers = manager.get_exclusive_writers("manuscript")
+        assert writers == ["gatekeeper", "showrunner"]
+
+    def test_get_exclusive_writers_non_exclusive_store(self):
+        """Non-exclusive store returns empty list."""
+        stores = {
+            "workspace": StoreDefinition(
+                id="workspace",
+                name="Workspace",
+                semantics=StoreSemantics.MUTABLE,
+            ),
+        }
+        manager = StoreManager(stores)
+
+        assert manager.get_exclusive_writers("workspace") == []
+
+    def test_get_exclusive_writers_unknown_store(self):
+        """Unknown store returns empty list."""
+        manager = StoreManager()
+        assert manager.get_exclusive_writers("unknown") == []

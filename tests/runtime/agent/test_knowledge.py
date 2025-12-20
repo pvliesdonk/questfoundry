@@ -472,3 +472,45 @@ class TestKnowledgeContextBuilderIntegration:
         for agent in studio.agents:
             context = builder.build_context(agent, studio)
             assert isinstance(context, KnowledgeContext)
+
+    async def test_archetype_based_knowledge_inclusion(self, domain_v4_path):
+        """Knowledge entries with applicable_to.archetypes should be auto-included."""
+        from questfoundry.runtime.domain.loader import load_studio
+
+        result = await load_studio(domain_v4_path)
+        if not result.success:
+            pytest.skip(f"Could not load domain: {result.errors}")
+
+        studio = result.studio
+
+        # Find scene_smith (archetype: creator)
+        scene_smith = next((a for a in studio.agents if a.id == "scene_smith"), None)
+        if not scene_smith:
+            pytest.skip("Scene Smith agent not found")
+
+        # Check if delegation_protocol exists and applies to creators
+        delegation_protocol = studio.knowledge.get("delegation_protocol")
+        if not delegation_protocol:
+            pytest.skip("delegation_protocol knowledge entry not found")
+
+        # Verify delegation_protocol applies to creator archetype
+        applicable_to = delegation_protocol.applicable_to
+        if isinstance(applicable_to, dict):
+            archetypes = applicable_to.get("archetypes", [])
+        else:
+            archetypes = applicable_to.archetypes if applicable_to else []
+
+        if "creator" not in archetypes:
+            pytest.skip("delegation_protocol does not apply to creator archetype")
+
+        # Build context for scene_smith
+        builder = KnowledgeContextBuilder()
+        context = builder.build_context(scene_smith, studio)
+
+        # delegation_protocol should be included even though it's not
+        # explicitly listed in scene_smith's knowledge_requirements
+        all_entries = context.entries_inlined + context.entries_in_menu
+        assert "delegation_protocol" in all_entries, (
+            f"delegation_protocol should be auto-included for creator archetype. "
+            f"Got entries: {all_entries}"
+        )

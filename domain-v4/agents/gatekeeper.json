@@ -50,6 +50,13 @@
       "tool_ref": "return_to_orchestrator"
     },
     {
+      "id": "use_request_lifecycle_transition",
+      "name": "Request Lifecycle Transition",
+      "description": "Promote approved artifacts to cold storage after gatecheck passes. Gatekeeper is the exclusive writer for manuscript store.",
+      "category": "tool",
+      "tool_ref": "request_lifecycle_transition"
+    },
+    {
       "id": "read_all_stores",
       "name": "Read All Stores",
       "description": "Can read from any store to validate content",

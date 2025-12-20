@@ -39,7 +39,6 @@ from questfoundry.runtime.agent.turn_validator import (
 from questfoundry.runtime.context import (
     ContextSecretary,
     Secretary,
-    SummarizationLevel,
     SummarizationPolicy,
 )
 from questfoundry.runtime.observability import EventType
@@ -530,10 +529,15 @@ class AgentRuntime:
         if not history:
             return history
 
+        # Estimate actual history size to check context pressure
+        # Can't rely on Secretary's cached value - it has the previous turn's size
+        history_tokens = sum(len(json.dumps(m)) // 4 for m in history)
+        context_limit = self._context_limit or self._secretary.context_limit
+        usage_fraction = history_tokens / context_limit if context_limit > 0 else 0
+
         # Gate on context pressure: only summarize at FULL level (>= 90%)
         # Per PR #180 tiered design - don't summarize when context pressure is low
-        current_level = self._secretary.get_current_level(agent_id)
-        if current_level < SummarizationLevel.FULL:
+        if usage_fraction < self._secretary.full_summarization_threshold:
             return history
 
         # Check if summarization is needed (group count check)
@@ -560,6 +564,167 @@ class AgentRuntime:
 
         return [summary_message] + preserved
 
+    # Static tools whose results don't change during a session
+    STATIC_TOOLS = frozenset(
+        {
+            "consult_playbook",
+            "consult_schema",
+            "consult_knowledge",
+            "consult_corpus",
+        }
+    )
+
+    # Size threshold for tool result summarization (~500 tokens = 2000 chars)
+    TOOL_RESULT_SIZE_THRESHOLD = 2000
+
+    def _deduplicate_static_tool_results(
+        self,
+        history: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """
+        Remove duplicate static tool results from history.
+
+        For static tools (consult_*), the result is the same every time.
+        We keep only the first occurrence and remove subsequent duplicates,
+        including the corresponding tool_call from assistant messages.
+
+        Args:
+            history: Conversation history
+
+        Returns:
+            History with duplicate static tool results removed
+        """
+        import hashlib
+
+        # Track seen static tool results: (tool_name, content_hash) -> tool_call_id
+        seen_static: dict[tuple[str, str], str] = {}
+        # Track tool_call_ids to remove from assistant messages
+        duplicate_tool_call_ids: set[str] = set()
+
+        # First pass: identify duplicates
+        for msg in history:
+            if msg.get("role") != "tool":
+                continue
+            tool_name = msg.get("name", "")
+            if tool_name not in self.STATIC_TOOLS:
+                continue
+
+            content = msg.get("content", "")
+            # MD5 is fine here - used for deduplication, not security
+            content_hash = hashlib.md5(content.encode()).hexdigest()  # noqa: S324
+            key = (tool_name, content_hash)
+
+            tool_call_id = msg.get("tool_call_id")
+            if key in seen_static:
+                # Duplicate - mark for removal
+                if tool_call_id:
+                    duplicate_tool_call_ids.add(tool_call_id)
+            else:
+                # First occurrence - keep it
+                seen_static[key] = tool_call_id or ""
+
+        if not duplicate_tool_call_ids:
+            return history  # No duplicates found
+
+        # Second pass: filter out duplicates
+        result: list[dict[str, Any]] = []
+        for msg in history:
+            role = msg.get("role")
+
+            if role == "tool":
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id in duplicate_tool_call_ids:
+                    continue  # Skip duplicate tool result
+
+            elif role == "assistant" and msg.get("tool_calls"):
+                # Filter out duplicate tool_calls from assistant message
+                original_calls = msg.get("tool_calls", [])
+                filtered_calls = [
+                    tc for tc in original_calls if tc.get("id") not in duplicate_tool_call_ids
+                ]
+                if filtered_calls:
+                    # Keep message with filtered tool_calls
+                    new_msg = dict(msg)
+                    new_msg["tool_calls"] = filtered_calls
+                    result.append(new_msg)
+                elif msg.get("content"):
+                    # Keep message without tool_calls if it has content
+                    new_msg = dict(msg)
+                    new_msg.pop("tool_calls", None)
+                    result.append(new_msg)
+                # Else: skip empty assistant message
+                continue
+
+            result.append(msg)
+
+        logger.info(
+            "Deduplicated %d static tool results from history",
+            len(duplicate_tool_call_ids),
+        )
+        return result
+
+    def _summarize_historical_tool_results(
+        self,
+        history: list[dict[str, Any]],
+        agent_id: str,
+    ) -> list[dict[str, Any]]:
+        """
+        Apply summarization to large tool results in history.
+
+        Called when context pressure is high (>= 70%). Summarizes large tool
+        results from previous turns to save space.
+
+        Args:
+            history: Conversation history
+            agent_id: Agent ID for context tracking
+
+        Returns:
+            History with large tool results summarized
+        """
+        result: list[dict[str, Any]] = []
+        for msg in history:
+            if msg.get("role") != "tool":
+                result.append(msg)
+                continue
+
+            content = msg.get("content", "")
+            if len(content) <= self.TOOL_RESULT_SIZE_THRESHOLD:
+                result.append(msg)
+                continue
+
+            # Summarize large tool result
+            tool_name = msg.get("name", "unknown")
+
+            # Use tool's summarization policy if available
+            summary = self._secretary.summarize_tool_result(
+                tool_id=tool_name,
+                result=content,
+                tool_call_id=msg.get("tool_call_id"),
+                agent_id=agent_id,
+            )
+
+            new_msg = dict(msg)
+            if summary.policy_applied == SummarizationPolicy.DROP:
+                new_msg["content"] = json.dumps(
+                    {
+                        "_summarized": f"[Large {tool_name} result dropped to save context]",
+                        "_original_size": len(content),
+                    }
+                )
+            elif summary.content:
+                new_msg["content"] = json.dumps(
+                    {
+                        "_summarized": summary.content,
+                        "_tool": tool_name,
+                        "_original_size": len(content),
+                    }
+                )
+            # else: keep original (PRESERVE policy)
+
+            result.append(new_msg)
+
+        return result
+
     def _get_agent_history_with_summarization(
         self,
         session: Session,
@@ -571,6 +736,12 @@ class AgentRuntime:
         Each agent only sees their own turns (not other agents' internal
         conversations), and older turns are summarized when needed to
         prevent context overflow.
+
+        Processing pipeline:
+        1. Get agent-specific history
+        2. Deduplicate static tool results (consult_*)
+        3. Summarize large tool results when context is high
+        4. Apply full context summarization if still over threshold
 
         Args:
             session: Current session
@@ -589,7 +760,20 @@ class AgentRuntime:
         if not agent_history:
             return None
 
-        # Apply context summarization if needed
+        # Check context pressure to decide on summarization
+        history_tokens = sum(len(json.dumps(m)) // 4 for m in agent_history)
+        context_limit = self._context_limit or self._secretary.context_limit
+        usage_fraction = history_tokens / context_limit if context_limit > 0 else 0
+
+        # Only apply deduplication and tool summarization when context is high (>= 70%)
+        if usage_fraction >= self._secretary.summarization_threshold:
+            # Step 1: Deduplicate static tool results
+            agent_history = self._deduplicate_static_tool_results(agent_history)
+
+            # Step 2: Summarize large tool results
+            agent_history = self._summarize_historical_tool_results(agent_history, agent_id)
+
+        # Step 3: Apply full context summarization if still over threshold (>= 90%)
         return self._apply_context_summarization(agent_history, agent_id)
 
     async def _execute_tool_calls(
