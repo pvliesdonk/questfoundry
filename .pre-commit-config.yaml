@@ -78,6 +78,18 @@ repos:
         files: ^src/questfoundry/
         args: [--config-file=pyproject.toml]
 
+  # JSON Schema validation for meta/ and domain-v4/
+  # Note: Uses warn mode in pre-commit, strict mode in CI
+  - repo: local
+    hooks:
+      - id: validate-schemas
+        name: validate JSON schemas
+        entry: uv run python scripts/validate_schemas.py
+        language: system
+        files: ^(domain-v4|meta/schemas)/.*\.json$
+        pass_filenames: false
+        always_run: true
+
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.39.0
