@@ -172,11 +172,13 @@ class ValidateStoryGraphTool(BaseTool):
             )
 
             # Extract outgoing connections from choice_intents (deduplicate)
+            # choice_intents can be strings or objects with target_anchor
             choice_intents = brief.get("choice_intents", [])
             for choice in choice_intents:
-                target = choice.get("target_anchor")
-                if target and target not in node.outgoing:
-                    node.outgoing.append(target)
+                if isinstance(choice, dict):
+                    target = choice.get("target_anchor")
+                    if target and target not in node.outgoing:
+                        node.outgoing.append(target)
 
             analysis.nodes[anchor] = node
 
@@ -186,7 +188,9 @@ class ValidateStoryGraphTool(BaseTool):
             if not include_drafts and lifecycle == "draft":
                 continue
 
-            section_anchor: str = section.get("anchor_id") or section.get("_id") or ""
+            section_anchor: str = (
+                section.get("anchor") or section.get("anchor_id") or section.get("_id") or ""
+            )
             if not section_anchor:
                 continue  # Skip sections without valid anchor
 
@@ -200,12 +204,13 @@ class ValidateStoryGraphTool(BaseTool):
                     existing.lifecycle_state = lifecycle
                     existing.artifact_type = "section"
                     existing.artifact_id = section.get("_id", "")
-                # Merge outgoing connections
+                # Merge outgoing connections (choices can be objects with target_anchor)
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
-                    target = choice.get("target_anchor")
-                    if target and target not in existing.outgoing:
-                        existing.outgoing.append(target)
+                    if isinstance(choice, dict):
+                        target = choice.get("target_anchor")
+                        if target and target not in existing.outgoing:
+                            existing.outgoing.append(target)
             else:
                 node = NodeInfo(
                     anchor_id=section_anchor,
@@ -214,11 +219,13 @@ class ValidateStoryGraphTool(BaseTool):
                     lifecycle_state=lifecycle,
                     artifact_type="section",
                 )
+                # choices can be objects with target_anchor
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
-                    target = choice.get("target_anchor")
-                    if target and target not in node.outgoing:
-                        node.outgoing.append(target)
+                    if isinstance(choice, dict):
+                        target = choice.get("target_anchor")
+                        if target and target not in node.outgoing:
+                            node.outgoing.append(target)
                 analysis.nodes[section_anchor] = node
 
         # Build incoming connections and detect missing targets in one pass
