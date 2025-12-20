@@ -41,25 +41,40 @@ class ReturnToOrchestratorTool(BaseTool):
 
         Args:
             args: Tool arguments including:
-                - status: complete, partial, blocked, needs_decision
                 - summary: Brief summary of what was accomplished
+                - result_assessment: pass, partial, fail, skip, info
+                - recommendation: proceed, rework, escalate, hold
                 - artifacts_produced: IDs of artifacts created/updated
                 - artifacts_ready_for_review: IDs ready for quality gating
-                - blockers: What's preventing progress (if blocked)
-                - recommendations: Suggestions for next steps
+                - blockers: What's preventing progress (if any)
         """
-        status = args.get("status")
         summary = args.get("summary")
+        result_assessment = args.get("result_assessment")
+        recommendation = args.get("recommendation")
         artifacts_produced = args.get("artifacts_produced", [])
         artifacts_ready_for_review = args.get("artifacts_ready_for_review", [])
         blockers = args.get("blockers", [])
-        recommendations = args.get("recommendations")
 
         # Validate required fields
-        if not status:
-            raise ToolValidationError("Status is required")
         if not summary:
-            raise ToolValidationError("Summary is required")
+            raise ToolValidationError("summary is required")
+        if not result_assessment:
+            raise ToolValidationError("result_assessment is required")
+        if not recommendation:
+            raise ToolValidationError("recommendation is required")
+
+        # Validate enum values
+        valid_assessments = ("pass", "partial", "fail", "skip", "info")
+        if result_assessment not in valid_assessments:
+            raise ToolValidationError(
+                f"result_assessment must be one of {valid_assessments}, got '{result_assessment}'"
+            )
+
+        valid_recommendations = ("proceed", "rework", "escalate", "hold")
+        if recommendation not in valid_recommendations:
+            raise ToolValidationError(
+                f"recommendation must be one of {valid_recommendations}, got '{recommendation}'"
+            )
 
         # Find the orchestrator agent
         orchestrator_id = self._find_orchestrator()
@@ -70,29 +85,37 @@ class ReturnToOrchestratorTool(BaseTool):
                 error="No orchestrator agent found in studio",
             )
 
-        # Determine success based on status
-        success = status in ("complete", "partial")
+        # Derive task_completion from blockers and recommendation
+        # If there are blockers and recommendation is hold/escalate, task is blocked
+        # Otherwise, the task completed (even if results are partial/fail)
+        if blockers and recommendation in ("hold", "escalate"):
+            task_completion = "blocked"
+        else:
+            task_completion = "completed"
 
-        # Build result data (artifacts_produced passed separately to create_delegation_response)
+        # Derive success from task_completion (for message payload)
+        success = task_completion == "completed"
+
+        # Build result data with new structure
         result_data = {
-            "status": status,
-            "summary": summary,
+            "task_completion": task_completion,
+            "result": {
+                "assessment": result_assessment,
+                "summary": summary,
+            },
+            "recommendation": recommendation,
             "artifacts_ready_for_review": artifacts_ready_for_review,
         }
         if blockers:
-            result_data["blockers"] = blockers
-        if recommendations:
-            result_data["recommendations"] = recommendations
+            result_data["result"]["details"] = blockers
 
-        # Build error string for blocked/needs_decision
+        # Build error string for blocked status
         error_msg = None
-        if status == "blocked" and blockers:
+        if task_completion == "blocked" and blockers:
             error_msg = "; ".join(
                 (b.get("description") or str(b)) if isinstance(b, dict) else str(b)
                 for b in blockers
             )
-        elif status == "needs_decision":
-            error_msg = f"Needs orchestrator decision: {summary}"
 
         # Get delegation context from tool context (if available)
         delegation_id = self._context.delegation_id or "implicit"
@@ -113,10 +136,11 @@ class ReturnToOrchestratorTool(BaseTool):
         if self._context.broker:
             await self._context.broker.send(message)
             logger.info(
-                "Return to orchestrator: %s -> %s (status: %s, delegation: %s)",
+                "Return to orchestrator: %s -> %s (assessment: %s, recommendation: %s, delegation: %s)",
                 self._context.agent_id,
                 delegator_id,
-                status,
+                result_assessment,
+                recommendation,
                 delegation_id,
             )
         else:
@@ -128,7 +152,9 @@ class ReturnToOrchestratorTool(BaseTool):
                 "acknowledged": True,
                 "message_id": message.id,
                 "returned_to": delegator_id,
-                "status": status,
+                "task_completion": task_completion,
+                "result_assessment": result_assessment,
+                "recommendation": recommendation,
             },
         )
 
