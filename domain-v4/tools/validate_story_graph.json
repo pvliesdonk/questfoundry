@@ -42,7 +42,7 @@
               "dead_end_count": { "type": "integer" },
               "orphan_count": { "type": "integer" },
               "missing_target_count": { "type": "integer" },
-              "has_stable_paths": { "type": "boolean" }
+              "has_reachable_stable_node": { "type": "boolean", "description": "Whether any reachable node is in a stable state (approved/cold)" }
             }
           },
           "reachable": {
@@ -86,7 +86,19 @@
           },
           "nodes": {
             "type": "object",
-            "description": "Detailed node information keyed by anchor ID"
+            "description": "Detailed node information keyed by anchor ID",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "anchor_id": { "type": "string", "description": "The node's anchor identifier" },
+                "artifact_id": { "type": "string", "description": "The underlying artifact ID" },
+                "title": { "type": "string", "description": "Human-readable title" },
+                "lifecycle_state": { "type": "string", "description": "Current lifecycle state (draft, approved, cold, etc.)" },
+                "type": { "type": "string", "enum": ["section_brief", "section"], "description": "Artifact type" },
+                "outgoing": { "type": "array", "items": { "type": "string" }, "description": "Target anchor IDs this node connects to" },
+                "incoming": { "type": "array", "items": { "type": "string" }, "description": "Source anchor IDs that connect to this node" }
+              }
+            }
           }
         }
       },

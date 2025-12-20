@@ -14,15 +14,12 @@ requiring LLM reasoning about graph structure.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass
@@ -60,8 +57,8 @@ class GraphAnalysis:
     # Lifecycle breakdown
     by_lifecycle: dict[str, list[str]] = field(default_factory=dict)
 
-    # Paths requiring only approved/cold content
-    stable_paths: bool = False
+    # Whether any reachable node is in a stable state (approved/cold)
+    has_reachable_stable_node: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for tool result."""
@@ -74,7 +71,7 @@ class GraphAnalysis:
                 "dead_end_count": len(self.dead_ends),
                 "orphan_count": len(self.orphans),
                 "missing_target_count": len(self.missing_targets),
-                "has_stable_paths": self.stable_paths,
+                "has_reachable_stable_node": self.has_reachable_stable_node,
             },
             "reachable": sorted(self.reachable),
             "unreachable": sorted(self.unreachable),
@@ -150,17 +147,11 @@ class ValidateStoryGraphTool(BaseTool):
         project = self._context.project
         assert project is not None  # Checked in execute()
 
-        # Query section_briefs
-        briefs = project.query_artifacts(
-            artifact_type="section_brief",
-            limit=1000,
-        )
+        # Query section_briefs (no limit - get all)
+        briefs = project.query_artifacts(artifact_type="section_brief")
 
-        # Query sections
-        sections = project.query_artifacts(
-            artifact_type="section",
-            limit=1000,
-        )
+        # Query sections (no limit - get all)
+        sections = project.query_artifacts(artifact_type="section")
 
         # Build nodes from briefs
         for brief in briefs:
@@ -180,11 +171,11 @@ class ValidateStoryGraphTool(BaseTool):
                 artifact_type="section_brief",
             )
 
-            # Extract outgoing connections from choice_intents
+            # Extract outgoing connections from choice_intents (deduplicate)
             choice_intents = brief.get("choice_intents", [])
             for choice in choice_intents:
                 target = choice.get("target_anchor")
-                if target:
+                if target and target not in node.outgoing:
                     node.outgoing.append(target)
 
             analysis.nodes[anchor] = node
@@ -226,15 +217,18 @@ class ValidateStoryGraphTool(BaseTool):
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
                     target = choice.get("target_anchor")
-                    if target:
+                    if target and target not in node.outgoing:
                         node.outgoing.append(target)
                 analysis.nodes[section_anchor] = node
 
-        # Build incoming connections
+        # Build incoming connections and detect missing targets in one pass
         for anchor, node in analysis.nodes.items():
             for target in node.outgoing:
                 if target in analysis.nodes:
                     analysis.nodes[target].incoming.append(anchor)
+                else:
+                    # Target doesn't exist - record as missing
+                    analysis.missing_targets.append({"from": anchor, "to": target})
 
         # Identify entry points
         if entry_anchor and entry_anchor in analysis.nodes:
@@ -245,11 +239,11 @@ class ValidateStoryGraphTool(BaseTool):
                 if not node.incoming:
                     analysis.entry_points.append(anchor)
 
-        # Compute reachability via BFS from entry points
+        # Compute reachability via BFS from entry points (using deque for O(1) popleft)
         analysis.reachable = set()
-        queue = list(analysis.entry_points)
+        queue: deque[str] = deque(analysis.entry_points)
         while queue:
-            current = queue.pop(0)
+            current = queue.popleft()
             if current in analysis.reachable:
                 continue
             if current not in analysis.nodes:
@@ -263,7 +257,7 @@ class ValidateStoryGraphTool(BaseTool):
         all_anchors = set(analysis.nodes.keys())
         analysis.unreachable = all_anchors - analysis.reachable
 
-        # Find dead ends (no outgoing, not counting terminal sections)
+        # Find dead ends (no outgoing connections)
         for anchor, node in analysis.nodes.items():
             if not node.outgoing:
                 analysis.dead_ends.append(anchor)
@@ -273,33 +267,16 @@ class ValidateStoryGraphTool(BaseTool):
             if not node.incoming and anchor not in analysis.entry_points:
                 analysis.orphans.append(anchor)
 
-        # Find missing targets
-        all_targets = set()
-        for node in analysis.nodes.values():
-            all_targets.update(node.outgoing)
-        for target in all_targets:
-            if target not in analysis.nodes:
-                # Find which nodes reference this missing target
-                for anchor, node in analysis.nodes.items():
-                    if target in node.outgoing:
-                        analysis.missing_targets.append(
-                            {
-                                "from": anchor,
-                                "to": target,
-                            }
-                        )
-
         # Group by lifecycle
         by_lifecycle: dict[str, list[str]] = defaultdict(list)
         for anchor, node in analysis.nodes.items():
             by_lifecycle[node.lifecycle_state].append(anchor)
         analysis.by_lifecycle = dict(by_lifecycle)
 
-        # Check if stable paths exist (all approved/cold)
+        # Check if any reachable node is in a stable state (approved/cold)
         stable_states = {"approved", "cold"}
         stable_nodes = {a for a, n in analysis.nodes.items() if n.lifecycle_state in stable_states}
-        # Check if entry can reach at least one stable path
-        analysis.stable_paths = bool(analysis.reachable & stable_nodes)
+        analysis.has_reachable_stable_node = bool(analysis.reachable & stable_nodes)
 
         return analysis
 
@@ -343,10 +320,33 @@ class ValidateStoryGraphTool(BaseTool):
                 "Verify this is intentional."
             )
 
-        draft_count = len(analysis.by_lifecycle.get("draft", []))
-        if draft_count > 0 and not analysis.stable_paths:
+        # Dead ends recommendation (nodes with no outgoing connections)
+        if analysis.dead_ends:
+            # Filter to only reachable dead ends - unreachable ones are less urgent
+            reachable_dead_ends = [d for d in analysis.dead_ends if d in analysis.reachable]
+            if reachable_dead_ends:
+                recommendations.append(
+                    f"{len(reachable_dead_ends)} reachable dead end(s): "
+                    f"{', '.join(sorted(reachable_dead_ends)[:3])}"
+                    + ("..." if len(reachable_dead_ends) > 3 else "")
+                    + ". Add outgoing paths or mark as terminal."
+                )
+
+        # Orphans recommendation (nodes with no incoming connections, excluding entry points)
+        if analysis.orphans:
             recommendations.append(
-                f"All {draft_count} reachable nodes are drafts. "
+                f"{len(analysis.orphans)} orphan node(s) with no incoming paths: "
+                f"{', '.join(sorted(analysis.orphans)[:3])}"
+                + ("..." if len(analysis.orphans) > 3 else "")
+                + ". Connect from existing nodes or remove."
+            )
+
+        # Count only reachable drafts for the draft recommendation
+        all_drafts = set(analysis.by_lifecycle.get("draft", []))
+        reachable_drafts = all_drafts & analysis.reachable
+        if reachable_drafts and not analysis.has_reachable_stable_node:
+            recommendations.append(
+                f"All {len(reachable_drafts)} reachable node(s) are drafts. "
                 "Promote some to approved for stable paths."
             )
 
