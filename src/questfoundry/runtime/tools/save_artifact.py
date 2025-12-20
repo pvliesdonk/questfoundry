@@ -60,8 +60,10 @@ class SaveArtifactTool(BaseTool):
                 errors=[
                     self._error_entry(
                         "data",
-                        "Artifact data must be a JSON object",
-                        "Provide a dictionary of field values that align with the artifact schema.",
+                        issue="Artifact data must be a JSON object",
+                        provided=type(data).__name__,
+                        expected_type="object",
+                        description="Provide a dictionary of field values that align with the artifact schema.",
                     )
                 ],
             )
@@ -72,8 +74,8 @@ class SaveArtifactTool(BaseTool):
                 errors=[
                     self._error_entry(
                         "project",
-                        "Project storage is unavailable",
-                        "Restart the session or ensure the runtime is initialized with a project.",
+                        issue="Project storage is unavailable",
+                        description="Restart the session or ensure the runtime is initialized with a project.",
                     )
                 ],
                 fatal=True,
@@ -85,8 +87,8 @@ class SaveArtifactTool(BaseTool):
                 errors=[
                     self._error_entry(
                         "artifact_type",
-                        "Artifact type is missing or could not be inferred",
-                        "Pass artifact_type explicitly or use an artifact_id with a known prefix (e.g., section_*).",
+                        issue="Artifact type is missing or could not be inferred",
+                        description="Pass artifact_type explicitly or use an artifact_id with a known prefix (e.g., section_*).",
                     )
                 ],
             )
@@ -98,8 +100,9 @@ class SaveArtifactTool(BaseTool):
                 errors=[
                     self._error_entry(
                         "artifact_type",
-                        f"'{artifact_type_id}' is not defined in the studio",
-                        "Confirm the artifact type exists in domain/ and provide a valid identifier.",
+                        issue=f"'{artifact_type_id}' is not defined in the studio",
+                        provided=artifact_type_id,
+                        description="Confirm the artifact type exists in domain/ and provide a valid identifier.",
                     )
                 ],
             )
@@ -116,9 +119,10 @@ class SaveArtifactTool(BaseTool):
                     errors=[
                         self._error_entry(
                             "store",
-                            reason
+                            issue=reason
                             or f"Store '{resolved_store_id}' rejects '{artifact_type_id}' artifacts",
-                            "Select a store that lists this artifact type or update the domain's store permissions.",
+                            provided=resolved_store_id,
+                            description="Select a store that lists this artifact type or update the domain's store permissions.",
                         )
                     ],
                 )
@@ -132,13 +136,15 @@ class SaveArtifactTool(BaseTool):
                         errors=[
                             self._error_entry(
                                 "store",
-                                workflow_warning,
-                                "Let the designated producer write to this store or adjust the store's workflow intent.",
+                                issue=workflow_warning,
+                                description="Let the designated producer write to this store or adjust the store's workflow intent.",
                             )
                         ],
                     )
 
-        validation_errors, validation_warnings = self._validate_artifact_data(artifact_type, data)
+        validation_errors, validation_warnings, schema_info = self._validate_artifact_data(
+            artifact_type, data
+        )
         feedback_warnings = list(validation_warnings)
         if workflow_warning:
             feedback_warnings.append(
@@ -156,6 +162,8 @@ class SaveArtifactTool(BaseTool):
                 warnings=feedback_warnings,
                 include_validation_errors=True,
                 workflow_warning=workflow_warning,
+                schema_info=schema_info,
+                artifact_type_id=artifact_type_id,
             )
 
         if not artifact_id:
@@ -184,7 +192,12 @@ class SaveArtifactTool(BaseTool):
                 "artifact_id": artifact_id,
                 "store": resolved_store_id,
                 "lifecycle_state": artifact.get("_lifecycle_state", "draft"),
-                "feedback": self._build_feedback(True, warnings=feedback_warnings),
+                "feedback": self._build_feedback(
+                    True,
+                    warnings=feedback_warnings,
+                    schema_info=schema_info,
+                    artifact_type_id=artifact_type_id,
+                ),
             }
 
             if workflow_warning:
@@ -199,8 +212,8 @@ class SaveArtifactTool(BaseTool):
                 errors=[
                     self._error_entry(
                         None,
-                        "Unexpected error while writing the artifact",
-                        "Check the runtime logs for details and retry once the issue is resolved.",
+                        issue="Unexpected error while writing the artifact",
+                        description="Check the runtime logs for details and retry once the issue is resolved.",
                     )
                 ],
                 workflow_warning=workflow_warning,
@@ -251,25 +264,54 @@ class SaveArtifactTool(BaseTool):
 
     def _validate_artifact_data(
         self, artifact_type: Any, data: dict[str, Any]
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Validate artifact data against type schema."""
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        """
+        Validate artifact data against type schema.
+
+        Returns:
+            Tuple of (errors, warnings, schema_info) where schema_info contains
+            actionable metadata about required/optional fields for LLM recovery.
+        """
         errors: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
 
-        if not artifact_type.fields:
-            return errors, warnings
+        # Build schema info for actionable feedback
+        required_fields: list[dict[str, Any]] = []
+        optional_fields: list[dict[str, Any]] = []
+        provided_fields = set(data.keys())
 
+        if not artifact_type.fields:
+            return errors, warnings, {"required_fields": [], "optional_fields": []}
+
+        # Categorize all fields
+        for field in artifact_type.fields:
+            field_info = {
+                "name": field.name,
+                "type": field.type.value if hasattr(field.type, "value") else str(field.type),
+                "description": field.description or "",
+            }
+            if field.required:
+                required_fields.append(field_info)
+            else:
+                optional_fields.append(field_info)
+
+        # Check for missing required fields
         for field in artifact_type.fields:
             if field.required and field.name not in data:
-                guidance = field.description or "Provide this field as described in the schema."
                 errors.append(
                     self._error_entry(
                         field.name,
-                        f"Required field '{field.name}' is missing",
-                        guidance,
+                        issue=f"Required field '{field.name}' is missing",
+                        provided=None,
+                        expected_type=field.type.value
+                        if hasattr(field.type, "value")
+                        else str(field.type),
+                        description=field.description,
                     )
                 )
 
+        # Check for type errors on provided fields
+        known_field_names = {f.name for f in artifact_type.fields}
         for field in artifact_type.fields:
             if field.name in data:
                 value = data[field.name]
@@ -277,7 +319,24 @@ class SaveArtifactTool(BaseTool):
                 if type_error:
                     errors.append(type_error)
 
-        return errors, warnings
+        # Check for unknown fields (provided but not in schema)
+        for field_name in provided_fields:
+            if field_name not in known_field_names:
+                warnings.append(
+                    self._warning_entry(
+                        field_name,
+                        f"Unknown field '{field_name}' is not defined in the schema",
+                        "Remove this field or check the artifact type schema for valid field names.",
+                    )
+                )
+
+        schema_info = {
+            "required_fields": required_fields,
+            "optional_fields": optional_fields,
+            "provided_fields": list(provided_fields),
+        }
+
+        return errors, warnings, schema_info
 
     def _check_field_type(self, field: Any, value: Any) -> dict[str, Any] | None:
         """Check if a field value matches the expected type."""
@@ -295,14 +354,17 @@ class SaveArtifactTool(BaseTool):
 
         checker = type_checks.get(expected_type)
         if checker and not checker(value):
-            guidance = field.description or "Use the schema's expected data type for this field."
+            # Summarize provided value for feedback (truncate if too long)
+            provided_repr = repr(value)
+            if len(provided_repr) > 100:
+                provided_repr = provided_repr[:100] + "..."
+
             return self._error_entry(
                 field.name,
-                (
-                    f"Field '{field.name}' has wrong type. "
-                    f"Expected {expected_type}, got {type(value).__name__}"
-                ),
-                guidance,
+                issue=f"Wrong type: expected {expected_type}, got {type(value).__name__}",
+                provided=provided_repr,
+                expected_type=expected_type,
+                description=field.description,
             )
 
         return None
@@ -336,8 +398,16 @@ class SaveArtifactTool(BaseTool):
         fatal: bool = False,
         include_validation_errors: bool = False,
         workflow_warning: str | None = None,
+        schema_info: dict[str, Any] | None = None,
+        artifact_type_id: str | None = None,
     ) -> ToolResult:
-        feedback = self._build_feedback(False, errors=errors, warnings=warnings)
+        feedback = self._build_feedback(
+            False,
+            errors=errors,
+            warnings=warnings,
+            schema_info=schema_info,
+            artifact_type_id=artifact_type_id,
+        )
         data: dict[str, Any] = {"feedback": feedback}
         if include_validation_errors:
             data["validation_errors"] = errors or []
@@ -356,22 +426,77 @@ class SaveArtifactTool(BaseTool):
         *,
         errors: list[dict[str, Any]] | None = None,
         warnings: list[dict[str, Any]] | None = None,
+        schema_info: dict[str, Any] | None = None,
+        artifact_type_id: str | None = None,
     ) -> dict[str, Any]:
-        return {
-            "valid": valid,
+        """
+        Build actionable feedback for LLM self-correction.
+
+        Format follows the validate-with-feedback pattern from meta/docs:
+        - success: bool
+        - error_count: number of errors
+        - errors: detailed error entries with field/issue/provided/expected
+        - required_fields: list of {name, type, description} for required fields
+        - optional_fields: list of {name, type, description} for optional fields
+        - hint: guidance on how to fix
+        """
+        feedback: dict[str, Any] = {
+            "success": valid,
+            "error_count": len(errors) if errors else 0,
             "errors": errors or [],
             "warnings": warnings or [],
         }
 
+        if schema_info:
+            feedback["required_fields"] = schema_info.get("required_fields", [])
+            feedback["optional_fields"] = schema_info.get("optional_fields", [])
+            if "provided_fields" in schema_info:
+                feedback["provided_fields"] = schema_info["provided_fields"]
+
+        if not valid and artifact_type_id:
+            feedback["hint"] = (
+                f"Review the errors above. Check field names and types against the "
+                f"'{artifact_type_id}' artifact type schema. Use consult_schema('{artifact_type_id}') "
+                f"for detailed field definitions."
+            )
+
+        return feedback
+
     def _error_entry(
         self,
         field: str | None,
-        error: str,
-        guidance: str | None = None,
+        issue: str,
+        *,
+        provided: Any = None,
+        expected_type: str | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
-        entry: dict[str, Any] = {"field": field, "error": error}
-        if guidance:
-            entry["guidance"] = guidance
+        """
+        Build an actionable error entry for LLM self-correction.
+
+        Args:
+            field: The field name (or None for general errors)
+            issue: Brief description of what's wrong
+            provided: What was actually provided (or None if missing)
+            expected_type: The expected type for this field
+            description: The field's description from schema
+        """
+        entry: dict[str, Any] = {
+            "field": field,
+            "issue": issue,
+        }
+        # Show what was provided (or indicate missing)
+        if provided is not None:
+            entry["provided"] = provided
+        else:
+            entry["provided"] = "(missing)"
+
+        if expected_type:
+            entry["expected_type"] = expected_type
+
+        if description:
+            entry["guidance"] = description
+
         return entry
 
     def _warning_entry(
