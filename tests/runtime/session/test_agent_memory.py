@@ -523,3 +523,123 @@ class TestMultiTurnHistory:
         # Verify turn 2 follows correctly
         assert history[4]["content"] == "What's the status?"
         assert history[5]["content"] == "Chapter 1 is complete."
+
+
+class TestAgentHistoryIsolation:
+    """Test that agents only see their own history, not other agents'."""
+
+    def test_get_agent_history_filters_by_agent(self):
+        """Test get_agent_history only returns turns for that agent."""
+        session = Session(
+            id="sess_1",
+            project_id="test_project",
+            entry_agent="showrunner",
+            _project=None,
+        )
+
+        # Turn 1: Showrunner
+        turn1 = Turn(
+            turn_number=1,
+            agent_id="showrunner",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="user", content="Create a story"),
+                LLMMessage(role="assistant", content="I'll delegate to Plotwright."),
+            ],
+        )
+        session.turns.append(turn1)
+
+        # Turn 2: Plotwright (different agent)
+        turn2 = Turn(
+            turn_number=2,
+            agent_id="plotwright",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="user", content="Design the narrative."),
+                LLMMessage(role="assistant", content="Here's the plot outline."),
+            ],
+        )
+        session.turns.append(turn2)
+
+        # Turn 3: Showrunner again
+        turn3 = Turn(
+            turn_number=3,
+            agent_id="showrunner",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="user", content="Continue with Scene Smith."),
+                LLMMessage(role="assistant", content="Delegating now."),
+            ],
+        )
+        session.turns.append(turn3)
+
+        # Showrunner should only see its own turns (1 and 3)
+        sr_history = session.get_agent_history("showrunner")
+        assert len(sr_history) == 4  # 2 messages from turn 1, 2 from turn 3
+        assert sr_history[0]["content"] == "Create a story"
+        assert sr_history[2]["content"] == "Continue with Scene Smith."
+
+        # Plotwright should only see its own turn (2)
+        pw_history = session.get_agent_history("plotwright")
+        assert len(pw_history) == 2
+        assert pw_history[0]["content"] == "Design the narrative."
+
+        # Scene Smith has no turns
+        ss_history = session.get_agent_history("scene_smith")
+        assert len(ss_history) == 0
+
+    def test_get_agent_turn_count(self):
+        """Test counting turns per agent."""
+        session = Session(
+            id="sess_1",
+            project_id="test_project",
+            entry_agent="showrunner",
+            _project=None,
+        )
+
+        # Add turns for different agents
+        for i, agent in enumerate(
+            ["showrunner", "plotwright", "showrunner", "scene_smith", "showrunner"]
+        ):
+            session.turns.append(
+                Turn(
+                    turn_number=i + 1,
+                    agent_id=agent,
+                    session_id="sess_1",
+                    status=TurnStatus.COMPLETED,
+                )
+            )
+
+        assert session.get_agent_turn_count("showrunner") == 3
+        assert session.get_agent_turn_count("plotwright") == 1
+        assert session.get_agent_turn_count("scene_smith") == 1
+        assert session.get_agent_turn_count("gatekeeper") == 0
+
+    def test_agent_history_excludes_system_prompts(self):
+        """Test that system prompts are excluded from agent history."""
+        session = Session(
+            id="sess_1",
+            project_id="test_project",
+            entry_agent="showrunner",
+            _project=None,
+        )
+
+        turn = Turn(
+            turn_number=1,
+            agent_id="showrunner",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="system", content="You are the Showrunner..."),
+                LLMMessage(role="user", content="Hello"),
+                LLMMessage(role="assistant", content="Hi there"),
+            ],
+        )
+        session.turns.append(turn)
+
+        history = session.get_agent_history("showrunner")
+        assert len(history) == 2  # System prompt excluded
+        assert all(h["role"] != "system" for h in history)

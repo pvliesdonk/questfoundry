@@ -744,6 +744,7 @@ class ContextSummaryResult:
     turns_preserved: int
     summary_created: bool
     summary_text: str | None = None
+    preserved_turns: list[dict[str, Any]] | None = None  # Preserved turns for reconstruction
     tokens_before: int = 0
     tokens_after: int = 0
 
@@ -773,12 +774,36 @@ class ContextSecretary:
     total_summaries_created: int = 0
     total_turns_summarized: int = 0
 
+    def should_summarize_messages(self, messages: list[dict[str, Any]]) -> bool:
+        """
+        Check if messages need summarization based on group count.
+
+        Groups messages into atomic units (assistant+tool pairs) and checks
+        if we have enough groups to warrant summarization.
+
+        Args:
+            messages: List of messages to check
+
+        Returns:
+            True if we have enough message groups to warrant summarization
+        """
+        groups = self._group_messages(messages)
+        summarizable = len(groups) - self.preserve_recent_turns
+        needs_summary = summarizable >= self.min_turns_to_summarize
+        if needs_summary:
+            logger.debug(
+                "Context summarization needed: %d summarizable groups >= %d threshold",
+                summarizable,
+                self.min_turns_to_summarize,
+            )
+        return needs_summary
+
     def should_summarize(self, turn_count: int) -> bool:
         """
         Check if context needs summarization based on turn count.
 
-        Note: This is a simple heuristic. The runtime should also check
-        token counts and the Secretary's current_level.
+        DEPRECATED: Use should_summarize_messages() for message lists.
+        This method is kept for backwards compatibility with Turn-level usage.
 
         Args:
             turn_count: Number of turns in conversation
@@ -797,42 +822,90 @@ class ContextSecretary:
             )
         return needs_summary
 
+    def _group_messages(self, messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+        """
+        Group messages into atomic units that must stay together.
+
+        OpenAI requires that tool result messages immediately follow their
+        corresponding assistant message with tool_calls. This groups:
+        - Standalone user/system messages as single-item groups
+        - Assistant with tool_calls + all following tool results as one group
+
+        Args:
+            messages: Flat list of messages
+
+        Returns:
+            List of message groups (each group is a list of messages)
+        """
+        groups: list[list[dict[str, Any]]] = []
+        current_group: list[dict[str, Any]] = []
+
+        for msg in messages:
+            role = msg.get("role")
+
+            if role == "tool":
+                # Tool results belong to the current group (with assistant)
+                current_group.append(msg)
+            else:
+                # Non-tool message starts a new group
+                if current_group:
+                    groups.append(current_group)
+                current_group = [msg]
+
+        # Don't forget the last group
+        if current_group:
+            groups.append(current_group)
+
+        return groups
+
     def select_turns_for_summarization(
         self,
         turns: list[dict[str, Any]],
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """
-        Partition turns into to-summarize and to-preserve.
+        Partition messages into to-summarize and to-preserve.
 
         Preservation rules:
-        - Recent turns (last preserve_recent_turns) always preserved
-        - Turns with delegation messages preserved
-        - Turns with artifact creation preserved
+        - Recent message groups always preserved (keeps assistant+tool pairs intact)
+        - Groups with delegation content preserved
+        - Groups with artifact creation preserved
 
         Args:
-            turns: List of conversation turns (oldest first)
+            turns: List of messages (oldest first). Despite the name, this is
+                   a flat message list, not Turn objects.
 
         Returns:
-            Tuple of (turns_to_summarize, turns_to_preserve)
+            Tuple of (messages_to_summarize, messages_to_preserve)
         """
-        if len(turns) <= self.preserve_recent_turns:
+        # Group messages to preserve assistant+tool pairing
+        groups = self._group_messages(turns)
+
+        if len(groups) <= self.preserve_recent_turns:
             return [], turns
 
-        # Recent turns always preserved
-        older_turns = turns[: -self.preserve_recent_turns]
-        recent_turns = turns[-self.preserve_recent_turns :]
+        # Recent groups always preserved
+        older_groups = groups[: -self.preserve_recent_turns]
+        recent_groups = groups[-self.preserve_recent_turns :]
 
-        to_summarize = []
-        to_preserve = list(recent_turns)  # Start with recent
+        to_summarize: list[dict[str, Any]] = []
+        older_preserved: list[dict[str, Any]] = []
 
-        for turn in older_turns:
-            if self._should_preserve_turn(turn):
-                to_preserve.append(turn)
+        for group in older_groups:
+            # Check if any message in group should be preserved
+            should_preserve = any(self._should_preserve_turn(msg) for msg in group)
+            if should_preserve:
+                older_preserved.extend(group)
             else:
-                to_summarize.append(turn)
+                to_summarize.extend(group)
+
+        # Flatten recent groups
+        recent_messages = [msg for group in recent_groups for msg in group]
+
+        # Maintain chronological order: older preserved first, then recent
+        to_preserve = older_preserved + recent_messages
 
         logger.info(
-            "Context: selected %d turns to summarize, preserving %d (recent=%d)",
+            "Context: selected %d messages to summarize, preserving %d (recent groups=%d)",
             len(to_summarize),
             len(to_preserve),
             self.preserve_recent_turns,
@@ -920,16 +993,19 @@ class ContextSecretary:
         Summarize conversation context if needed.
 
         Args:
-            turns: All conversation turns (oldest first)
+            turns: All conversation messages (oldest first). Despite the name,
+                   this is a flat message list, not Turn objects.
 
         Returns:
             ContextSummaryResult with summary info
         """
-        if not self.should_summarize(len(turns)):
+        # Use message-aware check that groups assistant+tool pairs
+        if not self.should_summarize_messages(turns):
             return ContextSummaryResult(
                 turns_summarized=0,
                 turns_preserved=len(turns),
                 summary_created=False,
+                preserved_turns=turns,  # All turns preserved
             )
 
         to_summarize, to_preserve = self.select_turns_for_summarization(turns)
@@ -939,6 +1015,7 @@ class ContextSecretary:
                 turns_summarized=0,
                 turns_preserved=len(turns),
                 summary_created=False,
+                preserved_turns=turns,  # All turns preserved
             )
 
         # Generate summary
@@ -960,6 +1037,7 @@ class ContextSecretary:
             turns_preserved=len(to_preserve),
             summary_created=True,
             summary_text=summary_text,
+            preserved_turns=to_preserve,  # Include preserved turns for caller
         )
 
     def get_stats(self) -> dict[str, Any]:

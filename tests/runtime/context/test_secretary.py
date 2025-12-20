@@ -1296,6 +1296,67 @@ class TestContextSecretary:
         # Should preserve at least 3 (preserve_recent_turns)
         assert result.turns_preserved >= 3
 
+    def test_group_messages_keeps_tool_pairs_intact(self, secretary: ContextSecretary):
+        """Test that assistant+tool_calls and tool results stay grouped together."""
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": "call_1", "name": "search"}],
+            },
+            {"role": "tool", "content": "Result 1", "tool_call_id": "call_1"},
+            {"role": "tool", "content": "Result 2", "tool_call_id": "call_2"},
+            {"role": "user", "content": "Thanks"},
+            {"role": "assistant", "content": "You're welcome"},
+        ]
+
+        groups = secretary._group_messages(messages)
+
+        # Should have 4 groups:
+        # [user], [assistant+tool_calls, tool, tool], [user], [assistant]
+        assert len(groups) == 4
+        assert groups[0] == [{"role": "user", "content": "Hello"}]
+        assert len(groups[1]) == 3  # assistant + 2 tool results
+        assert groups[1][0]["role"] == "assistant"
+        assert groups[1][1]["role"] == "tool"
+        assert groups[1][2]["role"] == "tool"
+        assert groups[2] == [{"role": "user", "content": "Thanks"}]
+        assert groups[3] == [{"role": "assistant", "content": "You're welcome"}]
+
+    def test_select_preserves_tool_pairs_atomically(self, secretary: ContextSecretary):
+        """Test that when preserving messages, tool pairs stay together."""
+        # Create messages where an older group has delegation content
+        messages = [
+            {"role": "user", "content": "Start"},
+            {
+                "role": "assistant",
+                "content": "Delegation to plotwright",
+                "tool_calls": [{"id": "c1", "name": "delegate"}],
+            },
+            {"role": "tool", "content": "Delegated", "tool_call_id": "c1"},
+            {"role": "user", "content": "Middle"},
+            {"role": "assistant", "content": "Response"},
+            {"role": "user", "content": "Recent 1"},
+            {"role": "assistant", "content": "Recent 2"},
+            {"role": "user", "content": "Recent 3"},
+        ]
+
+        to_summarize, to_preserve = secretary.select_turns_for_summarization(messages)
+
+        # Verify delegation assistant AND its tool result are both preserved as a pair
+        assert any("Delegation" in str(m.get("content", "")) for m in to_preserve)
+        assert any(m.get("tool_call_id") == "c1" for m in to_preserve)
+
+        # Verify the assistant+tool pair is adjacent in preserved messages
+        for i, msg in enumerate(to_preserve):
+            if msg.get("tool_calls") and i + 1 < len(to_preserve):
+                # If this assistant has tool_calls, check the next message
+                next_msg = to_preserve[i + 1]
+                # Next should be the tool result for this call
+                if any(tc.get("id") == "c1" for tc in msg.get("tool_calls", [])):
+                    assert next_msg.get("tool_call_id") == "c1"
+
 
 class TestContextSummaryResult:
     """Tests for ContextSummaryResult dataclass."""
