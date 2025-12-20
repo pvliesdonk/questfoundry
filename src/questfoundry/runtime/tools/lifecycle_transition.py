@@ -268,12 +268,12 @@ class RequestLifecycleTransitionTool(BaseTool):
         if not store_manager.is_exclusive_writer(target_store, agent_id):
             exclusive_writers = store_manager.get_exclusive_writers(target_store)
             # Format writers list for human-readable error message
-            if len(exclusive_writers) == 1:
+            if not exclusive_writers:
+                writers_str = "the exclusive writers"  # Fallback
+            elif len(exclusive_writers) == 1:
                 writers_str = exclusive_writers[0]
-            elif len(exclusive_writers) == 2:
-                writers_str = f"{exclusive_writers[0]} or {exclusive_writers[1]}"
             else:
-                writers_str = ", ".join(exclusive_writers[:-1]) + f", or {exclusive_writers[-1]}"
+                writers_str = f"{', '.join(exclusive_writers[:-1])} or {exclusive_writers[-1]}"
             return ToolResult(
                 success=False,
                 data={
@@ -303,9 +303,17 @@ class RequestLifecycleTransitionTool(BaseTool):
 
         # 4. Perform the transition with store migration
         # Note: project is already validated as non-None in execute() before this is called
-        assert self._context.project is not None
+        project = self._context.project
+        if project is None:
+            # Should never happen - checked in execute(), but handle gracefully
+            return ToolResult(
+                success=False,
+                data={"artifact_id": artifact_id},
+                error="Internal error: project context is unavailable for cold transition.",
+            )
+
         try:
-            updated = self._context.project.update_artifact(
+            updated = project.update_artifact(
                 artifact_id=artifact_id,
                 data={
                     "_lifecycle_state": "cold",

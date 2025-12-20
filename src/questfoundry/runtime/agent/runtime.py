@@ -574,6 +574,9 @@ class AgentRuntime:
         }
     )
 
+    # Size threshold for tool result summarization (~500 tokens = 2000 chars)
+    TOOL_RESULT_SIZE_THRESHOLD = 2000
+
     def _deduplicate_static_tool_results(
         self,
         history: list[dict[str, Any]],
@@ -607,7 +610,8 @@ class AgentRuntime:
                 continue
 
             content = msg.get("content", "")
-            content_hash = hashlib.md5(content.encode()).hexdigest()
+            # MD5 is fine here - used for deduplication, not security
+            content_hash = hashlib.md5(content.encode()).hexdigest()  # noqa: S324
             key = (tool_name, content_hash)
 
             tool_call_id = msg.get("tool_call_id")
@@ -677,9 +681,6 @@ class AgentRuntime:
         Returns:
             History with large tool results summarized
         """
-        # Size threshold for summarization (roughly 500 tokens = 2000 chars)
-        SIZE_THRESHOLD = 2000
-
         result: list[dict[str, Any]] = []
         for msg in history:
             if msg.get("role") != "tool":
@@ -687,7 +688,7 @@ class AgentRuntime:
                 continue
 
             content = msg.get("content", "")
-            if len(content) <= SIZE_THRESHOLD:
+            if len(content) <= self.TOOL_RESULT_SIZE_THRESHOLD:
                 result.append(msg)
                 continue
 

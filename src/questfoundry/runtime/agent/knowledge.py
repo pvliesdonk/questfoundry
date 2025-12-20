@@ -21,7 +21,23 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
 
+import logging
+
 from questfoundry.runtime.models.base import KnowledgeContent
+
+logger = logging.getLogger(__name__)
+
+# Valid knowledge layers for archetype-based inclusion
+VALID_LAYERS = frozenset({"must_know", "should_know", "role_specific"})
+
+
+def _combine_entry_lists(explicit: list[str], archetype_matched: list[str]) -> list[str]:
+    """Combine explicit and archetype-matched entries, preserving order.
+
+    Explicit entries come first, then archetype-matched entries that aren't
+    already in the explicit list (to avoid duplicates).
+    """
+    return list(explicit) + [eid for eid in archetype_matched if eid not in set(explicit)]
 
 
 @dataclass
@@ -121,10 +137,7 @@ class KnowledgeContextBuilder:
         must_know_section = None
         explicit_must_know = (knowledge_req.must_know or []) if knowledge_req else []
         archetype_must_know = archetype_entries.get("must_know", [])
-        # Combine, preserving order (explicit first, then archetype-matched)
-        all_must_know = list(explicit_must_know) + [
-            eid for eid in archetype_must_know if eid not in explicit_must_know
-        ]
+        all_must_know = _combine_entry_lists(explicit_must_know, archetype_must_know)
 
         if all_must_know:
             must_know_lines: list[str] = []
@@ -165,9 +178,7 @@ class KnowledgeContextBuilder:
         # 3. Should-know - menu only (skip if already in menu or inlined)
         explicit_should_know = (knowledge_req.should_know or []) if knowledge_req else []
         archetype_should_know = archetype_entries.get("should_know", [])
-        all_should_know = list(explicit_should_know) + [
-            eid for eid in archetype_should_know if eid not in explicit_should_know
-        ]
+        all_should_know = _combine_entry_lists(explicit_should_know, archetype_should_know)
         for entry_id in all_should_know:
             if entry_id in entries_in_menu or entry_id in entries_inlined:
                 continue
@@ -179,9 +190,7 @@ class KnowledgeContextBuilder:
         # 4. Role-specific - menu only (skip if already in menu or inlined)
         explicit_role_specific = (knowledge_req.role_specific or []) if knowledge_req else []
         archetype_role_specific = archetype_entries.get("role_specific", [])
-        all_role_specific = list(explicit_role_specific) + [
-            eid for eid in archetype_role_specific if eid not in explicit_role_specific
-        ]
+        all_role_specific = _combine_entry_lists(explicit_role_specific, archetype_role_specific)
         for entry_id in all_role_specific:
             if entry_id in entries_in_menu or entry_id in entries_inlined:
                 continue
@@ -326,8 +335,15 @@ class KnowledgeContextBuilder:
 
             # Add to appropriate layer bucket
             layer = entry.layer
-            if layer in result:
+            if layer in VALID_LAYERS:
                 result[layer].append(entry_id)
+            elif layer not in {"constitution", "lookup"}:
+                # Warn about unknown layers (constitution and lookup are handled separately)
+                logger.warning(
+                    "Knowledge entry '%s' has unknown layer '%s', skipping archetype inclusion",
+                    entry_id,
+                    layer,
+                )
 
         return result
 
