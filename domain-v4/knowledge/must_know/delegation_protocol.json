@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "delegation_protocol",
+  "name": "Delegation Protocol",
+  "layer": "must_know",
+
+  "summary": "How delegated agents complete work and return control to the orchestrator with artifact handoff.",
+
+  "keywords": ["delegation", "return", "handoff", "artifacts", "orchestrator"],
+
+  "triggers": [
+    "completing delegated work",
+    "returning to showrunner",
+    "artifact handoff",
+    "task completion"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Delegation Protocol\n\nWhen you receive a delegated task, you MUST complete it properly by returning to the orchestrator.\n\n### CRITICAL: Always Return with Artifacts\n\n**ALWAYS call `return_to_orchestrator` when your task is complete.** Include all artifact IDs you created:\n\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Created 3 sections from briefs\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"section_abc123\", \"section_def456\", \"section_ghi789\"]\n})\n```\n\n### Why Artifact Handoff Matters\n\n- Showrunner needs your artifact IDs to pass to the next agent\n- Without IDs, the workflow breaks (next agent can't find your work)\n- The `artifacts_produced` field is how the delegation chain works\n\n### The Three-Part Return\n\n1. **result_assessment** - Quality of your work:\n   - `pass` - Task completed successfully\n   - `partial` - Some issues found, work may need revision\n   - `fail` - Could not complete the task\n   - `skip` - Could not start (missing inputs)\n   - `info` - Informational only (e.g., pre-gate review)\n\n2. **recommendation** - What orchestrator should do:\n   - `proceed` - Continue to next workflow step\n   - `rework` - Send back for fixes\n   - `escalate` - Ask human for guidance\n   - `hold` - Address blockers first\n\n3. **artifacts_produced** - List of artifact IDs you created or modified\n\n### Never Do This\n\n- ❌ Stop after saving artifacts without calling `return_to_orchestrator`\n- ❌ Omit `artifacts_produced` when you created artifacts\n- ❌ Return without a summary of what you did\n\n### Examples\n\n**Creator completing work:**\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Wrote 3 sections with Agatha Christie style prose and contrastive choices\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"section_94482696\", \"section_9f09c489\", \"section_67222b03\"]\n})\n```\n\n**Validator finding issues:**\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Gatecheck complete - 6/8 bars pass, 2 need rework\",\n  \"result_assessment\": \"partial\",\n  \"recommendation\": \"rework\",\n  \"artifacts_produced\": [\"gatecheck_report_001\"],\n  \"blockers\": [\n    {\"type\": \"quality_issue\", \"description\": \"Choice Integrity: options 2 and 3 are near-synonyms\"}\n  ]\n})\n```\n\n**Blocked by missing input:**\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Cannot validate - no sections found in workspace\",\n  \"result_assessment\": \"skip\",\n  \"recommendation\": \"hold\",\n  \"blockers\": [\n    {\"type\": \"missing_input\", \"description\": \"Expected section artifacts not found\"}\n  ]\n})\n```"
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator", "validator", "researcher", "performer"]
+  },
+
+  "tags": ["runtime", "delegation", "handoff", "protocol"]
+}
