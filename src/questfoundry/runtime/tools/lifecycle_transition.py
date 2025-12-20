@@ -238,12 +238,15 @@ class RequestLifecycleTransitionTool(BaseTool):
 
         store_manager = self._get_store_manager()
         if not store_manager:
-            # No store manager - fall through to basic transition
-            logger.warning(
-                f"No store manager available for cold transition of {artifact_id}. "
-                "Artifact will only have _lifecycle_state updated, not migrated to cold store."
+            # No store manager - cannot perform cold transition atomically
+            logger.error(
+                f"StoreManager not available, cannot perform cold transition for {artifact_id}"
             )
-            return None
+            return ToolResult(
+                success=False,
+                data={},
+                error="StoreManager not available. Cannot perform cold transition.",
+            )
 
         # 1. Determine target cold store
         target_store = store_manager.get_cold_store_for_artifact_type(artifact_type)
@@ -264,6 +267,13 @@ class RequestLifecycleTransitionTool(BaseTool):
         agent_id = self._context.agent_id or ""
         if not store_manager.is_exclusive_writer(target_store, agent_id):
             exclusive_writers = store_manager.get_exclusive_writers(target_store)
+            # Format writers list for human-readable error message
+            if len(exclusive_writers) == 1:
+                writers_str = exclusive_writers[0]
+            elif len(exclusive_writers) == 2:
+                writers_str = f"{exclusive_writers[0]} or {exclusive_writers[1]}"
+            else:
+                writers_str = ", ".join(exclusive_writers[:-1]) + f", or {exclusive_writers[-1]}"
             return ToolResult(
                 success=False,
                 data={
@@ -273,7 +283,7 @@ class RequestLifecycleTransitionTool(BaseTool):
                     "current_agent": agent_id,
                 },
                 error=(
-                    f"Only {exclusive_writers} can promote to '{target_store}' store. "
+                    f"Only {writers_str} can promote to '{target_store}' store. "
                     f"Delegate to the exclusive writer to complete the cold transition."
                 ),
             )

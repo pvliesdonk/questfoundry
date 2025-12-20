@@ -369,7 +369,9 @@ class StoreManager:
             store_id: Store ID
 
         Returns:
-            List of agent IDs that are exclusive writers, empty if non-exclusive
+            List of agent IDs that are exclusive writers.
+            Returns empty list if store is non-exclusive or if store doesn't exist.
+            Use get_store() first if you need to distinguish between these cases.
         """
         store = self._stores.get(store_id)
         if store and store.is_exclusive:

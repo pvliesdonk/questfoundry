@@ -347,6 +347,20 @@ class TestRequestLifecycleTransitionTool:
         """Force=true bypasses validation requirement."""
         tool_context.agent_id = "gatekeeper"
         mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        # Cold transitions require a store manager
+        manuscript_store = StoreDefinition(
+            id="manuscript",
+            name="Manuscript",
+            semantics=StoreSemantics.COLD,
+            artifact_types=["section"],
+            workflow_intent=WorkflowIntent(
+                production_guidance="exclusive",
+                designated_producers=["gatekeeper"],
+            ),
+        )
+        tool_context.store_manager = StoreManager({"manuscript": manuscript_store})
 
         tool = RequestLifecycleTransitionTool(
             MockToolDefinition("request_lifecycle_transition"),
@@ -471,7 +485,7 @@ class TestRequestLifecycleTransitionTool:
 
     @pytest.mark.asyncio
     async def test_no_lifecycle_manager_allows_transition(self, mock_project):
-        """Without lifecycle manager, any transition allowed."""
+        """Without lifecycle manager, any transition allowed (for non-cold states)."""
         ctx = ToolContext(
             studio=MockStudio(),
             project=mock_project,
@@ -484,11 +498,12 @@ class TestRequestLifecycleTransitionTool:
             ctx,
         )
 
-        # Even draft -> cold works without manager
+        # draft -> review works without lifecycle manager validation
+        # (cold transitions still require store_manager regardless)
         result = await tool.execute(
             {
                 "artifact_id": "section_001",
-                "target_state": "cold",
+                "target_state": "review",
             }
         )
 
@@ -769,6 +784,7 @@ class TestColdTransitionWithStoreMigration:
         """Cold transition fails if agent is not exclusive writer."""
         cold_tool_context.agent_id = "scene_smith"  # Not an exclusive writer
         mock_project.artifacts["section_001"]["_lifecycle_state"] = "approved"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
 
         tool = RequestLifecycleTransitionTool(
             MockToolDefinition("request_lifecycle_transition"),
@@ -784,8 +800,8 @@ class TestColdTransitionWithStoreMigration:
         )
 
         assert result.success is False
-        # Either lifecycle manager rejects (allowed_agents) or store manager rejects
-        assert "not allowed" in result.error.lower() or "Only" in result.error
+        # Lifecycle manager rejects because scene_smith not in allowed_agents
+        assert "not allowed" in result.error.lower()
         # Artifact should NOT have changed
         assert mock_project.artifacts["section_001"]["_lifecycle_state"] == "approved"
 
@@ -836,8 +852,8 @@ class TestColdTransitionWithStoreMigration:
         )
 
         assert result.success is True
-        # Either caught by early "already in target state" check or cold-specific idempotency
-        assert result.data.get("transitioned") is False or result.data.get("already_cold") is True
+        # Early check catches "already in target state" and returns transitioned=False
+        assert result.data.get("transitioned") is False
         assert "already" in result.data.get("message", "").lower()
 
     @pytest.mark.asyncio
@@ -895,7 +911,7 @@ class TestColdTransitionWithStoreMigration:
 
     @pytest.mark.asyncio
     async def test_cold_transition_without_store_manager(self, mock_project, lifecycle_manager):
-        """Cold transition works without store manager (no store migration)."""
+        """Cold transition fails without store manager (atomicity requirement)."""
         ctx = ToolContext(
             studio=MockStudio(),
             project=mock_project,
@@ -918,11 +934,9 @@ class TestColdTransitionWithStoreMigration:
             }
         )
 
-        assert result.success is True
-        assert result.data["transitioned"] is True
-        assert result.data["new_state"] == "cold"
-        # Should not have store migration fields
-        assert "new_store" not in result.data
+        # Cold transitions require StoreManager for atomic state + store update
+        assert result.success is False
+        assert "StoreManager not available" in result.error
 
 
 class TestDirectGatecheckToColdTransition:
@@ -1034,6 +1048,7 @@ class TestDirectGatecheckToColdTransition:
             store_manager=store_manager,
         )
         mock_project.artifacts["section_001"]["_lifecycle_state"] = "gatecheck"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
 
         tool = RequestLifecycleTransitionTool(
             MockToolDefinition("request_lifecycle_transition"),
