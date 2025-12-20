@@ -19,6 +19,8 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 try:
     import jsonschema
@@ -65,33 +67,45 @@ def build_resolver(schema_path: Path, schema: dict) -> RefResolver:
 
     # Custom handler for file:// URIs
     def file_handler(uri: str) -> dict:
-        # Convert file:// URI back to path
+        # Convert file:// URI back to path using proper URL parsing
         if uri.startswith("file://"):
-            path = Path(uri[7:])  # Remove file://
+            parsed_uri = urlparse(uri)
+            path = Path(url2pathname(parsed_uri.path))
         else:
             # Relative reference
             path = schema_dir / uri
 
-        with open(path) as f:
-            return json.load(f)
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except OSError as e:
+            raise jsonschema.exceptions.RefResolutionError(
+                f"Cannot read $ref file {path}: {e}"
+            ) from e
+        except json.JSONDecodeError as e:
+            raise jsonschema.exceptions.RefResolutionError(
+                f"Invalid JSON in $ref file {path}: {e}"
+            ) from e
 
-    handlers = {"file": lambda uri: file_handler(uri)}
+    handlers = {"file": file_handler}
 
     return RefResolver(base_uri, schema, handlers=handlers)
 
 
-def validate_file(json_file: Path, repo_root: Path) -> tuple[bool, list[str]]:
+def validate_file(
+    json_file: Path, data: dict, repo_root: Path
+) -> tuple[bool, list[str]]:
     """
-    Validate a JSON file against its $schema.
+    Validate a JSON file's data against its $schema.
+
+    Args:
+        json_file: Path to the JSON file (for resolving relative schema refs)
+        data: Pre-loaded JSON data (to avoid double-loading)
+        repo_root: Repository root path
 
     Returns (success, errors) tuple.
     """
     errors = []
-
-    # Load the JSON file
-    data = load_json(json_file)
-    if data is None:
-        return False, ["Failed to load JSON"]
 
     # Check for $schema property
     schema_ref = data.get("$schema")
@@ -193,7 +207,7 @@ def main() -> int:
             skipped += 1
             continue
 
-        success, errors = validate_file(json_file, repo_root)
+        success, errors = validate_file(json_file, data, repo_root)
 
         if success:
             passed += 1
