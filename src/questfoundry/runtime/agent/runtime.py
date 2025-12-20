@@ -36,7 +36,7 @@ from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
     TurnValidator,
 )
-from questfoundry.runtime.context import Secretary, SummarizationPolicy
+from questfoundry.runtime.context import ContextSecretary, Secretary, SummarizationPolicy
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -72,6 +72,29 @@ class ToolCall:
     success: bool = False
     error: str | None = None
     execution_time_ms: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "tool_id": self.tool_id,
+            "args": self.args,
+            "result": self.result,
+            "success": self.success,
+            "error": self.error,
+            "execution_time_ms": self.execution_time_ms,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ToolCall:
+        """Create from dictionary."""
+        return cls(
+            tool_id=data["tool_id"],
+            args=data.get("args", {}),
+            result=data.get("result"),
+            success=data.get("success", False),
+            error=data.get("error"),
+            execution_time_ms=data.get("execution_time_ms"),
+        )
 
 
 @dataclass
@@ -192,6 +215,13 @@ class AgentRuntime:
         )
         self._secretary_initialized = False
 
+        # Context Secretary for full conversation summarization (Level 2)
+        # Summarizes older turns when context pressure reaches FULL threshold (90%)
+        self._context_secretary = ContextSecretary(
+            preserve_recent_turns=3,  # Always preserve last 3 turns
+            min_turns_to_summarize=5,  # Need at least 5 older turns before summarizing
+        )
+
         # Turn validator for orchestrator enforcement
         self._turn_validator = TurnValidator(studio, turn_validation_config)
 
@@ -239,6 +269,11 @@ class AgentRuntime:
     def secretary(self) -> Secretary:
         """Get the Secretary for context management."""
         return self._secretary
+
+    @property
+    def context_secretary(self) -> ContextSecretary:
+        """Get the ContextSecretary for conversation summarization."""
+        return self._context_secretary
 
     def get_agent_tools(self, agent: Agent, session_id: str | None = None) -> list[BaseTool]:
         """
@@ -375,7 +410,7 @@ class AgentRuntime:
         agent: Agent,
         user_input: str,
         context: AgentContext | None = None,
-        history: list[dict[str, str]] | None = None,
+        history: list[dict[str, Any]] | None = None,
         tool_schemas: list[dict[str, Any]] | None = None,
     ) -> list[LLMMessage]:
         """
@@ -385,7 +420,8 @@ class AgentRuntime:
             agent: The agent to activate
             user_input: User's input message
             context: Pre-built context (built if not provided)
-            history: Conversation history [{role, content}, ...]
+            history: Conversation history - supports both simple {role, content}
+                     and rich format with tool_calls, tool_call_id, name
             tool_schemas: Optional list of tool schemas to include in prompt
 
         Returns:
@@ -412,10 +448,30 @@ class AgentRuntime:
         # System message
         messages.append(LLMMessage(role="system", content=prompt.text))
 
-        # History
+        # History - handle both simple and rich formats
         if history:
             for h in history:
-                messages.append(LLMMessage(role=h["role"], content=h["content"]))
+                # Reconstruct ToolCallRequest objects if present
+                tool_calls = None
+                if h.get("tool_calls"):
+                    tool_calls = [
+                        ToolCallRequest(
+                            id=tc["id"],
+                            name=tc["name"],
+                            arguments=tc.get("arguments", {}),
+                        )
+                        for tc in h["tool_calls"]
+                    ]
+
+                messages.append(
+                    LLMMessage(
+                        role=h["role"],
+                        content=h.get("content", ""),
+                        tool_call_id=h.get("tool_call_id"),
+                        name=h.get("name"),
+                        tool_calls=tool_calls,
+                    )
+                )
 
         # User input
         messages.append(LLMMessage(role="user", content=user_input))
@@ -1093,7 +1149,7 @@ class AgentRuntime:
                 # Update context size for next iteration's summarization decision (per-agent)
                 self._secretary.update_context_size(self.estimate_tokens(messages), agent.id)
 
-            # Complete turn
+            # Complete turn with full message trace and tool calls
             usage = TokenUsage(
                 prompt_tokens=total_prompt_tokens or response.prompt_tokens if response else None,
                 completion_tokens=total_completion_tokens or response.completion_tokens
@@ -1104,7 +1160,9 @@ class AgentRuntime:
                 else None,
             )
             final_content = response.content if response else ""
-            session.complete_turn(turn, final_content, usage)
+            session.complete_turn(
+                turn, final_content, usage, messages=messages, tool_calls=all_tool_calls
+            )
             duration_ms = (time.time() - start_time) * 1000
 
             # Log turn completion
@@ -1277,6 +1335,7 @@ class AgentRuntime:
             full_content = ""
             final_usage: TokenUsage | None = None
             consecutive_failures = 0
+            all_tool_calls: list[ToolCall] = []  # Track all tool calls for memory
 
             # Streaming loop with enforcement
             for iteration in range(max_iterations):
@@ -1353,6 +1412,7 @@ class AgentRuntime:
                     tool_results = await self._execute_tool_calls(
                         pending_tool_calls, agent, session.id, turn.turn_number
                     )
+                    all_tool_calls.extend(tool_results)  # Track for memory
 
                     # Validate turn with TurnValidator (checks for terminating tools)
                     # Note: This orchestrator enforcement runs independently of enforce_tool_usage.
@@ -1504,8 +1564,10 @@ class AgentRuntime:
                 # No enforcement or no tools - we're done
                 break
 
-            # Complete turn after streaming finishes
-            session.complete_turn(turn, full_content, final_usage)
+            # Complete turn after streaming finishes with full message trace
+            session.complete_turn(
+                turn, full_content, final_usage, messages=messages, tool_calls=all_tool_calls
+            )
             duration_ms = (time.time() - start_time) * 1000
 
             # Log completion

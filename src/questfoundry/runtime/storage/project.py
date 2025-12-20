@@ -292,6 +292,8 @@ class Project:
                 ended_at TEXT,
                 token_usage JSON,
                 status TEXT DEFAULT 'pending',
+                messages JSON NOT NULL DEFAULT '[]',
+                tool_calls JSON NOT NULL DEFAULT '[]',
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
 

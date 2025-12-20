@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.agent.runtime import ToolCall
+    from questfoundry.runtime.providers.base import LLMMessage
 
 
 class TurnStatus(str, Enum):
@@ -54,6 +58,7 @@ class Turn:
     A single turn in a session.
 
     Represents one agent invocation with input, output, and metadata.
+    Stores full message trace and tool calls for context reconstruction.
     """
 
     turn_number: int
@@ -66,6 +71,10 @@ class Turn:
     usage: TokenUsage | None = None
     status: TurnStatus = TurnStatus.PENDING
     db_id: int | None = None  # SQLite row ID
+    # Full message trace for context reconstruction
+    messages: list[LLMMessage] = field(default_factory=list)
+    # Executed tool calls for this turn
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
     def start(self) -> None:
         """Mark turn as started/streaming."""
@@ -115,14 +124,28 @@ class Turn:
             "ended_at": self.ended_at.isoformat() if self.ended_at else None,
             "usage": self.usage.to_dict() if self.usage else None,
             "status": self.status.value,
+            "messages": [m.to_dict() for m in self.messages],
+            "tool_calls": [tc.to_dict() for tc in self.tool_calls],
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Turn:
         """Create from dictionary."""
+        # Import at runtime to avoid circular imports
+        from questfoundry.runtime.agent.runtime import ToolCall
+        from questfoundry.runtime.providers.base import LLMMessage
+
         usage = None
         if data.get("usage"):
             usage = TokenUsage.from_dict(data["usage"])
+
+        messages = []
+        if data.get("messages"):
+            messages = [LLMMessage.from_dict(m) for m in data["messages"]]
+
+        tool_calls = []
+        if data.get("tool_calls"):
+            tool_calls = [ToolCall.from_dict(tc) for tc in data["tool_calls"]]
 
         return cls(
             turn_number=data["turn_number"],
@@ -135,4 +158,6 @@ class Turn:
             usage=usage,
             status=TurnStatus(data.get("status", "pending")),
             db_id=data.get("db_id"),
+            messages=messages,
+            tool_calls=tool_calls,
         )

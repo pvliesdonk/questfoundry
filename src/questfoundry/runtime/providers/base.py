@@ -44,6 +44,23 @@ class ToolCallRequest:
     name: str  # Tool name/ID
     arguments: dict[str, Any]  # Parsed arguments
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "arguments": self.arguments,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ToolCallRequest:
+        """Create from dictionary."""
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            arguments=data.get("arguments", {}),
+        )
+
 
 @dataclass
 class LLMMessage:
@@ -54,6 +71,34 @@ class LLMMessage:
     tool_call_id: str | None = None  # For tool result messages
     name: str | None = None  # Tool name for tool result messages
     tool_calls: list[ToolCallRequest] | None = None  # For assistant messages with tool calls
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result: dict[str, Any] = {
+            "role": self.role,
+            "content": self.content,
+        }
+        if self.tool_call_id is not None:
+            result["tool_call_id"] = self.tool_call_id
+        if self.name is not None:
+            result["name"] = self.name
+        if self.tool_calls is not None:
+            result["tool_calls"] = [tc.to_dict() for tc in self.tool_calls]
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LLMMessage:
+        """Create from dictionary."""
+        tool_calls = None
+        if data.get("tool_calls"):
+            tool_calls = [ToolCallRequest.from_dict(tc) for tc in data["tool_calls"]]
+        return cls(
+            role=data["role"],
+            content=data.get("content", ""),
+            tool_call_id=data.get("tool_call_id"),
+            name=data.get("name"),
+            tool_calls=tool_calls,
+        )
 
 
 @dataclass

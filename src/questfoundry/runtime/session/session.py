@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 from questfoundry.runtime.session.turn import TokenUsage, Turn, TurnStatus
 
 if TYPE_CHECKING:
+    from questfoundry.runtime.agent.runtime import ToolCall
+    from questfoundry.runtime.providers.base import LLMMessage
     from questfoundry.runtime.storage import Project
 
 
@@ -105,11 +107,15 @@ class Session:
             _project=project,
         )
 
+        # Import at runtime to avoid circular imports
+        from questfoundry.runtime.agent.runtime import ToolCall as ToolCallCls
+        from questfoundry.runtime.providers.base import LLMMessage as LLMMessageCls
+
         # Load turns
         turn_rows = conn.execute(
             """
             SELECT id, session_id, turn_number, agent_id, input, output,
-                   started_at, ended_at, token_usage, status
+                   started_at, ended_at, token_usage, status, messages, tool_calls
             FROM turns
             WHERE session_id = ?
             ORDER BY turn_number
@@ -130,6 +136,17 @@ class Session:
             else:
                 status = TurnStatus.COMPLETED if turn_row["output"] else TurnStatus.PENDING
 
+            # Load messages and tool_calls
+            messages = []
+            if turn_row["messages"]:
+                messages_data = json.loads(turn_row["messages"])
+                messages = [LLMMessageCls.from_dict(m) for m in messages_data]
+
+            tool_calls = []
+            if turn_row["tool_calls"]:
+                tool_calls_data = json.loads(turn_row["tool_calls"])
+                tool_calls = [ToolCallCls.from_dict(tc) for tc in tool_calls_data]
+
             turn = Turn(
                 db_id=turn_row["id"],
                 turn_number=turn_row["turn_number"],
@@ -143,6 +160,8 @@ class Session:
                 ),
                 usage=usage,
                 status=status,
+                messages=messages,
+                tool_calls=tool_calls,
             )
             session.turns.append(turn)
 
@@ -218,6 +237,8 @@ class Session:
         turn: Turn,
         output: str,
         usage: TokenUsage | None = None,
+        messages: list[LLMMessage] | None = None,
+        tool_calls: list[ToolCall] | None = None,
     ) -> None:
         """
         Complete a turn with output.
@@ -226,16 +247,30 @@ class Session:
             turn: The turn to complete
             output: The agent's output
             usage: Optional token usage stats
+            messages: Full message trace for this turn
+            tool_calls: Executed tool calls for this turn
         """
         turn.complete(output, usage)
+
+        # Store messages and tool_calls on the turn
+        if messages is not None:
+            turn.messages = messages
+        if tool_calls is not None:
+            turn.tool_calls = tool_calls
 
         # Persist to database
         if self._project and turn.db_id:
             conn = self._project._get_connection()
+
+            # Serialize messages and tool_calls
+            messages_json = json.dumps([m.to_dict() for m in turn.messages])
+            tool_calls_json = json.dumps([tc.to_dict() for tc in turn.tool_calls])
+
             conn.execute(
                 """
                 UPDATE turns
-                SET output = ?, ended_at = ?, token_usage = ?, status = ?
+                SET output = ?, ended_at = ?, token_usage = ?, status = ?,
+                    messages = ?, tool_calls = ?
                 WHERE id = ?
                 """,
                 (
@@ -243,6 +278,8 @@ class Session:
                     turn.ended_at.isoformat() if turn.ended_at else None,
                     json.dumps(usage.to_dict()) if usage else None,
                     turn.status.value,
+                    messages_json,
+                    tool_calls_json,
                     turn.db_id,
                 ),
             )
@@ -337,18 +374,27 @@ class Session:
                 total += turn.usage.total_tokens
         return total
 
-    def get_history(self) -> list[dict[str, str]]:
+    def get_history(self) -> list[dict[str, Any]]:
         """
-        Get conversation history for context.
+        Get full conversation history including tool interactions.
 
-        Returns list of {role, content} dicts for LLM context.
+        Returns list of message dicts for LLM context, excluding system prompts.
+        Each turn's full message trace (user, assistant with tool_calls, tool results)
+        is included for proper context reconstruction.
         """
-        history: list[dict[str, str]] = []
+        history: list[dict[str, Any]] = []
         for turn in self.turns:
-            if turn.input:
-                history.append({"role": "user", "content": turn.input})
-            if turn.output and turn.status == TurnStatus.COMPLETED:
-                history.append({"role": "assistant", "content": turn.output})
+            if turn.messages:
+                # Use stored message trace (includes tool interactions)
+                for msg in turn.messages:
+                    if msg.role != "system":  # Skip system prompts
+                        history.append(msg.to_dict())
+            else:
+                # Fallback for turns without stored messages (legacy data)
+                if turn.input:
+                    history.append({"role": "user", "content": turn.input})
+                if turn.output and turn.status == TurnStatus.COMPLETED:
+                    history.append({"role": "assistant", "content": turn.output})
         return history
 
     def to_dict(self) -> dict[str, Any]:
