@@ -84,9 +84,6 @@ jobs:
   schema-validation:
     name: Validate JSON Schemas
     runs-on: ubuntu-latest
-    # TODO: Remove continue-on-error once schema-domain mismatches are fixed
-    # See the validation output for list of issues to address
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

@@ -107,12 +107,6 @@
   "knowledge_config": "knowledge/layers.json",
 
   "defaults": {
-    "flow_control": {
-      "max_inbox_size": 20,
-      "max_active_delegations": 5,
-      "backpressure_threshold": 0.8,
-      "secretary_summarization_trigger": 10
-    },
     "quality": {
       "max_rework_cycles": 3,
       "escalation_after_rework": true

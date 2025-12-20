@@ -30,9 +30,10 @@
         "artifact_action",
         "store_access",
         "communication",
-        "delegation"
+        "delegation",
+        "process"
       ],
-      "description": "Category of capability"
+      "description": "Category of capability: tool (use a tool), artifact_action (CRUD artifacts), store_access (read/write stores), communication (message agents), delegation (delegate work), process (governance/workflow authority)"
     },
 
     "tool_ref": {

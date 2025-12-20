@@ -35,9 +35,12 @@
         "process",
         "access",
         "communication",
-        "safety"
+        "safety",
+        "quality",
+        "style",
+        "resource"
       ],
-      "description": "Category of constraint"
+      "description": "Category of constraint: content (what to create), process (how to work), access (permissions), communication (messaging), safety (user protection), quality (output standards), style (aesthetic rules), resource (budget/cost)"
     },
 
     "enforcement": {

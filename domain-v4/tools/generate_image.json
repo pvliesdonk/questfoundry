@@ -4,6 +4,8 @@
   "name": "Generate Image",
   "description": "Generate an illustration from an Art Plan. Consults Reference Sheets for visual consistency of recurring elements (characters, locations, objects). Returns an image asset with determinism log (kept off-surface).\n\nThis tool is expensive—use only when budget allows. Art Plans should exist for ALL worthy scenes, but generation is selective based on priority.\n\nRuntime provides implementation (DALL-E, Stable Diffusion, commission queue, etc.).",
 
+  "cost_tier": "high",
+
   "summarization_policy": "ultra_concise",
   "summary_template": "Generated image from {source_plan}",
 

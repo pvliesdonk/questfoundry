@@ -81,9 +81,10 @@
         "creator",
         "validator",
         "researcher",
-        "curator"
+        "curator",
+        "performer"
       ],
-      "description": "Agent archetype defining behavioral patterns"
+      "description": "Agent archetype defining behavioral patterns: orchestrator (coordinates agents), creator (produces artifacts), validator (checks quality), researcher (gathers information), curator (maintains collections), performer (presents content to users)"
     },
 
     "store_semantics": {

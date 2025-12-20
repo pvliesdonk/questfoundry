@@ -36,10 +36,13 @@
     "agents": {
       "type": "array",
       "items": {
-        "$ref": "agent.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to agent definition" },
+          { "$ref": "agent.schema.json" }
+        ]
       },
       "minItems": 1,
-      "description": "Agents that can perform work in this studio"
+      "description": "Agents that can perform work in this studio. Can be inline objects or file paths (manifest pattern)."
     },
 
     "entry_agent": {
@@ -47,67 +50,106 @@
       "description": "The agent that interfaces with external customers. Must reference an agent with is_entry_agent=true."
     },
 
+    "entry_agents": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "_definitions.schema.json#/$defs/agent_ref"
+      },
+      "description": "Named entry points mapped to agent IDs (e.g., { 'authoring': 'showrunner', 'playtest': 'player_narrator' }). Alternative to single entry_agent when multiple contexts need different entry points."
+    },
+
+    "constitution_ref": {
+      "type": "string",
+      "description": "File path to constitution definition (manifest pattern alternative to inline constitution)"
+    },
+
     "artifact_types": {
       "type": "array",
       "items": {
-        "$ref": "artifact-type.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to artifact type definition" },
+          { "$ref": "artifact-type.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Types of artifacts that can be created in this studio"
+      "description": "Types of artifacts that can be created in this studio. Can be inline objects or file paths."
     },
 
     "asset_types": {
       "type": "array",
       "items": {
-        "$ref": "asset-type.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to asset type definition" },
+          { "$ref": "asset-type.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Types of binary assets that can be stored in this studio"
+      "description": "Types of binary assets that can be stored in this studio. Can be inline objects or file paths."
     },
 
     "stores": {
       "type": "array",
       "items": {
-        "$ref": "store.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to store definition" },
+          { "$ref": "store.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Storage locations for artifacts and assets"
+      "description": "Storage locations for artifacts and assets. Can be inline objects or file paths."
     },
 
     "playbooks": {
       "type": "array",
       "items": {
-        "$ref": "playbook.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to playbook definition" },
+          { "$ref": "playbook.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Playbooks defining how work flows through the studio"
+      "description": "Playbooks defining how work flows through the studio. Can be inline objects or file paths."
     },
 
     "tools": {
       "type": "array",
       "items": {
-        "$ref": "tool-definition.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to tool definition" },
+          { "$ref": "tool-definition.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Tool definitions available to agents. Capabilities in agent.schema.json grant permission to use these tools; this array defines the tool interfaces."
+      "description": "Tool definitions available to agents. Can be inline objects or file paths."
     },
 
     "quality_criteria": {
       "type": "array",
       "items": {
-        "$ref": "../governance/quality-criteria.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to quality criteria definition" },
+          { "$ref": "../governance/quality-criteria.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Quality criteria used to validate work"
+      "description": "Quality criteria used to validate work. Can be inline objects or file paths."
     },
 
     "knowledge": {
       "type": "array",
       "items": {
-        "$ref": "../knowledge/knowledge-entry.schema.json"
+        "oneOf": [
+          { "type": "string", "description": "File path to knowledge entry" },
+          { "$ref": "../knowledge/knowledge-entry.schema.json" }
+        ]
       },
       "default": [],
-      "description": "Knowledge entries available to agents"
+      "description": "Knowledge entries available to agents. Can be inline objects or file paths."
+    },
+
+    "knowledge_config": {
+      "type": "string",
+      "description": "File path to knowledge layer configuration (e.g., 'knowledge/layers.json')"
     },
 
     "defaults": {
@@ -126,6 +168,7 @@
   "$defs": {
     "studio_defaults": {
       "type": "object",
+      "description": "Default values for studio workflow behavior. Note: Flow control settings (mailbox sizes, backpressure thresholds) are runtime configuration, not domain knowledge - configure those in RuntimeConfig.",
       "properties": {
         "default_store": {
           "$ref": "_definitions.schema.json#/$defs/store_ref",
@@ -135,53 +178,34 @@
           "$ref": "_definitions.schema.json#/$defs/playbook_ref",
           "description": "Default playbook when none specified"
         },
-        "max_rework_cycles": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 3,
-          "description": "Default maximum rework cycles for playbooks"
-        },
         "default_quality_criteria": {
           "type": "array",
           "items": { "type": "string" },
           "default": [],
           "description": "Quality criteria applied by default to all work"
         },
-        "flow_control": {
-          "$ref": "#/$defs/flow_control_settings",
-          "description": "Settings for managing agent mailbox overflow and backpressure"
+        "quality": {
+          "$ref": "#/$defs/quality_settings",
+          "description": "Quality workflow settings (design decisions, not runtime tuning)"
         }
       },
       "additionalProperties": false
     },
 
-    "flow_control_settings": {
+    "quality_settings": {
       "type": "object",
-      "description": "Flow control settings to prevent mailbox overflow and context explosion. The Runtime uses these to implement the Secretary (auto-summarization), Bouncer (backpressure), and TTL (expiration) patterns.",
+      "description": "Quality workflow design decisions.",
       "properties": {
-        "max_inbox_size": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 10,
-          "description": "Maximum messages shown in an agent's context. Beyond this, oldest messages are summarized into digests."
-        },
-        "auto_summarize_threshold": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 5,
-          "description": "When inbox exceeds this count, trigger automatic summarization of older messages into a digest."
-        },
-        "max_active_delegations_per_agent": {
+        "max_rework_cycles": {
           "type": "integer",
           "minimum": 1,
           "default": 3,
-          "description": "Maximum concurrent delegations an agent can have. New delegations are rejected (backpressure) when exceeded."
+          "description": "Maximum rework cycles before escalation"
         },
-        "default_message_ttl_turns": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 24,
-          "description": "Default turns before ephemeral messages expire. Delegations never expire; clarifications and progress updates may."
+        "escalation_after_rework": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to escalate to human after max rework cycles exceeded"
         }
       },
       "additionalProperties": false

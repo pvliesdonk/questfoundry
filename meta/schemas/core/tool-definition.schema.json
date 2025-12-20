@@ -23,6 +23,12 @@
       "description": "What this tool does - included in LLM context to help it decide when to use the tool"
     },
 
+    "cost_tier": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "external"],
+      "description": "Advisory cost tier for orchestration and UI. 'low' = cheap/fast, 'medium' = moderate cost, 'high' = expensive API calls, 'external' = triggers external services/commissions. Not hard budgeting - guides orchestrator decisions."
+    },
+
     "input_schema": {
       "$ref": "#/$defs/tool_input_schema",
       "description": "JSON Schema defining the tool's arguments (function signature)"

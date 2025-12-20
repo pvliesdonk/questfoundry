@@ -60,6 +60,18 @@ class ModelClassMapping:
 
 
 @dataclass
+class FlowControlConfig:
+    """Flow control settings for context management and backpressure."""
+
+    max_inbox_size: int = 20
+    max_active_delegations: int = 5
+    backpressure_threshold: float = 0.8
+    secretary_summarization_trigger: int = 10
+    auto_summarize_threshold: int = 5
+    default_message_ttl_turns: int = 24
+
+
+@dataclass
 class RuntimeConfig:
     """Complete runtime configuration."""
 
@@ -77,6 +89,9 @@ class RuntimeConfig:
 
     # Per-agent overrides: agent_id → {setting: value}
     agent_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    # Flow control (context management, backpressure)
+    flow_control: FlowControlConfig = field(default_factory=FlowControlConfig)
 
     # Logging
     log_events: bool = False
@@ -213,6 +228,23 @@ def _merge_yaml_config(config: RuntimeConfig, yaml_config: dict[str, Any]) -> No
     if "langsmith" in yaml_config:
         config.langsmith_enabled = yaml_config["langsmith"].get("enabled", False)
         config.langsmith_project = yaml_config["langsmith"].get("project")
+
+    if "flow_control" in yaml_config:
+        fc = yaml_config["flow_control"]
+        if "max_inbox_size" in fc:
+            config.flow_control.max_inbox_size = fc["max_inbox_size"]
+        if "max_active_delegations" in fc:
+            config.flow_control.max_active_delegations = fc["max_active_delegations"]
+        if "backpressure_threshold" in fc:
+            config.flow_control.backpressure_threshold = fc["backpressure_threshold"]
+        if "secretary_summarization_trigger" in fc:
+            config.flow_control.secretary_summarization_trigger = fc[
+                "secretary_summarization_trigger"
+            ]
+        if "auto_summarize_threshold" in fc:
+            config.flow_control.auto_summarize_threshold = fc["auto_summarize_threshold"]
+        if "default_message_ttl_turns" in fc:
+            config.flow_control.default_message_ttl_turns = fc["default_message_ttl_turns"]
 
 
 def _apply_cli_overrides(config: RuntimeConfig, overrides: dict[str, Any]) -> None:
