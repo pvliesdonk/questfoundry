@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from questfoundry.runtime.agent import AgentRuntime
+from questfoundry.runtime.agent.runtime import ToolCall, ToolCallRequest
 from questfoundry.runtime.models.base import Agent, Studio
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -361,10 +363,6 @@ class TestToolResultsToMessages:
         basic_studio: Studio,
     ) -> None:
         """Tool errors should include result.result data for LLM self-correction."""
-        import json
-
-        from questfoundry.runtime.agent.runtime import ToolCall, ToolCallRequest
-
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
 
         # Simulate a failed tool call with detailed feedback
@@ -423,10 +421,6 @@ class TestToolResultsToMessages:
         basic_studio: Studio,
     ) -> None:
         """Successful tool results should work as before."""
-        import json
-
-        from questfoundry.runtime.agent.runtime import ToolCall, ToolCallRequest
-
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
 
         tool_requests = [
@@ -451,6 +445,38 @@ class TestToolResultsToMessages:
         msg = messages[0]
         content = json.loads(msg.content)
         assert content == {"data": "success", "count": 42}
+
+    def test_error_with_none_result(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Tool errors with None result should still include error message."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_requests = [
+            ToolCallRequest(
+                id="call_789",
+                name="failing_tool",
+                arguments={"input": "test"},
+            )
+        ]
+        tool_results = [
+            ToolCall(
+                tool_id="failing_tool",
+                args={"input": "test"},
+                success=False,
+                error="Connection timeout",
+                result=None,  # No result data, just error
+            )
+        ]
+
+        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
+
+        assert len(messages) == 1
+        msg = messages[0]
+        content = json.loads(msg.content)
+        assert content == {"error": "Connection timeout"}
 
 
 class TestContextSummarizationPressureGating:

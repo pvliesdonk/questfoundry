@@ -700,7 +700,12 @@ class AgentRuntime:
                 # Include the full result.result (contains validation feedback, etc.)
                 # so the LLM can self-correct based on detailed error info
                 error_response = result.result.copy() if result.result else {}
-                error_response["error"] = result.error or "Tool execution failed"
+                runtime_error = result.error or "Tool execution failed"
+                # Avoid overwriting if result already has an "error" key
+                if "error" in error_response:
+                    error_response["runtime_error"] = runtime_error
+                else:
+                    error_response["error"] = runtime_error
                 content = json.dumps(error_response)
                 messages.append(
                     LLMMessage(
