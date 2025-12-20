@@ -198,6 +198,12 @@
       { "from": "gatecheck", "to": "draft" },
       { "from": "gatecheck", "to": "approved" },
       {
+        "from": "gatecheck",
+        "to": "cold",
+        "allowed_agents": ["gatekeeper"],
+        "requires_validation": ["integrity", "reachability", "style", "presentation"]
+      },
+      {
         "from": "approved",
         "to": "cold",
         "requires_validation": ["integrity", "reachability", "style", "presentation"]

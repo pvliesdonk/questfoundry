@@ -19,6 +19,7 @@ from questfoundry.runtime.tools.registry import TOOL_IMPLEMENTATIONS, register_t
 
 if TYPE_CHECKING:
     from questfoundry.runtime.storage.lifecycle import LifecycleManager
+    from questfoundry.runtime.storage.store_manager import StoreManager
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,17 @@ class RequestLifecycleTransitionTool(BaseTool):
                 # Validations passed - continue to commit
                 logger.info(f"Validations passed for {artifact_id}: {required_validations}")
 
+        # Handle cold transitions specially - requires store migration
+        if target_state == "cold":
+            cold_result = self._handle_cold_transition(
+                artifact_id=artifact_id,
+                artifact=artifact,
+                artifact_type=artifact_type,
+                current_state=current_state,
+            )
+            if cold_result is not None:
+                return cold_result
+
         # Perform the transition
         try:
             updated = self._context.project.update_artifact(
@@ -192,6 +204,138 @@ class RequestLifecycleTransitionTool(BaseTool):
     def _get_lifecycle_manager(self) -> LifecycleManager | None:
         """Get lifecycle manager from context."""
         return getattr(self._context, "lifecycle_manager", None)
+
+    def _get_store_manager(self) -> StoreManager | None:
+        """Get store manager from context."""
+        return getattr(self._context, "store_manager", None)
+
+    def _handle_cold_transition(
+        self,
+        artifact_id: str,
+        artifact: dict[str, Any],
+        artifact_type: str | None,
+        current_state: str,
+    ) -> ToolResult | None:
+        """
+        Handle transition to cold state with store migration.
+
+        Cold transitions require:
+        1. Determining the target cold store from artifact type
+        2. Verifying the caller is an exclusive writer for that store
+        3. Idempotency check (artifact already in cold store)
+        4. Updating both _lifecycle_state and _store atomically
+
+        Returns:
+            ToolResult if transition is handled (success or error),
+            None if should fall through to normal transition logic
+        """
+        if not artifact_type:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Cannot transition to cold: artifact has no type",
+            )
+
+        store_manager = self._get_store_manager()
+        if not store_manager:
+            # No store manager - fall through to basic transition
+            logger.warning(
+                f"No store manager available for cold transition of {artifact_id}. "
+                "Artifact will only have _lifecycle_state updated, not migrated to cold store."
+            )
+            return None
+
+        # 1. Determine target cold store
+        target_store = store_manager.get_cold_store_for_artifact_type(artifact_type)
+        if not target_store:
+            return ToolResult(
+                success=False,
+                data={
+                    "artifact_id": artifact_id,
+                    "artifact_type": artifact_type,
+                },
+                error=(
+                    f"No cold store accepts artifact type '{artifact_type}'. "
+                    "Check domain-v4/stores/*.json for artifact_types configuration."
+                ),
+            )
+
+        # 2. Check exclusive writer permission
+        agent_id = self._context.agent_id or ""
+        if not store_manager.is_exclusive_writer(target_store, agent_id):
+            exclusive_writers = store_manager.get_exclusive_writers(target_store)
+            return ToolResult(
+                success=False,
+                data={
+                    "artifact_id": artifact_id,
+                    "target_store": target_store,
+                    "required_writers": exclusive_writers,
+                    "current_agent": agent_id,
+                },
+                error=(
+                    f"Only {exclusive_writers} can promote to '{target_store}' store. "
+                    f"Delegate to the exclusive writer to complete the cold transition."
+                ),
+            )
+
+        # 3. Idempotency check - already in cold state and correct store?
+        current_store = artifact.get("_store", "workspace")
+        if current_state == "cold" and current_store == target_store:
+            return ToolResult(
+                success=True,
+                data={
+                    "artifact_id": artifact_id,
+                    "already_cold": True,
+                    "store": target_store,
+                    "message": f"Artifact already in cold state in '{target_store}' store",
+                },
+            )
+
+        # 4. Perform the transition with store migration
+        # Note: project is already validated as non-None in execute() before this is called
+        assert self._context.project is not None
+        try:
+            updated = self._context.project.update_artifact(
+                artifact_id=artifact_id,
+                data={
+                    "_lifecycle_state": "cold",
+                    "_store": target_store,
+                },
+            )
+
+            if updated:
+                logger.info(
+                    f"Cold transition: {artifact_id} {current_state} -> cold, "
+                    f"store: {current_store} -> {target_store} (by {agent_id})"
+                )
+
+                return ToolResult(
+                    success=True,
+                    data={
+                        "result": "committed",
+                        "artifact_id": artifact_id,
+                        "previous_state": current_state,
+                        "new_state": "cold",
+                        "previous_store": current_store,
+                        "new_store": target_store,
+                        "transitioned": True,
+                        "transitioned_by": agent_id,
+                    },
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error=f"Failed to update artifact for cold transition: {artifact_id}",
+                )
+
+        except Exception as e:
+            logger.exception(f"Failed cold transition for artifact: {e}")
+            return ToolResult(
+                success=False,
+                data={},
+                error=f"Failed cold transition: {e}",
+            )
 
     async def _run_validations(
         self,
