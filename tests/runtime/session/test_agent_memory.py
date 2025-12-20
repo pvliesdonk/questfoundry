@@ -174,18 +174,6 @@ class TestHistoryReconstruction:
 
     def test_get_history_with_tool_interactions(self):
         """Test get_history() includes tool interactions from messages."""
-
-        class MockProject:
-            """Minimal mock for project."""
-
-            class MockInfo:
-                id = "test_project"
-
-            info = MockInfo()
-
-            def _get_connection(self):
-                return None
-
         # Create session without actual DB
         session = Session(
             id="sess_1",

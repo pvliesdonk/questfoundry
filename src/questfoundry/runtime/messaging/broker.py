@@ -10,11 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.messaging.mailbox import AsyncMailbox
 from questfoundry.runtime.messaging.message import Message
-from questfoundry.runtime.messaging.types import MessageStatus
+from questfoundry.runtime.messaging.types import MessageStatus, MessageType
 
 if TYPE_CHECKING:
     from questfoundry.runtime.messaging.logger import MessageLogger
@@ -319,11 +321,6 @@ class AsyncMessageBroker:
                 _, preserved = self._mailbox_secretary.select_messages_for_summarization(messages)
 
                 # Create a digest message from the summary
-                import uuid
-                from datetime import datetime
-
-                from questfoundry.runtime.messaging.types import MessageType
-
                 digest = Message(
                     id=str(uuid.uuid4()),
                     type=MessageType.DIGEST,
