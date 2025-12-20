@@ -451,3 +451,58 @@ class TestToolResultsToMessages:
         msg = messages[0]
         content = json.loads(msg.content)
         assert content == {"data": "success", "count": 42}
+
+
+class TestContextSummarizationPressureGating:
+    """Tests for context summarization pressure gating."""
+
+    def test_no_summarization_below_full_level(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Context summarization should not trigger when below FULL level (90%)."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        # Create enough history to trigger turn-count-based summarization
+        # (8+ message groups), but context pressure is low (default 0%)
+        history = []
+        for i in range(20):  # Well above the 8-group threshold
+            history.append({"role": "user", "content": f"Message {i}"})
+            history.append({"role": "assistant", "content": f"Response {i}"})
+
+        # Apply summarization - should NOT summarize because pressure is below 90%
+        result = runtime._apply_context_summarization(history, "test_agent")
+
+        # History should be unchanged (no summarization)
+        assert result == history
+        assert len(result) == 40  # All messages preserved
+
+    def test_summarization_triggers_at_full_level(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Context summarization should trigger when at FULL level (90%+)."""
+        runtime = AgentRuntime(
+            provider=mock_provider,
+            studio=basic_studio,
+            context_limit=1000,  # Small limit
+        )
+
+        # Simulate high context pressure by updating the secretary's token tracking
+        runtime._secretary._agent_context_tokens["test_agent"] = 950  # 95% usage
+
+        # Create enough history to trigger turn-count-based summarization
+        history = []
+        for i in range(20):
+            history.append({"role": "user", "content": f"Message {i}"})
+            history.append({"role": "assistant", "content": f"Response {i}"})
+
+        # Apply summarization - should summarize because pressure is >= 90%
+        result = runtime._apply_context_summarization(history, "test_agent")
+
+        # History should be summarized (fewer messages)
+        assert result != history
+        # Should have summary message + preserved recent turns
+        assert len(result) < len(history)

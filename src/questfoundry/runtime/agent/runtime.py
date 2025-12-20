@@ -36,7 +36,12 @@ from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
     TurnValidator,
 )
-from questfoundry.runtime.context import ContextSecretary, Secretary, SummarizationPolicy
+from questfoundry.runtime.context import (
+    ContextSecretary,
+    Secretary,
+    SummarizationLevel,
+    SummarizationPolicy,
+)
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -511,6 +516,10 @@ class AgentRuntime:
         Uses the ContextSecretary to summarize older turns while preserving
         recent and important turns.
 
+        Per PR #180's tiered design, context summarization only happens at
+        FULL level (>= 90% context usage). This prevents premature summarization
+        when context pressure is low.
+
         Args:
             history: Conversation history (list of message dicts)
             agent_id: Agent ID for logging
@@ -521,7 +530,13 @@ class AgentRuntime:
         if not history:
             return history
 
-        # Check if summarization is needed
+        # Gate on context pressure: only summarize at FULL level (>= 90%)
+        # Per PR #180 tiered design - don't summarize when context pressure is low
+        current_level = self._secretary.get_current_level(agent_id)
+        if current_level < SummarizationLevel.FULL:
+            return history
+
+        # Check if summarization is needed (group count check)
         result = self._context_secretary.summarize_context(history)
 
         if not result.summary_created:
