@@ -36,7 +36,12 @@ from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
     TurnValidator,
 )
-from questfoundry.runtime.context import ContextSecretary, Secretary, SummarizationPolicy
+from questfoundry.runtime.context import (
+    ContextSecretary,
+    Secretary,
+    SummarizationLevel,
+    SummarizationPolicy,
+)
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -511,6 +516,10 @@ class AgentRuntime:
         Uses the ContextSecretary to summarize older turns while preserving
         recent and important turns.
 
+        Per PR #180's tiered design, context summarization only happens at
+        FULL level (>= 90% context usage). This prevents premature summarization
+        when context pressure is low.
+
         Args:
             history: Conversation history (list of message dicts)
             agent_id: Agent ID for logging
@@ -521,7 +530,13 @@ class AgentRuntime:
         if not history:
             return history
 
-        # Check if summarization is needed
+        # Gate on context pressure: only summarize at FULL level (>= 90%)
+        # Per PR #180 tiered design - don't summarize when context pressure is low
+        current_level = self._secretary.get_current_level(agent_id)
+        if current_level < SummarizationLevel.FULL:
+            return history
+
+        # Check if summarization is needed (group count check)
         result = self._context_secretary.summarize_context(history)
 
         if not result.summary_created:
@@ -680,9 +695,18 @@ class AgentRuntime:
 
         messages = []
         for tc, result in zip(tool_calls, tool_results, strict=True):
-            # Handle errors (always preserve error messages)
+            # Handle errors (always preserve error messages and feedback data)
             if not result.success:
-                content = json.dumps({"error": result.error or "Tool execution failed"})
+                # Include the full result.result (contains validation feedback, etc.)
+                # so the LLM can self-correct based on detailed error info
+                error_response = result.result.copy() if result.result else {}
+                runtime_error = result.error or "Tool execution failed"
+                # Avoid overwriting if result already has an "error" key
+                if "error" in error_response:
+                    error_response["runtime_error"] = runtime_error
+                else:
+                    error_response["error"] = runtime_error
+                content = json.dumps(error_response)
                 messages.append(
                     LLMMessage(
                         role="tool",

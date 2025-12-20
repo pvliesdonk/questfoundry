@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from questfoundry.runtime.agent import AgentRuntime
+from questfoundry.runtime.agent.runtime import ToolCall, ToolCallRequest
 from questfoundry.runtime.models.base import Agent, Studio
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -350,3 +352,183 @@ class TestAgentActivationStreaming:
         # Turn should be marked as error
         assert session.turn_count == 1
         assert "Stream failed" in (session.turns[0].output or "")
+
+
+class TestToolResultsToMessages:
+    """Tests for _tool_results_to_messages error handling."""
+
+    def test_error_includes_full_feedback_data(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Tool errors should include result.result data for LLM self-correction."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        # Simulate a failed tool call with detailed feedback
+        tool_requests = [
+            ToolCallRequest(
+                id="call_123",
+                name="save_artifact",
+                arguments={"artifact_type": "section_brief", "data": {"title": "Wrong"}},
+            )
+        ]
+        tool_results = [
+            ToolCall(
+                tool_id="save_artifact",
+                args={"artifact_type": "section_brief", "data": {"title": "Wrong"}},
+                success=False,
+                error="Artifact validation failed: 2 error(s)",
+                result={
+                    "feedback": {
+                        "success": False,
+                        "error_count": 2,
+                        "errors": [
+                            {"field": "brief_id", "issue": "Required field missing"},
+                            {"field": "section_title", "issue": "Required field missing"},
+                        ],
+                        "required_fields": [
+                            {"name": "brief_id", "type": "string"},
+                            {"name": "section_title", "type": "string"},
+                        ],
+                        "hint": "Check the artifact schema",
+                    }
+                },
+            )
+        ]
+
+        # Call the method
+        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
+
+        # Verify the error message includes the full feedback
+        assert len(messages) == 1
+        msg = messages[0]
+        assert msg.role == "tool"
+        assert msg.name == "save_artifact"
+
+        content = json.loads(msg.content)
+        assert "error" in content
+        assert content["error"] == "Artifact validation failed: 2 error(s)"
+        # KEY: The feedback data should be included for LLM self-correction
+        assert "feedback" in content
+        assert content["feedback"]["error_count"] == 2
+        assert len(content["feedback"]["errors"]) == 2
+        assert content["feedback"]["errors"][0]["field"] == "brief_id"
+
+    def test_success_result_not_affected(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Successful tool results should work as before."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_requests = [
+            ToolCallRequest(
+                id="call_456",
+                name="some_tool",
+                arguments={"query": "test"},
+            )
+        ]
+        tool_results = [
+            ToolCall(
+                tool_id="some_tool",
+                args={"query": "test"},
+                success=True,
+                result={"data": "success", "count": 42},
+            )
+        ]
+
+        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
+
+        assert len(messages) == 1
+        msg = messages[0]
+        content = json.loads(msg.content)
+        assert content == {"data": "success", "count": 42}
+
+    def test_error_with_none_result(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Tool errors with None result should still include error message."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_requests = [
+            ToolCallRequest(
+                id="call_789",
+                name="failing_tool",
+                arguments={"input": "test"},
+            )
+        ]
+        tool_results = [
+            ToolCall(
+                tool_id="failing_tool",
+                args={"input": "test"},
+                success=False,
+                error="Connection timeout",
+                result=None,  # No result data, just error
+            )
+        ]
+
+        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
+
+        assert len(messages) == 1
+        msg = messages[0]
+        content = json.loads(msg.content)
+        assert content == {"error": "Connection timeout"}
+
+
+class TestContextSummarizationPressureGating:
+    """Tests for context summarization pressure gating."""
+
+    def test_no_summarization_below_full_level(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Context summarization should not trigger when below FULL level (90%)."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        # Create enough history to trigger turn-count-based summarization
+        # (8+ message groups), but context pressure is low (default 0%)
+        history = []
+        for i in range(20):  # Well above the 8-group threshold
+            history.append({"role": "user", "content": f"Message {i}"})
+            history.append({"role": "assistant", "content": f"Response {i}"})
+
+        # Apply summarization - should NOT summarize because pressure is below 90%
+        result = runtime._apply_context_summarization(history, "test_agent")
+
+        # History should be unchanged (no summarization)
+        assert result == history
+        assert len(result) == 40  # All messages preserved
+
+    def test_summarization_triggers_at_full_level(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Context summarization should trigger when at FULL level (90%+)."""
+        runtime = AgentRuntime(
+            provider=mock_provider,
+            studio=basic_studio,
+            context_limit=1000,  # Small limit
+        )
+
+        # Simulate high context pressure by updating the secretary's token tracking
+        runtime._secretary._agent_context_tokens["test_agent"] = 950  # 95% usage
+
+        # Create enough history to trigger turn-count-based summarization
+        history = []
+        for i in range(20):
+            history.append({"role": "user", "content": f"Message {i}"})
+            history.append({"role": "assistant", "content": f"Response {i}"})
+
+        # Apply summarization - should summarize because pressure is >= 90%
+        result = runtime._apply_context_summarization(history, "test_agent")
+
+        # History should be summarized (fewer messages)
+        assert result != history
+        # Should have summary message + preserved recent turns
+        assert len(result) < len(history)
