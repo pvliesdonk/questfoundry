@@ -23,14 +23,56 @@
 
   "output_schema": {
     "type": "object",
+    "description": "Semantically clear validation result (see issue #228 for rationale)",
     "properties": {
-      "status": {
+      "validation_outcome": {
         "type": "string",
-        "enum": ["ok", "issues_found"],
-        "description": "Overall validation status"
+        "enum": ["passed", "warnings", "failed"],
+        "description": "Clear validation result: passed (no issues), warnings (non-blocking concerns), failed (blocking issues)"
+      },
+      "blocking_issues": {
+        "type": "array",
+        "description": "Issues that prevent graph approval - must be fixed",
+        "items": {
+          "type": "object",
+          "properties": {
+            "issue_type": { "type": "string", "enum": ["missing_targets", "no_entry_point"] },
+            "severity": { "type": "string", "enum": ["blocking"] },
+            "description": { "type": "string" },
+            "affected_nodes": { "type": "array", "items": { "type": "string" } },
+            "count": { "type": "integer" }
+          }
+        }
+      },
+      "warnings": {
+        "type": "array",
+        "description": "Non-blocking concerns - should be reviewed",
+        "items": {
+          "type": "object",
+          "properties": {
+            "issue_type": { "type": "string", "enum": ["unreachable_nodes", "multiple_entry_points", "dead_ends", "orphan_nodes", "no_stable_paths"] },
+            "severity": { "type": "string", "enum": ["warning"] },
+            "description": { "type": "string" },
+            "affected_nodes": { "type": "array", "items": { "type": "string" } },
+            "count": { "type": "integer" }
+          }
+        }
+      },
+      "recovery_actions": {
+        "type": "array",
+        "description": "Directive actions to fix issues (not passive hints)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "priority": { "type": "string", "enum": ["high", "medium", "low", "info"] },
+            "action": { "type": "string", "description": "What to do" },
+            "details": { "type": "string", "description": "Specific details" }
+          }
+        }
       },
       "analysis": {
         "type": "object",
+        "description": "Detailed graph analysis data",
         "properties": {
           "summary": {
             "type": "object",
@@ -42,29 +84,13 @@
               "dead_end_count": { "type": "integer" },
               "orphan_count": { "type": "integer" },
               "missing_target_count": { "type": "integer" },
-              "has_reachable_stable_node": { "type": "boolean", "description": "Whether any reachable node is in a stable state (approved/cold)" }
+              "has_reachable_stable_node": { "type": "boolean" }
             }
           },
-          "reachable": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Anchor IDs reachable from entry points"
-          },
-          "unreachable": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Anchor IDs not reachable from any entry point"
-          },
-          "dead_ends": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Anchor IDs with no outgoing connections"
-          },
-          "orphans": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Anchor IDs with no incoming connections (excluding entry points)"
-          },
+          "reachable": { "type": "array", "items": { "type": "string" } },
+          "unreachable": { "type": "array", "items": { "type": "string" } },
+          "dead_ends": { "type": "array", "items": { "type": "string" } },
+          "orphans": { "type": "array", "items": { "type": "string" } },
           "missing_targets": {
             "type": "array",
             "items": {
@@ -73,39 +99,28 @@
                 "from": { "type": "string" },
                 "to": { "type": "string" }
               }
-            },
-            "description": "References to non-existent anchor IDs"
+            }
           },
           "by_lifecycle": {
             "type": "object",
-            "additionalProperties": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
-            "description": "Nodes grouped by lifecycle state (draft, approved, cold, etc.)"
+            "additionalProperties": { "type": "array", "items": { "type": "string" } }
           },
           "nodes": {
             "type": "object",
-            "description": "Detailed node information keyed by anchor ID",
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "anchor_id": { "type": "string", "description": "The node's anchor identifier" },
-                "artifact_id": { "type": "string", "description": "The underlying artifact ID" },
-                "title": { "type": "string", "description": "Human-readable title" },
-                "lifecycle_state": { "type": "string", "description": "Current lifecycle state (draft, approved, cold, etc.)" },
-                "type": { "type": "string", "enum": ["section_brief", "section"], "description": "Artifact type" },
-                "outgoing": { "type": "array", "items": { "type": "string" }, "description": "Target anchor IDs this node connects to" },
-                "incoming": { "type": "array", "items": { "type": "string" }, "description": "Source anchor IDs that connect to this node" }
+                "anchor_id": { "type": "string" },
+                "artifact_id": { "type": "string" },
+                "title": { "type": "string" },
+                "lifecycle_state": { "type": "string" },
+                "type": { "type": "string", "enum": ["section_brief", "section"] },
+                "outgoing": { "type": "array", "items": { "type": "string" } },
+                "incoming": { "type": "array", "items": { "type": "string" } }
               }
             }
           }
         }
-      },
-      "recommendations": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "Actionable recommendations based on analysis"
       }
     }
   },

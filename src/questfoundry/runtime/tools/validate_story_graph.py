@@ -125,15 +125,28 @@ class ValidateStoryGraphTool(BaseTool):
         # Build the graph
         analysis = self._build_and_analyze_graph(include_drafts, entry_anchor)
 
-        # Determine overall status
-        has_issues = len(analysis.unreachable) > 0 or len(analysis.missing_targets) > 0
+        # Categorize issues by severity (following semantic clarity from issue #228)
+        blocking_issues, warnings = self._categorize_issues(analysis)
+
+        # Determine validation outcome
+        if blocking_issues:
+            validation_outcome = "failed"
+        elif warnings:
+            validation_outcome = "warnings"
+        else:
+            validation_outcome = "passed"
+
+        # Generate directive recovery actions (not passive hints)
+        recovery_actions = self._generate_recovery_actions(blocking_issues)
 
         return ToolResult(
             success=True,
             data={
-                "status": "issues_found" if has_issues else "ok",
+                "validation_outcome": validation_outcome,
+                "blocking_issues": blocking_issues,
+                "warnings": warnings,
+                "recovery_actions": recovery_actions,
                 "analysis": analysis.to_dict(),
-                "recommendations": self._generate_recommendations(analysis),
             },
         )
 
@@ -300,64 +313,159 @@ class ValidateStoryGraphTool(BaseTool):
         }
         return priorities.get(state, 0)
 
-    def _generate_recommendations(self, analysis: GraphAnalysis) -> list[str]:
-        """Generate actionable recommendations from analysis."""
-        recommendations = []
+    def _categorize_issues(
+        self, analysis: GraphAnalysis
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """
+        Categorize issues into blocking vs warnings.
 
-        if analysis.unreachable:
-            recommendations.append(
-                f"Add paths to {len(analysis.unreachable)} unreachable node(s): "
-                f"{', '.join(sorted(analysis.unreachable)[:3])}"
-                + ("..." if len(analysis.unreachable) > 3 else "")
-            )
+        Blocking issues prevent graph approval:
+        - Missing targets (broken links)
+        - No entry points
 
+        Warnings are concerns but don't block:
+        - Unreachable nodes
+        - Dead ends
+        - Orphans
+        - Multiple entry points
+        - All drafts (no stable paths)
+
+        Returns:
+            (blocking_issues, warnings) - each is a list of structured issue dicts
+        """
+        blocking: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
+
+        # BLOCKING: Missing targets (broken links)
         if analysis.missing_targets:
             missing = {m["to"] for m in analysis.missing_targets}
-            recommendations.append(
-                f"Create missing target(s): {', '.join(sorted(missing)[:3])}"
-                + ("..." if len(missing) > 3 else "")
+            blocking.append(
+                {
+                    "issue_type": "missing_targets",
+                    "severity": "blocking",
+                    "description": f"{len(missing)} target node(s) referenced but don't exist",
+                    "affected_nodes": sorted(missing)[:5],
+                    "count": len(missing),
+                }
             )
 
+        # BLOCKING: No entry points
         if not analysis.entry_points:
-            recommendations.append("No entry point found - designate a starting section")
+            blocking.append(
+                {
+                    "issue_type": "no_entry_point",
+                    "severity": "blocking",
+                    "description": "No entry point found - graph has no starting node",
+                    "affected_nodes": [],
+                    "count": 0,
+                }
+            )
 
+        # WARNING: Unreachable nodes
+        if analysis.unreachable:
+            warnings.append(
+                {
+                    "issue_type": "unreachable_nodes",
+                    "severity": "warning",
+                    "description": f"{len(analysis.unreachable)} node(s) cannot be reached from entry",
+                    "affected_nodes": sorted(analysis.unreachable)[:5],
+                    "count": len(analysis.unreachable),
+                }
+            )
+
+        # WARNING: Multiple entry points (may be intentional)
         if len(analysis.entry_points) > 1:
-            recommendations.append(
-                f"Multiple entry points detected: {', '.join(analysis.entry_points)}. "
-                "Verify this is intentional."
+            warnings.append(
+                {
+                    "issue_type": "multiple_entry_points",
+                    "severity": "warning",
+                    "description": f"{len(analysis.entry_points)} entry points detected",
+                    "affected_nodes": analysis.entry_points[:5],
+                    "count": len(analysis.entry_points),
+                }
             )
 
-        # Dead ends recommendation (nodes with no outgoing connections)
-        if analysis.dead_ends:
-            # Filter to only reachable dead ends - unreachable ones are less urgent
-            reachable_dead_ends = [d for d in analysis.dead_ends if d in analysis.reachable]
-            if reachable_dead_ends:
-                recommendations.append(
-                    f"{len(reachable_dead_ends)} reachable dead end(s): "
-                    f"{', '.join(sorted(reachable_dead_ends)[:3])}"
-                    + ("..." if len(reachable_dead_ends) > 3 else "")
-                    + ". Add outgoing paths or mark as terminal."
-                )
+        # WARNING: Dead ends (reachable only)
+        reachable_dead_ends = [d for d in analysis.dead_ends if d in analysis.reachable]
+        if reachable_dead_ends:
+            warnings.append(
+                {
+                    "issue_type": "dead_ends",
+                    "severity": "warning",
+                    "description": f"{len(reachable_dead_ends)} reachable node(s) have no outgoing paths",
+                    "affected_nodes": sorted(reachable_dead_ends)[:5],
+                    "count": len(reachable_dead_ends),
+                }
+            )
 
-        # Orphans recommendation (nodes with no incoming connections, excluding entry points)
+        # WARNING: Orphans
         if analysis.orphans:
-            recommendations.append(
-                f"{len(analysis.orphans)} orphan node(s) with no incoming paths: "
-                f"{', '.join(sorted(analysis.orphans)[:3])}"
-                + ("..." if len(analysis.orphans) > 3 else "")
-                + ". Connect from existing nodes or remove."
+            warnings.append(
+                {
+                    "issue_type": "orphan_nodes",
+                    "severity": "warning",
+                    "description": f"{len(analysis.orphans)} node(s) have no incoming paths",
+                    "affected_nodes": sorted(analysis.orphans)[:5],
+                    "count": len(analysis.orphans),
+                }
             )
 
-        # Count only reachable drafts for the draft recommendation
+        # WARNING: No stable paths
         all_drafts = set(analysis.by_lifecycle.get("draft", []))
         reachable_drafts = all_drafts & analysis.reachable
         if reachable_drafts and not analysis.has_reachable_stable_node:
-            recommendations.append(
-                f"All {len(reachable_drafts)} reachable node(s) are drafts. "
-                "Promote some to approved for stable paths."
+            warnings.append(
+                {
+                    "issue_type": "no_stable_paths",
+                    "severity": "warning",
+                    "description": f"All {len(reachable_drafts)} reachable node(s) are drafts",
+                    "affected_nodes": sorted(reachable_drafts)[:5],
+                    "count": len(reachable_drafts),
+                }
             )
 
-        if not recommendations:
-            recommendations.append("Story graph structure is valid.")
+        return blocking, warnings
 
-        return recommendations
+    def _generate_recovery_actions(
+        self,
+        blocking_issues: list[dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        """
+        Generate directive recovery actions (not passive hints).
+
+        Each action tells the agent exactly what to do next.
+        """
+        actions: list[dict[str, str]] = []
+
+        # Actions for blocking issues first (highest priority)
+        for issue in blocking_issues:
+            if issue["issue_type"] == "missing_targets":
+                nodes = issue["affected_nodes"]
+                actions.append(
+                    {
+                        "priority": "high",
+                        "action": "Create missing target nodes",
+                        "details": f"Create section_briefs for: {', '.join(nodes[:3])}"
+                        + ("..." if len(nodes) > 3 else ""),
+                    }
+                )
+            elif issue["issue_type"] == "no_entry_point":
+                actions.append(
+                    {
+                        "priority": "high",
+                        "action": "Designate entry point",
+                        "details": "Create a section_brief with no incoming connections to serve as entry",
+                    }
+                )
+
+        # If graph is valid, say so explicitly
+        if not blocking_issues:
+            actions.append(
+                {
+                    "priority": "info",
+                    "action": "Graph structure is valid",
+                    "details": "No blocking issues found. Review warnings if any.",
+                }
+            )
+
+        return actions
