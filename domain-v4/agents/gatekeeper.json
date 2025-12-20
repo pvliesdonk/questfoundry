@@ -57,6 +57,13 @@
       "tool_ref": "request_lifecycle_transition"
     },
     {
+      "id": "use_validate_story_graph",
+      "name": "Validate Story Graph",
+      "description": "Programmatic reachability analysis. Use this to check story topology for unreachable nodes, dead ends, missing targets, and lifecycle status without LLM reasoning about graph structure.",
+      "category": "tool",
+      "tool_ref": "validate_story_graph"
+    },
+    {
       "id": "read_all_stores",
       "name": "Read All Stores",
       "description": "Can read from any store to validate content",

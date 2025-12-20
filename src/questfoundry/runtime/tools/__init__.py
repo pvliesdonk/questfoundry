@@ -36,6 +36,7 @@ from questfoundry.runtime.tools import (
     stubs,  # noqa: F401
     terminate_session,  # noqa: F401  # Explicit session termination for orchestrators
     validate_artifact,  # noqa: F401
+    validate_story_graph,  # noqa: F401  # Programmatic reachability analysis
     web_fetch,  # noqa: F401
     web_search,  # noqa: F401
 )

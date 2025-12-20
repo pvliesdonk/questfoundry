@@ -1,0 +1,114 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "validate_story_graph",
+  "name": "Validate Story Graph",
+  "description": "Programmatically analyzes story topology to check reachability, dead ends, orphans, missing targets, and lifecycle status. Provides concrete data for structural validation without requiring LLM reasoning about graph structure.\n\nChecks:\n1. Reachability - Can all nodes be reached from entry?\n2. Dead ends - Nodes with no outgoing connections\n3. Orphans - Nodes with no incoming connections (except entry)\n4. Missing targets - References to non-existent nodes\n5. Lifecycle status - What state are the paths in?\n\nReturns structured analysis with actionable recommendations.",
+
+  "summarization_policy": "preserve",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "include_drafts": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether to include draft lifecycle nodes in analysis"
+      },
+      "entry_anchor": {
+        "type": "string",
+        "description": "Optional explicit entry point anchor. If not provided, nodes with no incoming connections are treated as entry points."
+      }
+    }
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["ok", "issues_found"],
+        "description": "Overall validation status"
+      },
+      "analysis": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "properties": {
+              "total_nodes": { "type": "integer" },
+              "entry_points": { "type": "array", "items": { "type": "string" } },
+              "reachable_count": { "type": "integer" },
+              "unreachable_count": { "type": "integer" },
+              "dead_end_count": { "type": "integer" },
+              "orphan_count": { "type": "integer" },
+              "missing_target_count": { "type": "integer" },
+              "has_stable_paths": { "type": "boolean" }
+            }
+          },
+          "reachable": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Anchor IDs reachable from entry points"
+          },
+          "unreachable": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Anchor IDs not reachable from any entry point"
+          },
+          "dead_ends": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Anchor IDs with no outgoing connections"
+          },
+          "orphans": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Anchor IDs with no incoming connections (excluding entry points)"
+          },
+          "missing_targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": { "type": "string" },
+                "to": { "type": "string" }
+              }
+            },
+            "description": "References to non-existent anchor IDs"
+          },
+          "by_lifecycle": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "description": "Nodes grouped by lifecycle state (draft, approved, cold, etc.)"
+          },
+          "nodes": {
+            "type": "object",
+            "description": "Detailed node information keyed by anchor ID"
+          }
+        }
+      },
+      "recommendations": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Actionable recommendations based on analysis"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Full story graph validation",
+      "input": {}
+    },
+    {
+      "description": "Validate from specific entry point, excluding drafts",
+      "input": {
+        "entry_anchor": "opening_scene",
+        "include_drafts": false
+      }
+    }
+  ]
+}
