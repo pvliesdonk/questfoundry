@@ -381,6 +381,9 @@ class Session:
         Returns list of message dicts for LLM context, excluding system prompts.
         Each turn's full message trace (user, assistant with tool_calls, tool results)
         is included for proper context reconstruction.
+
+        WARNING: This returns ALL turns regardless of agent. For multi-agent
+        sessions, use get_agent_history(agent_id) instead to avoid context explosion.
         """
         history: list[dict[str, Any]] = []
         for turn in self.turns:
@@ -396,6 +399,42 @@ class Session:
                 if turn.output and turn.status == TurnStatus.COMPLETED:
                     history.append({"role": "assistant", "content": turn.output})
         return history
+
+    def get_agent_history(self, agent_id: str) -> list[dict[str, Any]]:
+        """
+        Get conversation history for a specific agent only.
+
+        In multi-agent sessions, each agent should only see their own turns,
+        not the internal conversations of other agents. This prevents:
+        - Context explosion (exponential growth as agents accumulate others' histories)
+        - Confusion (agents seeing irrelevant internal conversations)
+
+        Args:
+            agent_id: The agent to get history for
+
+        Returns:
+            List of message dicts from only this agent's turns, excluding system prompts.
+        """
+        history: list[dict[str, Any]] = []
+        for turn in self.turns:
+            if turn.agent_id != agent_id:
+                continue  # Skip other agents' turns
+
+            if turn.messages:
+                for msg in turn.messages:
+                    if msg.role != "system":
+                        history.append(msg.to_dict())
+            else:
+                # Fallback for turns without stored messages
+                if turn.input:
+                    history.append({"role": "user", "content": turn.input})
+                if turn.output and turn.status == TurnStatus.COMPLETED:
+                    history.append({"role": "assistant", "content": turn.output})
+        return history
+
+    def get_agent_turn_count(self, agent_id: str) -> int:
+        """Get the number of turns for a specific agent."""
+        return sum(1 for turn in self.turns if turn.agent_id == agent_id)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""

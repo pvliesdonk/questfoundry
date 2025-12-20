@@ -500,6 +500,51 @@ class AgentRuntime:
                 f"({self._context_limit} tokens). Reduce knowledge or use larger model."
             )
 
+    def _apply_context_summarization(
+        self,
+        history: list[dict[str, Any]] | None,
+        agent_id: str,
+    ) -> list[dict[str, Any]] | None:
+        """
+        Apply context summarization if the history exceeds thresholds.
+
+        Uses the ContextSecretary to summarize older turns while preserving
+        recent and important turns.
+
+        Args:
+            history: Conversation history (list of message dicts)
+            agent_id: Agent ID for logging
+
+        Returns:
+            Possibly summarized history
+        """
+        if not history:
+            return history
+
+        # Check if summarization is needed
+        result = self._context_secretary.summarize_context(history)
+
+        if not result.summary_created:
+            return history
+
+        # Reconstruct history with summary + preserved turns
+        _, preserved = self._context_secretary.select_turns_for_summarization(history)
+
+        # Create summary message as first entry
+        summary_message = {
+            "role": "system",
+            "content": f"[Context summary for continuity]\n{result.summary_text}",
+        }
+
+        logger.info(
+            "Agent %s: summarized %d turns, preserving %d",
+            agent_id,
+            result.turns_summarized,
+            result.turns_preserved,
+        )
+
+        return [summary_message] + preserved
+
     async def _execute_tool_calls(
         self,
         tool_calls: list[ToolCallRequest],
@@ -900,8 +945,21 @@ class AgentRuntime:
             # Get tool schemas for this agent
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
-            # Build messages once and extract system prompt for logging
-            history = session.get_history()[:-1] if len(session.turns) > 1 else None
+            # Get agent-specific history (not other agents' conversations)
+            history: list[dict[str, Any]] | None = None
+            agent_turn_count = session.get_agent_turn_count(agent.id)
+            if agent_turn_count > 1:
+                agent_history = session.get_agent_history(agent.id)
+                # Exclude current turn's messages (they're being built now)
+                current_turn = session.current_turn
+                if current_turn and current_turn.agent_id == agent.id and current_turn.messages:
+                    agent_history = (
+                        agent_history[: -len(current_turn.messages)] if agent_history else []
+                    )
+                # Apply context summarization if needed
+                history = self._apply_context_summarization(agent_history, agent.id)
+
+            # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
             # Log system prompt for debugging
@@ -1300,8 +1358,21 @@ class AgentRuntime:
             # Get tool schemas for this agent
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
-            # Build messages once and extract system prompt for logging
-            history = session.get_history()[:-1] if len(session.turns) > 1 else None
+            # Get agent-specific history (not other agents' conversations)
+            history: list[dict[str, Any]] | None = None
+            agent_turn_count = session.get_agent_turn_count(agent.id)
+            if agent_turn_count > 1:
+                agent_history = session.get_agent_history(agent.id)
+                # Exclude current turn's messages (they're being built now)
+                current_turn = session.current_turn
+                if current_turn and current_turn.agent_id == agent.id and current_turn.messages:
+                    agent_history = (
+                        agent_history[: -len(current_turn.messages)] if agent_history else []
+                    )
+                # Apply context summarization if needed
+                history = self._apply_context_summarization(agent_history, agent.id)
+
+            # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
             # Log system prompt for debugging (streaming path)
