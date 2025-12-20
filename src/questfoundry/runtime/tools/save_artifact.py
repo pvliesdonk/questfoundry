@@ -432,35 +432,130 @@ class SaveArtifactTool(BaseTool):
         """
         Build actionable feedback for LLM self-correction.
 
-        Format follows the validate-with-feedback pattern from meta/docs:
-        - success: bool
-        - error_count: number of errors
-        - errors: detailed error entries with field/issue/provided/expected
-        - required_fields: list of {name, type, description} for required fields
-        - optional_fields: list of {name, type, description} for optional fields
-        - hint: guidance on how to fix
+        Structure separates three concerns (following PR #220 pattern):
+        - action_outcome: what happened to the save attempt (saved/rejected)
+        - rejection_reason: why it was rejected (validation_failed, etc.)
+        - recovery_action: directive for next step
         """
-        feedback: dict[str, Any] = {
-            "success": valid,
-            "error_count": len(errors) if errors else 0,
-            "errors": errors or [],
-            "warnings": warnings or [],
-        }
+        if valid:
+            return {
+                "action_outcome": "saved",
+                "error_count": 0,
+                "errors": [],
+                "warnings": warnings or [],
+            }
 
-        if schema_info:
-            feedback["required_fields"] = schema_info.get("required_fields", [])
-            feedback["optional_fields"] = schema_info.get("optional_fields", [])
-            if "provided_fields" in schema_info:
-                feedback["provided_fields"] = schema_info["provided_fields"]
+        # Extract field corrections and missing fields from errors
+        field_corrections: dict[str, str] = {}
+        missing_required: list[str] = []
 
-        if not valid and artifact_type_id:
-            feedback["hint"] = (
-                f"Review the errors above. Check field names and types against the "
-                f"'{artifact_type_id}' artifact type schema. Use consult_schema('{artifact_type_id}') "
-                f"for detailed field definitions."
+        if schema_info and errors:
+            required_names = {f["name"] for f in schema_info.get("required_fields", [])}
+            provided_names = set(schema_info.get("provided_fields", []))
+
+            # Find missing required fields
+            for err in errors or []:
+                if "Required field" in err.get("issue", "") and err.get("field"):
+                    missing_required.append(err["field"])
+
+            # Find field corrections via fuzzy matching
+            field_corrections = self._find_field_corrections(
+                provided_names, required_names, schema_info.get("required_fields", [])
             )
 
+        # Count corrections vs truly missing
+        correctable = len(field_corrections)
+        truly_missing = len(missing_required) - correctable
+
+        # Build recovery action message
+        parts = []
+        if correctable > 0:
+            parts.append(f"rename {correctable} field(s)")
+        if truly_missing > 0:
+            parts.append(f"add {truly_missing} missing field(s)")
+
+        action_summary = " and ".join(parts) if parts else "fix errors"
+        recovery_action = (
+            f"{action_summary.capitalize()}, then retry. "
+            f"Call consult_schema('{artifact_type_id}') for field definitions."
+        )
+
+        feedback: dict[str, Any] = {
+            "action_outcome": "rejected",
+            "rejection_reason": "validation_failed",
+            "recovery_action": recovery_action,
+        }
+
+        # Add field corrections if any detected
+        if field_corrections:
+            feedback["field_corrections"] = field_corrections
+
+        # Add missing required (excluding those with corrections)
+        corrected_fields = set(field_corrections.values())
+        truly_missing_fields = [f for f in missing_required if f not in corrected_fields]
+        if truly_missing_fields:
+            feedback["missing_required"] = truly_missing_fields
+
+        # Add counts and detailed errors at the end
+        feedback["error_count"] = len(errors) if errors else 0
+        feedback["errors"] = errors or []
+        feedback["warnings"] = warnings or []
+
         return feedback
+
+    def _find_field_corrections(
+        self,
+        provided: set[str],
+        required: set[str],
+        required_fields: list[dict[str, Any]],
+    ) -> dict[str, str]:
+        """
+        Find likely field name corrections via fuzzy matching.
+
+        Detects cases like:
+        - section_title → title (suffix match)
+        - content → prose (common synonyms)
+        """
+        corrections: dict[str, str] = {}
+
+        # Build lookup for required field names
+        required_lookup = {f["name"]: f for f in required_fields}
+
+        for provided_name in provided:
+            if provided_name in required:
+                continue  # Exact match, no correction needed
+
+            # Check for suffix/prefix matches
+            for req_name in required:
+                if req_name in required_lookup:
+                    # Check if provided ends with required (e.g., section_title → title)
+                    if provided_name.endswith(f"_{req_name}") or provided_name.endswith(req_name):
+                        corrections[provided_name] = f"rename to '{req_name}'"
+                        break
+                    # Check if provided starts with required (e.g., title_text → title)
+                    if provided_name.startswith(f"{req_name}_") or provided_name.startswith(
+                        req_name
+                    ):
+                        corrections[provided_name] = f"rename to '{req_name}'"
+                        break
+
+        # Common semantic mappings
+        semantic_mappings = {
+            "content": ["prose", "text", "body"],
+            "text": ["prose", "content", "body"],
+            "body": ["prose", "content", "text"],
+        }
+
+        for provided_name in provided:
+            if provided_name in corrections:
+                continue
+            if provided_name in semantic_mappings:
+                for candidate in semantic_mappings[provided_name]:
+                    if candidate in required and candidate not in corrections.values():
+                        corrections[provided_name] = f"rename to '{candidate}'"
+                        break
+
+        return corrections
 
     def _error_entry(
         self,
