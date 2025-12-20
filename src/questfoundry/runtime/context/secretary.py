@@ -744,6 +744,7 @@ class ContextSummaryResult:
     turns_preserved: int
     summary_created: bool
     summary_text: str | None = None
+    preserved_turns: list[dict[str, Any]] | None = None  # Preserved turns for reconstruction
     tokens_before: int = 0
     tokens_after: int = 0
 
@@ -823,13 +824,16 @@ class ContextSecretary:
         recent_turns = turns[-self.preserve_recent_turns :]
 
         to_summarize = []
-        to_preserve = list(recent_turns)  # Start with recent
+        older_preserved = []  # Important older turns to keep
 
         for turn in older_turns:
             if self._should_preserve_turn(turn):
-                to_preserve.append(turn)
+                older_preserved.append(turn)
             else:
                 to_summarize.append(turn)
+
+        # Maintain chronological order: older preserved first, then recent
+        to_preserve = older_preserved + list(recent_turns)
 
         logger.info(
             "Context: selected %d turns to summarize, preserving %d (recent=%d)",
@@ -930,6 +934,7 @@ class ContextSecretary:
                 turns_summarized=0,
                 turns_preserved=len(turns),
                 summary_created=False,
+                preserved_turns=turns,  # All turns preserved
             )
 
         to_summarize, to_preserve = self.select_turns_for_summarization(turns)
@@ -939,6 +944,7 @@ class ContextSecretary:
                 turns_summarized=0,
                 turns_preserved=len(turns),
                 summary_created=False,
+                preserved_turns=turns,  # All turns preserved
             )
 
         # Generate summary
@@ -960,6 +966,7 @@ class ContextSecretary:
             turns_preserved=len(to_preserve),
             summary_created=True,
             summary_text=summary_text,
+            preserved_turns=to_preserve,  # Include preserved turns for caller
         )
 
     def get_stats(self) -> dict[str, Any]:

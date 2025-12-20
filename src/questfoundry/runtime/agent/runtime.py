@@ -527,8 +527,8 @@ class AgentRuntime:
         if not result.summary_created:
             return history
 
-        # Reconstruct history with summary + preserved turns
-        _, preserved = self._context_secretary.select_turns_for_summarization(history)
+        # Use preserved turns from result (avoids recomputing partition)
+        preserved = result.preserved_turns or []
 
         # Create summary message as first entry
         summary_message = {
@@ -544,6 +544,38 @@ class AgentRuntime:
         )
 
         return [summary_message] + preserved
+
+    def _get_agent_history_with_summarization(
+        self,
+        session: Session,
+        agent_id: str,
+    ) -> list[dict[str, Any]] | None:
+        """
+        Get agent-specific history with context summarization applied.
+
+        Each agent only sees their own turns (not other agents' internal
+        conversations), and older turns are summarized when needed to
+        prevent context overflow.
+
+        Args:
+            session: Current session
+            agent_id: Agent to get history for
+
+        Returns:
+            History with summarization applied, or None if no prior turns
+        """
+        # Only include history if this agent has prior completed turns
+        agent_turn_count = session.get_agent_turn_count(agent_id)
+        if agent_turn_count <= 1:
+            return None
+
+        # Get agent-specific history (filters out other agents' turns)
+        agent_history = session.get_agent_history(agent_id)
+        if not agent_history:
+            return None
+
+        # Apply context summarization if needed
+        return self._apply_context_summarization(agent_history, agent_id)
 
     async def _execute_tool_calls(
         self,
@@ -946,18 +978,9 @@ class AgentRuntime:
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
             # Get agent-specific history (not other agents' conversations)
-            history: list[dict[str, Any]] | None = None
-            agent_turn_count = session.get_agent_turn_count(agent.id)
-            if agent_turn_count > 1:
-                agent_history = session.get_agent_history(agent.id)
-                # Exclude current turn's messages (they're being built now)
-                current_turn = session.current_turn
-                if current_turn and current_turn.agent_id == agent.id and current_turn.messages:
-                    agent_history = (
-                        agent_history[: -len(current_turn.messages)] if agent_history else []
-                    )
-                # Apply context summarization if needed
-                history = self._apply_context_summarization(agent_history, agent.id)
+            # Note: Current turn has no messages yet (just started), so
+            # get_agent_history naturally excludes it via its messages filter.
+            history = self._get_agent_history_with_summarization(session, agent.id)
 
             # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
@@ -1359,18 +1382,9 @@ class AgentRuntime:
             tool_schemas = self.get_tool_schemas(agent, session.id)
 
             # Get agent-specific history (not other agents' conversations)
-            history: list[dict[str, Any]] | None = None
-            agent_turn_count = session.get_agent_turn_count(agent.id)
-            if agent_turn_count > 1:
-                agent_history = session.get_agent_history(agent.id)
-                # Exclude current turn's messages (they're being built now)
-                current_turn = session.current_turn
-                if current_turn and current_turn.agent_id == agent.id and current_turn.messages:
-                    agent_history = (
-                        agent_history[: -len(current_turn.messages)] if agent_history else []
-                    )
-                # Apply context summarization if needed
-                history = self._apply_context_summarization(agent_history, agent.id)
+            # Note: Current turn has no messages yet (just started), so
+            # get_agent_history naturally excludes it via its messages filter.
+            history = self._get_agent_history_with_summarization(session, agent.id)
 
             # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
