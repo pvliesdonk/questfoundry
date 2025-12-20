@@ -130,6 +130,7 @@ class AgentRuntime:
         checkpoint_manager: CheckpointManager | None = None,
         playbook_tracker: PlaybookTracker | None = None,
         turn_validation_config: TurnValidationConfig | None = None,
+        on_tool_call: Any | None = None,
     ):
         """
         Initialize agent runtime.
@@ -148,6 +149,7 @@ class AgentRuntime:
             checkpoint_manager: Optional checkpoint manager for auto-checkpointing
             playbook_tracker: Optional playbook tracker for checkpoint state
             turn_validation_config: Optional configuration for orchestrator enforcement
+            on_tool_call: Optional callback(tool_id, success, agent_id, turn_number, execution_time_ms, result)
         """
         self._provider = provider
         self._studio = studio
@@ -161,6 +163,7 @@ class AgentRuntime:
         self._interactive = interactive
         self._checkpoint_manager = checkpoint_manager
         self._playbook_tracker = playbook_tracker
+        self._on_tool_call = on_tool_call
 
         # Context usage tracking per agent
         self._context_usage: dict[str, ContextUsage] = {}
@@ -480,6 +483,20 @@ class AgentRuntime:
                 logger.warning(f"Tool call failed: {tc.name} - {e}")
 
             results.append(tool_call)
+
+            # Notify UI callback if registered
+            if self._on_tool_call:
+                try:
+                    self._on_tool_call(
+                        tool_id=tool_call.tool_id,
+                        success=tool_call.success,
+                        agent_id=agent.id,
+                        turn_number=turn_number,
+                        execution_time_ms=tool_call.execution_time_ms,
+                        result=tool_call.result,
+                    )
+                except Exception as e:
+                    logger.debug(f"Tool callback failed: {e}")
 
         return results
 
