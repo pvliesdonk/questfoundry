@@ -133,7 +133,7 @@ class TestSaveArtifactTool:
         assert "artifact" in result.data
         assert "artifact_id" in result.data
         assert result.data["store"] == "workspace"
-        assert result.data["feedback"]["success"] is True
+        assert result.data["feedback"]["action_outcome"] == "saved"
 
         # Verify artifact was saved
         artifact_id = result.data["artifact_id"]
@@ -166,7 +166,7 @@ class TestSaveArtifactTool:
 
         assert result.success is True
         assert result.data["artifact_id"] == "section_001"
-        assert result.data["feedback"]["success"] is True
+        assert result.data["feedback"]["action_outcome"] == "saved"
 
         saved = project.get_artifact("section_001")
         assert saved is not None
@@ -193,7 +193,7 @@ class TestSaveArtifactTool:
 
         assert result.success is False
         assert "Unknown artifact type" in result.error
-        assert result.data["feedback"]["success"] is False
+        assert result.data["feedback"]["action_outcome"] == "rejected"
 
     @pytest.mark.asyncio
     async def test_save_artifact_validation_failure(self, project: Project):
@@ -218,7 +218,7 @@ class TestSaveArtifactTool:
 
         assert result.success is False
         assert "feedback" in result.data
-        assert result.data["feedback"]["success"] is False
+        assert result.data["feedback"]["action_outcome"] == "rejected"
         assert len(result.data["validation_errors"]) > 0
 
     @pytest.mark.asyncio
@@ -248,34 +248,87 @@ class TestSaveArtifactTool:
         assert result.success is False
         feedback = result.data["feedback"]
 
-        # Verify actionable feedback format
-        assert feedback["success"] is False
+        # Verify actionable feedback format (PR #220 pattern)
+        assert feedback["action_outcome"] == "rejected"
+        assert feedback["rejection_reason"] == "validation_failed"
+        assert "recovery_action" in feedback
         assert feedback["error_count"] >= 1
         assert "errors" in feedback
-        assert "required_fields" in feedback
-        assert "optional_fields" in feedback
-        assert "provided_fields" in feedback
-        assert "hint" in feedback
 
-        # Verify required/optional field info
-        required_names = [f["name"] for f in feedback["required_fields"]]
-        assert "title" in required_names
+        # Verify recovery action references consult_schema
+        assert "consult_schema" in feedback["recovery_action"]
+        assert "section" in feedback["recovery_action"]
 
-        optional_names = [f["name"] for f in feedback["optional_fields"]]
-        assert "body" in optional_names
-
-        # Verify provided fields tracked
-        assert "wrong_field" in feedback["provided_fields"]
-
-        # Verify hint references artifact type
-        assert "section" in feedback["hint"]
-        assert "consult_schema" in feedback["hint"]
+        # Verify missing required fields are listed
+        assert "missing_required" in feedback
+        assert "title" in feedback["missing_required"]
 
         # Verify errors have actionable structure
         for error in feedback["errors"]:
             assert "field" in error
             assert "issue" in error
             assert "provided" in error  # Shows what was provided or "(missing)"
+
+    @pytest.mark.asyncio
+    async def test_save_artifact_field_corrections(self, project: Project):
+        """Verify feedback includes field name corrections (Scene Smith scenario)."""
+        # Create artifact type with title/prose fields (like real section)
+        artifact_type = MagicMock()
+        artifact_type.id = "section"
+        artifact_type.name = "Section"
+        artifact_type.default_store = None
+
+        field_title = MagicMock()
+        field_title.name = "title"
+        field_title.type = FieldType.STRING
+        field_title.required = True
+        field_title.description = "Human-readable section title"
+
+        field_prose = MagicMock()
+        field_prose.name = "prose"
+        field_prose.type = FieldType.TEXT
+        field_prose.required = True
+        field_prose.description = "Narrative paragraphs"
+
+        artifact_type.fields = [field_title, field_prose]
+        artifact_type.lifecycle = None
+
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(
+            studio=studio,
+            project=project,
+        )
+        tool = SaveArtifactTool(definition, context)
+
+        # Simulate Scene Smith's mistake: section_title instead of title, content instead of prose
+        result = await tool.execute(
+            {
+                "artifact_type": "section",
+                "data": {
+                    "section_title": "The Mysterious Arrival",
+                    "content": "The evening mist clung to the cobblestones...",
+                },
+            }
+        )
+
+        assert result.success is False
+        feedback = result.data["feedback"]
+
+        # Verify field corrections are detected
+        assert "field_corrections" in feedback
+        assert "section_title" in feedback["field_corrections"]
+        assert "title" in feedback["field_corrections"]["section_title"]
+        assert "content" in feedback["field_corrections"]
+        assert "prose" in feedback["field_corrections"]["content"]
+
+        # Since all missing fields have corrections, missing_required should be empty
+        assert "missing_required" not in feedback or not feedback["missing_required"]
+
+        # Recovery action should mention the corrections
+        assert "rename" in feedback["recovery_action"].lower()
 
     @pytest.mark.asyncio
     async def test_save_artifact_wrong_store(self, project: Project):
@@ -304,7 +357,7 @@ class TestSaveArtifactTool:
 
         assert result.success is False
         assert "does not accept" in result.error
-        assert result.data["feedback"]["success"] is False
+        assert result.data["feedback"]["action_outcome"] == "rejected"
 
     @pytest.mark.asyncio
     async def test_save_artifact_exclusive_writer_warning(self, project: Project):
@@ -387,7 +440,7 @@ class TestSaveArtifactTool:
 
         assert result.success is True
         assert result.data["artifact_id"] == "section_custom1234"
-        assert result.data["feedback"]["success"] is True
+        assert result.data["feedback"]["action_outcome"] == "saved"
 
 
 class TestUpdateArtifactTool:
