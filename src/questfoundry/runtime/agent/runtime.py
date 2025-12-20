@@ -39,7 +39,6 @@ from questfoundry.runtime.agent.turn_validator import (
 from questfoundry.runtime.context import (
     ContextSecretary,
     Secretary,
-    SummarizationLevel,
     SummarizationPolicy,
 )
 from questfoundry.runtime.observability import EventType
@@ -530,10 +529,15 @@ class AgentRuntime:
         if not history:
             return history
 
+        # Estimate actual history size to check context pressure
+        # Can't rely on Secretary's cached value - it has the previous turn's size
+        history_tokens = sum(len(json.dumps(m)) // 4 for m in history)
+        context_limit = self._context_limit or self._secretary.context_limit
+        usage_fraction = history_tokens / context_limit if context_limit > 0 else 0
+
         # Gate on context pressure: only summarize at FULL level (>= 90%)
         # Per PR #180 tiered design - don't summarize when context pressure is low
-        current_level = self._secretary.get_current_level(agent_id)
-        if current_level < SummarizationLevel.FULL:
+        if usage_fraction < self._secretary.full_summarization_threshold:
             return history
 
         # Check if summarization is needed (group count check)
