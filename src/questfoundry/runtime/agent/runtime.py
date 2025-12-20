@@ -680,9 +680,13 @@ class AgentRuntime:
 
         messages = []
         for tc, result in zip(tool_calls, tool_results, strict=True):
-            # Handle errors (always preserve error messages)
+            # Handle errors (always preserve error messages and feedback data)
             if not result.success:
-                content = json.dumps({"error": result.error or "Tool execution failed"})
+                # Include the full result.result (contains validation feedback, etc.)
+                # so the LLM can self-correct based on detailed error info
+                error_response = result.result.copy() if result.result else {}
+                error_response["error"] = result.error or "Tool execution failed"
+                content = json.dumps(error_response)
                 messages.append(
                     LLMMessage(
                         role="tool",

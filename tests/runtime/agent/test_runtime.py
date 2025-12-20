@@ -350,3 +350,104 @@ class TestAgentActivationStreaming:
         # Turn should be marked as error
         assert session.turn_count == 1
         assert "Stream failed" in (session.turns[0].output or "")
+
+
+class TestToolResultsToMessages:
+    """Tests for _tool_results_to_messages error handling."""
+
+    def test_error_includes_full_feedback_data(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Tool errors should include result.result data for LLM self-correction."""
+        import json
+
+        from questfoundry.runtime.agent.runtime import ToolCall, ToolCallRequest
+
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        # Simulate a failed tool call with detailed feedback
+        tool_requests = [
+            ToolCallRequest(
+                id="call_123",
+                name="save_artifact",
+                arguments={"artifact_type": "section_brief", "data": {"title": "Wrong"}},
+            )
+        ]
+        tool_results = [
+            ToolCall(
+                tool_id="save_artifact",
+                args={"artifact_type": "section_brief", "data": {"title": "Wrong"}},
+                success=False,
+                error="Artifact validation failed: 2 error(s)",
+                result={
+                    "feedback": {
+                        "success": False,
+                        "error_count": 2,
+                        "errors": [
+                            {"field": "brief_id", "issue": "Required field missing"},
+                            {"field": "section_title", "issue": "Required field missing"},
+                        ],
+                        "required_fields": [
+                            {"name": "brief_id", "type": "string"},
+                            {"name": "section_title", "type": "string"},
+                        ],
+                        "hint": "Check the artifact schema",
+                    }
+                },
+            )
+        ]
+
+        # Call the method
+        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
+
+        # Verify the error message includes the full feedback
+        assert len(messages) == 1
+        msg = messages[0]
+        assert msg.role == "tool"
+        assert msg.name == "save_artifact"
+
+        content = json.loads(msg.content)
+        assert "error" in content
+        assert content["error"] == "Artifact validation failed: 2 error(s)"
+        # KEY: The feedback data should be included for LLM self-correction
+        assert "feedback" in content
+        assert content["feedback"]["error_count"] == 2
+        assert len(content["feedback"]["errors"]) == 2
+        assert content["feedback"]["errors"][0]["field"] == "brief_id"
+
+    def test_success_result_not_affected(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Successful tool results should work as before."""
+        import json
+
+        from questfoundry.runtime.agent.runtime import ToolCall, ToolCallRequest
+
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_requests = [
+            ToolCallRequest(
+                id="call_456",
+                name="some_tool",
+                arguments={"query": "test"},
+            )
+        ]
+        tool_results = [
+            ToolCall(
+                tool_id="some_tool",
+                args={"query": "test"},
+                success=True,
+                result={"data": "success", "count": 42},
+            )
+        ]
+
+        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
+
+        assert len(messages) == 1
+        msg = messages[0]
+        content = json.loads(msg.content)
+        assert content == {"data": "success", "count": 42}
