@@ -33,7 +33,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from questfoundry.cli_output import StatusReporter, create_log_handler
+from questfoundry.cli_output import DelegationResultInfo, StatusReporter, create_log_handler
 
 # Global verbosity level (set by callback)
 _verbosity: int = 0
@@ -659,6 +659,35 @@ async def _setup_runtime(
     else:
         logger.debug("Could not determine context size for %s, using default", model_to_use)
 
+    # Create tool call callback for UI updates
+    def on_tool_call(
+        tool_id: str,
+        success: bool,
+        agent_id: str,
+        turn_number: int | None,
+        execution_time_ms: float | None,
+        result: Any,
+    ) -> None:
+        """Callback from runtime when a tool is executed."""
+        if _status_reporter:
+            _status_reporter.tool_call(
+                tool_id=tool_id,
+                success=success,
+                agent_id=agent_id,
+                turn_number=turn_number or 0,
+                execution_time_ms=execution_time_ms,
+            )
+            # Track artifact creation from save_artifact tool
+            if tool_id == "save_artifact" and success and result:
+                _status_reporter.artifact_created(
+                    artifact_id=result.get("artifact_id", "unknown"),
+                    artifact_type=result.get("artifact", {}).get("_type", "unknown"),
+                    store=result.get("store", "unknown"),
+                    created_by=agent_id,
+                    turn_number=turn_number or 0,
+                    lifecycle_state=result.get("lifecycle_state", "draft"),
+                )
+
     # Create runtime
     runtime = AgentRuntime(
         provider=provider,
@@ -672,6 +701,7 @@ async def _setup_runtime(
         interactive=interactive,
         checkpoint_manager=checkpoint_manager,
         context_limit=context_limit,
+        on_tool_call=on_tool_call,
     )
 
     # Get entry agent
@@ -800,6 +830,50 @@ async def _handle_orchestrator_follow_up(
     responses = await runtime.get_delegation_responses(agent.id)
     if not responses:
         return ""
+
+    # Display structured results from each delegation
+    if _status_reporter and responses:
+        console.print()
+        console.print("[dim]─── Delegation Results ───[/dim]")
+        for msg in responses:
+            payload = msg.payload or {}
+            success = payload.get("success", False)
+            result_data = payload.get("result", {})
+
+            # Extract structured fields from return_to_orchestrator
+            task_completion = result_data.get(
+                "task_completion", "completed" if success else "failed"
+            )
+            result_info = result_data.get("result", {})
+            assessment = result_info.get("assessment", "info")
+            recommendation = result_data.get("recommendation", "proceed")
+            summary = result_info.get("summary") or result_data.get("summary", "No summary")
+
+            # Artifacts
+            artifacts = payload.get("artifacts_produced", [])
+            ready_for_review = result_data.get("artifacts_ready_for_review", [])
+
+            # Blockers/issues
+            details = result_info.get("details", [])
+            blockers = []
+            for d in details:
+                if isinstance(d, dict):
+                    blockers.append(d.get("description", str(d)))
+                else:
+                    blockers.append(str(d))
+
+            result_info_obj = DelegationResultInfo(
+                from_agent=msg.from_agent,
+                task_completion=task_completion,
+                assessment=assessment,
+                recommendation=recommendation,
+                summary=summary,
+                artifacts_produced=artifacts,
+                artifacts_ready_for_review=ready_for_review,
+                blockers=blockers,
+            )
+            _status_reporter.delegation_result(result_info_obj)
+        console.print()
 
     # Build follow-up prompt with delegation results
     follow_up_prompt = runtime.build_delegation_response_prompt(responses)
@@ -1000,25 +1074,8 @@ async def _invoke_response(
 
     duration_ms = (time.time() - start_time) * 1000
 
-    # Report tool calls and artifacts via StatusReporter
-    if _status_reporter and result.tool_calls:
-        for tc in result.tool_calls:
-            _status_reporter.tool_call(
-                tool_id=tc.tool_id,
-                success=tc.success,
-                agent_id=agent.id,
-                turn_number=result.turn.turn_number,
-                execution_time_ms=tc.execution_time_ms,
-            )
-            # Check if this was a save_artifact call
-            if tc.tool_id == "save_artifact" and tc.success and tc.result:
-                _status_reporter.artifact_created(
-                    artifact_id=tc.result.get("artifact_id", "unknown"),
-                    artifact_type=tc.result.get("artifact", {}).get("_type", "unknown"),
-                    store=tc.result.get("store", "unknown"),
-                    created_by=agent.id,
-                    turn_number=result.turn.turn_number,
-                )
+    # Note: Tool calls and artifacts are now reported via the on_tool_call callback
+    # which is called during runtime._execute_tool_calls()
 
     # Report turn completion
     if _status_reporter:

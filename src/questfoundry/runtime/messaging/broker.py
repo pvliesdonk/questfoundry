@@ -10,11 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.messaging.mailbox import AsyncMailbox
 from questfoundry.runtime.messaging.message import Message
-from questfoundry.runtime.messaging.types import MessageStatus
+from questfoundry.runtime.messaging.types import MessageStatus, MessageType
 
 if TYPE_CHECKING:
     from questfoundry.runtime.messaging.logger import MessageLogger
@@ -52,6 +54,15 @@ class AsyncMessageBroker:
         self._mailboxes: dict[str, AsyncMailbox] = {}
         self._lock = asyncio.Lock()
         self._current_turn = 0
+
+        # Mailbox Secretary for message summarization when mailboxes get large
+        # Lazy import to avoid circular dependency
+        from questfoundry.runtime.context import MailboxSecretary
+
+        self._mailbox_secretary = MailboxSecretary(
+            auto_summarize_threshold=20,  # Summarize when > 20 messages
+            preserve_recent_n=5,  # Always preserve last 5 messages
+        )
 
     def set_project(self, project: Project) -> None:
         """Set project for persistence after initialization."""
@@ -287,16 +298,54 @@ class AsyncMessageBroker:
         """
         Get all pending messages for an agent.
 
-        Used for building agent context.
+        Used for building agent context. When mailbox exceeds the
+        auto_summarize_threshold, older low-priority messages are
+        summarized into a digest message to prevent context overflow.
 
         Args:
             agent_id: Agent ID
 
         Returns:
-            List of pending messages
+            List of pending messages (possibly with digest summary)
         """
         mailbox = await self.get_mailbox(agent_id)
-        return await mailbox.get_all_pending()
+        messages = await mailbox.get_all_pending()
+
+        # Apply mailbox summarization if needed
+        if self._mailbox_secretary.should_summarize(len(messages)):
+            result = self._mailbox_secretary.summarize_mailbox(
+                messages, current_turn=self._current_turn
+            )
+            if result.digest_created and result.summary_text:
+                # Get the preserved messages only
+                _, preserved = self._mailbox_secretary.select_messages_for_summarization(messages)
+
+                # Create a digest message from the summary
+                digest = Message(
+                    id=str(uuid.uuid4()),
+                    type=MessageType.DIGEST,
+                    from_agent="system",
+                    to_agent=agent_id,
+                    timestamp=datetime.now(),
+                    payload={
+                        "summary": result.summary_text,
+                        "action_items": result.action_items,
+                        "messages_summarized": result.messages_summarized,
+                    },
+                    priority=0,  # Low priority - just context
+                )
+
+                logger.info(
+                    "Mailbox %s: created digest for %d messages, preserved %d",
+                    agent_id,
+                    result.messages_summarized,
+                    result.messages_preserved,
+                )
+
+                # Return digest + preserved messages (digest first for context)
+                return [digest] + preserved
+
+        return messages
 
     async def wait_for_response(
         self,

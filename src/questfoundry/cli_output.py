@@ -35,6 +35,7 @@ class ArtifactEvent:
     store: str
     created_by: str
     turn_number: int
+    lifecycle_state: str = "draft"  # draft, review, approved, cold
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -60,6 +61,20 @@ class DelegationEvent:
     success: bool
     turn_number: int
     timestamp: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class DelegationResultInfo:
+    """Structured result from return_to_orchestrator."""
+
+    from_agent: str
+    task_completion: str  # completed | blocked
+    assessment: str  # pass | partial | fail | skip | info
+    recommendation: str  # proceed | rework | escalate | hold
+    summary: str
+    artifacts_produced: list[str] = field(default_factory=list)
+    artifacts_ready_for_review: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -313,17 +328,18 @@ class StatusReporter:
         )
         self._tool_calls.append(event)
 
+        # Track on current turn if available
         if self._current_turn:
             self._current_turn.tool_calls += 1
 
         if self.quiet:
             return
 
-        # Only show tool calls at verbosity >= 1, or always show failures
+        # Show tool calls at INFO level (-v) or always show failures
         if self.verbosity >= 1 or not success:
-            status = "[green]OK[/green]" if success else "[red]FAIL[/red]"
-            time_str = f" ({execution_time_ms:.0f}ms)" if execution_time_ms else ""
-            self.console.print(f"  [dim]tool:[/dim] {tool_id} {status}{time_str}")
+            status_icon = "[green]✓[/green]" if success else "[red]✗[/red]"
+            time_str = f" [dim]({execution_time_ms:.0f}ms)[/dim]" if execution_time_ms else ""
+            self.console.print(f"  [dim]tool:[/dim] {tool_id} {status_icon}{time_str}")
             # Show result preview at higher verbosity
             if result_preview and self.verbosity >= 2:
                 preview = (
@@ -342,6 +358,7 @@ class StatusReporter:
         store: str,
         created_by: str,
         turn_number: int,
+        lifecycle_state: str = "draft",
     ) -> None:
         """Report artifact creation."""
         event = ArtifactEvent(
@@ -350,6 +367,7 @@ class StatusReporter:
             store=store,
             created_by=created_by,
             turn_number=turn_number,
+            lifecycle_state=lifecycle_state,
         )
         self._artifacts.append(event)
 
@@ -359,10 +377,21 @@ class StatusReporter:
         if self.quiet:
             return
 
+        # Lifecycle state indicator
+        state_colors = {
+            "draft": "yellow",
+            "review": "blue",
+            "approved": "green",
+            "cold": "cyan",
+        }
+        state_color = state_colors.get(lifecycle_state, "dim")
+
         # Always show artifact creation (this is what user wants to see)
         self.console.print(
             f"  [bold green]+[/bold green] {artifact_type}: "
-            f"[cyan]{artifact_id}[/cyan] [dim]-> {store}[/dim]"
+            f"[cyan]{artifact_id}[/cyan] "
+            f"[{state_color}]({lifecycle_state})[/{state_color}] "
+            f"[dim]-> {store}[/dim]"
         )
 
     # -------------------------------------------------------------------------
@@ -398,7 +427,7 @@ class StatusReporter:
         error: str | None = None,
     ) -> None:
         """Report delegation completion."""
-        task_preview = task[:50] + "..." if len(task) > 50 else task
+        task_preview = task[:80] + "..." if len(task) > 80 else task
 
         event = DelegationEvent(
             from_agent=from_agent,
@@ -415,10 +444,72 @@ class StatusReporter:
         if self.quiet:
             return
 
-        status = "[green]OK[/green]" if success else "[red]FAIL[/red]"
-        self.console.print(f"  [dim]result:[/dim] {to_agent} {status}")
+        # Show delegation with task - this is key info users want to see
+        status_icon = "[green]✓[/green]" if success else "[red]✗[/red]"
+        self.console.print(f"  [dim]delegate:[/dim] [cyan]{to_agent}[/cyan] {status_icon}")
+        # Always show task preview (this is what SR asked specialist to do)
+        self.console.print(f"    [dim]task:[/dim] {task_preview}")
         if not success and error:
-            self.console.print(f"    [red]{error}[/red]")
+            self.console.print(f"    [red]error: {error}[/red]")
+
+    def delegation_result(self, result: DelegationResultInfo) -> None:
+        """
+        Display structured result from return_to_orchestrator.
+
+        Shows what the specialist accomplished: assessment, recommendation,
+        summary, and any artifacts or blockers.
+        """
+        if self.quiet:
+            return
+
+        # Assessment color coding
+        assessment_colors = {
+            "pass": "green",
+            "partial": "yellow",
+            "fail": "red",
+            "skip": "dim",
+            "info": "blue",
+        }
+        assessment_color = assessment_colors.get(result.assessment, "white")
+
+        # Recommendation color coding
+        rec_colors = {
+            "proceed": "green",
+            "rework": "yellow",
+            "escalate": "red",
+            "hold": "yellow",
+        }
+        rec_color = rec_colors.get(result.recommendation, "white")
+
+        # Task completion indicator
+        completion_icon = "✓" if result.task_completion == "completed" else "⏸"
+        completion_color = "green" if result.task_completion == "completed" else "yellow"
+
+        # Header line with agent and completion status
+        self.console.print(
+            f"  [{completion_color}]{completion_icon}[/{completion_color}] "
+            f"[cyan]{result.from_agent}[/cyan] "
+            f"[{assessment_color}]{result.assessment}[/{assessment_color}] → "
+            f"[{rec_color}]{result.recommendation}[/{rec_color}]"
+        )
+
+        # Summary (always shown)
+        summary_text = result.summary[:100] + "..." if len(result.summary) > 100 else result.summary
+        self.console.print(f"    [dim]{summary_text}[/dim]")
+
+        # Artifacts produced (if any)
+        if result.artifacts_produced:
+            artifacts_str = ", ".join(result.artifacts_produced[:3])
+            if len(result.artifacts_produced) > 3:
+                artifacts_str += f" (+{len(result.artifacts_produced) - 3} more)"
+            self.console.print(f"    [green]+[/green] artifacts: {artifacts_str}")
+
+        # Blockers (if any)
+        if result.blockers:
+            blockers_str = "; ".join(result.blockers[:2])
+            if len(result.blockers) > 2:
+                blockers_str += f" (+{len(result.blockers) - 2} more)"
+            self.console.print(f"    [yellow]![/yellow] blockers: {blockers_str}")
 
     # -------------------------------------------------------------------------
     # Summary Table
@@ -432,6 +523,16 @@ class StatusReporter:
         table.add_column("Tools", justify="right")
         table.add_column("Artifacts", justify="right")
         table.add_column("Tokens", justify="right", style="dim")
+
+        # Aggregate tool/artifact counts by turn from event lists
+        # This handles out-of-order tracking for delegated agents
+        tools_by_turn: dict[int, int] = {}
+        for tc in self._tool_calls:
+            tools_by_turn[tc.turn_number] = tools_by_turn.get(tc.turn_number, 0) + 1
+
+        artifacts_by_turn: dict[int, int] = {}
+        for art in self._artifacts:
+            artifacts_by_turn[art.turn_number] = artifacts_by_turn.get(art.turn_number, 0) + 1
 
         total_tokens = 0
         total_artifacts = 0
@@ -447,11 +548,15 @@ class StatusReporter:
                 total_tokens += tokens
                 tokens_str = f"{tokens:,}"
 
-            artifacts_str = str(turn.artifacts_created) if turn.artifacts_created else "-"
-            tools_str = str(turn.tool_calls) if turn.tool_calls else "-"
+            # Get counts from aggregated event lists
+            turn_tools = tools_by_turn.get(turn.turn_number, 0)
+            turn_artifacts = artifacts_by_turn.get(turn.turn_number, 0)
 
-            total_artifacts += turn.artifacts_created
-            total_tools += turn.tool_calls
+            artifacts_str = str(turn_artifacts) if turn_artifacts else "-"
+            tools_str = str(turn_tools) if turn_tools else "-"
+
+            total_artifacts += turn_artifacts
+            total_tools += turn_tools
 
             table.add_row(
                 str(turn.turn_number),
@@ -478,9 +583,17 @@ class StatusReporter:
         if self._artifacts:
             self.console.print()
             self.console.print("[bold]Artifacts Created:[/bold]")
+            state_colors = {
+                "draft": "yellow",
+                "review": "blue",
+                "approved": "green",
+                "cold": "cyan",
+            }
             for art in self._artifacts:
+                state_color = state_colors.get(art.lifecycle_state, "dim")
                 self.console.print(
                     f"  [cyan]{art.artifact_id}[/cyan] ({art.artifact_type}) "
+                    f"[{state_color}]{art.lifecycle_state}[/{state_color}] "
                     f"[dim]-> {art.store}[/dim]"
                 )
 

@@ -843,21 +843,27 @@ class ContextSecretary:
         """
         Check if a turn should be preserved (not summarized).
 
+        Supports two formats:
+        - LLMMessage format: {role, content, tool_calls: [{name, ...}]} from get_history()
+        - Turn format: {output, tool_calls: [{tool_id, ...}]} from Turn.to_dict()
+
         Args:
-            turn: Conversation turn dict
+            turn: Conversation turn dict (either format)
 
         Returns:
             True if turn should be preserved
         """
         # Check for delegation-related content
-        content = str(turn.get("content", ""))
+        # Support both "content" (LLMMessage) and "output" (Turn) fields
+        content = str(turn.get("content", turn.get("output", "")))
         if "delegation" in content.lower():
             return True
 
         # Check for tool calls that created artifacts
+        # Support both "name" (ToolCallRequest) and "tool_id" (ToolCall) fields
         tool_calls = turn.get("tool_calls", [])
         for tc in tool_calls:
-            tool_name = tc.get("name", "")
+            tool_name = tc.get("name", tc.get("tool_id", ""))
             if tool_name in ("save_artifact", "create_artifact"):
                 return True
 
