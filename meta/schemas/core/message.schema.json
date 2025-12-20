@@ -239,6 +239,13 @@
           },
           "description": "Artifacts created as part of this delegation"
         },
+        "artifacts_ready_for_review": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/artifact_instance_ref"
+          },
+          "description": "Artifacts that are ready for quality gating"
+        },
         "inline_results": {
           "type": "object",
           "additionalProperties": true,

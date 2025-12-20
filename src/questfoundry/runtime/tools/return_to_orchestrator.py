@@ -97,8 +97,12 @@ class ReturnToOrchestratorTool(BaseTool):
         success = task_completion == "completed"
 
         # Build result data with new structure
+        # Note: summary appears twice by design:
+        # - Top-level summary: what was accomplished (required by schema)
+        # - result.summary: assessment details (optional, same content for simplicity)
         result_data = {
             "task_completion": task_completion,
+            "summary": summary,
             "result": {
                 "assessment": result_assessment,
                 "summary": summary,
