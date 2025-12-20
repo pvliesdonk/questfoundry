@@ -1773,7 +1773,8 @@ class AgentRuntime:
 
             status = result.get("status", "complete" if success else "failed")
             summary = result.get("summary", "No summary provided")
-            artifacts = result.get("artifacts_produced", [])
+            # artifacts_produced is a sibling of result in payload, not inside result
+            artifacts = payload.get("artifacts_produced", [])
             ready_for_review = result.get("artifacts_ready_for_review", [])
             blockers = result.get("blockers", [])
             recommendations = result.get("recommendations", "")
