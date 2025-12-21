@@ -13,8 +13,21 @@ Mailbox Summarization:
 - MailboxSecretary monitors per-agent mailbox size
 - When exceeding auto_summarize_threshold, generates digest messages
 - Preserves delegations, high-priority, and recent messages
+
+Tool Result Caching:
+- ToolResultCache prevents repeated tool execution
+- ACTIVATION scope: Intra-turn deduplication
+- SESSION scope: Static tool caching across turns
 """
 
+from questfoundry.runtime.context.cache import (
+    CachedToolResult,
+    CacheScope,
+    PresentationPolicy,
+    ToolCachingPolicy,
+    ToolResultCache,
+    render_cached_hit_message,
+)
 from questfoundry.runtime.context.secretary import (
     ContextSecretary,
     ContextSummaryResult,
@@ -27,6 +40,14 @@ from questfoundry.runtime.context.secretary import (
 )
 
 __all__ = [
+    # Cache
+    "CachedToolResult",
+    "CacheScope",
+    "PresentationPolicy",
+    "ToolCachingPolicy",
+    "ToolResultCache",
+    "render_cached_hit_message",
+    # Secretary
     "ContextSecretary",
     "ContextSummaryResult",
     "MailboxSecretary",
