@@ -2212,6 +2212,10 @@ def corpus_build(
         bool,
         typer.Option("--embeddings", "-e", help="Build vector embeddings for semantic search"),
     ] = False,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", "-p", help="Embedding provider: 'ollama' or 'openai'"),
+    ] = None,
 ) -> None:
     """Build or update the corpus search index.
 
@@ -2220,7 +2224,8 @@ def corpus_build(
     changed since the last build are re-indexed (unless --force).
 
     Use --embeddings to also generate vector embeddings for semantic
-    search. This requires either Ollama (local) or OpenAI API access.
+    search. Use --provider to select 'ollama' (local) or 'openai'.
+    If not specified, auto-detects available provider.
     """
     import asyncio
 
@@ -2254,33 +2259,38 @@ def corpus_build(
             console.print()
             console.print("[dim]Building vector embeddings...[/dim]")
 
-            async def build_vectors() -> int:
+            async def build_vectors(provider_name: str | None) -> int:
                 from questfoundry.runtime.corpus.embeddings import get_embedding_provider
                 from questfoundry.runtime.corpus.vector_index import VectorIndex
 
-                provider = await get_embedding_provider()
-                if provider is None:
+                embed_provider = await get_embedding_provider(provider_name=provider_name)
+                if embed_provider is None:
                     console.print("[red]✗ No embedding provider available[/red]")
-                    console.print(
-                        "[dim]Install Ollama with nomic-embed-text or set OPENAI_API_KEY[/dim]"
-                    )
+                    if provider_name:
+                        console.print(f"[dim]Provider '{provider_name}' not available[/dim]")
+                    else:
+                        console.print(
+                            "[dim]Install Ollama with nomic-embed-text or set OPENAI_API_KEY[/dim]"
+                        )
                     return 0
 
-                console.print(f"[dim]Using {provider.model} ({provider.dimension}d)[/dim]")
+                console.print(
+                    f"[dim]Using {embed_provider.model} ({embed_provider.dimension}d)[/dim]"
+                )
 
-                vector_index = VectorIndex(index_path, dimension=provider.dimension)
+                vector_index = VectorIndex(index_path, dimension=embed_provider.dimension)
                 if not vector_index.is_available:
                     console.print("[red]✗ sqlite-vec not available[/red]")
                     console.print("[dim]Install with: pip install sqlite-vec[/dim]")
                     return 0
 
                 try:
-                    embedded = await vector_index.build_vectors(provider, force=force)
+                    embedded = await vector_index.build_vectors(embed_provider, force=force)
                     return embedded
                 finally:
                     vector_index.close()
 
-            embedded_count = asyncio.run(build_vectors())
+            embedded_count = asyncio.run(build_vectors(provider))
             if embedded_count > 0:
                 console.print(f"[green]✓[/green] Embedded {embedded_count} section(s)")
             elif embedded_count == 0 and status.section_count > 0:
