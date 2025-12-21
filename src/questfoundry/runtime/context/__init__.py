@@ -28,6 +28,13 @@ from questfoundry.runtime.context.cache import (
     ToolResultCache,
     render_cached_hit_message,
 )
+from questfoundry.runtime.context.prepare import (
+    ContextConfig,
+    PreparedContext,
+    SummarizationEvent,
+    SummarizationEventKind,
+    prepare_context,
+)
 from questfoundry.runtime.context.secretary import (
     ContextSecretary,
     ContextSummaryResult,
@@ -47,6 +54,12 @@ __all__ = [
     "ToolCachingPolicy",
     "ToolResultCache",
     "render_cached_hit_message",
+    # Prepare
+    "ContextConfig",
+    "PreparedContext",
+    "SummarizationEvent",
+    "SummarizationEventKind",
+    "prepare_context",
     # Secretary
     "ContextSecretary",
     "ContextSummaryResult",
