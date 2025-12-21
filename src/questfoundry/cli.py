@@ -2191,6 +2191,184 @@ def validate_semantic(
 
 
 # =============================================================================
+# Corpus Subcommand
+# =============================================================================
+
+corpus_app = typer.Typer(help="Manage corpus index for search", no_args_is_help=True)
+app.add_typer(corpus_app, name="corpus")
+
+
+@corpus_app.command("build")
+def corpus_build(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Force rebuild even if files unchanged"),
+    ] = False,
+) -> None:
+    """Build or update the corpus search index.
+
+    Parses all corpus files in domain/knowledge/corpus/ and indexes
+    them in a SQLite database for fast search. Only files that have
+    changed since the last build are re-indexed (unless --force).
+    """
+    from questfoundry.runtime.corpus.index import CorpusIndex
+
+    corpus_dir = domain / "knowledge" / "corpus"
+    if not corpus_dir.exists():
+        console.print(f"[red]✗ Corpus directory not found: {corpus_dir}[/red]")
+        raise typer.Exit(1)
+
+    index_path = CorpusIndex.get_index_path(domain)
+    index = CorpusIndex(index_path)
+
+    console.print(f"[dim]Building index from {corpus_dir}...[/dim]")
+
+    try:
+        count = index.build(corpus_dir, force=force)
+
+        if count > 0:
+            console.print(f"[green]✓[/green] Indexed {count} file(s)")
+        else:
+            console.print("[dim]No files needed indexing (all up to date)[/dim]")
+
+        status = index.get_status()
+        console.print(
+            f"[dim]Total: {status.file_count} files, {status.section_count} sections[/dim]"
+        )
+        console.print(f"[dim]Index: {index_path}[/dim]")
+
+    finally:
+        index.close()
+
+
+@corpus_app.command("status")
+def corpus_status(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+) -> None:
+    """Show corpus index status.
+
+    Displays information about the indexed corpus including file counts,
+    section counts, and cluster breakdown. Also checks for stale files
+    that need re-indexing.
+    """
+    from questfoundry.runtime.corpus.index import CorpusIndex
+
+    index_path = CorpusIndex.get_index_path(domain)
+    corpus_dir = domain / "knowledge" / "corpus"
+
+    if not index_path.exists():
+        console.print("[yellow]○[/yellow] Corpus index not found")
+        console.print(f"[dim]Expected: {index_path}[/dim]")
+        if corpus_dir.exists():
+            console.print("[dim]Run 'qf corpus build' to create index[/dim]")
+        return
+
+    index = CorpusIndex(index_path)
+
+    try:
+        status = index.get_status(corpus_dir if corpus_dir.exists() else None)
+
+        console.print()
+        console.print("[bold]Corpus Index Status[/bold]")
+        console.print()
+        console.print(f"[green]✓[/green] Index exists: {index_path}")
+        console.print(f"  Files: {status.file_count}")
+        console.print(f"  Sections: {status.section_count}")
+
+        if status.clusters:
+            console.print()
+            console.print("[bold]Clusters:[/bold]")
+            for cluster, count in sorted(status.clusters.items()):
+                console.print(f"  {cluster}: {count} file(s)")
+
+        if status.stale_files:
+            console.print()
+            console.print(
+                f"[yellow]⚠ {len(status.stale_files)} stale file(s) need re-indexing[/yellow]"
+            )
+            for f in status.stale_files[:5]:
+                console.print(f"  [dim]{f}[/dim]")
+            if len(status.stale_files) > 5:
+                console.print(f"  [dim]... and {len(status.stale_files) - 5} more[/dim]")
+            console.print("[dim]Run 'qf corpus build' to update[/dim]")
+
+    finally:
+        index.close()
+
+
+@corpus_app.command("validate")
+def corpus_validate(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+) -> None:
+    """Validate corpus frontmatter against schema.
+
+    Checks each corpus file for:
+    - Valid YAML frontmatter
+    - Required fields (title, summary, topics, cluster)
+    - Field value constraints (length, valid cluster names)
+    - Proper section structure
+    """
+    from questfoundry.runtime.corpus.parser import parse_corpus_file
+
+    corpus_dir = domain / "knowledge" / "corpus"
+    if not corpus_dir.exists():
+        console.print(f"[red]✗ Corpus directory not found: {corpus_dir}[/red]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print("[bold]Corpus Validation[/bold]")
+    console.print(f"[dim]Directory: {corpus_dir}[/dim]")
+    console.print()
+
+    files = list(corpus_dir.glob("*.md"))
+    if not files:
+        console.print("[yellow]○[/yellow] No corpus files found")
+        return
+
+    errors_found = False
+    valid_count = 0
+
+    for file_path in sorted(files):
+        result = parse_corpus_file(file_path)
+
+        if result is None:
+            console.print(f"[red]✗[/red] {file_path.name}")
+            console.print("   [red]Could not parse file (missing or invalid frontmatter)[/red]")
+            errors_found = True
+            continue
+
+        # Validate frontmatter
+        validation_errors = result.frontmatter.validate()
+
+        if validation_errors:
+            console.print(f"[yellow]⚠[/yellow] {file_path.name}")
+            for error in validation_errors:
+                console.print(f"   [yellow]{error}[/yellow]")
+            errors_found = True
+        else:
+            console.print(f"[green]✓[/green] {file_path.name}")
+            valid_count += 1
+
+    console.print()
+    console.print(f"[bold]Summary:[/bold] {valid_count}/{len(files)} files valid")
+
+    if errors_found:
+        console.print()
+        console.print("[yellow]Some files have validation issues[/yellow]")
+        raise typer.Exit(1)
+
+
+# =============================================================================
 # Export Command (Stub)
 # =============================================================================
 

@@ -31,6 +31,9 @@ trace.log
 # Project directories
 **/project_*/
 
+# Generated indexes
+.corpus_index.sqlite
+
 # Python
 *.pyc
 __pycache__/
