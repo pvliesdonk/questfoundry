@@ -44,7 +44,10 @@ from questfoundry.runtime.context import (
     Secretary,
     SummarizationPolicy,
     ToolResultCache,
+    create_summary_message,
+    get_fast_model,
     prepare_context,
+    summarize_messages,
 )
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
@@ -163,6 +166,7 @@ class AgentRuntime:
         playbook_tracker: PlaybookTracker | None = None,
         turn_validation_config: TurnValidationConfig | None = None,
         on_tool_call: Any | None = None,
+        summarization_model: str | None = None,
     ):
         """
         Initialize agent runtime.
@@ -182,6 +186,8 @@ class AgentRuntime:
             playbook_tracker: Optional playbook tracker for checkpoint state
             turn_validation_config: Optional configuration for orchestrator enforcement
             on_tool_call: Optional callback(tool_id, success, agent_id, turn_number, execution_time_ms, result)
+            summarization_model: Model to use for context summarization. If None, uses
+                provider's default fast model (e.g., gpt-4o-mini for OpenAI).
         """
         self._provider = provider
         self._studio = studio
@@ -196,6 +202,7 @@ class AgentRuntime:
         self._checkpoint_manager = checkpoint_manager
         self._playbook_tracker = playbook_tracker
         self._on_tool_call = on_tool_call
+        self._summarization_model = summarization_model
 
         # Context usage tracking per agent
         self._context_usage: dict[str, ContextUsage] = {}
@@ -288,6 +295,106 @@ class AgentRuntime:
     def context_secretary(self) -> ContextSecretary:
         """Get the ContextSecretary for conversation summarization."""
         return self._context_secretary
+
+    async def _apply_llm_summarization(
+        self,
+        messages: list[LLMMessage],
+        agent_id: str,
+    ) -> list[LLMMessage]:
+        """
+        Apply LLM-based summarization if context is at 90% threshold.
+
+        This uses the same provider but with a fast/cheap model to generate
+        an intelligent summary of older conversation turns, replacing them
+        with a single summary message.
+
+        Args:
+            messages: Current message list
+            agent_id: Agent ID for tracking
+
+        Returns:
+            Potentially modified message list with summary replacing old turns
+        """
+        # Estimate current token usage
+        total_chars = sum(len(m.content) for m in messages)
+        estimated_tokens = total_chars // 4
+
+        context_limit = self._context_limit or 128000
+        usage_fraction = estimated_tokens / context_limit
+
+        # Only apply at 90% threshold
+        if usage_fraction < 0.9:
+            return messages
+
+        logger.info(
+            "Context at %.1f%% for agent %s, applying LLM summarization",
+            usage_fraction * 100,
+            agent_id,
+        )
+
+        # Convert LLMMessages to dicts for ContextSecretary
+        message_dicts = [m.to_dict() for m in messages]
+
+        # Use ContextSecretary to select messages to summarize
+        to_summarize, to_preserve = self._context_secretary.select_turns_for_summarization(
+            message_dicts
+        )
+
+        if not to_summarize:
+            logger.debug("No messages selected for summarization")
+            return messages
+
+        # Get the summarization model
+        summarization_model = self._summarization_model or get_fast_model(
+            self._provider.name, fallback_model=self._model
+        )
+
+        # Call LLM summarization
+        result = await summarize_messages(
+            to_summarize,
+            self._provider,
+            model=summarization_model,
+        )
+
+        if not result.success or not result.summary:
+            # Fall back to template-based summary
+            logger.warning("LLM summarization failed, using template-based fallback")
+            summary_text = self._context_secretary.generate_summary(to_summarize)
+            if not summary_text:
+                return messages
+        else:
+            summary_text = result.summary
+            logger.info(
+                "LLM summarization: %d messages, %d→%d tokens, model=%s",
+                result.messages_summarized,
+                result.tokens_before,
+                result.tokens_after,
+                result.model_used,
+            )
+
+        # Build new message list: system prompt + summary + preserved messages
+        new_messages: list[LLMMessage] = []
+
+        # Preserve system prompt if present
+        if messages and messages[0].role == "system":
+            new_messages.append(messages[0])
+
+        # Add summary as a user message
+        summary_msg = create_summary_message(summary_text)
+        new_messages.append(LLMMessage.from_dict(summary_msg))
+
+        # Add preserved messages (convert back from dicts)
+        for msg_dict in to_preserve:
+            new_messages.append(LLMMessage.from_dict(msg_dict))
+
+        logger.info(
+            "Context summarized: %d → %d messages (reduced by %d)",
+            len(messages),
+            len(new_messages),
+            len(messages) - len(new_messages),
+        )
+
+        return new_messages
 
     def get_agent_tools(self, agent: Agent, session_id: str | None = None) -> list[BaseTool]:
         """
@@ -1329,8 +1436,12 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
-                # Prepare context with summarization and hard guardrail
-                # This is the single orchestration point for context management
+                # Apply LLM-based context summarization at 90% threshold
+                # This uses a fast model to intelligently compress older turns
+                messages = await self._apply_llm_summarization(messages, agent.id)
+
+                # Prepare context with hard guardrail (last resort trimming)
+                # This is the final safety net for context management
                 context_config = ContextConfig(
                     max_context_tokens=self._context_limit or 128000,
                     hard_max_tokens=int((self._context_limit or 128000) * 0.95),
@@ -1754,8 +1865,12 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
-                # Prepare context with summarization and hard guardrail
-                # This is the single orchestration point for context management
+                # Apply LLM-based context summarization at 90% threshold
+                # This uses a fast model to intelligently compress older turns
+                messages = await self._apply_llm_summarization(messages, agent.id)
+
+                # Prepare context with hard guardrail (last resort trimming)
+                # This is the final safety net for context management
                 context_config = ContextConfig(
                     max_context_tokens=self._context_limit or 128000,
                     hard_max_tokens=int((self._context_limit or 128000) * 0.95),
