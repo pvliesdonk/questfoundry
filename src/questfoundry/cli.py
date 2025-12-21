@@ -2208,13 +2208,22 @@ def corpus_build(
         bool,
         typer.Option("--force", "-f", help="Force rebuild even if files unchanged"),
     ] = False,
+    embeddings: Annotated[
+        bool,
+        typer.Option("--embeddings", "-e", help="Build vector embeddings for semantic search"),
+    ] = False,
 ) -> None:
     """Build or update the corpus search index.
 
     Parses all corpus files in domain/knowledge/corpus/ and indexes
     them in a SQLite database for fast search. Only files that have
     changed since the last build are re-indexed (unless --force).
+
+    Use --embeddings to also generate vector embeddings for semantic
+    search. This requires either Ollama (local) or OpenAI API access.
     """
+    import asyncio
+
     from questfoundry.runtime.corpus.index import CorpusIndex
 
     corpus_dir = domain / "knowledge" / "corpus"
@@ -2239,6 +2248,44 @@ def corpus_build(
         console.print(
             f"[dim]Total: {status.file_count} files, {status.section_count} sections[/dim]"
         )
+
+        # Build vector embeddings if requested
+        if embeddings:
+            console.print()
+            console.print("[dim]Building vector embeddings...[/dim]")
+
+            async def build_vectors() -> int:
+                from questfoundry.runtime.corpus.embeddings import get_embedding_provider
+                from questfoundry.runtime.corpus.vector_index import VectorIndex
+
+                provider = await get_embedding_provider()
+                if provider is None:
+                    console.print("[red]✗ No embedding provider available[/red]")
+                    console.print(
+                        "[dim]Install Ollama with nomic-embed-text or set OPENAI_API_KEY[/dim]"
+                    )
+                    return 0
+
+                console.print(f"[dim]Using {provider.model} ({provider.dimension}d)[/dim]")
+
+                vector_index = VectorIndex(index_path, dimension=provider.dimension)
+                if not vector_index.is_available:
+                    console.print("[red]✗ sqlite-vec not available[/red]")
+                    console.print("[dim]Install with: pip install sqlite-vec[/dim]")
+                    return 0
+
+                try:
+                    embedded = await vector_index.build_vectors(provider, force=force)
+                    return embedded
+                finally:
+                    vector_index.close()
+
+            embedded_count = asyncio.run(build_vectors())
+            if embedded_count > 0:
+                console.print(f"[green]✓[/green] Embedded {embedded_count} section(s)")
+            elif embedded_count == 0 and status.section_count > 0:
+                console.print("[dim]Vectors already up to date (use --force to rebuild)[/dim]")
+
         console.print(f"[dim]Index: {index_path}[/dim]")
 
     finally:
@@ -2256,9 +2303,10 @@ def corpus_status(
 
     Displays information about the indexed corpus including file counts,
     section counts, and cluster breakdown. Also checks for stale files
-    that need re-indexing.
+    that need re-indexing, and shows vector embedding status if available.
     """
     from questfoundry.runtime.corpus.index import CorpusIndex
+    from questfoundry.runtime.corpus.vector_index import VectorIndex
 
     index_path = CorpusIndex.get_index_path(domain)
     corpus_dir = domain / "knowledge" / "corpus"
@@ -2271,6 +2319,7 @@ def corpus_status(
         return
 
     index = CorpusIndex(index_path)
+    vector_index = VectorIndex(index_path)
 
     try:
         status = index.get_status(corpus_dir if corpus_dir.exists() else None)
@@ -2281,6 +2330,23 @@ def corpus_status(
         console.print(f"[green]✓[/green] Index exists: {index_path}")
         console.print(f"  Files: {status.file_count}")
         console.print(f"  Sections: {status.section_count}")
+
+        # Vector index status
+        console.print()
+        console.print("[bold]Vector Search:[/bold]")
+        vec_status = vector_index.get_status()
+        if not vec_status["available"]:
+            console.print(
+                f"  [dim]Not available ({vec_status.get('reason', 'sqlite-vec not loaded')})[/dim]"
+            )
+        elif vec_status["vector_count"] == 0:
+            console.print("  [dim]No embeddings (run 'qf corpus build --embeddings')[/dim]")
+        else:
+            console.print(f"  [green]✓[/green] {vec_status['vector_count']} embeddings")
+            if vec_status.get("model"):
+                console.print(f"  Model: {vec_status['model']} ({vec_status['dimension']}d)")
+            if vec_status.get("indexed_at"):
+                console.print(f"  Built: {vec_status['indexed_at']}")
 
         if status.clusters:
             console.print()
@@ -2301,6 +2367,7 @@ def corpus_status(
 
     finally:
         index.close()
+        vector_index.close()
 
 
 @corpus_app.command("validate")

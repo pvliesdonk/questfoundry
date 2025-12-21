@@ -6,18 +6,23 @@ Supports multiple modes:
 - toc: Get table of contents listing all corpus files
 - file: Retrieve full content of a specific file
 - cluster: Browse files in a cluster
-- search: Search for relevant excerpts (default)
+- search: Search for relevant excerpts (default, uses hybrid search if available)
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.corpus.index import CorpusIndex
 from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
+
+if TYPE_CHECKING:
+    from questfoundry.runtime.corpus.embeddings import EmbeddingProvider
+    from questfoundry.runtime.corpus.hybrid_search import HybridSearcher
+    from questfoundry.runtime.corpus.vector_index import VectorIndex
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +49,16 @@ class ConsultCorpusTool(BaseTool):
     - toc: Get table of contents
     - file: Get specific file content
     - cluster: Browse files in a cluster
-    - search: Search for relevant excerpts
+    - search: Search for relevant excerpts (uses hybrid search if vectors available)
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._index: CorpusIndex | None = None
+        self._vector_index: VectorIndex | None = None
+        self._embedding_provider: EmbeddingProvider | None = None
+        self._hybrid_searcher: HybridSearcher | None = None
+        self._embeddings_checked = False
 
     def _get_index(self) -> CorpusIndex | None:
         """Get or create the corpus index."""
@@ -79,6 +88,44 @@ class ConsultCorpusTool(BaseTool):
 
         return self._index
 
+    async def _get_hybrid_searcher(self, index: CorpusIndex) -> HybridSearcher:
+        """Get or create the hybrid searcher."""
+        if self._hybrid_searcher is not None:
+            return self._hybrid_searcher
+
+        from questfoundry.runtime.corpus.hybrid_search import HybridSearcher
+        from questfoundry.runtime.corpus.vector_index import VectorIndex
+
+        # domain_path is guaranteed non-None at this point (checked in execute)
+        assert self._context.domain_path is not None
+        domain_path = Path(self._context.domain_path)
+        index_path = CorpusIndex.get_index_path(domain_path)
+
+        # Try to set up vector search if not yet checked
+        if not self._embeddings_checked:
+            self._embeddings_checked = True
+
+            self._vector_index = VectorIndex(index_path)
+            if self._vector_index.is_available and self._vector_index.has_vectors():
+                # Get embedding provider for query embedding
+                from questfoundry.runtime.corpus.embeddings import get_embedding_provider
+
+                self._embedding_provider = await get_embedding_provider()
+                if self._embedding_provider:
+                    logger.info(f"Hybrid search enabled with {self._embedding_provider.model}")
+                else:
+                    logger.debug("Embedding provider not available for query embedding")
+            else:
+                logger.debug("Vector index not available or empty")
+
+        self._hybrid_searcher = HybridSearcher(
+            corpus_index=index,
+            vector_index=self._vector_index,
+            embedding_provider=self._embedding_provider,
+        )
+
+        return self._hybrid_searcher
+
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute corpus operation based on mode."""
         mode = args.get("mode", "search")
@@ -100,7 +147,7 @@ class ConsultCorpusTool(BaseTool):
         elif mode == "cluster":
             return self._handle_cluster(index, args)
         elif mode == "search":
-            return self._handle_search(index, args)
+            return await self._handle_search(index, args)
         else:
             return ToolResult(
                 success=False,
@@ -189,8 +236,8 @@ class ConsultCorpusTool(BaseTool):
             },
         )
 
-    def _handle_search(self, index: CorpusIndex, args: dict[str, Any]) -> ToolResult:
-        """Handle search mode - search for relevant excerpts."""
+    async def _handle_search(self, index: CorpusIndex, args: dict[str, Any]) -> ToolResult:
+        """Handle search mode - search for relevant excerpts using hybrid search."""
         query = args.get("query", "")
         max_results = args.get("max_results", 3)
 
@@ -201,18 +248,13 @@ class ConsultCorpusTool(BaseTool):
                 error="query parameter is required for mode=search",
             )
 
-        # Use index-based keyword search
-        results = index.keyword_search(query, max_results)
+        # Use hybrid searcher (combines keyword and vector if available)
+        searcher = await self._get_hybrid_searcher(index)
+        results = await searcher.search(query, max_results=max_results)
+        search_method = searcher.get_search_method()
 
         # Transform results to match expected output schema
-        excerpts = [
-            {
-                "excerpt": r["content"],
-                "source_file": r["source_file"],
-                "relevance_score": r["relevance_score"],
-            }
-            for r in results
-        ]
+        excerpts = [r.to_dict() for r in results]
 
         return ToolResult(
             success=True,
@@ -220,7 +262,7 @@ class ConsultCorpusTool(BaseTool):
                 "success": True,
                 "mode": "search",
                 "source": "domain_corpus",
-                "search_method": "keyword",
+                "search_method": search_method,
                 "excerpt_count": len(excerpts),
                 "excerpts": excerpts,
             },
