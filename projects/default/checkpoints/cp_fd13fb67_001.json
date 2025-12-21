@@ -1,0 +1,50 @@
+{
+  "$schema": "checkpoint-v1",
+  "id": "cp_fd13fb67_001",
+  "session_id": "fd13fb67-bf6e-4f1c-89b0-a97e563c03aa",
+  "turn_number": 1,
+  "created_at": "2025-12-21T07:00:27.429566",
+  "schema_version": 1,
+  "session_status": "active",
+  "entry_agent": "showrunner",
+  "turn_count": 1,
+  "mailbox_states": {
+    "plotwright": [
+      {
+        "id": "51046e8d-addd-4b65-b984-9aa1ed86530a",
+        "type": "delegation_request",
+        "from_agent": "showrunner",
+        "to_agent": "plotwright",
+        "timestamp": "2025-12-21T07:00:27.395466",
+        "ttl_turns": null,
+        "turn_created": null,
+        "correlation_id": "df29369e-a114-4689-8f16-e70cf29c8659",
+        "in_reply_to": null,
+        "delegation_id": "df29369e-a114-4689-8f16-e70cf29c8659",
+        "playbook_id": "story_spark",
+        "playbook_instance_id": null,
+        "phase_id": "topology_design",
+        "payload": {
+          "task": "Map parts/chapters and designate hubs, loops, and gateways for a three-section Agatha Christie-style mystery story. For each gateway, write a diegetic condition the Player-Narrator can enforce.",
+          "context": {},
+          "is_rework_target": false
+        },
+        "priority": 5,
+        "status": "pending"
+      }
+    ]
+  },
+  "active_delegations": [],
+  "playbook_instances": [],
+  "context_usage": {
+    "showrunner": {
+      "agent_id": "showrunner",
+      "total_tokens": 10223,
+      "input_tokens": 10108,
+      "output_tokens": 115,
+      "limit": 128000,
+      "warning_threshold": 100000
+    }
+  },
+  "summary": null
+}

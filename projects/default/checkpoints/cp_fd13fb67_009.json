@@ -1,0 +1,84 @@
+{
+  "$schema": "checkpoint-v1",
+  "id": "cp_fd13fb67_009",
+  "session_id": "fd13fb67-bf6e-4f1c-89b0-a97e563c03aa",
+  "turn_number": 9,
+  "created_at": "2025-12-21T07:01:29.103459",
+  "schema_version": 1,
+  "session_status": "active",
+  "entry_agent": "showrunner",
+  "turn_count": 9,
+  "mailbox_states": {
+    "plotwright": [],
+    "showrunner": [],
+    "gatekeeper": [
+      {
+        "id": "043e6fde-947d-41e9-825d-92a0be2c9c3e",
+        "type": "delegation_request",
+        "from_agent": "showrunner",
+        "to_agent": "gatekeeper",
+        "timestamp": "2025-12-21T07:01:29.075023",
+        "ttl_turns": null,
+        "turn_created": null,
+        "correlation_id": "3164fc98-c8a1-4319-a456-5ec1eb8cbd55",
+        "in_reply_to": null,
+        "delegation_id": "3164fc98-c8a1-4319-a456-5ec1eb8cbd55",
+        "playbook_id": "story_spark",
+        "playbook_instance_id": null,
+        "phase_id": "preview_gate",
+        "payload": {
+          "task": "Run a final pre-gate review on the reworked Section Briefs for the Agatha Christie-style mystery story. Validate the logical flow, stable narrative paths, and coherence of choice intents.",
+          "context": {
+            "artifact_refs": [
+              "section_brief_20dbc553",
+              "section_brief_007ddd51",
+              "section_brief_145a1f3e"
+            ],
+            "notes": "Ensure that the changes made to the Section Briefs align with the Agatha Christie style and resolve previous issues identified."
+          },
+          "is_rework_target": false
+        },
+        "priority": 5,
+        "status": "pending"
+      }
+    ],
+    "scene_smith": [],
+    "researcher": [],
+    "book_binder": [],
+    "lore_weaver": [],
+    "codex_curator": [],
+    "style_lead": [],
+    "art_director": [],
+    "audio_director": [],
+    "player_narrator": []
+  },
+  "active_delegations": [],
+  "playbook_instances": [],
+  "context_usage": {
+    "showrunner": {
+      "agent_id": "showrunner",
+      "total_tokens": 68314,
+      "input_tokens": 67611,
+      "output_tokens": 703,
+      "limit": 128000,
+      "warning_threshold": 100000
+    },
+    "plotwright": {
+      "agent_id": "plotwright",
+      "total_tokens": 91377,
+      "input_tokens": 89016,
+      "output_tokens": 2361,
+      "limit": 128000,
+      "warning_threshold": 100000
+    },
+    "gatekeeper": {
+      "agent_id": "gatekeeper",
+      "total_tokens": 16944,
+      "input_tokens": 16302,
+      "output_tokens": 642,
+      "limit": 128000,
+      "warning_threshold": 100000
+    }
+  },
+  "summary": null
+}

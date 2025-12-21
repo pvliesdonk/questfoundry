@@ -1,0 +1,84 @@
+{
+  "$schema": "checkpoint-v1",
+  "id": "cp_fd13fb67_013",
+  "session_id": "fd13fb67-bf6e-4f1c-89b0-a97e563c03aa",
+  "turn_number": 13,
+  "created_at": "2025-12-21T07:01:53.408857",
+  "schema_version": 1,
+  "session_status": "active",
+  "entry_agent": "showrunner",
+  "turn_count": 13,
+  "mailbox_states": {
+    "plotwright": [],
+    "showrunner": [],
+    "gatekeeper": [
+      {
+        "id": "f9cae094-9681-424b-bb84-e1241376f5b9",
+        "type": "delegation_request",
+        "from_agent": "showrunner",
+        "to_agent": "gatekeeper",
+        "timestamp": "2025-12-21T07:01:53.371846",
+        "ttl_turns": null,
+        "turn_created": null,
+        "correlation_id": "3013b878-093c-48a2-81a9-9885e2132ec1",
+        "in_reply_to": null,
+        "delegation_id": "3013b878-093c-48a2-81a9-9885e2132ec1",
+        "playbook_id": "story_spark",
+        "playbook_instance_id": null,
+        "phase_id": "final_review",
+        "payload": {
+          "task": "Conduct a final review of the fully connected Section Briefs to ensure all narrative paths are stable and consistent with Agatha Christie-style storytelling.",
+          "context": {
+            "artifact_refs": [
+              "section_brief_20dbc553",
+              "section_brief_007ddd51",
+              "section_brief_145a1f3e"
+            ],
+            "notes": "Verify that all sections now transition smoothly and align with the intended mystery narrative structure."
+          },
+          "is_rework_target": false
+        },
+        "priority": 5,
+        "status": "pending"
+      }
+    ],
+    "scene_smith": [],
+    "researcher": [],
+    "book_binder": [],
+    "lore_weaver": [],
+    "codex_curator": [],
+    "style_lead": [],
+    "art_director": [],
+    "audio_director": [],
+    "player_narrator": []
+  },
+  "active_delegations": [],
+  "playbook_instances": [],
+  "context_usage": {
+    "showrunner": {
+      "agent_id": "showrunner",
+      "total_tokens": 147550,
+      "input_tokens": 146572,
+      "output_tokens": 978,
+      "limit": 128000,
+      "warning_threshold": 100000
+    },
+    "plotwright": {
+      "agent_id": "plotwright",
+      "total_tokens": 166869,
+      "input_tokens": 163749,
+      "output_tokens": 3120,
+      "limit": 128000,
+      "warning_threshold": 100000
+    },
+    "gatekeeper": {
+      "agent_id": "gatekeeper",
+      "total_tokens": 32776,
+      "input_tokens": 31949,
+      "output_tokens": 827,
+      "limit": 128000,
+      "warning_threshold": 100000
+    }
+  },
+  "summary": null
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "checkpoint-v1",
+  "id": "cp_fd13fb67_005",
+  "session_id": "fd13fb67-bf6e-4f1c-89b0-a97e563c03aa",
+  "turn_number": 5,
+  "created_at": "2025-12-21T07:00:58.668424",
+  "schema_version": 1,
+  "session_status": "active",
+  "entry_agent": "showrunner",
+  "turn_count": 5,
+  "mailbox_states": {
+    "plotwright": [],
+    "showrunner": [],
+    "gatekeeper": [
+      {
+        "id": "6e650d00-ffe3-4958-b452-691161c6d203",
+        "type": "delegation_request",
+        "from_agent": "showrunner",
+        "to_agent": "gatekeeper",
+        "timestamp": "2025-12-21T07:00:58.636650",
+        "ttl_turns": null,
+        "turn_created": null,
+        "correlation_id": "eddfdbad-ad09-44b8-9cf5-0a9c60ac6601",
+        "in_reply_to": null,
+        "delegation_id": "eddfdbad-ad09-44b8-9cf5-0a9c60ac6601",
+        "playbook_id": "story_spark",
+        "playbook_instance_id": null,
+        "phase_id": "preview_gate",
+        "payload": {
+          "task": "Run a quick pre-gate review on the Section Briefs for the Agatha Christie-style mystery story. Check for accidental dead ends (Integrity), keystone reachability (Reachability), and meaningful hubs/loops (Nonlinearity).",
+          "context": {
+            "artifact_refs": [
+              "section_brief_20dbc553",
+              "section_brief_007ddd51",
+              "section_brief_145a1f3e"
+            ],
+            "notes": "Ensure that each section brief adheres to the structure and style typical of an Agatha Christie mystery."
+          },
+          "is_rework_target": false
+        },
+        "priority": 5,
+        "status": "pending"
+      }
+    ],
+    "scene_smith": [],
+    "researcher": [],
+    "book_binder": [],
+    "lore_weaver": [],
+    "codex_curator": [],
+    "style_lead": [],
+    "art_director": [],
+    "audio_director": [],
+    "player_narrator": []
+  },
+  "active_delegations": [],
+  "playbook_instances": [],
+  "context_usage": {
+    "showrunner": {
+      "agent_id": "showrunner",
+      "total_tokens": 26439,
+      "input_tokens": 26043,
+      "output_tokens": 396,
+      "limit": 128000,
+      "warning_threshold": 100000
+    },
+    "plotwright": {
+      "agent_id": "plotwright",
+      "total_tokens": 51393,
+      "input_tokens": 49850,
+      "output_tokens": 1543,
+      "limit": 128000,
+      "warning_threshold": 100000
+    }
+  },
+  "summary": null
+}

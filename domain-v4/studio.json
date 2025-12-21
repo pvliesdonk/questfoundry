@@ -75,7 +75,7 @@
     "tools/consult_schema.json",
     "tools/consult_playbook.json",
     "tools/validate_artifact.json",
-    "tools/validate_story_graph.json",
+    "tools/analyze_story_graph.json",
     "tools/search_workspace.json",
     "tools/get_artifact.json",
     "tools/delegate.json",

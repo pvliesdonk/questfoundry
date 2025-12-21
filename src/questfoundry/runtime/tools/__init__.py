@@ -19,6 +19,7 @@ Usage:
 
 # Import tool implementations to trigger registration
 from questfoundry.runtime.tools import (
+    analyze_story_graph,  # noqa: F401  # Programmatic graph topology analysis
     communicate,  # noqa: F401  # Phase 7: unified human communication
     consult_corpus,  # noqa: F401
     consult_knowledge,  # noqa: F401  # Phase 7: knowledge menu+consult pattern
@@ -36,7 +37,6 @@ from questfoundry.runtime.tools import (
     stubs,  # noqa: F401
     terminate_session,  # noqa: F401  # Explicit session termination for orchestrators
     validate_artifact,  # noqa: F401
-    validate_story_graph,  # noqa: F401  # Programmatic reachability analysis
     web_fetch,  # noqa: F401
     web_search,  # noqa: F401
 )

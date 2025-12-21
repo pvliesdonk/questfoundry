@@ -1,0 +1,71 @@
+{
+  "$schema": "checkpoint-v1",
+  "id": "cp_fd13fb67_003",
+  "session_id": "fd13fb67-bf6e-4f1c-89b0-a97e563c03aa",
+  "turn_number": 3,
+  "created_at": "2025-12-21T07:00:44.967035",
+  "schema_version": 1,
+  "session_status": "active",
+  "entry_agent": "showrunner",
+  "turn_count": 3,
+  "mailbox_states": {
+    "plotwright": [
+      {
+        "id": "ebe93cf7-a3d3-42b2-ac31-04e900a1f9b8",
+        "type": "delegation_request",
+        "from_agent": "showrunner",
+        "to_agent": "plotwright",
+        "timestamp": "2025-12-21T07:00:44.944281",
+        "ttl_turns": null,
+        "turn_created": null,
+        "correlation_id": "7d5190be-03ff-44c8-99f7-7890d91838d2",
+        "in_reply_to": null,
+        "delegation_id": "7d5190be-03ff-44c8-99f7-7890d91838d2",
+        "playbook_id": "story_spark",
+        "playbook_instance_id": null,
+        "phase_id": "brief_creation",
+        "payload": {
+          "task": "For each new or affected section, create a Section Brief with goal, key beats, choice intents, and constraints for the Agatha Christie-style mystery story.",
+          "context": {
+            "notes": "Focus on creating a mystery with typical Agatha Christie elements: an intriguing murder, a set of suspects with motives, and a clever detective who unravels the mystery."
+          },
+          "is_rework_target": true
+        },
+        "priority": 5,
+        "status": "pending"
+      }
+    ],
+    "showrunner": [],
+    "gatekeeper": [],
+    "scene_smith": [],
+    "researcher": [],
+    "book_binder": [],
+    "lore_weaver": [],
+    "codex_curator": [],
+    "style_lead": [],
+    "art_director": [],
+    "audio_director": [],
+    "player_narrator": []
+  },
+  "active_delegations": [],
+  "playbook_instances": [],
+  "context_usage": {
+    "showrunner": {
+      "agent_id": "showrunner",
+      "total_tokens": 16853,
+      "input_tokens": 16614,
+      "output_tokens": 239,
+      "limit": 128000,
+      "warning_threshold": 100000
+    },
+    "plotwright": {
+      "agent_id": "plotwright",
+      "total_tokens": 22026,
+      "input_tokens": 21140,
+      "output_tokens": 886,
+      "limit": 128000,
+      "warning_threshold": 100000
+    }
+  },
+  "summary": null
+}

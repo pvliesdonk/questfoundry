@@ -44,6 +44,13 @@
       "tool_ref": "consult_corpus"
     },
     {
+      "id": "use_analyze_story_graph",
+      "name": "Analyze Story Graph",
+      "description": "Understand current story topology when designing structure. Shows reachable nodes, dead ends, entry points, and how paths connect—essential for topology-first design.",
+      "category": "tool",
+      "tool_ref": "analyze_story_graph"
+    },
+    {
       "id": "read_stores",
       "name": "Read Stores",
       "description": "Can read workspace and canon for context",

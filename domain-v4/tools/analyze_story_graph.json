@@ -1,8 +1,8 @@
 {
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
-  "id": "validate_story_graph",
-  "name": "Validate Story Graph",
-  "description": "Programmatically analyzes story topology to check reachability, dead ends, orphans, missing targets, and lifecycle status. Provides concrete data for structural validation without requiring LLM reasoning about graph structure.\n\nChecks:\n1. Reachability - Can all nodes be reached from entry?\n2. Dead ends - Nodes with no outgoing connections\n3. Orphans - Nodes with no incoming connections (except entry)\n4. Missing targets - References to non-existent nodes\n5. Lifecycle status - What state are the paths in?\n\nReturns structured analysis with actionable recommendations.",
+  "id": "analyze_story_graph",
+  "name": "Analyze Story Graph",
+  "description": "Programmatically analyzes story topology to check reachability, dead ends, orphans, missing targets, and lifecycle status. Provides concrete data for structural analysis without requiring LLM reasoning about graph structure.\n\nChecks:\n1. Reachability - Can all nodes be reached from entry?\n2. Dead ends - Nodes with no outgoing connections\n3. Orphans - Nodes with no incoming connections (except entry)\n4. Missing targets - References to non-existent nodes\n5. Lifecycle status - What state are the paths in?\n\nReturns structured analysis with actionable recommendations.",
 
   "summarization_policy": "preserve",
 
@@ -23,12 +23,12 @@
 
   "output_schema": {
     "type": "object",
-    "description": "Semantically clear validation result (see issue #228 for rationale)",
+    "description": "Semantically clear analysis result (see issue #228 for rationale)",
     "properties": {
-      "validation_outcome": {
+      "analysis_outcome": {
         "type": "string",
         "enum": ["passed", "warnings", "failed"],
-        "description": "Clear validation result: passed (no issues), warnings (non-blocking concerns), failed (blocking issues)"
+        "description": "Analysis outcome: passed (no issues), warnings (non-blocking concerns), failed (blocking issues)"
       },
       "blocking_issues": {
         "type": "array",

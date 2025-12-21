@@ -1,5 +1,5 @@
 """
-Validate Story Graph tool implementation.
+Analyze Story Graph tool implementation.
 
 Programmatically analyzes the story topology to check:
 1. Reachability - Can all nodes be reached from entry?
@@ -8,7 +8,7 @@ Programmatically analyzes the story topology to check:
 4. Missing targets - References to non-existent nodes
 5. Lifecycle status - What state are the paths in?
 
-This provides gatekeeper with concrete data instead of
+This provides agents with concrete graph data instead of
 requiring LLM reasoning about graph structure.
 """
 
@@ -94,8 +94,8 @@ class GraphAnalysis:
         }
 
 
-@register_tool("validate_story_graph")
-class ValidateStoryGraphTool(BaseTool):
+@register_tool("analyze_story_graph")
+class AnalyzeStoryGraphTool(BaseTool):
     """
     Analyze story topology for reachability and structural issues.
 
@@ -111,7 +111,7 @@ class ValidateStoryGraphTool(BaseTool):
     """
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Execute story graph validation."""
+        """Execute story graph analysis."""
         include_drafts = args.get("include_drafts", True)
         entry_anchor = args.get("entry_anchor")  # Optional explicit entry
 
@@ -128,13 +128,13 @@ class ValidateStoryGraphTool(BaseTool):
         # Categorize issues by severity (following semantic clarity from issue #228)
         blocking_issues, warnings = self._categorize_issues(analysis)
 
-        # Determine validation outcome
+        # Determine analysis outcome
         if blocking_issues:
-            validation_outcome = "failed"
+            analysis_outcome = "failed"
         elif warnings:
-            validation_outcome = "warnings"
+            analysis_outcome = "warnings"
         else:
-            validation_outcome = "passed"
+            analysis_outcome = "passed"
 
         # Generate directive recovery actions (not passive hints)
         recovery_actions = self._generate_recovery_actions(blocking_issues)
@@ -142,7 +142,7 @@ class ValidateStoryGraphTool(BaseTool):
         return ToolResult(
             success=True,
             data={
-                "validation_outcome": validation_outcome,
+                "analysis_outcome": analysis_outcome,
                 "blocking_issues": blocking_issues,
                 "warnings": warnings,
                 "recovery_actions": recovery_actions,
