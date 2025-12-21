@@ -39,10 +39,12 @@ from questfoundry.runtime.agent.turn_validator import (
 from questfoundry.runtime.context import (
     CachedToolResult,
     CacheScope,
+    ContextConfig,
     ContextSecretary,
     Secretary,
     SummarizationPolicy,
     ToolResultCache,
+    prepare_context,
 )
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
@@ -1327,9 +1329,23 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
+                # Prepare context with summarization and hard guardrail
+                # This is the single orchestration point for context management
+                context_config = ContextConfig(
+                    max_context_tokens=self._context_limit or 128000,
+                    hard_max_tokens=int((self._context_limit or 128000) * 0.95),
+                )
+                prepared = prepare_context(messages, agent.id, context_config)
+                if prepared.was_modified:
+                    messages = prepared.messages
+                    logger.info(
+                        f"Context trimmed: {prepared.events[-1].before_tokens} -> "
+                        f"{prepared.events[-1].after_tokens} tokens"
+                    )
+
                 # Invoke LLM with tools and tracing callbacks
                 response = await self._provider.invoke(
-                    messages,
+                    prepared.messages,
                     self._model,
                     options,
                     tools=tool_schemas if tool_schemas else None,
@@ -1738,12 +1754,26 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
+                # Prepare context with summarization and hard guardrail
+                # This is the single orchestration point for context management
+                context_config = ContextConfig(
+                    max_context_tokens=self._context_limit or 128000,
+                    hard_max_tokens=int((self._context_limit or 128000) * 0.95),
+                )
+                prepared = prepare_context(messages, agent.id, context_config)
+                if prepared.was_modified:
+                    messages = prepared.messages
+                    logger.info(
+                        f"Context trimmed: {prepared.events[-1].before_tokens} -> "
+                        f"{prepared.events[-1].after_tokens} tokens"
+                    )
+
                 iteration_content = ""
                 pending_tool_calls: list[ToolCallRequest] | None = None
 
                 # Stream from provider with tools and tracing callbacks
                 async for chunk in self._provider.stream(
-                    messages,
+                    prepared.messages,
                     self._model,
                     options,
                     tools=tool_schemas if tool_schemas else None,
