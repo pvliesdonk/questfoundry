@@ -12,12 +12,22 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any
 
 from questfoundry.runtime.tools.base import BaseTool, ToolExecutionError, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
 
 logger = logging.getLogger(__name__)
+
+# Valid recency values
+VALID_RECENCY_VALUES = {"all_time", "day", "week", "month", "year"}
+
+# Domain filter validation pattern - allows valid domain characters only
+# Matches: example.com, sub.example.com, .edu, gov, etc.
+DOMAIN_FILTER_PATTERN = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$"
+)
 
 # SearXNG configuration
 SEARXNG_URL = os.environ.get("QF_SEARXNG__URL", "")
@@ -83,6 +93,22 @@ class WebSearchTool(BaseTool):
                 error="Search query cannot be empty",
             )
 
+        # Validate domain_filter to prevent query injection
+        if domain_filter and not DOMAIN_FILTER_PATTERN.match(domain_filter):
+            return ToolResult(
+                success=False,
+                data={"results": []},
+                error=f"Invalid domain_filter: '{domain_filter}'. Must be a valid domain (e.g., 'wikipedia.org', 'gov').",
+            )
+
+        # Validate recency value
+        if recency not in VALID_RECENCY_VALUES:
+            logger.warning(
+                "WebSearchTool: Unrecognized recency value '%s'; defaulting to 'all_time'.",
+                recency,
+            )
+            recency = "all_time"
+
         try:
             # Build actual search query with domain filter if specified
             search_query = f"site:{domain_filter} {query}" if domain_filter else query
@@ -111,20 +137,22 @@ class WebSearchTool(BaseTool):
 
         Args:
             query: Search query string (may include site: prefix for domain filtering)
-            max_results: Maximum results to return
+            max_results: Maximum results to return (applied client-side; SearXNG
+                doesn't support a results limit parameter)
             recency: Time filter - 'all_time', 'day', 'week', 'month', 'year'
         """
         import httpx
 
         # Map recency to SearXNG time_range parameter
-        time_range_map = {
+        # Note: recency is already validated in execute(), so we use direct lookup
+        time_range_map: dict[str, str | None] = {
             "all_time": None,
             "day": "day",
             "week": "week",
             "month": "month",
             "year": "year",
         }
-        time_range = time_range_map.get(recency)
+        time_range = time_range_map[recency]
 
         params: dict[str, Any] = {
             "q": query,
@@ -140,7 +168,7 @@ class WebSearchTool(BaseTool):
 
             data = response.json()
 
-        # Extract results
+        # Extract results (max_results applied client-side as SearXNG returns full page)
         results = []
         for item in data.get("results", [])[:max_results]:
             result: dict[str, Any] = {

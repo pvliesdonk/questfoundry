@@ -90,6 +90,7 @@ def check_tool_schema(
     tool_id = tool_data.get("id", "unknown")
 
     # Check description for biasing language
+    # Only report one biasing issue per description to avoid duplicate warnings
     description = tool_data.get("description", "")
     for pattern, message in BIASING_PATTERNS:
         if re.search(pattern, description):
@@ -102,6 +103,7 @@ def check_tool_schema(
                     suggestion="Remove role-specific or emphatic language from tool description",
                 )
             )
+            break  # One warning per description is sufficient
 
     # Check input schema
     input_schema = tool_data.get("input_schema", {})
