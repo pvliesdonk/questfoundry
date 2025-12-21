@@ -107,14 +107,31 @@ class ConsultCorpusTool(BaseTool):
 
             self._vector_index = VectorIndex(index_path)
             if self._vector_index.is_available and self._vector_index.has_vectors():
-                # Get embedding provider for query embedding
-                from questfoundry.runtime.corpus.embeddings import get_embedding_provider
+                # Auto-detect the first available model from stored embeddings
+                stored_model = self._vector_index.get_first_available_model()
+                if stored_model:
+                    # Get embedding provider that matches the stored model
+                    from questfoundry.runtime.corpus.embeddings import get_embedding_provider
 
-                self._embedding_provider = await get_embedding_provider()
-                if self._embedding_provider:
-                    logger.info(f"Hybrid search enabled with {self._embedding_provider.model}")
+                    # Determine provider type from model name
+                    if stored_model.startswith("text-embedding"):
+                        provider_name = "openai"
+                    else:
+                        provider_name = "ollama"
+
+                    self._embedding_provider = await get_embedding_provider(
+                        provider_name=provider_name, model=stored_model
+                    )
+                    if self._embedding_provider:
+                        # Set vector index to use the same model
+                        self._vector_index.set_model(
+                            stored_model, self._embedding_provider.dimension
+                        )
+                        logger.info(f"Hybrid search enabled with {stored_model}")
+                    else:
+                        logger.debug(f"Embedding provider not available for {stored_model}")
                 else:
-                    logger.debug("Embedding provider not available for query embedding")
+                    logger.debug("No model found in vector index")
             else:
                 logger.debug("Vector index not available or empty")
 

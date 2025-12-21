@@ -29,11 +29,15 @@ if TYPE_CHECKING:
     from questfoundry.runtime.providers import LLMProvider, OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from questfoundry.cli_output import DelegationResultInfo, StatusReporter, create_log_handler
+
+# Load .env file for environment variables (OLLAMA_HOST, API keys, etc.)
+load_dotenv()
 
 # Global verbosity level (set by callback)
 _verbosity: int = 0
@@ -2349,9 +2353,23 @@ def corpus_status(
             console.print(
                 f"  [dim]Not available ({vec_status.get('reason', 'sqlite-vec not loaded')})[/dim]"
             )
-        elif vec_status["vector_count"] == 0:
+        elif "embeddings" in vec_status:
+            # Multi-model format
+            embeddings = vec_status["embeddings"]
+            if not embeddings:
+                console.print("  [dim]No embeddings (run 'qf corpus build --embeddings')[/dim]")
+            else:
+                console.print(f"  [green]✓[/green] {len(embeddings)} model(s):")
+                for emb in embeddings:
+                    console.print(
+                        f"    • {emb['model']} ({emb['dimension']}d): {emb['vector_count']} vectors"
+                    )
+                    if emb.get("indexed_at"):
+                        console.print(f"      Built: {emb['indexed_at']}")
+        elif vec_status.get("vector_count", 0) == 0:
             console.print("  [dim]No embeddings (run 'qf corpus build --embeddings')[/dim]")
         else:
+            # Single model format (legacy)
             console.print(f"  [green]✓[/green] {vec_status['vector_count']} embeddings")
             if vec_status.get("model"):
                 console.print(f"  Model: {vec_status['model']} ({vec_status['dimension']}d)")

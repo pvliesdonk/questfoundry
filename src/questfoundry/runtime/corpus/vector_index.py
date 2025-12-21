@@ -2,11 +2,14 @@
 Vector index for corpus semantic search.
 
 Extends the SQLite corpus index with sqlite-vec for vector similarity search.
+Supports multiple embedding models by using model-specific tables
+(e.g., corpus_vectors_nomic_embed_text, corpus_vectors_text_embedding_3_small).
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import struct
 from pathlib import Path
@@ -29,26 +32,42 @@ def deserialize_float32(data: bytes) -> list[float]:
     return list(struct.unpack(f"{count}f", data))
 
 
+def _sanitize_model_name(model: str) -> str:
+    """Convert model name to valid SQLite table suffix."""
+    # Replace non-alphanumeric chars with underscores, collapse multiple
+    sanitized = re.sub(r"[^a-zA-Z0-9]+", "_", model)
+    return sanitized.strip("_").lower()
+
+
 class VectorIndex:
     """
     Vector index using sqlite-vec.
 
     Stores embeddings for corpus sections and provides KNN search.
-    Integrated with the main corpus index database.
+    Supports multiple embedding models via separate tables.
     """
 
-    def __init__(self, index_path: Path, dimension: int = 768):
+    def __init__(self, index_path: Path, model: str | None = None, dimension: int = 768):
         """
         Initialize vector index.
 
         Args:
             index_path: Path to the SQLite database (same as corpus index)
+            model: Embedding model name (required for building, optional for status)
             dimension: Embedding vector dimension
         """
         self._index_path = index_path
+        self._model = model
         self._dimension = dimension
         self._conn: sqlite3.Connection | None = None
         self._vec_available = False
+
+    @property
+    def _table_name(self) -> str:
+        """Get model-specific table name."""
+        if self._model is None:
+            raise ValueError("Model name required for table operations")
+        return f"corpus_vectors_{_sanitize_model_name(self._model)}"
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get or create database connection with sqlite-vec."""
@@ -74,7 +93,7 @@ class VectorIndex:
         return self._conn
 
     def _ensure_schema(self) -> None:
-        """Create vector table if not exists, or recreate if dimension changed."""
+        """Create or migrate metadata table (schema only, not model-specific tables)."""
         if not self._vec_available:
             return
 
@@ -82,34 +101,33 @@ class VectorIndex:
         if conn is None:
             return
 
-        # Track embedding metadata (create first so we can check stored dimension)
+        # Check if metadata table exists and has correct schema
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='corpus_embedding_meta'"
+        )
+        if cursor.fetchone() is not None:
+            # Table exists, check if it has the new schema (model column)
+            cursor = conn.execute("PRAGMA table_info(corpus_embedding_meta)")
+            columns = {row[1] for row in cursor.fetchall()}
+            if "model" not in columns:
+                # Old schema (any version without model column) - drop and recreate
+                logger.info("Migrating corpus_embedding_meta to new model-based schema")
+                conn.execute("DROP TABLE corpus_embedding_meta")
+                conn.commit()
+
+        # Create metadata table with new schema (shared across all models)
+        # Keys: model -> (dimension, indexed_at)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS corpus_embedding_meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
+                model TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (model, key)
             )
             """
         )
-
-        # Check if vector table exists and has correct dimension
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='corpus_vectors'"
-        )
-        table_exists = cursor.fetchone() is not None
-
-        # Only create table if it doesn't exist
-        # Dimension changes are handled in build_vectors() with force=True
-        if not table_exists:
-            conn.execute(
-                f"""
-                CREATE VIRTUAL TABLE corpus_vectors USING vec0(
-                    section_id INTEGER PRIMARY KEY,
-                    embedding FLOAT[{self._dimension}]
-                )
-                """
-            )
-            conn.commit()
+        conn.commit()
 
     @property
     def is_available(self) -> bool:
@@ -128,8 +146,62 @@ class VectorIndex:
             self._conn.close()
             self._conn = None
 
+    def get_all_embeddings(self) -> list[dict[str, Any]]:
+        """Get status of all available embedding sets (all models)."""
+        if not self.is_available:
+            return []
+
+        conn = self._get_connection()
+        embeddings = []
+
+        # Try to get models from metadata
+        try:
+            cursor = conn.execute("SELECT DISTINCT model FROM corpus_embedding_meta")
+            models = [row["model"] for row in cursor.fetchall()]
+
+            for model in models:
+                table_name = f"corpus_vectors_{_sanitize_model_name(model)}"
+
+                # Check if table exists
+                cursor = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table_name,),
+                )
+                if cursor.fetchone() is None:
+                    continue
+
+                # Count vectors in this table
+                cursor = conn.execute(f"SELECT COUNT(*) as count FROM {table_name}")  # noqa: S608
+                row = cursor.fetchone()
+                vector_count = row["count"] if row else 0
+
+                if vector_count == 0:
+                    continue
+
+                # Get metadata for this model
+                cursor = conn.execute(
+                    "SELECT key, value FROM corpus_embedding_meta WHERE model = ?",
+                    (model,),
+                )
+                meta = {row["key"]: row["value"] for row in cursor.fetchall()}
+
+                embeddings.append(
+                    {
+                        "model": model,
+                        "dimension": int(meta.get("dimension", 0)),
+                        "vector_count": vector_count,
+                        "indexed_at": meta.get("indexed_at"),
+                    }
+                )
+        except Exception as e:
+            logger.debug(f"Error querying embeddings metadata: {e}")
+            # If metadata table doesn't exist or has wrong schema, return empty
+            pass
+
+        return embeddings
+
     def get_status(self) -> dict[str, Any]:
-        """Get vector index status."""
+        """Get vector index status for current model (or general status if no model)."""
         if not self.is_available:
             return {
                 "available": False,
@@ -138,19 +210,46 @@ class VectorIndex:
 
         conn = self._get_connection()
 
-        # Count vectors
-        cursor = conn.execute("SELECT COUNT(*) as count FROM corpus_vectors")
-        vector_count = cursor.fetchone()["count"]
+        # If no model specified, return general status
+        if self._model is None:
+            all_embeddings = self.get_all_embeddings()
+            return {
+                "available": True,
+                "embeddings": all_embeddings,
+                "embedding_count": len(all_embeddings),
+            }
 
-        # Get metadata
-        cursor = conn.execute("SELECT key, value FROM corpus_embedding_meta")
+        # Check if our model's table exists
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (self._table_name,),
+        )
+        if cursor.fetchone() is None:
+            return {
+                "available": True,
+                "vector_count": 0,
+                "model": self._model,
+                "dimension": self._dimension,
+                "indexed_at": None,
+            }
+
+        # Count vectors
+        cursor = conn.execute(f"SELECT COUNT(*) as count FROM {self._table_name}")  # noqa: S608
+        row = cursor.fetchone()
+        vector_count = row["count"] if row else 0
+
+        # Get metadata for this model
+        cursor = conn.execute(
+            "SELECT key, value FROM corpus_embedding_meta WHERE model = ?",
+            (self._model,),
+        )
         meta = {row["key"]: row["value"] for row in cursor.fetchall()}
 
         return {
             "available": True,
             "vector_count": vector_count,
-            "dimension": self._dimension,
-            "model": meta.get("model"),
+            "model": self._model,
+            "dimension": int(meta.get("dimension", self._dimension)),
             "indexed_at": meta.get("indexed_at"),
         }
 
@@ -172,23 +271,22 @@ class VectorIndex:
         if not self.is_available:
             raise RuntimeError("sqlite-vec not available")
 
+        # Set model and dimension from provider
+        self._model = provider.model
+        self._dimension = provider.dimension
+
         conn = self._get_connection()
+        table_name = self._table_name
 
-        # Check stored dimension and handle dimension changes
-        cursor = conn.execute("SELECT value FROM corpus_embedding_meta WHERE key='dimension'")
-        row = cursor.fetchone()
-        stored_dim = int(row["value"]) if row else None
-
-        # Check if dimension changed - need to recreate table
-        if stored_dim is not None and stored_dim != self._dimension:
-            logger.info(
-                f"Vector dimension changed ({stored_dim} -> {self._dimension}), "
-                "recreating vector table"
-            )
-            conn.execute("DROP TABLE IF EXISTS corpus_vectors")
+        # Ensure model-specific table exists
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        )
+        if cursor.fetchone() is None:
             conn.execute(
                 f"""
-                CREATE VIRTUAL TABLE corpus_vectors USING vec0(
+                CREATE VIRTUAL TABLE {table_name} USING vec0(
                     section_id INTEGER PRIMARY KEY,
                     embedding FLOAT[{self._dimension}]
                 )
@@ -198,11 +296,13 @@ class VectorIndex:
 
         # Check if rebuild needed
         if not force:
-            cursor = conn.execute("SELECT COUNT(*) as count FROM corpus_vectors")
+            cursor = conn.execute(f"SELECT COUNT(*) as count FROM {table_name}")  # noqa: S608
             row = cursor.fetchone()
             existing = row["count"] if row else 0
             if existing > 0:
-                logger.info(f"Vector index already has {existing} vectors, skipping")
+                logger.info(
+                    f"Vector index already has {existing} vectors for {self._model}, skipping"
+                )
                 return 0
 
         # Get all sections from corpus index
@@ -222,7 +322,7 @@ class VectorIndex:
 
         # Clear existing vectors if force rebuild
         if force:
-            conn.execute("DELETE FROM corpus_vectors")
+            conn.execute(f"DELETE FROM {table_name}")  # noqa: S608
 
         # Batch embed sections
         batch_size = 20
@@ -243,7 +343,7 @@ class VectorIndex:
                 for j, row in enumerate(batch):
                     vector_bytes = serialize_float32(result.embeddings[j])
                     conn.execute(
-                        "INSERT INTO corpus_vectors (section_id, embedding) VALUES (?, ?)",
+                        f"INSERT INTO {table_name} (section_id, embedding) VALUES (?, ?)",  # noqa: S608
                         (row["id"], vector_bytes),
                     )
 
@@ -254,19 +354,23 @@ class VectorIndex:
                 logger.error(f"Failed to embed batch {i}: {e}")
                 raise
 
-        # Update metadata
+        # Update metadata for this model
         from datetime import datetime
 
         conn.execute(
+            "DELETE FROM corpus_embedding_meta WHERE model = ?",
+            (self._model,),
+        )
+        conn.execute(
             """
-            INSERT OR REPLACE INTO corpus_embedding_meta (key, value)
-            VALUES ('model', ?), ('indexed_at', ?), ('dimension', ?)
+            INSERT INTO corpus_embedding_meta (model, key, value)
+            VALUES (?, 'dimension', ?), (?, 'indexed_at', ?)
             """,
-            (provider.model, datetime.now().isoformat(), str(provider.dimension)),
+            (self._model, str(self._dimension), self._model, datetime.now().isoformat()),
         )
 
         conn.commit()
-        logger.info(f"Embedded {total_embedded} sections")
+        logger.info(f"Embedded {total_embedded} sections with {self._model} ({self._dimension}d)")
         return total_embedded
 
     def vector_search(
@@ -287,12 +391,26 @@ class VectorIndex:
         if not self.is_available:
             return []
 
+        if self._model is None:
+            logger.warning("No model specified for vector search")
+            return []
+
         conn = self._get_connection()
+        table_name = self._table_name
+
+        # Check if table exists
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        )
+        if cursor.fetchone() is None:
+            return []
+
         query_bytes = serialize_float32(query_embedding)
 
         # KNN search using sqlite-vec
         cursor = conn.execute(
-            """
+            f"""
             SELECT
                 v.section_id,
                 v.distance,
@@ -301,13 +419,13 @@ class VectorIndex:
                 f.path,
                 f.title,
                 f.cluster
-            FROM corpus_vectors v
+            FROM {table_name} v
             JOIN corpus_sections s ON v.section_id = s.id
             JOIN corpus_files f ON s.file_id = f.id
             WHERE v.embedding MATCH ?
             ORDER BY v.distance
             LIMIT ?
-            """,
+            """,  # noqa: S608
             (query_bytes, limit),
         )
 
@@ -336,11 +454,39 @@ class VectorIndex:
         return results
 
     def has_vectors(self) -> bool:
-        """Check if vector index has been built."""
+        """Check if vector index has been built (for current model or any model)."""
         if not self.is_available:
             return False
 
         conn = self._get_connection()
-        cursor = conn.execute("SELECT COUNT(*) as count FROM corpus_vectors")
+
+        # If no model specified, check if ANY model has vectors
+        if self._model is None:
+            return len(self.get_all_embeddings()) > 0
+
+        table_name = self._table_name
+
+        # Check if table exists
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        )
+        if cursor.fetchone() is None:
+            return False
+
+        cursor = conn.execute(f"SELECT COUNT(*) as count FROM {table_name}")  # noqa: S608
         row = cursor.fetchone()
         return bool(row["count"] > 0) if row else False
+
+    def get_first_available_model(self) -> str | None:
+        """Get the first available model with vectors (for auto-detection)."""
+        embeddings = self.get_all_embeddings()
+        if embeddings:
+            model: str = embeddings[0]["model"]
+            return model
+        return None
+
+    def set_model(self, model: str, dimension: int) -> None:
+        """Set the model and dimension for this index (for search operations)."""
+        self._model = model
+        self._dimension = dimension

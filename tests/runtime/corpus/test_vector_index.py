@@ -15,9 +15,30 @@ import pytest
 from questfoundry.runtime.corpus.index import CorpusIndex
 from questfoundry.runtime.corpus.vector_index import (
     VectorIndex,
+    _sanitize_model_name,
     deserialize_float32,
     serialize_float32,
 )
+
+
+class TestModelNameSanitization:
+    """Tests for model name sanitization."""
+
+    def test_sanitize_basic(self):
+        """_sanitize_model_name should convert to lowercase with underscores."""
+        assert _sanitize_model_name("nomic-embed-text") == "nomic_embed_text"
+
+    def test_sanitize_openai_model(self):
+        """_sanitize_model_name should handle OpenAI model names."""
+        assert _sanitize_model_name("text-embedding-3-small") == "text_embedding_3_small"
+
+    def test_sanitize_special_chars(self):
+        """_sanitize_model_name should handle special characters."""
+        assert _sanitize_model_name("model.v1:latest") == "model_v1_latest"
+
+    def test_sanitize_strips_edges(self):
+        """_sanitize_model_name should strip leading/trailing underscores."""
+        assert _sanitize_model_name("-model-") == "model"
 
 
 class TestVectorSerialization:
@@ -129,13 +150,14 @@ class TestVectorIndex:
         # Won't have sqlite-vec available in most test environments
         # but should still initialize
         assert vector_index is not None
-        assert vector_index.dimension == 768
+        assert vector_index.dimension == 768  # default dimension
 
-    def test_custom_dimension(self, temp_db: Path):
-        """VectorIndex should accept custom dimension."""
-        vector_index = VectorIndex(temp_db, dimension=1536)
+    def test_init_with_model(self, temp_db: Path):
+        """VectorIndex should accept model parameter."""
+        vector_index = VectorIndex(temp_db, model="test-model", dimension=512)
 
-        assert vector_index.dimension == 1536
+        assert vector_index._model == "test-model"
+        assert vector_index.dimension == 512
 
     def test_close(self, temp_db: Path):
         """close() should release connection."""
@@ -161,6 +183,19 @@ class TestVectorIndex:
 
         vector_index.close()
 
+    def test_get_status_no_model_returns_embeddings_list(self, temp_db: Path):
+        """get_status without model should return embeddings list format."""
+        vector_index = VectorIndex(temp_db)
+
+        if vector_index.is_available:
+            status = vector_index.get_status()
+            # When no model is specified, status returns embeddings list
+            assert "embeddings" in status
+            assert "embedding_count" in status
+            assert isinstance(status["embeddings"], list)
+
+        vector_index.close()
+
     def test_has_vectors_returns_false_initially(self, temp_db: Path):
         """has_vectors should return False before building."""
         vector_index = VectorIndex(temp_db)
@@ -170,6 +205,16 @@ class TestVectorIndex:
         else:
             # If sqlite-vec not available, has_vectors returns False
             assert vector_index.has_vectors() is False
+
+        vector_index.close()
+
+    def test_set_model(self, temp_db: Path):
+        """set_model should update model and dimension."""
+        vector_index = VectorIndex(temp_db)
+        vector_index.set_model("custom-model", 256)
+
+        assert vector_index._model == "custom-model"
+        assert vector_index._dimension == 256
 
         vector_index.close()
 
@@ -212,8 +257,8 @@ class TestVectorIndexWithSqliteVec:
         corpus_index = CorpusIndex(index_path)
         corpus_index.build(corpus_dir)
 
-        # Create vector index
-        vector_index = VectorIndex(index_path, dimension=4)
+        # Create vector index with model name
+        vector_index = VectorIndex(index_path, model="test-model", dimension=4)
 
         return vector_index, corpus_index
 
@@ -226,6 +271,8 @@ class TestVectorIndexWithSqliteVec:
                 import asyncio
 
                 mock_provider = MagicMock()
+                mock_provider.model = "test-model"
+                mock_provider.dimension = 4
                 asyncio.run(vector_index.build_vectors(mock_provider))
 
         corpus_index.close()
@@ -240,4 +287,16 @@ class TestVectorIndexWithSqliteVec:
             assert results == []
 
         corpus_index.close()
+        vector_index.close()
+
+    def test_vector_search_requires_model(self, tmp_path: Path):
+        """vector_search should return empty if no model specified."""
+        index_path = tmp_path / "test.sqlite"
+        vector_index = VectorIndex(index_path)  # No model specified
+
+        if vector_index.is_available:
+            # Should return empty list when no model is set
+            results = vector_index.vector_search([0.1, 0.2, 0.3, 0.4])
+            assert results == []
+
         vector_index.close()
