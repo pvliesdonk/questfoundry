@@ -431,7 +431,7 @@ class RequestLifecycleTransitionTool(BaseTool):
 
         # Check bar results
         bar_results = result.data.get("bar_results", [])
-        failed_bars = [br for br in bar_results if br.get("status") == "red"]
+        failed_bars = [br for br in bar_results if br.get("status") == "fail"]
 
         if failed_bars:
             # Collect failure details

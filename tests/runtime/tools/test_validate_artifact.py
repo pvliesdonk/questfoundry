@@ -264,7 +264,7 @@ class TestQualityBars:
 
         bar_result = result.data["bar_results"][0]
         assert bar_result["bar"] == "nonlinearity"
-        assert bar_result["status"] == "green"
+        assert bar_result["status"] == "pass"
         assert "3 choices" in bar_result["evidence"]
 
     @pytest.mark.asyncio
@@ -295,5 +295,5 @@ class TestQualityBars:
 
         bar_result = result.data["bar_results"][0]
         assert bar_result["bar"] == "accessibility"
-        assert bar_result["status"] == "yellow"
+        assert bar_result["status"] == "warn"
         assert "too short" in bar_result["evidence"]

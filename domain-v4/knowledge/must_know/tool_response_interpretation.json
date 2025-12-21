@@ -16,9 +16,9 @@
   ],
 
   "content": {
-    "type": "reference",
+    "type": "file_ref",
     "format": "markdown",
-    "path": "tool_response_interpretation.md"
+    "file_path": "knowledge/must_know/tool_response_interpretation.md"
   },
 
   "applicable_to": {
