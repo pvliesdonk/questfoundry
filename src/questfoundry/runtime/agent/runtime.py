@@ -37,9 +37,12 @@ from questfoundry.runtime.agent.turn_validator import (
     TurnValidator,
 )
 from questfoundry.runtime.context import (
+    CachedToolResult,
+    CacheScope,
     ContextSecretary,
     Secretary,
     SummarizationPolicy,
+    ToolResultCache,
 )
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
@@ -225,6 +228,11 @@ class AgentRuntime:
             preserve_recent_turns=3,  # Always preserve last 3 turns
             min_turns_to_summarize=5,  # Need at least 5 older turns before summarizing
         )
+
+        # Tool result cache for deduplication (Phase 2 of epic #240)
+        # - ACTIVATION scope: Intra-turn deduplication (same tool called twice in one turn)
+        # - SESSION scope: Static tool caching (consult_* tools across turns)
+        self._tool_cache = ToolResultCache()
 
         # Turn validator for orchestrator enforcement
         self._turn_validator = TurnValidator(studio, turn_validation_config)
@@ -784,7 +792,11 @@ class AgentRuntime:
         turn_number: int | None = None,
     ) -> list[ToolCall]:
         """
-        Execute a list of tool calls.
+        Execute a list of tool calls with caching.
+
+        Uses ToolResultCache for deduplication:
+        - ACTIVATION scope: Prevents same tool called twice in one turn
+        - SESSION scope: Caches static tools (consult_*) across turns
 
         Args:
             tool_calls: List of tool call requests from LLM
@@ -796,23 +808,89 @@ class AgentRuntime:
             List of ToolCall results
         """
         results = []
+
+        # Create activation ID for intra-turn caching
+        activation_id = f"{session_id}:{turn_number}" if session_id and turn_number else None
+
         for tc in tool_calls:
             tool_call = ToolCall(tool_id=tc.name, args=tc.arguments)
             start_time = time.time()
 
-            try:
-                result = await self.execute_tool(
-                    tc.name, tc.arguments, agent, session_id, turn_number
+            # Get caching policy for this tool
+            policy = self._tool_cache.get_policy(tc.name)
+            cached_hit: CachedToolResult | None = None
+
+            # Check activation cache first (intra-turn deduplication)
+            if policy.participate_in_activation_cache and activation_id and session_id:
+                cached_hit = self._tool_cache.lookup(
+                    session_id=session_id,
+                    scope=CacheScope.ACTIVATION,
+                    tool_name=tc.name,
+                    tool_args=tc.arguments,
+                    activation_id=activation_id,
                 )
-                tool_call.result = result.data
-                tool_call.success = result.success
-                tool_call.error = result.error
-                tool_call.execution_time_ms = result.execution_time_ms
-            except Exception as e:
-                tool_call.success = False
-                tool_call.error = str(e)
-                tool_call.execution_time_ms = (time.time() - start_time) * 1000
-                logger.warning(f"Tool call failed: {tc.name} - {e}")
+
+            # Check session cache for static tools (inter-turn caching)
+            if not cached_hit and policy.participate_in_session_cache and session_id:
+                cached_hit = self._tool_cache.lookup(
+                    session_id=session_id,
+                    scope=CacheScope.SESSION,
+                    tool_name=tc.name,
+                    tool_args=tc.arguments,
+                )
+
+            if cached_hit:
+                # Use cached result
+                tool_call.result = {"_cached": True, "_ref": cached_hit.presentation_id}
+                tool_call.success = cached_hit.success
+                tool_call.execution_time_ms = 0.1  # Negligible time for cache hit
+                logger.debug(f"Cache hit for {tc.name}: {cached_hit.presentation_id}")
+            else:
+                # Execute the tool
+                try:
+                    result = await self.execute_tool(
+                        tc.name, tc.arguments, agent, session_id, turn_number
+                    )
+                    tool_call.result = result.data
+                    tool_call.success = result.success
+                    tool_call.error = result.error
+                    tool_call.execution_time_ms = result.execution_time_ms
+
+                    # Cache successful results
+                    if result.success and session_id:
+                        cached_result = CachedToolResult(
+                            tool_name=tc.name,
+                            args_json=json.dumps(tc.arguments, sort_keys=True),
+                            content=result.data,
+                            success=True,
+                        )
+
+                        # Store in activation cache
+                        if policy.participate_in_activation_cache and activation_id:
+                            self._tool_cache.record(
+                                session_id=session_id,
+                                scope=CacheScope.ACTIVATION,
+                                tool_name=tc.name,
+                                tool_args=tc.arguments,
+                                result=cached_result,
+                                activation_id=activation_id,
+                            )
+
+                        # Store in session cache for static tools
+                        if policy.participate_in_session_cache:
+                            self._tool_cache.record(
+                                session_id=session_id,
+                                scope=CacheScope.SESSION,
+                                tool_name=tc.name,
+                                tool_args=tc.arguments,
+                                result=cached_result,
+                            )
+
+                except Exception as e:
+                    tool_call.success = False
+                    tool_call.error = str(e)
+                    tool_call.execution_time_ms = (time.time() - start_time) * 1000
+                    logger.warning(f"Tool call failed: {tc.name} - {e}")
 
             results.append(tool_call)
 
