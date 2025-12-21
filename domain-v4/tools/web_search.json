@@ -27,9 +27,9 @@
       },
       "recency": {
         "type": "string",
-        "enum": ["any", "day", "week", "month", "year"],
-        "default": "any",
-        "description": "Filter by content freshness"
+        "enum": ["all_time", "day", "week", "month", "year"],
+        "default": "all_time",
+        "description": "Filter by content freshness. 'all_time' returns results regardless of date."
       }
     },
     "required": ["query"]
@@ -43,10 +43,10 @@
         "items": {
           "type": "object",
           "properties": {
-            "title": { "type": "string" },
-            "url": { "type": "string" },
-            "snippet": { "type": "string" },
-            "published_date": { "type": "string" }
+            "title": { "type": "string", "description": "Page title" },
+            "url": { "type": "string", "description": "Full URL to the page" },
+            "snippet": { "type": "string", "description": "Content excerpt from the search result" },
+            "published_date": { "type": "string", "description": "Publication date if available (ISO 8601 format)" }
           }
         }
       },

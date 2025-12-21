@@ -28,9 +28,9 @@ if TYPE_CHECKING:
 class BarStatus(str, Enum):
     """Status of a quality bar check."""
 
-    GREEN = "green"  # Passes
-    YELLOW = "yellow"  # Minor issues, can proceed
-    RED = "red"  # Fails, needs fix
+    PASS = "pass"  # Meets requirements
+    WARN = "warn"  # Minor issues, can proceed
+    FAIL = "fail"  # Does not meet requirements, needs fix
 
 
 @dataclass
@@ -137,8 +137,8 @@ class ValidateArtifactTool(BaseTool):
 
         # Determine overall validity
         has_schema_errors = len(schema_errors) > 0
-        has_red_bars = any(br.status == BarStatus.RED for br in bar_results)
-        valid = not has_schema_errors and not has_red_bars
+        has_failed_bars = any(br.status == BarStatus.FAIL for br in bar_results)
+        valid = not has_schema_errors and not has_failed_bars
 
         return ToolResult(
             success=True,
@@ -252,10 +252,10 @@ class ValidateArtifactTool(BaseTool):
             if validator:
                 result = validator(artifact_type, artifact_data)
             else:
-                # Default: pass with note that full validation not implemented
+                # Default: warn with note that full validation not implemented
                 result = BarResult(
                     bar=bar,
-                    status=BarStatus.YELLOW,
+                    status=BarStatus.WARN,
                     evidence=f"Full {bar} validation requires LLM analysis",
                     smallest_fix=None,
                 )
@@ -297,14 +297,14 @@ class ValidateArtifactTool(BaseTool):
         if issues:
             return BarResult(
                 bar="integrity",
-                status=BarStatus.RED,
+                status=BarStatus.FAIL,
                 evidence="; ".join(issues),
                 smallest_fix="Fix broken references or create missing artifacts",
             )
 
         return BarResult(
             bar="integrity",
-            status=BarStatus.GREEN,
+            status=BarStatus.PASS,
             evidence="All references valid (structural check only)",
         )
 
@@ -317,7 +317,7 @@ class ValidateArtifactTool(BaseTool):
         # This requires understanding the story graph - defer to LLM
         return BarResult(
             bar="reachability",
-            status=BarStatus.YELLOW,
+            status=BarStatus.WARN,
             evidence="Reachability analysis requires story graph context (LLM analysis)",
             smallest_fix=None,
         )
@@ -334,21 +334,21 @@ class ValidateArtifactTool(BaseTool):
         if not choices:
             return BarResult(
                 bar="nonlinearity",
-                status=BarStatus.GREEN,
+                status=BarStatus.PASS,
                 evidence="No choices defined (may be terminal or linear by design)",
             )
 
         if len(choices) < 2:
             return BarResult(
                 bar="nonlinearity",
-                status=BarStatus.YELLOW,
+                status=BarStatus.WARN,
                 evidence=f"Only {len(choices)} choice(s) - limited branching",
                 smallest_fix="Consider adding alternative choices for player agency",
             )
 
         return BarResult(
             bar="nonlinearity",
-            status=BarStatus.GREEN,
+            status=BarStatus.PASS,
             evidence=f"Has {len(choices)} choices (content differentiation requires LLM)",
         )
 
@@ -366,13 +366,13 @@ class ValidateArtifactTool(BaseTool):
                 # Has conditions - structural check passes
                 return BarResult(
                     bar="gateways",
-                    status=BarStatus.GREEN,
+                    status=BarStatus.PASS,
                     evidence=f"Has {field_name} defined (enforcement logic requires runtime)",
                 )
 
         return BarResult(
             bar="gateways",
-            status=BarStatus.GREEN,
+            status=BarStatus.PASS,
             evidence="No gateway conditions defined",
         )
 
@@ -384,7 +384,7 @@ class ValidateArtifactTool(BaseTool):
         """
         return BarResult(
             bar="style",
-            status=BarStatus.YELLOW,
+            status=BarStatus.WARN,
             evidence="Style consistency requires LLM analysis",
             smallest_fix=None,
         )
@@ -406,14 +406,14 @@ class ValidateArtifactTool(BaseTool):
         if has_random:
             return BarResult(
                 bar="determinism",
-                status=BarStatus.YELLOW,
+                status=BarStatus.WARN,
                 evidence="Content mentions randomness - verify it's intentional and documented",
                 smallest_fix="Document random mechanics clearly for players",
             )
 
         return BarResult(
             bar="determinism",
-            status=BarStatus.GREEN,
+            status=BarStatus.PASS,
             evidence="No random elements detected",
         )
 
@@ -425,7 +425,7 @@ class ValidateArtifactTool(BaseTool):
         """
         return BarResult(
             bar="presentation",
-            status=BarStatus.YELLOW,
+            status=BarStatus.WARN,
             evidence="Spoiler safety requires LLM analysis of content flow",
             smallest_fix=None,
         )
@@ -441,7 +441,7 @@ class ValidateArtifactTool(BaseTool):
         if not choices:
             return BarResult(
                 bar="accessibility",
-                status=BarStatus.GREEN,
+                status=BarStatus.PASS,
                 evidence="No navigation choices to evaluate",
             )
 
@@ -454,13 +454,13 @@ class ValidateArtifactTool(BaseTool):
         if issues:
             return BarResult(
                 bar="accessibility",
-                status=BarStatus.YELLOW,
+                status=BarStatus.WARN,
                 evidence="; ".join(issues),
                 smallest_fix="Add clearer, more descriptive choice text",
             )
 
         return BarResult(
             bar="accessibility",
-            status=BarStatus.GREEN,
+            status=BarStatus.PASS,
             evidence=f"All {len(choices)} choices have adequate text",
         )

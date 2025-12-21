@@ -35,7 +35,8 @@
       },
       "layer": {
         "type": "string",
-        "description": "Which knowledge layer this belongs to"
+        "enum": ["constitution", "must_know", "should_know", "role_specific", "lookup"],
+        "description": "Which knowledge layer this entry belongs to. See domain-v4/knowledge/layers.json for layer definitions."
       },
       "content": {
         "type": "string",

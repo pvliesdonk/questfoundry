@@ -73,7 +73,8 @@ class WebSearchTool(BaseTool):
         """Execute web search."""
         query = args.get("query", "")
         max_results = args.get("max_results", 5)
-        categories = args.get("categories", ["general"])
+        domain_filter = args.get("domain_filter")
+        recency = args.get("recency", "all_time")
 
         if not query.strip():
             return ToolResult(
@@ -83,12 +84,12 @@ class WebSearchTool(BaseTool):
             )
 
         try:
-            results = await self._search(query, max_results, categories)
+            results = await self._search(query, max_results, domain_filter, recency)
 
             return ToolResult(
                 success=True,
                 data={
-                    "query": query,
+                    "query_used": query,
                     "result_count": len(results),
                     "results": results,
                 },
@@ -98,16 +99,44 @@ class WebSearchTool(BaseTool):
             raise ToolExecutionError(f"Web search failed: {e}") from e
 
     async def _search(
-        self, query: str, max_results: int, categories: list[str]
+        self,
+        query: str,
+        max_results: int,
+        domain_filter: str | None,
+        recency: str,
     ) -> list[dict[str, Any]]:
-        """Perform search via SearXNG API."""
+        """Perform search via SearXNG API.
+
+        Args:
+            query: Search query string
+            max_results: Maximum results to return
+            domain_filter: Optional domain restriction (e.g., 'wikipedia.org', 'gov')
+            recency: Time filter - 'all_time', 'day', 'week', 'month', 'year'
+        """
         import httpx
 
-        params = {
-            "q": query,
-            "format": "json",
-            "categories": ",".join(categories),
+        # Build query with domain filter if specified
+        search_query = query
+        if domain_filter:
+            search_query = f"site:{domain_filter} {query}"
+
+        # Map recency to SearXNG time_range parameter
+        time_range_map = {
+            "all_time": None,
+            "day": "day",
+            "week": "week",
+            "month": "month",
+            "year": "year",
         }
+        time_range = time_range_map.get(recency)
+
+        params: dict[str, Any] = {
+            "q": search_query,
+            "format": "json",
+            "categories": "general",
+        }
+        if time_range:
+            params["time_range"] = time_range
 
         async with httpx.AsyncClient(timeout=SEARXNG_TIMEOUT) as client:
             response = await client.get(f"{SEARXNG_URL}/search", params=params)
@@ -118,14 +147,15 @@ class WebSearchTool(BaseTool):
         # Extract results
         results = []
         for item in data.get("results", [])[:max_results]:
-            results.append(
-                {
-                    "title": item.get("title", ""),
-                    "url": item.get("url", ""),
-                    "snippet": item.get("content", ""),
-                    "engine": item.get("engine", ""),
-                }
-            )
+            result: dict[str, Any] = {
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", ""),
+            }
+            # Include published_date if available
+            if item.get("publishedDate"):
+                result["published_date"] = item.get("publishedDate")
+            results.append(result)
 
         return results
 

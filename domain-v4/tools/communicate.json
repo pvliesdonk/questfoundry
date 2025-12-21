@@ -2,7 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "communicate",
   "name": "Communicate with Customer",
-  "description": "Send a message to the human customer. This is the ONLY way orchestrators communicate with humans - all output must go through this tool.\n\nMessage types:\n- status: Brief progress update (non-blocking)\n- question: Need input from customer (blocks until answered)\n- notification: Deliverable ready or milestone reached (non-blocking)\n- error: Something failed or needs attention (may block depending on severity)\n\nOrchestrators must end every turn with either this tool or delegate.",
+  "description": "Send a message to the human customer.\n\nMessage types:\n- status: Brief progress update (non-blocking)\n- question: Need input from customer (blocks until answered)\n- notification: Deliverable ready or milestone reached (non-blocking)\n- error: Something failed or needs attention (may block depending on severity)",
 
   "terminates_turn": true,
   "summarization_policy": "preserve",

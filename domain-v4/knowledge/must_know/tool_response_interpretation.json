@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "tool_response_interpretation",
+  "name": "Tool Response Interpretation",
+  "layer": "must_know",
+
+  "summary": "How to interpret tool responses: distinguish execution outcome, validation result, and recommended action.",
+
+  "keywords": ["tools", "responses", "interpretation", "action_outcome", "recovery_action"],
+
+  "triggers": [
+    "tool returned an error",
+    "how to interpret tool result",
+    "what does action_outcome mean",
+    "tool says rejected"
+  ],
+
+  "content": {
+    "type": "inline",
+    "format": "markdown",
+    "text": "## Interpreting Tool Responses\n\nTool responses separate three distinct concerns. Always check each axis:\n\n### 1. Execution Outcome (`action_outcome`)\n\nDid the operation apply?\n\n| Value | Meaning | Your Action |\n|-------|---------|-------------|\n| `saved` | Artifact was persisted | Proceed |\n| `rejected` | Operation refused | Fix issues and retry |\n| `deferred` | Queued for later | Wait or proceed |\n\n### 2. Quality Assessment (`validation_result`, `overall_assessment`)\n\nIs the data acceptable?\n\n| Value | Meaning | Your Action |\n|-------|---------|-------------|\n| `pass` | Meets requirements | Proceed |\n| `warn` | Minor issues | Consider fixing or proceed |\n| `fail` | Does not meet requirements | Must fix before proceeding |\n\n### 3. Recommended Action (`recommendation`, `recovery_action`)\n\nWhat should happen next?\n\n| Field | Scope | Values |\n|-------|-------|--------|\n| `recommendation` | Orchestrator decision | proceed, rework, escalate, hold |\n| `recovery_action` | Specific fix instruction | Read this FIRST and follow it |\n\n### Priority: Always Read `recovery_action` First\n\nWhen a tool returns `action_outcome: rejected`, the `recovery_action` field tells you exactly what to fix. Follow its instructions before retrying.\n\n### Common Mistake\n\n**Wrong**: Retrying the same input after `action_outcome: rejected`\n**Right**: Reading `recovery_action`, making the specified changes, then retrying\n\n### Example: save_artifact Response\n\n```json\n{\n  \"action_outcome\": \"rejected\",\n  \"rejection_reason\": \"validation_failed\",\n  \"recovery_action\": \"Rename 'content' to 'prose' and add required 'section_id' field\",\n  \"errors\": [...]\n}\n```\n\n**Do**: Rename the field, add section_id, retry\n**Don't**: Retry with the same payload hoping it works"
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator", "creator", "validator", "researcher", "curator"]
+  },
+
+  "related_entries": ["delegation_protocol", "runtime_guidelines_core"],
+
+  "tags": ["runtime", "tools", "interpretation", "semantic"]
+}
