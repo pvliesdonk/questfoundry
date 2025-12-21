@@ -22,22 +22,6 @@ from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
 
 
-def _get_choice_target(choice: dict[str, Any]) -> str | None:
-    """Extract target anchor from a choice object.
-
-    Handles field name variations from LLM-created data:
-    - Schema-correct: "target_anchor"
-    - Common LLM mistake: "target"
-
-    Args:
-        choice: A choice or choice_intent object
-
-    Returns:
-        The target anchor ID, or None if not found
-    """
-    return choice.get("target_anchor") or choice.get("target")
-
-
 @dataclass
 class NodeInfo:
     """Information about a node in the story graph."""
@@ -201,10 +185,11 @@ class AnalyzeStoryGraphTool(BaseTool):
             )
 
             # Extract outgoing connections from choice_intents (deduplicate)
+            # choice_intents are objects with target_anchor field
             choice_intents = brief.get("choice_intents", [])
             for choice in choice_intents:
                 if isinstance(choice, dict):
-                    target = _get_choice_target(choice)
+                    target = choice.get("target_anchor")
                     if target and target not in node.outgoing:
                         node.outgoing.append(target)
 
@@ -234,11 +219,11 @@ class AnalyzeStoryGraphTool(BaseTool):
                     existing.artifact_id = section.get("_id", "")
                     # Also update title from section when it becomes authoritative
                     existing.title = section.get("title", existing.title)
-                # Merge outgoing connections from choices
+                # Merge outgoing connections (choices can be objects with target_anchor)
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
                     if isinstance(choice, dict):
-                        target = _get_choice_target(choice)
+                        target = choice.get("target_anchor")
                         if target and target not in existing.outgoing:
                             existing.outgoing.append(target)
             else:
@@ -249,11 +234,11 @@ class AnalyzeStoryGraphTool(BaseTool):
                     lifecycle_state=lifecycle,
                     artifact_type="section",
                 )
-                # Extract outgoing connections from choices
+                # choices are objects with target_anchor field
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
                     if isinstance(choice, dict):
-                        target = _get_choice_target(choice)
+                        target = choice.get("target_anchor")
                         if target and target not in node.outgoing:
                             node.outgoing.append(target)
                 analysis.nodes[section_anchor] = node
