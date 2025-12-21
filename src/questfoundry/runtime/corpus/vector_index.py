@@ -104,12 +104,17 @@ class VectorIndex:
             row = cursor.fetchone()
             stored_dim = int(row["value"]) if row else None
 
-            if stored_dim is not None and stored_dim != self._dimension:
-                # Dimension mismatch - drop and recreate
-                logger.info(
-                    f"Vector dimension changed ({stored_dim} -> {self._dimension}), "
-                    "rebuilding vector index"
-                )
+            # Drop and recreate if dimension mismatch OR if no dimension stored (unknown state)
+            if stored_dim is None or stored_dim != self._dimension:
+                if stored_dim is not None:
+                    logger.info(
+                        f"Vector dimension changed ({stored_dim} -> {self._dimension}), "
+                        "rebuilding vector index"
+                    )
+                else:
+                    logger.info(
+                        f"Vector table exists but dimension unknown, recreating with {self._dimension}d"
+                    )
                 conn.execute("DROP TABLE corpus_vectors")
                 table_exists = False
 
