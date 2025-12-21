@@ -74,7 +74,7 @@ class VectorIndex:
         return self._conn
 
     def _ensure_schema(self) -> None:
-        """Create vector table if not exists."""
+        """Create vector table if not exists, or recreate if dimension changed."""
         if not self._vec_available:
             return
 
@@ -82,18 +82,7 @@ class VectorIndex:
         if conn is None:
             return
 
-        # Create virtual table for vector search
-        # Note: vec0 requires exact dimension in schema
-        conn.execute(
-            f"""
-            CREATE VIRTUAL TABLE IF NOT EXISTS corpus_vectors USING vec0(
-                section_id INTEGER PRIMARY KEY,
-                embedding FLOAT[{self._dimension}]
-            )
-            """
-        )
-
-        # Track embedding metadata
+        # Track embedding metadata (create first so we can check stored dimension)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS corpus_embedding_meta (
@@ -102,6 +91,39 @@ class VectorIndex:
             )
             """
         )
+
+        # Check if vector table exists and has correct dimension
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='corpus_vectors'"
+        )
+        table_exists = cursor.fetchone() is not None
+
+        if table_exists:
+            # Check stored dimension
+            cursor = conn.execute("SELECT value FROM corpus_embedding_meta WHERE key='dimension'")
+            row = cursor.fetchone()
+            stored_dim = int(row["value"]) if row else None
+
+            if stored_dim is not None and stored_dim != self._dimension:
+                # Dimension mismatch - drop and recreate
+                logger.info(
+                    f"Vector dimension changed ({stored_dim} -> {self._dimension}), "
+                    "rebuilding vector index"
+                )
+                conn.execute("DROP TABLE corpus_vectors")
+                table_exists = False
+
+        if not table_exists:
+            # Create virtual table for vector search
+            # Note: vec0 requires exact dimension in schema
+            conn.execute(
+                f"""
+                CREATE VIRTUAL TABLE corpus_vectors USING vec0(
+                    section_id INTEGER PRIMARY KEY,
+                    embedding FLOAT[{self._dimension}]
+                )
+                """
+            )
 
         conn.commit()
 
