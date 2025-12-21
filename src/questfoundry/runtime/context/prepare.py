@@ -118,7 +118,7 @@ def _trim_messages_to_limit(
 
 def prepare_context(
     messages: list[LLMMessage],
-    agent_id: str,
+    _agent_id: str,
     config: ContextConfig | None = None,
 ) -> PreparedContext:
     """Prepare context for LLM call with summarization.
@@ -131,7 +131,7 @@ def prepare_context(
 
     Args:
         messages: The full message list to be sent to the LLM
-        agent_id: The agent making the call (for per-agent tracking)
+        _agent_id: The agent making the call (reserved for per-agent tracking)
         config: Context configuration (uses defaults if not provided)
 
     Returns:
@@ -148,36 +148,12 @@ def prepare_context(
     tokens = estimate_tokens(result_messages)
 
     # Step 2: Tool summarization at 70% threshold
-    tool_threshold_tokens = int(config.max_context_tokens * config.tool_summarization_threshold)
-    if tokens >= tool_threshold_tokens:
-        # For now, we just log that tool summarization would apply
-        # The actual tool summarization is handled by Secretary in _tool_results_to_messages
-        # This is a placeholder for future centralization
-        events.append(
-            SummarizationEvent(
-                kind=SummarizationEventKind.TOOL_SUMMARIZATION,
-                before_tokens=tokens,
-                after_tokens=tokens,  # Will be updated when we centralize
-                details={"threshold": config.tool_summarization_threshold, "agent_id": agent_id},
-            )
-        )
+    # Tool summarization is currently handled by Secretary in _tool_results_to_messages.
+    # We don't record placeholder events here to avoid misleading metrics.
 
     # Step 3: Context summarization at 90% threshold
-    context_threshold_tokens = int(
-        config.max_context_tokens * config.context_summarization_threshold
-    )
-    if tokens >= context_threshold_tokens:
-        # For now, log that context summarization would apply
-        # The actual summarization is handled by ContextSecretary
-        # This is a placeholder for future centralization
-        events.append(
-            SummarizationEvent(
-                kind=SummarizationEventKind.CONTEXT_SUMMARIZATION,
-                before_tokens=tokens,
-                after_tokens=tokens,  # Will be updated when we centralize
-                details={"threshold": config.context_summarization_threshold, "agent_id": agent_id},
-            )
-        )
+    # Context summarization is currently handled by _apply_llm_summarization in runtime.py.
+    # We don't record placeholder events here to avoid misleading metrics.
 
     # Step 4: Hard guardrail - never exceed max tokens
     if tokens > config.hard_max_tokens:

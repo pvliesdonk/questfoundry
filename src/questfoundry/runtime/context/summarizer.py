@@ -146,7 +146,17 @@ def _messages_to_text(messages: list[dict[str, Any]]) -> str:
 
 
 def _estimate_tokens(text: str) -> int:
-    """Estimate token count using 4 chars per token heuristic."""
+    """Estimate token count using 4 chars per token heuristic.
+
+    This is a rough approximation. Actual tokenization varies by model:
+    - GPT models: ~4 chars/token for English prose
+    - Claude: similar to GPT
+    - Some languages/code may have different ratios
+
+    For context management decisions, this heuristic provides sufficient
+    accuracy. Critical limits use conservative thresholds to account for
+    estimation error.
+    """
     return len(text) // 4
 
 
@@ -167,7 +177,10 @@ async def summarize_messages(
         model: Model to use (defaults to fast model for provider)
 
     Returns:
-        SummarizationResult with summary text and metadata
+        SummarizationResult with summary text and metadata.
+        On failure, returns success=False with empty summary and original
+        token count (no reduction). Callers should check success and may
+        fall back to simpler trimming strategies.
     """
     from questfoundry.runtime.providers.base import InvokeOptions, LLMMessage
 

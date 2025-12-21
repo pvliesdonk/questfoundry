@@ -47,6 +47,7 @@ from questfoundry.runtime.context import (
     create_summary_message,
     get_fast_model,
     prepare_context,
+    render_cached_hit_message,
     summarize_messages,
 )
 from questfoundry.runtime.observability import EventType
@@ -136,6 +137,11 @@ STOP_TOOL_NAMES = frozenset(
 
 # Maximum consecutive failures before giving up
 MAX_CONSECUTIVE_FAILURES = 3
+
+# Context management constants
+DEFAULT_CONTEXT_LIMIT = 128000  # Default context window for modern models
+CONTEXT_SUMMARIZATION_THRESHOLD = 0.9  # Apply LLM summarization at 90% usage
+CONTEXT_HARD_GUARDRAIL = 0.95  # Hard trim at 95% to prevent overflow
 
 
 class AgentRuntime:
@@ -319,11 +325,11 @@ class AgentRuntime:
         total_chars = sum(len(m.content) for m in messages)
         estimated_tokens = total_chars // 4
 
-        context_limit = self._context_limit or 128000
+        context_limit = self._context_limit or DEFAULT_CONTEXT_LIMIT
         usage_fraction = estimated_tokens / context_limit
 
-        # Only apply at 90% threshold
-        if usage_fraction < 0.9:
+        # Only apply at summarization threshold (90%)
+        if usage_fraction < CONTEXT_SUMMARIZATION_THRESHOLD:
             return messages
 
         logger.info(
@@ -949,8 +955,8 @@ class AgentRuntime:
                 )
 
             if cached_hit:
-                # Use cached result
-                tool_call.result = {"_cached": True, "_ref": cached_hit.presentation_id}
+                # Use cached result with informative message for LLM context
+                tool_call.result = render_cached_hit_message(tc.name, cached_hit, policy)
                 tool_call.success = cached_hit.success
                 tool_call.execution_time_ms = 0.1  # Negligible time for cache hit
                 logger.debug(f"Cache hit for {tc.name}: {cached_hit.presentation_id}")
@@ -1442,9 +1448,10 @@ class AgentRuntime:
 
                 # Prepare context with hard guardrail (last resort trimming)
                 # This is the final safety net for context management
+                context_limit = self._context_limit or DEFAULT_CONTEXT_LIMIT
                 context_config = ContextConfig(
-                    max_context_tokens=self._context_limit or 128000,
-                    hard_max_tokens=int((self._context_limit or 128000) * 0.95),
+                    max_context_tokens=context_limit,
+                    hard_max_tokens=int(context_limit * CONTEXT_HARD_GUARDRAIL),
                 )
                 prepared = prepare_context(messages, agent.id, context_config)
                 if prepared.was_modified:
@@ -1663,7 +1670,11 @@ class AgentRuntime:
             final_content = response.content if response else ""
             # Store only this turn's new messages, not the full trace including history
             # This prevents O(n²) storage growth where each turn duplicates prior turns
-            turn_messages = messages[new_message_start:]
+            # Use prepared.messages since that's what was sent to the LLM
+            final_messages = prepared.messages
+            # If summarization changed message structure, adjust slice index
+            slice_start = min(new_message_start, len(final_messages))
+            turn_messages = final_messages[slice_start:]
             session.complete_turn(
                 turn, final_content, usage, messages=turn_messages, tool_calls=all_tool_calls
             )
@@ -1704,6 +1715,10 @@ class AgentRuntime:
             # Auto-checkpoint after orchestrator turns
             if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
                 await self._create_auto_checkpoint(session)
+
+            # Clean up activation cache to prevent memory leaks
+            activation_id = f"{session.id}:{turn.turn_number}"
+            self._tool_cache.clear_activation(activation_id)
 
             return ActivationResult(
                 content=final_content,
@@ -1871,9 +1886,10 @@ class AgentRuntime:
 
                 # Prepare context with hard guardrail (last resort trimming)
                 # This is the final safety net for context management
+                context_limit = self._context_limit or DEFAULT_CONTEXT_LIMIT
                 context_config = ContextConfig(
-                    max_context_tokens=self._context_limit or 128000,
-                    hard_max_tokens=int((self._context_limit or 128000) * 0.95),
+                    max_context_tokens=context_limit,
+                    hard_max_tokens=int(context_limit * CONTEXT_HARD_GUARDRAIL),
                 )
                 prepared = prepare_context(messages, agent.id, context_config)
                 if prepared.was_modified:
@@ -2099,7 +2115,11 @@ class AgentRuntime:
 
             # Store only this turn's new messages, not the full trace including history
             # This prevents O(n²) storage growth where each turn duplicates prior turns
-            turn_messages = messages[new_message_start:]
+            # Use prepared.messages since that's what was sent to the LLM
+            final_messages = prepared.messages
+            # If summarization changed message structure, adjust slice index
+            slice_start = min(new_message_start, len(final_messages))
+            turn_messages = final_messages[slice_start:]
             session.complete_turn(
                 turn, full_content, final_usage, messages=turn_messages, tool_calls=all_tool_calls
             )
@@ -2145,6 +2165,10 @@ class AgentRuntime:
             # Auto-checkpoint after orchestrator turns
             if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
                 await self._create_auto_checkpoint(session)
+
+            # Clean up activation cache to prevent memory leaks
+            activation_id = f"{session.id}:{turn.turn_number}"
+            self._tool_cache.clear_activation(activation_id)
 
         except Exception as e:
             # End turn tracing with error

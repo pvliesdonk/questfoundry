@@ -91,9 +91,11 @@ def _hash_args(args: dict[str, Any]) -> str:
 
     Args are JSON-normalized (sorted keys, no whitespace) before hashing
     to ensure consistent cache keys regardless of argument order.
+
+    Uses full SHA256 hash to avoid collision risk with truncated hashes.
     """
     canonical = json.dumps(args, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def _make_cache_key(
@@ -312,7 +314,7 @@ def render_cached_hit_message(
     tool_name: str,
     cached_result: CachedToolResult,
     policy: ToolCachingPolicy,
-) -> str:
+) -> dict[str, Any]:
     """Render the message content for a cache hit.
 
     Args:
@@ -321,35 +323,33 @@ def render_cached_hit_message(
         policy: The caching policy for the tool
 
     Returns:
-        Content string to use in the tool result message
+        Content dictionary to use in the tool result message.
+        Returns a dict (not JSON string) to avoid double-encoding
+        when the caller serializes to JSON.
     """
     if policy.presentation_on_hit == PresentationPolicy.FULL_CONTENT:
         # Return the full original content
         if isinstance(cached_result.content, dict):
-            return json.dumps(cached_result.content)
-        return str(cached_result.content)
+            return cached_result.content
+        return {"content": str(cached_result.content)}
 
     elif policy.presentation_on_hit == PresentationPolicy.REFERENCE_ONLY:
         # Return a short reference
-        return json.dumps(
-            {
-                "_cached": True,
-                "_tool": tool_name,
-                "_ref": cached_result.presentation_id,
-                "_note": f"Identical to previous {tool_name} call; see earlier in conversation.",
-            }
-        )
+        return {
+            "_cached": True,
+            "_tool": tool_name,
+            "_ref": cached_result.presentation_id,
+            "_note": f"Identical to previous {tool_name} call; see earlier in conversation.",
+        }
 
     elif policy.presentation_on_hit == PresentationPolicy.SUMMARY:
         # Return a summary (for now, same as reference)
         # TODO: Implement actual summarization
-        return json.dumps(
-            {
-                "_cached": True,
-                "_tool": tool_name,
-                "_ref": cached_result.presentation_id,
-                "_note": f"Summarized from previous {tool_name} call.",
-            }
-        )
+        return {
+            "_cached": True,
+            "_tool": tool_name,
+            "_ref": cached_result.presentation_id,
+            "_note": f"Summarized from previous {tool_name} call.",
+        }
 
-    return json.dumps({"_cached": True, "_tool": tool_name})
+    return {"_cached": True, "_tool": tool_name}
