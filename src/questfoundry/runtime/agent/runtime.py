@@ -37,9 +37,18 @@ from questfoundry.runtime.agent.turn_validator import (
     TurnValidator,
 )
 from questfoundry.runtime.context import (
+    CachedToolResult,
+    CacheScope,
+    ContextConfig,
     ContextSecretary,
     Secretary,
     SummarizationPolicy,
+    ToolResultCache,
+    create_summary_message,
+    get_fast_model,
+    prepare_context,
+    render_cached_hit_message,
+    summarize_messages,
 )
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
@@ -129,6 +138,11 @@ STOP_TOOL_NAMES = frozenset(
 # Maximum consecutive failures before giving up
 MAX_CONSECUTIVE_FAILURES = 3
 
+# Context management constants
+DEFAULT_CONTEXT_LIMIT = 128000  # Default context window for modern models
+CONTEXT_SUMMARIZATION_THRESHOLD = 0.9  # Apply LLM summarization at 90% usage
+CONTEXT_HARD_GUARDRAIL = 0.95  # Hard trim at 95% to prevent overflow
+
 
 class AgentRuntime:
     """
@@ -158,6 +172,7 @@ class AgentRuntime:
         playbook_tracker: PlaybookTracker | None = None,
         turn_validation_config: TurnValidationConfig | None = None,
         on_tool_call: Any | None = None,
+        summarization_model: str | None = None,
     ):
         """
         Initialize agent runtime.
@@ -177,6 +192,8 @@ class AgentRuntime:
             playbook_tracker: Optional playbook tracker for checkpoint state
             turn_validation_config: Optional configuration for orchestrator enforcement
             on_tool_call: Optional callback(tool_id, success, agent_id, turn_number, execution_time_ms, result)
+            summarization_model: Model to use for context summarization. If None, uses
+                provider's default fast model (e.g., gpt-4o-mini for OpenAI).
         """
         self._provider = provider
         self._studio = studio
@@ -191,6 +208,7 @@ class AgentRuntime:
         self._checkpoint_manager = checkpoint_manager
         self._playbook_tracker = playbook_tracker
         self._on_tool_call = on_tool_call
+        self._summarization_model = summarization_model
 
         # Context usage tracking per agent
         self._context_usage: dict[str, ContextUsage] = {}
@@ -225,6 +243,11 @@ class AgentRuntime:
             preserve_recent_turns=3,  # Always preserve last 3 turns
             min_turns_to_summarize=5,  # Need at least 5 older turns before summarizing
         )
+
+        # Tool result cache for deduplication (Phase 2 of epic #240)
+        # - ACTIVATION scope: Intra-turn deduplication (same tool called twice in one turn)
+        # - SESSION scope: Static tool caching (consult_* tools across turns)
+        self._tool_cache = ToolResultCache()
 
         # Turn validator for orchestrator enforcement
         self._turn_validator = TurnValidator(studio, turn_validation_config)
@@ -278,6 +301,106 @@ class AgentRuntime:
     def context_secretary(self) -> ContextSecretary:
         """Get the ContextSecretary for conversation summarization."""
         return self._context_secretary
+
+    async def _apply_llm_summarization(
+        self,
+        messages: list[LLMMessage],
+        agent_id: str,
+    ) -> list[LLMMessage]:
+        """
+        Apply LLM-based summarization if context is at 90% threshold.
+
+        This uses the same provider but with a fast/cheap model to generate
+        an intelligent summary of older conversation turns, replacing them
+        with a single summary message.
+
+        Args:
+            messages: Current message list
+            agent_id: Agent ID for tracking
+
+        Returns:
+            Potentially modified message list with summary replacing old turns
+        """
+        # Estimate current token usage
+        total_chars = sum(len(m.content) for m in messages)
+        estimated_tokens = total_chars // 4
+
+        context_limit = self._context_limit or DEFAULT_CONTEXT_LIMIT
+        usage_fraction = estimated_tokens / context_limit
+
+        # Only apply at summarization threshold (90%)
+        if usage_fraction < CONTEXT_SUMMARIZATION_THRESHOLD:
+            return messages
+
+        logger.info(
+            "Context at %.1f%% for agent %s, applying LLM summarization",
+            usage_fraction * 100,
+            agent_id,
+        )
+
+        # Convert LLMMessages to dicts for ContextSecretary
+        message_dicts = [m.to_dict() for m in messages]
+
+        # Use ContextSecretary to select messages to summarize
+        to_summarize, to_preserve = self._context_secretary.select_turns_for_summarization(
+            message_dicts
+        )
+
+        if not to_summarize:
+            logger.debug("No messages selected for summarization")
+            return messages
+
+        # Get the summarization model
+        summarization_model = self._summarization_model or get_fast_model(
+            self._provider.name, fallback_model=self._model
+        )
+
+        # Call LLM summarization
+        result = await summarize_messages(
+            to_summarize,
+            self._provider,
+            model=summarization_model,
+        )
+
+        if not result.success or not result.summary:
+            # Fall back to template-based summary
+            logger.warning("LLM summarization failed, using template-based fallback")
+            summary_text = self._context_secretary.generate_summary(to_summarize)
+            if not summary_text:
+                return messages
+        else:
+            summary_text = result.summary
+            logger.info(
+                "LLM summarization: %d messages, %d→%d tokens, model=%s",
+                result.messages_summarized,
+                result.tokens_before,
+                result.tokens_after,
+                result.model_used,
+            )
+
+        # Build new message list: system prompt + summary + preserved messages
+        new_messages: list[LLMMessage] = []
+
+        # Preserve system prompt if present
+        if messages and messages[0].role == "system":
+            new_messages.append(messages[0])
+
+        # Add summary as a user message
+        summary_msg = create_summary_message(summary_text)
+        new_messages.append(LLMMessage.from_dict(summary_msg))
+
+        # Add preserved messages (convert back from dicts)
+        for msg_dict in to_preserve:
+            new_messages.append(LLMMessage.from_dict(msg_dict))
+
+        logger.info(
+            "Context summarized: %d → %d messages (reduced by %d)",
+            len(messages),
+            len(new_messages),
+            len(messages) - len(new_messages),
+        )
+
+        return new_messages
 
     def get_agent_tools(self, agent: Agent, session_id: str | None = None) -> list[BaseTool]:
         """
@@ -784,7 +907,11 @@ class AgentRuntime:
         turn_number: int | None = None,
     ) -> list[ToolCall]:
         """
-        Execute a list of tool calls.
+        Execute a list of tool calls with caching.
+
+        Uses ToolResultCache for deduplication:
+        - ACTIVATION scope: Prevents same tool called twice in one turn
+        - SESSION scope: Caches static tools (consult_*) across turns
 
         Args:
             tool_calls: List of tool call requests from LLM
@@ -796,23 +923,89 @@ class AgentRuntime:
             List of ToolCall results
         """
         results = []
+
+        # Create activation ID for intra-turn caching
+        activation_id = f"{session_id}:{turn_number}" if session_id and turn_number else None
+
         for tc in tool_calls:
             tool_call = ToolCall(tool_id=tc.name, args=tc.arguments)
             start_time = time.time()
 
-            try:
-                result = await self.execute_tool(
-                    tc.name, tc.arguments, agent, session_id, turn_number
+            # Get caching policy for this tool
+            policy = self._tool_cache.get_policy(tc.name)
+            cached_hit: CachedToolResult | None = None
+
+            # Check activation cache first (intra-turn deduplication)
+            if policy.participate_in_activation_cache and activation_id and session_id:
+                cached_hit = self._tool_cache.lookup(
+                    session_id=session_id,
+                    scope=CacheScope.ACTIVATION,
+                    tool_name=tc.name,
+                    tool_args=tc.arguments,
+                    activation_id=activation_id,
                 )
-                tool_call.result = result.data
-                tool_call.success = result.success
-                tool_call.error = result.error
-                tool_call.execution_time_ms = result.execution_time_ms
-            except Exception as e:
-                tool_call.success = False
-                tool_call.error = str(e)
-                tool_call.execution_time_ms = (time.time() - start_time) * 1000
-                logger.warning(f"Tool call failed: {tc.name} - {e}")
+
+            # Check session cache for static tools (inter-turn caching)
+            if not cached_hit and policy.participate_in_session_cache and session_id:
+                cached_hit = self._tool_cache.lookup(
+                    session_id=session_id,
+                    scope=CacheScope.SESSION,
+                    tool_name=tc.name,
+                    tool_args=tc.arguments,
+                )
+
+            if cached_hit:
+                # Use cached result with informative message for LLM context
+                tool_call.result = render_cached_hit_message(tc.name, cached_hit, policy)
+                tool_call.success = cached_hit.success
+                tool_call.execution_time_ms = 0.1  # Negligible time for cache hit
+                logger.debug(f"Cache hit for {tc.name}: {cached_hit.presentation_id}")
+            else:
+                # Execute the tool
+                try:
+                    result = await self.execute_tool(
+                        tc.name, tc.arguments, agent, session_id, turn_number
+                    )
+                    tool_call.result = result.data
+                    tool_call.success = result.success
+                    tool_call.error = result.error
+                    tool_call.execution_time_ms = result.execution_time_ms
+
+                    # Cache successful results
+                    if result.success and session_id:
+                        cached_result = CachedToolResult(
+                            tool_name=tc.name,
+                            args_json=json.dumps(tc.arguments, sort_keys=True),
+                            content=result.data,
+                            success=True,
+                        )
+
+                        # Store in activation cache
+                        if policy.participate_in_activation_cache and activation_id:
+                            self._tool_cache.record(
+                                session_id=session_id,
+                                scope=CacheScope.ACTIVATION,
+                                tool_name=tc.name,
+                                tool_args=tc.arguments,
+                                result=cached_result,
+                                activation_id=activation_id,
+                            )
+
+                        # Store in session cache for static tools
+                        if policy.participate_in_session_cache:
+                            self._tool_cache.record(
+                                session_id=session_id,
+                                scope=CacheScope.SESSION,
+                                tool_name=tc.name,
+                                tool_args=tc.arguments,
+                                result=cached_result,
+                            )
+
+                except Exception as e:
+                    tool_call.success = False
+                    tool_call.error = str(e)
+                    tool_call.execution_time_ms = (time.time() - start_time) * 1000
+                    logger.warning(f"Tool call failed: {tc.name} - {e}")
 
             results.append(tool_call)
 
@@ -1193,6 +1386,13 @@ class AgentRuntime:
             # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
+            # Track where new messages start (after system prompt + history)
+            # This is used to store only this turn's messages, not the full trace
+            # Structure: [system, *history, user_input, ...]
+            # New messages start at: 1 (system) + len(history)
+            history_len = len(history) if history else 0
+            new_message_start = 1 + history_len
+
             # Log system prompt for debugging
             if self._event_logger:
                 system_prompt = ""
@@ -1242,9 +1442,28 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
+                # Apply LLM-based context summarization at 90% threshold
+                # This uses a fast model to intelligently compress older turns
+                messages = await self._apply_llm_summarization(messages, agent.id)
+
+                # Prepare context with hard guardrail (last resort trimming)
+                # This is the final safety net for context management
+                context_limit = self._context_limit or DEFAULT_CONTEXT_LIMIT
+                context_config = ContextConfig(
+                    max_context_tokens=context_limit,
+                    hard_max_tokens=int(context_limit * CONTEXT_HARD_GUARDRAIL),
+                )
+                prepared = prepare_context(messages, agent.id, context_config)
+                if prepared.was_modified:
+                    messages = prepared.messages
+                    logger.info(
+                        f"Context trimmed: {prepared.events[-1].before_tokens} -> "
+                        f"{prepared.events[-1].after_tokens} tokens"
+                    )
+
                 # Invoke LLM with tools and tracing callbacks
                 response = await self._provider.invoke(
-                    messages,
+                    prepared.messages,
                     self._model,
                     options,
                     tools=tool_schemas if tool_schemas else None,
@@ -1449,8 +1668,15 @@ class AgentRuntime:
                 else None,
             )
             final_content = response.content if response else ""
+            # Store only this turn's new messages, not the full trace including history
+            # This prevents O(n²) storage growth where each turn duplicates prior turns
+            # Use prepared.messages since that's what was sent to the LLM
+            final_messages = prepared.messages
+            # If summarization changed message structure, adjust slice index
+            slice_start = min(new_message_start, len(final_messages))
+            turn_messages = final_messages[slice_start:]
             session.complete_turn(
-                turn, final_content, usage, messages=messages, tool_calls=all_tool_calls
+                turn, final_content, usage, messages=turn_messages, tool_calls=all_tool_calls
             )
             duration_ms = (time.time() - start_time) * 1000
 
@@ -1489,6 +1715,10 @@ class AgentRuntime:
             # Auto-checkpoint after orchestrator turns
             if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
                 await self._create_auto_checkpoint(session)
+
+            # Clean up activation cache to prevent memory leaks
+            activation_id = f"{session.id}:{turn.turn_number}"
+            self._tool_cache.clear_activation(activation_id)
 
             return ActivationResult(
                 content=final_content,
@@ -1597,6 +1827,13 @@ class AgentRuntime:
             # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
+            # Track where new messages start (after system prompt + history)
+            # This is used to store only this turn's messages, not the full trace
+            # Structure: [system, *history, user_input, ...]
+            # New messages start at: 1 (system) + len(history)
+            history_len = len(history) if history else 0
+            new_message_start = 1 + history_len
+
             # Log system prompt for debugging (streaming path)
             if self._event_logger:
                 system_prompt = ""
@@ -1643,12 +1880,31 @@ class AgentRuntime:
                         prompt_tokens=estimated_tokens,
                     )
 
+                # Apply LLM-based context summarization at 90% threshold
+                # This uses a fast model to intelligently compress older turns
+                messages = await self._apply_llm_summarization(messages, agent.id)
+
+                # Prepare context with hard guardrail (last resort trimming)
+                # This is the final safety net for context management
+                context_limit = self._context_limit or DEFAULT_CONTEXT_LIMIT
+                context_config = ContextConfig(
+                    max_context_tokens=context_limit,
+                    hard_max_tokens=int(context_limit * CONTEXT_HARD_GUARDRAIL),
+                )
+                prepared = prepare_context(messages, agent.id, context_config)
+                if prepared.was_modified:
+                    messages = prepared.messages
+                    logger.info(
+                        f"Context trimmed: {prepared.events[-1].before_tokens} -> "
+                        f"{prepared.events[-1].after_tokens} tokens"
+                    )
+
                 iteration_content = ""
                 pending_tool_calls: list[ToolCallRequest] | None = None
 
                 # Stream from provider with tools and tracing callbacks
                 async for chunk in self._provider.stream(
-                    messages,
+                    prepared.messages,
                     self._model,
                     options,
                     tools=tool_schemas if tool_schemas else None,
@@ -1857,9 +2113,15 @@ class AgentRuntime:
                 # No enforcement or no tools - we're done
                 break
 
-            # Complete turn after streaming finishes with full message trace
+            # Store only this turn's new messages, not the full trace including history
+            # This prevents O(n²) storage growth where each turn duplicates prior turns
+            # Use prepared.messages since that's what was sent to the LLM
+            final_messages = prepared.messages
+            # If summarization changed message structure, adjust slice index
+            slice_start = min(new_message_start, len(final_messages))
+            turn_messages = final_messages[slice_start:]
             session.complete_turn(
-                turn, full_content, final_usage, messages=messages, tool_calls=all_tool_calls
+                turn, full_content, final_usage, messages=turn_messages, tool_calls=all_tool_calls
             )
             duration_ms = (time.time() - start_time) * 1000
 
@@ -1903,6 +2165,10 @@ class AgentRuntime:
             # Auto-checkpoint after orchestrator turns
             if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
                 await self._create_auto_checkpoint(session)
+
+            # Clean up activation cache to prevent memory leaks
+            activation_id = f"{session.id}:{turn.turn_number}"
+            self._tool_cache.clear_activation(activation_id)
 
         except Exception as e:
             # End turn tracing with error

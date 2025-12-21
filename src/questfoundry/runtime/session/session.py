@@ -247,7 +247,10 @@ class Session:
             turn: The turn to complete
             output: The agent's output
             usage: Optional token usage stats
-            messages: Full message trace for this turn
+            messages: Messages produced during this turn only (not including
+                history from prior turns). This ensures O(n) storage growth
+                instead of O(n²). get_agent_history() concatenates turn
+                messages to reconstruct full history.
             tool_calls: Executed tool calls for this turn
         """
         turn.complete(output, usage)

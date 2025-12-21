@@ -13,8 +13,28 @@ Mailbox Summarization:
 - MailboxSecretary monitors per-agent mailbox size
 - When exceeding auto_summarize_threshold, generates digest messages
 - Preserves delegations, high-priority, and recent messages
+
+Tool Result Caching:
+- ToolResultCache prevents repeated tool execution
+- ACTIVATION scope: Intra-turn deduplication
+- SESSION scope: Static tool caching across turns
 """
 
+from questfoundry.runtime.context.cache import (
+    CachedToolResult,
+    CacheScope,
+    PresentationPolicy,
+    ToolCachingPolicy,
+    ToolResultCache,
+    render_cached_hit_message,
+)
+from questfoundry.runtime.context.prepare import (
+    ContextConfig,
+    PreparedContext,
+    SummarizationEvent,
+    SummarizationEventKind,
+    prepare_context,
+)
 from questfoundry.runtime.context.secretary import (
     ContextSecretary,
     ContextSummaryResult,
@@ -25,8 +45,29 @@ from questfoundry.runtime.context.secretary import (
     SummarizationPolicy,
     ToolResultSummary,
 )
+from questfoundry.runtime.context.summarizer import (
+    FAST_MODELS,
+    SummarizationResult,
+    create_summary_message,
+    get_fast_model,
+    summarize_messages,
+)
 
 __all__ = [
+    # Cache
+    "CachedToolResult",
+    "CacheScope",
+    "PresentationPolicy",
+    "ToolCachingPolicy",
+    "ToolResultCache",
+    "render_cached_hit_message",
+    # Prepare
+    "ContextConfig",
+    "PreparedContext",
+    "SummarizationEvent",
+    "SummarizationEventKind",
+    "prepare_context",
+    # Secretary
     "ContextSecretary",
     "ContextSummaryResult",
     "MailboxSecretary",
@@ -35,4 +76,10 @@ __all__ = [
     "SummarizationLevel",
     "SummarizationPolicy",
     "ToolResultSummary",
+    # Summarizer
+    "FAST_MODELS",
+    "SummarizationResult",
+    "create_summary_message",
+    "get_fast_model",
+    "summarize_messages",
 ]

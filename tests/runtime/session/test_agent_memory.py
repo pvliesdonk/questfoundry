@@ -525,6 +525,131 @@ class TestMultiTurnHistory:
         assert history[5]["content"] == "Chapter 1 is complete."
 
 
+class TestHistoryLinearGrowth:
+    """Regression tests for Issue #240 - O(n²) to O(n) storage fix.
+
+    The bug: complete_turn() was storing the entire messages array including
+    inherited history. When get_agent_history() reconstructed history, each
+    turn's stored messages already contained prior history → exponential duplication.
+
+    The fix: Store only new messages per turn (the delta), not the full trace.
+    """
+
+    def test_no_duplicate_messages_in_history(self):
+        """Verify each message appears exactly once in reconstructed history."""
+        session = Session(
+            id="sess_1",
+            project_id="test_project",
+            entry_agent="showrunner",
+            _project=None,
+        )
+
+        # Simulate 3 turns, each storing only its own messages (the fix)
+        # Turn 1: user asks something
+        turn1 = Turn(
+            turn_number=1,
+            agent_id="showrunner",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="user", content="Turn 1 user"),
+                LLMMessage(role="assistant", content="Turn 1 assistant"),
+            ],
+        )
+        session.turns.append(turn1)
+
+        # Turn 2: another interaction
+        turn2 = Turn(
+            turn_number=2,
+            agent_id="showrunner",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="user", content="Turn 2 user"),
+                LLMMessage(role="assistant", content="Turn 2 assistant"),
+            ],
+        )
+        session.turns.append(turn2)
+
+        # Turn 3: yet another interaction
+        turn3 = Turn(
+            turn_number=3,
+            agent_id="showrunner",
+            session_id="sess_1",
+            status=TurnStatus.COMPLETED,
+            messages=[
+                LLMMessage(role="user", content="Turn 3 user"),
+                LLMMessage(role="assistant", content="Turn 3 assistant"),
+            ],
+        )
+        session.turns.append(turn3)
+
+        # Reconstruct history
+        history = session.get_agent_history("showrunner")
+
+        # Should have exactly 6 messages (2 per turn * 3 turns)
+        assert len(history) == 6, f"Expected 6 messages, got {len(history)}"
+
+        # Extract content to verify no duplicates
+        contents = [msg["content"] for msg in history]
+        unique_contents = set(contents)
+        assert len(contents) == len(unique_contents), (
+            f"Duplicate messages found! Contents: {contents}"
+        )
+
+        # Verify order is correct
+        expected_order = [
+            "Turn 1 user",
+            "Turn 1 assistant",
+            "Turn 2 user",
+            "Turn 2 assistant",
+            "Turn 3 user",
+            "Turn 3 assistant",
+        ]
+        assert contents == expected_order
+
+    def test_history_size_grows_linearly(self):
+        """Verify history size is O(n), not O(n²)."""
+        session = Session(
+            id="sess_1",
+            project_id="test_project",
+            entry_agent="showrunner",
+            _project=None,
+        )
+
+        sizes = []
+        for i in range(5):
+            # Add a turn with exactly 2 messages
+            turn = Turn(
+                turn_number=i + 1,
+                agent_id="showrunner",
+                session_id="sess_1",
+                status=TurnStatus.COMPLETED,
+                messages=[
+                    LLMMessage(role="user", content=f"User message {i + 1}"),
+                    LLMMessage(role="assistant", content=f"Assistant response {i + 1}"),
+                ],
+            )
+            session.turns.append(turn)
+
+            # Measure history size
+            history = session.get_agent_history("showrunner")
+            sizes.append(len(history))
+
+        # With the fix: sizes should be [2, 4, 6, 8, 10] - linear growth
+        # With the bug: sizes would be [2, 4, 8, 16, 32] - exponential growth
+        expected_sizes = [2, 4, 6, 8, 10]
+        assert sizes == expected_sizes, (
+            f"History growth is not linear! Expected {expected_sizes}, got {sizes}"
+        )
+
+        # Verify each step adds exactly 2 messages
+        deltas = [sizes[i + 1] - sizes[i] for i in range(len(sizes) - 1)]
+        assert all(d == 2 for d in deltas), (
+            f"Growth per turn should be constant (2), but got deltas: {deltas}"
+        )
+
+
 class TestAgentHistoryIsolation:
     """Test that agents only see their own history, not other agents'."""
 
