@@ -676,6 +676,7 @@ async def _setup_runtime(
                 agent_id=agent_id,
                 turn_number=turn_number or 0,
                 execution_time_ms=execution_time_ms,
+                result_data=result if isinstance(result, dict) else None,
             )
             # Track artifact creation from save_artifact tool
             if tool_id == "save_artifact" and success and result:

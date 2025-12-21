@@ -317,8 +317,19 @@ class StatusReporter:
         turn_number: int,
         execution_time_ms: float | None = None,
         result_preview: str | None = None,
+        result_data: dict[str, Any] | None = None,
     ) -> None:
-        """Report a tool call."""
+        """Report a tool call.
+
+        Args:
+            tool_id: The tool that was called
+            success: Whether the tool executed without error
+            agent_id: Agent that called the tool
+            turn_number: Current turn number
+            execution_time_ms: Execution time
+            result_preview: Deprecated - use result_data instead
+            result_data: Full tool result data dict (may contain action_outcome, etc.)
+        """
         event = ToolCallEvent(
             tool_id=tool_id,
             success=success,
@@ -335,12 +346,44 @@ class StatusReporter:
         if self.quiet:
             return
 
-        # Show tool calls at INFO level (-v) or always show failures
-        if self.verbosity >= 1 or not success:
-            status_icon = "[green]✓[/green]" if success else "[red]✗[/red]"
+        # Extract semantic fields from result_data
+        action_outcome = None
+        rejection_reason = None
+        if result_data:
+            action_outcome = result_data.get("action_outcome") or result_data.get("result")
+            rejection_reason = result_data.get("rejection_reason")
+
+        # Show tool calls at INFO level (-v) or always show failures/rejections
+        show_tool = self.verbosity >= 1 or not success or action_outcome == "rejected"
+        if show_tool:
+            # Build status indicator: execution success vs action outcome
+            if not success:
+                # Tool execution failed
+                status_icon = "[red]✗ error[/red]"
+            elif action_outcome == "rejected":
+                status_icon = "[yellow]↩ rejected[/yellow]"
+            elif action_outcome == "committed" or action_outcome == "saved":
+                status_icon = "[green]✓ committed[/green]"
+            elif action_outcome == "deferred":
+                status_icon = "[blue]⏳ deferred[/blue]"
+            elif action_outcome:
+                status_icon = f"[green]✓[/green] {action_outcome}"
+            else:
+                status_icon = "[green]✓[/green]" if success else "[red]✗[/red]"
+
             time_str = f" [dim]({execution_time_ms:.0f}ms)[/dim]" if execution_time_ms else ""
             self.console.print(f"  [dim]tool:[/dim] {tool_id} {status_icon}{time_str}")
-            # Show result preview at higher verbosity
+
+            # Show rejection reason
+            if rejection_reason:
+                self.console.print(f"    [yellow]reason: {rejection_reason}[/yellow]")
+
+            # Show recovery action if present
+            recovery_action = result_data.get("recovery_action") if result_data else None
+            if recovery_action and self.verbosity >= 1:
+                self.console.print(f"    [cyan]action: {recovery_action}[/cyan]")
+
+            # Show result preview at higher verbosity (legacy support)
             if result_preview and self.verbosity >= 2:
                 preview = (
                     result_preview[:80] + "..." if len(result_preview) > 80 else result_preview
@@ -646,7 +689,7 @@ def create_log_handler(log_console: Console, verbosity: int) -> Any:
 
     return RichHandler(
         console=log_console,
-        rich_tracebacks=True,
+        rich_tracebacks=False,  # Disabled - rich tracebacks are too verbose
         show_path=verbosity >= 2,
         show_time=verbosity >= 1,
     )
