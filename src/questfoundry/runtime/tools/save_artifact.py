@@ -310,14 +310,13 @@ class SaveArtifactTool(BaseTool):
                     )
                 )
 
-        # Check for type errors on provided fields
+        # Check for type errors on provided fields (including nested validation)
         known_field_names = {f.name for f in artifact_type.fields}
         for field in artifact_type.fields:
             if field.name in data:
                 value = data[field.name]
-                type_error = self._check_field_type(field, value)
-                if type_error:
-                    errors.append(type_error)
+                field_errors = self._validate_field_value(field, value, field.name)
+                errors.extend(field_errors)
 
         # Check for unknown fields (provided but not in schema)
         for field_name in provided_fields:
@@ -339,8 +338,34 @@ class SaveArtifactTool(BaseTool):
         return errors, warnings, schema_info
 
     def _check_field_type(self, field: Any, value: Any) -> dict[str, Any] | None:
-        """Check if a field value matches the expected type."""
+        """Check if a field value matches the expected type.
+
+        For backward compatibility, returns first error only.
+        Use _validate_field_value for full recursive validation.
+        """
+        errors = self._validate_field_value(field, value, field.name)
+        return errors[0] if errors else None
+
+    def _validate_field_value(
+        self,
+        field: Any,
+        value: Any,
+        path: str,
+    ) -> list[dict[str, Any]]:
+        """Recursively validate a field value against its schema.
+
+        Args:
+            field: The field definition (FieldDefinition)
+            value: The value to validate
+            path: Dot-notation path for error messages (e.g., "choice_intents[0].target_anchor")
+
+        Returns:
+            List of validation errors (empty if valid)
+        """
+        errors: list[dict[str, Any]] = []
         expected_type = field.type.value if getattr(field, "type", None) else "string"
+
+        # Type checking functions
         type_checks = {
             "string": lambda v: isinstance(v, str),
             "text": lambda v: isinstance(v, str),
@@ -354,20 +379,89 @@ class SaveArtifactTool(BaseTool):
 
         checker = type_checks.get(expected_type)
         if checker and not checker(value):
-            # Summarize provided value for feedback (truncate if too long)
             provided_repr = repr(value)
             if len(provided_repr) > 100:
                 provided_repr = provided_repr[:100] + "..."
 
-            return self._error_entry(
-                field.name,
-                issue=f"Wrong type: expected {expected_type}, got {type(value).__name__}",
-                provided=provided_repr,
-                expected_type=expected_type,
-                description=field.description,
+            errors.append(
+                self._error_entry(
+                    path,
+                    issue=f"Wrong type: expected {expected_type}, got {type(value).__name__}",
+                    provided=provided_repr,
+                    expected_type=expected_type,
+                    description=field.description,
+                )
             )
+            return errors  # Don't recurse if base type is wrong
 
-        return None
+        # Recursive validation for arrays
+        if expected_type == "array" and isinstance(value, list):
+            item_schema = getattr(field, "items", None)
+            items_type = getattr(field, "items_type", None)
+
+            if item_schema:
+                # Complex items with nested structure
+                for i, item in enumerate(value):
+                    item_path = f"{path}[{i}]"
+                    item_errors = self._validate_field_value(item_schema, item, item_path)
+                    errors.extend(item_errors)
+            elif items_type:
+                # Simple scalar items - check each item's type
+                scalar_checker = type_checks.get(
+                    items_type.value if hasattr(items_type, "value") else str(items_type)
+                )
+                if scalar_checker:
+                    for i, item in enumerate(value):
+                        if not scalar_checker(item):
+                            item_path = f"{path}[{i}]"
+                            errors.append(
+                                self._error_entry(
+                                    item_path,
+                                    issue=f"Wrong type: expected {items_type}, got {type(item).__name__}",
+                                    provided=repr(item)[:100],
+                                    expected_type=str(items_type),
+                                )
+                            )
+
+        # Recursive validation for objects with defined properties
+        if expected_type == "object" and isinstance(value, dict):
+            properties = getattr(field, "properties", None)
+            if properties:
+                known_props = {p.name for p in properties}
+
+                # Check required properties
+                for prop in properties:
+                    prop_path = f"{path}.{prop.name}"
+                    if prop.required and prop.name not in value:
+                        errors.append(
+                            self._error_entry(
+                                prop_path,
+                                issue=f"Required property '{prop.name}' is missing",
+                                provided=None,
+                                expected_type=prop.type.value
+                                if hasattr(prop.type, "value")
+                                else str(prop.type),
+                                description=prop.description,
+                            )
+                        )
+                    elif prop.name in value:
+                        # Recursively validate property value
+                        prop_errors = self._validate_field_value(prop, value[prop.name], prop_path)
+                        errors.extend(prop_errors)
+
+                # Check for unknown properties
+                for key in value:
+                    if key not in known_props:
+                        errors.append(
+                            self._error_entry(
+                                f"{path}.{key}",
+                                issue=f"Unknown property '{key}' not defined in schema",
+                                provided=key,
+                                description=f"Valid properties: {', '.join(sorted(known_props))}",
+                            )
+                        )
+
+        return errors
 
     def _generate_artifact_id(self, artifact_type_id: str) -> str:
         """Generate a unique artifact ID."""

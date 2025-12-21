@@ -808,6 +808,372 @@ class TestSearchWorkspaceTool:
         assert "title" not in first  # Data fields excluded from summary
 
 
+class TestNestedValidation:
+    """Tests for nested schema validation (issue #244)."""
+
+    @pytest.fixture
+    def project(self):
+        """Create a temporary project."""
+        with TemporaryDirectory() as tmpdir:
+            project = Project.create(
+                path=Path(tmpdir) / "test_project",
+                name="Test Project",
+            )
+            yield project
+            project.close()
+
+    def make_section_brief_type(self):
+        """Create section_brief artifact type with choice_intents array."""
+        artifact_type = MagicMock()
+        artifact_type.id = "section_brief"
+        artifact_type.name = "Section Brief"
+        artifact_type.default_store = None
+        artifact_type.lifecycle = None
+
+        # Required fields
+        brief_id = MagicMock()
+        brief_id.name = "brief_id"
+        brief_id.type = FieldType.STRING
+        brief_id.required = True
+        brief_id.description = "Unique identifier"
+
+        section_title = MagicMock()
+        section_title.name = "section_title"
+        section_title.type = FieldType.STRING
+        section_title.required = True
+        section_title.description = "Human-readable title"
+
+        # choice_intents array with nested object structure
+        choice_intents = MagicMock()
+        choice_intents.name = "choice_intents"
+        choice_intents.type = FieldType.ARRAY
+        choice_intents.required = False
+        choice_intents.description = "Contrastive choices with intents"
+        choice_intents.items_type = None  # Complex items
+
+        # Nested item schema for choice_intents
+        item_schema = MagicMock()
+        item_schema.type = FieldType.OBJECT
+        item_schema.description = "A choice intent"
+
+        # Properties of choice_intent item
+        intent_prop = MagicMock()
+        intent_prop.name = "intent"
+        intent_prop.type = FieldType.STRING
+        intent_prop.required = False
+        intent_prop.description = "What player does"
+
+        target_anchor_prop = MagicMock()
+        target_anchor_prop.name = "target_anchor"
+        target_anchor_prop.type = FieldType.STRING
+        target_anchor_prop.required = False
+        target_anchor_prop.description = "Anchor ID this choice leads to"
+
+        outcome_prop = MagicMock()
+        outcome_prop.name = "outcome_difference"
+        outcome_prop.type = FieldType.TEXT
+        outcome_prop.required = False
+        outcome_prop.description = "How path differs"
+
+        item_schema.properties = [intent_prop, target_anchor_prop, outcome_prop]
+        choice_intents.items = item_schema
+
+        artifact_type.fields = [brief_id, section_title, choice_intents]
+        return artifact_type
+
+    @pytest.mark.asyncio
+    async def test_nested_array_item_validation_unknown_property(self, project: Project):
+        """Reject unknown property in array item (the original bug from issue #243)."""
+        artifact_type = self.make_section_brief_type()
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        # Use "target" instead of "target_anchor" - this should fail
+        result = await tool.execute(
+            {
+                "artifact_type": "section_brief",
+                "data": {
+                    "brief_id": "SB-001",
+                    "section_title": "Opening Scene",
+                    "choice_intents": [
+                        {
+                            "intent": "open the door",
+                            "target": "anchor002",  # WRONG: should be target_anchor
+                        }
+                    ],
+                },
+            }
+        )
+
+        assert result.success is False
+        assert "validation" in result.error.lower()
+
+        # Check that error path is correct
+        errors = result.data.get("validation_errors", [])
+        assert len(errors) >= 1
+
+        # Find the error about unknown property
+        unknown_prop_error = None
+        for err in errors:
+            if "target" in err.get("field", "") and "Unknown property" in err.get("issue", ""):
+                unknown_prop_error = err
+                break
+
+        assert unknown_prop_error is not None, f"Expected unknown property error, got: {errors}"
+        assert "choice_intents[0].target" in unknown_prop_error["field"]
+        assert "target_anchor" in unknown_prop_error.get("guidance", "")
+
+    @pytest.mark.asyncio
+    async def test_nested_array_item_validation_success(self, project: Project):
+        """Accept valid nested array items."""
+        artifact_type = self.make_section_brief_type()
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        # Use correct field names
+        result = await tool.execute(
+            {
+                "artifact_type": "section_brief",
+                "data": {
+                    "brief_id": "SB-001",
+                    "section_title": "Opening Scene",
+                    "choice_intents": [
+                        {
+                            "intent": "open the door",
+                            "target_anchor": "anchor002",
+                        },
+                        {
+                            "intent": "run away",
+                            "target_anchor": "anchor003",
+                        },
+                    ],
+                },
+            }
+        )
+
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_nested_array_item_wrong_type(self, project: Project):
+        """Reject wrong type in array item property."""
+        artifact_type = self.make_section_brief_type()
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        result = await tool.execute(
+            {
+                "artifact_type": "section_brief",
+                "data": {
+                    "brief_id": "SB-001",
+                    "section_title": "Opening Scene",
+                    "choice_intents": [
+                        {
+                            "intent": "open the door",
+                            "target_anchor": 123,  # WRONG: should be string
+                        }
+                    ],
+                },
+            }
+        )
+
+        assert result.success is False
+        errors = result.data.get("validation_errors", [])
+        assert len(errors) >= 1
+
+        # Check error path includes array index
+        type_error = None
+        for err in errors:
+            if "target_anchor" in err.get("field", "") and "Wrong type" in err.get("issue", ""):
+                type_error = err
+                break
+
+        assert type_error is not None, f"Expected type error, got: {errors}"
+        assert "choice_intents[0].target_anchor" in type_error["field"]
+
+    @pytest.mark.asyncio
+    async def test_nested_object_validation(self, project: Project):
+        """Validate nested object properties."""
+        # Create artifact type with nested object field
+        artifact_type = MagicMock()
+        artifact_type.id = "test_obj"
+        artifact_type.name = "Test Object"
+        artifact_type.default_store = None
+        artifact_type.lifecycle = None
+
+        title_field = MagicMock()
+        title_field.name = "title"
+        title_field.type = FieldType.STRING
+        title_field.required = True
+        title_field.description = "Title"
+
+        # Object field with properties
+        config_field = MagicMock()
+        config_field.name = "config"
+        config_field.type = FieldType.OBJECT
+        config_field.required = False
+        config_field.description = "Configuration object"
+
+        setting_prop = MagicMock()
+        setting_prop.name = "setting"
+        setting_prop.type = FieldType.STRING
+        setting_prop.required = False
+        setting_prop.description = "A setting"
+
+        enabled_prop = MagicMock()
+        enabled_prop.name = "enabled"
+        enabled_prop.type = FieldType.BOOLEAN
+        enabled_prop.required = False
+        enabled_prop.description = "Is enabled"
+
+        config_field.properties = [setting_prop, enabled_prop]
+        artifact_type.fields = [title_field, config_field]
+
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        # Test unknown property in nested object
+        result = await tool.execute(
+            {
+                "artifact_type": "test_obj",
+                "data": {
+                    "title": "Test",
+                    "config": {
+                        "setting": "value",
+                        "unknown_key": "should fail",  # Unknown property
+                    },
+                },
+            }
+        )
+
+        assert result.success is False
+        errors = result.data.get("validation_errors", [])
+        assert any("config.unknown_key" in err.get("field", "") for err in errors)
+
+    @pytest.mark.asyncio
+    async def test_nested_required_property(self, project: Project):
+        """Validate required properties in nested objects."""
+        artifact_type = MagicMock()
+        artifact_type.id = "test_req"
+        artifact_type.name = "Test Required"
+        artifact_type.default_store = None
+        artifact_type.lifecycle = None
+
+        title_field = MagicMock()
+        title_field.name = "title"
+        title_field.type = FieldType.STRING
+        title_field.required = True
+
+        metadata_field = MagicMock()
+        metadata_field.name = "metadata"
+        metadata_field.type = FieldType.OBJECT
+        metadata_field.required = False
+        metadata_field.description = "Metadata object"
+
+        # Required property inside metadata
+        version_prop = MagicMock()
+        version_prop.name = "version"
+        version_prop.type = FieldType.STRING
+        version_prop.required = True
+        version_prop.description = "Version string"
+
+        optional_prop = MagicMock()
+        optional_prop.name = "optional_field"
+        optional_prop.type = FieldType.STRING
+        optional_prop.required = False
+
+        metadata_field.properties = [version_prop, optional_prop]
+        artifact_type.fields = [title_field, metadata_field]
+
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        # Missing required property in nested object
+        result = await tool.execute(
+            {
+                "artifact_type": "test_req",
+                "data": {
+                    "title": "Test",
+                    "metadata": {
+                        "optional_field": "value",
+                        # missing required "version"
+                    },
+                },
+            }
+        )
+
+        assert result.success is False
+        errors = result.data.get("validation_errors", [])
+        assert any(
+            "metadata.version" in err.get("field", "") and "Required" in err.get("issue", "")
+            for err in errors
+        )
+
+    @pytest.mark.asyncio
+    async def test_scalar_array_items(self, project: Project):
+        """Validate arrays with simple scalar items."""
+        artifact_type = MagicMock()
+        artifact_type.id = "test_scalar"
+        artifact_type.name = "Test Scalar Array"
+        artifact_type.default_store = None
+        artifact_type.lifecycle = None
+
+        title_field = MagicMock()
+        title_field.name = "title"
+        title_field.type = FieldType.STRING
+        title_field.required = True
+
+        tags_field = MagicMock()
+        tags_field.name = "tags"
+        tags_field.type = FieldType.ARRAY
+        tags_field.required = False
+        tags_field.items = None  # No complex item schema
+        tags_field.items_type = FieldType.STRING  # Simple string items
+
+        artifact_type.fields = [title_field, tags_field]
+
+        studio = MagicMock()
+        studio.artifact_types = [artifact_type]
+
+        definition = make_mock_definition("save_artifact")
+        context = ToolContext(studio=studio, project=project)
+        tool = SaveArtifactTool(definition, context)
+
+        # Wrong type in scalar array
+        result = await tool.execute(
+            {
+                "artifact_type": "test_scalar",
+                "data": {
+                    "title": "Test",
+                    "tags": ["valid", 123, "also_valid"],  # 123 should fail
+                },
+            }
+        )
+
+        assert result.success is False
+        errors = result.data.get("validation_errors", [])
+        assert any("tags[1]" in err.get("field", "") for err in errors)
+
+
 class TestDeleteArtifactTool:
     """Tests for DeleteArtifactTool."""
 
