@@ -1193,6 +1193,13 @@ class AgentRuntime:
             # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
 
+            # Track where new messages start (after system prompt + history)
+            # This is used to store only this turn's messages, not the full trace
+            # Structure: [system, *history, user_input, ...]
+            # New messages start at: 1 (system) + len(history)
+            history_len = len(history) if history else 0
+            new_message_start = 1 + history_len
+
             # Log system prompt for debugging
             if self._event_logger:
                 system_prompt = ""
@@ -1449,8 +1456,11 @@ class AgentRuntime:
                 else None,
             )
             final_content = response.content if response else ""
+            # Store only this turn's new messages, not the full trace including history
+            # This prevents O(n²) storage growth where each turn duplicates prior turns
+            turn_messages = messages[new_message_start:]
             session.complete_turn(
-                turn, final_content, usage, messages=messages, tool_calls=all_tool_calls
+                turn, final_content, usage, messages=turn_messages, tool_calls=all_tool_calls
             )
             duration_ms = (time.time() - start_time) * 1000
 
@@ -1596,6 +1606,13 @@ class AgentRuntime:
 
             # Build messages
             messages = self.build_messages(agent, user_input, context, history, tool_schemas)
+
+            # Track where new messages start (after system prompt + history)
+            # This is used to store only this turn's messages, not the full trace
+            # Structure: [system, *history, user_input, ...]
+            # New messages start at: 1 (system) + len(history)
+            history_len = len(history) if history else 0
+            new_message_start = 1 + history_len
 
             # Log system prompt for debugging (streaming path)
             if self._event_logger:
@@ -1857,9 +1874,11 @@ class AgentRuntime:
                 # No enforcement or no tools - we're done
                 break
 
-            # Complete turn after streaming finishes with full message trace
+            # Store only this turn's new messages, not the full trace including history
+            # This prevents O(n²) storage growth where each turn duplicates prior turns
+            turn_messages = messages[new_message_start:]
             session.complete_turn(
-                turn, full_content, final_usage, messages=messages, tool_calls=all_tool_calls
+                turn, full_content, final_usage, messages=turn_messages, tool_calls=all_tool_calls
             )
             duration_ms = (time.time() - start_time) * 1000
 
