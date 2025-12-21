@@ -1260,12 +1260,49 @@ class TestContextSecretary:
         assert "Creating artifact" in preserved_contents
 
     def test_generate_summary(self, secretary: ContextSecretary, sample_turns: list[dict]):
-        """Test summary generation."""
+        """Test summary generation extracts structured data."""
         summary = secretary.generate_summary(sample_turns[:5])
 
         assert "5" in summary  # Number of turns
-        assert "user" in summary or "assistant" in summary  # Roles mentioned
-        assert "search_workspace" in summary  # Tool mentioned
+        # New format extracts structured data (tools, artifacts, delegations)
+        # Falls back to tool names if no structured data found
+        assert "search_workspace" in summary or "Tools used" in summary
+
+    def test_generate_summary_extracts_artifacts(self, secretary: ContextSecretary):
+        """Test summary extraction of artifact IDs from tool results."""
+        turns = [
+            {"role": "user", "content": "Create a brief"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {"name": "save_artifact", "arguments": {"artifact_id": "brief-001"}}
+                ],
+            },
+            {
+                "role": "tool",
+                "content": '{"artifact_id": "brief-001", "saved": true}',
+            },
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "name": "delegate",
+                        "arguments": {"to_agent": "plotwright", "task": "Create structure"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": '{"assigned_to": "plotwright"}',
+            },
+        ]
+
+        summary = secretary.generate_summary(turns)
+
+        assert "brief-001" in summary  # Artifact ID extracted
+        assert "plotwright" in summary  # Delegation extracted
 
     def test_summarize_context_below_threshold(self, secretary: ContextSecretary):
         """Test summarize_context returns empty result when below threshold."""

@@ -1523,7 +1523,7 @@ class AgentRuntime:
         session: Session,
         options: InvokeOptions | None = None,
         enforce_tool_usage: bool = True,
-        max_iterations: int = 5,
+        max_iterations: int = 10,
     ) -> AsyncIterator[StreamChunk]:
         """
         Activate an agent with streaming response.

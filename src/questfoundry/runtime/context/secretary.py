@@ -950,7 +950,13 @@ class ContextSecretary:
         """
         Generate a summary of conversation turns.
 
-        This is a simple template-based summary. For production use,
+        Extracts structured data from tool calls to preserve:
+        - Artifact IDs created/referenced
+        - Delegation outcomes
+        - Playbook/workflow state
+        - Key decisions
+
+        For production use with more nuanced summarization,
         this should be replaced with an LLM call using a fast model.
 
         Args:
@@ -962,26 +968,103 @@ class ContextSecretary:
         if not turns:
             return ""
 
-        # Count messages by role
-        role_counts: dict[str, int] = {}
-        tool_names: set[str] = set()
+        # Extract structured data from tool calls
+        artifacts_created: set[str] = set()
+        artifacts_referenced: set[str] = set()
+        delegations: list[str] = []
+        playbook: str | None = None
+        workflow_notes: list[str] = []
 
         for turn in turns:
-            role = turn.get("role", "unknown")
-            role_counts[role] = role_counts.get(role, 0) + 1
+            # Extract from tool results
+            if turn.get("role") == "tool":
+                content = turn.get("content", "")
+                try:
+                    result = json.loads(content) if isinstance(content, str) else content
+                    if isinstance(result, dict):
+                        # Artifact operations
+                        if "artifact_id" in result:
+                            aid = result["artifact_id"]
+                            if result.get("created") or result.get("saved"):
+                                artifacts_created.add(aid)
+                            else:
+                                artifacts_referenced.add(aid)
 
-            # Track tool calls
+                        # Delegation results
+                        if "assigned_to" in result:
+                            delegations.append(f"→ {result['assigned_to']}")
+                        if "returned_to" in result:
+                            summary = result.get("summary", "")[:100]
+                            assessment = result.get("result_assessment", "")
+                            delegations.append(
+                                f"← {assessment}: {summary}..." if summary else f"← {assessment}"
+                            )
+
+                        # Search results
+                        if "artifacts" in result and isinstance(result["artifacts"], list):
+                            for a in result["artifacts"][:5]:
+                                if isinstance(a, dict) and "_id" in a:
+                                    artifacts_referenced.add(a["_id"])
+
+                except (json.JSONDecodeError, TypeError):
+                    # Non-JSON or malformed content is common (text responses)
+                    # Skip silently - we only extract from structured tool results
+                    pass
+
+            # Extract from assistant tool calls
             for tc in turn.get("tool_calls", []):
-                tool_names.add(tc.get("name", "unknown"))
+                name = tc.get("name", "")
+                args = tc.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+
+                # Track playbook
+                if name == "consult_playbook" and "playbook_id" in args:
+                    playbook = args["playbook_id"]
+
+                # Track delegations
+                if name == "delegate" and "to_agent" in args:
+                    task = args.get("task", "")[:50]
+                    delegations.append(f"→ {args['to_agent']}: {task}...")
+
+                # Track key actions
+                if name == "save_artifact" and "artifact_id" in args:
+                    artifacts_created.add(args["artifact_id"])
+                if name == "communicate":
+                    msg = args.get("message", "")[:80]
+                    if msg:
+                        workflow_notes.append(f"Said: {msg}...")
 
         # Build summary
         lines = [f"[Summary of {len(turns)} earlier conversation turns]"]
 
-        role_summary = ", ".join(f"{count} {role}" for role, count in role_counts.items())
-        lines.append(f"Roles: {role_summary}")
+        if playbook:
+            lines.append(f"Workflow: {playbook}")
 
-        if tool_names:
-            lines.append(f"Tools used: {', '.join(sorted(tool_names))}")
+        if artifacts_created:
+            lines.append(f"Artifacts created: {', '.join(sorted(artifacts_created)[:10])}")
+
+        if artifacts_referenced - artifacts_created:
+            refs = artifacts_referenced - artifacts_created
+            lines.append(f"Artifacts referenced: {', '.join(sorted(refs)[:10])}")
+
+        if delegations:
+            lines.append(f"Delegations: {'; '.join(delegations[:8])}")
+
+        if workflow_notes:
+            lines.append(f"Notes: {'; '.join(workflow_notes[:3])}")
+
+        # Fallback if nothing extracted
+        if len(lines) == 1:
+            tool_names: set[str] = set()
+            for turn in turns:
+                for tc in turn.get("tool_calls", []):
+                    tool_names.add(tc.get("name", "unknown"))
+            if tool_names:
+                lines.append(f"Tools used: {', '.join(sorted(tool_names))}")
 
         return "\n".join(lines)
 
