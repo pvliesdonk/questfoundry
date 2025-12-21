@@ -452,13 +452,15 @@ class StatusReporter:
         if self.quiet:
             return
 
-        task_preview = task[:50] + "..." if len(task) > 50 else task
+        # Task preview: 100 chars at verbosity 0, full task at verbosity 1+
+        max_len = 100 if self.verbosity == 0 else 200
+        task_preview = task[:max_len] + "..." if len(task) > max_len else task
         turn_info = f" (turn {turn_number})" if self.verbosity >= 2 else ""
         self.console.print(
             f"  [dim]delegate:[/dim] {from_agent} [yellow]->[/yellow] {to_agent}{turn_info}"
         )
-        if self.verbosity >= 1:
-            self.console.print(f"    [dim]{task_preview}[/dim]")
+        # Always show task preview (this is important context)
+        self.console.print(f"    [dim]{task_preview}[/dim]")
 
     def delegation_complete(
         self,
@@ -470,7 +472,8 @@ class StatusReporter:
         error: str | None = None,
     ) -> None:
         """Report delegation completion."""
-        task_preview = task[:80] + "..." if len(task) > 80 else task
+        # Truncate task for event storage (80 chars is fine for records)
+        task_preview = task[:100] + "..." if len(task) > 100 else task
 
         event = DelegationEvent(
             from_agent=from_agent,
@@ -490,8 +493,9 @@ class StatusReporter:
         # Show delegation with task - this is key info users want to see
         status_icon = "[green]✓[/green]" if success else "[red]✗[/red]"
         self.console.print(f"  [dim]delegate:[/dim] [cyan]{to_agent}[/cyan] {status_icon}")
-        # Always show task preview (this is what SR asked specialist to do)
-        self.console.print(f"    [dim]task:[/dim] {task_preview}")
+        # Always show task preview with more context
+        display_task = task[:150] + "..." if len(task) > 150 else task
+        self.console.print(f"    [dim]task:[/dim] {display_task}")
         if not success and error:
             self.console.print(f"    [red]error: {error}[/red]")
 
@@ -536,8 +540,13 @@ class StatusReporter:
             f"[{rec_color}]{result.recommendation}[/{rec_color}]"
         )
 
-        # Summary (always shown)
-        summary_text = result.summary[:100] + "..." if len(result.summary) > 100 else result.summary
+        # Summary (always shown, 150 chars default, 250 at verbosity 1+)
+        max_summary = 150 if self.verbosity == 0 else 250
+        summary_text = (
+            result.summary[:max_summary] + "..."
+            if len(result.summary) > max_summary
+            else result.summary
+        )
         self.console.print(f"    [dim]{summary_text}[/dim]")
 
         # Artifacts produced (if any)

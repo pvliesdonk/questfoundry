@@ -1030,6 +1030,15 @@ async def _stream_response(
         )
         full_content += follow_up_content
 
+    # Check if session should be marked as completed
+    # For streaming, we check if the current turn called a session-terminating tool
+    current_turn = session.current_turn
+    if current_turn:
+        for tc in current_turn.tool_calls:
+            if tc.tool_id == "terminate_session" and tc.success:
+                session.complete()
+                break
+
     return full_content
 
 
@@ -1139,6 +1148,10 @@ async def _invoke_response(
             runtime, agent, session, _invoke_response, _follow_up_depth
         )
         full_content += follow_up_content
+
+    # Check if session should be marked as completed
+    if result.session_terminated:
+        session.complete()
 
     return full_content
 
