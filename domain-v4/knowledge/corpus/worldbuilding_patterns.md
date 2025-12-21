@@ -1,3 +1,17 @@
+---
+title: Worldbuilding Patterns for Interactive Fiction
+summary: Creating consistent fictional worlds with internal logic, timeline management, causality chains, and implied depth.
+topics:
+  - worldbuilding
+  - world-consistency
+  - internal-logic
+  - timeline-management
+  - causality-chains
+  - implied-depth
+  - rules-establishment
+cluster: world-and-setting
+---
+
 # Worldbuilding Patterns for Interactive Fiction
 
 Craft guidance for creating consistent, believable fictional worlds—internal logic, timeline management, causality, and the art of implying depth.

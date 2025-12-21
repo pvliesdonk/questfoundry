@@ -1,3 +1,17 @@
+---
+title: Dialogue Craft for Interactive Fiction
+summary: Writing compelling dialogue with character voice, subtext, natural exposition, and effective tagging techniques.
+topics:
+  - dialogue
+  - character-voice
+  - subtext
+  - exposition
+  - dialogue-tags
+  - verbal-tics
+  - speech-patterns
+cluster: prose-and-language
+---
+
 # Dialogue Craft for Interactive Fiction
 
 Craft guidance for writing compelling dialogue—character voice, subtext, natural exposition, and effective tagging.

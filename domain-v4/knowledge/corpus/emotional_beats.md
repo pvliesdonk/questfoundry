@@ -1,3 +1,18 @@
+---
+title: Emotional Beats for Interactive Fiction
+summary: Designing emotional moments through catharsis building, earned impact, and creating resonant story experiences.
+topics:
+  - emotional-beats
+  - catharsis
+  - emotional-impact
+  - setup-and-payoff
+  - reader-investment
+  - triumphant-victory
+  - devastating-loss
+  - bittersweet-resolution
+cluster: emotional-design
+---
+
 # Emotional Beats for Interactive Fiction
 
 Craft guidance for designing emotional moments—building to catharsis, earning emotional impact, and creating resonant experiences.

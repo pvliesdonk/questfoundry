@@ -1,3 +1,18 @@
+---
+title: Horror Genre Conventions for Interactive Fiction
+summary: Writing horror with fear mechanics, atmosphere building, threat design, and responsible content handling.
+topics:
+  - horror
+  - psychological-horror
+  - supernatural-horror
+  - cosmic-horror
+  - body-horror
+  - atmosphere
+  - dread
+  - fear-mechanics
+cluster: genre-conventions
+---
+
 # Horror Genre Conventions for Interactive Fiction
 
 Craft guidance for writing horror—fear mechanics, atmosphere, threat design, pacing, and content considerations.

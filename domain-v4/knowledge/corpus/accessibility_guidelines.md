@@ -1,3 +1,18 @@
+---
+title: Accessibility Guidelines for Interactive Fiction
+summary: Making IF accessible through cognitive accessibility, visual considerations, input options, and inclusive design practices.
+topics:
+  - accessibility
+  - cognitive-accessibility
+  - visual-accessibility
+  - inclusive-design
+  - reading-level
+  - memory-demands
+  - navigation
+  - screen-readers
+cluster: audience-and-access
+---
+
 # Accessibility Guidelines for Interactive Fiction
 
 Craft guidance for making IF accessible to diverse readers—cognitive accessibility, visual considerations, input options, and inclusive design.

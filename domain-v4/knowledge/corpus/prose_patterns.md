@@ -1,3 +1,18 @@
+---
+title: Prose Patterns for Interactive Fiction
+summary: Writing compelling prose with second person present tense, sensory grounding, pacing control, and paragraph cadence.
+topics:
+  - prose-style
+  - second-person
+  - present-tense
+  - sensory-details
+  - pacing
+  - paragraph-length
+  - sentence-rhythm
+  - white-space
+cluster: prose-and-language
+---
+
 # Prose Patterns for Interactive Fiction
 
 Craft guidance for writing compelling prose in interactive fiction—focusing on immediacy, sensory grounding, and rhythm.

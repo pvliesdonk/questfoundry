@@ -1,3 +1,18 @@
+---
+title: Conflict Patterns for Interactive Fiction
+summary: Creating and managing conflict through internal vs external struggles, escalation, resolution, and character growth.
+topics:
+  - conflict
+  - internal-conflict
+  - external-conflict
+  - antagonist-design
+  - escalation
+  - resolution-patterns
+  - character-growth
+  - stakes
+cluster: emotional-design
+---
+
 # Conflict Patterns for Interactive Fiction
 
 Craft guidance for creating and managing conflict—types, escalation, resolution, and the relationship between struggle and character growth.

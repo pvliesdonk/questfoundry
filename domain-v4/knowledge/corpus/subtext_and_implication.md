@@ -1,3 +1,18 @@
+---
+title: Subtext and Implication for Interactive Fiction
+summary: Writing beneath the surface through subtext, implication, symbolic objects, and environmental storytelling.
+topics:
+  - subtext
+  - implication
+  - show-dont-tell
+  - symbolism
+  - environmental-storytelling
+  - silence
+  - reader-trust
+  - juxtaposition
+cluster: prose-and-language
+---
+
 # Subtext and Implication for Interactive Fiction
 
 Craft guidance for writing beneath the surface—communicating meaning without stating it directly, trusting readers, and using silence.
