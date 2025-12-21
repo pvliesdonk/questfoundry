@@ -117,6 +117,6 @@
   "metadata": {
     "wave": 7,
     "status": "complete",
-    "notes": "Wave 7: Added list_* tools for explicit discovery (list_artifact_types, list_stores, list_agents). V3 pattern: compact menus in prompt with consult tools for full details. Studio definition: 12 agents, 17 tools, 16 artifact types, 2 asset types, 7 playbooks."
+    "notes": "Wave 7: Added list_* tools for explicit discovery (list_artifact_types, list_stores, list_agents). V3 pattern: compact menus in prompt with consult tools for full details. Studio definition: 12 agents, 20 tools, 16 artifact types, 2 asset types, 7 playbooks."
   }
 }

@@ -185,7 +185,7 @@ class ValidateStoryGraphTool(BaseTool):
             )
 
             # Extract outgoing connections from choice_intents (deduplicate)
-            # choice_intents can be strings or objects with target_anchor
+            # choice_intents are objects with target_anchor field
             choice_intents = brief.get("choice_intents", [])
             for choice in choice_intents:
                 if isinstance(choice, dict):
@@ -217,6 +217,8 @@ class ValidateStoryGraphTool(BaseTool):
                     existing.lifecycle_state = lifecycle
                     existing.artifact_type = "section"
                     existing.artifact_id = section.get("_id", "")
+                    # Also update title from section when it becomes authoritative
+                    existing.title = section.get("title", existing.title)
                 # Merge outgoing connections (choices can be objects with target_anchor)
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
@@ -232,7 +234,7 @@ class ValidateStoryGraphTool(BaseTool):
                     lifecycle_state=lifecycle,
                     artifact_type="section",
                 )
-                # choices can be objects with target_anchor
+                # choices are objects with target_anchor field
                 section_choices = section.get("choices", [])
                 for choice in section_choices:
                     if isinstance(choice, dict):

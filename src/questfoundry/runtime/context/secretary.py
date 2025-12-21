@@ -1007,6 +1007,8 @@ class ContextSecretary:
                                     artifacts_referenced.add(a["_id"])
 
                 except (json.JSONDecodeError, TypeError):
+                    # Non-JSON or malformed content is common (text responses)
+                    # Skip silently - we only extract from structured tool results
                     pass
 
             # Extract from assistant tool calls
