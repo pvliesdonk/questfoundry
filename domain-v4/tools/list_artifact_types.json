@@ -24,9 +24,9 @@
         "type": "integer",
         "description": "Number of artifact types"
       },
-      "hint": {
+      "recommended_action": {
         "type": "string",
-        "description": "Hint for next action"
+        "description": "Directive next step after listing types"
       }
     }
   },
@@ -41,7 +41,7 @@
           {"id": "section_brief", "name": "Section Brief", "category": "planning", "description": "Structural outline before prose writing"}
         ],
         "count": 2,
-        "hint": "Use consult_schema(artifact_type_id) for full field definitions."
+        "recommended_action": "Call consult_schema(artifact_type_id) to get full field definitions for the type you need."
       }
     }
   ]

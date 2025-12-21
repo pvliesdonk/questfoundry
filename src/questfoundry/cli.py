@@ -676,6 +676,7 @@ async def _setup_runtime(
                 agent_id=agent_id,
                 turn_number=turn_number or 0,
                 execution_time_ms=execution_time_ms,
+                result_data=result if isinstance(result, dict) else None,
             )
             # Track artifact creation from save_artifact tool
             if tool_id == "save_artifact" and success and result:
@@ -2079,6 +2080,101 @@ def checkpoints_delete(
     finally:
         if project:
             project.close()
+
+
+# =============================================================================
+# Export Command (Stub)
+# =============================================================================
+
+
+# =============================================================================
+# Validate Subcommand
+# =============================================================================
+
+validate_app = typer.Typer(help="Validate domain and schemas", no_args_is_help=True)
+app.add_typer(validate_app, name="validate")
+
+
+@validate_app.command("semantic")
+def validate_semantic(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", "-s", help="Treat warnings as errors"),
+    ] = False,
+) -> None:
+    """Check for semantic ambiguity issues in tool interfaces.
+
+    Validates tool schemas against semantic conventions defined in
+    meta/docs/semantic-conventions.md. Checks for:
+
+    - Banned field names (color codes like 'green', 'yellow', 'red')
+    - Discouraged field names ('hint', 'any', 'completing')
+    - Biasing language in tool descriptions (emphatic caps, role-specific language)
+
+    Exit codes:
+    - 0: No errors (warnings allowed unless --strict)
+    - 1: Errors found or warnings with --strict
+    """
+    from questfoundry.runtime.validation.semantic import (
+        Severity,
+        validate_domain_semantics,
+    )
+
+    console.print()
+    console.print("[bold]Semantic Validation[/bold]")
+    console.print(f"[dim]Domain: {domain}[/dim]")
+    console.print()
+
+    result = validate_domain_semantics(domain)
+
+    if not result.issues:
+        console.print(f"[green]✓[/green] {result.files_checked} files checked, no issues found")
+        return
+
+    # Group issues by severity
+    errors = [i for i in result.issues if i.severity == Severity.ERROR]
+    warnings = [i for i in result.issues if i.severity == Severity.WARNING]
+    infos = [i for i in result.issues if i.severity == Severity.INFO]
+
+    # Display issues
+    for issue in result.issues:
+        if issue.severity == Severity.ERROR:
+            icon = "[red]✗[/red]"
+            style = "red"
+        elif issue.severity == Severity.WARNING:
+            icon = "[yellow]⚠[/yellow]"
+            style = "yellow"
+        else:
+            icon = "[blue]ℹ[/blue]"
+            style = "dim"
+
+        console.print(f"{icon} [{style}]{issue.message}[/{style}]")
+        console.print(f"   [dim]Location: {issue.location}[/dim]")
+        console.print(f"   [dim]Rule: {issue.rule}[/dim]")
+        if issue.suggestion:
+            console.print(f"   [cyan]Suggestion: {issue.suggestion}[/cyan]")
+        console.print()
+
+    # Summary
+    console.print(f"[bold]Summary:[/bold] {result.files_checked} files checked")
+    if errors:
+        console.print(f"  [red]{len(errors)} error(s)[/red]")
+    if warnings:
+        console.print(f"  [yellow]{len(warnings)} warning(s)[/yellow]")
+    if infos:
+        console.print(f"  [dim]{len(infos)} info(s)[/dim]")
+
+    # Determine exit code
+    if errors:
+        raise typer.Exit(1)
+    if strict and warnings:
+        console.print()
+        console.print("[yellow]Failing due to --strict flag[/yellow]")
+        raise typer.Exit(1)
 
 
 # =============================================================================

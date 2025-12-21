@@ -2,7 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_playbook",
   "name": "Consult Playbook",
-  "description": "Retrieve full details for a playbook/workflow. REQUIRED: You MUST provide the playbook_id parameter (e.g., 'story_spark'). Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how to orchestrate a workflow.",
+  "description": "Retrieve full details for a playbook/workflow. Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how a workflow should be orchestrated.",
 
   "summarization_policy": "drop",
   "summary_template": "Retrieved playbook: {name}",

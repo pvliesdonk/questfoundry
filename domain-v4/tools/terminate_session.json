@@ -2,7 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "terminate_session",
   "name": "Terminate Session",
-  "description": "End the current session. Use when:\n- All requested work is complete\n- User explicitly requests session end\n- Unrecoverable error prevents further progress\n\nThis is the ONLY way for orchestrators to end a session explicitly. Other tools like communicate and delegate yield control but expect to resume - they do NOT end the session.",
+  "description": "End the current session. Use when:\n- All requested work is complete\n- User explicitly requests session end\n- Unrecoverable error prevents further progress\n\nUnlike communicate and delegate which yield control temporarily, this tool ends the session permanently.",
   "terminates_turn": true,
   "terminates_session": true,
   "input_schema": {

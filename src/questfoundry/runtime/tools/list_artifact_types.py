@@ -42,6 +42,6 @@ class ListArtifactTypesTool(BaseTool):
             data={
                 "artifact_types": types,
                 "count": len(types),
-                "hint": "Use consult_schema(artifact_type_id) for full field definitions.",
+                "recommended_action": "Call consult_schema(artifact_type_id) to get full field definitions for the type you need.",
             },
         )

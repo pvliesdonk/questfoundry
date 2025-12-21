@@ -266,10 +266,10 @@
     "progress_update_payload": {
       "type": "object",
       "properties": {
-        "status": {
+        "progress_phase": {
           "type": "string",
-          "enum": ["started", "in_progress", "blocked", "completing"],
-          "description": "Current status"
+          "enum": ["started", "in_progress", "blocked"],
+          "description": "Current progress phase. Use percent_complete to indicate near-completion rather than a separate 'completing' state."
         },
         "percent_complete": {
           "type": "integer",

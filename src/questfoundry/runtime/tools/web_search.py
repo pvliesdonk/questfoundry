@@ -12,12 +12,22 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any
 
 from questfoundry.runtime.tools.base import BaseTool, ToolExecutionError, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
 
 logger = logging.getLogger(__name__)
+
+# Valid recency values
+VALID_RECENCY_VALUES = {"all_time", "day", "week", "month", "year"}
+
+# Domain filter validation pattern - allows valid domain characters only
+# Matches: example.com, sub.example.com, .edu, gov, etc.
+DOMAIN_FILTER_PATTERN = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$"
+)
 
 # SearXNG configuration
 SEARXNG_URL = os.environ.get("QF_SEARXNG__URL", "")
@@ -73,7 +83,8 @@ class WebSearchTool(BaseTool):
         """Execute web search."""
         query = args.get("query", "")
         max_results = args.get("max_results", 5)
-        categories = args.get("categories", ["general"])
+        domain_filter = args.get("domain_filter")
+        recency = args.get("recency", "all_time")
 
         if not query.strip():
             return ToolResult(
@@ -82,13 +93,32 @@ class WebSearchTool(BaseTool):
                 error="Search query cannot be empty",
             )
 
+        # Validate domain_filter to prevent query injection
+        if domain_filter and not DOMAIN_FILTER_PATTERN.match(domain_filter):
+            return ToolResult(
+                success=False,
+                data={"results": []},
+                error=f"Invalid domain_filter: '{domain_filter}'. Must be a valid domain (e.g., 'wikipedia.org', 'gov').",
+            )
+
+        # Validate recency value
+        if recency not in VALID_RECENCY_VALUES:
+            logger.warning(
+                "WebSearchTool: Unrecognized recency value '%s'; defaulting to 'all_time'.",
+                recency,
+            )
+            recency = "all_time"
+
         try:
-            results = await self._search(query, max_results, categories)
+            # Build actual search query with domain filter if specified
+            search_query = f"site:{domain_filter} {query}" if domain_filter else query
+
+            results = await self._search(search_query, max_results, recency)
 
             return ToolResult(
                 success=True,
                 data={
-                    "query": query,
+                    "query_used": search_query,
                     "result_count": len(results),
                     "results": results,
                 },
@@ -98,16 +128,39 @@ class WebSearchTool(BaseTool):
             raise ToolExecutionError(f"Web search failed: {e}") from e
 
     async def _search(
-        self, query: str, max_results: int, categories: list[str]
+        self,
+        query: str,
+        max_results: int,
+        recency: str,
     ) -> list[dict[str, Any]]:
-        """Perform search via SearXNG API."""
+        """Perform search via SearXNG API.
+
+        Args:
+            query: Search query string (may include site: prefix for domain filtering)
+            max_results: Maximum results to return (applied client-side; SearXNG
+                doesn't support a results limit parameter)
+            recency: Time filter - 'all_time', 'day', 'week', 'month', 'year'
+        """
         import httpx
 
-        params = {
+        # Map recency to SearXNG time_range parameter
+        # Note: recency is already validated in execute(), so we use direct lookup
+        time_range_map: dict[str, str | None] = {
+            "all_time": None,
+            "day": "day",
+            "week": "week",
+            "month": "month",
+            "year": "year",
+        }
+        time_range = time_range_map[recency]
+
+        params: dict[str, Any] = {
             "q": query,
             "format": "json",
-            "categories": ",".join(categories),
+            "categories": "general",
         }
+        if time_range:
+            params["time_range"] = time_range
 
         async with httpx.AsyncClient(timeout=SEARXNG_TIMEOUT) as client:
             response = await client.get(f"{SEARXNG_URL}/search", params=params)
@@ -115,17 +168,18 @@ class WebSearchTool(BaseTool):
 
             data = response.json()
 
-        # Extract results
+        # Extract results (max_results applied client-side as SearXNG returns full page)
         results = []
         for item in data.get("results", [])[:max_results]:
-            results.append(
-                {
-                    "title": item.get("title", ""),
-                    "url": item.get("url", ""),
-                    "snippet": item.get("content", ""),
-                    "engine": item.get("engine", ""),
-                }
-            )
+            result: dict[str, Any] = {
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", ""),
+            }
+            # Include published_date if available
+            if item.get("publishedDate"):
+                result["published_date"] = item.get("publishedDate")
+            results.append(result)
 
         return results
 

@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "tool_response_interpretation",
+  "name": "Tool Response Interpretation",
+  "layer": "must_know",
+
+  "summary": "How to interpret tool responses: distinguish execution outcome, validation result, and recommended action.",
+
+  "keywords": ["tools", "responses", "interpretation", "action_outcome", "recovery_action"],
+
+  "triggers": [
+    "tool returned an error",
+    "how to interpret tool result",
+    "what does action_outcome mean",
+    "tool says rejected"
+  ],
+
+  "content": {
+    "type": "file_ref",
+    "format": "markdown",
+    "file_path": "knowledge/must_know/tool_response_interpretation.md"
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator", "creator", "validator", "researcher", "curator"]
+  },
+
+  "related_entries": ["delegation_protocol", "runtime_guidelines_core"],
+
+  "tags": ["runtime", "tools", "interpretation", "semantic"]
+}

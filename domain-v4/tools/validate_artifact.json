@@ -62,10 +62,14 @@
         "items": {
           "type": "object",
           "properties": {
-            "bar": { "type": "string" },
-            "status": { "type": "string", "enum": ["green", "yellow", "red"] },
-            "evidence": { "type": "string" },
-            "smallest_fix": { "type": "string" }
+            "bar": { "type": "string", "description": "Name of the quality bar checked" },
+            "status": {
+              "type": "string",
+              "enum": ["pass", "warn", "fail"],
+              "description": "Result of the check: pass=meets requirements, warn=minor issues, fail=blocking issues"
+            },
+            "evidence": { "type": "string", "description": "What was observed" },
+            "smallest_fix": { "type": "string", "description": "Minimal change needed to address issues" }
           }
         }
       }

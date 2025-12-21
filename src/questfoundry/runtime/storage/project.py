@@ -140,12 +140,26 @@ class Project:
             info_path.write_text(json.dumps(self._info.to_dict(), indent=2))
 
     def _get_connection(self) -> sqlite3.Connection:
-        """Get or create database connection."""
+        """Get or create database connection.
+
+        Configures the connection for safe async usage:
+        - check_same_thread=False: Allow usage across async boundaries
+        - WAL journal mode: Allow concurrent reads during writes
+        - busy_timeout: Wait for locks instead of failing immediately
+        """
         if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path)
+            self._conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,  # Required for async usage
+                timeout=30.0,  # Wait up to 30s for locks
+            )
             self._conn.row_factory = sqlite3.Row
+            # Enable WAL mode for better concurrency (reads don't block writes)
+            self._conn.execute("PRAGMA journal_mode = WAL")
             # Enable foreign keys
             self._conn.execute("PRAGMA foreign_keys = ON")
+            # Set busy timeout (milliseconds) as backup
+            self._conn.execute("PRAGMA busy_timeout = 30000")
         return self._conn
 
     @classmethod

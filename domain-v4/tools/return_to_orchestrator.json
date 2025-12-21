@@ -2,7 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "return_to_orchestrator",
   "name": "Return to Orchestrator",
-  "description": "Signal task completion and return control to the orchestrator (Showrunner). Use this when your delegated work is complete, blocked, or needs orchestrator decision.\n\nThis is the standard way for specialist agents to end their turn after completing delegated work. The orchestrator will receive your summary and decide next steps.\n\nNOTE: This tool is for NON-ORCHESTRATOR agents only. Orchestrators use 'delegate' or 'communicate' to end their turns.",
+  "description": "Signal task completion and return control to the orchestrator. Use this when your delegated work is complete, blocked, or needs orchestrator decision.\n\nProvide a summary, quality assessment, and recommended next action. The orchestrator will receive this information and decide next steps.",
 
   "terminates_turn": true,
   "summarization_policy": "ultra_concise",
