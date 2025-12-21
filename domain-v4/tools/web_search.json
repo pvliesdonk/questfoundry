@@ -52,7 +52,11 @@
       },
       "query_used": {
         "type": "string",
-        "description": "The actual query sent (may differ from input)"
+        "description": "The actual query sent (may include site: prefix if domain_filter was specified)"
+      },
+      "result_count": {
+        "type": "integer",
+        "description": "Number of results returned"
       }
     }
   },

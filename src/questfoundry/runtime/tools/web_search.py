@@ -84,12 +84,15 @@ class WebSearchTool(BaseTool):
             )
 
         try:
-            results = await self._search(query, max_results, domain_filter, recency)
+            # Build actual search query with domain filter if specified
+            search_query = f"site:{domain_filter} {query}" if domain_filter else query
+
+            results = await self._search(search_query, max_results, recency)
 
             return ToolResult(
                 success=True,
                 data={
-                    "query_used": query,
+                    "query_used": search_query,
                     "result_count": len(results),
                     "results": results,
                 },
@@ -102,23 +105,16 @@ class WebSearchTool(BaseTool):
         self,
         query: str,
         max_results: int,
-        domain_filter: str | None,
         recency: str,
     ) -> list[dict[str, Any]]:
         """Perform search via SearXNG API.
 
         Args:
-            query: Search query string
+            query: Search query string (may include site: prefix for domain filtering)
             max_results: Maximum results to return
-            domain_filter: Optional domain restriction (e.g., 'wikipedia.org', 'gov')
             recency: Time filter - 'all_time', 'day', 'week', 'month', 'year'
         """
         import httpx
-
-        # Build query with domain filter if specified
-        search_query = query
-        if domain_filter:
-            search_query = f"site:{domain_filter} {query}"
 
         # Map recency to SearXNG time_range parameter
         time_range_map = {
@@ -131,7 +127,7 @@ class WebSearchTool(BaseTool):
         time_range = time_range_map.get(recency)
 
         params: dict[str, Any] = {
-            "q": search_query,
+            "q": query,
             "format": "json",
             "categories": "general",
         }
