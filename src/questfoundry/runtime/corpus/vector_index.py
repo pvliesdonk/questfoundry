@@ -98,29 +98,9 @@ class VectorIndex:
         )
         table_exists = cursor.fetchone() is not None
 
-        if table_exists:
-            # Check stored dimension
-            cursor = conn.execute("SELECT value FROM corpus_embedding_meta WHERE key='dimension'")
-            row = cursor.fetchone()
-            stored_dim = int(row["value"]) if row else None
-
-            # Drop and recreate if dimension mismatch OR if no dimension stored (unknown state)
-            if stored_dim is None or stored_dim != self._dimension:
-                if stored_dim is not None:
-                    logger.info(
-                        f"Vector dimension changed ({stored_dim} -> {self._dimension}), "
-                        "rebuilding vector index"
-                    )
-                else:
-                    logger.info(
-                        f"Vector table exists but dimension unknown, recreating with {self._dimension}d"
-                    )
-                conn.execute("DROP TABLE corpus_vectors")
-                table_exists = False
-
+        # Only create table if it doesn't exist
+        # Dimension changes are handled in build_vectors() with force=True
         if not table_exists:
-            # Create virtual table for vector search
-            # Note: vec0 requires exact dimension in schema
             conn.execute(
                 f"""
                 CREATE VIRTUAL TABLE corpus_vectors USING vec0(
@@ -129,8 +109,7 @@ class VectorIndex:
                 )
                 """
             )
-
-        conn.commit()
+            conn.commit()
 
     @property
     def is_available(self) -> bool:
@@ -195,10 +174,33 @@ class VectorIndex:
 
         conn = self._get_connection()
 
+        # Check stored dimension and handle dimension changes
+        cursor = conn.execute("SELECT value FROM corpus_embedding_meta WHERE key='dimension'")
+        row = cursor.fetchone()
+        stored_dim = int(row["value"]) if row else None
+
+        # Check if dimension changed - need to recreate table
+        if stored_dim is not None and stored_dim != self._dimension:
+            logger.info(
+                f"Vector dimension changed ({stored_dim} -> {self._dimension}), "
+                "recreating vector table"
+            )
+            conn.execute("DROP TABLE IF EXISTS corpus_vectors")
+            conn.execute(
+                f"""
+                CREATE VIRTUAL TABLE corpus_vectors USING vec0(
+                    section_id INTEGER PRIMARY KEY,
+                    embedding FLOAT[{self._dimension}]
+                )
+                """
+            )
+            conn.commit()
+
         # Check if rebuild needed
         if not force:
             cursor = conn.execute("SELECT COUNT(*) as count FROM corpus_vectors")
-            existing = cursor.fetchone()["count"]
+            row = cursor.fetchone()
+            existing = row["count"] if row else 0
             if existing > 0:
                 logger.info(f"Vector index already has {existing} vectors, skipping")
                 return 0
