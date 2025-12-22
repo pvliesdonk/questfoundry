@@ -38,6 +38,7 @@ IMPLICIT_TOOL_DEFINITIONS: dict[str, Tool] = {
         id="save_artifact",
         name="Save Artifact",
         description="Persist an artifact to a store (validates schema and permissions).",
+        can_reject=True,  # Rejects work when validation fails
     ),
     "update_artifact": Tool(
         id="update_artifact",
@@ -55,6 +56,7 @@ IMPLICIT_TOOL_DEFINITIONS: dict[str, Tool] = {
         id="request_lifecycle_transition",
         name="Request Lifecycle Transition",
         description="Request a lifecycle state transition for an artifact (draft→review→approved→cold).",
+        can_reject=True,  # Rejects work when transition not allowed
     ),
     "get_lifecycle_state": Tool(
         id="get_lifecycle_state",

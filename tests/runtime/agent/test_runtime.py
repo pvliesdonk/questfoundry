@@ -532,3 +532,422 @@ class TestContextSummarizationPressureGating:
         assert result != history
         # Should have summary message + preserved recent turns
         assert len(result) < len(history)
+
+
+class TestIterationOutcome:
+    """Tests for IterationOutcome dataclass (issue #234)."""
+
+    def test_made_progress_with_successes(self) -> None:
+        """made_progress returns True when there are effective successes."""
+        from questfoundry.runtime.agent.runtime import IterationOutcome
+
+        outcome = IterationOutcome(
+            total_tool_calls=3,
+            successful_tool_calls=2,
+            failed_tool_calls=1,
+            rejected_tool_calls=0,
+        )
+        assert outcome.made_progress is True
+
+    def test_made_progress_with_all_rejected(self) -> None:
+        """made_progress returns False when all successes were rejections."""
+        from questfoundry.runtime.agent.runtime import IterationOutcome
+
+        outcome = IterationOutcome(
+            total_tool_calls=2,
+            successful_tool_calls=2,
+            failed_tool_calls=0,
+            rejected_tool_calls=2,  # All successes were rejections
+        )
+        assert outcome.made_progress is False
+
+    def test_made_progress_with_partial_rejection(self) -> None:
+        """made_progress returns True when some successes are not rejections."""
+        from questfoundry.runtime.agent.runtime import IterationOutcome
+
+        outcome = IterationOutcome(
+            total_tool_calls=3,
+            successful_tool_calls=3,
+            failed_tool_calls=0,
+            rejected_tool_calls=1,  # Only 1 of 3 successes was rejection
+        )
+        assert outcome.made_progress is True
+
+    def test_made_progress_with_all_failures(self) -> None:
+        """made_progress returns False when all tools failed."""
+        from questfoundry.runtime.agent.runtime import IterationOutcome
+
+        outcome = IterationOutcome(
+            total_tool_calls=2,
+            successful_tool_calls=0,
+            failed_tool_calls=2,
+            rejected_tool_calls=0,
+        )
+        assert outcome.made_progress is False
+
+
+class TestMadeProgressHelper:
+    """Tests for _made_progress helper method (issue #234)."""
+
+    def test_failed_tool_is_no_progress(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Failed tool calls don't count as progress."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_result = ToolCall(
+            tool_id="some_tool",
+            args={},
+            success=False,
+            error="Something went wrong",
+        )
+        assert runtime._made_progress(tool_result) is False
+
+    def test_successful_tool_is_progress(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Successful tool calls count as progress by default."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_result = ToolCall(
+            tool_id="some_tool",
+            args={},
+            success=True,
+            result={"data": "success"},
+        )
+        assert runtime._made_progress(tool_result) is True
+
+    def test_rejected_can_reject_tool_is_no_progress(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Tool with can_reject=True returning rejected is no progress."""
+        from questfoundry.runtime.models.base import Tool
+        from questfoundry.runtime.tools.registry import ToolRegistry
+
+        # Add a tool that can reject
+        basic_studio.tools = [
+            Tool(
+                id="validate_artifact",
+                name="Validate Artifact",
+                description="Test tool that can reject",
+                can_reject=True,
+            )
+        ]
+
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+        runtime._tool_registry = ToolRegistry(studio=basic_studio)
+
+        # Tool succeeded but rejected the work
+        tool_result = ToolCall(
+            tool_id="validate_artifact",
+            args={},
+            success=True,
+            result={
+                "feedback": {
+                    "action_outcome": "rejected",
+                    "message": "Validation failed",
+                }
+            },
+        )
+        assert runtime._made_progress(tool_result) is False
+
+    def test_explicit_made_progress_flag(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Tool result with explicit made_progress field is respected."""
+        from questfoundry.runtime.models.base import Tool
+        from questfoundry.runtime.tools.registry import ToolRegistry
+
+        basic_studio.tools = [
+            Tool(
+                id="save_artifact",
+                name="Save Artifact",
+                description="Test tool",
+                can_reject=True,
+            )
+        ]
+
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+        runtime._tool_registry = ToolRegistry(studio=basic_studio)
+
+        # Tool explicitly says no progress was made
+        tool_result = ToolCall(
+            tool_id="save_artifact",
+            args={},
+            success=True,
+            result={"made_progress": False},
+        )
+        assert runtime._made_progress(tool_result) is False
+
+
+class TestEvaluateIterationOutcome:
+    """Tests for _evaluate_iteration_outcome method (issue #234)."""
+
+    def test_all_successful_tools(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """All successful tools produce progress."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_calls = [
+            ToolCall(tool_id="tool1", args={}, success=True, result={}),
+            ToolCall(tool_id="tool2", args={}, success=True, result={}),
+        ]
+
+        outcome = runtime._evaluate_iteration_outcome(tool_calls)
+
+        assert outcome.total_tool_calls == 2
+        assert outcome.successful_tool_calls == 2
+        assert outcome.failed_tool_calls == 0
+        assert outcome.rejected_tool_calls == 0
+        assert outcome.made_progress is True
+
+    def test_mixed_success_failure(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Mix of successful and failed tools."""
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        tool_calls = [
+            ToolCall(tool_id="tool1", args={}, success=True, result={}),
+            ToolCall(tool_id="tool2", args={}, success=False, error="Failed"),
+        ]
+
+        outcome = runtime._evaluate_iteration_outcome(tool_calls)
+
+        assert outcome.total_tool_calls == 2
+        assert outcome.successful_tool_calls == 1
+        assert outcome.failed_tool_calls == 1
+        assert outcome.made_progress is True
+
+    def test_all_rejected(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """All successful tools rejected work."""
+        from questfoundry.runtime.models.base import Tool
+        from questfoundry.runtime.tools.registry import ToolRegistry
+
+        basic_studio.tools = [Tool(id="validate", name="Validate", description="", can_reject=True)]
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+        runtime._tool_registry = ToolRegistry(studio=basic_studio)
+
+        tool_calls = [
+            ToolCall(
+                tool_id="validate",
+                args={},
+                success=True,
+                result={"feedback": {"action_outcome": "rejected"}},
+            ),
+        ]
+
+        outcome = runtime._evaluate_iteration_outcome(tool_calls)
+
+        assert outcome.total_tool_calls == 1
+        assert outcome.successful_tool_calls == 1
+        assert outcome.rejected_tool_calls == 1
+        assert outcome.made_progress is False
+
+    def test_mixed_rejected_and_successful_tools(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+    ) -> None:
+        """Iteration with at least one non-rejected success counts as progress."""
+        from questfoundry.runtime.models.base import Tool
+        from questfoundry.runtime.tools.registry import ToolRegistry
+
+        # One can_reject tool plus a generic non-rejecting tool
+        basic_studio.tools = [Tool(id="validate", name="Validate", description="", can_reject=True)]
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+        runtime._tool_registry = ToolRegistry(studio=basic_studio)
+
+        tool_calls = [
+            # Rejected work from a can_reject tool
+            ToolCall(
+                tool_id="validate",
+                args={},
+                success=True,
+                result={"feedback": {"action_outcome": "rejected"}},
+            ),
+            # Successful tool with no rejection signal
+            ToolCall(
+                tool_id="other_tool",
+                args={},
+                success=True,
+                result={},
+            ),
+        ]
+
+        outcome = runtime._evaluate_iteration_outcome(tool_calls)
+
+        assert outcome.total_tool_calls == 2
+        assert outcome.successful_tool_calls == 2
+        assert outcome.rejected_tool_calls == 1
+        # At least one non-rejected success → iteration made progress
+        assert outcome.made_progress is True
+
+
+class TestProgressBasedIterationLimits:
+    """Tests for progress-based iteration counting (issue #234)."""
+
+    @pytest.mark.asyncio
+    async def test_stalled_counter_resets_on_progress(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+        session: Session,
+    ) -> None:
+        """Stalled iterations reset when progress is made."""
+        from questfoundry.runtime.providers.base import ToolCallRequest
+
+        # Simulate: 2 rejections, then success, then 2 more rejections
+        call_count = 0
+
+        async def mock_invoke(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+
+            if call_count <= 2:
+                # First 2 calls: rejection
+                return LLMResponse(
+                    content="Trying validation...",
+                    model="test",
+                    provider="mock",
+                    tool_calls=[
+                        ToolCallRequest(
+                            id=f"call_{call_count}",
+                            name="validate_artifact",
+                            arguments={},
+                        )
+                    ],
+                )
+            elif call_count == 3:
+                # Third call: success
+                return LLMResponse(
+                    content="Saving artifact...",
+                    model="test",
+                    provider="mock",
+                    tool_calls=[
+                        ToolCallRequest(
+                            id=f"call_{call_count}",
+                            name="save_artifact",
+                            arguments={},
+                        )
+                    ],
+                )
+            else:
+                # After that: done
+                return LLMResponse(
+                    content="Done!",
+                    model="test",
+                    provider="mock",
+                )
+
+        mock_provider.invoke = AsyncMock(side_effect=mock_invoke)
+
+        # Set up tools
+        from questfoundry.runtime.models.base import Capability, Tool
+
+        basic_studio.tools = [
+            Tool(id="validate_artifact", name="Validate", description="", can_reject=True),
+            Tool(id="save_artifact", name="Save", description="", can_reject=True),
+        ]
+        basic_studio.agents[0].capabilities = [
+            Capability(id="cap1", name="", tool_ref="validate_artifact"),
+            Capability(id="cap2", name="", tool_ref="save_artifact"),
+        ]
+
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+
+        async def fake_execute(tool_call_requests, *_args, **_kwargs):
+            if not tool_call_requests:
+                return []
+
+            tool_name = tool_call_requests[0].name
+            if tool_name == "validate_artifact":
+                return [
+                    ToolCall(
+                        tool_id="validate_artifact",
+                        args={},
+                        success=True,
+                        result={"feedback": {"action_outcome": "rejected"}},
+                    )
+                ]
+            if tool_name == "save_artifact":
+                return [
+                    ToolCall(
+                        tool_id="save_artifact",
+                        args={},
+                        success=True,
+                        result={"feedback": {"action_outcome": "saved"}},
+                    )
+                ]
+            return []
+
+        runtime._execute_tool_calls = AsyncMock(side_effect=fake_execute)
+
+        agent = runtime.get_agent("showrunner")
+        assert agent is not None
+
+        # Should complete without hitting stalled limit because
+        # progress resets the counter
+        result = await runtime.activate(
+            agent,
+            "Test",
+            session,
+            max_stalled_iterations=3,
+            max_total_iterations=10,
+            enforce_tool_usage=False,
+        )
+
+        # Should have completed
+        assert "stalled" not in result.content.lower()
+
+    @pytest.mark.asyncio
+    async def test_max_tool_iterations_backward_compat(
+        self,
+        mock_provider: MagicMock,
+        basic_studio: Studio,
+        session: Session,
+    ) -> None:
+        """Deprecated max_tool_iterations still works."""
+        import warnings
+
+        mock_response = LLMResponse(
+            content="Done",
+            model="test",
+            provider="mock",
+        )
+        mock_provider.invoke = AsyncMock(return_value=mock_response)
+
+        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
+        agent = runtime.get_agent("showrunner")
+
+        # Should trigger deprecation warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", DeprecationWarning)
+            await runtime.activate(
+                agent,
+                "Test",
+                session,
+                max_tool_iterations=5,  # Deprecated parameter
+            )
+
+            # Check that deprecation warning was issued
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) >= 1
+            assert "max_tool_iterations" in str(deprecation_warnings[0].message)

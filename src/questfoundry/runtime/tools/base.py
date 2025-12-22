@@ -155,6 +155,11 @@ class BaseTool(ABC):
         """Timeout from definition."""
         return self._definition.timeout_ms
 
+    @property
+    def can_reject(self) -> bool:
+        """Whether this tool can reject work even when execution succeeds."""
+        return self._definition.can_reject
+
     def validate_input(self, args: dict[str, Any]) -> None:
         """
         Validate input arguments against schema.
