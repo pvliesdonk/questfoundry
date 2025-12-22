@@ -118,6 +118,7 @@ class WebSearchTool(BaseTool):
             return ToolResult(
                 success=True,
                 data={
+                    "action_outcome": f"found {len(results)} results",
                     "query_used": search_query,
                     "result_count": len(results),
                     "results": results,
@@ -205,6 +206,7 @@ class MockWebSearchTool(BaseTool):
         return ToolResult(
             success=True,
             data={
+                "action_outcome": "found 0 results (mock)",
                 "query": query,
                 "result_count": 0,
                 "results": [],

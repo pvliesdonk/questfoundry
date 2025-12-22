@@ -176,12 +176,14 @@ class ConsultCorpusTool(BaseTool):
         """Handle toc mode - return table of contents."""
         toc = index.get_toc()
 
+        file_count = len(toc) if isinstance(toc, list) else 0
         return ToolResult(
             success=True,
             data={
                 "success": True,
                 "mode": "toc",
                 "source": "domain_corpus",
+                "action_outcome": f"retrieved toc ({file_count} files)",
                 "toc": toc,
             },
         )
@@ -206,12 +208,14 @@ class ConsultCorpusTool(BaseTool):
                 error=f"File not found: {filename}",
             )
 
+        content_len = len(file_content) if file_content else 0
         return ToolResult(
             success=True,
             data={
                 "success": True,
                 "mode": "file",
                 "source": "domain_corpus",
+                "action_outcome": f"retrieved {filename} ({content_len} chars)",
                 "file_content": file_content,
             },
         )
@@ -223,12 +227,14 @@ class ConsultCorpusTool(BaseTool):
         if not cluster:
             # Return list of available clusters
             clusters = index.list_clusters()
+            cluster_count = len(clusters) if clusters else 0
             return ToolResult(
                 success=True,
                 data={
                     "success": True,
                     "mode": "cluster",
                     "source": "domain_corpus",
+                    "action_outcome": f"listed {cluster_count} clusters",
                     "clusters": clusters,
                 },
             )
@@ -241,6 +247,7 @@ class ConsultCorpusTool(BaseTool):
             )
 
         cluster_files = index.get_cluster(cluster)
+        file_count = len(cluster_files) if cluster_files else 0
 
         return ToolResult(
             success=True,
@@ -248,6 +255,7 @@ class ConsultCorpusTool(BaseTool):
                 "success": True,
                 "mode": "cluster",
                 "source": "domain_corpus",
+                "action_outcome": f"found {file_count} files in '{cluster}'",
                 "cluster": cluster,
                 "cluster_files": cluster_files,
             },
@@ -279,6 +287,7 @@ class ConsultCorpusTool(BaseTool):
                 "success": True,
                 "mode": "search",
                 "source": "domain_corpus",
+                "action_outcome": f"found {len(excerpts)} excerpts ({search_method})",
                 "search_method": search_method,
                 "excerpt_count": len(excerpts),
                 "excerpts": excerpts,

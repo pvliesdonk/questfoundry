@@ -45,6 +45,7 @@ class ConsultKnowledgeTool(BaseTool):
             return ToolResult(
                 success=True,
                 data={
+                    "action_outcome": f"listed {len(available)} knowledge entries",
                     "message": (
                         "You called consult_knowledge without specifying an entry_id. "
                         "Available knowledge entries:"
@@ -75,9 +76,11 @@ class ConsultKnowledgeTool(BaseTool):
                 content_text = section_text
             else:
                 # Section not found - return full content with warning
+                content_len = len(content_text) if content_text else 0
                 return ToolResult(
                     success=True,
                     data={
+                        "action_outcome": f"retrieved '{entry_id}' ({content_len} chars)",
                         "entry_id": entry_id,
                         "name": entry.name or entry_id,
                         "layer": entry.layer.value
@@ -90,7 +93,9 @@ class ConsultKnowledgeTool(BaseTool):
                 )
 
         # Build result
+        content_len = len(content_text) if content_text else 0
         result_data: dict[str, Any] = {
+            "action_outcome": f"retrieved '{entry_id}' ({content_len} chars)",
             "entry_id": entry_id,
             "name": entry.name or entry_id,
             "layer": entry.layer.value if hasattr(entry.layer, "value") else str(entry.layer),
