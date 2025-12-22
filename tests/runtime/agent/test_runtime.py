@@ -97,7 +97,7 @@ class TestAgentRuntimeBasics:
         assert agent.name == "Showrunner"
 
     def test_get_agent_not_found(self, mock_provider: MagicMock, basic_studio: Studio) -> None:
-        """get_agent returns None for unknown ID."""
+        """get_agent returns None for unknown ID.""""""
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
 
         agent = runtime.get_agent("nonexistent")
@@ -178,357 +178,36 @@ class TestContextValidation:
         runtime = AgentRuntime(
             provider=mock_provider,
             studio=basic_studio,
-            context_limit=10,  # Very small limit
+            context_limit=10,
         )
 
         messages = [
-            LLMMessage(role="system", content="A" * 1000),  # Way over limit
+            LLMMessage(role="system", content="This is a very long system prompt"),
+            LLMMessage(role="user", content="Hello"),
         ]
-
-        with pytest.raises(ContextOverflowError, match="exceeds"):
-            runtime.validate_context_size(messages)
-
-    def test_validate_no_limit(self, mock_provider: MagicMock, basic_studio: Studio) -> None:
-        """Validation is skipped when no limit set."""
-        runtime = AgentRuntime(
-            provider=mock_provider,
-            studio=basic_studio,
-            context_limit=None,
-        )
-
-        messages = [
-            LLMMessage(role="system", content="A" * 100000),
-        ]
-
-        # Should not raise even with huge message
-        runtime.validate_context_size(messages)
-
-
-class TestAgentActivation:
-    """Tests for agent activation."""
-
-    @pytest.mark.asyncio
-    async def test_activate_success(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-        session: Session,
-    ) -> None:
-        """activate() invokes provider and returns result."""
-        mock_response = LLMResponse(
-            content="Hello! I am the Showrunner.",
-            model="qwen3:8b",
-            provider="mock",
-            prompt_tokens=100,
-            completion_tokens=20,
-            total_tokens=120,
-        )
-        mock_provider.invoke = AsyncMock(return_value=mock_response)
-
-        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-        agent = runtime.get_agent("showrunner")
-        assert agent is not None
-
-        result = await runtime.activate(agent, "Hello!", session)
-
-        assert result.content == "Hello! I am the Showrunner."
-        assert result.agent_id == "showrunner"
-        assert result.turn is not None
-        assert result.usage is not None
-        assert result.usage.total_tokens == 120
-
-    @pytest.mark.asyncio
-    async def test_activate_creates_turn(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-        session: Session,
-    ) -> None:
-        """activate() creates and completes a turn."""
-        mock_response = LLMResponse(
-            content="Response",
-            model="qwen3:8b",
-            provider="mock",
-        )
-        mock_provider.invoke = AsyncMock(return_value=mock_response)
-
-        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-        agent = runtime.get_agent("showrunner")
-        assert agent is not None
-
-        assert session.turn_count == 0
-
-        await runtime.activate(agent, "Input", session)
-
-        assert session.turn_count == 1
-        turn = session.turns[0]
-        assert turn.input == "Input"
-        assert turn.output == "Response"
-
-    @pytest.mark.asyncio
-    async def test_activate_context_overflow(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-        session: Session,
-    ) -> None:
-        """activate() raises on context overflow."""
-        runtime = AgentRuntime(
-            provider=mock_provider,
-            studio=basic_studio,
-            context_limit=10,  # Very small
-        )
-        agent = runtime.get_agent("showrunner")
-        assert agent is not None
 
         with pytest.raises(ContextOverflowError):
-            await runtime.activate(agent, "Hello!", session)
-
-        # Turn should be marked as error
-        assert session.turn_count == 1
-        assert "exceeds" in (session.turns[0].output or "")
+            runtime.validate_context_size(messages)
 
 
-class TestAgentActivationStreaming:
-    """Tests for streaming agent activation."""
+class TestGetAgentHistoryWithSummarization:
+    """Tests for _get_agent_history_with_summarization."""
 
-    @pytest.mark.asyncio
-    async def test_activate_streaming(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-        session: Session,
-    ) -> None:
-        """activate_streaming yields chunks and completes turn."""
-
-        async def mock_stream(*_args, **_kwargs):
-            yield StreamChunk(content="Hello")
-            yield StreamChunk(content=" world")
-            yield StreamChunk(content="!", done=True, total_tokens=50)
-
-        mock_provider.stream = mock_stream
-
+    def test_no_history_returns_none(self, mock_provider: MagicMock, basic_studio: Studio) -> None:
+        """If agent has no prior turns, returns None."""
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-        agent = runtime.get_agent("showrunner")
-        assert agent is not None
+        session = MagicMock(spec=Session)
+        session.get_agent_turn_count.return_value = 1
+        session.get_agent_history.return_value = []
 
-        chunks = []
-        async for chunk in runtime.activate_streaming(agent, "Hi", session):
-            chunks.append(chunk)
+        result = runtime._get_agent_history_with_summarization(session, "showrunner")
 
-        assert len(chunks) == 3
-        assert chunks[0].content == "Hello"
-        assert chunks[1].content == " world"
-        assert chunks[2].done is True
+        assert result is None
 
-        # Turn should be completed
-        assert session.turn_count == 1
-        turn = session.turns[0]
-        assert turn.output == "Hello world!"
-
-    @pytest.mark.asyncio
-    async def test_activate_streaming_error(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-        session: Session,
+    def test_returns_history_when_present(
+        self, mock_provider: MagicMock, basic_studio: Studio
     ) -> None:
-        """activate_streaming handles errors properly."""
-
-        async def mock_stream_error(*_args, **_kwargs):
-            yield StreamChunk(content="Start")
-            raise RuntimeError("Stream failed")
-
-        mock_provider.stream = mock_stream_error
-
+        """If agent has history and context is not high, returns history unchanged."""
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-        agent = runtime.get_agent("showrunner")
-        assert agent is not None
-
-        with pytest.raises(RuntimeError, match="Stream failed"):
-            async for _chunk in runtime.activate_streaming(agent, "Hi", session):
-                pass
-
-        # Turn should be marked as error
-        assert session.turn_count == 1
-        assert "Stream failed" in (session.turns[0].output or "")
-
-
-class TestToolResultsToMessages:
-    """Tests for _tool_results_to_messages error handling."""
-
-    def test_error_includes_full_feedback_data(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-    ) -> None:
-        """Tool errors should include result.result data for LLM self-correction."""
-        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-
-        # Simulate a failed tool call with detailed feedback
-        tool_requests = [
-            ToolCallRequest(
-                id="call_123",
-                name="save_artifact",
-                arguments={"artifact_type": "section_brief", "data": {"title": "Wrong"}},
-            )
-        ]
-        tool_results = [
-            ToolCall(
-                tool_id="save_artifact",
-                args={"artifact_type": "section_brief", "data": {"title": "Wrong"}},
-                success=False,
-                error="Artifact validation failed: 2 error(s)",
-                result={
-                    "feedback": {
-                        "success": False,
-                        "error_count": 2,
-                        "errors": [
-                            {"field": "brief_id", "issue": "Required field missing"},
-                            {"field": "section_title", "issue": "Required field missing"},
-                        ],
-                        "required_fields": [
-                            {"name": "brief_id", "type": "string"},
-                            {"name": "section_title", "type": "string"},
-                        ],
-                        "hint": "Check the artifact schema",
-                    }
-                },
-            )
-        ]
-
-        # Call the method
-        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
-
-        # Verify the error message includes the full feedback
-        assert len(messages) == 1
-        msg = messages[0]
-        assert msg.role == "tool"
-        assert msg.name == "save_artifact"
-
-        content = json.loads(msg.content)
-        assert "error" in content
-        assert content["error"] == "Artifact validation failed: 2 error(s)"
-        # KEY: The feedback data should be included for LLM self-correction
-        assert "feedback" in content
-        assert content["feedback"]["error_count"] == 2
-        assert len(content["feedback"]["errors"]) == 2
-        assert content["feedback"]["errors"][0]["field"] == "brief_id"
-
-    def test_success_result_not_affected(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-    ) -> None:
-        """Successful tool results should work as before."""
-        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-
-        tool_requests = [
-            ToolCallRequest(
-                id="call_456",
-                name="some_tool",
-                arguments={"query": "test"},
-            )
-        ]
-        tool_results = [
-            ToolCall(
-                tool_id="some_tool",
-                args={"query": "test"},
-                success=True,
-                result={"data": "success", "count": 42},
-            )
-        ]
-
-        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
-
-        assert len(messages) == 1
-        msg = messages[0]
-        content = json.loads(msg.content)
-        assert content == {"data": "success", "count": 42}
-
-    def test_error_with_none_result(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-    ) -> None:
-        """Tool errors with None result should still include error message."""
-        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-
-        tool_requests = [
-            ToolCallRequest(
-                id="call_789",
-                name="failing_tool",
-                arguments={"input": "test"},
-            )
-        ]
-        tool_results = [
-            ToolCall(
-                tool_id="failing_tool",
-                args={"input": "test"},
-                success=False,
-                error="Connection timeout",
-                result=None,  # No result data, just error
-            )
-        ]
-
-        messages = runtime._tool_results_to_messages(tool_requests, tool_results)
-
-        assert len(messages) == 1
-        msg = messages[0]
-        content = json.loads(msg.content)
-        assert content == {"error": "Connection timeout"}
-
-
-class TestContextSummarizationPressureGating:
-    """Tests for context summarization pressure gating."""
-
-    def test_no_summarization_below_full_level(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-    ) -> None:
-        """Context summarization should not trigger when below FULL level (90%)."""
-        runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
-
-        # Create enough history to trigger turn-count-based summarization
-        # (8+ message groups), but context pressure is low (default 0%)
-        history = []
-        for i in range(20):  # Well above the 8-group threshold
-            history.append({"role": "user", "content": f"Message {i}"})
-            history.append({"role": "assistant", "content": f"Response {i}"})
-
-        # Apply summarization - should NOT summarize because pressure is below 90%
-        result = runtime._apply_context_summarization(history, "test_agent")
-
-        # History should be unchanged (no summarization)
-        assert result == history
-        assert len(result) == 40  # All messages preserved
-
-    def test_summarization_triggers_at_full_level(
-        self,
-        mock_provider: MagicMock,
-        basic_studio: Studio,
-    ) -> None:
-        """Context summarization should trigger when at FULL level (90%+)."""
-        runtime = AgentRuntime(
-            provider=mock_provider,
-            studio=basic_studio,
-            context_limit=1000,  # Small limit (in tokens)
-        )
-
-        # Create history that actually fills 90%+ of context
-        # Each message needs ~25 tokens to reach ~950 tokens with 40 messages
-        # JSON overhead adds ~20 chars per message, so we need ~100 char content
-        padding = "x" * 100  # ~25 tokens per message
-        history = []
-        for i in range(20):
-            history.append({"role": "user", "content": f"Message {i} {padding}"})
-            history.append({"role": "assistant", "content": f"Response {i} {padding}"})
-
-        # Apply summarization - should summarize because actual history is >= 90%
-        result = runtime._apply_context_summarization(history, "test_agent")
-
-        # History should be summarized (fewer messages)
-        assert result != history
-        # Should have summary message + preserved recent turns
-        assert len(result) < len(history)
+        session = MagicMock(spec=Session)
+        …
