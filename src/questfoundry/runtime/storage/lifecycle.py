@@ -296,16 +296,40 @@ class LifecycleManager:
             else:
                 type_id = getattr(artifact_type, "id", None)
                 lifecycle_data = getattr(artifact_type, "lifecycle", None)
-                # If lifecycle is an object, convert to dict
-                if lifecycle_data and hasattr(lifecycle_data, "to_dict"):
-                    lifecycle_data = lifecycle_data.to_dict()
-                elif lifecycle_data and not isinstance(lifecycle_data, dict):
-                    # Try to access as object attributes
-                    lifecycle_data = {
-                        "states": getattr(lifecycle_data, "states", []),
-                        "initial_state": getattr(lifecycle_data, "initial_state", "draft"),
-                        "transitions": getattr(lifecycle_data, "transitions", []),
-                    }
+                # If lifecycle is an object, convert to a plain dict so that
+                # ArtifactLifecycle.from_dict always sees primitive structures.
+                # This handles:
+                # - Pydantic v2 models (.model_dump)
+                # - Pydantic v1 models (.dict)
+                # - Custom objects exposing .to_dict()
+                if lifecycle_data and not isinstance(lifecycle_data, dict):
+                    lifecycle_dict: dict[str, Any] | None = None
+                    # Prefer Pydantic v2-style export
+                    if hasattr(lifecycle_data, "model_dump"):
+                        try:
+                            lifecycle_dict = lifecycle_data.model_dump(by_alias=True)
+                        except TypeError:  # pragma: no cover - defensive
+                            lifecycle_dict = lifecycle_data.model_dump()
+                    # Fallback to Pydantic v1-style export
+                    elif hasattr(lifecycle_data, "dict"):
+                        try:
+                            lifecycle_dict = lifecycle_data.dict(by_alias=True)
+                        except TypeError:  # pragma: no cover - defensive
+                            lifecycle_dict = lifecycle_data.dict()
+                    # Generic custom object export
+                    elif hasattr(lifecycle_data, "to_dict"):
+                        lifecycle_dict = lifecycle_data.to_dict()
+
+                    if lifecycle_dict is not None:
+                        lifecycle_data = lifecycle_dict
+                    else:
+                        # Last-resort attribute access – keeps behavior for
+                        # simple container objects used in tests and docs.
+                        lifecycle_data = {
+                            "states": getattr(lifecycle_data, "states", []),
+                            "initial_state": getattr(lifecycle_data, "initial_state", "draft"),
+                            "transitions": getattr(lifecycle_data, "transitions", []),
+                        }
 
             if type_id and lifecycle_data:
                 lifecycle = ArtifactLifecycle.from_dict(type_id, lifecycle_data)

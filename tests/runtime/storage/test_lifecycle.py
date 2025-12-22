@@ -366,3 +366,49 @@ class TestLifecycleManager:
 
         assert manager.has_lifecycle("section")
         assert not manager.has_lifecycle("note")
+
+    def test_from_artifact_types_pydantic_models(self):
+        """Create manager from pydantic ArtifactType models with Lifecycle."""
+        from questfoundry.runtime.models.base import (
+            ArtifactType as ModelArtifactType,
+        )
+        from questfoundry.runtime.models.base import (
+            Lifecycle as ModelLifecycle,
+        )
+        from questfoundry.runtime.models.base import (
+            LifecycleState as ModelLifecycleState,
+        )
+        from questfoundry.runtime.models.base import (
+            LifecycleTransition as ModelLifecycleTransition,
+        )
+
+        artifact_type = ModelArtifactType(
+            id="section",
+            name="Section",
+            lifecycle=ModelLifecycle(
+                states=[
+                    ModelLifecycleState(id="draft", name="Draft"),
+                    ModelLifecycleState(id="cold", name="Cold", terminal=True),
+                ],
+                initial_state="draft",
+                transitions=[
+                    ModelLifecycleTransition(
+                        from_state="draft",
+                        to_state="cold",
+                        allowed_agents=["gatekeeper"],
+                    )
+                ],
+            ),
+        )
+
+        manager = LifecycleManager.from_artifact_types([artifact_type])
+
+        assert manager.has_lifecycle("section")
+        lifecycle = manager.get_lifecycle("section")
+        assert lifecycle is not None
+
+        # The stored transition should be the storage-layer dataclass,
+        # with is_agent_allowed available.
+        trans = lifecycle.get_transition("draft", "cold")
+        assert trans is not None
+        assert trans.is_agent_allowed("gatekeeper")
