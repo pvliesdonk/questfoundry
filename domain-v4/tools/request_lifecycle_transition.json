@@ -1,0 +1,84 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "request_lifecycle_transition",
+  "name": "Request Lifecycle Transition",
+  "description": "Request a lifecycle state transition for an artifact (draft→review→approved→cold). Uses the validate-with-feedback pattern: strict schema validation and clear, actionable error messages when a request is invalid or a transition is not allowed.",
+
+  "summarization_policy": "preserve",
+
+  "can_reject": true,
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "artifact_id": {
+        "type": "string",
+        "description": "ID of the artifact to transition"
+      },
+      "target_state": {
+        "type": "string",
+        "description": "Requested lifecycle state (e.g. 'review', 'approved', 'cold'). Use get_lifecycle_state to see allowed target_state values."
+      },
+      "force": {
+        "type": "boolean",
+        "description": "If true, bypasses requires_validation checks when the lifecycle permits it. Use with care."
+      }
+    },
+    "required": ["artifact_id", "target_state"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "type": "string",
+        "description": "Outcome of the transition request: 'committed' | 'rejected' | 'deferred'",
+        "enum": ["committed", "rejected", "deferred"]
+      },
+      "artifact_id": {
+        "type": "string",
+        "description": "ID of the artifact that was targeted"
+      },
+      "previous_state": {
+        "type": "string",
+        "description": "Lifecycle state before the transition (only for committed transitions)"
+      },
+      "new_state": {
+        "type": "string",
+        "description": "Lifecycle state after the transition (only for committed transitions)"
+      },
+      "validation_results": {
+        "type": "array",
+        "description": "Results from any required validations (quality bars)",
+        "items": {
+          "type": "object"
+        }
+      },
+      "rejection_reason": {
+        "type": "string",
+        "description": "If result='rejected', explains why the transition was not applied."
+      },
+      "guidance": {
+        "type": "string",
+        "description": "Actionable next steps to correct the request (validate-with-feedback)."
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Promote a section from draft to review after self-validation",
+      "input": {
+        "artifact_id": "section_001",
+        "target_state": "review"
+      }
+    },
+    {
+      "description": "Promote an approved section to cold (Gatekeeper only)",
+      "input": {
+        "artifact_id": "section_002",
+        "target_state": "cold"
+      }
+    }
+  ]
+}

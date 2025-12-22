@@ -91,7 +91,8 @@
     "tools/consult_knowledge.json",
     "tools/list_artifact_types.json",
     "tools/list_stores.json",
-    "tools/list_agents.json"
+    "tools/list_agents.json",
+    "tools/request_lifecycle_transition.json"
   ],
 
   "quality_criteria": [
