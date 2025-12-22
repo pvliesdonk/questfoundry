@@ -1,3 +1,17 @@
+---
+title: Scope and Length Guidelines for Interactive Fiction
+summary: Sizing IF projects with word counts, section metrics, branching depth, and scope-quality balance guidance.
+topics:
+  - project-scope
+  - word-counts
+  - section-metrics
+  - branching-depth
+  - play-time
+  - multiple-endings
+  - scope-quality-balance
+cluster: scope-and-planning
+---
+
 # Scope and Length Guidelines for Interactive Fiction
 
 Craft guidance for sizing interactive fiction projects—word counts, section metrics, branching depth, and balancing scope with quality.

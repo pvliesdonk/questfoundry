@@ -29,11 +29,15 @@ if TYPE_CHECKING:
     from questfoundry.runtime.providers import LLMProvider, OllamaProvider
     from questfoundry.runtime.session import Session
     from questfoundry.runtime.storage import Project
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from questfoundry.cli_output import DelegationResultInfo, StatusReporter, create_log_handler
+
+# Load .env file for environment variables (OLLAMA_HOST, API keys, etc.)
+load_dotenv()
 
 # Global verbosity level (set by callback)
 _verbosity: int = 0
@@ -2187,6 +2191,275 @@ def validate_semantic(
     if strict and warnings:
         console.print()
         console.print("[yellow]Failing due to --strict flag[/yellow]")
+        raise typer.Exit(1)
+
+
+# =============================================================================
+# Corpus Subcommand
+# =============================================================================
+
+corpus_app = typer.Typer(help="Manage corpus index for search", no_args_is_help=True)
+app.add_typer(corpus_app, name="corpus")
+
+
+@corpus_app.command("build")
+def corpus_build(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Force rebuild even if files unchanged"),
+    ] = False,
+    embeddings: Annotated[
+        bool,
+        typer.Option("--embeddings", "-e", help="Build vector embeddings for semantic search"),
+    ] = False,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", "-p", help="Embedding provider: 'ollama' or 'openai'"),
+    ] = None,
+) -> None:
+    """Build or update the corpus search index.
+
+    Parses all corpus files in domain/knowledge/corpus/ and indexes
+    them in a SQLite database for fast search. Only files that have
+    changed since the last build are re-indexed (unless --force).
+
+    Use --embeddings to also generate vector embeddings for semantic
+    search. Use --provider to select 'ollama' (local) or 'openai'.
+    If not specified, auto-detects available provider.
+    """
+    import asyncio
+
+    from questfoundry.runtime.corpus.index import CorpusIndex
+
+    corpus_dir = domain / "knowledge" / "corpus"
+    if not corpus_dir.exists():
+        console.print(f"[red]✗ Corpus directory not found: {corpus_dir}[/red]")
+        raise typer.Exit(1)
+
+    index_path = CorpusIndex.get_index_path(domain)
+    index = CorpusIndex(index_path)
+
+    console.print(f"[dim]Building index from {corpus_dir}...[/dim]")
+
+    try:
+        count = index.build(corpus_dir, force=force)
+
+        if count > 0:
+            console.print(f"[green]✓[/green] Indexed {count} file(s)")
+        else:
+            console.print("[dim]No files needed indexing (all up to date)[/dim]")
+
+        status = index.get_status()
+        console.print(
+            f"[dim]Total: {status.file_count} files, {status.section_count} sections[/dim]"
+        )
+
+        # Build vector embeddings if requested
+        if embeddings:
+            console.print()
+            console.print("[dim]Building vector embeddings...[/dim]")
+
+            async def build_vectors(provider_name: str | None) -> int:
+                from questfoundry.runtime.corpus.embeddings import get_embedding_provider
+                from questfoundry.runtime.corpus.vector_index import VectorIndex
+
+                embed_provider = await get_embedding_provider(provider_name=provider_name)
+                if embed_provider is None:
+                    console.print("[red]✗ No embedding provider available[/red]")
+                    if provider_name:
+                        console.print(f"[dim]Provider '{provider_name}' not available[/dim]")
+                    else:
+                        console.print(
+                            "[dim]Install Ollama with nomic-embed-text or set OPENAI_API_KEY[/dim]"
+                        )
+                    return 0
+
+                console.print(
+                    f"[dim]Using {embed_provider.model} ({embed_provider.dimension}d)[/dim]"
+                )
+
+                vector_index = VectorIndex(index_path, dimension=embed_provider.dimension)
+                if not vector_index.is_available:
+                    console.print("[red]✗ sqlite-vec not available[/red]")
+                    console.print("[dim]Install with: pip install sqlite-vec[/dim]")
+                    return 0
+
+                try:
+                    embedded = await vector_index.build_vectors(embed_provider, force=force)
+                    return embedded
+                finally:
+                    vector_index.close()
+
+            embedded_count = asyncio.run(build_vectors(provider))
+            if embedded_count > 0:
+                console.print(f"[green]✓[/green] Embedded {embedded_count} section(s)")
+            elif embedded_count == 0 and status.section_count > 0:
+                console.print("[dim]Vectors already up to date (use --force to rebuild)[/dim]")
+
+        console.print(f"[dim]Index: {index_path}[/dim]")
+
+    finally:
+        index.close()
+
+
+@corpus_app.command("status")
+def corpus_status(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+) -> None:
+    """Show corpus index status.
+
+    Displays information about the indexed corpus including file counts,
+    section counts, and cluster breakdown. Also checks for stale files
+    that need re-indexing, and shows vector embedding status if available.
+    """
+    from questfoundry.runtime.corpus.index import CorpusIndex
+    from questfoundry.runtime.corpus.vector_index import VectorIndex
+
+    index_path = CorpusIndex.get_index_path(domain)
+    corpus_dir = domain / "knowledge" / "corpus"
+
+    if not index_path.exists():
+        console.print("[yellow]○[/yellow] Corpus index not found")
+        console.print(f"[dim]Expected: {index_path}[/dim]")
+        if corpus_dir.exists():
+            console.print("[dim]Run 'qf corpus build' to create index[/dim]")
+        return
+
+    index = CorpusIndex(index_path)
+    vector_index = VectorIndex(index_path)
+
+    try:
+        status = index.get_status(corpus_dir if corpus_dir.exists() else None)
+
+        console.print()
+        console.print("[bold]Corpus Index Status[/bold]")
+        console.print()
+        console.print(f"[green]✓[/green] Index exists: {index_path}")
+        console.print(f"  Files: {status.file_count}")
+        console.print(f"  Sections: {status.section_count}")
+
+        # Vector index status
+        console.print()
+        console.print("[bold]Vector Search:[/bold]")
+        vec_status = vector_index.get_status()
+        if not vec_status["available"]:
+            console.print(
+                f"  [dim]Not available ({vec_status.get('reason', 'sqlite-vec not loaded')})[/dim]"
+            )
+        elif "embeddings" in vec_status:
+            # Multi-model format
+            embeddings = vec_status["embeddings"]
+            if not embeddings:
+                console.print("  [dim]No embeddings (run 'qf corpus build --embeddings')[/dim]")
+            else:
+                console.print(f"  [green]✓[/green] {len(embeddings)} model(s):")
+                for emb in embeddings:
+                    console.print(
+                        f"    • {emb['model']} ({emb['dimension']}d): {emb['vector_count']} vectors"
+                    )
+                    if emb.get("indexed_at"):
+                        console.print(f"      Built: {emb['indexed_at']}")
+        elif vec_status.get("vector_count", 0) == 0:
+            console.print("  [dim]No embeddings (run 'qf corpus build --embeddings')[/dim]")
+        else:
+            # Single model format (legacy)
+            console.print(f"  [green]✓[/green] {vec_status['vector_count']} embeddings")
+            if vec_status.get("model"):
+                console.print(f"  Model: {vec_status['model']} ({vec_status['dimension']}d)")
+            if vec_status.get("indexed_at"):
+                console.print(f"  Built: {vec_status['indexed_at']}")
+
+        if status.clusters:
+            console.print()
+            console.print("[bold]Clusters:[/bold]")
+            for cluster, count in sorted(status.clusters.items()):
+                console.print(f"  {cluster}: {count} file(s)")
+
+        if status.stale_files:
+            console.print()
+            console.print(
+                f"[yellow]⚠ {len(status.stale_files)} stale file(s) need re-indexing[/yellow]"
+            )
+            for f in status.stale_files[:5]:
+                console.print(f"  [dim]{f}[/dim]")
+            if len(status.stale_files) > 5:
+                console.print(f"  [dim]... and {len(status.stale_files) - 5} more[/dim]")
+            console.print("[dim]Run 'qf corpus build' to update[/dim]")
+
+    finally:
+        index.close()
+        vector_index.close()
+
+
+@corpus_app.command("validate")
+def corpus_validate(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+) -> None:
+    """Validate corpus frontmatter against schema.
+
+    Checks each corpus file for:
+    - Valid YAML frontmatter
+    - Required fields (title, summary, topics, cluster)
+    - Field value constraints (length, valid cluster names)
+    - Proper section structure
+    """
+    from questfoundry.runtime.corpus.parser import parse_corpus_file
+
+    corpus_dir = domain / "knowledge" / "corpus"
+    if not corpus_dir.exists():
+        console.print(f"[red]✗ Corpus directory not found: {corpus_dir}[/red]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print("[bold]Corpus Validation[/bold]")
+    console.print(f"[dim]Directory: {corpus_dir}[/dim]")
+    console.print()
+
+    files = list(corpus_dir.glob("*.md"))
+    if not files:
+        console.print("[yellow]○[/yellow] No corpus files found")
+        return
+
+    errors_found = False
+    valid_count = 0
+
+    for file_path in sorted(files):
+        result = parse_corpus_file(file_path)
+
+        if result is None:
+            console.print(f"[red]✗[/red] {file_path.name}")
+            console.print("   [red]Could not parse file (missing or invalid frontmatter)[/red]")
+            errors_found = True
+            continue
+
+        # Validate frontmatter
+        validation_errors = result.frontmatter.validate()
+
+        if validation_errors:
+            console.print(f"[yellow]⚠[/yellow] {file_path.name}")
+            for error in validation_errors:
+                console.print(f"   [yellow]{error}[/yellow]")
+            errors_found = True
+        else:
+            console.print(f"[green]✓[/green] {file_path.name}")
+            valid_count += 1
+
+    console.print()
+    console.print(f"[bold]Summary:[/bold] {valid_count}/{len(files)} files valid")
+
+    if errors_found:
+        console.print()
+        console.print("[yellow]Some files have validation issues[/yellow]")
         raise typer.Exit(1)
 
 

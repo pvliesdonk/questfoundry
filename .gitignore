@@ -30,6 +30,10 @@ trace.log
 
 # Project directories
 **/project_*/
+projects/
+
+# Generated indexes
+.corpus_index.sqlite
 
 # Python
 *.pyc

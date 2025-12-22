@@ -2,7 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_corpus",
   "name": "Consult Corpus",
-  "description": "Search the craft corpus for writing guidance and genre conventions. Use this for prose techniques, choice architecture, diegetic interface patterns, world consistency, genre conventions (fantasy/mystery/horror), and common pitfalls to avoid. Returns relevant excerpts with source attribution.\n\nPattern: consult-corpus - agent searches internal craft knowledge, NOT external web facts.",
+  "description": "Access the craft corpus for writing guidance and genre conventions. Supports multiple modes:\n\n- **toc**: Get table of contents listing all corpus files\n- **file**: Retrieve full content of a specific file\n- **cluster**: Browse files in a cluster (genre-conventions, prose-and-language, etc.)\n- **search**: Search for relevant excerpts (default mode)\n\nUse this for prose techniques, choice architecture, genre conventions, and craft guidance.",
 
   "summarization_policy": "drop",
   "summary_template": "Retrieved {excerpt_count} excerpts from corpus",
@@ -10,19 +10,41 @@
   "input_schema": {
     "type": "object",
     "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["search", "toc", "file", "cluster"],
+        "default": "search",
+        "description": "Operation mode: 'search' for keyword/semantic search, 'toc' for table of contents, 'file' for direct file access, 'cluster' for browsing by cluster"
+      },
       "query": {
         "type": "string",
-        "description": "Natural language search query describing what craft guidance you need"
+        "description": "Search query (required for mode=search)"
+      },
+      "file": {
+        "type": "string",
+        "description": "Filename to retrieve, e.g. 'dialogue_craft' or 'dialogue_craft.md' (required for mode=file)"
+      },
+      "cluster": {
+        "type": "string",
+        "enum": [
+          "narrative-structure",
+          "prose-and-language",
+          "genre-conventions",
+          "audience-and-access",
+          "world-and-setting",
+          "emotional-design",
+          "scope-and-planning"
+        ],
+        "description": "Cluster to browse (required for mode=cluster)"
       },
       "max_results": {
         "type": "integer",
         "default": 3,
         "minimum": 1,
         "maximum": 10,
-        "description": "Maximum number of excerpts to return"
+        "description": "Maximum number of excerpts to return (mode=search only)"
       }
-    },
-    "required": ["query"]
+    }
   },
 
   "output_schema": {
@@ -30,22 +52,27 @@
     "properties": {
       "success": {
         "type": "boolean",
-        "description": "Whether the search completed successfully"
+        "description": "Whether the operation completed successfully"
+      },
+      "mode": {
+        "type": "string",
+        "description": "The mode that was executed"
       },
       "source": {
         "type": "string",
-        "description": "Source of results: 'shared_corpus' or 'studio_corpus'"
+        "description": "Source of results: 'domain_corpus'"
       },
       "search_method": {
         "type": "string",
-        "description": "Search method used: 'vector' (semantic) or 'keyword'"
+        "description": "Search method used (mode=search only): 'vector', 'keyword', or 'hybrid'"
       },
       "excerpt_count": {
         "type": "integer",
-        "description": "Number of excerpts returned"
+        "description": "Number of excerpts returned (mode=search)"
       },
       "excerpts": {
         "type": "array",
+        "description": "Search results (mode=search)",
         "items": {
           "type": "object",
           "properties": {
@@ -63,26 +90,85 @@
             }
           }
         }
+      },
+      "toc": {
+        "type": "array",
+        "description": "Table of contents (mode=toc)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "summary": { "type": "string" },
+            "cluster": { "type": "string" },
+            "path": { "type": "string" }
+          }
+        }
+      },
+      "file_content": {
+        "type": "object",
+        "description": "File content (mode=file)",
+        "properties": {
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "cluster": { "type": "string" },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "heading": { "type": "string" },
+                "level": { "type": "integer" },
+                "content": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "cluster_files": {
+        "type": "array",
+        "description": "Files in cluster (mode=cluster)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "summary": { "type": "string" },
+            "path": { "type": "string" }
+          }
+        }
       }
     }
   },
 
   "examples": [
     {
-      "description": "Find guidance on writing meaningful choices",
+      "description": "Get table of contents",
       "input": {
+        "mode": "toc"
+      }
+    },
+    {
+      "description": "Get a specific file",
+      "input": {
+        "mode": "file",
+        "file": "dialogue_craft"
+      }
+    },
+    {
+      "description": "Browse genre conventions cluster",
+      "input": {
+        "mode": "cluster",
+        "cluster": "genre-conventions"
+      }
+    },
+    {
+      "description": "Search for writing meaningful choices",
+      "input": {
+        "mode": "search",
         "query": "how to write meaningful choices for players"
       }
     },
     {
-      "description": "Look up diegetic interface patterns",
-      "input": {
-        "query": "diegetic gates and locks",
-        "max_results": 5
-      }
-    },
-    {
-      "description": "Get horror genre conventions",
+      "description": "Search (default mode)",
       "input": {
         "query": "horror interactive fiction conventions"
       }

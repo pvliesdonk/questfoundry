@@ -1,3 +1,18 @@
+---
+title: Fantasy Genre Conventions for Interactive Fiction
+summary: Writing fantasy with subgenres, magic systems, worldbuilding tropes, character archetypes, and quest structures.
+topics:
+  - fantasy
+  - high-fantasy
+  - urban-fantasy
+  - dark-fantasy
+  - magic-systems
+  - worldbuilding
+  - quest-structure
+  - fantasy-tropes
+cluster: genre-conventions
+---
+
 # Fantasy Genre Conventions for Interactive Fiction
 
 Craft guidance for writing fantasy—subgenres, magic systems, worldbuilding tropes, character archetypes, and quest structures.

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "corpus-frontmatter.schema.json",
+  "title": "Corpus File Frontmatter",
+  "description": "YAML frontmatter schema for corpus files in domain-v4/knowledge/corpus/. Enables discoverability through structured metadata including title, summary, topics, and cluster assignment.",
+
+  "type": "object",
+  "required": ["title", "summary", "topics", "cluster"],
+
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "description": "Human-readable title for the corpus file. Should clearly indicate the subject matter."
+    },
+
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 300,
+      "description": "1-2 sentence summary of the file's contents. Used for TOC display and search result previews."
+    },
+
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 50,
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "minItems": 3,
+      "maxItems": 15,
+      "uniqueItems": true,
+      "description": "Searchable topic keywords. Use lowercase with hyphens for multi-word topics. Minimum 3 topics for discoverability."
+    },
+
+    "cluster": {
+      "type": "string",
+      "enum": [
+        "narrative-structure",
+        "prose-and-language",
+        "genre-conventions",
+        "audience-and-access",
+        "world-and-setting",
+        "emotional-design",
+        "scope-and-planning"
+      ],
+      "description": "Logical grouping for browsing. Cluster assignment enables mode=cluster queries in consult_corpus."
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "cluster_descriptions": {
+      "description": "Reference descriptions for each cluster (not enforced, for documentation)",
+      "type": "object",
+      "properties": {
+        "narrative-structure": {
+          "const": "Plot organization, pacing, branching, nonlinear storytelling, endings"
+        },
+        "prose-and-language": {
+          "const": "Voice, dialogue, exposition, subtext, prose techniques"
+        },
+        "genre-conventions": {
+          "const": "Genre-specific tropes, conventions, reader expectations"
+        },
+        "audience-and-access": {
+          "const": "Age targeting, accessibility, localization, inclusive design"
+        },
+        "world-and-setting": {
+          "const": "Worldbuilding, setting as character, environmental storytelling"
+        },
+        "emotional-design": {
+          "const": "Emotional beats, conflict patterns, resonant moments"
+        },
+        "scope-and-planning": {
+          "const": "Project sizing, metrics, balancing scope and quality"
+        }
+      }
+    }
+  }
+}

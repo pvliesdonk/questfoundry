@@ -1,3 +1,18 @@
+---
+title: Pacing and Tension
+summary: Controlling story rhythm through beat structures, scene-sequel patterns, escalation, and climactic payoffs.
+topics:
+  - pacing
+  - tension
+  - beat-structures
+  - scene-sequel
+  - escalation
+  - breathing-room
+  - climax
+  - rhythm
+cluster: narrative-structure
+---
+
 # Pacing and Tension
 
 Craft guidance for controlling story rhythm through beat structures, escalation, breathing room, and climactic payoffs.

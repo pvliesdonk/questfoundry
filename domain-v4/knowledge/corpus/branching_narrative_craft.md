@@ -1,3 +1,18 @@
+---
+title: Branching Narrative Craft for Interactive Fiction
+summary: Designing meaningful choices through branch architecture, consequence systems, and narrative coherence across paths.
+topics:
+  - branching-narrative
+  - choice-design
+  - meaningful-choices
+  - consequence-systems
+  - branch-structures
+  - state-tracking
+  - narrative-coherence
+  - player-agency
+cluster: narrative-structure
+---
+
 # Branching Narrative Craft for Interactive Fiction
 
 Craft guidance for designing meaningful choices—branch architecture, consequence systems, and maintaining narrative coherence across paths.

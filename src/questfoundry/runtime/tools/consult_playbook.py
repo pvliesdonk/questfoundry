@@ -39,6 +39,7 @@ class ConsultPlaybookTool(BaseTool):
             return ToolResult(
                 success=True,
                 data={
+                    "action_outcome": f"listed {len(available)} playbooks",
                     "message": (
                         "You called consult_playbook without specifying a playbook_id. "
                         "For new story requests, call again with playbook_id='story_spark'. "
@@ -66,6 +67,8 @@ class ConsultPlaybookTool(BaseTool):
 
         # Build detailed response
         result_data = self._format_playbook(playbook)
+        phase_count = len(playbook.phases) if playbook.phases else 0
+        result_data["action_outcome"] = f"retrieved '{playbook_id}' ({phase_count} phases)"
 
         # Add clear next-action guidance
         if playbook.entry_phase and playbook.phases:

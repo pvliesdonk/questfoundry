@@ -67,6 +67,7 @@ class SearchWorkspaceTool(BaseTool):
             )
 
             data: dict[str, Any] = {
+                "action_outcome": f"found {len(results)} artifacts",
                 "results": results,
                 "total_count": len(results),
             }

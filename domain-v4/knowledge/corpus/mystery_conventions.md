@@ -1,3 +1,18 @@
+---
+title: Mystery Genre Conventions for Interactive Fiction
+summary: Writing mysteries with clue placement, fair play rules, detective archetypes, and satisfying solutions.
+topics:
+  - mystery
+  - cozy-mystery
+  - hardboiled
+  - noir
+  - clue-placement
+  - fair-play
+  - red-herrings
+  - detective-archetypes
+cluster: genre-conventions
+---
+
 # Mystery Genre Conventions for Interactive Fiction
 
 Craft guidance for writing mysteries—clue placement, fair play, detective archetypes, suspect pools, and satisfying solutions.

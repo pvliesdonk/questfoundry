@@ -1,3 +1,17 @@
+---
+title: Scene Transitions
+summary: Moving between scenes through temporal jumps, location changes, seamless weaving, and effective scene breaks.
+topics:
+  - scene-transitions
+  - time-skips
+  - location-changes
+  - flashbacks
+  - scene-breaks
+  - bridging-technique
+  - arrive-late-leave-early
+cluster: narrative-structure
+---
+
 # Scene Transitions
 
 Craft guidance for moving between scenes—temporal jumps, location changes, seamless weaving, and scene breaks.

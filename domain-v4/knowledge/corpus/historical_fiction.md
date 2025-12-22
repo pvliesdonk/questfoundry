@@ -1,3 +1,17 @@
+---
+title: Historical Fiction Conventions for Interactive Fiction
+summary: Writing historical fiction with research balance, period voice, historical figures, and anachronism avoidance.
+topics:
+  - historical-fiction
+  - period-voice
+  - historical-accuracy
+  - anachronisms
+  - research-balance
+  - historical-figures
+  - period-dialogue
+cluster: genre-conventions
+---
+
 # Historical Fiction Conventions for Interactive Fiction
 
 Craft guidance for writing historical fiction—research balance, period voice, handling historical figures, and avoiding anachronisms.

@@ -1,3 +1,18 @@
+---
+title: Audience Targeting for Interactive Fiction
+summary: Writing for different age groups with appropriate vocabulary, themes, complexity, and content boundaries.
+topics:
+  - audience-targeting
+  - age-groups
+  - reading-level
+  - vocabulary
+  - themes-by-age
+  - content-boundaries
+  - middle-grade
+  - young-adult
+cluster: audience-and-access
+---
+
 # Audience Targeting for Interactive Fiction
 
 Craft guidance for writing interactive fiction for different age groups—vocabulary, themes, complexity, and content appropriateness.

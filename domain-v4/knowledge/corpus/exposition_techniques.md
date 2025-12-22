@@ -1,3 +1,18 @@
+---
+title: Exposition Techniques
+summary: Handling exposition through show vs tell, natural information reveals, avoiding info dumps, and building reader trust.
+topics:
+  - exposition
+  - show-vs-tell
+  - info-dumps
+  - reader-trust
+  - backstory
+  - worldbuilding-reveals
+  - iceberg-principle
+  - drip-feeding
+cluster: prose-and-language
+---
+
 # Exposition Techniques
 
 Craft guidance for handling exposition—show vs tell, natural reveals, avoiding info dumps, and managing reader trust.

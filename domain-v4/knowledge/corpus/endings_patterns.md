@@ -1,3 +1,18 @@
+---
+title: Endings Patterns
+summary: Writing satisfying conclusions with emotional payoff, multiple endings support, and techniques for earning the ending.
+topics:
+  - endings
+  - conclusions
+  - multiple-endings
+  - character-transformation
+  - denouement
+  - callbacks
+  - full-circle-endings
+  - resolution
+cluster: narrative-structure
+---
+
 # Endings Patterns
 
 Craft guidance for writing satisfying conclusions—emotional payoff, multiple endings, resolution vs ambiguity, and earning the ending.

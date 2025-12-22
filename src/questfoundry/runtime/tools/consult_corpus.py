@@ -1,314 +1,295 @@
 """
 Consult Corpus tool implementation.
 
-RAG-style search in the knowledge base with:
-- Vector search (when embeddings available)
-- Keyword fallback (always available)
-
-The corpus contains craft guidance, genre conventions, and writing patterns.
+Access the craft corpus for writing guidance and genre conventions.
+Supports multiple modes:
+- toc: Get table of contents listing all corpus files
+- file: Retrieve full content of a specific file
+- cluster: Browse files in a cluster
+- search: Search for relevant excerpts (default, uses hybrid search if available)
 """
 
 from __future__ import annotations
 
 import logging
-import re
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.corpus.index import CorpusIndex
 from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
 
+if TYPE_CHECKING:
+    from questfoundry.runtime.corpus.embeddings import EmbeddingProvider
+    from questfoundry.runtime.corpus.hybrid_search import HybridSearcher
+    from questfoundry.runtime.corpus.vector_index import VectorIndex
+
 logger = logging.getLogger(__name__)
 
-# Flag for vector search availability
-# Set to True when sqlite-vec and embeddings are configured
-VECTOR_SEARCH_AVAILABLE = False
-
-# Common stop words to filter out during tokenization
-_STOP_WORDS = frozenset(
+# Valid cluster names
+VALID_CLUSTERS = frozenset(
     {
-        "the",
-        "a",
-        "an",
-        "and",
-        "or",
-        "but",
-        "in",
-        "on",
-        "at",
-        "to",
-        "for",
-        "of",
-        "with",
-        "by",
-        "from",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "being",
-        "have",
-        "has",
-        "had",
-        "do",
-        "does",
-        "did",
-        "will",
-        "would",
-        "could",
-        "should",
-        "may",
-        "might",
-        "must",
-        "this",
-        "that",
-        "these",
-        "those",
-        "it",
-        "its",
+        "narrative-structure",
+        "prose-and-language",
+        "genre-conventions",
+        "audience-and-access",
+        "world-and-setting",
+        "emotional-design",
+        "scope-and-planning",
     }
 )
-
-
-@dataclass
-class CorpusExcerpt:
-    """An excerpt from the corpus."""
-
-    excerpt: str
-    source_file: str
-    relevance_score: float
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "excerpt": self.excerpt,
-            "source_file": self.source_file,
-            "relevance_score": round(self.relevance_score, 3),
-        }
 
 
 @register_tool("consult_corpus")
 class ConsultCorpusTool(BaseTool):
     """
-    Search the craft corpus for writing guidance and genre conventions.
+    Access the craft corpus for writing guidance and genre conventions.
 
-    Uses vector search when available, falls back to keyword matching.
+    Supports multiple modes:
+    - toc: Get table of contents
+    - file: Get specific file content
+    - cluster: Browse files in a cluster
+    - search: Search for relevant excerpts (uses hybrid search if vectors available)
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._corpus_cache: dict[str, str] | None = None
+        self._index: CorpusIndex | None = None
+        self._vector_index: VectorIndex | None = None
+        self._embedding_provider: EmbeddingProvider | None = None
+        self._hybrid_searcher: HybridSearcher | None = None
+        self._embeddings_checked = False
+
+    def _get_index(self) -> CorpusIndex | None:
+        """Get or create the corpus index."""
+        if self._index is not None:
+            return self._index
+
+        domain_path = self._context.domain_path
+        if not domain_path:
+            logger.warning("No domain_path configured for corpus")
+            return None
+
+        domain_path = Path(domain_path)
+        index_path = CorpusIndex.get_index_path(domain_path)
+
+        if not index_path.exists():
+            # Try to build index if corpus exists
+            corpus_dir = domain_path / "knowledge" / "corpus"
+            if corpus_dir.exists():
+                logger.info("Building corpus index on first access")
+                self._index = CorpusIndex(index_path)
+                self._index.build(corpus_dir)
+            else:
+                logger.warning(f"Corpus directory not found: {corpus_dir}")
+                return None
+        else:
+            self._index = CorpusIndex(index_path)
+
+        return self._index
+
+    async def _get_hybrid_searcher(self, index: CorpusIndex) -> HybridSearcher:
+        """Get or create the hybrid searcher."""
+        if self._hybrid_searcher is not None:
+            return self._hybrid_searcher
+
+        from questfoundry.runtime.corpus.hybrid_search import HybridSearcher
+        from questfoundry.runtime.corpus.vector_index import VectorIndex
+
+        # domain_path is guaranteed non-None at this point (checked in execute)
+        assert self._context.domain_path is not None
+        domain_path = Path(self._context.domain_path)
+        index_path = CorpusIndex.get_index_path(domain_path)
+
+        # Try to set up vector search if not yet checked
+        if not self._embeddings_checked:
+            self._embeddings_checked = True
+
+            self._vector_index = VectorIndex(index_path)
+            if self._vector_index.is_available and self._vector_index.has_vectors():
+                # Auto-detect the first available model from stored embeddings
+                stored_model = self._vector_index.get_first_available_model()
+                if stored_model:
+                    # Get embedding provider that matches the stored model
+                    from questfoundry.runtime.corpus.embeddings import get_embedding_provider
+
+                    # Determine provider type from model name
+                    if stored_model.startswith("text-embedding"):
+                        provider_name = "openai"
+                    else:
+                        provider_name = "ollama"
+
+                    self._embedding_provider = await get_embedding_provider(
+                        provider_name=provider_name, model=stored_model
+                    )
+                    if self._embedding_provider:
+                        # Set vector index to use the same model
+                        self._vector_index.set_model(
+                            stored_model, self._embedding_provider.dimension
+                        )
+                        logger.info(f"Hybrid search enabled with {stored_model}")
+                    else:
+                        logger.debug(f"Embedding provider not available for {stored_model}")
+                else:
+                    logger.debug("No model found in vector index")
+            else:
+                logger.debug("Vector index not available or empty")
+
+        self._hybrid_searcher = HybridSearcher(
+            corpus_index=index,
+            vector_index=self._vector_index,
+            embedding_provider=self._embedding_provider,
+        )
+
+        return self._hybrid_searcher
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        """Execute corpus search."""
+        """Execute corpus operation based on mode."""
+        mode = args.get("mode", "search")
+
+        # Get the index
+        index = self._get_index()
+        if index is None:
+            return ToolResult(
+                success=False,
+                data={"success": False, "mode": mode},
+                error="Corpus index not available",
+            )
+
+        # Dispatch to mode handler
+        if mode == "toc":
+            return self._handle_toc(index)
+        elif mode == "file":
+            return self._handle_file(index, args)
+        elif mode == "cluster":
+            return self._handle_cluster(index, args)
+        elif mode == "search":
+            return await self._handle_search(index, args)
+        else:
+            return ToolResult(
+                success=False,
+                data={"success": False, "mode": mode},
+                error=f"Unknown mode: {mode}",
+            )
+
+    def _handle_toc(self, index: CorpusIndex) -> ToolResult:
+        """Handle toc mode - return table of contents."""
+        toc = index.get_toc()
+
+        file_count = len(toc) if isinstance(toc, list) else 0
+        return ToolResult(
+            success=True,
+            data={
+                "success": True,
+                "mode": "toc",
+                "source": "domain_corpus",
+                "action_outcome": f"retrieved toc ({file_count} files)",
+                "toc": toc,
+            },
+        )
+
+    def _handle_file(self, index: CorpusIndex, args: dict[str, Any]) -> ToolResult:
+        """Handle file mode - return specific file content."""
+        filename = args.get("file", "")
+
+        if not filename:
+            return ToolResult(
+                success=False,
+                data={"success": False, "mode": "file"},
+                error="file parameter is required for mode=file",
+            )
+
+        file_content = index.get_file(filename)
+
+        if file_content is None:
+            return ToolResult(
+                success=False,
+                data={"success": False, "mode": "file"},
+                error=f"File not found: {filename}",
+            )
+
+        content_len = len(file_content) if file_content else 0
+        return ToolResult(
+            success=True,
+            data={
+                "success": True,
+                "mode": "file",
+                "source": "domain_corpus",
+                "action_outcome": f"retrieved {filename} ({content_len} chars)",
+                "file_content": file_content,
+            },
+        )
+
+    def _handle_cluster(self, index: CorpusIndex, args: dict[str, Any]) -> ToolResult:
+        """Handle cluster mode - return files in a cluster."""
+        cluster = args.get("cluster", "")
+
+        if not cluster:
+            # Return list of available clusters
+            clusters = index.list_clusters()
+            cluster_count = len(clusters) if clusters else 0
+            return ToolResult(
+                success=True,
+                data={
+                    "success": True,
+                    "mode": "cluster",
+                    "source": "domain_corpus",
+                    "action_outcome": f"listed {cluster_count} clusters",
+                    "clusters": clusters,
+                },
+            )
+
+        if cluster not in VALID_CLUSTERS:
+            return ToolResult(
+                success=False,
+                data={"success": False, "mode": "cluster"},
+                error=f"Invalid cluster: {cluster}. Valid clusters: {', '.join(sorted(VALID_CLUSTERS))}",
+            )
+
+        cluster_files = index.get_cluster(cluster)
+        file_count = len(cluster_files) if cluster_files else 0
+
+        return ToolResult(
+            success=True,
+            data={
+                "success": True,
+                "mode": "cluster",
+                "source": "domain_corpus",
+                "action_outcome": f"found {file_count} files in '{cluster}'",
+                "cluster": cluster,
+                "cluster_files": cluster_files,
+            },
+        )
+
+    async def _handle_search(self, index: CorpusIndex, args: dict[str, Any]) -> ToolResult:
+        """Handle search mode - search for relevant excerpts using hybrid search."""
         query = args.get("query", "")
         max_results = args.get("max_results", 3)
 
         if not query.strip():
             return ToolResult(
                 success=False,
-                data={"success": False, "excerpts": []},
-                error="Query cannot be empty",
+                data={"success": False, "mode": "search", "excerpts": []},
+                error="query parameter is required for mode=search",
             )
 
-        # Load corpus if needed
-        corpus = self._load_corpus()
+        # Use hybrid searcher (combines keyword and vector if available)
+        searcher = await self._get_hybrid_searcher(index)
+        results = await searcher.search(query, max_results=max_results)
+        search_method = searcher.get_search_method()
 
-        if not corpus:
-            return ToolResult(
-                success=False,
-                data={"success": False, "excerpts": []},
-                error="No corpus files found",
-            )
-
-        # Choose search method
-        if VECTOR_SEARCH_AVAILABLE:
-            excerpts = await self._vector_search(query, corpus, max_results)
-            search_method = "vector"
-        else:
-            excerpts = self._keyword_search(query, corpus, max_results)
-            search_method = "keyword"
+        # Transform results to match expected output schema
+        excerpts = [r.to_dict() for r in results]
 
         return ToolResult(
             success=True,
             data={
                 "success": True,
+                "mode": "search",
                 "source": "domain_corpus",
+                "action_outcome": f"found {len(excerpts)} excerpts ({search_method})",
                 "search_method": search_method,
                 "excerpt_count": len(excerpts),
-                "excerpts": [e.to_dict() for e in excerpts],
+                "excerpts": excerpts,
             },
         )
-
-    def _load_corpus(self) -> dict[str, str]:
-        """
-        Load corpus files from domain knowledge directory.
-
-        Returns dict mapping filename to content.
-        """
-        if self._corpus_cache is not None:
-            return self._corpus_cache
-
-        corpus: dict[str, str] = {}
-        domain_path = self._context.domain_path
-
-        if not domain_path:
-            logger.warning("No domain_path configured for corpus search")
-            return corpus
-
-        domain_path = Path(domain_path)
-        knowledge_dirs = [
-            domain_path / "knowledge",
-            domain_path / "corpus",
-        ]
-
-        for knowledge_dir in knowledge_dirs:
-            if not knowledge_dir.exists():
-                continue
-
-            # Load markdown and text files
-            for ext in ["*.md", "*.txt"]:
-                for file_path in knowledge_dir.rglob(ext):
-                    try:
-                        content = file_path.read_text(encoding="utf-8")
-                        relative_path = file_path.relative_to(domain_path)
-                        corpus[str(relative_path)] = content
-                    except Exception as e:
-                        logger.warning(f"Failed to load corpus file {file_path}: {e}")
-
-        self._corpus_cache = corpus
-        logger.debug(f"Loaded {len(corpus)} corpus files")
-        return corpus
-
-    def _keyword_search(
-        self, query: str, corpus: dict[str, str], max_results: int
-    ) -> list[CorpusExcerpt]:
-        """
-        Keyword-based search with relevance scoring.
-
-        Score formula: (word_coverage * 0.7) + (density * 0.3)
-        """
-        # Tokenize query
-        query_words = set(self._tokenize(query.lower()))
-
-        if not query_words:
-            return []
-
-        candidates: list[tuple[float, str, str]] = []
-
-        for source_file, content in corpus.items():
-            # Find relevant excerpts in content
-            excerpts = self._extract_excerpts(content, query_words)
-
-            for excerpt, score in excerpts:
-                candidates.append((score, source_file, excerpt))
-
-        # Sort by score descending
-        candidates.sort(key=lambda x: x[0], reverse=True)
-
-        # Return top results
-        results = []
-        for score, source_file, excerpt in candidates[:max_results]:
-            results.append(
-                CorpusExcerpt(
-                    excerpt=excerpt,
-                    source_file=source_file,
-                    relevance_score=min(score, 1.0),
-                )
-            )
-
-        return results
-
-    def _extract_excerpts(self, content: str, query_words: set[str]) -> list[tuple[str, float]]:
-        """
-        Extract relevant excerpts from content.
-
-        Returns list of (excerpt, score) tuples.
-        """
-        excerpts = []
-
-        # Split into paragraphs
-        paragraphs = re.split(r"\n\n+", content)
-
-        for para in paragraphs:
-            para = para.strip()
-            if len(para) < 50:  # Skip short paragraphs
-                continue
-
-            # Tokenize paragraph
-            para_words = self._tokenize(para.lower())
-            if not para_words:
-                continue
-
-            # Calculate word coverage
-            matching_words = query_words & set(para_words)
-            word_coverage = len(matching_words) / len(query_words) if query_words else 0
-
-            # Calculate density (how concentrated query words are)
-            density = len(matching_words) / len(para_words) if para_words else 0
-
-            # Combined score
-            score = (word_coverage * 0.7) + (density * 0.3)
-
-            if score > 0.1:  # Minimum relevance threshold
-                # Truncate excerpt if too long
-                if len(para) > 500:
-                    para = para[:497] + "..."
-                excerpts.append((para, score))
-
-        return excerpts
-
-    def _tokenize(self, text: str) -> list[str]:
-        """Tokenize text into words, filtering stop words."""
-        # Simple word tokenization
-        words = re.findall(r"\b[a-z]{2,}\b", text)
-        # Remove common stop words (using module-level constant)
-        return [w for w in words if w not in _STOP_WORDS]
-
-    async def _vector_search(
-        self, query: str, corpus: dict[str, str], max_results: int
-    ) -> list[CorpusExcerpt]:
-        """
-        Vector-based semantic search.
-
-        TODO: Implement when sqlite-vec and embedding model are configured.
-        Currently falls back to keyword search.
-        """
-        # Placeholder for vector search implementation
-        # When implemented, this would:
-        # 1. Embed the query using an embedding model
-        # 2. Search the vector index for similar embeddings
-        # 3. Return excerpts with cosine similarity scores
-
-        logger.debug("Vector search not available, using keyword fallback")
-        return self._keyword_search(query, corpus, max_results)
-
-
-# =============================================================================
-# Vector Search Infrastructure (TODO: Phase 3 or later)
-# =============================================================================
-
-# TODO: Implement vector search when ready
-# Required components:
-# 1. Embedding model (e.g., sentence-transformers)
-# 2. sqlite-vec extension for vector storage
-# 3. Index building during domain load
-# 4. Query embedding and similarity search
-#
-# Example structure:
-#
-# class VectorIndex:
-#     def __init__(self, db_path: Path):
-#         self._conn = sqlite3.connect(str(db_path))
-#         self._conn.enable_load_extension(True)
-#         self._conn.load_extension("vec0")
-#
-#     def build_index(self, corpus: dict[str, str], embedder):
-#         # Chunk documents, embed, store in sqlite-vec
-#         pass
-#
-#     def search(self, query_embedding: list[float], limit: int):
-#         # KNN search using sqlite-vec
-#         pass

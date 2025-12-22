@@ -1,3 +1,17 @@
+---
+title: Nonlinear Structure
+summary: Non-chronological storytelling techniques including time jumps, parallel narratives, and reader orientation strategies.
+topics:
+  - nonlinear-narrative
+  - time-jumps
+  - flashbacks
+  - parallel-narratives
+  - temporal-markers
+  - braided-structure
+  - reader-orientation
+cluster: narrative-structure
+---
+
 # Nonlinear Structure
 
 Craft guidance for non-chronological storytelling—time jumps, parallel narratives, and keeping readers oriented.

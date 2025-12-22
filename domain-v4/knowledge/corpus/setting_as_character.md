@@ -1,3 +1,17 @@
+---
+title: Setting as Character for Interactive Fiction
+summary: Making environments active story participants through atmosphere, sensory immersion, and narrative-shaping settings.
+topics:
+  - setting-as-character
+  - environment
+  - atmosphere
+  - sensory-immersion
+  - environmental-pressure
+  - place-based-tension
+  - mood-building
+cluster: world-and-setting
+---
+
 # Setting as Character for Interactive Fiction
 
 Craft guidance for making environments active story participants—atmosphere, sensory immersion, and settings that shape narrative.

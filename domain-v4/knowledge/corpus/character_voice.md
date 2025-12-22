@@ -1,3 +1,18 @@
+---
+title: Character Voice
+summary: Creating distinct character voices through idiolect, POV consistency, vocabulary choices, and the Uncle Charles principle.
+topics:
+  - character-voice
+  - idiolect
+  - pov-consistency
+  - deep-pov
+  - filter-words
+  - head-hopping
+  - dialect
+  - vocabulary
+cluster: prose-and-language
+---
+
 # Character Voice
 
 Craft guidance for creating distinct character voices through idiolect, POV consistency, and vocabulary choices.

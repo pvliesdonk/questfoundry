@@ -1,3 +1,18 @@
+---
+title: Localization Considerations for Interactive Fiction
+summary: Writing IF for translation and cultural adaptation with localization-friendly text design and practices.
+topics:
+  - localization
+  - translation
+  - cultural-adaptation
+  - string-externalization
+  - text-expansion
+  - pluralization
+  - date-formatting
+  - global-audiences
+cluster: audience-and-access
+---
+
 # Localization Considerations for Interactive Fiction
 
 Craft guidance for writing IF that can be translated and culturally adapted—text design, cultural assumptions, and localization-friendly practices.
