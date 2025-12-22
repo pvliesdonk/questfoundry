@@ -45,7 +45,7 @@
       {
         "type": "section_brief",
         "alias": "briefs",
-        "description": "Section Briefs for each new or affected section",
+        "description": "Section Briefs for each new or affected section (to be promoted to lifecycle state `ready` via lifecycle tools after preview gate passes)",
         "state": "ready"
       }
     ],

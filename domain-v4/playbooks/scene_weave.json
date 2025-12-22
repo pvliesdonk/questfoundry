@@ -52,7 +52,7 @@
       {
         "type": "section",
         "alias": "sections",
-        "description": "Full prose Sections with choices and gates",
+        "description": "Full prose Sections with choices and gates (created in `draft`, intended to be promoted to lifecycle states like `review`/`approved` via lifecycle tools after gatecheck)",
         "state": "review"
       }
     ],
