@@ -239,6 +239,12 @@ class Tool(BaseModel):
     terminates_turn: bool = False
     terminates_session: bool = False  # If true, calling ends the entire session
 
+    # Whether this tool can reject work even when execution succeeds
+    # (e.g., validation failures, permission denied). When can_reject=True
+    # and result contains action_outcome='rejected', it doesn't count as
+    # progress for iteration limits.
+    can_reject: bool = False
+
     # Summarization policy for Secretary pattern context management
     # - drop: Remove from summarized context (tool can be re-called)
     # - ultra_concise: Single-line summary using summary_template

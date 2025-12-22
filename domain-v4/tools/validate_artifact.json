@@ -6,6 +6,8 @@
 
   "summarization_policy": "preserve",
 
+  "can_reject": true,
+
   "input_schema": {
     "type": "object",
     "properties": {

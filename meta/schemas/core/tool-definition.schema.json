@@ -84,6 +84,12 @@
       "description": "If true, calling this tool ends the entire session. This is the ONLY way to signal 'I'm done with my work forever'. Only meaningful for orchestrator agents. Use for explicit session completion or fatal errors. Most tools that terminates_turn do NOT terminate session - they yield control expecting to resume."
     },
 
+    "can_reject": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, this tool may reject work even when execution succeeds (e.g., validation failures, permission denied). When can_reject=true and result contains action_outcome='rejected', it doesn't count as progress for iteration limits. Use for tools that validate or gate content."
+    },
+
     "summarization_policy": {
       "$ref": "#/$defs/summarization_policy",
       "description": "How to summarize this tool's result when context needs to be compressed. Used by the Secretary pattern to manage context growth."

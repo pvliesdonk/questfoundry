@@ -111,6 +111,33 @@ class ToolCall:
 
 
 @dataclass
+class IterationOutcome:
+    """Outcome of a single iteration for progress tracking (issue #234).
+
+    Used to determine if an iteration made progress toward the task.
+    Progress resets the stalled iteration counter, allowing the agent
+    to continue working. Non-progress increments the stalled counter.
+    """
+
+    total_tool_calls: int
+    successful_tool_calls: int
+    failed_tool_calls: int
+    rejected_tool_calls: int = 0  # Calls that succeeded but rejected work
+
+    @property
+    def made_progress(self) -> bool:
+        """Did this iteration make progress?
+
+        Progress is made if at least one tool call:
+        - Succeeded (success=True)
+        - AND did not reject work (action_outcome != 'rejected')
+        """
+        # Progress = successful calls minus rejections > 0
+        effective_successes = self.successful_tool_calls - self.rejected_tool_calls
+        return effective_successes > 0
+
+
+@dataclass
 class ActivationResult:
     """Result of an agent activation."""
 
@@ -135,8 +162,14 @@ STOP_TOOL_NAMES = frozenset(
     }
 )
 
-# Maximum consecutive failures before giving up
+# Maximum consecutive failures before giving up (legacy, for backward compat)
 MAX_CONSECUTIVE_FAILURES = 3
+
+# Progress-based iteration counting (issue #234)
+# Stalled iterations: consecutive iterations without progress (resets on progress)
+# Total iterations: hard cap regardless of progress
+MAX_STALLED_ITERATIONS = 3
+MAX_TOTAL_ITERATIONS = 20
 
 # Context management constants
 DEFAULT_CONTEXT_LIMIT = 128000  # Default context window for modern models
@@ -1309,24 +1342,104 @@ class AgentRuntime:
                     return True
         return False
 
+    def _made_progress(self, tool_result: ToolCall) -> bool:
+        """
+        Determine if a tool result represents actual progress (issue #234).
+
+        Uses the tool's can_reject property plus convention-based detection.
+        Tools that can_reject=True may return success=True but still signal
+        rejection via action_outcome patterns.
+
+        Args:
+            tool_result: The executed tool call
+
+        Returns:
+            True if this call made progress toward the task
+        """
+        # Basic failure = no progress
+        if not tool_result.success:
+            return False
+
+        # Check if this tool can reject work
+        registry = self.tool_registry
+        if registry:
+            tool_def = registry.get_tool_definition(tool_result.tool_id)
+            if tool_def and tool_def.can_reject:
+                # Check for rejection patterns in result
+                result = tool_result.result
+                if isinstance(result, dict):
+                    # Pattern 1: feedback.action_outcome == "rejected"
+                    feedback = result.get("feedback", {})
+                    if isinstance(feedback, dict):
+                        if feedback.get("action_outcome") == "rejected":
+                            return False
+
+                    # Pattern 2: Top-level rejection indicator
+                    if result.get("action_outcome") == "rejected":
+                        return False
+
+                    # Pattern 3: Explicit progress flag (tools can opt-in)
+                    if "made_progress" in result:
+                        return result["made_progress"]
+
+        # Default: success = progress
+        return True
+
+    def _evaluate_iteration_outcome(
+        self, tool_calls: list[ToolCall]
+    ) -> IterationOutcome:
+        """
+        Evaluate the outcome of an iteration's tool calls (issue #234).
+
+        Args:
+            tool_calls: List of tool calls made in this iteration
+
+        Returns:
+            IterationOutcome with progress assessment
+        """
+        total = len(tool_calls)
+        successful = sum(1 for tc in tool_calls if tc.success)
+        failed = total - successful
+
+        # Count rejections among successful calls
+        rejected = sum(
+            1 for tc in tool_calls
+            if tc.success and not self._made_progress(tc)
+        )
+
+        return IterationOutcome(
+            total_tool_calls=total,
+            successful_tool_calls=successful,
+            failed_tool_calls=failed,
+            rejected_tool_calls=rejected,
+        )
+
     async def activate(
         self,
         agent: Agent,
         user_input: str,
         session: Session,
         options: InvokeOptions | None = None,
-        max_tool_iterations: int = 10,
+        max_tool_iterations: int | None = None,  # DEPRECATED: use max_total_iterations
+        max_stalled_iterations: int = MAX_STALLED_ITERATIONS,
+        max_total_iterations: int = MAX_TOTAL_ITERATIONS,
         enforce_tool_usage: bool = True,
     ) -> ActivationResult:
         """
         Activate an agent (non-streaming) with tool call support.
+
+        Uses progress-based iteration counting (issue #234):
+        - stalled_iterations: Incremented when no progress made, resets on progress
+        - total_iterations: Hard cap that never resets
 
         Args:
             agent: The agent to activate
             user_input: User's input message
             session: Session to track the turn in
             options: LLM invocation options
-            max_tool_iterations: Maximum number of tool call iterations
+            max_tool_iterations: DEPRECATED - use max_total_iterations instead
+            max_stalled_iterations: Max consecutive non-progress iterations (default: 3)
+            max_total_iterations: Hard cap on total iterations (default: 20)
             enforce_tool_usage: If True, nudge LLM when it doesn't make tool calls
 
         Returns:
@@ -1336,6 +1449,16 @@ class AgentRuntime:
             ContextOverflowError: If prompt exceeds context limit
             ProviderError: If LLM call fails
         """
+        # Handle deprecated parameter
+        if max_tool_iterations is not None:
+            import warnings
+            warnings.warn(
+                "max_tool_iterations is deprecated, use max_stalled_iterations "
+                "and max_total_iterations instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            max_total_iterations = max_tool_iterations
         # Start turn
         turn = session.start_turn(agent.id, user_input)
         start_time = time.time()
@@ -1427,10 +1550,14 @@ class AgentRuntime:
             total_completion_tokens = 0
             response: LLMResponse | None = None
             stop_reason: str | None = None
-            consecutive_failures = 0  # Track no-tool-call failures
 
-            # Tool call loop with enforcement
-            for iteration in range(max_tool_iterations):
+            # Progress-based iteration tracking (issue #234)
+            stalled_iterations = 0  # Consecutive iterations without progress
+            total_iterations = 0  # Total iterations (hard cap)
+
+            # Tool call loop with progress-based counting
+            for iteration in range(max_total_iterations):
+                total_iterations += 1
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
                 if self._event_logger:
@@ -1506,22 +1633,26 @@ class AgentRuntime:
 
                 # Check for tool calls
                 if not response.has_tool_calls or not response.tool_calls:
-                    # No tool calls - check if we should enforce tool usage
+                    # No tool calls - no progress made
+                    stalled_iterations += 1
+
+                    # Check if we should enforce tool usage
                     if enforce_tool_usage and tool_schemas:
-                        consecutive_failures += 1
                         logger.warning(
-                            "No tool calls in iteration %d (failure %d/%d)",
+                            "No tool calls in iteration %d (stalled %d/%d, total %d/%d)",
                             iteration + 1,
-                            consecutive_failures,
-                            MAX_CONSECUTIVE_FAILURES,
+                            stalled_iterations,
+                            max_stalled_iterations,
+                            total_iterations,
+                            max_total_iterations,
                         )
 
-                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        if stalled_iterations >= max_stalled_iterations:
                             logger.error(
-                                "Max consecutive failures (%d) reached without tool calls",
-                                MAX_CONSECUTIVE_FAILURES,
+                                "Max stalled iterations (%d) reached without tool calls",
+                                max_stalled_iterations,
                             )
-                            stop_reason = "max_failures"
+                            stop_reason = "stalled"
                             break
 
                         # Add assistant message and nudge (no tool calls)
@@ -1563,25 +1694,31 @@ class AgentRuntime:
                         nudge_message=validation.nudge_message,
                     )
 
+                # Evaluate progress for this iteration (issue #234)
+                outcome = self._evaluate_iteration_outcome(tool_results)
+
                 if not validation.valid:
                     # Orchestrator didn't use terminating tool - tools already executed above
-                    consecutive_failures += 1
+                    # For orchestrators, missing terminating tool = no progress
+                    stalled_iterations += 1
                     logger.warning(
-                        "Turn validation failed in iteration %d (failure %d/%d): %s",
+                        "Turn validation failed in iteration %d (stalled %d/%d, total %d/%d): %s",
                         iteration + 1,
-                        consecutive_failures,
-                        MAX_CONSECUTIVE_FAILURES,
+                        stalled_iterations,
+                        max_stalled_iterations,
+                        total_iterations,
+                        max_total_iterations,
                         "missing terminating tool"
                         if validation.non_terminating_tools
                         else "no tools",
                     )
 
-                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    if stalled_iterations >= max_stalled_iterations:
                         logger.error(
-                            "Max consecutive failures (%d) reached without valid turn",
-                            MAX_CONSECUTIVE_FAILURES,
+                            "Max stalled iterations (%d) reached without valid turn",
+                            max_stalled_iterations,
                         )
-                        stop_reason = "max_failures"
+                        stop_reason = "stalled"
                         break
 
                     # Add assistant and tool messages (tools already executed above)
@@ -1602,8 +1739,35 @@ class AgentRuntime:
                     messages.append(LLMMessage(role="user", content=nudge))
                     continue
 
-                # Reset failure count on valid turn
-                consecutive_failures = 0
+                # Valid turn - check progress
+                if outcome.made_progress:
+                    stalled_iterations = 0  # Reset on progress
+                    logger.info(
+                        "Iteration %d: %d/%d tools succeeded, progress=True, stalled=%d/%d",
+                        iteration + 1,
+                        outcome.successful_tool_calls,
+                        outcome.total_tool_calls,
+                        stalled_iterations,
+                        max_stalled_iterations,
+                    )
+                else:
+                    stalled_iterations += 1
+                    logger.warning(
+                        "Iteration %d: %d/%d tools succeeded (%d rejected), progress=False, stalled=%d/%d",
+                        iteration + 1,
+                        outcome.successful_tool_calls,
+                        outcome.total_tool_calls,
+                        outcome.rejected_tool_calls,
+                        stalled_iterations,
+                        max_stalled_iterations,
+                    )
+                    if stalled_iterations >= max_stalled_iterations:
+                        logger.error(
+                            "Max stalled iterations (%d) reached - tools succeeded but rejected work",
+                            max_stalled_iterations,
+                        )
+                        stop_reason = "stalled"
+                        break
 
                 # Check if we should stop the loop.
                 #
@@ -1753,7 +1917,9 @@ class AgentRuntime:
         session: Session,
         options: InvokeOptions | None = None,
         enforce_tool_usage: bool = True,
-        max_iterations: int = 10,
+        max_iterations: int | None = None,  # DEPRECATED: use max_total_iterations
+        max_stalled_iterations: int = MAX_STALLED_ITERATIONS,
+        max_total_iterations: int = MAX_TOTAL_ITERATIONS,
     ) -> AsyncIterator[StreamChunk]:
         """
         Activate an agent with streaming response.
@@ -1762,13 +1928,19 @@ class AgentRuntime:
         it will be nudged and given another chance to use tools. This implements
         the validate-with-feedback pattern from v3.
 
+        Uses progress-based iteration counting (issue #234):
+        - stalled_iterations: Incremented when no progress made, resets on progress
+        - total_iterations: Hard cap that never resets
+
         Args:
             agent: The agent to activate
             user_input: User's input message
             session: Session to track the turn in
             options: LLM invocation options
             enforce_tool_usage: If True, nudge LLM when it doesn't make tool calls
-            max_iterations: Maximum streaming iterations for enforcement loop
+            max_iterations: DEPRECATED - use max_total_iterations instead
+            max_stalled_iterations: Max consecutive non-progress iterations (default: 3)
+            max_total_iterations: Hard cap on total iterations (default: 20)
 
         Yields:
             StreamChunk with content
@@ -1777,6 +1949,16 @@ class AgentRuntime:
             ContextOverflowError: If prompt exceeds context limit
             ProviderError: If LLM call fails
         """
+        # Handle deprecated parameter
+        if max_iterations is not None:
+            import warnings
+            warnings.warn(
+                "max_iterations is deprecated, use max_stalled_iterations "
+                "and max_total_iterations instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            max_total_iterations = max_iterations
         # Start turn
         turn = session.start_turn(agent.id, user_input)
         start_time = time.time()
@@ -1864,11 +2046,15 @@ class AgentRuntime:
             # Collect response for turn completion
             full_content = ""
             final_usage: TokenUsage | None = None
-            consecutive_failures = 0
             all_tool_calls: list[ToolCall] = []  # Track all tool calls for memory
 
-            # Streaming loop with enforcement
-            for iteration in range(max_iterations):
+            # Progress-based iteration tracking (issue #234)
+            stalled_iterations = 0  # Consecutive iterations without progress
+            total_iterations = 0  # Total iterations (hard cap)
+
+            # Streaming loop with progress-based counting
+            for iteration in range(max_total_iterations):
+                total_iterations += 1
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
                 if self._event_logger:
@@ -1981,20 +2167,26 @@ class AgentRuntime:
                             nudge_message=validation.nudge_message,
                         )
 
+                    # Evaluate progress for this iteration (issue #234)
+                    outcome = self._evaluate_iteration_outcome(tool_results)
+
                     if not validation.valid:
                         # Orchestrator didn't use terminating tool - tools already executed above
-                        consecutive_failures += 1
+                        # For orchestrators, missing terminating tool = no progress
+                        stalled_iterations += 1
                         logger.warning(
-                            "Turn validation failed in streaming iteration %d (failure %d/%d)",
+                            "Turn validation failed in streaming iteration %d (stalled %d/%d, total %d/%d)",
                             iteration + 1,
-                            consecutive_failures,
-                            MAX_CONSECUTIVE_FAILURES,
+                            stalled_iterations,
+                            max_stalled_iterations,
+                            total_iterations,
+                            max_total_iterations,
                         )
 
-                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        if stalled_iterations >= max_stalled_iterations:
                             logger.error(
-                                "Max consecutive failures (%d) reached in streaming",
-                                MAX_CONSECUTIVE_FAILURES,
+                                "Max stalled iterations (%d) reached in streaming",
+                                max_stalled_iterations,
                             )
                             break
 
@@ -2022,8 +2214,34 @@ class AgentRuntime:
                         )
                         continue
 
-                    # Valid turn - reset failure count
-                    consecutive_failures = 0
+                    # Valid turn - check progress
+                    if outcome.made_progress:
+                        stalled_iterations = 0  # Reset on progress
+                        logger.info(
+                            "Streaming iteration %d: %d/%d tools succeeded, progress=True, stalled=%d/%d",
+                            iteration + 1,
+                            outcome.successful_tool_calls,
+                            outcome.total_tool_calls,
+                            stalled_iterations,
+                            max_stalled_iterations,
+                        )
+                    else:
+                        stalled_iterations += 1
+                        logger.warning(
+                            "Streaming iteration %d: %d/%d tools succeeded (%d rejected), progress=False, stalled=%d/%d",
+                            iteration + 1,
+                            outcome.successful_tool_calls,
+                            outcome.total_tool_calls,
+                            outcome.rejected_tool_calls,
+                            stalled_iterations,
+                            max_stalled_iterations,
+                        )
+                        if stalled_iterations >= max_stalled_iterations:
+                            logger.error(
+                                "Max stalled iterations (%d) reached in streaming - tools succeeded but rejected work",
+                                max_stalled_iterations,
+                            )
+                            break
 
                     # Check if we should stop the loop.
                     #
@@ -2081,20 +2299,24 @@ class AgentRuntime:
                     # (next iteration will stream with updated messages)
                     continue
 
-                # No tool calls - check if we should enforce
+                # No tool calls - no progress made
+                stalled_iterations += 1
+
+                # Check if we should enforce
                 if enforce_tool_usage and tool_schemas:
-                    consecutive_failures += 1
                     logger.warning(
-                        "No tool calls in streaming iteration %d (failure %d/%d)",
+                        "No tool calls in streaming iteration %d (stalled %d/%d, total %d/%d)",
                         iteration + 1,
-                        consecutive_failures,
-                        MAX_CONSECUTIVE_FAILURES,
+                        stalled_iterations,
+                        max_stalled_iterations,
+                        total_iterations,
+                        max_total_iterations,
                     )
 
-                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    if stalled_iterations >= max_stalled_iterations:
                         logger.error(
-                            "Max consecutive failures (%d) reached in streaming",
-                            MAX_CONSECUTIVE_FAILURES,
+                            "Max stalled iterations (%d) reached in streaming without tool calls",
+                            max_stalled_iterations,
                         )
                         break
 
@@ -2270,11 +2492,13 @@ class AgentRuntime:
                         task_prompt += f"\n\nContext: {json.dumps(context_data, indent=2)}"
 
                     # Activate the delegatee (non-streaming for delegations)
+                    # Use tighter limits for delegated tasks (focused, smaller scope)
                     activation_result = await self.activate(
                         agent=delegatee,
                         user_input=task_prompt,
                         session=session,
-                        max_tool_iterations=5,
+                        max_stalled_iterations=MAX_STALLED_ITERATIONS,
+                        max_total_iterations=10,  # Delegations are focused tasks
                     )
 
                     # Create success response
