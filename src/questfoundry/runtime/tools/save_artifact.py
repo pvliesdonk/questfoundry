@@ -364,6 +364,24 @@ class SaveArtifactTool(BaseTool):
         """
         errors: list[dict[str, Any]] = []
         expected_type = field.type.value if getattr(field, "type", None) else "string"
+        original_value = value
+
+        # Lenient coercion for numeric types: accept simple digit-only strings
+        # (including a leading minus sign) for integer/number fields. This makes
+        # LLM-produced payloads like "sequence": "1" valid without sacrificing
+        # schema strictness for non-numeric strings.
+        if expected_type in {"integer", "number"} and isinstance(value, str):
+            stripped = value.strip()
+            is_int_like = stripped.isdigit() or (
+                stripped.startswith("-") and stripped[1:].isdigit()
+            )
+            if is_int_like:
+                try:
+                    int_value = int(stripped)
+                    value = int_value if expected_type == "integer" else int_value
+                except ValueError:
+                    # Fall through to normal type checking using the original string.
+                    value = original_value
 
         # Type checking functions
         type_checks = {

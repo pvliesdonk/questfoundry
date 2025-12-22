@@ -62,16 +62,11 @@ class ConsultSchemaTool(BaseTool):
         field_summary = self._build_field_summary(artifact_type)
         result_data["field_summary"] = field_summary
 
-        # Include full field definitions
+        # Include full field definitions, preserving nested structure so LLMs can
+        # see array/object shapes (properties, items, items_type, constraints).
         if artifact_type.fields:
             result_data["artifact_type"]["fields"] = [
-                {
-                    "name": f.name,
-                    "type": f.type.value if f.type else "string",
-                    "required": f.required,
-                    "description": f.description,
-                }
-                for f in artifact_type.fields
+                self._field_to_dict(f) for f in artifact_type.fields
             ]
 
         # Build lifecycle summary
@@ -107,6 +102,63 @@ class ConsultSchemaTool(BaseTool):
             result_data["artifact_type"]["default_store"] = artifact_type.default_store
 
         return ToolResult(success=True, data=result_data)
+
+    def _field_to_dict(self, field: Any) -> dict[str, Any]:
+        """
+        Convert a FieldDefinition into a JSON-serializable dict, including
+        nested object/array structure.
+
+        Mirrors the structure used in artifact-type JSON definitions so that
+        consult_schema exposes the full shape (not just top-level fields).
+        """
+        field_dict: dict[str, Any] = {
+            "name": field.name,
+            "type": field.type.value if getattr(field, "type", None) else "string",
+            "required": bool(getattr(field, "required", False)),
+            "description": getattr(field, "description", None),
+        }
+
+        # Enum / format for scalar types
+        enum_values = getattr(field, "enum", None)
+        if enum_values:
+            field_dict["enum"] = list(enum_values)
+        fmt = getattr(field, "format", None)
+        if fmt:
+            field_dict["format"] = fmt
+
+        # Length and numeric constraints
+        if getattr(field, "min_length", None) is not None:
+            field_dict["min_length"] = field.min_length
+        if getattr(field, "max_length", None) is not None:
+            field_dict["max_length"] = field.max_length
+        if getattr(field, "min", None) is not None:
+            field_dict["min"] = field.min
+        if getattr(field, "max", None) is not None:
+            field_dict["max"] = field.max
+
+        # Reference target
+        ref_target = getattr(field, "ref_target", None)
+        if ref_target:
+            field_dict["ref_target"] = ref_target
+
+        # Object properties (nested fields)
+        properties = getattr(field, "properties", None)
+        if properties:
+            field_dict["properties"] = [self._field_to_dict(p) for p in properties]
+
+        # Array item structure
+        items = getattr(field, "items", None)
+        if items:
+            field_dict["items"] = self._field_to_dict(items)
+
+        items_type = getattr(field, "items_type", None)
+        if items_type:
+            # items_type is a FieldType enum for scalar arrays
+            field_dict["items_type"] = (
+                items_type.value if getattr(items_type, "value", None) else str(items_type)
+            )
+
+        return field_dict
 
     def _build_field_summary(self, artifact_type: ArtifactType) -> str:
         """Build human-readable field summary."""
