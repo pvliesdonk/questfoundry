@@ -627,7 +627,7 @@ class TestMadeProgressHelper:
         basic_studio: Studio,
     ) -> None:
         """Tool with can_reject=True returning rejected is no progress."""
-        from questfoundry.runtime.models.base import Capability, Tool
+        from questfoundry.runtime.models.base import Tool
         from questfoundry.runtime.tools.registry import ToolRegistry
 
         # Add a tool that can reject
@@ -741,9 +741,7 @@ class TestEvaluateIterationOutcome:
         from questfoundry.runtime.models.base import Tool
         from questfoundry.runtime.tools.registry import ToolRegistry
 
-        basic_studio.tools = [
-            Tool(id="validate", name="Validate", description="", can_reject=True)
-        ]
+        basic_studio.tools = [Tool(id="validate", name="Validate", description="", can_reject=True)]
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
         runtime._tool_registry = ToolRegistry(studio=basic_studio)
 
@@ -773,9 +771,7 @@ class TestEvaluateIterationOutcome:
         from questfoundry.runtime.tools.registry import ToolRegistry
 
         # One can_reject tool plus a generic non-rejecting tool
-        basic_studio.tools = [
-            Tool(id="validate", name="Validate", description="", can_reject=True)
-        ]
+        basic_studio.tools = [Tool(id="validate", name="Validate", description="", can_reject=True)]
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
         runtime._tool_registry = ToolRegistry(studio=basic_studio)
 
@@ -821,7 +817,7 @@ class TestProgressBasedIterationLimits:
         # Simulate: 2 rejections, then success, then 2 more rejections
         call_count = 0
 
-        async def mock_invoke(*args, **kwargs):
+        async def mock_invoke(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
 
@@ -865,7 +861,6 @@ class TestProgressBasedIterationLimits:
 
         # Set up tools
         from questfoundry.runtime.models.base import Capability, Tool
-        from questfoundry.runtime.tools.registry import ToolRegistry
 
         basic_studio.tools = [
             Tool(id="validate_artifact", name="Validate", description="", can_reject=True),

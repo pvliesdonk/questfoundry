@@ -12,6 +12,7 @@ completing tasks, especially when they need to:
 4. Retry with correct data
 
 **Real Example from Plotwright:**
+
 ```
 Iteration 1: consult_corpus (Agatha Christie research) ✓ productive
 Iteration 2: analyze_story_graph ✓ productive
@@ -213,6 +214,7 @@ async def activate(
 ```
 
 **Migration:**
+
 - `max_tool_iterations=5` → `max_stalled_iterations=3, max_total_iterations=20`
 - Old parameter deprecated but still works (maps to `max_total_iterations`)
 
@@ -273,6 +275,7 @@ seen_calls.add(call_signature)
 **Behavior:** Research tool makes progress, resets counter, allows retry
 
 Example flow:
+
 ```
 save_artifact (rejected)     → stalled = 1
 consult_schema (success)     → stalled = 0 (progress!)
@@ -302,6 +305,7 @@ saves.
 ### 6. Orchestrator vs Specialist
 
 Both use the same logic, but with different termination conditions:
+
 - **Orchestrator:** Stops on terminating tool OR stalled
 - **Specialist:** Stops on terminating tool OR stalled OR max total
 
@@ -321,6 +325,7 @@ logger.info(
 ```
 
 Event log entry:
+
 ```json
 {
   "event": "iteration_complete",
@@ -401,6 +406,7 @@ async def activate(
 ## Decision
 
 Implement **Progress-Based Counting** as described above. It:
+
 - Solves the immediate problem (agents can recover from failures)
 - Maintains safety (hard cap + stalled counter)
 - Is observable (clear logging of progress)

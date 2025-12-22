@@ -24,12 +24,12 @@ from __future__ import annotations
 import json
 import logging
 import time
+import warnings
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-import warnings
 
 from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
@@ -1384,14 +1384,12 @@ class AgentRuntime:
             return False
 
         # Pattern 2: Top-level rejection indicator
-        if result.get("action_outcome") == "rejected":
-            return False
-
+        action_outcome = result.get("action_outcome")
+        if isinstance(action_outcome, str):
+            return action_outcome != "rejected"
         return True
 
-    def _evaluate_iteration_outcome(
-        self, tool_calls: list[ToolCall]
-    ) -> IterationOutcome:
+    def _evaluate_iteration_outcome(self, tool_calls: list[ToolCall]) -> IterationOutcome:
         """
         Evaluate the outcome of an iteration's tool calls (issue #234).
 
@@ -1406,10 +1404,7 @@ class AgentRuntime:
         failed = total - successful
 
         # Count rejections among successful calls
-        rejected = sum(
-            1 for tc in tool_calls
-            if tc.success and not self._made_progress(tc)
-        )
+        rejected = sum(1 for tc in tool_calls if tc.success and not self._made_progress(tc))
 
         return IterationOutcome(
             total_tool_calls=total,
@@ -1672,7 +1667,9 @@ class AgentRuntime:
                 tool_calls = response.tool_calls  # Already checked not None
 
                 # Execute tool calls (always execute, even if validation will fail)
-                logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration_number})")
+                logger.info(
+                    f"Executing {len(tool_calls)} tool calls (iteration {iteration_number})"
+                )
                 tool_results = await self._execute_tool_calls(
                     tool_calls, agent, session.id, turn.turn_number
                 )
