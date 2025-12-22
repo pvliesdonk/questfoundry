@@ -411,20 +411,27 @@ class VectorIndex:
         # KNN search using sqlite-vec
         cursor = conn.execute(
             f"""
+            WITH knn AS (
+                SELECT
+                    section_id,
+                    distance
+                FROM {table_name}
+                WHERE embedding MATCH ?
+                ORDER BY distance
+                LIMIT ?
+            )
             SELECT
-                v.section_id,
-                v.distance,
+                knn.section_id,
+                knn.distance,
                 s.heading,
                 s.content,
                 f.path,
                 f.title,
                 f.cluster
-            FROM {table_name} v
-            JOIN corpus_sections s ON v.section_id = s.id
+            FROM knn
+            JOIN corpus_sections s ON knn.section_id = s.id
             JOIN corpus_files f ON s.file_id = f.id
-            WHERE v.embedding MATCH ?
-            ORDER BY v.distance
-            LIMIT ?
+            ORDER BY knn.distance
             """,  # noqa: S608
             (query_bytes, limit),
         )
