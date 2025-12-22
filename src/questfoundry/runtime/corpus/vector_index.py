@@ -79,7 +79,7 @@ class VectorIndex:
             # Try to load sqlite-vec extension
             try:
                 self._conn.enable_load_extension(True)
-                import sqlite_vec  # type: ignore[import-untyped]
+                import sqlite_vec  # type: ignore[import-untyped,import-not-found,unused-ignore]
 
                 sqlite_vec.load(self._conn)
                 self._vec_available = True
