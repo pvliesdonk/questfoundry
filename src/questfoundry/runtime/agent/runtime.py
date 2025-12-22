@@ -29,6 +29,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+import warnings
 
 from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
@@ -1356,33 +1357,36 @@ class AgentRuntime:
         Returns:
             True if this call made progress toward the task
         """
-        # Basic failure = no progress
         if not tool_result.success:
             return False
 
-        # Check if this tool can reject work
         registry = self.tool_registry
-        if registry:
-            tool_def = registry.get_tool_definition(tool_result.tool_id)
-            if tool_def and tool_def.can_reject:
-                # Check for rejection patterns in result
-                result = tool_result.result
-                if isinstance(result, dict):
-                    # Pattern 1: feedback.action_outcome == "rejected"
-                    feedback = result.get("feedback", {})
-                    if isinstance(feedback, dict):
-                        if feedback.get("action_outcome") == "rejected":
-                            return False
+        if not registry:
+            return True
 
-                    # Pattern 2: Top-level rejection indicator
-                    if result.get("action_outcome") == "rejected":
-                        return False
+        tool_def = registry.get_tool_definition(tool_result.tool_id)
+        if not tool_def or not tool_def.can_reject:
+            return True
 
-                    # Pattern 3: Explicit progress flag (tools can opt-in)
-                    if "made_progress" in result:
-                        return result["made_progress"]
+        result = tool_result.result
+        if not isinstance(result, dict):
+            return True
 
-        # Default: success = progress
+        # Pattern 3: Explicit flag takes precedence when provided.
+        if "made_progress" in result:
+            progress_flag = result["made_progress"]
+            if isinstance(progress_flag, bool):
+                return progress_flag
+
+        # Pattern 1: feedback.action_outcome == "rejected"
+        feedback = result.get("feedback", {})
+        if isinstance(feedback, dict) and feedback.get("action_outcome") == "rejected":
+            return False
+
+        # Pattern 2: Top-level rejection indicator
+        if result.get("action_outcome") == "rejected":
+            return False
+
         return True
 
     def _evaluate_iteration_outcome(
@@ -1451,7 +1455,6 @@ class AgentRuntime:
         """
         # Handle deprecated parameter
         if max_tool_iterations is not None:
-            import warnings
             warnings.warn(
                 "max_tool_iterations is deprecated, use max_stalled_iterations "
                 "and max_total_iterations instead",
@@ -1553,11 +1556,10 @@ class AgentRuntime:
 
             # Progress-based iteration tracking (issue #234)
             stalled_iterations = 0  # Consecutive iterations without progress
-            total_iterations = 0  # Total iterations (hard cap)
 
             # Tool call loop with progress-based counting
             for iteration in range(max_total_iterations):
-                total_iterations += 1
+                iteration_number = iteration + 1
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
                 if self._event_logger:
@@ -1640,10 +1642,10 @@ class AgentRuntime:
                     if enforce_tool_usage and tool_schemas:
                         logger.warning(
                             "No tool calls in iteration %d (stalled %d/%d, total %d/%d)",
-                            iteration + 1,
+                            iteration_number,
                             stalled_iterations,
                             max_stalled_iterations,
-                            total_iterations,
+                            iteration_number,
                             max_total_iterations,
                         )
 
@@ -1670,7 +1672,7 @@ class AgentRuntime:
                 tool_calls = response.tool_calls  # Already checked not None
 
                 # Execute tool calls (always execute, even if validation will fail)
-                logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration + 1})")
+                logger.info(f"Executing {len(tool_calls)} tool calls (iteration {iteration_number})")
                 tool_results = await self._execute_tool_calls(
                     tool_calls, agent, session.id, turn.turn_number
                 )
@@ -1703,10 +1705,10 @@ class AgentRuntime:
                     stalled_iterations += 1
                     logger.warning(
                         "Turn validation failed in iteration %d (stalled %d/%d, total %d/%d): %s",
-                        iteration + 1,
+                        iteration_number,
                         stalled_iterations,
                         max_stalled_iterations,
-                        total_iterations,
+                        iteration_number,
                         max_total_iterations,
                         "missing terminating tool"
                         if validation.non_terminating_tools
@@ -1744,7 +1746,7 @@ class AgentRuntime:
                     stalled_iterations = 0  # Reset on progress
                     logger.info(
                         "Iteration %d: %d/%d tools succeeded, progress=True, stalled=%d/%d",
-                        iteration + 1,
+                        iteration_number,
                         outcome.successful_tool_calls,
                         outcome.total_tool_calls,
                         stalled_iterations,
@@ -1754,7 +1756,7 @@ class AgentRuntime:
                     stalled_iterations += 1
                     logger.warning(
                         "Iteration %d: %d/%d tools succeeded (%d rejected), progress=False, stalled=%d/%d",
-                        iteration + 1,
+                        iteration_number,
                         outcome.successful_tool_calls,
                         outcome.total_tool_calls,
                         outcome.rejected_tool_calls,
@@ -1951,7 +1953,6 @@ class AgentRuntime:
         """
         # Handle deprecated parameter
         if max_iterations is not None:
-            import warnings
             warnings.warn(
                 "max_iterations is deprecated, use max_stalled_iterations "
                 "and max_total_iterations instead",
@@ -2050,11 +2051,10 @@ class AgentRuntime:
 
             # Progress-based iteration tracking (issue #234)
             stalled_iterations = 0  # Consecutive iterations without progress
-            total_iterations = 0  # Total iterations (hard cap)
 
             # Streaming loop with progress-based counting
             for iteration in range(max_total_iterations):
-                total_iterations += 1
+                iteration_number = iteration + 1
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
                 if self._event_logger:
@@ -2176,10 +2176,10 @@ class AgentRuntime:
                         stalled_iterations += 1
                         logger.warning(
                             "Turn validation failed in streaming iteration %d (stalled %d/%d, total %d/%d)",
-                            iteration + 1,
+                            iteration_number,
                             stalled_iterations,
                             max_stalled_iterations,
-                            total_iterations,
+                            iteration_number,
                             max_total_iterations,
                         )
 
@@ -2219,7 +2219,7 @@ class AgentRuntime:
                         stalled_iterations = 0  # Reset on progress
                         logger.info(
                             "Streaming iteration %d: %d/%d tools succeeded, progress=True, stalled=%d/%d",
-                            iteration + 1,
+                            iteration_number,
                             outcome.successful_tool_calls,
                             outcome.total_tool_calls,
                             stalled_iterations,
@@ -2229,7 +2229,7 @@ class AgentRuntime:
                         stalled_iterations += 1
                         logger.warning(
                             "Streaming iteration %d: %d/%d tools succeeded (%d rejected), progress=False, stalled=%d/%d",
-                            iteration + 1,
+                            iteration_number,
                             outcome.successful_tool_calls,
                             outcome.total_tool_calls,
                             outcome.rejected_tool_calls,
@@ -2306,10 +2306,10 @@ class AgentRuntime:
                 if enforce_tool_usage and tool_schemas:
                     logger.warning(
                         "No tool calls in streaming iteration %d (stalled %d/%d, total %d/%d)",
-                        iteration + 1,
+                        iteration_number,
                         stalled_iterations,
                         max_stalled_iterations,
-                        total_iterations,
+                        iteration_number,
                         max_total_iterations,
                     )
 

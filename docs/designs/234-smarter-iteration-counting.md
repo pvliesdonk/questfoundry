@@ -37,7 +37,7 @@ Replace single `max_iterations` with two counters:
 
 | Counter | Increments When | Resets When | Default Limit |
 |---------|-----------------|-------------|---------------|
-| `stalled_iterations` | No tool calls, or all tool calls failed | Any successful tool call | 3 |
+| `stalled_iterations` | No tool calls, or all tool calls failed/rejected | At least one non-rejected successful tool call | 3 |
 | `total_iterations` | Every iteration (hard cap) | Never | 20 |
 
 ### Definition of "Progress"
@@ -51,11 +51,12 @@ class IterationOutcome:
     total_tool_calls: int
     successful_tool_calls: int
     failed_tool_calls: int
+    rejected_tool_calls: int = 0  # Calls that succeeded but rejected work
 
     @property
     def made_progress(self) -> bool:
-        """Did this iteration make progress?"""
-        return self.successful_tool_calls > 0
+        """Did this iteration make progress (net of rejections)?"""
+        return self.successful_tool_calls - self.rejected_tool_calls > 0
 ```
 
 ### Tool Success Criteria
@@ -76,33 +77,37 @@ return a structured result with a rejection indicator:
 
 ```python
 def _made_progress(self, tool_result: ToolCall) -> bool:
-    """
-    Determine if a tool result represents actual progress.
-
-    Uses convention-based detection - no hardcoded tool names.
-    """
-    # Basic failure = no progress
+    """Determine if a tool result represents actual progress."""
     if not tool_result.success:
         return False
 
-    # Check for rejection patterns in result
+    registry = self.tool_registry
+    if not registry:
+        return True
+
+    tool_def = registry.get_tool_definition(tool_result.tool_id)
+    if not tool_def or not tool_def.can_reject:
+        return True  # Not a rejecting tool → success counts as progress
+
     result = tool_result.result
-    if isinstance(result, dict):
-        # Pattern 1: feedback.action_outcome == "rejected"
-        feedback = result.get("feedback", {})
-        if isinstance(feedback, dict):
-            if feedback.get("action_outcome") == "rejected":
-                return False
+    if not isinstance(result, dict):
+        return True
 
-        # Pattern 2: Top-level rejection indicator
-        if result.get("action_outcome") == "rejected":
-            return False
+    # Pattern 3 (explicit flag): tools can override via made_progress boolean
+    if "made_progress" in result:
+        progress_flag = result["made_progress"]
+        if isinstance(progress_flag, bool):
+            return progress_flag
 
-        # Pattern 3: Explicit progress flag (tools can opt-in)
-        if "made_progress" in result:
-            return result["made_progress"]
+    # Pattern 1: nested feedback outcome
+    feedback = result.get("feedback", {})
+    if isinstance(feedback, dict) and feedback.get("action_outcome") == "rejected":
+        return False
 
-    # Default: success = progress
+    # Pattern 2: top-level action_outcome
+    if result.get("action_outcome") == "rejected":
+        return False
+
     return True
 ```
 

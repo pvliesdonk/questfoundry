@@ -865,8 +865,7 @@ class TestProgressBasedIterationLimits:
 
         # Set up tools
         from questfoundry.runtime.models.base import Capability, Tool
-        from questfoundry.runtime.tools.base import BaseTool, ToolContext, ToolResult
-        from questfoundry.runtime.tools.registry import ToolRegistry, register_tool
+        from questfoundry.runtime.tools.registry import ToolRegistry
 
         basic_studio.tools = [
             Tool(id="validate_artifact", name="Validate", description="", can_reject=True),
@@ -879,6 +878,33 @@ class TestProgressBasedIterationLimits:
 
         runtime = AgentRuntime(provider=mock_provider, studio=basic_studio)
 
+        async def fake_execute(tool_call_requests, *_args, **_kwargs):
+            if not tool_call_requests:
+                return []
+
+            tool_name = tool_call_requests[0].name
+            if tool_name == "validate_artifact":
+                return [
+                    ToolCall(
+                        tool_id="validate_artifact",
+                        args={},
+                        success=True,
+                        result={"feedback": {"action_outcome": "rejected"}},
+                    )
+                ]
+            if tool_name == "save_artifact":
+                return [
+                    ToolCall(
+                        tool_id="save_artifact",
+                        args={},
+                        success=True,
+                        result={"feedback": {"action_outcome": "saved"}},
+                    )
+                ]
+            return []
+
+        runtime._execute_tool_calls = AsyncMock(side_effect=fake_execute)
+
         agent = runtime.get_agent("showrunner")
         assert agent is not None
 
@@ -890,6 +916,7 @@ class TestProgressBasedIterationLimits:
             session,
             max_stalled_iterations=3,
             max_total_iterations=10,
+            enforce_tool_usage=False,
         )
 
         # Should have completed
