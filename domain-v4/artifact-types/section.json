@@ -206,6 +206,7 @@
 
   "lifecycle_policy": {
     "edit_policy": "demote",
+    "demote_trigger_states": ["review"],
     "demote_target_state": "draft",
     "demote_target_store": "workspace"
   },

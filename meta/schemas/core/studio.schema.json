@@ -135,6 +135,18 @@
       "description": "Quality criteria used to validate work. Can be inline objects or file paths."
     },
 
+    "relationships": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string", "description": "File path to relationship definition" },
+          { "$ref": "relationship.schema.json" }
+        ]
+      },
+      "default": [],
+      "description": "Relationships between artifact types defining derivation chains and impact policies. Can be inline objects or file paths."
+    },
+
     "knowledge": {
       "type": "array",
       "items": {
