@@ -58,7 +58,12 @@
 
     "lifecycle": {
       "$ref": "#/$defs/lifecycle",
-      "description": "Optional lifecycle states for this artifact type"
+      "description": "Optional lifecycle states and transitions for this artifact type"
+    },
+
+    "lifecycle_policy": {
+      "$ref": "#/$defs/lifecycle_policy",
+      "description": "Declarative edit/mutation policies for runtime enforcement. Defines what happens when artifacts are edited in non-initial states."
     },
 
     "validation": {
@@ -137,11 +142,44 @@
                 "type": "array",
                 "items": { "type": "string" },
                 "description": "IDs of quality criteria that must pass for this transition"
+              },
+              "target_store": {
+                "$ref": "_definitions.schema.json#/$defs/store_ref",
+                "description": "Store to migrate artifact to on this transition. Generalizes cold migration - any transition can trigger store migration. Runtime updates both _lifecycle_state and _store atomically."
               }
             },
             "additionalProperties": false
           },
           "description": "Allowed state transitions"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "lifecycle_policy": {
+      "type": "object",
+      "description": "Declarative policies for runtime enforcement of lifecycle behavior. These policies are enforced automatically by the runtime, reducing cognitive load on agents.",
+      "properties": {
+        "edit_policy": {
+          "type": "string",
+          "enum": ["allow", "demote", "disallow"],
+          "default": "allow",
+          "description": "Runtime behavior when artifact content is edited in non-initial states. 'allow': edit proceeds normally (default). 'demote': edit succeeds but artifact is auto-transitioned to demote_target_state. 'disallow': edit is rejected with error."
+        },
+        "demote_trigger_states": {
+          "type": "array",
+          "items": {
+            "$ref": "_definitions.schema.json#/$defs/id"
+          },
+          "description": "States that trigger the edit_policy when set to 'demote' or 'disallow'. Defaults to all states except initial_state. Explicitly list states to customize (e.g., ['review', 'cold'] but not 'approved')."
+        },
+        "demote_target_state": {
+          "$ref": "_definitions.schema.json#/$defs/id",
+          "description": "State to transition to when demotion is triggered. Defaults to lifecycle.initial_state (typically 'draft')."
+        },
+        "demote_target_store": {
+          "$ref": "_definitions.schema.json#/$defs/store_ref",
+          "description": "Store to migrate artifact to on demotion. Defaults to artifact type's default_store (typically 'workspace')."
         }
       },
       "additionalProperties": false

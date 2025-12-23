@@ -95,6 +95,50 @@ Assessment of data quality or compliance.
 
 **Banned values**: `completing` — use `in_progress` with high percent_complete instead.
 
+### Relationship Kinds (`kind` in relationship.schema.json)
+
+Defines the semantic nature of artifact-to-artifact relationships:
+
+| Value | Meaning | Typical Cascade |
+|-------|---------|-----------------|
+| `derived_from` | Child is implementation of parent (e.g., section from brief) | Parent edit → demote children |
+| `depends_on` | Child requires parent to function (hard dependency) | Parent delete → block or cascade |
+| `supersedes` | Child replaces parent (versioning, retcon) | New version → archive old |
+| `references` | Informational link only | No automatic cascade |
+
+### Impact Policies (`impact_policy` in relationship.schema.json)
+
+Defines runtime behavior when parent artifact changes:
+
+**`on_parent_edit`** — What happens to children when parent is edited:
+
+| Value | Meaning |
+|-------|---------|
+| `none` | No effect on children (default) |
+| `flag_stale` | Set `_stale_parent=true` on children (advisory, no state change) |
+| `demote` | Demote children to their `lifecycle_policy.demote_target_state` (enforced) |
+
+**`on_parent_delete`** — What happens to children when parent is deleted:
+
+| Value | Meaning |
+|-------|---------|
+| `none` | No effect on children |
+| `orphan` | Clear `link_field` on children (default) |
+| `cascade_delete` | Delete children |
+| `block` | Prevent parent deletion while children exist |
+
+### Edit Policies (`edit_policy` in artifact-type.schema.json)
+
+Defines runtime behavior when artifacts are edited in non-initial states:
+
+| Value | Meaning |
+|-------|---------|
+| `allow` | Edit proceeds normally (default) |
+| `demote` | Edit succeeds, artifact auto-demoted to `demote_target_state` |
+| `disallow` | Edit rejected with error |
+
+See [lifecycle-policy.md](lifecycle-policy.md) for detailed documentation.
+
 ## Content Field Naming
 
 Different text fields serve different purposes. Use consistent names:
