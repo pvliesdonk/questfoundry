@@ -84,7 +84,7 @@
           "type": "string",
           "enum": ["none", "flag_stale", "demote"],
           "default": "none",
-          "description": "Action when parent artifact is edited. 'none': no effect on children. 'flag_stale': set _stale_parent=true on children (advisory). 'demote': transition children to their initial_state (enforced)."
+          "description": "Action when parent artifact is edited. 'none': no effect on children. 'flag_stale': set _stale_parent=true on children (advisory). 'demote': transition children to their lifecycle_policy.demote_target_state (enforced)."
         },
         "on_parent_delete": {
           "type": "string",
@@ -94,7 +94,7 @@
         },
         "demote_target_store": {
           "$ref": "_definitions.schema.json#/$defs/store_ref",
-          "description": "For on_parent_edit='demote': store to migrate demoted children to. Defaults to child artifact type's default_store."
+          "description": "For on_parent_edit='demote': optional store override for demoted children. Takes precedence over child's lifecycle_policy.demote_target_store. If not set, uses child's lifecycle_policy.demote_target_store (or child artifact type's default_store if that is also unset)."
         }
       },
       "additionalProperties": false

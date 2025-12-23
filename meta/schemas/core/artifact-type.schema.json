@@ -171,7 +171,7 @@
           "items": {
             "$ref": "_definitions.schema.json#/$defs/id"
           },
-          "description": "States that trigger demotion when edit_policy='demote'. Defaults to all states except initial_state. Explicitly list states to customize (e.g., ['review', 'cold'] but not 'approved')."
+          "description": "States that trigger the edit_policy when set to 'demote' or 'disallow'. Defaults to all states except initial_state. Explicitly list states to customize (e.g., ['review', 'cold'] but not 'approved')."
         },
         "demote_target_state": {
           "$ref": "_definitions.schema.json#/$defs/id",

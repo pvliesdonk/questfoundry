@@ -99,7 +99,17 @@ Key points:
 
 - Relationships define cascade behavior (parent edit → child impact)
 - The `impact_policy.on_parent_edit` can trigger child demotion
-- Cascade demotion uses the child's `lifecycle_policy.demote_target_state` and `demote_target_store`
+- Cascade demotion uses the child's `lifecycle_policy.demote_target_state`
+
+### Store Precedence for Cascade Demotion
+
+When a child artifact is demoted via cascade, the target store is determined by this precedence order:
+
+1. `relationship.impact_policy.demote_target_store` (if set on the relationship)
+2. `child_artifact_type.lifecycle_policy.demote_target_store` (if set on the child's type)
+3. `child_artifact_type.default_store` (fallback)
+
+This allows relationships to override the child's default demotion behavior when needed.
 
 ### Example Flow
 
@@ -116,7 +126,8 @@ Key points:
 When an artifact edit request arrives:
 
 1. **Check lifecycle_policy.edit_policy**
-   - If `disallow` and current state in trigger states → reject
+   - Determine trigger states: use `demote_trigger_states` if specified, otherwise all states except `initial_state`
+   - If `disallow` and current state in trigger states → reject edit
    - If `demote` and current state in trigger states → flag for demotion
 
 2. **Apply content changes**

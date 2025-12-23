@@ -116,7 +116,7 @@ Defines runtime behavior when parent artifact changes:
 |-------|---------|
 | `none` | No effect on children (default) |
 | `flag_stale` | Set `_stale_parent=true` on children (advisory, no state change) |
-| `demote` | Demote children to their `initial_state` (enforced) |
+| `demote` | Demote children to their `lifecycle_policy.demote_target_state` (enforced) |
 
 **`on_parent_delete`** — What happens to children when parent is deleted:
 
