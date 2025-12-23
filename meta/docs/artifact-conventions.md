@@ -109,3 +109,13 @@ These conventions align with the semantic axes defined in `semantic-conventions.
 - Lifecycle states describe **artifact state**, not action outcomes
 - The `cold` state corresponds to the `lifecycle_state: cold` defined in `_definitions.schema.json`
 - Transitions are requested via `request_lifecycle_transition` and return `transition_result` (committed/rejected/deferred)
+
+## Runtime Enforcement
+
+The `lifecycle_policy` block in artifact-type.schema.json defines automatic enforcement behavior:
+
+- **Edit demotion**: Editing non-draft artifacts can auto-demote them (see `edit_policy`)
+- **Store migration**: Transitions can trigger automatic store changes (see `target_store`)
+- **Relationship cascades**: Parent changes can cascade to children (see `relationship.schema.json`)
+
+See [lifecycle-policy.md](lifecycle-policy.md) for detailed documentation on runtime enforcement.

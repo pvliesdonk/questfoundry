@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "relationship.schema.json",
+  "title": "Artifact Relationship",
+  "description": "Defines behavioral relationships between artifact types. Runtime uses these for cascade policies (parent edit → child impact) and navigation helpers (get children/parents). Relationships are directional: from_type is the parent (referenced), to_type is the child (holds the reference).\n\nRELATIONSHIP KINDS:\n- derived_from: Child is implementation of parent (e.g., section derived from section_brief)\n- depends_on: Child requires parent to function (hard dependency)\n- supersedes: Child replaces parent (versioning, retcon)\n- references: Informational link only (no cascade behavior)\n\nLINK RESOLUTION:\n- by_artifact_id: link_field on child contains parent's _id directly\n- by_field_match: link_field on child contains a value that matches match_field on parent",
+
+  "type": "object",
+  "required": ["id", "from_type", "to_type", "kind", "link_field"],
+
+  "properties": {
+    "id": {
+      "$ref": "_definitions.schema.json#/$defs/id",
+      "description": "Unique identifier for this relationship"
+    },
+
+    "name": {
+      "$ref": "_definitions.schema.json#/$defs/name",
+      "description": "Human-readable name for this relationship"
+    },
+
+    "description": {
+      "$ref": "_definitions.schema.json#/$defs/description",
+      "description": "Explanation of what this relationship represents"
+    },
+
+    "from_type": {
+      "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+      "description": "Parent artifact type (the one being referenced)"
+    },
+
+    "to_type": {
+      "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+      "description": "Child artifact type (the one holding the reference)"
+    },
+
+    "kind": {
+      "type": "string",
+      "enum": ["derived_from", "depends_on", "supersedes", "references"],
+      "description": "Relationship semantics determining cascade behavior and runtime enforcement"
+    },
+
+    "link_field": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "description": "JSON path on child artifact that references parent. Use dot notation for nested fields (e.g., 'brief_ref' or 'source.pack_id'). Runtime uses json_extract with this path for queries."
+    },
+
+    "link_resolution": {
+      "type": "string",
+      "enum": ["by_artifact_id", "by_field_match"],
+      "default": "by_field_match",
+      "description": "How the link resolves to the parent artifact. 'by_artifact_id': link_field contains parent's _id. 'by_field_match': link_field contains a value matching match_field on parent."
+    },
+
+    "match_field": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "description": "For link_resolution='by_field_match': field on parent artifact to match against. E.g., if child.brief_ref='SB-001' and parent.brief_id='SB-001', set link_field='brief_ref' and match_field='brief_id'."
+    },
+
+    "impact_policy": {
+      "$ref": "#/$defs/impact_policy",
+      "description": "Defines runtime behavior when parent artifact changes"
+    }
+  },
+
+  "additionalProperties": false,
+
+  "if": {
+    "properties": {
+      "link_resolution": { "const": "by_field_match" }
+    }
+  },
+  "then": {
+    "required": ["match_field"]
+  },
+
+  "$defs": {
+    "impact_policy": {
+      "type": "object",
+      "description": "Defines what happens to child artifacts when parent changes. Runtime enforces these policies automatically.",
+      "properties": {
+        "on_parent_edit": {
+          "type": "string",
+          "enum": ["none", "flag_stale", "demote"],
+          "default": "none",
+          "description": "Action when parent artifact is edited. 'none': no effect on children. 'flag_stale': set _stale_parent=true on children (advisory). 'demote': transition children to their initial_state (enforced)."
+        },
+        "on_parent_delete": {
+          "type": "string",
+          "enum": ["none", "orphan", "cascade_delete", "block"],
+          "default": "orphan",
+          "description": "Action when parent artifact is deleted. 'none': no effect. 'orphan': clear link_field on children. 'cascade_delete': delete children. 'block': prevent parent deletion while children exist."
+        },
+        "demote_target_store": {
+          "$ref": "_definitions.schema.json#/$defs/store_ref",
+          "description": "For on_parent_edit='demote': store to migrate demoted children to. Defaults to child artifact type's default_store."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
