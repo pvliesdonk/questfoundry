@@ -95,6 +95,11 @@
     "tools/request_lifecycle_transition.json"
   ],
 
+  "relationships": [
+    "relationships/section_from_brief.json",
+    "relationships/codex_from_canon.json"
+  ],
+
   "quality_criteria": [
     "governance/quality-criteria/integrity.json",
     "governance/quality-criteria/reachability.json",

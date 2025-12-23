@@ -1,0 +1,16 @@
+{
+  "$schema": "../../meta/schemas/core/relationship.schema.json",
+  "id": "section_from_brief",
+  "name": "Section from Brief",
+  "description": "Sections are derived from section briefs. When a brief is edited, derived sections should be demoted to draft for review.",
+  "from_type": "section_brief",
+  "to_type": "section",
+  "kind": "derived_from",
+  "link_field": "brief_ref",
+  "link_resolution": "by_field_match",
+  "match_field": "brief_id",
+  "impact_policy": {
+    "on_parent_edit": "demote",
+    "on_parent_delete": "orphan"
+  }
+}
