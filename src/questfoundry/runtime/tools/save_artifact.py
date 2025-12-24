@@ -748,6 +748,7 @@ class UpdateArtifactTool(BaseTool):
 
     Merges provided data with existing artifact data.
     Respects store semantics (blocks updates to cold/append_only stores).
+    Enforces lifecycle edit policies (allow/demote/disallow).
     """
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
@@ -796,6 +797,27 @@ class UpdateArtifactTool(BaseTool):
             if store and store.requires_version_history():
                 save_version = True
 
+        # Check edit policy if managers are available
+        policy_result = None
+        if self._context.lifecycle_manager and self._context.relationship_manager:
+            from questfoundry.runtime.storage.edit_policy import EditPolicyGuard
+
+            guard = EditPolicyGuard(
+                self._context.lifecycle_manager,
+                self._context.relationship_manager,
+            )
+            policy_result = guard.check_edit(existing, self._context.project)
+
+            if not policy_result.allowed:
+                return ToolResult(
+                    success=False,
+                    data={
+                        "artifact_id": artifact_id,
+                        "lifecycle_state": existing.get("_lifecycle_state"),
+                    },
+                    error=policy_result.reason or "Edit not allowed by lifecycle policy",
+                )
+
         # Update artifact
         try:
             # Save version history before update for versioned stores
@@ -813,12 +835,38 @@ class UpdateArtifactTool(BaseTool):
             )
 
             if updated:
-                result_data = {
+                result_data: dict[str, Any] = {
                     "artifact": updated,
                     "artifact_id": artifact_id,
                 }
                 if version_saved is not None:
                     result_data["version_saved"] = version_saved
+
+                # Apply demotions if policy requires
+                if policy_result and self._context.lifecycle_manager:
+                    from questfoundry.runtime.storage.edit_policy import EditPolicyGuard
+
+                    guard = EditPolicyGuard(
+                        self._context.lifecycle_manager,
+                        self._context.relationship_manager,  # type: ignore[arg-type]
+                    )
+                    guard.apply_demotions(
+                        policy_result,
+                        existing,
+                        self._context.project,
+                        self._context.agent_id,
+                    )
+
+                    # Add demotion info to result
+                    if policy_result.demote_to_state:
+                        result_data["demoted_to"] = policy_result.demote_to_state
+                        # Refresh artifact to get updated state
+                        refreshed = self._context.project.get_artifact(artifact_id)
+                        if refreshed:
+                            result_data["artifact"] = refreshed
+
+                    if policy_result.cascade_demotions:
+                        result_data["cascade_demotions"] = len(policy_result.cascade_demotions)
 
                 return ToolResult(
                     success=True,
