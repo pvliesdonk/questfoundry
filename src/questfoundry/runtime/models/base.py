@@ -325,6 +325,41 @@ class QualityCriteria(BaseModel):
     failure_guidance: str | None = None
 
 
+# =============================================================================
+# Relationship Models
+# =============================================================================
+
+
+class RelationshipImpactPolicy(BaseModel):
+    """Defines cascade behavior when a parent artifact changes."""
+
+    on_parent_edit: Literal["none", "flag_stale", "demote"] = "none"
+    on_parent_delete: Literal["none", "orphan", "cascade_delete", "block"] = "orphan"
+    demote_target_store: str | None = None
+
+
+class RelationshipDef(BaseModel):
+    """
+    Relationship definition from relationship.schema.json.
+
+    Defines behavioral relationships between artifact types for cascade
+    policies and navigation.
+    """
+
+    id: str
+    name: str | None = None
+    description: str | None = None
+    from_type: str  # Parent artifact type (referenced)
+    to_type: str  # Child artifact type (holds reference)
+    kind: Literal["derived_from", "depends_on", "supersedes", "references"]
+    link_field: str = Field(pattern=r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$")
+    link_resolution: Literal["by_artifact_id", "by_field_match"] = "by_field_match"
+    match_field: str | None = Field(
+        default=None, pattern=r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$"
+    )
+    impact_policy: RelationshipImpactPolicy | None = None
+
+
 class KnowledgeContent(BaseModel):
     """Knowledge content definition."""
 
@@ -434,6 +469,7 @@ class Studio(BaseModel):
     artifact_types: list[ArtifactType] = Field(default_factory=list)
     asset_types: list[AssetType] = Field(default_factory=list)
     quality_criteria: list[QualityCriteria] = Field(default_factory=list)
+    relationships: list[RelationshipDef] = Field(default_factory=list)
 
     # Knowledge system
     knowledge_config: dict[str, Any] | None = None  # Layer configuration from layers.json

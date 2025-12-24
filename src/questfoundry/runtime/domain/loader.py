@@ -33,6 +33,7 @@ from questfoundry.runtime.models.base import (
     KnowledgeEntry,
     Playbook,
     QualityCriteria,
+    RelationshipDef,
     Store,
     Studio,
     Tool,
@@ -160,6 +161,7 @@ async def _resolve_all_refs(
         "artifact_types": ArtifactType,
         "asset_types": AssetType,
         "quality_criteria": QualityCriteria,
+        "relationships": RelationshipDef,
     }
 
     for key, _model_class in ref_keys.items():
@@ -376,6 +378,12 @@ def _build_studio(resolved: dict[str, Any]) -> Studio:
         qc_data = _strip_schema_field(qc_data)
         quality_criteria.append(QualityCriteria.model_validate(qc_data))
 
+    # Build relationships
+    relationships = []
+    for rel_data in resolved.get("relationships", []):
+        rel_data = _strip_schema_field(rel_data)
+        relationships.append(RelationshipDef.model_validate(rel_data))
+
     # Build knowledge entries dict
     knowledge: dict[str, KnowledgeEntry] = {}
     for entry_id, entry_data in resolved.get("knowledge", {}).items():
@@ -395,6 +403,7 @@ def _build_studio(resolved: dict[str, Any]) -> Studio:
     studio_data["artifact_types"] = artifact_types
     studio_data["asset_types"] = asset_types
     studio_data["quality_criteria"] = quality_criteria
+    studio_data["relationships"] = relationships
     studio_data["knowledge"] = knowledge
 
     return Studio.model_validate(studio_data)

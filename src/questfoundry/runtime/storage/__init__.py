@@ -8,11 +8,18 @@ Provides:
 - Message storage for agent communication
 - StoreManager: Registry for store definitions
 - LifecycleManager: Artifact lifecycle state machines
+- RelationshipManager: Artifact relationship cascade handling
+- EditPolicyGuard: Edit policy enforcement
 """
 
+from questfoundry.runtime.storage.edit_policy import (
+    EditPolicyGuard,
+    EditPolicyResult,
+)
 from questfoundry.runtime.storage.lifecycle import (
     ArtifactLifecycle,
     LifecycleManager,
+    LifecyclePolicy,
     LifecycleState,
     LifecycleTransition,
 )
@@ -21,6 +28,11 @@ from questfoundry.runtime.storage.project import (
     ProjectInfo,
     ProjectStatusSummary,
     list_projects,
+)
+from questfoundry.runtime.storage.relationship import (
+    ImpactPolicy,
+    Relationship,
+    RelationshipManager,
 )
 from questfoundry.runtime.storage.store_manager import (
     AssetStorageConfig,
@@ -45,6 +57,14 @@ __all__ = [
     # Lifecycle management
     "LifecycleManager",
     "ArtifactLifecycle",
+    "LifecyclePolicy",
     "LifecycleState",
     "LifecycleTransition",
+    # Relationship management
+    "RelationshipManager",
+    "Relationship",
+    "ImpactPolicy",
+    # Edit policy enforcement
+    "EditPolicyGuard",
+    "EditPolicyResult",
 ]

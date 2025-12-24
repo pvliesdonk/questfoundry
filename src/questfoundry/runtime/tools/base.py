@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from questfoundry.runtime.messaging.broker import AsyncMessageBroker
     from questfoundry.runtime.models import Studio, Tool
-    from questfoundry.runtime.storage import LifecycleManager, Project, StoreManager
+    from questfoundry.runtime.storage import (
+        LifecycleManager,
+        Project,
+        RelationshipManager,
+        StoreManager,
+    )
 
 
 class ToolError(Exception):
@@ -92,6 +97,7 @@ class ToolContext:
     # Storage infrastructure (Phase 4)
     store_manager: StoreManager | None = None
     lifecycle_manager: LifecycleManager | None = None
+    relationship_manager: RelationshipManager | None = None
 
     # Additional context that may be needed
     domain_path: Path | None = None  # Path to domain directory

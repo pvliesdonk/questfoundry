@@ -9,9 +9,48 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
+
+
+def _to_dict(obj: Any) -> dict[str, Any] | None:
+    """
+    Convert an object to a dictionary.
+
+    Handles Pydantic v2 (.model_dump), Pydantic v1 (.dict),
+    and custom objects with .to_dict() method.
+
+    Args:
+        obj: Object to convert
+
+    Returns:
+        Dictionary representation or None if conversion not possible
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return cast(dict[str, Any], obj)
+
+    # Prefer Pydantic v2-style export
+    if hasattr(obj, "model_dump"):
+        try:
+            return cast(dict[str, Any], obj.model_dump(by_alias=True))
+        except TypeError:  # pragma: no cover - defensive
+            return cast(dict[str, Any], obj.model_dump())
+
+    # Fallback to Pydantic v1-style export
+    if hasattr(obj, "dict"):
+        try:
+            return cast(dict[str, Any], obj.dict(by_alias=True))
+        except TypeError:  # pragma: no cover - defensive
+            return cast(dict[str, Any], obj.dict())
+
+    # Generic custom object export
+    if hasattr(obj, "to_dict"):
+        return cast(dict[str, Any], obj.to_dict())
+
+    return None
 
 
 @dataclass
@@ -42,6 +81,7 @@ class LifecycleTransition:
     to_state: str
     allowed_agents: list[str] = field(default_factory=list)
     requires_validation: list[str] = field(default_factory=list)
+    target_store: str | None = None  # Store migration on transition
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> LifecycleTransition:
@@ -51,6 +91,7 @@ class LifecycleTransition:
             to_state=data["to"],
             allowed_agents=data.get("allowed_agents", []),
             requires_validation=data.get("requires_validation", []),
+            target_store=data.get("target_store"),
         )
 
     def is_agent_allowed(self, agent_id: str | None) -> bool:
@@ -62,21 +103,55 @@ class LifecycleTransition:
 
 
 @dataclass
+class LifecyclePolicy:
+    """
+    Runtime enforcement behavior for an artifact type.
+
+    Defines what happens automatically when artifacts are edited,
+    separate from the state machine definition.
+    """
+
+    edit_policy: str = "allow"  # "allow", "demote", "disallow"
+    demote_trigger_states: list[str] | None = None  # None = all except initial
+    demote_target_state: str | None = None  # Defaults to initial_state
+    demote_target_store: str | None = None  # Defaults to artifact's default_store
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> LifecyclePolicy:
+        """Create from dictionary."""
+        if data is None:
+            return cls()
+        return cls(
+            edit_policy=data.get("edit_policy", "allow"),
+            demote_trigger_states=data.get("demote_trigger_states"),
+            demote_target_state=data.get("demote_target_state"),
+            demote_target_store=data.get("demote_target_store"),
+        )
+
+
+@dataclass
 class ArtifactLifecycle:
     """
     Lifecycle state machine for an artifact type.
 
-    Tracks states and valid transitions between them.
+    Tracks states and valid transitions between them, plus
+    runtime enforcement policy for edit behavior.
     """
 
     artifact_type_id: str
     states: dict[str, LifecycleState] = field(default_factory=dict)
     transitions: list[LifecycleTransition] = field(default_factory=list)
     initial_state: str = "draft"
+    policy: LifecyclePolicy | None = None  # Runtime enforcement behavior
+    default_store: str | None = None  # Fallback for demotion store
 
     @classmethod
     def from_dict(
-        cls, artifact_type_id: str, data: dict[str, Any] | None
+        cls,
+        artifact_type_id: str,
+        data: dict[str, Any] | None,
+        policy_data: dict[str, Any] | None = None,
+        default_store: str | None = None,
     ) -> ArtifactLifecycle | None:
         """
         Create lifecycle from artifact type definition.
@@ -84,6 +159,8 @@ class ArtifactLifecycle:
         Args:
             artifact_type_id: ID of the artifact type
             data: Lifecycle section from artifact type definition
+            policy_data: lifecycle_policy section from artifact type definition
+            default_store: default_store from artifact type definition
 
         Returns:
             ArtifactLifecycle or None if no lifecycle defined
@@ -110,11 +187,16 @@ class ArtifactLifecycle:
                 # Already a LifecycleTransition object
                 transitions.append(trans_data)
 
+        # Parse lifecycle policy
+        policy = LifecyclePolicy.from_dict(policy_data) if policy_data else None
+
         return cls(
             artifact_type_id=artifact_type_id,
             states=states,
             transitions=transitions,
             initial_state=data.get("initial_state", "draft"),
+            policy=policy,
+            default_store=default_store,
         )
 
     def get_state(self, state_id: str) -> LifecycleState | None:
@@ -191,6 +273,59 @@ class ArtifactLifecycle:
     def list_states(self) -> list[LifecycleState]:
         """List all states in order of definition."""
         return list(self.states.values())
+
+    def get_edit_policy(self, current_state: str) -> str:
+        """
+        Get edit policy for the given state.
+
+        Args:
+            current_state: Current lifecycle state of the artifact
+
+        Returns:
+            "allow", "demote", or "disallow"
+        """
+        if self.policy is None:
+            return "allow"
+
+        # Determine which states trigger the policy
+        trigger_states = self.policy.demote_trigger_states
+        if trigger_states is None:
+            # Default: all states except initial trigger demotion
+            trigger_states = [s for s in self.states if s != self.initial_state]
+
+        if current_state not in trigger_states:
+            return "allow"
+
+        return self.policy.edit_policy
+
+    def get_demote_target(self) -> tuple[str, str | None]:
+        """
+        Get target state and store for demotion.
+
+        Returns:
+            Tuple of (target_state, target_store). target_store may be None.
+        """
+        if self.policy is None:
+            return (self.initial_state, self.default_store)
+
+        target_state = self.policy.demote_target_state or self.initial_state
+        target_store = self.policy.demote_target_store or self.default_store
+
+        return (target_state, target_store)
+
+    def get_transition_store(self, from_state: str, to_state: str) -> str | None:
+        """
+        Get target_store for a transition, if specified.
+
+        Args:
+            from_state: Current state
+            to_state: Target state
+
+        Returns:
+            Store ID if transition specifies target_store, None otherwise
+        """
+        transition = self.get_transition(from_state, to_state)
+        return transition.target_store if transition else None
 
 
 class LifecycleManager:
@@ -293,33 +428,17 @@ class LifecycleManager:
             if isinstance(artifact_type, dict):
                 type_id = artifact_type.get("id")
                 lifecycle_data = artifact_type.get("lifecycle")
+                policy_data = artifact_type.get("lifecycle_policy")
+                default_store = artifact_type.get("default_store")
             else:
                 type_id = getattr(artifact_type, "id", None)
                 lifecycle_data = getattr(artifact_type, "lifecycle", None)
-                # If lifecycle is an object, convert to a plain dict so that
-                # ArtifactLifecycle.from_dict always sees primitive structures.
-                # This handles:
-                # - Pydantic v2 models (.model_dump)
-                # - Pydantic v1 models (.dict)
-                # - Custom objects exposing .to_dict()
-                if lifecycle_data and not isinstance(lifecycle_data, dict):
-                    lifecycle_dict: dict[str, Any] | None = None
-                    # Prefer Pydantic v2-style export
-                    if hasattr(lifecycle_data, "model_dump"):
-                        try:
-                            lifecycle_dict = lifecycle_data.model_dump(by_alias=True)
-                        except TypeError:  # pragma: no cover - defensive
-                            lifecycle_dict = lifecycle_data.model_dump()
-                    # Fallback to Pydantic v1-style export
-                    elif hasattr(lifecycle_data, "dict"):
-                        try:
-                            lifecycle_dict = lifecycle_data.dict(by_alias=True)
-                        except TypeError:  # pragma: no cover - defensive
-                            lifecycle_dict = lifecycle_data.dict()
-                    # Generic custom object export
-                    elif hasattr(lifecycle_data, "to_dict"):
-                        lifecycle_dict = lifecycle_data.to_dict()
+                policy_data = getattr(artifact_type, "lifecycle_policy", None)
+                default_store = getattr(artifact_type, "default_store", None)
 
+                # Convert lifecycle_data to dict if needed
+                if lifecycle_data and not isinstance(lifecycle_data, dict):
+                    lifecycle_dict = _to_dict(lifecycle_data)
                     if lifecycle_dict is not None:
                         lifecycle_data = lifecycle_dict
                     else:
@@ -331,8 +450,30 @@ class LifecycleManager:
                             "transitions": getattr(lifecycle_data, "transitions", []),
                         }
 
+                # Convert policy_data to dict if needed
+                if policy_data and not isinstance(policy_data, dict):
+                    policy_dict = _to_dict(policy_data)
+                    if policy_dict is not None:
+                        policy_data = policy_dict
+                    else:
+                        # Last-resort attribute access for policy objects
+                        policy_data = {
+                            "edit_policy": getattr(policy_data, "edit_policy", "allow"),
+                            "demote_trigger_states": getattr(
+                                policy_data, "demote_trigger_states", None
+                            ),
+                            "demote_target_state": getattr(
+                                policy_data, "demote_target_state", None
+                            ),
+                            "demote_target_store": getattr(
+                                policy_data, "demote_target_store", None
+                            ),
+                        }
+
             if type_id and lifecycle_data:
-                lifecycle = ArtifactLifecycle.from_dict(type_id, lifecycle_data)
+                lifecycle = ArtifactLifecycle.from_dict(
+                    type_id, lifecycle_data, policy_data, default_store
+                )
                 if lifecycle:
                     manager.register_lifecycle(lifecycle)
 

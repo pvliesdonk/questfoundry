@@ -162,11 +162,29 @@ class RequestLifecycleTransitionTool(BaseTool):
             if cold_result is not None:
                 return cold_result
 
+        # Check if transition has a target_store for store migration
+        target_store = None
+        if lifecycle_manager and artifact_type:
+            lifecycle = lifecycle_manager.get_lifecycle(artifact_type)
+            if lifecycle:
+                target_store = lifecycle.get_transition_store(current_state, target_state)
+
         # Perform the transition
         try:
+            update_data: dict[str, Any] = {"_lifecycle_state": target_state}
+
+            # Include store migration if transition specifies target_store
+            if target_store:
+                current_store = artifact.get("_store", "workspace")
+                update_data["_store"] = target_store
+                logger.info(
+                    f"Store migration: {artifact_id} {current_store} -> {target_store} "
+                    f"(via transition to {target_state})"
+                )
+
             updated = self._context.project.update_artifact(
                 artifact_id=artifact_id,
-                data={"_lifecycle_state": target_state},
+                data=update_data,
             )
 
             if updated:
@@ -175,16 +193,23 @@ class RequestLifecycleTransitionTool(BaseTool):
                     f"(by {self._context.agent_id})"
                 )
 
+                result_data: dict[str, Any] = {
+                    "result": "committed",
+                    "artifact_id": artifact_id,
+                    "previous_state": current_state,
+                    "new_state": target_state,
+                    "transitioned": True,
+                    "transitioned_by": self._context.agent_id,
+                }
+
+                # Include store migration info if applicable
+                if target_store:
+                    result_data["previous_store"] = current_store
+                    result_data["new_store"] = target_store
+
                 return ToolResult(
                     success=True,
-                    data={
-                        "result": "committed",
-                        "artifact_id": artifact_id,
-                        "previous_state": current_state,
-                        "new_state": target_state,
-                        "transitioned": True,
-                        "transitioned_by": self._context.agent_id,
-                    },
+                    data=result_data,
                 )
             else:
                 return ToolResult(

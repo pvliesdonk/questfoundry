@@ -452,17 +452,28 @@ class Project:
         now = datetime.now().isoformat()
         new_version = existing["_version"] + 1
 
-        # Merge data
+        # Merge data (excluding system fields that have dedicated columns)
         existing_data = {k: v for k, v in existing.items() if not k.startswith("_")}
         merged_data = {**existing_data, **data}
+
+        # Extract system field updates (these need to update both JSON and dedicated columns)
+        new_lifecycle_state = data.get("_lifecycle_state", existing["_lifecycle_state"])
+        new_store = data.get("_store", existing["_store"])
 
         conn.execute(
             """
             UPDATE artifacts
-            SET _version = ?, _updated_at = ?, data = ?
+            SET _version = ?, _updated_at = ?, _lifecycle_state = ?, _store = ?, data = ?
             WHERE _id = ?
             """,
-            (new_version, now, json.dumps(merged_data), artifact_id),
+            (
+                new_version,
+                now,
+                new_lifecycle_state,
+                new_store,
+                json.dumps(merged_data),
+                artifact_id,
+            ),
         )
         conn.commit()
 
@@ -560,6 +571,107 @@ class Project:
             )
 
         return results
+
+    def get_children_by_relationship(
+        self,
+        parent_artifact: dict[str, Any],
+        relationship: Any,  # Relationship from relationship.py
+    ) -> list[dict[str, Any]]:
+        """
+        Find child artifacts linked to parent via relationship.
+
+        Handles both link_resolution modes:
+        - by_artifact_id: child.link_field == parent._id
+        - by_field_match: child.link_field == parent.match_field
+
+        Args:
+            parent_artifact: The parent artifact dict
+            relationship: Relationship definition
+
+        Returns:
+            List of child artifacts matching the relationship
+        """
+        parent_type = parent_artifact.get("_type")
+        if parent_type != relationship.from_type:
+            return []
+
+        # Determine the value to match on
+        if relationship.link_resolution == "by_artifact_id":
+            parent_value = parent_artifact.get("_id")
+        else:  # by_field_match
+            # Default to _id if no match_field specified
+            if relationship.match_field:
+                parent_value = self._extract_field(parent_artifact, relationship.match_field)
+            else:
+                parent_value = parent_artifact.get("_id")
+
+        if parent_value is None:
+            return []
+
+        # Build SQLite query with json_extract for nested paths
+        conn = self._get_connection()
+        json_path = self._to_json_path(relationship.link_field)
+
+        query = """
+            SELECT * FROM artifacts
+            WHERE _type = ?
+            AND json_extract(data, ?) = ?
+        """
+        params = [relationship.to_type, json_path, parent_value]
+
+        rows = conn.execute(query, params).fetchall()
+
+        results = []
+        for row in rows:
+            data = json.loads(row["data"])
+            results.append(
+                {
+                    "_id": row["_id"],
+                    "_type": row["_type"],
+                    "_version": row["_version"],
+                    "_created_at": row["_created_at"],
+                    "_updated_at": row["_updated_at"],
+                    "_created_by": row["_created_by"],
+                    "_lifecycle_state": row["_lifecycle_state"],
+                    "_store": row["_store"],
+                    **data,
+                }
+            )
+
+        return results
+
+    def _to_json_path(self, field_path: str) -> str:
+        """
+        Convert dot-notation field path to SQLite json_extract path.
+
+        Examples:
+            "brief_ref" -> "$.brief_ref"
+            "canon_source.pack_id" -> "$.canon_source.pack_id"
+        """
+        return f"$.{field_path}"
+
+    def _extract_field(self, artifact: dict[str, Any], field_path: str | None) -> Any:
+        """
+        Extract a value from an artifact using dot-notation path.
+
+        Args:
+            artifact: The artifact dict
+            field_path: Dot-notation path (e.g., "brief_id" or "source.pack_id")
+
+        Returns:
+            The extracted value, or None if not found
+        """
+        if field_path is None:
+            return None
+
+        parts = field_path.split(".")
+        value: Any = artifact
+        for part in parts:
+            if isinstance(value, dict):
+                value = value.get(part)
+            else:
+                return None
+        return value
 
     # Version history operations
 

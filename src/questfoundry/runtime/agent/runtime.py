@@ -62,7 +62,7 @@ from questfoundry.runtime.providers import (
     ToolCallRequest,
 )
 from questfoundry.runtime.session import Session, TokenUsage, Turn
-from questfoundry.runtime.storage import LifecycleManager, StoreManager
+from questfoundry.runtime.storage import LifecycleManager, RelationshipManager, StoreManager
 
 if TYPE_CHECKING:
     from questfoundry.runtime.checkpoint import CheckpointManager, ContextUsage
@@ -252,6 +252,7 @@ class AgentRuntime:
         self._tool_registry: ToolRegistry | None = None
         self._store_manager: StoreManager | None = None
         self._lifecycle_manager: LifecycleManager | None = None
+        self._relationship_manager: RelationshipManager | None = None
         try:
             self._store_manager = StoreManager.from_studio(studio)
         except (KeyError, ValueError) as exc:  # pragma: no cover - defensive logging
@@ -262,6 +263,14 @@ class AgentRuntime:
             self._lifecycle_manager = LifecycleManager.from_artifact_types(studio.artifact_types)
         except (KeyError, ValueError, AttributeError) as exc:  # pragma: no cover - defensive
             logger.warning("Failed to load lifecycle manager from studio definition: %s", exc)
+
+        # Initialize relationship manager from relationships
+        try:
+            if studio.relationships:
+                rel_dicts = [r.model_dump() for r in studio.relationships]
+                self._relationship_manager = RelationshipManager.from_definitions(rel_dicts)
+        except (KeyError, ValueError, AttributeError) as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to load relationship manager from studio definition: %s", exc)
 
         # Secretary for tiered context management
         # context_limit from model determines when to start summarizing
@@ -305,6 +314,7 @@ class AgentRuntime:
                     interactive=self._interactive,
                     store_manager=self._store_manager,
                     lifecycle_manager=self._lifecycle_manager,
+                    relationship_manager=self._relationship_manager,
                 )
             except ImportError:
                 logger.warning("Tools module not available, tool execution disabled", exc_info=True)
