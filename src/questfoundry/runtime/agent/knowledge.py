@@ -14,8 +14,10 @@ Knowledge layers:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
@@ -94,9 +96,19 @@ class KnowledgeContextBuilder:
         # Use context.context_text in system prompt
     """
 
-    def __init__(self, config: KnowledgeBudgetConfig | None = None) -> None:
-        """Initialize with optional budget configuration."""
+    def __init__(
+        self,
+        config: KnowledgeBudgetConfig | None = None,
+        domain_path: Path | str | None = None,
+    ) -> None:
+        """Initialize with optional budget configuration.
+
+        Args:
+            config: Budget configuration for knowledge injection
+            domain_path: Path to domain directory for loading constitution file
+        """
         self.config = config or KnowledgeBudgetConfig()
+        self._domain_path = Path(domain_path) if domain_path else None
 
     def build_context(self, agent: Agent, studio: Studio) -> KnowledgeContext:
         """
@@ -222,15 +234,48 @@ class KnowledgeContextBuilder:
     def _get_constitution_text(self, studio: Studio) -> str | None:
         """Get constitution text from studio.
 
-        Constitution is typically stored in a separate file referenced
-        by constitution_ref, but may also be in knowledge entries.
+        Constitution is loaded from the governance/constitution.json file
+        referenced by studio.constitution_ref.
         """
-        # TODO: Load from constitution_ref if available
-        # For now, look for a 'constitution' knowledge entry
+        # Try loading from file if domain_path is available
+        if self._domain_path and studio.constitution_ref:
+            const_path = self._domain_path / studio.constitution_ref
+            if const_path.exists():
+                try:
+                    data = json.loads(const_path.read_text())
+                    return self._format_constitution_data(data)
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.warning(f"Failed to load constitution: {e}")
+
+        # Fall back to knowledge entry (legacy support)
         entry = studio.knowledge.get("constitution")
         if entry:
             return self._get_entry_content(entry)
+
         return None
+
+    def _format_constitution_data(self, data: dict[str, Any]) -> str:
+        """Format constitution JSON data into readable text.
+
+        Extracts preamble and principle statements for agent consumption.
+        """
+        lines = []
+
+        # Preamble
+        preamble = data.get("preamble")
+        if preamble:
+            lines.append(preamble)
+            lines.append("")
+
+        # Principles as bullet list
+        principles = data.get("principles", [])
+        for p in principles:
+            if isinstance(p, dict):
+                statement = p.get("statement", "")
+                if statement:
+                    lines.append(f"- {statement}")
+
+        return "\n".join(lines) if lines else ""
 
     def _get_entry_content(self, entry: KnowledgeEntry) -> str | None:
         """Extract text content from a knowledge entry.
@@ -366,6 +411,7 @@ def build_knowledge_context(
     agent: Agent,
     studio: Studio,
     config: KnowledgeBudgetConfig | None = None,
+    domain_path: Path | str | None = None,
 ) -> KnowledgeContext:
     """
     Convenience function to build knowledge context for an agent.
@@ -374,9 +420,10 @@ def build_knowledge_context(
         agent: Agent definition
         studio: Studio with knowledge entries
         config: Optional budget configuration
+        domain_path: Path to domain directory for loading constitution
 
     Returns:
         KnowledgeContext with formatted text
     """
-    builder = KnowledgeContextBuilder(config)
+    builder = KnowledgeContextBuilder(config, domain_path=domain_path)
     return builder.build_context(agent, studio)
