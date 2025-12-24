@@ -25,7 +25,7 @@
     "archetypes": ["orchestrator", "creator", "validator", "researcher", "curator"]
   },
 
-  "related_entries": ["delegation_protocol", "runtime_guidelines_core"],
+  "related_entries": ["delegation_protocol", "runtime_guidelines_core", "lifecycle_contract"],
 
   "tags": ["runtime", "tools", "interpretation", "semantic"]
 }
