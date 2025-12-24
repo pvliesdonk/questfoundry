@@ -16,9 +16,270 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Lore Weaver Procedures\n\nProcedures for building and maintaining the world bible (canon).\n\n---\n\n### Canon Pack Organization\n\n**Principle**: Group related lore into portable, thematic containers.\n\n**Common Pack Types**:\n1. **Era Packs** - Timeline-bounded (\"Age of Founding\", \"The Collapse\")\n2. **Faction Packs** - Group-focused (\"The Guild's Secrets\", \"Crown Politics\")\n3. **Metaphysics Packs** - Rules of the world (\"How Magic Works\", \"The Afterlife\")\n4. **Geography Packs** - Place-focused (\"The Eastern Territories\")\n\n**Scope Decision**:\n- `book` scope: Lore specific to one story\n- `world` scope: Lore shareable across multiple books\n\n---\n\n### Cause Chains\n\n**Principle**: Every fact needs a cause. \"It just is\" is not canon.\n\n**Procedure**:\n1. State the truth\n2. Ask \"Why?\" or \"How did this come to be?\"\n3. Document the cause\n4. If cause is unknown, mark as open question\n\n**Example**:\n- Truth: \"The Guild controls the waterfront\"\n- Cause: \"After the Collapse, they were the only organization with intact logistics\"\n- Deeper cause: \"Their founder foresaw the crisis and stockpiled resources\"\n\n---\n\n### Timeline Anchoring\n\n**Principle**: Events must have temporal relationships. Floating events create continuity errors.\n\n**Anchor Types**:\n1. **Absolute** - Fixed date/time (\"Year 347 of the New Era\")\n2. **Relative** - Relationship to other events (\"Three years after the Founding\")\n3. **Sequence** - Order without duration (\"After X but before Y\")\n\n**Procedure**:\n1. Every event gets a timeline_position\n2. Create timeline anchors for major reference points\n3. Cross-reference new events against existing anchors\n4. Flag impossible sequences (effect before cause)\n\n---\n\n### Consistency Checking\n\n**Before finalizing a canon pack**:\n\n1. **Internal Consistency**\n   - Do entries within this pack contradict each other?\n   - Are cause chains complete?\n   - Are timeline positions compatible?\n\n2. **External Consistency**\n   - Does this pack contradict other canon packs?\n   - Do faction motivations still make sense?\n   - Are metaphysical rules still consistent?\n\n3. **Narrative Feasibility**\n   - Can the story use this lore as intended?\n   - Does this enable or block narrative possibilities?\n\n**If Conflict Found**:\n- Do NOT silently overwrite\n- Raise a hook for resolution\n- Document both versions until resolved\n\n---\n\n### Spoiler Classification\n\n**Spoiler Levels**:\n- `minor`: Background flavor that adds depth but doesn't change experience\n- `major`: Reveals that affect player understanding or strategy\n- `critical`: Twists, secrets, or outcomes that would ruin the experience\n\n**Codex Derivation**:\n- `minor` spoilers: May appear in codex with careful phrasing\n- `major` spoilers: Must be omitted or heavily obscured\n- `critical` spoilers: Never appear in codex under any circumstances"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Every fact needs a cause. 'It just is' is not canon.",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Unjustified facts feel arbitrary and break immersion. Cause chains create depth and believability."
+        },
+        {
+          "statement": "Events must have temporal relationships. Floating events create continuity errors.",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Without temporal anchoring, events can contradict each other or violate causality."
+        },
+        {
+          "statement": "Do not silently overwrite existing canon when conflicts found. Raise a hook for resolution.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "rationale": "Silent overwrites cause continuity errors and undermine the world bible's authority."
+        },
+        {
+          "statement": "Critical spoilers never appear in codex under any circumstances.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "rationale": "Critical spoilers would ruin the player experience. No exceptions."
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Cause chain",
+          "meaning": "The sequence of reasons explaining why a fact is true. Each fact should have a documented cause, with deeper causes revealed as needed.",
+          "distinguishing_features": [
+            "States the truth",
+            "Documents immediate cause",
+            "May include deeper historical causes",
+            "Marks unknown causes as open questions"
+          ],
+          "examples": [
+            {
+              "term_usage": "The Guild controls the waterfront",
+              "context": "Truth: The Guild controls the waterfront. Cause: After the Collapse, they were the only organization with intact logistics. Deeper cause: Their founder foresaw the crisis and stockpiled resources."
+            }
+          ]
+        },
+        {
+          "term": "Timeline anchor",
+          "meaning": "A reference point in the story's timeline that events can be positioned relative to. Can be absolute (fixed date), relative (years after X), or sequential (after X but before Y).",
+          "distinguishing_features": [
+            "Absolute: fixed date/time",
+            "Relative: relationship to other events",
+            "Sequence: order without specific duration"
+          ],
+          "examples": [
+            {
+              "term_usage": "The Founding",
+              "context": "Absolute: Year 347 of the New Era. Relative: Three years after the Collapse. Sequence: After the Last War but before the Guild's Rise."
+            }
+          ]
+        },
+        {
+          "term": "Canon pack",
+          "meaning": "A portable, thematic container of related lore. Common types: Era (timeline-bounded), Faction (group-focused), Metaphysics (world rules), Geography (place-focused).",
+          "distinguishing_features": [
+            "Era packs: timeline-bounded",
+            "Faction packs: group-focused",
+            "Metaphysics packs: world rules",
+            "Geography packs: place-focused",
+            "Scope: book (story-specific) or world (shareable)"
+          ],
+          "examples": [
+            {
+              "term_usage": "Age of Founding pack",
+              "context": "Era pack containing all lore about the founding period, with timeline anchors and cause chains"
+            }
+          ]
+        },
+        {
+          "term": "Spoiler level: minor",
+          "meaning": "Background flavor that adds depth but doesn't change player experience or strategy.",
+          "distinguishing_features": [
+            "Adds depth",
+            "Doesn't change experience",
+            "May appear in codex with careful phrasing"
+          ]
+        },
+        {
+          "term": "Spoiler level: major",
+          "meaning": "Reveals that affect player understanding or strategy.",
+          "distinguishing_features": [
+            "Affects understanding",
+            "Changes strategy",
+            "Must be omitted or heavily obscured in codex"
+          ]
+        },
+        {
+          "term": "Spoiler level: critical",
+          "meaning": "Twists, secrets, or outcomes that would ruin the experience if revealed early.",
+          "distinguishing_features": [
+            "Core twists or secrets",
+            "Would ruin experience",
+            "Never appear in codex under any circumstances"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When organizing lore into packs",
+          "guidance": "Choose pack type based on primary organizing principle: Era (time-bounded), Faction (group-focused), Metaphysics (rules), Geography (place-focused). Set scope to 'book' for story-specific lore, 'world' for shareable lore.",
+          "examples": [
+            {
+              "situation": "Lore about how magic works in this world",
+              "response": "Metaphysics pack, world scope"
+            },
+            {
+              "situation": "Lore about a specific villain's organization",
+              "response": "Faction pack, book scope"
+            }
+          ]
+        },
+        {
+          "context": "When a fact lacks justification",
+          "guidance": "Ask 'Why?' or 'How did this come to be?' Document the cause. If cause is unknown, mark as open question and flag for research or creative invention.",
+          "examples": [
+            {
+              "situation": "The eastern district is abandoned",
+              "response": "Why? Document cause (plague? economic collapse? magical disaster?). If unknown, create open question."
+            }
+          ]
+        },
+        {
+          "context": "When adding events to timeline",
+          "guidance": "Give every event a timeline_position using anchors: absolute (fixed date), relative (X years after event Y), or sequential (after X, before Y). Cross-reference against existing anchors to catch impossible sequences.",
+          "examples": [
+            {
+              "situation": "Adding 'The Guild's first warehouse' event",
+              "response": "Position: 3 years after the Collapse (relative anchor). Cross-check: Does this come after the Founder's stockpiling? Before the Council's formation? Flag if order is impossible."
+            }
+          ]
+        },
+        {
+          "context": "When canon conflicts are discovered",
+          "guidance": "Do not silently overwrite. Raise a hook for resolution. Document both versions until resolved. Present options to Showrunner if needed.",
+          "examples": [
+            {
+              "situation": "New pack says Guild was founded in Year 350, old pack says Year 347",
+              "response": "Raise hook: 'Guild founding date conflict: Pack A says 350, Pack B says 347. Which is canon?' Document both until resolved."
+            }
+          ]
+        },
+        {
+          "context": "Classifying spoiler level for codex derivation",
+          "guidance": "Minor: may appear with care. Major: must be omitted or obscured. Critical: never appears. Consider what enhances vs ruins discovery.",
+          "examples": [
+            {
+              "situation": "The Guild's founder was wealthy",
+              "response": "Minor spoiler - adds depth but doesn't change experience. Can include in codex."
+            },
+            {
+              "situation": "The Guild's founder foresaw the Collapse",
+              "response": "Major spoiler - affects how players interpret Guild actions. Omit from codex."
+            },
+            {
+              "situation": "The Guild's founder caused the Collapse",
+              "response": "Critical spoiler - central twist. Never in codex under any circumstances."
+            }
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Create a canon pack",
+          "steps": [
+            "Choose pack type (Era, Faction, Metaphysics, Geography)",
+            "Set scope (book or world)",
+            "Gather related lore entries",
+            "Build cause chains for each entry",
+            "Establish timeline positions using anchors",
+            "Check internal consistency (entries within pack)",
+            "Check external consistency (pack vs other packs)",
+            "Verify narrative feasibility (can story use this?)",
+            "Classify spoiler levels for codex derivation",
+            "Document any open questions or conflicts"
+          ],
+          "preconditions": [
+            "Sufficient lore exists to warrant a pack",
+            "Organizing principle is clear"
+          ],
+          "postconditions": [
+            "Thematically coherent pack",
+            "Complete cause chains",
+            "Anchored timeline",
+            "No unresolved internal conflicts",
+            "Spoiler levels assigned"
+          ]
+        },
+        {
+          "goal": "Check consistency before finalizing a canon pack",
+          "steps": [
+            "Internal consistency: Do entries within this pack contradict each other?",
+            "Internal consistency: Are cause chains complete?",
+            "Internal consistency: Are timeline positions compatible?",
+            "External consistency: Does this pack contradict other canon packs?",
+            "External consistency: Do faction motivations still make sense?",
+            "External consistency: Are metaphysical rules still consistent?",
+            "Narrative feasibility: Can the story use this lore as intended?",
+            "Narrative feasibility: Does this enable or block narrative possibilities?",
+            "If conflict found: raise hook, do not silently overwrite",
+            "If conflict found: document both versions until resolved"
+          ],
+          "preconditions": [
+            "Canon pack is drafted",
+            "Other canon packs are accessible for comparison"
+          ],
+          "postconditions": [
+            "Consistency verified or conflicts documented",
+            "Hooks raised for any conflicts",
+            "Pack is internally coherent"
+          ]
+        },
+        {
+          "goal": "Build a cause chain",
+          "steps": [
+            "State the truth (the fact you're justifying)",
+            "Ask 'Why?' or 'How did this come to be?'",
+            "Document the immediate cause",
+            "Optionally: ask 'Why?' about the cause to go deeper",
+            "If cause is unknown, mark as open question",
+            "If cause requires research, raise hook to Researcher",
+            "If cause requires creative invention, raise hook to Plotwright or Lorekeeper"
+          ],
+          "preconditions": [
+            "A fact exists that needs justification"
+          ],
+          "postconditions": [
+            "Fact has documented cause",
+            "Cause is justified or marked as open question"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Silently overwriting existing canon",
+          "consequence": "Continuity errors, undermines world bible authority, causes downstream breakage",
+          "prevention": "Always raise hooks for conflicts. Never silently overwrite. Document both versions until resolved."
+        },
+        {
+          "failure_mode": "Creating floating events without timeline anchors",
+          "consequence": "Events can contradict causality, create impossible sequences, confuse downstream agents",
+          "prevention": "Every event must have timeline_position. Cross-reference against existing anchors."
+        },
+        {
+          "failure_mode": "Unjustified facts ('it just is')",
+          "consequence": "World feels arbitrary, breaks immersion, no depth",
+          "prevention": "Every fact needs a cause chain. Mark unknown causes as open questions."
+        },
+        {
+          "failure_mode": "Including critical spoilers in codex-derivable lore",
+          "consequence": "Ruins player experience, spoils twists",
+          "prevention": "Classify spoiler levels. Critical spoilers never in codex under any circumstances."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

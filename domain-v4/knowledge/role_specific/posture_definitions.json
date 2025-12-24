@@ -15,9 +15,167 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Research Posture Definitions\n\nEvery research finding must have a posture—the certainty level of the claim.\n\n### Posture Levels\n\n| Posture | Meaning | When to Use |\n|---------|---------|-------------|\n| **corroborated** | Multiple reliable sources agree | 2+ independent, reputable sources confirm the claim |\n| **plausible** | Reasonable to assume | One good source, or logical inference from established facts |\n| **disputed** | Sources conflict | Active disagreement in literature; note both positions |\n| **uncorroborated:low** | No sources, low risk | Claim is minor; error wouldn't harm the story |\n| **uncorroborated:med** | No sources, medium risk | Claim matters; error could cause plot inconsistency |\n| **uncorroborated:high** | No sources, high risk | Claim is central; error could break the story |\n\n### Posture Selection Guidelines\n\n**Use `corroborated` when:**\n- Wikipedia + one other source agree\n- Academic/government sources confirm\n- Multiple news sources report consistently\n\n**Use `plausible` when:**\n- One reliable source (encyclopedia, textbook)\n- Logical extension of corroborated facts\n- Expert opinion without contradiction\n\n**Use `disputed` when:**\n- Sources actively disagree\n- Historical debate ongoing\n- Regional/cultural variation exists\n\n**Use `uncorroborated` when:**\n- No sources found\n- Only primary sources (blogs, forums)\n- Topic too obscure for verification\n\n### Risk Assessment for Uncorroborated\n\n- **Low risk**: Flavor detail, background color, minor mechanics\n- **Medium risk**: Character motivation, plot device, world rule\n- **High risk**: Central premise, safety-critical detail, legal/medical claim\n\n### Surface Handling by Posture\n\n| Posture | Surface Treatment |\n|---------|------------------|\n| corroborated | Can state directly |\n| plausible | Can state with soft hedge (\"believed to be\") |\n| disputed | Present as in-world disagreement |\n| uncorroborated | Use neutral phrasing; avoid definitive claims |"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Every research finding must have a posture—the certainty level of the claim.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "rationale": "Posture enables downstream agents to make informed decisions about how to handle uncertain information."
+        }
+      ],
+      "definitions": [
+        {
+          "term": "corroborated",
+          "meaning": "Multiple reliable sources agree on the claim.",
+          "distinguishing_features": [
+            "2+ independent, reputable sources confirm",
+            "Wikipedia + one other source agree",
+            "Academic/government sources confirm",
+            "Multiple news sources report consistently"
+          ],
+          "examples": [
+            {
+              "term_usage": "Victorian London street lighting research",
+              "context": "Wikipedia and two historical archives all confirm limited electric deployment from 1878"
+            }
+          ]
+        },
+        {
+          "term": "plausible",
+          "meaning": "Reasonable to assume based on available evidence.",
+          "distinguishing_features": [
+            "One good source (encyclopedia, textbook)",
+            "Logical extension of corroborated facts",
+            "Expert opinion without contradiction"
+          ],
+          "examples": [
+            {
+              "term_usage": "Inferring social customs from documented laws",
+              "context": "One period etiquette manual provides guidance"
+            }
+          ]
+        },
+        {
+          "term": "disputed",
+          "meaning": "Sources actively conflict; multiple valid interpretations exist.",
+          "distinguishing_features": [
+            "Sources actively disagree",
+            "Historical debate ongoing",
+            "Regional/cultural variation exists"
+          ],
+          "examples": [
+            {
+              "term_usage": "Historical events with competing narratives",
+              "context": "Different historians attribute different causes to the same event"
+            }
+          ]
+        },
+        {
+          "term": "uncorroborated:low",
+          "meaning": "No sources found, but error would not harm the story.",
+          "distinguishing_features": [
+            "Claim is minor detail",
+            "Error wouldn't harm the story",
+            "Flavor detail, background color, minor mechanics"
+          ],
+          "examples": [
+            {
+              "term_usage": "Color of tavern sign in background scene",
+              "context": "No historical record exists, but choice is narratively insignificant"
+            }
+          ]
+        },
+        {
+          "term": "uncorroborated:med",
+          "meaning": "No sources found, and error could cause plot inconsistency.",
+          "distinguishing_features": [
+            "Claim matters to story",
+            "Error could cause plot inconsistency",
+            "Character motivation, plot device, world rule"
+          ],
+          "examples": [
+            {
+              "term_usage": "How a historical organization made decisions",
+              "context": "Drives character motivation but no clear historical record"
+            }
+          ]
+        },
+        {
+          "term": "uncorroborated:high",
+          "meaning": "No sources found, and error could break the story.",
+          "distinguishing_features": [
+            "Claim is central to premise",
+            "Error could break the story",
+            "Safety-critical, legal, or medical claims",
+            "Central premise or world rule"
+          ],
+          "examples": [
+            {
+              "term_usage": "Core metaphysical rule of the world",
+              "context": "No real-world analogue exists, but consistency is critical"
+            }
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When multiple reliable sources agree",
+          "guidance": "Use 'corroborated' posture. This indicates high confidence and allows direct statements in prose.",
+          "examples": [
+            {
+              "situation": "Wikipedia + government archive + academic paper all confirm a historical date",
+              "response": "Assign corroborated posture"
+            }
+          ]
+        },
+        {
+          "context": "When only one reliable source exists",
+          "guidance": "Use 'plausible' posture. This indicates reasonable confidence but suggests soft hedging in prose.",
+          "examples": [
+            {
+              "situation": "One encyclopedia entry describes a practice, no contradicting sources found",
+              "response": "Assign plausible posture"
+            }
+          ]
+        },
+        {
+          "context": "When sources actively disagree",
+          "guidance": "Use 'disputed' posture. Present as in-world disagreement rather than stating one version as fact.",
+          "examples": [
+            {
+              "situation": "Historians debate the cause of a historical event",
+              "response": "Assign disputed posture, note both positions"
+            }
+          ]
+        },
+        {
+          "context": "When no sources found, assess story impact",
+          "guidance": "Use uncorroborated with risk level: low (flavor detail), med (affects plot), high (central premise or safety-critical).",
+          "examples": [
+            {
+              "situation": "Can't verify color of historical uniforms",
+              "response": "uncorroborated:low - it's background detail"
+            },
+            {
+              "situation": "Can't verify how an organization made decisions, but it drives character motivation",
+              "response": "uncorroborated:med - could cause plot issues"
+            },
+            {
+              "situation": "Can't verify a medical procedure that is central to the plot",
+              "response": "uncorroborated:high - could break story or cause safety issues"
+            }
+          ]
+        },
+        {
+          "context": "Choosing surface treatment based on posture",
+          "guidance": "corroborated: state directly. plausible: soft hedge ('believed to be'). disputed: present as in-world disagreement. uncorroborated: use neutral phrasing, avoid definitive claims.",
+          "examples": []
+        }
+      ]
+    }
   },
 
   "applicable_to": {

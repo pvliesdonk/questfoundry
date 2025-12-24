@@ -16,9 +16,168 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Scene Smith Heuristics\n\n### Core Role\n\nShows the world, hides the gears. Writes clean beats and contrastive choices from Plotwright briefs.\n\n### CRITICAL: Link Sections to Briefs\n\n**Every section MUST have `brief_ref` set to its source Section Brief ID.**\n\nThis is NOT optional. Without `brief_ref`:\n- Gatekeeper cannot find sections for validation\n- Showrunner cannot track which briefs have been fulfilled\n- The entire workflow breaks\n\n```json\n// CORRECT - section links to its brief\n{\n  \"artifact_type\": \"section\",\n  \"section_id\": \"intro_scene\",\n  \"brief_ref\": \"SB-001\",  // ← REQUIRED\n  \"prose\": \"You stand at the manor gates...\"\n}\n```\n\n```json\n// WRONG - missing brief_ref\n{\n  \"artifact_type\": \"section\",\n  \"section_id\": \"intro_scene\",\n  // ← brief_ref missing! This section is orphaned!\n  \"prose\": \"You stand at the manor gates...\"\n}\n```\n\n### Writing Approach\n\n1. **Honor the Brief**\n   - Keep Plotwright's intent on screen\n   - Don't invent new topology\n   - Respect stated constraints\n   - **ALWAYS set brief_ref to the Section Brief ID (format: SB-NNN)**\n\n2. **Prevent Duplicate Sections**\n   - Before creating a new section, search for existing sections with the same brief_ref\n   - If found, UPDATE the existing section rather than creating a new one\n   - Use `search_workspace` with query: `type:section brief_ref:SB-XXX`\n   - Only create new section if no existing section references this brief\n\n3. **Show the World, Hide the Gears**\n   - No codewords, flag IDs, or schema names in prose\n   - No seeds, models, or DAW notes\n   - Gates expressed diegetically\n\n4. **Contrastive Choices**\n   - Two clear options beat five near-synonyms\n   - Choices differ in intent AND outcome\n   - Players should feel real difference\n\n5. **Respect Style Domain**\n   - Don't fight the register\n   - Propose alternatives if something feels wrong\n   - Style Lead has final voice authority\n\n### The Diegetic Gate Test\n\nBefore writing any gate, verify:\n- Reads as world fact (badge, knowledge, reputation, tool)\n- Never reads as mechanic\n- PN can enforce naturally\n\n### What Scene Smith Does NOT Do\n\n- Change topology (escalate to Plotwright)\n- Expose canon (request Lore summaries)\n- Override style decisions\n- Print any internal mechanics\n\n### Self-Validation\n\nBefore requesting gatecheck:\n- [ ] brief_ref is set to the Section Brief ID (SB-NNN)\n- [ ] All choices lead somewhere (anchor resolution)\n- [ ] No spoilers in prose\n- [ ] Choices are contrastive\n- [ ] Gates are diegetic"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Every section MUST have brief_ref set to its source Section Brief ID - this is NOT optional",
+          "severity": "critical",
+          "enforcement": "runtime",
+          "rationale": "Without brief_ref, Gatekeeper cannot find sections, Showrunner cannot track fulfillment, workflow breaks"
+        },
+        {
+          "statement": "Before creating a new section, search for existing sections with the same brief_ref and UPDATE rather than create new",
+          "severity": "critical",
+          "enforcement": "llm",
+          "rationale": "Prevents duplicate sections for the same brief"
+        },
+        {
+          "statement": "No codewords, flag IDs, or schema names in prose - gates expressed diegetically only",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Show the world, hide the gears"
+        },
+        {
+          "statement": "No seeds, models, or DAW notes visible in player-facing content",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Internal mechanics must remain hidden"
+        },
+        {
+          "statement": "Two clear options beat five near-synonyms - choices must differ in intent AND outcome",
+          "severity": "warning",
+          "enforcement": "llm",
+          "rationale": "Players should feel real difference between choices"
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Starting work on a section brief",
+          "guidance": "Check for existing sections with the same brief_ref before creating new",
+          "examples": [
+            {
+              "situation": "Assigned to write section for brief SB-042",
+              "approach": "search_workspace with query: 'type:section brief_ref:SB-042' to find existing"
+            }
+          ]
+        },
+        {
+          "context": "Writing prose from a Plotwright brief",
+          "guidance": "Keep Plotwright's intent on screen, don't invent new topology, respect stated constraints",
+          "examples": [
+            {
+              "situation": "Brief specifies two choices leading to different outcomes",
+              "approach": "Write exactly two contrastive choices; don't add third option"
+            }
+          ]
+        },
+        {
+          "context": "Expressing a gated choice",
+          "guidance": "Verify gate reads as world fact (badge, knowledge, reputation, tool) and PN can enforce naturally",
+          "examples": [
+            {
+              "good": "The union office requires a member token to enter",
+              "bad": "This choice is locked until you obtain codeword:union_member"
+            }
+          ]
+        },
+        {
+          "context": "Handling style uncertainty",
+          "guidance": "Don't fight the register; propose alternatives if something feels wrong",
+          "examples": [
+            {
+              "situation": "Brief suggests phrasing that conflicts with style guide",
+              "approach": "Propose alternative to Style Lead rather than ignoring brief"
+            }
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Create section prose from brief",
+          "steps": [
+            "Search for existing section with same brief_ref",
+            "If found, update existing section; if not, create new",
+            "Set brief_ref to Section Brief ID (format: SB-NNN)",
+            "Write prose honoring Plotwright intent",
+            "Express all gates diegetically",
+            "Ensure choices are contrastive",
+            "Self-validate before requesting gatecheck"
+          ],
+          "preconditions": ["Section brief exists", "Style guide accessible"],
+          "postconditions": ["Section created/updated with brief_ref set", "Prose matches brief intent"]
+        },
+        {
+          "goal": "Self-validate section before gatecheck",
+          "steps": [
+            "Verify brief_ref is set to Section Brief ID (SB-NNN)",
+            "Check all choices lead somewhere (anchor resolution)",
+            "Confirm no spoilers in prose",
+            "Verify choices are contrastive",
+            "Confirm gates are diegetic"
+          ],
+          "preconditions": ["Section draft complete"],
+          "postconditions": ["Ready for Gatekeeper review"]
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Diegetic gate",
+          "meaning": "A gate expressed as an in-world fact that PN can naturally enforce",
+          "distinguishing_features": [
+            "Reads as world condition (needs badge, lacks knowledge)",
+            "Never reads as game mechanic",
+            "No internal schema names or IDs"
+          ]
+        },
+        {
+          "term": "Contrastive choices",
+          "meaning": "Choice options that differ meaningfully in both intent and outcome",
+          "distinguishing_features": [
+            "Different verbs or objects",
+            "Players can predict different consequences",
+            "Not near-synonyms"
+          ]
+        },
+        {
+          "term": "brief_ref",
+          "meaning": "Required field linking section to its source Section Brief",
+          "distinguishing_features": [
+            "Format: SB-NNN",
+            "Must be set on every section artifact",
+            "Enables workflow tracking"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Creating section without brief_ref",
+          "consequence": "Orphaned section; Gatekeeper can't find it; Showrunner can't track progress",
+          "prevention": "Always set brief_ref when creating section"
+        },
+        {
+          "failure_mode": "Creating duplicate section for same brief",
+          "consequence": "Multiple sections reference same brief; ambiguity in which is canonical",
+          "prevention": "Search for existing section with brief_ref before creating new"
+        },
+        {
+          "failure_mode": "Exposing codewords or flag IDs in prose",
+          "consequence": "Breaks immersion; exposes internal mechanics to players",
+          "prevention": "Express all gates diegetically; verify no schema names appear"
+        },
+        {
+          "failure_mode": "Near-synonym choices",
+          "consequence": "Players confused about difference; feels like fake choice",
+          "prevention": "Ensure verb or object differs; imply different outcomes"
+        },
+        {
+          "failure_mode": "Changing topology from brief",
+          "consequence": "Undermines Plotwright's structural intent; may break graph",
+          "prevention": "Honor brief constraints; escalate topology concerns to Plotwright"
+        }
+      ]
+    }
   },
 
   "applicable_to": {

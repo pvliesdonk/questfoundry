@@ -16,9 +16,199 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Prose Patterns\n\n### Paragraph Cadence\n\n**Default Target: 3+ paragraphs per full scene**\n\n1. **Lead image + motion**: Opening sensory details and action\n2. **Goal/vector + friction**: Character intent and obstacles\n3. **Choice setup**: Context for upcoming decision\n\n### Micro-beats\n\n**Transit-only micro-beats** (brief passages between scenes) may be 1 paragraph if explicitly framed. The next full scene must carry reflection and affordances.\n\n**Auto-extension rule**: If draft is <3 paragraphs and not a designated micro-beat, extend with movement/vector paragraph before presenting choices.\n\n### Beat Integration\n\nParse briefs to extract:\n- Planned beats (story moments)\n- Required choices (player decision points)\n- Canon callbacks (lore integration)\n- State effects (world changes)\n- Gateway conditions (choice availability)\n\n### Style Self-Check (Minimum)\n\n- **Register match**: Voice aligns with style guide for this story\n- **Paragraph consistency**: Voice doesn't waver within or between paragraphs\n- **Contrastive choices**: Options are meaningfully different\n- **No meta phrasing**: Choices are diegetic, not UI instructions\n- **PN-safe gateways**: No codewords or state leaks in gateway hints\n- **Altered-hub returns**: Add second unmistakable diegetic cue on return if subtlety risks confusion\n\n### Common Pitfalls\n\n- **Cosmetic choices**: Options that lead to same outcome\n- **Meta phrasing**: 'Click here' or 'Choose wisely'\n- **Spoiler choice text**: Previewing consequences in option label\n- **Register breaks**: Modern idioms in historical settings\n- **Thin scenes**: <3 paragraphs without micro-beat justification\n- **Weak diegetic cues**: Subtle returns that players might miss"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Default target is 3+ paragraphs per full scene",
+          "severity": "warning",
+          "enforcement": "llm",
+          "rationale": "Full scenes need sufficient space for lead image, goal/friction, and choice setup"
+        },
+        {
+          "statement": "Transit-only micro-beats may be 1 paragraph if explicitly framed, but next full scene must carry reflection and affordances",
+          "severity": "warning",
+          "enforcement": "llm",
+          "rationale": "Balance brevity in transitions with depth in main scenes"
+        },
+        {
+          "statement": "If draft is <3 paragraphs and not a designated micro-beat, extend with movement/vector paragraph before presenting choices",
+          "severity": "warning",
+          "enforcement": "llm",
+          "rationale": "Auto-extension rule prevents thin scenes"
+        },
+        {
+          "statement": "Choices must be diegetic, not UI instructions - no meta phrasing like 'Click here' or 'Choose wisely'",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Maintain immersion"
+        },
+        {
+          "statement": "No codewords or state leaks in gateway hints - gates must be PN-safe",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Hide internal mechanics"
+        },
+        {
+          "statement": "Altered-hub returns must add second unmistakable diegetic cue if subtlety risks confusion",
+          "severity": "warning",
+          "enforcement": "llm",
+          "rationale": "Players need to recognize when returning to altered location"
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Structuring a full scene",
+          "guidance": "Follow three-paragraph cadence: lead image + motion, goal/vector + friction, choice setup",
+          "examples": [
+            {
+              "situation": "Writing investigation scene",
+              "approach": "Para 1: Describe crime scene sensory details and character entering. Para 2: Character's goal to find clues and obstacles encountered. Para 3: Context for upcoming decision about next investigative step"
+            }
+          ]
+        },
+        {
+          "context": "Integrating story beats from brief",
+          "guidance": "Parse briefs to extract planned beats, required choices, canon callbacks, state effects, and gateway conditions",
+          "examples": [
+            {
+              "situation": "Brief mentions 'player discovers foreman's secret ledger'",
+              "approach": "Integrate discovery as beat within scene flow, show reaction, set up choices"
+            }
+          ]
+        },
+        {
+          "context": "Matching register to style guide",
+          "guidance": "Voice should align with established style guide for this story - check consistency within and between paragraphs",
+          "examples": [
+            {
+              "situation": "Writing noir detective story",
+              "approach": "Maintain hard-boiled register, terse observations, cynical tone throughout"
+            }
+          ]
+        },
+        {
+          "context": "Creating contrastive choices",
+          "guidance": "Options must be meaningfully different - avoid cosmetic choices that lead to same outcome",
+          "examples": [
+            {
+              "good": "Confront the foreman directly / Search his office after hours / Report to the union",
+              "bad": "Investigate further / Continue investigating / Keep investigating"
+            }
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Write scene prose with proper structure",
+          "steps": [
+            "Parse brief for beats, choices, canon, state, and gateways",
+            "Draft opening paragraph with lead image and motion",
+            "Draft middle paragraph with goal/vector and friction",
+            "Draft closing paragraph setting up choices",
+            "Verify paragraph count (3+ for full scene)",
+            "Run style self-check"
+          ],
+          "preconditions": ["Section brief available", "Style guide accessible"],
+          "postconditions": ["Scene has 3+ paragraphs", "Beats integrated", "Choices set up"]
+        },
+        {
+          "goal": "Perform style self-check before submission",
+          "steps": [
+            "Verify register matches style guide for this story",
+            "Check paragraph consistency (voice doesn't waver)",
+            "Confirm choices are contrastive",
+            "Ensure no meta phrasing in choices",
+            "Verify gateways are PN-safe (no codewords)",
+            "Check altered-hub returns have unmistakable cues if needed"
+          ],
+          "preconditions": ["Scene draft complete"],
+          "postconditions": ["Style issues identified and addressed"]
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Paragraph cadence",
+          "meaning": "Default three-paragraph structure for full scenes",
+          "distinguishing_features": [
+            "Lead image + motion (opening sensory details and action)",
+            "Goal/vector + friction (character intent and obstacles)",
+            "Choice setup (context for upcoming decision)"
+          ]
+        },
+        {
+          "term": "Micro-beat",
+          "meaning": "Transit-only brief passage between scenes, may be 1 paragraph if explicitly framed",
+          "distinguishing_features": [
+            "Connects two full scenes",
+            "Minimal prose (1 paragraph allowed)",
+            "Next full scene must carry reflection and affordances"
+          ]
+        },
+        {
+          "term": "Beat integration",
+          "meaning": "Incorporating planned story moments from brief into scene flow",
+          "distinguishing_features": [
+            "Planned beats (story moments)",
+            "Required choices (player decisions)",
+            "Canon callbacks (lore connections)",
+            "State effects (world changes)",
+            "Gateway conditions (choice availability)"
+          ]
+        },
+        {
+          "term": "Contrastive choices",
+          "meaning": "Options that are meaningfully different in intent and outcome",
+          "distinguishing_features": [
+            "Different verbs or objects",
+            "Distinct consequences implied",
+            "Not cosmetic variations"
+          ]
+        },
+        {
+          "term": "Register",
+          "meaning": "The level of formality and tone appropriate for story's style",
+          "distinguishing_features": [
+            "Matches genre expectations (noir vs cozy vs epic)",
+            "Consistent vocabulary level",
+            "Stable tone across paragraphs"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Cosmetic choices that lead to same outcome",
+          "consequence": "Feels like fake choice; undermines player agency",
+          "prevention": "Ensure options differ in both intent and consequence"
+        },
+        {
+          "failure_mode": "Meta phrasing in choices like 'Click here' or 'Choose wisely'",
+          "consequence": "Breaks immersion; exposes UI layer",
+          "prevention": "Keep all choice text diegetic and in-world"
+        },
+        {
+          "failure_mode": "Spoiler in choice text previewing consequences",
+          "consequence": "Removes suspense; gives away outcome",
+          "prevention": "Hint at consequences without revealing them"
+        },
+        {
+          "failure_mode": "Register breaks like modern idioms in historical settings",
+          "consequence": "Anachronism damages immersion",
+          "prevention": "Match vocabulary and phrasing to setting era"
+        },
+        {
+          "failure_mode": "Thin scenes with <3 paragraphs without micro-beat justification",
+          "consequence": "Feels rushed; doesn't establish context for choices",
+          "prevention": "Extend with movement/vector paragraph or explicitly frame as micro-beat"
+        },
+        {
+          "failure_mode": "Weak diegetic cues on altered-hub returns",
+          "consequence": "Players don't recognize location has changed",
+          "prevention": "Add unmistakable second cue if subtlety risks confusion"
+        }
+      ]
+    }
   },
 
   "applicable_to": {

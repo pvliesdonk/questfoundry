@@ -16,9 +16,457 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Audio Director Heuristics\n\nGuidance for audio planning: deciding WHAT to sound and WHY.\n\n---\n\n### The Cost Asymmetry Principle\n\n**Core Truth**: Planning is cheap, generation is expensive.\n\n- Describing 50 audio cues in Audio Plans: ~5000 tokens\n- Generating 50 audio clips: $50+ in API costs\n\n**Implication**: Plan liberally, prioritize ruthlessly, generate selectively.\n\nCreate Audio Plans for ALL moments that would benefit from audio. Priority determines what actually gets generated within budget.\n\n---\n\n### Cue Type Taxonomy\n\nEvery Audio Plan must specify a cue type:\n\n| Cue Type | Duration | Looping | Use Cases |\n|----------|----------|---------|------------|\n| **ambient** | 30s-5min | Yes, seamless | Background atmosphere: location sounds, weather, crowd murmur |\n| **spot** | 0.5s-10s | No | One-shot effects: door creak, gunshot, footsteps, notification |\n| **music** | 15s-5min | Optional | Musical cues: tension builds, victory themes, emotional beats |\n| **voice** | Variable | No | Narration, character speech, announcements |\n\n**Selection Heuristics**:\n- Establishing a place? → **ambient**\n- Punctuating an action? → **spot**\n- Building/releasing emotion? → **music**\n- Delivering information? → **voice**\n\n---\n\n### Purpose Taxonomy\n\nEvery Audio Plan must answer: \"Why does this sound help the player?\"\n\n| Purpose | When to Use | Example |\n|---------|-------------|----------|\n| **atmosphere** | Player should feel a mood | Rain on windows during a tense wait, distant sirens in noir |\n| **signpost** | Player needs to notice something | Musical sting at a choice point, sound change when entering danger |\n| **recall** | Player needs a memory anchor | Location ambient for a recurring place, character leitmotif |\n| **clarify** | Player should understand something | Sound of a mechanism working, off-screen events made audible |\n\n**Red Flags**:\n- \"Because it would sound cool\" is not a purpose\n- Audio for every paragraph dilutes impact\n- Clarify should not be used for obvious things\n\n---\n\n### Priority Setting\n\n**must_have**: Moment is actively diminished without audio\n- Key emotional beats\n- Critical signposts (choices, transitions)\n- Ambient for primary recurring locations\n\n**nice_to_have**: Moment benefits from audio but functions without it\n- Atmosphere enhancement\n- Supporting location ambients\n- Secondary emotional cues\n\n**optional**: Moment could have audio but value is marginal\n- Decorative sounds\n- Minor transitions\n- Redundant ambients\n\n**Budget Rule**: Generate must_have first, then nice_to_have until budget exhausted. Optional only if budget remains.\n\n---\n\n### Layering Decisions\n\nAudio cues exist in layers:\n\n| Layer | Purpose | Examples |\n|-------|---------|----------|\n| **background** | Continuous base | Ambient loops, underscore music |\n| **foreground** | Attention focus | Spot effects, dialogue |\n| **overlay** | Emphasis | Musical stings, alert sounds |\n\n**Layering Rules**:\n- Only ONE ambient loop per location (no stacking)\n- Spot effects briefly duck background\n- Music can duck or blend based on emotional intent\n- Voice always takes priority (ducks everything)\n\n**Exclusive Groups**: Use for mutually exclusive cues (e.g., \"location-ambient\" group ensures only one plays at a time when moving between areas).\n\n---\n\n### Trigger Selection\n\nWhen does this cue play?\n\n| Trigger | Use Case |\n|---------|-----------|\n| **section_enter** | When player arrives at this section (ambient starts) |\n| **choice_presented** | When player sees options (signpost sting) |\n| **choice_selected** | When player commits to option (confirmation sound) |\n| **condition_met** | When specific state achieved (inventory acquired, flag set) |\n| **manual** | Explicitly scripted (author specifies exact moment) |\n\n**Default Guidance**:\n- Ambient → section_enter\n- Spot effects → condition_met or manual\n- Music transitions → section_enter or choice_selected\n- Voice → manual\n\n---\n\n### Reference Sheet Discipline\n\nReference Sheets ensure consistency for recurring sonic elements.\n\n**When to Create a Sheet**:\n\n*Locations*:\n- Appears in 2+ scenes with distinct ambient\n- The ambient is \"signature\" (player should recognize \"I'm back at the office\")\n\n*Objects*:\n- Has a distinctive sound signature\n- Sound appears in multiple scenes\n\n*Characters (Leitmotifs)*:\n- Major character with musical association\n- Rare—only for significant recurring characters\n\n**What to Include**:\n- Description of the characteristic sound\n- Emotional quality/purpose\n- When to deploy vs. omit\n- Relationship to other sonic elements\n\n---\n\n### Transcript & Caption Guidelines\n\n**Transcript**:\n- Required for accessibility\n- Describes what the sound IS\n- Voice cues: full text of speech\n- Other cues: descriptive prose\n- Good: \"Rain pattering on a window, with occasional distant thunder\"\n- Bad: \"Ambient sound\" or \"weather\"\n\n**Caption** (optional display):\n- Player-facing, atmospheric, brief\n- Good: \"The rain hasn't stopped for days\"\n- Bad: \"Rain sound effect\"\n\n**Red Flags**:\n- Transcripts that just name the sound (\"thunder\" vs \"A roll of distant thunder, lasting several seconds\")\n- Captions that describe technique\n- Missing transcripts (accessibility failure)\n\n---\n\n### Audio vs. Visual Differences\n\n| Aspect | Visual | Audio |\n|--------|--------|-------|\n| **Consistency need** | High (faces must match) | Medium (ambients can vary) |\n| **Duration** | Static | Temporal (loops, triggers) |\n| **Layering** | One image at a time | Multiple layers simultaneous |\n| **Trigger complexity** | Simple (placement) | Complex (timing, conditions) |\n| **Reference Sheet usage** | Characters, locations, objects | Locations, objects (rarely characters) |\n\n**Implication**: Audio planning needs more attention to timing, layering, and triggers than visual planning."
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Create Audio Plans for ALL moments that would benefit from audio",
+          "severity": "warning",
+          "enforcement": "llm",
+          "rationale": "Planning is cheap (tokens), generation is expensive (API costs). Priority determines what actually gets generated within budget."
+        },
+        {
+          "statement": "Every Audio Plan must specify a cue type: ambient, spot, music, or voice",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Cue type determines duration, looping behavior, and usage"
+        },
+        {
+          "statement": "Every Audio Plan must specify a purpose from taxonomy: atmosphere, signpost, recall, or clarify",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Every sound must answer 'Why does this help the player?'"
+        },
+        {
+          "statement": "Generate must_have first, then nice_to_have until budget exhausted, optional only if budget remains",
+          "severity": "critical",
+          "enforcement": "llm",
+          "rationale": "Budget discipline ensures highest-value audio is generated"
+        },
+        {
+          "statement": "Only ONE ambient loop per location (no stacking)",
+          "severity": "error",
+          "enforcement": "runtime",
+          "rationale": "Multiple ambient loops create sonic mud"
+        },
+        {
+          "statement": "Voice always takes priority and ducks everything else",
+          "severity": "critical",
+          "enforcement": "runtime",
+          "rationale": "Dialogue must always be intelligible"
+        },
+        {
+          "statement": "Transcripts are required for all audio cues",
+          "severity": "critical",
+          "enforcement": "llm",
+          "rationale": "Accessibility requirement—describes what the sound IS"
+        },
+        {
+          "statement": "Never use 'Because it would sound cool' as a purpose",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Purpose must be about player benefit, not aesthetic preference"
+        },
+        {
+          "statement": "Never mention technique in captions",
+          "severity": "error",
+          "enforcement": "llm",
+          "rationale": "Captions are player-facing and should maintain immersion"
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Planning volume vs generation budget",
+          "guidance": "Plan liberally, prioritize ruthlessly, generate selectively. Describing 50 audio cues costs ~5000 tokens, generating 50 audio clips costs $50+ in API fees.",
+          "examples": [
+            "Create Audio Plans for all worthy moments, use priority to control generation",
+            "Don't self-censor during planning—let priority system manage budget"
+          ]
+        },
+        {
+          "context": "Selecting cue type for establishing a place",
+          "guidance": "Use ambient for continuous background atmosphere.",
+          "examples": [
+            "Location sounds (office ambiance, forest sounds)",
+            "Weather (rain, wind)",
+            "Crowd murmur"
+          ]
+        },
+        {
+          "context": "Selecting cue type for punctuating an action",
+          "guidance": "Use spot for one-shot effects.",
+          "examples": [
+            "Door creak",
+            "Gunshot",
+            "Footsteps",
+            "Notification sound"
+          ]
+        },
+        {
+          "context": "Selecting cue type for building/releasing emotion",
+          "guidance": "Use music for emotional beats.",
+          "examples": [
+            "Tension builds",
+            "Victory themes",
+            "Emotional climaxes"
+          ]
+        },
+        {
+          "context": "Selecting cue type for delivering information",
+          "guidance": "Use voice for narration or character speech.",
+          "examples": [
+            "Narration",
+            "Character dialogue",
+            "Announcements"
+          ]
+        },
+        {
+          "context": "When to use 'atmosphere' purpose",
+          "guidance": "Player should feel a mood.",
+          "examples": [
+            "Rain on windows during a tense wait",
+            "Distant sirens in noir setting"
+          ]
+        },
+        {
+          "context": "When to use 'signpost' purpose",
+          "guidance": "Player needs to notice something important.",
+          "examples": [
+            "Musical sting at a choice point",
+            "Sound change when entering danger"
+          ]
+        },
+        {
+          "context": "When to use 'recall' purpose",
+          "guidance": "Player needs a memory anchor.",
+          "examples": [
+            "Location ambient for a recurring place",
+            "Character leitmotif"
+          ]
+        },
+        {
+          "context": "When to use 'clarify' purpose",
+          "guidance": "Player should understand something through sound.",
+          "examples": [
+            "Sound of a mechanism working",
+            "Off-screen events made audible"
+          ]
+        },
+        {
+          "context": "Priority: must_have",
+          "guidance": "Moment is actively diminished without audio.",
+          "examples": [
+            "Key emotional beats",
+            "Critical signposts (choices, transitions)",
+            "Ambient for primary recurring locations"
+          ]
+        },
+        {
+          "context": "Priority: nice_to_have",
+          "guidance": "Moment benefits from audio but functions without it.",
+          "examples": [
+            "Atmosphere enhancement",
+            "Supporting location ambients",
+            "Secondary emotional cues"
+          ]
+        },
+        {
+          "context": "Priority: optional",
+          "guidance": "Moment could have audio but value is marginal.",
+          "examples": [
+            "Decorative sounds",
+            "Minor transitions",
+            "Redundant ambients"
+          ]
+        },
+        {
+          "context": "Layering spot effects",
+          "guidance": "Spot effects should briefly duck background layers.",
+          "examples": [
+            "Footstep sound ducks ambient slightly for clarity",
+            "Door slam briefly reduces music volume"
+          ]
+        },
+        {
+          "context": "Layering music",
+          "guidance": "Music can duck or blend based on emotional intent.",
+          "examples": [
+            "Tension music swells over ambient",
+            "Emotional underscore blends with atmosphere"
+          ]
+        },
+        {
+          "context": "Using exclusive groups",
+          "guidance": "Use for mutually exclusive cues like location ambients.",
+          "examples": [
+            "'location-ambient' group ensures only one plays when moving between areas"
+          ]
+        },
+        {
+          "context": "Trigger selection for ambient",
+          "guidance": "Use section_enter to start ambient when player arrives.",
+          "examples": [
+            "Forest ambient starts when entering forest section"
+          ]
+        },
+        {
+          "context": "Trigger selection for spot effects",
+          "guidance": "Use condition_met or manual for precise timing.",
+          "examples": [
+            "Door creak when door_opened flag set",
+            "Gunshot at scripted moment"
+          ]
+        },
+        {
+          "context": "Trigger selection for music",
+          "guidance": "Use section_enter or choice_selected for transitions.",
+          "examples": [
+            "Tension music starts at climax section",
+            "Victory theme when player chooses winning path"
+          ]
+        },
+        {
+          "context": "Trigger selection for voice",
+          "guidance": "Use manual for explicit scripting.",
+          "examples": [
+            "Narration at specific story beats"
+          ]
+        },
+        {
+          "context": "When to create a Location Reference Sheet",
+          "guidance": "Create when location appears in 2+ scenes with distinct ambient, or ambient is 'signature' for recognition.",
+          "examples": [
+            "Detective's office ambient that player should recognize",
+            "Villain's lair with distinctive sound signature"
+          ]
+        },
+        {
+          "context": "When to create an Object Reference Sheet",
+          "guidance": "Create when object has distinctive sound signature appearing in multiple scenes.",
+          "examples": [
+            "Grandfather clock with specific chime",
+            "Vehicle with recognizable engine sound"
+          ]
+        },
+        {
+          "context": "When to create a Character Leitmotif Sheet",
+          "guidance": "Rare—only for major characters with musical association.",
+          "examples": [
+            "Protagonist theme",
+            "Major antagonist musical signature"
+          ]
+        },
+        {
+          "context": "Writing transcripts",
+          "guidance": "Describe what the sound IS in accessible prose. Required for accessibility.",
+          "examples": [
+            "Good: 'Rain pattering on a window, with occasional distant thunder'",
+            "Bad: 'Ambient sound' or 'weather'"
+          ]
+        },
+        {
+          "context": "Writing voice transcripts",
+          "guidance": "Provide full text of speech.",
+          "examples": [
+            "Full dialogue text for character speech",
+            "Full narration text for narrated segments"
+          ]
+        },
+        {
+          "context": "Writing captions (optional display)",
+          "guidance": "Write atmospheric, brief player-facing text.",
+          "examples": [
+            "Good: 'The rain hasn't stopped for days'",
+            "Bad: 'Rain sound effect'"
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Select appropriate cue type",
+          "steps": [
+            "Ask: Establishing a place? → ambient",
+            "Ask: Punctuating an action? → spot",
+            "Ask: Building/releasing emotion? → music",
+            "Ask: Delivering information? → voice"
+          ]
+        },
+        {
+          "goal": "Select appropriate purpose",
+          "steps": [
+            "Ask: Should player feel a mood? If yes → atmosphere",
+            "Ask: Does player need to notice something? If yes → signpost",
+            "Ask: Will player need to remember this? If yes → recall",
+            "Ask: Should player understand something through sound? If yes → clarify"
+          ]
+        },
+        {
+          "goal": "Create a Location Reference Sheet",
+          "steps": [
+            "Description of the characteristic sound",
+            "Emotional quality/purpose",
+            "When to deploy vs. omit",
+            "Relationship to other sonic elements"
+          ]
+        },
+        {
+          "goal": "Create an Object Reference Sheet",
+          "steps": [
+            "Description of the characteristic sound",
+            "Emotional quality/purpose",
+            "When to deploy vs. omit",
+            "Relationship to other sonic elements"
+          ]
+        },
+        {
+          "goal": "Create a Character Leitmotif Sheet",
+          "steps": [
+            "Description of the musical theme",
+            "Emotional quality/purpose",
+            "When to deploy vs. omit",
+            "Relationship to other sonic elements"
+          ]
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Cost Asymmetry Principle",
+          "meaning": "Planning is cheap (tokens), generation is expensive (API costs)",
+          "distinguishing_features": [
+            "Describing 50 audio cues: ~5000 tokens",
+            "Generating 50 audio clips: $50+ in API costs",
+            "Implication: Plan liberally, generate selectively"
+          ]
+        },
+        {
+          "term": "cue_type: ambient",
+          "meaning": "Continuous background atmosphere with seamless looping",
+          "distinguishing_features": [
+            "Duration: 30s-5min",
+            "Looping: Yes, seamless",
+            "Use: Location sounds, weather, crowd murmur"
+          ]
+        },
+        {
+          "term": "cue_type: spot",
+          "meaning": "One-shot sound effect",
+          "distinguishing_features": [
+            "Duration: 0.5s-10s",
+            "Looping: No",
+            "Use: Door creak, gunshot, footsteps, notification"
+          ]
+        },
+        {
+          "term": "cue_type: music",
+          "meaning": "Musical cue for emotional beats",
+          "distinguishing_features": [
+            "Duration: 15s-5min",
+            "Looping: Optional",
+            "Use: Tension builds, victory themes, emotional beats"
+          ]
+        },
+        {
+          "term": "cue_type: voice",
+          "meaning": "Narration or character speech",
+          "distinguishing_features": [
+            "Duration: Variable",
+            "Looping: No",
+            "Use: Narration, character speech, announcements"
+          ]
+        },
+        {
+          "term": "purpose: atmosphere",
+          "meaning": "Player should feel a mood",
+          "distinguishing_features": [
+            "Rain during tense wait",
+            "Distant sirens in noir"
+          ]
+        },
+        {
+          "term": "purpose: signpost",
+          "meaning": "Player needs to notice something",
+          "distinguishing_features": [
+            "Musical sting at choice point",
+            "Sound change when entering danger"
+          ]
+        },
+        {
+          "term": "purpose: recall",
+          "meaning": "Player needs a memory anchor",
+          "distinguishing_features": [
+            "Location ambient for recurring place",
+            "Character leitmotif"
+          ]
+        },
+        {
+          "term": "purpose: clarify",
+          "meaning": "Player should understand something through sound",
+          "distinguishing_features": [
+            "Sound of mechanism working",
+            "Off-screen events made audible"
+          ]
+        },
+        {
+          "term": "layer: background",
+          "meaning": "Continuous base layer",
+          "distinguishing_features": [
+            "Ambient loops",
+            "Underscore music"
+          ]
+        },
+        {
+          "term": "layer: foreground",
+          "meaning": "Attention focus layer",
+          "distinguishing_features": [
+            "Spot effects",
+            "Dialogue"
+          ]
+        },
+        {
+          "term": "layer: overlay",
+          "meaning": "Emphasis layer",
+          "distinguishing_features": [
+            "Musical stings",
+            "Alert sounds"
+          ]
+        },
+        {
+          "term": "exclusive_group",
+          "meaning": "Mutually exclusive cue set where only one plays at a time",
+          "distinguishing_features": [
+            "Used for location ambients to prevent stacking",
+            "Ensures clean sonic environment"
+          ]
+        },
+        {
+          "term": "Reference Sheet",
+          "meaning": "Consistent sonic specification for recurring elements",
+          "distinguishing_features": [
+            "Ensures consistency across multiple audio cues",
+            "Created for locations, objects, or characters with recurring sounds",
+            "Includes characteristic sound description and deployment context"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Transcripts that just name the sound",
+          "consequence": "Accessibility failure—users need descriptive detail",
+          "prevention": "Write descriptive prose: 'A roll of distant thunder, lasting several seconds' not just 'thunder'"
+        },
+        {
+          "failure_mode": "Missing transcripts",
+          "consequence": "Critical accessibility violation",
+          "prevention": "Every audio cue MUST have a transcript describing what the sound IS"
+        },
+        {
+          "failure_mode": "Stacking ambient loops",
+          "consequence": "Sonic mud—multiple ambients create confusion",
+          "prevention": "Only ONE ambient per location, use exclusive groups to enforce"
+        }
+      ]
+    }
   },
 
   "applicable_to": {
