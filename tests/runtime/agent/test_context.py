@@ -68,28 +68,45 @@ def domain_with_knowledge(tmp_path: Path) -> Path:
     }
     (governance_dir / "constitution.json").write_text(json.dumps(constitution))
 
-    # Create must_know entry
+    # Create must_know entry with structured content
     spoiler_entry = {
         "id": "spoiler_hygiene",
         "name": "Spoiler Hygiene",
         "layer": "must_know",
         "summary": "Keep secrets secret.",
         "content": {
-            "type": "inline",
-            "text": "Player-facing content must never reveal secrets.",
+            "type": "structured",
+            "format": "json",
+            "data": {
+                "rules": [
+                    {
+                        "statement": "Player-facing content must never reveal secrets",
+                        "severity": "critical",
+                        "enforcement": "llm",
+                    }
+                ]
+            },
         },
     }
     (must_know_dir / "spoiler_hygiene.json").write_text(json.dumps(spoiler_entry))
 
-    # Create role_specific entry
+    # Create role_specific entry with structured content
     ops_entry = {
         "id": "showrunner_ops",
         "name": "Showrunner Operations",
         "layer": "role_specific",
         "summary": "How to coordinate agents.",
         "content": {
-            "type": "inline",
-            "text": "Detailed operations guide for the showrunner.",
+            "type": "structured",
+            "format": "json",
+            "data": {
+                "procedures": [
+                    {
+                        "goal": "Coordinate agents",
+                        "steps": ["Delegate tasks", "Monitor progress"],
+                    }
+                ]
+            },
         },
     }
     (role_specific_dir / "showrunner_ops.json").write_text(json.dumps(ops_entry))
