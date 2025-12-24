@@ -9,8 +9,13 @@ Provides:
 - StoreManager: Registry for store definitions
 - LifecycleManager: Artifact lifecycle state machines
 - RelationshipManager: Artifact relationship cascade handling
+- EditPolicyGuard: Edit policy enforcement
 """
 
+from questfoundry.runtime.storage.edit_policy import (
+    EditPolicyGuard,
+    EditPolicyResult,
+)
 from questfoundry.runtime.storage.lifecycle import (
     ArtifactLifecycle,
     LifecycleManager,
@@ -59,4 +64,7 @@ __all__ = [
     "RelationshipManager",
     "Relationship",
     "ImpactPolicy",
+    # Edit policy enforcement
+    "EditPolicyGuard",
+    "EditPolicyResult",
 ]
