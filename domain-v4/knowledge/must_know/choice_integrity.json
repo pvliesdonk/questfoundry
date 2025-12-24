@@ -17,9 +17,81 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Choice Integrity\n\n### The Principle\n\nEvery choice must offer meaningfully different paths. Cosmetic variation is fake agency.\n\n### Contrastive Choices\n\n**Two clear options beat five near-synonyms.**\n\nChoices must differ in:\n- Intent (what the player is trying to do)\n- Outcome (what happens as a result)\n- Tone/approach (how it feels to choose)\n\n### Handling Convergence\n\nWhen branches must converge:\n\n1. **Immediate Reflection**: The next scene's first paragraph reflects the entering path (lexical, behavioral, or situational difference)\n\n2. **State-Aware Affordances**: At least one option reads differently based on entering state\n\n3. **Diegetic Bridge**: A short in-world transition bridges the convergence\n\n4. **Micro-Beat Between**: When necessary, add a short beat that sets a visible state flag\n\n### Examples\n\n**Good Contrastive Choices**:\n- 'Confront the foreman directly' vs 'Gather evidence first'\n- 'Trust Kestrel's word' vs 'Demand proof'\n\n**Bad (Near-Synonyms)**:\n- 'Go north' vs 'Head northward' vs 'Travel north'\n- 'Fight' vs 'Attack' vs 'Battle'\n\n### The First-Choice Test\n\nAt the first choice point:\n- Are the options functionally different?\n- If they converge, does the next scene acknowledge which path was taken?"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "rules": [
+        {
+          "statement": "Every choice must offer meaningfully different paths",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Cosmetic variation is fake agency - it undermines player trust."
+        },
+        {
+          "statement": "Two clear options beat five near-synonyms",
+          "enforcement": "llm",
+          "severity": "error",
+          "reasoning": "Quality over quantity in choice design."
+        }
+      ],
+      "criteria": [
+        {
+          "name": "Contrastive Choices",
+          "pass_condition": "Choices differ in intent (what the player is trying to do), outcome (what happens), AND tone/approach (how it feels to choose).",
+          "fail_indicators": [
+            "Options that differ only in wording",
+            "Multiple paths to identical outcomes",
+            "Choices that feel interchangeable"
+          ],
+          "examples": [
+            "'Confront the foreman directly' vs 'Gather evidence first'",
+            "'Trust Kestrel's word' vs 'Demand proof'"
+          ],
+          "counter_examples": [
+            "'Go north' vs 'Head northward' vs 'Travel north'",
+            "'Fight' vs 'Attack' vs 'Battle'"
+          ]
+        },
+        {
+          "name": "First-Choice Test",
+          "pass_condition": "At the first choice point: options are functionally different, and if they converge, the next scene acknowledges which path was taken.",
+          "fail_indicators": [
+            "First choice leads to identical content",
+            "Convergence happens silently without acknowledgment"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Handling branch convergence",
+          "guidance": "Use one of four techniques: Immediate Reflection, State-Aware Affordances, Diegetic Bridge, or Micro-Beat Between.",
+          "examples": [
+            "Immediate Reflection: The next scene's first paragraph reflects the entering path",
+            "State-Aware Affordances: At least one option reads differently based on entering state",
+            "Diegetic Bridge: A short in-world transition bridges the convergence",
+            "Micro-Beat Between: Add a short beat that sets a visible state flag"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Near-synonym choices",
+          "consequence": "Players feel their agency is fake; trust in the narrative erodes.",
+          "detection": "Read choices aloud - do they feel like genuinely different actions?",
+          "prevention": "Reduce to fewer, more distinct options.",
+          "counter_examples": [
+            "'Go north' vs 'Head northward' vs 'Travel north'"
+          ]
+        },
+        {
+          "failure_mode": "Silent convergence",
+          "consequence": "Players who took different paths feel their choice didn't matter.",
+          "detection": "Check: does the next scene reference how the player arrived?",
+          "prevention": "Add acknowledgment via reflection, state-aware text, or micro-beat."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

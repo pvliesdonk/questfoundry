@@ -3,26 +3,144 @@
   "id": "export_patterns",
   "name": "Export Patterns",
   "layer": "role_specific",
-
   "summary": "Common export configurations and their use cases: playtest builds, milestone releases, full production.",
-
-  "keywords": ["export", "bundle", "release", "formats", "book_binder"],
-
+  "keywords": [
+    "export",
+    "bundle",
+    "release",
+    "formats",
+    "book_binder"
+  ],
   "triggers": [
     "choosing export options",
     "format selection",
     "release type"
   ],
-
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Export Patterns\n\nCommon export configurations for different use cases.\n\n### Playtest Build\n\n**Purpose**: Quick build for narration dry-run or internal review.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\"],\n  \"options\": {\n    \"include_art_plans\": false,\n    \"include_art_renders\": false,\n    \"include_audio_plans\": false,\n    \"include_audio_assets\": false,\n    \"languages\": [\"en\"],\n    \"print_friendly\": true\n  }\n}\n```\n\n**Characteristics**:\n- Minimal formats (MD + HTML)\n- English only\n- No art/audio\n- Fast turnaround\n\n---\n\n### Milestone Release\n\n**Purpose**: Chapter or act completion for stakeholder review.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\", \"epub\"],\n  \"options\": {\n    \"include_art_plans\": true,\n    \"include_art_renders\": false,\n    \"include_audio_plans\": true,\n    \"include_audio_assets\": false,\n    \"languages\": [\"en\"],\n    \"print_friendly\": true\n  }\n}\n```\n\n**Characteristics**:\n- Reader-friendly formats (HTML, EPUB)\n- Art/audio plans for context\n- Still primary language only\n\n---\n\n### Full Production\n\n**Purpose**: Release-ready bundle for distribution.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\", \"epub\", \"pdf\"],\n  \"options\": {\n    \"include_art_plans\": false,\n    \"include_art_renders\": true,\n    \"include_audio_plans\": false,\n    \"include_audio_assets\": true,\n    \"languages\": [\"en\", \"nl\", \"de\"],\n    \"print_friendly\": true\n  }\n}\n```\n\n**Characteristics**:\n- All formats including PDF\n- Full renders and assets (not just plans)\n- All supported languages\n- Print-ready layout\n\n---\n\n### Translation Review\n\n**Purpose**: Review translation coverage before release.\n\n```json\n{\n  \"output_formats\": [\"markdown\", \"html\"],\n  \"options\": {\n    \"include_art_plans\": false,\n    \"include_art_renders\": false,\n    \"include_audio_plans\": false,\n    \"include_audio_assets\": false,\n    \"languages\": [\"en\", \"nl\"],\n    \"print_friendly\": false\n  }\n}\n```\n\n**Characteristics**:\n- Side-by-side language comparison\n- Text-focused (no assets)\n- Coverage flags visible\n\n---\n\n### Format Notes\n\n| Format | Best For | Limitations |\n|--------|----------|-------------|\n| markdown | Source control, diffing | No rich styling |\n| html | Web reading, interactivity | Requires server/hosting |\n| epub | E-readers, mobile | Limited interactivity |\n| pdf | Print, archival | Static, large files |"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "definitions": [
+        {
+          "term": "Playtest build",
+          "meaning": "Quick build for narration dry-run or internal review. Minimal formats, English only, no art/audio, fast turnaround.",
+          "distinguishing_features": [
+            "Formats: markdown, html only",
+            "Languages: English only",
+            "Art/audio: plans and renders excluded",
+            "Purpose: internal review",
+            "Speed: fast turnaround"
+          ],
+          "examples": [
+            "term_usage: Testing narrative flow before full production | context: output_formats: [markdown, html], include_art_plans: false, include_art_renders: false, include_audio_plans: false, include_audio_assets: false, languages: [en], print_friendly: true"
+          ]
+        },
+        {
+          "term": "Milestone release",
+          "meaning": "Chapter or act completion for stakeholder review. Reader-friendly formats, art/audio plans included for context, still primary language only.",
+          "distinguishing_features": [
+            "Formats: markdown, html, epub",
+            "Languages: English only",
+            "Art/audio: plans included, renders excluded",
+            "Purpose: stakeholder review",
+            "Speed: moderate"
+          ],
+          "examples": [
+            "term_usage: Sharing completed chapter with reviewers | context: output_formats: [markdown, html, epub], include_art_plans: true, include_art_renders: false, include_audio_plans: true, include_audio_assets: false, languages: [en], print_friendly: true"
+          ]
+        },
+        {
+          "term": "Full production",
+          "meaning": "Release-ready bundle for distribution. All formats including PDF, full renders and assets, all supported languages, print-ready layout.",
+          "distinguishing_features": [
+            "Formats: markdown, html, epub, pdf",
+            "Languages: all supported",
+            "Art/audio: full renders and assets, plans excluded",
+            "Purpose: player distribution",
+            "Speed: comprehensive"
+          ],
+          "examples": [
+            "term_usage: Final release to players | context: output_formats: [markdown, html, epub, pdf], include_art_plans: false, include_art_renders: true, include_audio_plans: false, include_audio_assets: true, languages: [en, nl, de], print_friendly: true"
+          ]
+        },
+        {
+          "term": "Translation review",
+          "meaning": "Review translation coverage before release. Side-by-side language comparison, text-focused, coverage flags visible.",
+          "distinguishing_features": [
+            "Formats: markdown, html only",
+            "Languages: source + target languages",
+            "Art/audio: all excluded",
+            "Purpose: translation QA",
+            "Speed: fast"
+          ],
+          "examples": [
+            "term_usage: Reviewing Dutch translation coverage | context: output_formats: [markdown, html], include_art_plans: false, include_art_renders: false, include_audio_plans: false, include_audio_assets: false, languages: [en, nl], print_friendly: false"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When asked for a quick internal review",
+          "guidance": "Use playtest build pattern: MD+HTML, English only, no assets, print-friendly.",
+          "examples": [
+            "situation: Showrunner wants to review narrative flow | response: Playtest build configuration"
+          ]
+        },
+        {
+          "context": "When sharing progress with stakeholders",
+          "guidance": "Use milestone release pattern: MD+HTML+EPUB, English only, art/audio plans included, no renders.",
+          "examples": [
+            "situation: Chapter 3 complete, need stakeholder review | response: Milestone release configuration"
+          ]
+        },
+        {
+          "context": "When preparing for player distribution",
+          "guidance": "Use full production pattern: all formats including PDF, all languages, full renders and assets, print-ready.",
+          "examples": [
+            "situation: Ready to ship to players | response: Full production configuration"
+          ]
+        },
+        {
+          "context": "When checking translation completeness",
+          "guidance": "Use translation review pattern: MD+HTML, source and target languages, no assets, coverage flags visible.",
+          "examples": [
+            "situation: Need to verify Dutch translation coverage | response: Translation review configuration with [en, nl]"
+          ]
+        },
+        {
+          "context": "Choosing between markdown, html, epub, pdf",
+          "guidance": "Markdown: source control, diffing. HTML: web reading, interactivity. EPUB: e-readers, mobile. PDF: print, archival. Consider target audience and distribution method.",
+          "examples": []
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Including renders in playtest builds",
+          "consequence": "Slow build times, unnecessary processing, delays internal review",
+          "prevention": "Playtest builds should exclude all art renders and audio assets"
+        },
+        {
+          "failure_mode": "Omitting languages from full production",
+          "consequence": "Incomplete release, non-English players cannot access content",
+          "prevention": "Full production must include all supported and sufficiently-covered languages"
+        },
+        {
+          "failure_mode": "Including plans in player-facing releases",
+          "consequence": "Players see meta-planning content instead of finished assets",
+          "prevention": "Full production should include renders/assets but exclude plans"
+        }
+      ]
+    }
   },
-
   "applicable_to": {
-    "agents": ["book_binder", "showrunner"]
+    "agents": [
+      "book_binder",
+      "showrunner"
+    ]
   },
-
-  "tags": ["export", "configuration", "patterns"]
+  "tags": [
+    "export",
+    "configuration",
+    "patterns"
+  ]
 }

@@ -19,7 +19,10 @@ from questfoundry.runtime.tools.consult_knowledge import ConsultKnowledgeTool
 
 @pytest.fixture
 def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
-    """Create mock knowledge entries for testing."""
+    """Create mock knowledge entries for testing.
+
+    Uses structured content format with semantic types (rules, definitions, etc.)
+    """
     return {
         "spoiler_hygiene": KnowledgeEntry(
             id="spoiler_hygiene",
@@ -27,8 +30,24 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.MUST_KNOW,
             summary="Never reveal future plot points.",
             content={
-                "type": "inline",
-                "text": "## Spoiler Hygiene\n\n### Core Principle\n\nNever reveal future plot points.\n\n### Examples\n\nWRONG: The detective will discover the butler did it.\nCORRECT: The detective examines the clues carefully.",
+                "type": "structured",
+                "data": {
+                    "rules": [
+                        {
+                            "statement": "Never reveal future plot points",
+                            "severity": "critical",
+                            "reasoning": "Core Principle of spoiler hygiene",
+                        },
+                    ],
+                    "warnings": [
+                        {
+                            "failure_mode": "Plot revelation",
+                            "consequence": "Spoils reader experience",
+                            "examples": ["The detective examines the clues carefully"],
+                            "counter_examples": ["The detective will discover the butler did it"],
+                        },
+                    ],
+                },
             },
             related_entries=["sources_of_truth", "diegetic_gates"],
         ),
@@ -38,8 +57,19 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.MUST_KNOW,
             summary="Guidelines for runtime behavior.",
             content={
-                "type": "inline",
-                "text": "## Runtime Guidelines\n\n### Tool Usage\n\nAlways use tools for actions.\n\n### Error Handling\n\nHandle errors gracefully.",
+                "type": "structured",
+                "data": {
+                    "rules": [
+                        {
+                            "statement": "Always use tools for actions",
+                            "severity": "error",
+                        },
+                        {
+                            "statement": "Handle errors gracefully",
+                            "severity": "warning",
+                        },
+                    ],
+                },
             },
         ),
         "empty_entry": KnowledgeEntry(
@@ -56,7 +86,12 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             summary="Entry with structured data.",
             content={
                 "type": "structured",
-                "data": {"key": "value", "nested": {"inner": "data"}},
+                "data": {
+                    "definitions": [
+                        {"term": "key", "meaning": "value"},
+                        {"term": "nested", "meaning": "inner data"},
+                    ]
+                },
             },
         ),
         "corpus_entry": KnowledgeEntry(
@@ -154,7 +189,8 @@ class TestConsultKnowledgeSuccess:
         assert result.data["entry_id"] == "spoiler_hygiene"
         assert result.data["name"] == "Spoiler Hygiene"
         assert result.data["layer"] == "must_know"
-        assert "Spoiler Hygiene" in result.data["content"]
+        # Rendered structured content should contain the rule statement
+        assert "Never reveal future plot points" in result.data["content"]
 
     async def test_includes_related_entries(self, consult_knowledge_tool: ConsultKnowledgeTool):
         """Should include related_entries in response."""
@@ -174,20 +210,21 @@ class TestConsultKnowledgeSuccess:
 
 
 class TestConsultKnowledgeSectionExtraction:
-    """Tests for section extraction from content."""
+    """Tests for section extraction from rendered content."""
 
     async def test_extracts_specific_section(self, consult_knowledge_tool: ConsultKnowledgeTool):
-        """Should extract content from specified section."""
+        """Should extract content from specified section (rendered markdown headers)."""
+        # Note: Structured content is rendered with headers like "## Rules", "## Warnings"
         result = await consult_knowledge_tool.execute(
             {
                 "entry_id": "runtime_guidelines",
-                "section": "Tool Usage",
+                "section": "Rules",
             }
         )
 
         assert result.success is True
-        assert "Tool Usage" in result.data["content"]
-        assert "Error Handling" not in result.data["content"]
+        # Should have rules content
+        assert "Always use tools for actions" in result.data["content"]
 
     async def test_section_not_found_returns_full_content(
         self, consult_knowledge_tool: ConsultKnowledgeTool
@@ -203,8 +240,8 @@ class TestConsultKnowledgeSectionExtraction:
         assert result.success is True
         assert "warning" in result.data
         assert "Nonexistent Section" in result.data["warning"]
-        # Should still have full content
-        assert "Core Principle" in result.data["content"]
+        # Should still have full content with rendered rules and warnings
+        assert "Never reveal future plot points" in result.data["content"]
 
 
 class TestConsultKnowledgeNotFound:
@@ -222,18 +259,26 @@ class TestConsultKnowledgeNotFound:
 class TestConsultKnowledgeContentTypes:
     """Tests for different content types."""
 
-    async def test_inline_content(self, consult_knowledge_tool: ConsultKnowledgeTool):
-        """Inline content should return text directly."""
+    async def test_structured_content_with_rules(
+        self, consult_knowledge_tool: ConsultKnowledgeTool
+    ):
+        """Structured content with rules should render as readable markdown."""
         result = await consult_knowledge_tool.execute({"entry_id": "spoiler_hygiene"})
 
         assert result.success is True
+        # Should render the rule statement
+        assert "Never reveal future plot points" in result.data["content"]
+        # Should include reasoning from the structured data
         assert "Core Principle" in result.data["content"]
 
-    async def test_structured_content(self, consult_knowledge_tool: ConsultKnowledgeTool):
-        """Structured content should return JSON representation."""
+    async def test_structured_content_with_definitions(
+        self, consult_knowledge_tool: ConsultKnowledgeTool
+    ):
+        """Structured content with definitions should render properly."""
         result = await consult_knowledge_tool.execute({"entry_id": "structured_entry"})
 
         assert result.success is True
+        # Should render definitions with term and meaning
         assert "key" in result.data["content"]
         assert "value" in result.data["content"]
 

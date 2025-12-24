@@ -3,27 +3,195 @@
   "id": "book_binder_procedures",
   "name": "Book Binder Procedures",
   "layer": "role_specific",
-
   "summary": "How Book Binder exports views: Cold-only, package don't rewrite, stamp provenance, ensure navigation integrity.",
-
-  "keywords": ["export", "binding", "view", "bundle", "book_binder"],
-
+  "keywords": [
+    "export",
+    "binding",
+    "view",
+    "bundle",
+    "book_binder"
+  ],
   "triggers": [
     "export request",
     "binding run",
     "creating bundle",
     "release preparation"
   ],
-
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Book Binder Procedures\n\n### Core Role\n\nPackage, don't rewrite. Turn Canon snapshots into player-safe export views. If content needs editing, route upstream.\n\n### Iron Rules\n\n1. **Cold-Only**\n   - One Canon snapshot per view\n   - Never mix Hot content\n   - Abort if Hot paths detected\n\n2. **No Text Edits**\n   - Never 'fix' prose to pass Integrity\n   - Create hooks for upstream teams\n   - Normalize only non-semantic labels (heading case)\n\n3. **Stamp Provenance**\n   - Front matter: snapshot ID, options, coverage\n   - Build manifest: full technical details\n   - View log: player-safe summary\n\n4. **Navigation Integrity**\n   - All anchors resolve\n   - All crosslinks work\n   - No orphan pages\n   - Codex references land\n\n### Assembly Checklist\n\n```\n[ ] Snapshot ID confirmed with Showrunner\n[ ] Export options confirmed (formats, art, audio, languages)\n[ ] Integrity check run (links, anchors, alt text)\n[ ] Bundle assembled in all formats\n[ ] Front matter stamped with provenance\n[ ] Build manifest created (internal)\n[ ] View log created (player-safe)\n[ ] Gatekeeper spot-check: green\n[ ] Hooks created for any upstream issues\n```\n\n### Front Matter Template (Player-Safe)\n\n```\nTitle: [Book Title]\nSnapshot: [snapshot_id]\nFormats: [markdown, html, epub, pdf]\nLanguages: EN (100%), NL (74%)\nArt: plans only | full | none\nAudio: plans only | full | none\nAccessibility: alt text present, captions n/a\nNotes: [known limitations]\n```\n\n### What Book Binder Does NOT Do\n\n- Edit prose, canon, or codex content\n- Export from Hot or mixed sources\n- Surface internal details (codewords, seeds, models)\n- Make content decisions (Showrunner's domain)\n\n### When to Create Hooks\n\n- Broken anchors → Scene Smith\n- Missing codex entries → Codex Curator\n- Label inconsistencies → Style Lead\n- Missing alt text → Art Director\n- Translation gaps → Translator"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Export from one Canon snapshot per view. Never mix Hot content. Abort if Hot paths detected.",
+          "severity": "critical",
+          "enforcement": "runtime",
+          "reasoning": "Hot content is drafts. Only cold (committed canon) should reach players. Mixed sources create inconsistencies."
+        },
+        {
+          "statement": "Never edit prose, canon, or codex text content. Create hooks for upstream teams if changes needed.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "reasoning": "Book Binder packages, doesn't rewrite. Content decisions belong upstream. Editing bypasses quality gates."
+        },
+        {
+          "statement": "Normalize only non-semantic labels (heading case, formatting). Never change meaning.",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "Format normalization is acceptable. Semantic changes must go through proper review channels."
+        },
+        {
+          "statement": "Every export must have stamped provenance: snapshot ID, options, coverage in front matter and build manifest.",
+          "severity": "critical",
+          "enforcement": "runtime",
+          "reasoning": "Enables debugging, version tracking, and understanding what was included in the export."
+        },
+        {
+          "statement": "All anchors must resolve, all crosslinks must work, no orphan pages, and codex references must land.",
+          "severity": "error",
+          "enforcement": "runtime",
+          "reasoning": "Navigation integrity is core to player experience. Broken links frustrate players and look unprofessional."
+        },
+        {
+          "statement": "Do not export from Hot or mixed sources.",
+          "severity": "critical",
+          "enforcement": "runtime"
+        },
+        {
+          "statement": "Do not surface internal details (codewords, seeds, models).",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Do not make content decisions. That is Showrunner's domain.",
+          "severity": "warning",
+          "enforcement": "llm"
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Package, don't rewrite",
+          "meaning": "Book Binder assembles existing canon into export views without editing content. If content needs changes, route upstream to appropriate creative agents.",
+          "distinguishing_features": [
+            "Assembles from canon snapshots",
+            "Does not edit prose or lore",
+            "Creates hooks for needed changes",
+            "Only normalizes non-semantic formatting"
+          ]
+        },
+        {
+          "term": "Cold-only export",
+          "meaning": "Export views contain only committed canon (cold store), never drafts (hot store). Each view comes from exactly one canon snapshot.",
+          "distinguishing_features": [
+            "One canon snapshot per view",
+            "No hot content mixed in",
+            "Abort if hot paths detected"
+          ]
+        },
+        {
+          "term": "Navigation integrity",
+          "meaning": "All internal references in the export resolve correctly: anchors, crosslinks, codex entries, and page connections.",
+          "distinguishing_features": [
+            "All anchors resolve",
+            "All crosslinks work",
+            "No orphan pages",
+            "Codex references land"
+          ]
+        },
+        {
+          "term": "Provenance stamping",
+          "meaning": "Recording the source and configuration of an export in both player-safe front matter and internal build manifest.",
+          "distinguishing_features": [
+            "Snapshot ID recorded",
+            "Export options documented",
+            "Coverage information included",
+            "Technical details in build manifest",
+            "Player-safe summary in view log"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When integrity check reveals broken links or anchors",
+          "guidance": "Do not fix the prose yourself. Create a hook to Scene Smith identifying the broken reference and its context.",
+          "examples": []
+        },
+        {
+          "context": "When codex entries are missing",
+          "guidance": "Create a hook to Codex Curator identifying which terms need entries and where they appear.",
+          "examples": []
+        },
+        {
+          "context": "When labels are inconsistent (capitalization, formatting)",
+          "guidance": "If non-semantic (e.g., 'Chapter One' vs 'Chapter one'), normalize. If semantic (e.g., changing a character name), create hook to Style Lead.",
+          "examples": []
+        },
+        {
+          "context": "When art alt text is missing",
+          "guidance": "Create a hook to Art Director. Do not invent alt text yourself.",
+          "examples": []
+        },
+        {
+          "context": "When translation gaps exist",
+          "guidance": "Document in coverage notes. Create hook to Translator if this blocks release.",
+          "examples": []
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Assemble an export bundle",
+          "steps": [
+            "Confirm snapshot ID with Showrunner",
+            "Confirm export options (formats, art, audio, languages)",
+            "Run integrity check (links, anchors, alt text)",
+            "Abort if integrity check fails - create hooks for issues",
+            "Assemble bundle in all requested formats",
+            "Stamp front matter with provenance (player-safe)",
+            "Create build manifest (internal technical details)",
+            "Create view log (player-safe summary)",
+            "Request Gatekeeper spot-check",
+            "If spot-check fails, create hooks for upstream issues"
+          ],
+          "preconditions": [
+            "Canon snapshot exists and is identified",
+            "Export options confirmed",
+            "No hot content in snapshot"
+          ],
+          "postconditions": [
+            "Bundle exists in all requested formats",
+            "Provenance stamped",
+            "Integrity verified",
+            "Gatekeeper spot-check green"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Editing prose to 'fix' integrity issues",
+          "consequence": "Bypasses quality gates, introduces unreviewed content, may create inconsistencies with other canon",
+          "prevention": "Create hooks for upstream teams. Never edit content directly."
+        },
+        {
+          "failure_mode": "Mixing hot and cold content",
+          "consequence": "Players see inconsistent or draft content, breaks canon integrity",
+          "prevention": "Runtime must enforce cold-only exports. Abort if hot paths detected."
+        },
+        {
+          "failure_mode": "Missing provenance",
+          "consequence": "Cannot debug issues, cannot track versions, cannot reproduce builds",
+          "prevention": "Runtime must require provenance stamping before export completes."
+        }
+      ]
+    }
   },
-
   "applicable_to": {
-    "agents": ["book_binder"]
+    "agents": [
+      "book_binder"
+    ]
   },
-
-  "tags": ["role", "export", "binding"]
+  "tags": [
+    "role",
+    "export",
+    "binding"
+  ]
 }

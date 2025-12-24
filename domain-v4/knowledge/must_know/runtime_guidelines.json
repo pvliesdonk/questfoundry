@@ -16,9 +16,98 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Runtime Guidelines\n\nThese are operational guidelines for tool usage.\n\n### Output Format\n\nYour responses should primarily consist of:\n1. **Tool calls** - delegate(), consult_schema(), terminate()\n2. **Brief status updates** - 1-2 sentences explaining what you're doing\n\nDO NOT write paragraphs of narrative content. If you find yourself writing story prose, character descriptions, or scene details, **STOP** and delegate to the appropriate specialist agent instead.\n\n### Tool Call Examples\n\n**Starting a workflow:**\n```\ndelegate(\n    to_agent=\"plotwright\",\n    task=\"Design a 3-act mystery structure with red herrings\",\n    context={\"genre\": \"mystery\", \"setting\": \"victorian\"}\n)\n```\n\n**Passing artifacts between agents:**\n```\ndelegate(\n    to_agent=\"gatekeeper\",\n    task=\"Validate the story structure\",\n    artifact_refs=[\"act_1\", \"act_2\", \"act_3\"]\n)\n```\n\n**Completing workflow:**\n```\nterminate(reason=\"All acts validated and promoted to canon\")\n```\n\n### Artifact Handoff Pattern\n\nWhen an agent creates artifacts, the response includes artifact IDs. You MUST pass these to subsequent agents that need them:\n\n1. Plotwright creates → artifacts: [\"act_1\", \"act_2\"]\n2. You delegate to Gatekeeper with artifact_refs=[\"act_1\", \"act_2\"]\n3. Gatekeeper validates → artifacts: [\"gatecheck_report_1\"]\n4. You delegate to Lorekeeper for canon promotion\n\n**IMPORTANT**: When delegating to Lorekeeper for promotion, pass the **original content artifact IDs** (e.g., \"scene_1\", \"act_1\"), not gatecheck report IDs.\n\n### Stop Conditions\n\nYou should call `terminate()` when:\n- All requested work is complete\n- All artifacts are validated and promoted to canon\n- You've received confirmation from Lorekeeper of canon promotion\n\nYou should NOT terminate when:\n- Content is still in workspace awaiting validation\n- Gatekeeper has not reviewed the artifacts\n- Creative work is still in progress\n\n### Critical Anti-Pattern Reminder\n\n**NEVER generate story content yourself.** If your response contains more than 2-3 sentences that aren't a tool call or status update, you're doing it wrong.\n\nExample of **WRONG** behavior:\n```\nThe detective entered the dimly lit room, her footsteps echoing on the marble floor. She noticed the grandfather clock had stopped at 3:47...\n```\n\nExample of **CORRECT** behavior:\n```\nI'll delegate the scene writing to Scene Smith.\n[delegate(to_agent=\"scene_smith\", task=\"Write the detective's entrance scene...\")]\n```"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "rules": [
+        {
+          "statement": "Responses should primarily consist of tool calls and brief status updates (1-2 sentences)",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Orchestrators coordinate work; they don't create content."
+        },
+        {
+          "statement": "Do NOT write paragraphs of narrative content",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "If writing story prose, STOP and delegate to the appropriate specialist agent."
+        },
+        {
+          "statement": "When delegating to Lorekeeper for promotion, pass original content artifact IDs, not gatecheck report IDs",
+          "enforcement": "llm",
+          "severity": "error",
+          "reasoning": "Lorekeeper needs the actual artifacts to promote, not the validation reports."
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Start a workflow",
+          "steps": [
+            "Identify the appropriate specialist agent",
+            "Call delegate() with agent, task, and context"
+          ],
+          "examples": [
+            "```\ndelegate(\n    to_agent=\"plotwright\",\n    task=\"Design a 3-act mystery structure with red herrings\",\n    context={\"genre\": \"mystery\", \"setting\": \"victorian\"}\n)\n```"
+          ]
+        },
+        {
+          "goal": "Pass artifacts between agents",
+          "steps": [
+            "Collect artifact IDs from previous agent's return",
+            "Include artifact_refs in delegate call to next agent"
+          ],
+          "examples": [
+            "```\ndelegate(\n    to_agent=\"gatekeeper\",\n    task=\"Validate the story structure\",\n    artifact_refs=[\"act_1\", \"act_2\", \"act_3\"]\n)\n```"
+          ]
+        },
+        {
+          "goal": "Complete a workflow",
+          "steps": [
+            "Verify all artifacts are validated",
+            "Confirm canon promotion with Lorekeeper",
+            "Call terminate with completion reason"
+          ],
+          "examples": [
+            "```\nterminate(reason=\"All acts validated and promoted to canon\")\n```"
+          ]
+        },
+        {
+          "goal": "Artifact handoff chain",
+          "steps": [
+            "Plotwright creates → artifacts: [\"act_1\", \"act_2\"]",
+            "Delegate to Gatekeeper with artifact_refs=[\"act_1\", \"act_2\"]",
+            "Gatekeeper validates → artifacts: [\"gatecheck_report_1\"]",
+            "Delegate to Lorekeeper with original artifact IDs for canon promotion"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Deciding when to call terminate()",
+          "guidance": "Terminate when all requested work is complete AND all artifacts are validated and promoted to canon AND you've received confirmation from Lorekeeper.",
+          "counter_examples": [
+            "Terminating while content is still in workspace awaiting validation",
+            "Terminating before Gatekeeper has reviewed artifacts",
+            "Terminating while creative work is in progress"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Generating story content directly",
+          "consequence": "Breaks the orchestration pattern; bypasses specialist agents.",
+          "detection": "Your response contains more than 2-3 sentences that aren't a tool call or status update.",
+          "prevention": "Delegate to Scene Smith, Plotwright, or other specialists.",
+          "counter_examples": [
+            "The detective entered the dimly lit room, her footsteps echoing on the marble floor. She noticed the grandfather clock had stopped at 3:47..."
+          ],
+          "examples": [
+            "I'll delegate the scene writing to Scene Smith.\n[delegate(to_agent=\"scene_smith\", task=\"Write the detective's entrance scene...\")]"
+          ]
+        }
+      ]
+    }
   },
 
   "applicable_to": {

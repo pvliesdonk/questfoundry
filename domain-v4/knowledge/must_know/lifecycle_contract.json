@@ -17,9 +17,122 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Lifecycle Contract\n\nArtifacts follow a simple 3-state lifecycle: `draft → review → cold`.\n\n### The 3 States\n\n| State | Meaning | Who Works Here |\n|-------|---------|----------------|\n| `draft` | Active work in progress | All creators |\n| `review` | Ready for quality check | Gatekeeper validates |\n| `cold` | Canonized and immutable | No edits allowed |\n\n### Valid Transitions\n\n```\ndraft → review    (Showrunner or Gatekeeper)\nreview → cold     (Gatekeeper only, after validation)\nreview → draft    (Anyone, for rework)\n```\n\n**CRITICAL: You cannot skip states.** There is NO `draft → cold` transition. Content must pass through `review` first.\n\n### Automatic Edit Demotion\n\n**The runtime auto-demotes artifacts when edited.**\n\nIf a `section` in `review` state is edited:\n1. Runtime automatically demotes it to `draft`\n2. Runtime moves it from `manuscript` back to `workspace`\n3. No agent action required - this is automatic\n\n**Why this matters:**\n- You don't need to track or manage lifecycle states\n- Just create and edit content; the runtime handles the rest\n- Quality gates are enforced without manual state management\n\n### Cascade Demotions\n\nWhen a parent artifact is edited, children may auto-demote:\n\n- Editing a `section_brief` demotes its derived `section`\n- This ensures children stay consistent with their source\n- The relationship defines this behavior, not the agents\n\n### Cold Promotion\n\n**Only Gatekeeper can promote artifacts to `cold` state.**\n\nThis is a deliberate design:\n- Gatekeeper judges substance (quality bars)\n- Cold promotion requires passing all quality checks\n- `manuscript` store only accepts writes from Gatekeeper\n\n### What Agents Should NOT Do\n\n- ❌ Manually track lifecycle states\n- ❌ Call lifecycle tools for routine edits\n- ❌ Worry about demoting artifacts (runtime handles it)\n- ❌ Try to promote to cold without being Gatekeeper\n\n### What Agents SHOULD Do\n\n- ✅ Focus on content quality\n- ✅ Trust the runtime to manage state\n- ✅ Delegate to Gatekeeper for cold promotion\n- ✅ Use `request_lifecycle_transition` only for explicit promotion"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "definitions": [
+        {
+          "term": "draft",
+          "meaning": "Active work in progress. The initial state for all artifacts.",
+          "distinguishing_features": [
+            "All creators work here",
+            "Mutable by anyone with write access"
+          ]
+        },
+        {
+          "term": "review",
+          "meaning": "Ready for quality check. Content awaiting Gatekeeper validation.",
+          "distinguishing_features": [
+            "Gatekeeper validates content here",
+            "Editing auto-demotes back to draft"
+          ]
+        },
+        {
+          "term": "cold",
+          "meaning": "Canonized and immutable. Final state after passing validation.",
+          "distinguishing_features": [
+            "No edits allowed",
+            "Only Gatekeeper can promote to this state"
+          ]
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Lifecycle State Transitions",
+          "parties": ["runtime", "gatekeeper", "agents"],
+          "obligations": [
+            {
+              "party": "agents",
+              "must": "Request transition from draft to review when content is ready",
+              "when": "Content is complete and ready for validation"
+            },
+            {
+              "party": "gatekeeper",
+              "must": "Be the only one to promote from review to cold",
+              "when": "Content passes all quality bars"
+            },
+            {
+              "party": "runtime",
+              "must": "Auto-demote artifacts from review to draft when edited"
+            },
+            {
+              "party": "runtime",
+              "must": "Move demoted artifacts from manuscript back to workspace"
+            }
+          ]
+        },
+        {
+          "name": "Cascade Demotion",
+          "parties": ["runtime", "agents"],
+          "obligations": [
+            {
+              "party": "runtime",
+              "must": "Auto-demote child artifacts when parent is edited",
+              "when": "Relationship defines cascade behavior"
+            },
+            {
+              "party": "agents",
+              "must": "Be aware that children may need re-validation after parent changes"
+            }
+          ],
+          "examples": [
+            "Editing a section_brief demotes its derived section"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "statement": "You cannot skip states - there is NO draft→cold transition",
+          "enforcement": "runtime",
+          "severity": "critical",
+          "reasoning": "Content must pass through review first to ensure quality gates are applied."
+        },
+        {
+          "statement": "Only Gatekeeper can promote artifacts to cold state",
+          "enforcement": "runtime",
+          "severity": "critical",
+          "reasoning": "Gatekeeper judges substance via quality bars; cold promotion requires passing all checks."
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Working with artifact lifecycle",
+          "guidance": "Focus on content quality; trust the runtime to manage state transitions automatically.",
+          "examples": [
+            "Just create and edit content - runtime handles demotion",
+            "Delegate to Gatekeeper for cold promotion"
+          ],
+          "counter_examples": [
+            "Manually tracking lifecycle states",
+            "Calling lifecycle tools for routine edits",
+            "Trying to promote to cold without being Gatekeeper"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Attempting to manually manage lifecycle states",
+          "consequence": "Wasted effort - runtime handles this automatically.",
+          "prevention": "Focus on content; use request_lifecycle_transition only for explicit promotion."
+        },
+        {
+          "failure_mode": "Attempting cold promotion without Gatekeeper",
+          "consequence": "Transition will be rejected by runtime.",
+          "prevention": "Delegate to Gatekeeper for cold promotion."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

@@ -7,11 +7,10 @@ Implements the menu+consult pattern from meta/docs/knowledge-patterns.md.
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
-from questfoundry.runtime.models.base import KnowledgeContent
+from questfoundry.runtime.agent.content_utils import extract_knowledge_content
 from questfoundry.runtime.tools.base import BaseTool, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.registry import register_tool
 
@@ -106,42 +105,14 @@ class ConsultKnowledgeTool(BaseTool):
         return ToolResult(success=True, data=result_data)
 
     def _extract_content(self, entry: Any) -> str | None:
-        """Extract text content from a knowledge entry."""
-        content = entry.content
-        if content is None:
-            return None
+        """Extract text content from a knowledge entry.
 
-        # Handle dict content (raw from JSON)
-        if isinstance(content, dict):
-            content_type = content.get("type", "inline")
-            if content_type == "inline":
-                return content.get("text")
-            elif content_type == "file_ref":
-                # TODO: Load from file
-                return f"(Content in file: {content.get('file_path')})"
-            elif content_type == "structured":
-                # Return JSON representation of structured data
-                data = content.get("data", {})
-                return json.dumps(data, indent=2)
-            elif content_type == "corpus":
-                # Corpus entries are searched via consult_corpus tool
-                return "(This is a corpus entry. Use consult_corpus tool to search.)"
-            else:
-                return content.get("text")
-
-        # Handle KnowledgeContent model
-        if isinstance(content, KnowledgeContent):
-            if content.type == "inline":
-                text = content.text
-                return str(text) if text else None
-            elif content.type == "file_ref":
-                return f"(Content in file: {content.file_path})"
-            elif content.type == "structured":
-                return json.dumps(content.data or {}, indent=2)
-            elif content.type == "corpus":
-                return "(This is a corpus entry. Use consult_corpus tool to search.)"
-
-        return str(content) if content else None
+        Delegates to shared content_utils for consistent handling across
+        the codebase. Supports structured, file_ref, and corpus content types.
+        """
+        # Get domain path from context if available
+        domain_path = getattr(self._context, "domain_path", None)
+        return extract_knowledge_content(entry, domain_path)
 
     def _extract_section(self, content: str, section_name: str) -> str | None:
         """Extract a specific section from markdown content.

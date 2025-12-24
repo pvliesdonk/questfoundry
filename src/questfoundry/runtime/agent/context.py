@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.runtime.models.base import KnowledgeContent
+from questfoundry.runtime.agent.content_utils import extract_knowledge_content
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Playbook, Studio
@@ -274,18 +274,7 @@ class ContextBuilder:
 
     def _format_entry_for_injection(self, entry: KnowledgeEntry) -> dict[str, str]:
         """Format a knowledge entry for prompt injection."""
-        content = ""
-
-        if entry.content:
-            if isinstance(entry.content, dict):
-                # Dict-style inline content
-                if entry.content.get("type") == "inline":
-                    content = entry.content.get("text", "")
-            elif isinstance(entry.content, str):
-                content = entry.content
-            elif isinstance(entry.content, KnowledgeContent) and entry.content.type == "inline":
-                # KnowledgeContent model
-                content = entry.content.text or ""
+        content = extract_knowledge_content(entry, self._domain_path) or ""
 
         return {
             "id": entry.id,

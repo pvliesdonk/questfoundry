@@ -17,9 +17,132 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Diegetic Gates\n\n### The Principle\n\nGates must feel like world facts, not game mechanics. Players encounter gates as story elements they can understand without meta-knowledge.\n\n### Types of Diegetic Gates\n\n- **Badge/Token**: 'If you carry the foreman's seal...'\n- **Knowledge**: 'If you've learned the true name...'\n- **Reputation**: 'If the miners trust you...'\n- **Tool/Item**: 'If you have the override key...'\n\n### Gateway Phrasing\n\n**Meta (forbidden)**:\n- 'You need flag_approved == true to proceed'\n- 'This choice requires state.trust >= 5'\n- 'If you have the key item, you can unlock this'\n\n**Diegetic (correct)**:\n- 'The guard eyes your dock pass. With the foreman's stamp, he waves you through.'\n- 'She meets your gaze. Trust earned, she speaks freely.'\n- 'The door is locked. Perhaps someone in town has the key.'\n\n### Choice Text Phrasing\n\n**Meta (forbidden)**:\n- 'Select option 1 to gain the key'\n- 'Click here to proceed'\n- 'Choose wisely (this affects the ending)'\n\n**Diegetic (correct)**:\n- 'Ask the guard about the locked door'\n- 'Confront Kestrel about the documents'\n- 'Leave through the back entrance'\n\n### State Change Phrasing\n\n**Meta (forbidden)**:\n- 'Trust level increased to 5'\n- 'Flag_betrayal set to true'\n- 'Unlocked romance path'\n\n**Diegetic (correct)**:\n- 'Kestrel's expression softens slightly'\n- 'You notice her hand moves to her weapon'\n- 'She smiles, perhaps for the first time'\n\n### PN Enforcement\n\nThe Player-Narrator asks in-world questions:\n- 'Did the foreman give you his seal?'\n- 'Have you spoken with Kestrel about the passage?'\n\nThe PN never says:\n- 'Check if you have codeword ASH'\n- 'Is your reputation score above 5?'\n\n### Example Phrasings (Copy-Paste Safe)\n\n**Gate enforcement (PN/manuscript)**:\n- 'The foreman scans your lapel. No union token—he shakes his head.'\n- 'You recite the salvage clause; the clerk's shoulders drop. \"Fine—through you go.\"'\n- 'You've seen this panel before; two quick twists, and the hatch yields.'\n\n**Choice clarity**:\n- 'Slip through maintenance.'\n- 'Face the foreman.'\n\n### The Test\n\nCould a character in this world ask this question naturally? If yes, the gate is diegetic. Show consequences through world changes, character reactions, and environmental details—never through meta-commentary."
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "rules": [
+        {
+          "statement": "Gates must feel like world facts, not game mechanics",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Players should encounter gates as story elements they can understand without meta-knowledge."
+        },
+        {
+          "statement": "Never expose codeword names, flags, or game state to players",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Internal mechanics break immersion and reveal the machinery."
+        },
+        {
+          "statement": "PN asks in-world questions, never mechanical ones",
+          "enforcement": "llm",
+          "severity": "error",
+          "examples": [
+            "'Did the foreman give you his seal?'",
+            "'Have you spoken with Kestrel about the passage?'"
+          ],
+          "counter_examples": [
+            "'Check if you have codeword ASH'",
+            "'Is your reputation score above 5?'"
+          ]
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Badge/Token Gate",
+          "meaning": "Access controlled by possession of an in-world item.",
+          "examples": ["'If you carry the foreman's seal...'"]
+        },
+        {
+          "term": "Knowledge Gate",
+          "meaning": "Access controlled by information the player has learned.",
+          "examples": ["'If you've learned the true name...'"]
+        },
+        {
+          "term": "Reputation Gate",
+          "meaning": "Access controlled by relationship state with characters.",
+          "examples": ["'If the miners trust you...'"]
+        },
+        {
+          "term": "Tool/Item Gate",
+          "meaning": "Access controlled by having the right equipment.",
+          "examples": ["'If you have the override key...'"]
+        }
+      ],
+      "criteria": [
+        {
+          "name": "Diegetic Test",
+          "pass_condition": "Could a character in this world ask this question naturally?",
+          "reasoning": "If yes, the gate is diegetic. Show consequences through world changes, character reactions, and environmental details—never through meta-commentary."
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Meta gateway phrasing",
+          "consequence": "Breaks player immersion; reveals game mechanics.",
+          "detection": "Text contains flag names, state checks, or game terminology.",
+          "prevention": "Rewrite as in-world narrative.",
+          "counter_examples": [
+            "'You need flag_approved == true to proceed'",
+            "'This choice requires state.trust >= 5'",
+            "'If you have the key item, you can unlock this'"
+          ],
+          "examples": [
+            "'The guard eyes your dock pass. With the foreman's stamp, he waves you through.'",
+            "'She meets your gaze. Trust earned, she speaks freely.'",
+            "'The door is locked. Perhaps someone in town has the key.'"
+          ]
+        },
+        {
+          "failure_mode": "Meta choice text",
+          "consequence": "Players see the interface, not the story.",
+          "counter_examples": [
+            "'Select option 1 to gain the key'",
+            "'Click here to proceed'",
+            "'Choose wisely (this affects the ending)'"
+          ],
+          "examples": [
+            "'Ask the guard about the locked door'",
+            "'Confront Kestrel about the documents'",
+            "'Leave through the back entrance'"
+          ]
+        },
+        {
+          "failure_mode": "Meta state change phrasing",
+          "consequence": "Exposes internal tracking to players.",
+          "counter_examples": [
+            "'Trust level increased to 5'",
+            "'Flag_betrayal set to true'",
+            "'Unlocked romance path'"
+          ],
+          "examples": [
+            "'Kestrel's expression softens slightly'",
+            "'You notice her hand moves to her weapon'",
+            "'She smiles, perhaps for the first time'"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Writing gate enforcement text for PN/manuscript",
+          "guidance": "Use sensory details and character reactions to convey gate status.",
+          "examples": [
+            "'The foreman scans your lapel. No union token—he shakes his head.'",
+            "'You recite the salvage clause; the clerk's shoulders drop. \"Fine—through you go.\"'",
+            "'You've seen this panel before; two quick twists, and the hatch yields.'"
+          ]
+        },
+        {
+          "context": "Writing choice text",
+          "guidance": "Use action verbs in imperative form without meta-commentary.",
+          "examples": [
+            "'Slip through maintenance.'",
+            "'Face the foreman.'"
+          ]
+        }
+      ]
+    }
   },
 
   "applicable_to": {

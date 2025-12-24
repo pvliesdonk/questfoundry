@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "structured-content.schema.json",
+  "title": "Structured Knowledge Content",
+  "description": "Semantic types for structured knowledge content. Types describe what knowledge IS, not how it's displayed. Format (tables, bullets, code blocks) is a rendering concern.",
+
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "description": "Unilateral constraint - imposed, no negotiation. Use for 'Never X', 'Always Y', 'Must Z' statements.",
+      "required": ["statement"],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "description": "The constraint. May contain markdown for emphasis."
+        },
+        "enforcement": {
+          "type": "string",
+          "enum": ["runtime", "llm"],
+          "default": "llm",
+          "description": "How this rule is enforced. 'runtime' = code enforces, 'llm' = agent must follow."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "error", "warning"],
+          "default": "error",
+          "description": "How serious a violation is."
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "Why this rule exists."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "How to follow this rule correctly. May contain markdown code blocks."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What NOT to do - violations of this rule."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "obligation": {
+      "type": "object",
+      "description": "A single obligation within a contract.",
+      "required": ["party", "must"],
+      "properties": {
+        "party": {
+          "type": "string",
+          "description": "Who is obligated (agent name, role, or 'runtime')."
+        },
+        "must": {
+          "type": "string",
+          "description": "What they must do."
+        },
+        "when": {
+          "type": "string",
+          "description": "Trigger condition for this obligation."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "contract": {
+      "type": "object",
+      "description": "Multi-party agreement - between agents or agent and runtime. Use for handoffs, delegation protocols, shared responsibilities.",
+      "required": ["parties", "obligations"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the contract."
+        },
+        "parties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "description": "Who is party to this agreement."
+        },
+        "obligations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/obligation" },
+          "description": "What each party must do."
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "Why this contract exists."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of correct contract fulfillment."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of contract violations."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "criterion": {
+      "type": "object",
+      "description": "Quality judgment standard - what pass/fail means. Use for quality bars, validation rules, acceptance criteria.",
+      "required": ["name", "pass_condition"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the criterion."
+        },
+        "pass_condition": {
+          "type": "string",
+          "description": "What 'pass' means - the bar to clear."
+        },
+        "fail_indicators": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Signs that this criterion is not met."
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "Why this criterion matters."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples that pass this criterion."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples that fail this criterion."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "heuristic": {
+      "type": "object",
+      "description": "Contextual guidance - 'When X, prefer Y'. Use for decision aids, preferences, situational advice.",
+      "required": ["guidance"],
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "When this heuristic applies."
+        },
+        "guidance": {
+          "type": "string",
+          "description": "What to prefer or do in this context."
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "Why this guidance helps."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of following this guidance."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of ignoring this guidance (and consequences)."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "definition": {
+      "type": "object",
+      "description": "Vocabulary establishment - what a term means in this domain. Use for jargon, concepts, patterns.",
+      "required": ["term", "meaning"],
+      "properties": {
+        "term": {
+          "type": "string",
+          "description": "The term being defined."
+        },
+        "meaning": {
+          "type": "string",
+          "description": "What it means in this context."
+        },
+        "distinguishing_features": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What makes this term distinct from similar terms."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of this term in use."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Things that are NOT this term (common confusions)."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "procedure": {
+      "type": "object",
+      "description": "Ordered steps - how to accomplish something. Use for workflows, processes, recipes.",
+      "required": ["goal", "steps"],
+      "properties": {
+        "goal": {
+          "type": "string",
+          "description": "What this procedure accomplishes."
+        },
+        "preconditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What must be true before starting."
+        },
+        "steps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered steps to follow."
+        },
+        "postconditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What will be true after completion."
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "Why these steps in this order."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of this procedure executed correctly."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of incorrect execution."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "warning": {
+      "type": "object",
+      "description": "Failure mode to avoid - what goes wrong and how to prevent it. Use for anti-patterns, common mistakes, pitfalls.",
+      "required": ["failure_mode"],
+      "properties": {
+        "failure_mode": {
+          "type": "string",
+          "description": "What goes wrong."
+        },
+        "consequence": {
+          "type": "string",
+          "description": "Why it matters - the cost of this failure."
+        },
+        "detection": {
+          "type": "string",
+          "description": "How to recognize this failure is happening."
+        },
+        "prevention": {
+          "type": "string",
+          "description": "How to avoid this failure."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of correct behavior (avoiding the failure)."
+        },
+        "counter_examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Examples of the failure occurring."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "structured_entry": {
+      "type": "object",
+      "description": "Top-level container for structured knowledge. Mix semantic types as needed for the content.",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" },
+          "description": "Unilateral constraints."
+        },
+        "contracts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/contract" },
+          "description": "Multi-party agreements."
+        },
+        "criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/criterion" },
+          "description": "Quality judgment standards."
+        },
+        "heuristics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/heuristic" },
+          "description": "Contextual guidance."
+        },
+        "definitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/definition" },
+          "description": "Vocabulary definitions."
+        },
+        "procedures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/procedure" },
+          "description": "Ordered step sequences."
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" },
+          "description": "Failure modes to avoid."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

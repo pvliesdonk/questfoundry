@@ -2468,6 +2468,231 @@ def corpus_validate(
 # =============================================================================
 
 
+# =============================================================================
+# Agent Subcommand
+# =============================================================================
+
+agent_app = typer.Typer(help="Inspect agent configuration and prompts", no_args_is_help=True)
+app.add_typer(agent_app, name="agent")
+
+
+@agent_app.command("prompt")
+def agent_prompt(
+    agent_id: Annotated[str, typer.Argument(help="Agent ID (e.g., showrunner, scene_smith)")],
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    section: Annotated[
+        str | None,
+        typer.Option(
+            "--section", "-s", help="Show only specific section (constitution, must_know, menu)"
+        ),
+    ] = None,
+    raw: Annotated[
+        bool,
+        typer.Option("--raw", "-r", help="Output raw text (no panels/formatting)"),
+    ] = False,
+) -> None:
+    """Show the knowledge context / system prompt for an agent.
+
+    This command displays what knowledge content would be included in an
+    agent's system prompt, including:
+
+    - Constitution (inviolable principles)
+    - Must-know entries (critical knowledge, inlined)
+    - Menu (should-know and role-specific entries, summaries only)
+
+    Use this to verify knowledge is being loaded correctly, or to inspect
+    what context an agent sees when activated.
+
+    Examples:
+        qf agent prompt showrunner
+        qf agent prompt scene_smith --section constitution
+        qf agent prompt gatekeeper --raw > gatekeeper_prompt.txt
+    """
+    asyncio.run(_agent_prompt_async(agent_id, domain, section, raw))
+
+
+async def _agent_prompt_async(
+    agent_id: str,
+    domain_path: Path,
+    section: str | None,
+    raw: bool,
+) -> None:
+    """Async implementation of agent prompt command."""
+    from questfoundry.runtime.agent.knowledge import KnowledgeContextBuilder
+    from questfoundry.runtime.domain import load_studio
+
+    # Load domain
+    result = await load_studio(domain_path)
+    if not result.success or not result.studio:
+        console.print("[red]✗ Failed to load domain[/red]")
+        for error in result.errors:
+            console.print(f"  [red]• {error.message}[/red]")
+        raise typer.Exit(1)
+
+    studio = result.studio
+
+    # Find agent
+    agent = next((a for a in studio.agents if a.id == agent_id), None)
+    if not agent:
+        console.print(f"[red]✗ Agent not found: {agent_id}[/red]")
+        available = [a.id for a in studio.agents]
+        console.print(f"[dim]Available: {', '.join(available)}[/dim]")
+        raise typer.Exit(1)
+
+    # Build knowledge context with domain_path for constitution loading
+    builder = KnowledgeContextBuilder(domain_path=domain_path)
+    context = builder.build_context(agent, studio)
+
+    # Display results
+    if not raw:
+        console.print()
+        console.print(f"[bold]Knowledge Context for {agent.name}[/bold] ({agent.id})")
+        console.print(f"[dim]Archetypes: {', '.join(agent.archetypes)}[/dim]")
+        console.print()
+
+    # Show specific section or all
+    if (section == "constitution" or section is None) and context.constitution_section:
+        if raw:
+            console.print(context.constitution_section)
+        else:
+            console.print(
+                Panel(context.constitution_section, title="Constitution", border_style="blue")
+            )
+        if section:
+            return
+
+    if (section == "must_know" or section is None) and context.must_know_section:
+        if raw:
+            console.print(context.must_know_section)
+        else:
+            console.print(
+                Panel(context.must_know_section, title="Must-Know Knowledge", border_style="green")
+            )
+        if section:
+            return
+
+    if (section == "menu" or section is None) and context.menu_section:
+        if raw:
+            console.print(context.menu_section)
+        else:
+            console.print(
+                Panel(context.menu_section, title="Knowledge Menu", border_style="yellow")
+            )
+        if section:
+            return
+
+    # Summary stats (only in formatted mode)
+    if not raw and section is None:
+        console.print()
+        console.print("[bold]Summary:[/bold]")
+        console.print(f"  Tokens used: ~{context.tokens_used}")
+        console.print(f"  Entries inlined: {len(context.entries_inlined)}")
+        if context.entries_inlined:
+            console.print(f"    {', '.join(context.entries_inlined)}")
+        console.print(f"  Entries in menu: {len(context.entries_in_menu)}")
+        if context.entries_in_menu:
+            console.print(f"    {', '.join(context.entries_in_menu)}")
+
+    # Handle section not found
+    if section and not any(
+        [
+            section == "constitution" and context.constitution_section,
+            section == "must_know" and context.must_know_section,
+            section == "menu" and context.menu_section,
+        ]
+    ):
+        console.print(f"[yellow]⚠ Section '{section}' is empty or not available[/yellow]")
+        console.print("[dim]Valid sections: constitution, must_know, menu[/dim]")
+
+
+@agent_app.command("list")
+def agent_list(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    archetype: Annotated[
+        str | None,
+        typer.Option("--archetype", "-a", help="Filter by archetype"),
+    ] = None,
+) -> None:
+    """List all agents in the domain.
+
+    Similar to 'qf roles' but with more filtering options.
+    """
+    asyncio.run(_agent_list_async(domain, archetype))
+
+
+async def _agent_list_async(domain_path: Path, archetype: str | None) -> None:
+    """Async implementation of agent list command."""
+    from questfoundry.runtime.domain import load_studio
+
+    result = await load_studio(domain_path)
+    if not result.success or not result.studio:
+        console.print("[red]✗ Failed to load domain[/red]")
+        for error in result.errors:
+            console.print(f"  [red]• {error.message}[/red]")
+        raise typer.Exit(1)
+
+    studio = result.studio
+    agents = studio.agents
+
+    # Filter by archetype if specified
+    if archetype:
+        agents = [a for a in agents if archetype in a.archetypes]
+        if not agents:
+            console.print(f"[yellow]No agents with archetype '{archetype}'[/yellow]")
+            all_archetypes = set()
+            for a in studio.agents:
+                all_archetypes.update(a.archetypes)
+            console.print(f"[dim]Available archetypes: {', '.join(sorted(all_archetypes))}[/dim]")
+            return
+
+    table = Table(title=f"Agents in {studio.name}")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Archetypes", style="green")
+    table.add_column("Entry", style="yellow")
+    table.add_column("Knowledge")
+
+    for agent in sorted(agents, key=lambda a: a.id):
+        archetypes = ", ".join(agent.archetypes)
+        entry = "✓" if agent.is_entry_agent else ""
+
+        # Count knowledge requirements
+        knowledge_info = []
+        if agent.knowledge_requirements:
+            kr = agent.knowledge_requirements
+            if kr.constitution:
+                knowledge_info.append("C")
+            if kr.must_know:
+                knowledge_info.append(f"M:{len(kr.must_know)}")
+            if kr.should_know:
+                knowledge_info.append(f"S:{len(kr.should_know)}")
+            if kr.role_specific:
+                knowledge_info.append(f"R:{len(kr.role_specific)}")
+
+        table.add_row(
+            agent.id,
+            agent.name,
+            archetypes,
+            entry,
+            " ".join(knowledge_info) if knowledge_info else "-",
+        )
+
+    console.print(table)
+    console.print()
+    console.print("[dim]Legend: C=constitution, M=must_know, S=should_know, R=role_specific[/dim]")
+
+
+# =============================================================================
+# Export Command (Stub)
+# =============================================================================
+
+
 @app.command()
 def export(
     project_id: Annotated[str, typer.Argument(help="Project ID")],

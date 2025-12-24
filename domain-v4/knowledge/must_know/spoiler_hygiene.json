@@ -17,9 +17,117 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Spoiler Hygiene\n\n### Core Principle\n\nPlayer-facing surfaces (manuscript, codex, PN lines, captions) must never reveal:\n- Twists the narrative intends to reveal through play\n- Backstory that should emerge through discovery\n- Internal mechanics or system names\n\n### Leak Taxonomy (Recognize and Block)\n\n| Leak Type | Example (Bad) | Fix (Good) |\n|-----------|---------------|------------|\n| **Twist telegraph** | 'The foreman is secretly Syndicate.' | 'The foreman eyes your badge; his smile doesn't reach his eyes.' |\n| **Gate logic** | 'Option locked: missing CODEWORD: ASH.' | 'No union token on your lapel; the foreman waves you back.' |\n| **Technique** | 'Rendered in SDXL, seed 1234; stinger at -10 LUFS.' | (omit; technique recorded in logs, not on surface) |\n| **Canon dump in codex** | 'Dock 7 fire was sabotage by Toll Syndicate.' | 'A refinery accident years ago reshaped safety drills.' |\n| **Meta UI** | 'Click here to set FLAG_X.' | 'Show your salvage permit.' |\n| **Localization leak** | 'Choice A is better for Act II.' | Keep choices neutral; translator preserves contrast, not outcomes. |\n\n### The Canon/Codex Separation\n\n**Canon** (spoiler-level truth, Lore Weaver writes):\n- Spoiler-level truth about the world\n- Causal relationships, hidden histories\n- What REALLY happened and why\n\n**Codex** (player-safe, Curator writes):\n- What players have LEARNED or could learn\n- Summaries without revealing secrets\n- References that aid comprehension, not revelation\n\n### Redlines (Never Allowed on Surfaces)\n\n- Codeword names or gate logic (`CODEWORD: …`, `flag=true`, DC checks, RNG)\n- Determinism or production details (seeds, models, DAW, plugins, sampler settings)\n- Canon twists, hidden allegiances, behind-the-scenes causes\n- Internal identifiers (schema field names, section IDs as canonical truth, file paths)\n- Reviewer/debug marks ('TODO', 'FIXME', 'dev note')\n- Out-of-world directives ('click', 'flag', 'roll', 'invoke schema')\n\n### The Diegetic Test\n\nBefore any text reaches a player surface, ask:\n1. Could a character in this world say this?\n2. Does it reveal more than the player should know?\n3. Would reading this spoil a discovery?\n\nIf yes to #2 or #3, move content to canon or remove it.\n\n**TL;DR**: Keep wonder on the page and machinery off it. If a player could infer a twist or see the gears, it doesn't belong on the surface."
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "rules": [
+        {
+          "statement": "Player-facing surfaces must never reveal twists the narrative intends to reveal through play",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Spoilers destroy the discovery experience."
+        },
+        {
+          "statement": "Player-facing surfaces must never reveal backstory that should emerge through discovery",
+          "enforcement": "llm",
+          "severity": "critical"
+        },
+        {
+          "statement": "Player-facing surfaces must never expose internal mechanics or system names",
+          "enforcement": "llm",
+          "severity": "critical"
+        },
+        {
+          "statement": "Redlines: Never allow on surfaces",
+          "enforcement": "llm",
+          "severity": "critical",
+          "counter_examples": [
+            "Codeword names or gate logic (CODEWORD: …, flag=true, DC checks, RNG)",
+            "Determinism or production details (seeds, models, DAW, plugins, sampler settings)",
+            "Canon twists, hidden allegiances, behind-the-scenes causes",
+            "Internal identifiers (schema field names, section IDs as canonical truth, file paths)",
+            "Reviewer/debug marks ('TODO', 'FIXME', 'dev note')",
+            "Out-of-world directives ('click', 'flag', 'roll', 'invoke schema')"
+          ]
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Canon",
+          "meaning": "Spoiler-level truth about the world. What REALLY happened and why.",
+          "distinguishing_features": [
+            "Written by Lore Weaver",
+            "Contains hidden histories and causal relationships",
+            "Never shown directly to players"
+          ]
+        },
+        {
+          "term": "Codex",
+          "meaning": "Player-safe reference entries. What players have learned or could learn.",
+          "distinguishing_features": [
+            "Written by Codex Curator",
+            "Summaries without revealing secrets",
+            "Aids comprehension, not revelation"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Twist telegraph",
+          "consequence": "Ruins plot revelations for players.",
+          "counter_examples": ["'The foreman is secretly Syndicate.'"],
+          "examples": ["'The foreman eyes your badge; his smile doesn't reach his eyes.'"]
+        },
+        {
+          "failure_mode": "Gate logic leak",
+          "consequence": "Exposes game mechanics to players.",
+          "counter_examples": ["'Option locked: missing CODEWORD: ASH.'"],
+          "examples": ["'No union token on your lapel; the foreman waves you back.'"]
+        },
+        {
+          "failure_mode": "Technique leak",
+          "consequence": "Breaks immersion with production details.",
+          "counter_examples": ["'Rendered in SDXL, seed 1234; stinger at -10 LUFS.'"],
+          "prevention": "Technique is recorded in logs, not on surfaces."
+        },
+        {
+          "failure_mode": "Canon dump in codex",
+          "consequence": "Players learn secrets they should discover.",
+          "counter_examples": ["'Dock 7 fire was sabotage by Toll Syndicate.'"],
+          "examples": ["'A refinery accident years ago reshaped safety drills.'"]
+        },
+        {
+          "failure_mode": "Meta UI leak",
+          "consequence": "Players see interface instead of story.",
+          "counter_examples": ["'Click here to set FLAG_X.'"],
+          "examples": ["'Show your salvage permit.'"]
+        },
+        {
+          "failure_mode": "Localization leak",
+          "consequence": "Translator choices reveal outcomes.",
+          "counter_examples": ["'Choice A is better for Act II.'"],
+          "prevention": "Keep choices neutral; translators preserve contrast, not outcomes."
+        }
+      ],
+      "criteria": [
+        {
+          "name": "Diegetic Test for Surfaces",
+          "pass_condition": "Before any text reaches a player surface, answer: (1) Could a character say this? (2) Does it reveal more than the player should know? (3) Would reading this spoil a discovery?",
+          "fail_indicators": [
+            "Answer to #1 is no",
+            "Answer to #2 or #3 is yes"
+          ],
+          "reasoning": "If it fails, move content to canon or remove it."
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Deciding what belongs on player surfaces",
+          "guidance": "Keep wonder on the page and machinery off it. If a player could infer a twist or see the gears, it doesn't belong on the surface."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

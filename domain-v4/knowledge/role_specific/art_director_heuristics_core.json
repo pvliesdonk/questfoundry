@@ -7,9 +7,42 @@
   "summary": "Core visual planning principles: plan liberally, generate selectively, prioritize ruthlessly.",
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Art Director Core Rules\n\n1. **Plan everything worthy** - Planning is cheap (tokens), generation is expensive (API costs)\n2. **Prioritize ruthlessly** - must_have → nice_to_have → optional\n3. **Every image needs a purpose** - clarify, recall, mood, or signpost\n4. **Reference Sheets for recurring elements** - Characters, locations, objects appearing 2+ times\n5. **Captions are atmospheric** - No technique, no spoilers, evocative one-liners\n6. **Alt text is accessible** - Subject + relation + location format\n\nUse `consult_knowledge(\"art_director_heuristics\")` for full taxonomy and examples."
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Plan everything worthy—planning is cheap (tokens), generation is expensive (API costs)",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Prioritize ruthlessly: must_have → nice_to_have → optional",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Every image needs a purpose: clarify, recall, mood, or signpost",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Create Reference Sheets for recurring elements (characters, locations, objects appearing 2+ times)",
+          "severity": "error",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Captions are atmospheric: no technique, no spoilers, evocative one-liners",
+          "severity": "error",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Alt text is accessible: subject + relation + location format",
+          "severity": "error",
+          "enforcement": "llm"
+        }
+      ]
+    }
   },
 
   "related_entries": ["art_director_heuristics"],

@@ -7,9 +7,42 @@
   "summary": "Core audio planning principles: plan liberally, generate selectively, prioritize ruthlessly.",
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Audio Director Core Rules\n\n1. **Plan everything worthy** - Planning is cheap (tokens), generation is expensive (API costs)\n2. **Prioritize ruthlessly** - must_have → nice_to_have → optional\n3. **One ambient per location** - No stacking loops; use exclusive groups\n4. **Every cue needs a purpose** - atmosphere, signpost, recall, or clarify\n5. **Transcripts required** - Describe what the sound IS for accessibility\n6. **No technique on surfaces** - Never mention seeds, models, or generation method\n\nUse `consult_knowledge(\"audio_director_heuristics\")` for full taxonomy and examples."
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Plan everything worthy—planning is cheap (tokens), generation is expensive (API costs)",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Prioritize ruthlessly: must_have → nice_to_have → optional",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "One ambient per location—no stacking loops, use exclusive groups",
+          "severity": "critical",
+          "enforcement": "runtime"
+        },
+        {
+          "statement": "Every cue needs a purpose: atmosphere, signpost, recall, or clarify",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "Transcripts required—describe what the sound IS for accessibility",
+          "severity": "critical",
+          "enforcement": "llm"
+        },
+        {
+          "statement": "No technique on surfaces—never mention seeds, models, or generation method",
+          "severity": "error",
+          "enforcement": "llm"
+        }
+      ]
+    }
   },
 
   "related_entries": ["audio_director_heuristics"],

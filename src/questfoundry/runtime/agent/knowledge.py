@@ -16,14 +16,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
 
 import logging
 
-from questfoundry.runtime.models.base import KnowledgeContent
+from questfoundry.runtime.agent.content_utils import extract_knowledge_content
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +95,19 @@ class KnowledgeContextBuilder:
         # Use context.context_text in system prompt
     """
 
-    def __init__(self, config: KnowledgeBudgetConfig | None = None) -> None:
-        """Initialize with optional budget configuration."""
+    def __init__(
+        self,
+        config: KnowledgeBudgetConfig | None = None,
+        domain_path: Path | str | None = None,
+    ) -> None:
+        """Initialize with optional budget configuration.
+
+        Args:
+            config: Budget configuration for knowledge injection
+            domain_path: Path to domain directory for loading constitution file
+        """
         self.config = config or KnowledgeBudgetConfig()
+        self._domain_path = Path(domain_path) if domain_path else None
 
     def build_context(self, agent: Agent, studio: Studio) -> KnowledgeContext:
         """
@@ -120,8 +131,8 @@ class KnowledgeContextBuilder:
 
         knowledge_req = agent.knowledge_requirements
 
-        # Find entries that apply to this agent's archetypes
-        archetype_entries = self._find_entries_by_archetype(agent, studio)
+        # Find entries that apply to this agent (via archetypes or agent ID)
+        matched_entries = self._find_entries_by_applicability(agent, studio)
 
         # 1. Constitution - always inline
         constitution_section = None
@@ -136,7 +147,7 @@ class KnowledgeContextBuilder:
         # Combine explicit must_know with archetype-matched must_know entries
         must_know_section = None
         explicit_must_know = (knowledge_req.must_know or []) if knowledge_req else []
-        archetype_must_know = archetype_entries.get("must_know", [])
+        archetype_must_know = matched_entries.get("must_know", [])
         all_must_know = _combine_entry_lists(explicit_must_know, archetype_must_know)
 
         if all_must_know:
@@ -177,7 +188,7 @@ class KnowledgeContextBuilder:
 
         # 3. Should-know - menu only (skip if already in menu or inlined)
         explicit_should_know = (knowledge_req.should_know or []) if knowledge_req else []
-        archetype_should_know = archetype_entries.get("should_know", [])
+        archetype_should_know = matched_entries.get("should_know", [])
         all_should_know = _combine_entry_lists(explicit_should_know, archetype_should_know)
         for entry_id in all_should_know:
             if entry_id in entries_in_menu or entry_id in entries_inlined:
@@ -189,7 +200,7 @@ class KnowledgeContextBuilder:
 
         # 4. Role-specific - menu only (skip if already in menu or inlined)
         explicit_role_specific = (knowledge_req.role_specific or []) if knowledge_req else []
-        archetype_role_specific = archetype_entries.get("role_specific", [])
+        archetype_role_specific = matched_entries.get("role_specific", [])
         all_role_specific = _combine_entry_lists(explicit_role_specific, archetype_role_specific)
         for entry_id in all_role_specific:
             if entry_id in entries_in_menu or entry_id in entries_inlined:
@@ -222,39 +233,56 @@ class KnowledgeContextBuilder:
     def _get_constitution_text(self, studio: Studio) -> str | None:
         """Get constitution text from studio.
 
-        Constitution is typically stored in a separate file referenced
-        by constitution_ref, but may also be in knowledge entries.
+        Constitution is loaded from the governance/constitution.json file
+        referenced by studio.constitution_ref.
         """
-        # TODO: Load from constitution_ref if available
-        # For now, look for a 'constitution' knowledge entry
+        # Try loading from file if domain_path is available
+        if self._domain_path and studio.constitution_ref:
+            const_path = self._domain_path / studio.constitution_ref
+            if const_path.exists():
+                try:
+                    data = json.loads(const_path.read_text())
+                    return self._format_constitution_data(data)
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.warning(f"Failed to load constitution: {e}")
+
+        # Fall back to knowledge entry (legacy support)
         entry = studio.knowledge.get("constitution")
         if entry:
             return self._get_entry_content(entry)
+
         return None
 
+    def _format_constitution_data(self, data: dict[str, Any]) -> str:
+        """Format constitution JSON data into readable text.
+
+        Extracts preamble and principle statements for agent consumption.
+        """
+        lines = []
+
+        # Preamble
+        preamble = data.get("preamble")
+        if preamble:
+            lines.append(preamble)
+            lines.append("")
+
+        # Principles as bullet list
+        principles = data.get("principles", [])
+        for p in principles:
+            if isinstance(p, dict):
+                statement = p.get("statement", "")
+                if statement:
+                    lines.append(f"- {statement}")
+
+        return "\n".join(lines) if lines else ""
+
     def _get_entry_content(self, entry: KnowledgeEntry) -> str | None:
-        """Extract text content from a knowledge entry."""
-        content = entry.content
-        if content is None:
-            return None
+        """Extract text content from a knowledge entry.
 
-        # Handle dict content (raw from JSON)
-        if isinstance(content, dict):
-            content_type = content.get("type", "inline")
-            if content_type == "inline":
-                return content.get("text")
-            elif content_type == "structured":
-                return json.dumps(content.get("data", {}), indent=2)
-            return content.get("text")
-
-        # Handle KnowledgeContent model
-        if isinstance(content, KnowledgeContent):
-            if content.type == "inline":
-                return content.text
-            elif content.type == "structured":
-                return json.dumps(content.data or {}, indent=2)
-
-        return str(content) if content else None
+        Delegates to shared content_utils for consistent handling across
+        the codebase. Supports structured, file_ref, and corpus content types.
+        """
+        return extract_knowledge_content(entry, self._domain_path)
 
     def _format_constitution(self, text: str) -> str:
         """Format constitution for prompt injection."""
@@ -293,15 +321,18 @@ class KnowledgeContextBuilder:
         """
         return len(text) // self.config.chars_per_token
 
-    def _find_entries_by_archetype(self, agent: Agent, studio: Studio) -> dict[str, list[str]]:
+    def _find_entries_by_applicability(self, agent: Agent, studio: Studio) -> dict[str, list[str]]:
         """
-        Find knowledge entries that apply to this agent's archetypes.
+        Find knowledge entries that apply to this agent.
 
-        Checks each knowledge entry's applicable_to.archetypes field against
-        the agent's archetypes. Returns entries grouped by their layer.
+        Checks each knowledge entry's applicable_to field for matches against:
+        1. Agent's archetypes (via applicable_to.archetypes)
+        2. Agent's ID (via applicable_to.agents)
+
+        Returns entries grouped by their layer.
 
         Args:
-            agent: Agent definition with archetypes
+            agent: Agent definition with archetypes and id
             studio: Studio with knowledge entries
 
         Returns:
@@ -314,11 +345,9 @@ class KnowledgeContextBuilder:
         }
 
         agent_archetypes = set(getattr(agent, "archetypes", None) or [])
-        if not agent_archetypes:
-            return result
+        agent_id = agent.id
 
         for entry_id, entry in studio.knowledge.items():
-            # Check if entry has applicable_to with archetypes
             applicable_to = entry.applicable_to
             if not applicable_to:
                 continue
@@ -326,11 +355,16 @@ class KnowledgeContextBuilder:
             # Handle both dict and model forms
             if isinstance(applicable_to, dict):
                 entry_archetypes = set(applicable_to.get("archetypes", []))
+                entry_agents = set(applicable_to.get("agents", []))
             else:
                 entry_archetypes = set(applicable_to.archetypes or [])
+                entry_agents = set(applicable_to.agents or [])
 
-            # Check for archetype match
-            if not entry_archetypes.intersection(agent_archetypes):
+            # Check for archetype match OR agent ID match
+            archetype_match = bool(entry_archetypes.intersection(agent_archetypes))
+            agent_match = agent_id in entry_agents
+
+            if not (archetype_match or agent_match):
                 continue
 
             # Add to appropriate layer bucket
@@ -340,7 +374,7 @@ class KnowledgeContextBuilder:
             elif layer not in {"constitution", "lookup"}:
                 # Warn about unknown layers (constitution and lookup are handled separately)
                 logger.warning(
-                    "Knowledge entry '%s' has unknown layer '%s', skipping archetype inclusion",
+                    "Knowledge entry '%s' has unknown layer '%s', skipping applicability inclusion",
                     entry_id,
                     layer,
                 )
@@ -352,6 +386,7 @@ def build_knowledge_context(
     agent: Agent,
     studio: Studio,
     config: KnowledgeBudgetConfig | None = None,
+    domain_path: Path | str | None = None,
 ) -> KnowledgeContext:
     """
     Convenience function to build knowledge context for an agent.
@@ -360,9 +395,10 @@ def build_knowledge_context(
         agent: Agent definition
         studio: Studio with knowledge entries
         config: Optional budget configuration
+        domain_path: Path to domain directory for loading constitution
 
     Returns:
         KnowledgeContext with formatted text
     """
-    builder = KnowledgeContextBuilder(config)
+    builder = KnowledgeContextBuilder(config, domain_path=domain_path)
     return builder.build_context(agent, studio)

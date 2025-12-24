@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "knowledge-entry.schema.json",
   "title": "Knowledge Entry",
-  "description": "A piece of knowledge available to agents. Knowledge is stratified by layer, determining how it is accessed (always in prompt, retrieved via tool, etc.). Supports the menu+consult pattern with summary (menu) and details (consult).\n\nSTUDIO DOGMA vs REFERENCE MATERIAL: Use inline/file_ref/structured for Studio Dogma (internal rules, brand voice, project-specific facts). Use 'corpus' type for Reference Material (external genre guides, general craft knowledge) - this points to a RAG-searchable store without polluting the agent's context menu.",
+  "description": "A piece of knowledge available to agents. Knowledge is stratified by layer, determining how it is accessed (always in prompt, retrieved via tool, etc.). Supports the menu+consult pattern with summary (menu) and details (consult).\n\nSTUDIO DOGMA vs REFERENCE MATERIAL: Use structured/file_ref for Studio Dogma (internal rules, brand voice, project-specific facts). Use 'corpus' type for Reference Material (external genre guides, general craft knowledge) - this points to a RAG-searchable store without polluting the agent's context menu.\n\nNOTE: The 'inline' content type has been deprecated in favor of 'structured'. All must_know entries should use structured content with semantic types (rule, contract, criterion, heuristic, definition, procedure, warning).",
 
   "type": "object",
   "required": ["id", "layer"],
@@ -94,14 +94,9 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["inline", "file_ref", "structured", "corpus"],
-          "default": "inline",
-          "description": "How content is provided. Use 'corpus' for RAG-searchable reference material stored in a dedicated store."
-        },
-
-        "text": {
-          "$ref": "../core/_definitions.schema.json#/$defs/markdown_text",
-          "description": "For inline type: the actual content (markdown)"
+          "enum": ["file_ref", "structured", "corpus"],
+          "default": "structured",
+          "description": "How content is provided. 'structured' = semantic JSON validated against structured-content.schema.json. 'file_ref' = external file (rare, for very large content). 'corpus' = RAG-searchable reference material."
         },
 
         "file_path": {
@@ -112,18 +107,18 @@
         "format": {
           "type": "string",
           "enum": ["markdown", "json", "yaml", "plain"],
-          "default": "markdown",
-          "description": "Format of the content"
+          "default": "json",
+          "description": "Format of the content. Default is 'json' for structured type."
         },
 
         "data": {
-          "type": "object",
-          "description": "For structured type: structured data"
+          "$ref": "structured-content.schema.json#/$defs/structured_entry",
+          "description": "For structured type: semantic content following structured-content.schema.json. Contains arrays of rules, contracts, criteria, heuristics, definitions, procedures, and warnings."
         },
 
         "schema_ref": {
           "type": "string",
-          "description": "For structured type: schema the data conforms to"
+          "description": "For structured type: schema the data conforms to. Typically 'knowledge/structured-content.schema.json#/$defs/structured_entry'."
         },
 
         "corpus_ref": {

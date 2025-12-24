@@ -3,27 +3,181 @@
   "id": "style_lead_heuristics",
   "name": "Style Lead Heuristics",
   "layer": "role_specific",
-
   "summary": "Validation heuristics for unified style: voice consistency, diegetic gates, choice labels, and visual language alignment.",
-
-  "keywords": ["style", "voice", "register", "gates", "choices", "visual", "validation"],
-
+  "keywords": [
+    "style",
+    "voice",
+    "register",
+    "gates",
+    "choices",
+    "visual",
+    "validation"
+  ],
   "triggers": [
     "reviewing prose for style",
     "validating gate phrasing",
     "checking choice labels",
     "reviewing art plans for visual language"
   ],
-
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Style Lead Heuristics\n\nValidation guidance for maintaining coherent voice across all surfaces.\n\n---\n\n### Voice & Register\n\n**Core Principle**: The book should feel like one author wrote it, even when multiple agents contributed.\n\n**Heuristics**:\n1. **Consistency over perfection** - A consistent B+ voice beats inconsistent A+ fragments\n2. **Genre-appropriate register** - Match the expected tone (noir vs cozy vs epic)\n3. **Character voice ≠ narrative voice** - Dialogue can vary; prose should be steady\n\n**Red Flags**:\n- Sudden formality shifts mid-section\n- Modern slang in period settings\n- Overly complex sentences after simple ones without narrative reason\n\n---\n\n### Diegetic Gate Phrasing\n\n**Core Principle**: Gates must feel like in-world obstacles, not game mechanics.\n\n**Good**: \"The foreman's seal is required to enter the restricted level.\"\n**Bad**: \"This option is locked until you obtain the foreman_seal codeword.\"\n\n**Heuristics**:\n1. **Name the obstacle** - \"No union token\" not \"Missing requirement\"\n2. **Imply the solution** - The phrasing should hint at what players need\n3. **Match the register** - A fantasy gate differs from a noir gate\n\n**Red Flags**:\n- Schema names visible (codeword IDs, anchor names)\n- Generic \"locked\" or \"unavailable\" language\n- Meta-references to \"the game\" or \"your character\"\n\n---\n\n### Contrastive Choice Labels\n\n**Core Principle**: Choice labels must differentiate intent through verbs and objects.\n\n**Good**: \"Confront the foreman\" / \"Report to the union\" / \"Slip away quietly\"\n**Bad**: \"Proceed\" / \"Continue\" / \"Go forward\"\n\n**Heuristics**:\n1. **Verb + object** - Every choice should have a clear action and target\n2. **Distinct consequences implied** - Labels hint at different outcomes\n3. **No synonyms** - \"Proceed\" and \"Continue\" are the same choice dressed differently\n\n**Red Flags**:\n- More than one choice using the same verb\n- Vague directional language (\"go left\" without context)\n- Choices that only differ in adverbs (\"go quickly\" vs \"go slowly\")\n\n---\n\n### Edit Philosophy\n\n**Nudge, don't strangle**:\n- Preserve creator intent\n- Sharpen, don't replace\n- If unsure what they meant, ask (raise a hook)\n\n**Style Addenda**:\n- Create addenda for recurring patterns\n- Include exemplars (good and bad)\n- Mark severity (suggestion vs warning vs error)\n\n---\n\n### Visual Language Alignment\n\n**Core Principle**: Visual style should feel as unified as prose style.\n\n**Style Lead Validates** (Art Director decides WHAT):\n1. **Palette adherence** - Colors within established range\n2. **Composition conventions** - Framing follows Style Guide patterns\n3. **Motif threading** - Visual motifs echo prose motifs\n4. **Lighting consistency** - Same world, same light logic\n\n**Heuristics**:\n1. **Review Art Plan composition_hints** against Style Guide conventions\n2. **Flag drift, don't block** - Art Director has WHAT authority\n3. **Cross-surface coherence** - Visual should complement prose, not clash\n\n**Red Flags**:\n- Composition hints that violate established conventions\n- Palette choices outside guide range\n- Motifs in image that contradict prose motifs"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Consistency over perfection - A consistent B+ voice beats inconsistent A+ fragments",
+          "severity": "critical",
+          "enforcement": "llm",
+          "reasoning": "The book should feel like one author wrote it, even when multiple agents contributed"
+        },
+        {
+          "statement": "Gates must feel like in-world obstacles, not game mechanics - no schema names, codeword IDs, or anchor names visible",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "Maintain immersion by presenting gates as diegetic obstacles"
+        },
+        {
+          "statement": "Choice labels must differentiate intent through verbs and objects - no synonyms allowed",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "Players need to understand what each choice actually does"
+        },
+        {
+          "statement": "No more than one choice can use the same verb",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "Ensures choices are truly contrastive"
+        },
+        {
+          "statement": "Visual style should feel as unified as prose style",
+          "severity": "warning",
+          "enforcement": "llm",
+          "reasoning": "Cross-surface coherence - visual should complement prose, not clash"
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Validating voice consistency across sections",
+          "guidance": "Check for genre-appropriate register matching the expected tone (noir vs cozy vs epic)",
+          "examples": [
+            "situation: Multiple agents contributed to adjacent sections | approach: Verify register doesn't shift between sections without narrative reason"
+          ]
+        },
+        {
+          "context": "Reviewing gate phrasing",
+          "guidance": "Name the obstacle specifically, imply the solution, and match the register",
+          "examples": [
+            "good: The foreman's seal is required to enter the restricted level. | bad: This option is locked until you obtain the foreman_seal codeword."
+          ]
+        },
+        {
+          "context": "Validating choice labels",
+          "guidance": "Every choice should have verb + object, distinct consequences implied, no vague directional language",
+          "examples": [
+            "good: Confront the foreman / Report to the union / Slip away quietly | bad: Proceed / Continue / Go forward"
+          ]
+        },
+        {
+          "context": "Reviewing art plans for visual alignment",
+          "guidance": "Validate palette adherence, composition conventions, motif threading, and lighting consistency",
+          "examples": [
+            "situation: Art Director provides composition hints | approach: Review against Style Guide conventions, flag drift without blocking (Art Director has WHAT authority)"
+          ]
+        },
+        {
+          "context": "Providing editorial feedback",
+          "guidance": "Nudge, don't strangle - preserve creator intent, sharpen rather than replace",
+          "examples": [
+            "situation: Unsure what creator meant | approach: Raise a hook to ask for clarification rather than guessing"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Sudden formality shifts mid-section",
+          "consequence": "Breaks reader immersion and reveals multi-agent authorship",
+          "prevention": "Check register consistency across paragraph boundaries"
+        },
+        {
+          "failure_mode": "Modern slang in period settings",
+          "consequence": "Anachronism damages world coherence",
+          "prevention": "Match vocabulary to setting era and style guide"
+        },
+        {
+          "failure_mode": "Generic locked/unavailable language in gates",
+          "consequence": "Breaks diegesis by exposing game mechanics",
+          "prevention": "Always name specific in-world obstacles"
+        },
+        {
+          "failure_mode": "Choice labels that differ only in adverbs",
+          "consequence": "Players can't distinguish meaningful consequences",
+          "prevention": "Ensure verb + object differ, not just modifiers"
+        },
+        {
+          "failure_mode": "Composition hints violating established conventions",
+          "consequence": "Visual incoherence across scenes",
+          "prevention": "Review against Style Guide palette and composition rules"
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Validate voice and register consistency",
+          "steps": [
+            "Read prose in sequence to feel rhythm and tone",
+            "Check for register shifts without narrative justification",
+            "Verify character voice differs from narrative voice appropriately",
+            "Flag overly complex sentences after simple ones without reason"
+          ]
+        },
+        {
+          "goal": "Create style addenda for recurring patterns",
+          "steps": [
+            "Identify recurring style issues across multiple sections",
+            "Document pattern with good and bad exemplars",
+            "Mark severity (suggestion vs warning vs error)",
+            "Add to Style Guide for future reference"
+          ]
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Voice consistency",
+          "meaning": "The book should feel like one author wrote it, even when multiple agents contributed",
+          "distinguishing_features": [
+            "Steady narrative register",
+            "Consistent vocabulary level",
+            "Stable sentence complexity"
+          ]
+        },
+        {
+          "term": "Diegetic gate",
+          "meaning": "A gate expressed as an in-world obstacle rather than a game mechanic",
+          "distinguishing_features": [
+            "Names specific in-world requirement (seal, token, knowledge)",
+            "Implies solution through context",
+            "Matches story register"
+          ]
+        },
+        {
+          "term": "Contrastive choice labels",
+          "meaning": "Choice labels that differentiate intent through distinct verbs and objects",
+          "distinguishing_features": [
+            "Each choice has unique verb + object pair",
+            "Implies different consequences",
+            "No synonyms or near-duplicates"
+          ]
+        }
+      ]
+    }
   },
-
   "applicable_to": {
-    "agents": ["style_lead"]
+    "agents": [
+      "style_lead"
+    ]
   },
-
-  "tags": ["style", "validation", "heuristics"]
+  "tags": [
+    "style",
+    "validation",
+    "heuristics"
+  ]
 }

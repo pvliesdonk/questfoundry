@@ -3,27 +3,221 @@
   "id": "codex_curator_guidelines",
   "name": "Codex Curator Guidelines",
   "layer": "role_specific",
-
   "summary": "Guidelines for transforming canon into player-safe codex entries: spoiler stripping, diegetic voice, and accessibility.",
-
-  "keywords": ["codex", "glossary", "diegetic", "spoilers", "player-safe"],
-
+  "keywords": [
+    "codex",
+    "glossary",
+    "diegetic",
+    "spoilers",
+    "player-safe"
+  ],
   "triggers": [
     "writing codex entries",
     "stripping spoilers",
     "diegetic voice",
     "player-safe content"
   ],
-
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Codex Curator Guidelines\n\nGuidance for transforming spoiler-level canon into player-safe glossary entries.\n\n---\n\n### The Diegetic Voice\n\n**Principle**: Write as an in-world scholar would. The codex exists within the fiction.\n\n**Good Example**:\n> \"The Guild of Artificers controls much of the waterfront trade. Founded in the aftermath of the Collapse, they rose to prominence through their unmatched logistical capabilities. Their current Guildmaster is known for pragmatic dealings with both Crown and common folk.\"\n\n**Bad Example**:\n> \"The Guild is a major faction in Chapter 2. Players who ally with them get access to better equipment. The Guildmaster is secretly planning to betray the Crown (revealed in Chapter 5).\"\n\n**Voice Checklist**:\n- [ ] No meta-references (\"the player\", \"this chapter\")\n- [ ] No game mechanics (\"access to\", \"unlocks\")\n- [ ] No future knowledge (\"will later\", \"eventually\")\n- [ ] Appropriate formality for an in-world document\n\n---\n\n### Spoiler Stripping\n\n**The Question**: What would an in-world scholar know and publish?\n\n**Safe to Include**:\n- Public knowledge in the world\n- Historical facts (unless they're hidden history)\n- General descriptions of places and people\n- Cultural practices and beliefs\n\n**Never Include**:\n- Secret motivations\n- Hidden identities\n- Plot twists or reveals\n- Information players are meant to discover\n\n**The Omissions Field**:\n- Document what you've left out in `spoiler_omissions`\n- This helps Gatekeeper validate your choices\n- It's never exported—players never see it\n\n---\n\n### Entry Categories\n\n| Category | What It Covers | Typical Spoiler Risk |\n|----------|----------------|---------------------|\n| person | Named individuals | High (hidden motives) |\n| place | Locations | Low-Medium |\n| faction | Groups, organizations | Medium (secret goals) |\n| concept | Ideas, philosophies | Low |\n| item | Objects, artifacts | Medium (hidden powers) |\n| event | Historical happenings | Medium (hidden causes) |\n| creature | Beings, species | Low-Medium |\n| procedure | How to do things | Low |\n\n---\n\n### Writing Process\n\n1. **Identify the term** - What do players need defined?\n2. **Find the canon source** - What does the world bible say?\n3. **Filter for spoilers** - What can an in-world scholar know?\n4. **Write the entry** - Short definition + full explanation\n5. **Document omissions** - What did you leave out and why?\n6. **Add diegetic source** - Who \"wrote\" this entry?\n\n---\n\n### Accessibility\n\n**Reading Levels**:\n- `basic`: Simple sentences, common words, short entries\n- `intermediate`: Standard prose, some specialized terms defined\n- `advanced`: Complex concepts, assumes familiarity with the world\n\n**Content Notes**:\n- Flag entries that touch on sensitive topics\n- Keep content warnings in-world when possible\n- Example: \"This entry discusses the Scourge, which involved significant loss of life.\"\n\n---\n\n### When Canon Is Missing\n\n**Don't Invent**:\n- If canon doesn't cover something, you can't make it up\n- Raise a hook for Lore Weaver to fill the gap\n- Mark the entry as blocked on lore\n\n**Temporary Solutions**:\n- Write what you can with available canon\n- Note gaps in the entry's open questions\n- Return when Lore Weaver provides the missing truth"
+    "type": "structured",
+    "format": "json",
+    "data": {
+      "rules": [
+        {
+          "statement": "Write as an in-world scholar would. The codex exists within the fiction. No meta-references.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "reasoning": "Meta-references break immersion. Players must experience codex as an in-world document."
+        },
+        {
+          "statement": "Never include meta-references: 'the player', 'this chapter', game mechanics, future knowledge.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "reasoning": "Codex is diegetic. These references reveal it's a game, breaking the fiction."
+        },
+        {
+          "statement": "Never include secret motivations, hidden identities, plot twists, or information players are meant to discover.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "reasoning": "Codex must not spoil the story. Only public in-world knowledge should appear."
+        },
+        {
+          "statement": "Document what you've left out in 'spoiler_omissions' field. This is for Gatekeeper validation, never exported.",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "Gatekeeper needs to validate spoiler-stripping decisions. Omissions field enables review."
+        },
+        {
+          "statement": "If canon doesn't cover something, do not invent. Raise a hook for Lore Weaver to fill the gap.",
+          "severity": "critical",
+          "enforcement": "llm",
+          "reasoning": "Codex Curator does not invent canon. Only Lore Weaver creates world truth."
+        }
+      ],
+      "definitions": [
+        {
+          "term": "Diegetic voice",
+          "meaning": "Writing as if the codex exists within the story world, authored by an in-world scholar. No awareness of players, game mechanics, or narrative structure.",
+          "distinguishing_features": [
+            "No meta-references (the player, this chapter)",
+            "No game mechanics (unlocks, access to, bonuses)",
+            "No future knowledge (will later, eventually)",
+            "Appropriate formality for in-world document",
+            "May reference in-world sources (archives, scholars)"
+          ],
+          "examples": [
+            "term_usage: Guild of Artificers entry | context: Good: 'The Guild controls much of the waterfront trade. Founded after the Collapse, they rose through unmatched logistics.' Bad: 'The Guild is a major faction in Chapter 2. Players who ally with them get better equipment.'"
+          ]
+        },
+        {
+          "term": "Spoiler stripping",
+          "meaning": "Process of removing information from canon that players are meant to discover, leaving only what an in-world scholar would publicly know.",
+          "distinguishing_features": [
+            "Ask: What would an in-world scholar know and publish?",
+            "Remove secret motivations, hidden identities, plot twists",
+            "Keep public knowledge, historical facts, general descriptions",
+            "Document omissions in spoiler_omissions field"
+          ]
+        },
+        {
+          "term": "Reading level: basic",
+          "meaning": "Simple sentences, common words, short entries. Accessible to all players.",
+          "distinguishing_features": [
+            "Simple sentence structure",
+            "Common vocabulary",
+            "Short entry length"
+          ]
+        },
+        {
+          "term": "Reading level: intermediate",
+          "meaning": "Standard prose, some specialized terms defined inline. Most entries target this level.",
+          "distinguishing_features": [
+            "Standard prose complexity",
+            "Specialized terms with definitions",
+            "Medium entry length"
+          ]
+        },
+        {
+          "term": "Reading level: advanced",
+          "meaning": "Complex concepts, assumes familiarity with the world. Used sparingly.",
+          "distinguishing_features": [
+            "Complex concepts",
+            "Assumes world familiarity",
+            "May be longer, more detailed"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When assessing spoiler risk by category",
+          "guidance": "Person entries: high risk (hidden motives). Place entries: low-medium risk. Faction entries: medium risk (secret goals). Concept entries: low risk. Item entries: medium risk (hidden powers). Event entries: medium risk (hidden causes). Creature entries: low-medium risk. Procedure entries: low risk.",
+          "examples": []
+        },
+        {
+          "context": "When determining what's safe to include",
+          "guidance": "Safe: public in-world knowledge, historical facts (if not hidden history), general descriptions, cultural practices. Never: secret motivations, hidden identities, plot twists, information meant for discovery.",
+          "examples": [
+            "situation: Guild entry - founder was wealthy | response: Safe to include if publicly known in-world",
+            "situation: Guild entry - founder caused the Collapse | response: Never include - this is a plot twist"
+          ]
+        },
+        {
+          "context": "When canon is missing for a codex entry",
+          "guidance": "Do not invent. Raise hook to Lore Weaver. Write what you can with available canon, note gaps in open questions, return when lore is filled.",
+          "examples": [
+            "situation: Need to define 'The Scourge' but canon only mentions it exists | response: Raise hook: 'Need canon for The Scourge: cause, timeline, effects. Currently blocked.' Write minimal entry, mark as incomplete."
+          ]
+        },
+        {
+          "context": "When adding content warnings",
+          "guidance": "Flag entries that touch sensitive topics. Keep warnings in-world when possible. Example: 'This entry discusses the Scourge, which involved significant loss of life.'",
+          "examples": []
+        },
+        {
+          "context": "Maintaining diegetic voice",
+          "guidance": "Run through voice checklist: No meta-references? No game mechanics? No future knowledge? Appropriate formality? If any fail, rewrite without those elements.",
+          "examples": [
+            "situation: Draft says 'Players can unlock this area in Act 3' | response: Rewrite: 'The eastern district remains sealed by order of the Council.' (in-world reason, no meta)"
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Write a codex entry from canon",
+          "steps": [
+            "Identify the term players need defined",
+            "Find the canon source in world bible",
+            "Filter for spoilers: what can an in-world scholar know?",
+            "Write short definition (1-2 sentences)",
+            "Write full explanation in diegetic voice",
+            "Document omissions in spoiler_omissions field",
+            "Add diegetic source attribution (who 'wrote' this?)",
+            "Assign reading level (basic/intermediate/advanced)",
+            "Add content notes if touching sensitive topics",
+            "Validate voice checklist: no meta, no mechanics, no future knowledge"
+          ],
+          "preconditions": [
+            "Term has been identified",
+            "Canon exists for the term (or hook raised if missing)"
+          ],
+          "postconditions": [
+            "Entry written in diegetic voice",
+            "Spoilers stripped and documented",
+            "Reading level assigned",
+            "Voice checklist validated"
+          ]
+        },
+        {
+          "goal": "Validate diegetic voice",
+          "steps": [
+            "Check: Any meta-references (the player, this chapter)?",
+            "Check: Any game mechanics (unlocks, access to, bonuses)?",
+            "Check: Any future knowledge (will later, eventually)?",
+            "Check: Appropriate formality for in-world document?",
+            "If any check fails: rewrite without those elements",
+            "If all checks pass: voice is diegetic"
+          ],
+          "preconditions": [
+            "Draft entry exists"
+          ],
+          "postconditions": [
+            "Entry uses only in-world perspective",
+            "No meta-references remain"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Including plot twists or secret motivations",
+          "consequence": "Spoils story for players, ruins discovery experience",
+          "prevention": "Always ask: Would an in-world scholar know this? Is this meant for discovery? If yes, omit."
+        },
+        {
+          "failure_mode": "Using meta-references (the player, game mechanics)",
+          "consequence": "Breaks immersion, reveals the fiction is a game",
+          "prevention": "Run voice checklist on every entry. Remove any meta-references."
+        },
+        {
+          "failure_mode": "Inventing canon to complete entries",
+          "consequence": "Creates contradictions, undermines world bible authority",
+          "prevention": "Never invent. Raise hook to Lore Weaver if canon is missing."
+        },
+        {
+          "failure_mode": "Forgetting to document omissions",
+          "consequence": "Gatekeeper cannot validate spoiler-stripping decisions",
+          "prevention": "Always fill spoiler_omissions field with what was left out and why."
+        }
+      ]
+    }
   },
-
   "applicable_to": {
-    "agents": ["codex_curator"]
+    "agents": [
+      "codex_curator"
+    ]
   },
-
-  "tags": ["codex", "diegetic", "spoilers", "guidelines"]
+  "tags": [
+    "codex",
+    "diegetic",
+    "spoilers",
+    "guidelines"
+  ]
 }
