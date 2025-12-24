@@ -349,9 +349,13 @@ class StatusReporter:
         # Extract semantic fields from result_data
         action_outcome = None
         rejection_reason = None
+        artifact_info = None
         if result_data:
             action_outcome = result_data.get("action_outcome") or result_data.get("result")
             rejection_reason = result_data.get("rejection_reason")
+
+            # Extract artifact identifiers for relevant tools
+            artifact_info = self._extract_artifact_info(tool_id, result_data)
 
         # Show tool calls at INFO level (-v) or always show failures/rejections
         show_tool = self.verbosity >= 1 or not success or action_outcome == "rejected"
@@ -372,7 +376,10 @@ class StatusReporter:
                 status_icon = "[green]✓[/green]" if success else "[red]✗[/red]"
 
             time_str = f" [dim]({execution_time_ms:.0f}ms)[/dim]" if execution_time_ms else ""
-            self.console.print(f"  [dim]tool:[/dim] {tool_id} {status_icon}{time_str}")
+            artifact_str = f" [cyan]{artifact_info}[/cyan]" if artifact_info else ""
+            self.console.print(
+                f"  [dim]tool:[/dim] {tool_id}{artifact_str} {status_icon}{time_str}"
+            )
 
             # Show rejection reason
             if rejection_reason:
@@ -389,6 +396,72 @@ class StatusReporter:
                     result_preview[:80] + "..." if len(result_preview) > 80 else result_preview
                 )
                 self.console.print(f"    [dim]{preview}[/dim]")
+
+    def _extract_artifact_info(self, tool_id: str, result_data: dict[str, Any]) -> str | None:
+        """
+        Extract artifact identifiers from tool result data.
+
+        Returns a string like "section:intro_scene" or "section_brief:SB-001" or None.
+        """
+        if not result_data:
+            return None
+
+        # get_artifact - single artifact or list
+        if tool_id == "get_artifact":
+            artifacts = result_data.get("artifacts", [])
+            if isinstance(artifacts, list) and artifacts:
+                if len(artifacts) == 1:
+                    art = artifacts[0]
+                    art_type = art.get("artifact_type", "?")
+                    art_id = art.get("artifact_id") or art.get("id", "?")
+                    return f"{art_type}:{art_id}"
+                else:
+                    # Multiple artifacts - show count and first type
+                    first = artifacts[0]
+                    art_type = first.get("artifact_type", "artifact")
+                    return f"{len(artifacts)}x {art_type}s"
+            # No artifacts found
+            return None
+
+        # validate_artifact - show what was validated
+        if tool_id == "validate_artifact":
+            art_id = result_data.get("artifact_id")
+            art_type = result_data.get("artifact_type")
+            if art_id:
+                return f"{art_type}:{art_id}" if art_type else art_id
+            return None
+
+        # save_artifact - show what was saved
+        if tool_id == "save_artifact":
+            art_id = result_data.get("artifact_id")
+            art_type = result_data.get("artifact_type")
+            if art_id:
+                return f"{art_type}:{art_id}" if art_type else art_id
+            return None
+
+        # search_workspace - show result count
+        if tool_id == "search_workspace":
+            results = result_data.get("results", [])
+            if isinstance(results, list):
+                return f"{len(results)} found"
+            return None
+
+        # request_lifecycle_transition - show artifact and target state
+        if tool_id == "request_lifecycle_transition":
+            art_id = result_data.get("artifact_id")
+            target = result_data.get("target_state")
+            if art_id and target:
+                return f"{art_id} → {target}"
+            return None
+
+        # analyze_story_graph - show node count
+        if tool_id == "analyze_story_graph":
+            nodes = result_data.get("nodes", [])
+            if isinstance(nodes, list):
+                return f"{len(nodes)} nodes"
+            return None
+
+        return None
 
     # -------------------------------------------------------------------------
     # Artifact Events
