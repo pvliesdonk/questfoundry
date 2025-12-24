@@ -2486,32 +2486,43 @@ def agent_prompt(
     section: Annotated[
         str | None,
         typer.Option(
-            "--section", "-s", help="Show only specific section (constitution, must_know, menu)"
+            "--section",
+            "-s",
+            help="Show only specific section (constitution, knowledge, playbooks, agents, tools, stores, artifacts, menu)",
         ),
     ] = None,
     raw: Annotated[
         bool,
         typer.Option("--raw", "-r", help="Output raw text (no panels/formatting)"),
     ] = False,
+    full: Annotated[
+        bool,
+        typer.Option("--full", "-f", help="Show complete system prompt as sent to LLM"),
+    ] = False,
 ) -> None:
-    """Show the knowledge context / system prompt for an agent.
+    """Show the system prompt for an agent (same as runtime uses).
 
-    This command displays what knowledge content would be included in an
-    agent's system prompt, including:
+    This command displays the actual system prompt that would be sent to the LLM,
+    using the same code path as the runtime. Includes:
 
     - Constitution (inviolable principles)
     - Must-know entries (critical knowledge, inlined)
-    - Menu (should-know and role-specific entries, summaries only)
+    - Playbooks menu (for orchestrators)
+    - Agents menu (for orchestrators)
+    - Tools list
+    - Stores access
+    - Artifact types
+    - Knowledge menu
 
-    Use this to verify knowledge is being loaded correctly, or to inspect
-    what context an agent sees when activated.
+    Use --full to see the complete prompt as one block.
+    Use --section to inspect specific parts.
 
     Examples:
         qf agent prompt showrunner
-        qf agent prompt scene_smith --section constitution
-        qf agent prompt gatekeeper --raw > gatekeeper_prompt.txt
+        qf agent prompt showrunner --full --raw > showrunner_prompt.txt
+        qf agent prompt scene_smith --section tools
     """
-    asyncio.run(_agent_prompt_async(agent_id, domain, section, raw))
+    asyncio.run(_agent_prompt_async(agent_id, domain, section, raw, full))
 
 
 async def _agent_prompt_async(
@@ -2519,10 +2530,17 @@ async def _agent_prompt_async(
     domain_path: Path,
     section: str | None,
     raw: bool,
+    full: bool,
 ) -> None:
-    """Async implementation of agent prompt command."""
-    from questfoundry.runtime.agent.knowledge import KnowledgeContextBuilder
+    """Async implementation of agent prompt command.
+
+    Uses the same ContextBuilder and build_prompt as the runtime to ensure
+    the CLI shows exactly what the LLM receives.
+    """
+    from questfoundry.runtime.agent.context import ContextBuilder
+    from questfoundry.runtime.agent.prompt import build_prompt
     from questfoundry.runtime.domain import load_studio
+    from questfoundry.runtime.tools.registry import ToolRegistry
 
     # Load domain
     result = await load_studio(domain_path)
@@ -2542,70 +2560,129 @@ async def _agent_prompt_async(
         console.print(f"[dim]Available: {', '.join(available)}[/dim]")
         raise typer.Exit(1)
 
-    # Build knowledge context with domain_path for constitution loading
-    builder = KnowledgeContextBuilder(domain_path=domain_path)
-    context = builder.build_context(agent, studio)
+    # Build context using the SAME code path as runtime
+    context_builder = ContextBuilder(domain_path=domain_path)
+    context = context_builder.build(agent, studio)
 
-    # Display results
+    # Get tool schemas (same as runtime)
+    tool_registry = ToolRegistry(studio, domain_path=domain_path)
+    tool_schemas = tool_registry.get_langchain_tools(agent, session_id=None)
+
+    # Build prompt using the SAME code path as runtime
+    prompt = build_prompt(
+        agent=agent,
+        constitution_text=context.constitution_text,
+        must_know_entries=context.must_know_entries,
+        role_specific_menu=context.role_specific_menu,
+        tool_schemas=tool_schemas,
+        playbooks_menu=context.playbooks_menu,
+        stores_menu=context.stores_menu,
+        artifact_types_menu=context.artifact_types_menu,
+        agents_menu=context.agents_menu,
+    )
+
+    # Full mode: show complete prompt as sent to LLM
+    if full:
+        if raw:
+            console.print(prompt.text)
+        else:
+            console.print()
+            console.print(f"[bold]Complete System Prompt for {agent.name}[/bold] ({agent.id})")
+            console.print(f"[dim]Archetypes: {', '.join(agent.archetypes)}[/dim]")
+            console.print(f"[dim]Token estimate: ~{len(prompt.text) // 4}[/dim]")
+            console.print()
+            console.print(Panel(prompt.text, title="System Prompt", border_style="cyan"))
+        return
+
+    # Display header
     if not raw:
         console.print()
-        console.print(f"[bold]Knowledge Context for {agent.name}[/bold] ({agent.id})")
+        console.print(f"[bold]System Prompt for {agent.name}[/bold] ({agent.id})")
         console.print(f"[dim]Archetypes: {', '.join(agent.archetypes)}[/dim]")
         console.print()
 
-    # Show specific section or all
-    if (section == "constitution" or section is None) and context.constitution_section:
-        if raw:
-            console.print(context.constitution_section)
-        else:
-            console.print(
-                Panel(context.constitution_section, title="Constitution", border_style="blue")
-            )
-        if section:
-            return
+    # Extract sections from the prompt for display
+    sections_found: dict[str, str] = {}
 
-    if (section == "must_know" or section is None) and context.must_know_section:
-        if raw:
-            console.print(context.must_know_section)
-        else:
-            console.print(
-                Panel(context.must_know_section, title="Must-Know Knowledge", border_style="green")
-            )
-        if section:
-            return
+    # Parse sections from prompt text
+    prompt_text = prompt.text
+    section_markers = [
+        ("constitution", "## Constitution"),
+        ("knowledge", "## Critical Knowledge"),
+        ("playbooks", "## Available Playbooks"),
+        ("agents", "## Available Agents"),
+        ("tools", "## Your Tools"),
+        ("stores", "## Your Store Access"),
+        ("artifacts", "## Artifact Types"),
+        ("menu", "## Knowledge Menu"),
+    ]
 
-    if (section == "menu" or section is None) and context.menu_section:
-        if raw:
-            console.print(context.menu_section)
-        else:
-            console.print(
-                Panel(context.menu_section, title="Knowledge Menu", border_style="yellow")
-            )
-        if section:
-            return
+    for sec_name, marker in section_markers:
+        start = prompt_text.find(marker)
+        if start >= 0:
+            # Find end (next ## or end of text)
+            end = len(prompt_text)
+            for _, other_marker in section_markers:
+                if other_marker != marker:
+                    other_start = prompt_text.find(other_marker, start + len(marker))
+                    if other_start > start and other_start < end:
+                        end = other_start
+            sections_found[sec_name] = prompt_text[start:end].strip()
 
-    # Summary stats (only in formatted mode)
-    if not raw and section is None:
+    # Show requested section or all
+    section_titles = {
+        "constitution": ("Constitution", "blue"),
+        "knowledge": ("Critical Knowledge", "green"),
+        "playbooks": ("Available Playbooks", "magenta"),
+        "agents": ("Available Agents", "magenta"),
+        "tools": ("Your Tools", "cyan"),
+        "stores": ("Store Access", "yellow"),
+        "artifacts": ("Artifact Types", "yellow"),
+        "menu": ("Knowledge Menu", "dim"),
+    }
+
+    if section:
+        if section in sections_found:
+            if raw:
+                console.print(sections_found[section])
+            else:
+                title, color = section_titles.get(section, (section, "white"))
+                console.print(Panel(sections_found[section], title=title, border_style=color))
+        else:
+            console.print(f"[yellow]⚠ Section '{section}' not found in prompt[/yellow]")
+            console.print(f"[dim]Available: {', '.join(sections_found.keys())}[/dim]")
+        return
+
+    # Show all sections
+    for sec_name in [
+        "constitution",
+        "knowledge",
+        "playbooks",
+        "agents",
+        "tools",
+        "stores",
+        "artifacts",
+        "menu",
+    ]:
+        if sec_name in sections_found:
+            if raw:
+                console.print(sections_found[sec_name])
+                console.print()
+            else:
+                title, color = section_titles.get(sec_name, (sec_name, "white"))
+                console.print(Panel(sections_found[sec_name], title=title, border_style=color))
+
+    # Summary stats
+    if not raw:
         console.print()
         console.print("[bold]Summary:[/bold]")
-        console.print(f"  Tokens used: ~{context.tokens_used}")
-        console.print(f"  Entries inlined: {len(context.entries_inlined)}")
-        if context.entries_inlined:
-            console.print(f"    {', '.join(context.entries_inlined)}")
-        console.print(f"  Entries in menu: {len(context.entries_in_menu)}")
-        if context.entries_in_menu:
-            console.print(f"    {', '.join(context.entries_in_menu)}")
-
-    # Handle section not found
-    if section and not any(
-        [
-            section == "constitution" and context.constitution_section,
-            section == "must_know" and context.must_know_section,
-            section == "menu" and context.menu_section,
-        ]
-    ):
-        console.print(f"[yellow]⚠ Section '{section}' is empty or not available[/yellow]")
-        console.print("[dim]Valid sections: constitution, must_know, menu[/dim]")
+        console.print(f"  Token estimate: ~{len(prompt.text) // 4}")
+        console.print(f"  Sections: {', '.join(sections_found.keys())}")
+        console.print(f"  Tools: {len(tool_schemas)}")
+        if context.playbooks_menu:
+            console.print(f"  Playbooks: {len(context.playbooks_menu)}")
+        if context.agents_menu:
+            console.print(f"  Delegation targets: {len(context.agents_menu)}")
 
 
 @agent_app.command("list")

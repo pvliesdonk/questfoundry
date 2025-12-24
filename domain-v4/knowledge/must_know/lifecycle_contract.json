@@ -32,9 +32,10 @@
         },
         {
           "term": "review",
-          "meaning": "Ready for quality check. Content awaiting Gatekeeper validation.",
+          "meaning": "LLM studio work complete. Content has passed Gatekeeper validation and is ready for human review or export.",
           "distinguishing_features": [
-            "Gatekeeper validates content here",
+            "Gatekeeper has validated and approved the content",
+            "Showrunner promotes here after GK passes all quality bars",
             "Editing auto-demotes back to draft"
           ]
         },
@@ -50,17 +51,22 @@
       "contracts": [
         {
           "name": "Lifecycle State Transitions",
-          "parties": ["runtime", "gatekeeper", "agents"],
+          "parties": ["runtime", "gatekeeper", "showrunner"],
           "obligations": [
             {
-              "party": "agents",
-              "must": "Request transition from draft to review when content is ready",
-              "when": "Content is complete and ready for validation"
+              "party": "gatekeeper",
+              "must": "Validate artifacts while they are in draft state",
+              "when": "Delegated to review content"
+            },
+            {
+              "party": "gatekeeper",
+              "must": "Promote from draft to review after content passes all quality bars",
+              "when": "Validation succeeds"
             },
             {
               "party": "gatekeeper",
               "must": "Be the only one to promote from review to cold",
-              "when": "Content passes all quality bars"
+              "when": "Explicit approval flow requests cold promotion"
             },
             {
               "party": "runtime",
@@ -108,28 +114,33 @@
       "heuristics": [
         {
           "context": "Working with artifact lifecycle",
-          "guidance": "Focus on content quality; trust the runtime to manage state transitions automatically.",
+          "guidance": "Creators work in draft. Gatekeeper validates and promotes to review. Cold promotion is a separate approval step.",
           "examples": [
-            "Just create and edit content - runtime handles demotion",
-            "Delegate to Gatekeeper for cold promotion"
+            "Scene Smith creates section in draft → delegates to Gatekeeper → GK validates and promotes to review",
+            "Showrunner wants content validated → delegates to Gatekeeper (NOT calling lifecycle tools directly)"
           ],
           "counter_examples": [
-            "Manually tracking lifecycle states",
-            "Calling lifecycle tools for routine edits",
-            "Trying to promote to cold without being Gatekeeper"
+            "Showrunner calling request_lifecycle_transition directly without GK validation",
+            "Any agent other than Gatekeeper promoting to review or cold",
+            "Assuming 'review' means 'awaiting validation' (it means 'validation PASSED')"
           ]
         }
       ],
       "warnings": [
         {
-          "failure_mode": "Attempting to manually manage lifecycle states",
-          "consequence": "Wasted effort - runtime handles this automatically.",
-          "prevention": "Focus on content; use request_lifecycle_transition only for explicit promotion."
+          "failure_mode": "Non-Gatekeeper agent calling request_lifecycle_transition to promote to review",
+          "consequence": "Bypasses quality validation. Content may have issues that Gatekeeper would catch.",
+          "prevention": "ONLY Gatekeeper promotes artifacts. Showrunner delegates to GK, never promotes directly."
         },
         {
-          "failure_mode": "Attempting cold promotion without Gatekeeper",
+          "failure_mode": "Misunderstanding 'review' as 'awaiting validation'",
+          "consequence": "Agents may think they need to validate content in review state. Review means validation ALREADY PASSED.",
+          "prevention": "Remember: draft = working, review = GK passed, cold = published. Validation happens in draft."
+        },
+        {
+          "failure_mode": "Attempting cold promotion without explicit approval flow",
           "consequence": "Transition will be rejected by runtime.",
-          "prevention": "Delegate to Gatekeeper for cold promotion."
+          "prevention": "Cold promotion requires explicit approval (human or formal playbook), not just GK validation."
         }
       ]
     }
