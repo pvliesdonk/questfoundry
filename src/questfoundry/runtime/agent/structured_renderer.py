@@ -16,6 +16,9 @@ def render_rule(rule: dict[str, Any]) -> str:
     lines = []
 
     statement = rule.get("statement", "")
+    if not statement:
+        return ""  # Skip rules without statements
+
     severity = rule.get("severity", "error")
     enforcement = rule.get("enforcement", "llm")
 
@@ -47,11 +50,14 @@ def render_contract(contract: dict[str, Any]) -> str:
     lines = []
 
     name = contract.get("name", "Contract")
-    parties = contract.get("parties", [])
+    parties = contract.get("parties") or []
     obligations = contract.get("obligations", [])
 
     lines.append(f"### {name}")
-    lines.append(f"**Parties:** {', '.join(parties)}")
+    if parties:
+        lines.append(f"**Parties:** {', '.join(parties)}")
+    else:
+        lines.append("**Parties:** _None defined_")
 
     if obligations:
         lines.append("\n**Obligations:**")
@@ -274,5 +280,8 @@ def render_structured_entry(data: dict[str, Any]) -> str:
         for warning in warnings:
             sections.append(render_warning(warning))
             sections.append("")
+
+    if not sections:
+        return "(No structured content available.)"
 
     return "\n".join(sections).strip()

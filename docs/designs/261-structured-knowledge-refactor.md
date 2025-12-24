@@ -196,15 +196,15 @@ All semantic types can have:
 
 **Files**: `meta/schemas/knowledge/structured-content.schema.json`
 
-1. Create `structured-content.schema.json` with `$defs` for:
-   - `principle` - statement/reasoning/examples
-   - `pattern` - name/definition/purpose/requirements/example
-   - `checklist` - label/items
-   - `antipattern` - context/bad/good
-   - `table` - caption/columns/rows
-   - `code_example` - description/language/code
-   - `section` - title/content (containing above)
-   - `structured_entry` - top-level wrapper with sections array
+1. Create `structured-content.schema.json` with `$defs` for semantic types:
+   - `rule` - statement/enforcement/severity/reasoning/examples/counter_examples
+   - `contract` - name/parties/obligations/reasoning/examples
+   - `criterion` - name/pass_condition/fail_indicators/reasoning/examples/counter_examples
+   - `heuristic` - context/guidance/reasoning/examples/counter_examples
+   - `definition` - term/meaning/distinguishing_features/examples/counter_examples
+   - `procedure` - goal/preconditions/steps/postconditions/examples
+   - `warning` - failure_mode/consequence/detection/prevention/examples/counter_examples
+   - `structured_entry` - top-level wrapper with arrays of the above types
 
 2. Update `knowledge-entry.schema.json`:
    - Remove `inline` from `content.type` enum
