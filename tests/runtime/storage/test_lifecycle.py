@@ -412,3 +412,191 @@ class TestLifecycleManager:
         trans = lifecycle.get_transition("draft", "cold")
         assert trans is not None
         assert trans.is_agent_allowed("gatekeeper")
+
+
+class TestLifecyclePolicy:
+    """Tests for LifecyclePolicy dataclass."""
+
+    def test_from_dict_none(self):
+        """None data returns default policy."""
+        from questfoundry.runtime.storage.lifecycle import LifecyclePolicy
+
+        policy = LifecyclePolicy.from_dict(None)
+        assert policy.edit_policy == "allow"
+        assert policy.demote_trigger_states is None  # None means use default (all except initial)
+        assert policy.demote_target_state is None
+        assert policy.demote_target_store is None
+
+    def test_from_dict_minimal(self):
+        """Minimal dict uses defaults."""
+        from questfoundry.runtime.storage.lifecycle import LifecyclePolicy
+
+        policy = LifecyclePolicy.from_dict({})
+        assert policy.edit_policy == "allow"
+
+    def test_from_dict_demote_policy(self):
+        """Full demote policy from dict."""
+        from questfoundry.runtime.storage.lifecycle import LifecyclePolicy
+
+        policy = LifecyclePolicy.from_dict(
+            {
+                "edit_policy": "demote",
+                "demote_trigger_states": ["review", "approved"],
+                "demote_target_state": "draft",
+                "demote_target_store": "workspace",
+            }
+        )
+        assert policy.edit_policy == "demote"
+        assert policy.demote_trigger_states == ["review", "approved"]
+        assert policy.demote_target_state == "draft"
+        assert policy.demote_target_store == "workspace"
+
+    def test_from_dict_disallow_policy(self):
+        """Disallow policy from dict."""
+        from questfoundry.runtime.storage.lifecycle import LifecyclePolicy
+
+        policy = LifecyclePolicy.from_dict(
+            {
+                "edit_policy": "disallow",
+                "demote_trigger_states": ["final", "archived"],
+            }
+        )
+        assert policy.edit_policy == "disallow"
+        # demote_trigger_states are the states where edit_policy applies
+        assert policy.demote_trigger_states == ["final", "archived"]
+
+
+class TestArtifactLifecycleWithPolicy:
+    """Tests for ArtifactLifecycle with policy support."""
+
+    def test_get_edit_policy_no_policy(self):
+        """Get default edit policy when no policy set."""
+        lifecycle = ArtifactLifecycle(
+            artifact_type_id="test",
+            states={"draft": LifecycleState(id="draft", name="Draft")},
+            transitions=[],
+            initial_state="draft",
+        )
+        assert lifecycle.get_edit_policy("draft") == "allow"
+
+    def test_get_edit_policy_with_policy(self):
+        """Get edit policy from lifecycle policy."""
+        from questfoundry.runtime.storage.lifecycle import LifecyclePolicy
+
+        lifecycle = ArtifactLifecycle(
+            artifact_type_id="test",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "review": LifecycleState(id="review", name="Review"),
+            },
+            transitions=[],
+            initial_state="draft",
+            policy=LifecyclePolicy(
+                edit_policy="demote",
+                demote_trigger_states=["review"],
+            ),
+        )
+        # draft is not a trigger state - returns allow
+        assert lifecycle.get_edit_policy("draft") == "allow"
+        # review is a trigger state - returns demote
+        assert lifecycle.get_edit_policy("review") == "demote"
+
+    def test_get_demote_target_with_policy(self):
+        """Get demotion target from policy."""
+        from questfoundry.runtime.storage.lifecycle import LifecyclePolicy
+
+        lifecycle = ArtifactLifecycle(
+            artifact_type_id="test",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "review": LifecycleState(id="review", name="Review"),
+            },
+            transitions=[],
+            initial_state="draft",
+            policy=LifecyclePolicy(
+                edit_policy="demote",
+                demote_trigger_states=["review"],
+                demote_target_state="draft",
+                demote_target_store="workspace",
+            ),
+        )
+
+        # get_demote_target returns the policy's target, regardless of current state
+        state, store = lifecycle.get_demote_target()
+        assert state == "draft"
+        assert store == "workspace"
+
+
+class TestLifecycleTransitionWithTargetStore:
+    """Tests for transitions with target_store support."""
+
+    def test_transition_with_target_store(self):
+        """Create transition with target_store."""
+        trans = LifecycleTransition.from_dict(
+            {
+                "from": "approved",
+                "to": "cold",
+                "target_store": "manuscript",
+            }
+        )
+        assert trans.from_state == "approved"
+        assert trans.to_state == "cold"
+        assert trans.target_store == "manuscript"
+
+    def test_get_transition_store(self):
+        """Get target store for transition."""
+        lifecycle = ArtifactLifecycle(
+            artifact_type_id="section",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "approved": LifecycleState(id="approved", name="Approved"),
+                "cold": LifecycleState(id="cold", name="Cold", terminal=True),
+            },
+            transitions=[
+                LifecycleTransition(from_state="draft", to_state="approved"),
+                LifecycleTransition(
+                    from_state="approved",
+                    to_state="cold",
+                    target_store="manuscript",  # Store migration on cold transition
+                ),
+            ],
+            initial_state="draft",
+        )
+
+        # Transition with target_store
+        store = lifecycle.get_transition_store("approved", "cold")
+        assert store == "manuscript"
+
+        # Transition without target_store
+        store = lifecycle.get_transition_store("draft", "approved")
+        assert store is None
+
+        # Non-existent transition
+        store = lifecycle.get_transition_store("draft", "cold")
+        assert store is None
+
+    def test_from_dict_with_target_store(self):
+        """Load lifecycle with target_store from dict."""
+        data = {
+            "states": [
+                {"id": "draft", "name": "Draft"},
+                {"id": "cold", "name": "Cold", "terminal": True},
+            ],
+            "initial_state": "draft",
+            "transitions": [
+                {
+                    "from": "draft",
+                    "to": "cold",
+                    "target_store": "canon",
+                }
+            ],
+        }
+
+        lifecycle = ArtifactLifecycle.from_dict("test", data)
+        assert lifecycle is not None
+
+        trans = lifecycle.get_transition("draft", "cold")
+        assert trans.target_store == "canon"
+
+        store = lifecycle.get_transition_store("draft", "cold")
+        assert store == "canon"

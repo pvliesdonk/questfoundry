@@ -939,6 +939,108 @@ class TestColdTransitionWithStoreMigration:
         assert "StoreManager not available" in result.error
 
 
+class TestTransitionWithTargetStore:
+    """Tests for transitions that specify target_store for automatic store migration."""
+
+    @pytest.fixture
+    def lifecycle_manager_with_store_migration(self):
+        """Create lifecycle manager with target_store on transitions."""
+        manager = LifecycleManager()
+
+        section_lifecycle = ArtifactLifecycle(
+            artifact_type_id="section",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "review": LifecycleState(id="review", name="Review"),
+                "approved": LifecycleState(id="approved", name="Approved"),
+            },
+            transitions=[
+                LifecycleTransition(from_state="draft", to_state="review"),
+                LifecycleTransition(
+                    from_state="review",
+                    to_state="approved",
+                    target_store="archive",  # Move to archive on approval
+                ),
+            ],
+            initial_state="draft",
+        )
+        manager.register_lifecycle(section_lifecycle)
+        return manager
+
+    @pytest.mark.asyncio
+    async def test_transition_migrates_to_target_store(
+        self, mock_project, lifecycle_manager_with_store_migration
+    ):
+        """Transition with target_store updates both state and store."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=mock_project,
+            agent_id="scene_smith",
+            lifecycle_manager=lifecycle_manager_with_store_migration,
+        )
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "review"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "approved",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["transitioned"] is True
+        assert result.data["new_state"] == "approved"
+        assert result.data["new_store"] == "archive"
+        assert result.data["previous_store"] == "workspace"
+
+        # Verify artifact was updated
+        artifact = mock_project.artifacts["section_001"]
+        assert artifact["_lifecycle_state"] == "approved"
+        assert artifact["_store"] == "archive"
+
+    @pytest.mark.asyncio
+    async def test_transition_without_target_store_no_migration(
+        self, mock_project, lifecycle_manager_with_store_migration
+    ):
+        """Transition without target_store doesn't change store."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=mock_project,
+            agent_id="scene_smith",
+            lifecycle_manager=lifecycle_manager_with_store_migration,
+        )
+        mock_project.artifacts["section_001"]["_lifecycle_state"] = "draft"
+        mock_project.artifacts["section_001"]["_store"] = "workspace"
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "section_001",
+                "target_state": "review",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["transitioned"] is True
+        assert result.data["new_state"] == "review"
+        # No store migration for this transition
+        assert "new_store" not in result.data
+
+        # Verify store unchanged
+        artifact = mock_project.artifacts["section_001"]
+        assert artifact["_store"] == "workspace"
+
+
 class TestDirectGatecheckToColdTransition:
     """Tests for direct gatecheck → cold transition (Phase 4)."""
 
