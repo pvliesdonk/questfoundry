@@ -368,7 +368,8 @@ class KnowledgeContent(BaseModel):
     - file_ref: External file reference (rare, for large content)
     - corpus: RAG-searchable reference material
 
-    Note: 'inline' type has been deprecated in favor of 'structured'.
+    Note: Previously supported 'inline' and 'text' content types have been
+    removed; use the 'structured' type instead.
     """
 
     type: Literal["file_ref", "structured", "corpus"] = "structured"

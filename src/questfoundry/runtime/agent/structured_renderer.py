@@ -150,17 +150,17 @@ def render_definition(definition: dict[str, Any]) -> str:
 
     if features := definition.get("distinguishing_features"):
         for feat in features:
-            lines.append(f"  - {feat}")
+            lines.append(f"- {feat}")
 
     if examples := definition.get("examples"):
-        lines.append("\n  Examples:")
+        lines.append("\n**Examples:**")
         for ex in examples:
-            lines.append(f"  - {ex}")
+            lines.append(f"- {ex}")
 
     if counter_examples := definition.get("counter_examples"):
-        lines.append("\n  Not this:")
+        lines.append("\n**Not this:**")
         for ex in counter_examples:
-            lines.append(f"  - {ex}")
+            lines.append(f"- {ex}")
 
     return "\n".join(lines)
 
@@ -192,7 +192,7 @@ def render_procedure(procedure: dict[str, Any]) -> str:
     if examples := procedure.get("examples"):
         lines.append("\n**Examples:**")
         for ex in examples:
-            lines.append(ex)
+            lines.append(f"- {ex}")
 
     return "\n".join(lines)
 
@@ -230,56 +230,47 @@ def render_warning(warning: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_section(
+    items: list[dict[str, Any]] | None,
+    header: str,
+    renderer: Any,
+) -> list[str]:
+    """Render a section of items, filtering out empty renders."""
+    if not items:
+        return []
+
+    rendered = [renderer(item) for item in items]
+    # Filter out empty renders
+    rendered = [r for r in rendered if r]
+
+    if not rendered:
+        return []
+
+    result = [f"## {header}\n"]
+    for r in rendered:
+        result.append(r)
+        result.append("")
+    return result
+
+
 def render_structured_entry(data: dict[str, Any]) -> str:
     """Render a complete structured entry to markdown.
 
     Takes the 'data' field from a structured knowledge content
     and renders all semantic types to readable markdown.
+
+    Empty items (e.g., rules without statements) are filtered out.
     """
-    sections = []
+    sections: list[str] = []
 
-    # Render each semantic type if present
-    if rules := data.get("rules"):
-        sections.append("## Rules\n")
-        for rule in rules:
-            sections.append(render_rule(rule))
-            sections.append("")
-
-    if contracts := data.get("contracts"):
-        sections.append("## Contracts\n")
-        for contract in contracts:
-            sections.append(render_contract(contract))
-            sections.append("")
-
-    if criteria := data.get("criteria"):
-        sections.append("## Criteria\n")
-        for criterion in criteria:
-            sections.append(render_criterion(criterion))
-            sections.append("")
-
-    if definitions := data.get("definitions"):
-        sections.append("## Definitions\n")
-        for definition in definitions:
-            sections.append(render_definition(definition))
-            sections.append("")
-
-    if procedures := data.get("procedures"):
-        sections.append("## Procedures\n")
-        for procedure in procedures:
-            sections.append(render_procedure(procedure))
-            sections.append("")
-
-    if heuristics := data.get("heuristics"):
-        sections.append("## Guidance\n")
-        for heuristic in heuristics:
-            sections.append(render_heuristic(heuristic))
-            sections.append("")
-
-    if warnings := data.get("warnings"):
-        sections.append("## Warnings\n")
-        for warning in warnings:
-            sections.append(render_warning(warning))
-            sections.append("")
+    # Render each semantic type if present, filtering empty items
+    sections.extend(_render_section(data.get("rules"), "Rules", render_rule))
+    sections.extend(_render_section(data.get("contracts"), "Contracts", render_contract))
+    sections.extend(_render_section(data.get("criteria"), "Criteria", render_criterion))
+    sections.extend(_render_section(data.get("definitions"), "Definitions", render_definition))
+    sections.extend(_render_section(data.get("procedures"), "Procedures", render_procedure))
+    sections.extend(_render_section(data.get("heuristics"), "Guidance", render_heuristic))
+    sections.extend(_render_section(data.get("warnings"), "Warnings", render_warning))
 
     if not sections:
         return "(No structured content available.)"

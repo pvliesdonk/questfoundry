@@ -10,8 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from questfoundry.runtime.agent.structured_renderer import render_structured_entry
-from questfoundry.runtime.models.base import KnowledgeContent
+from questfoundry.runtime.agent.content_utils import extract_knowledge_content
 from questfoundry.runtime.tools.base import BaseTool, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.registry import register_tool
 
@@ -108,40 +107,12 @@ class ConsultKnowledgeTool(BaseTool):
     def _extract_content(self, entry: Any) -> str | None:
         """Extract text content from a knowledge entry.
 
-        For structured content, renders semantic types (rules, contracts, etc.)
-        to readable markdown using the structured_renderer.
+        Delegates to shared content_utils for consistent handling across
+        the codebase. Supports structured, file_ref, and corpus content types.
         """
-        content = entry.content
-        if content is None:
-            return None
-
-        # Handle dict content (raw from JSON)
-        if isinstance(content, dict):
-            content_type = content.get("type", "structured")
-            if content_type == "structured":
-                data = content.get("data", {})
-                if data:
-                    return render_structured_entry(data)
-                return None
-            elif content_type == "file_ref":
-                # file_ref entries should be migrated to structured
-                return f"(Content in file: {content.get('file_path')})"
-            elif content_type == "corpus":
-                return "(This is a corpus entry. Use consult_corpus tool to search.)"
-            return None
-
-        # Handle KnowledgeContent model
-        if isinstance(content, KnowledgeContent):
-            if content.type == "structured":
-                if content.data:
-                    return render_structured_entry(content.data)
-                return None
-            elif content.type == "file_ref":
-                return f"(Content in file: {content.file_path})"
-            elif content.type == "corpus":
-                return "(This is a corpus entry. Use consult_corpus tool to search.)"
-
-        return str(content) if content else None
+        # Get domain path from context if available
+        domain_path = getattr(self._context, "domain_path", None)
+        return extract_knowledge_content(entry, domain_path)
 
     def _extract_section(self, content: str, section_name: str) -> str | None:
         """Extract a specific section from markdown content.
