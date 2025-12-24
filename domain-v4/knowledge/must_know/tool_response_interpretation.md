@@ -53,3 +53,52 @@ When a tool returns `action_outcome: rejected`, the `recovery_action` field tell
 
 **Do**: Rename the field, add section_id, retry
 **Don't**: Retry with the same payload hoping it works
+
+## 4. Lifecycle Feedback
+
+The runtime automatically manages artifact lifecycle. Understand these notifications:
+
+### Edit Demotion Notifications
+
+When editing an artifact in `review` state:
+
+```json
+{
+  "action_outcome": "saved",
+  "lifecycle_effect": {
+    "demoted": true,
+    "from_state": "review",
+    "to_state": "draft",
+    "reason": "edit_policy"
+  }
+}
+```
+
+**Your Action**: None required. The runtime demoted the artifact automatically. Continue working.
+
+### Cascade Demotion Notifications
+
+When a parent edit affects children:
+
+```json
+{
+  "action_outcome": "saved",
+  "cascade_demotions": [
+    {"artifact_id": "section_abc", "to_state": "draft"}
+  ]
+}
+```
+
+**Your Action**: Be aware that child artifacts were also demoted. They may need re-validation.
+
+### Lifecycle Transition Rejections
+
+```json
+{
+  "action_outcome": "rejected",
+  "rejection_reason": "transition_not_allowed",
+  "recovery_action": "Only Gatekeeper can promote to cold state"
+}
+```
+
+**Your Action**: Delegate to Gatekeeper if you need cold promotion
