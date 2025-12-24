@@ -146,6 +146,10 @@
               "target_store": {
                 "$ref": "_definitions.schema.json#/$defs/store_ref",
                 "description": "Store to migrate artifact to on this transition. Generalizes cold migration - any transition can trigger store migration. Runtime updates both _lifecycle_state and _store atomically."
+              },
+              "description": {
+                "$ref": "_definitions.schema.json#/$defs/description",
+                "description": "Human-readable description of this transition"
               }
             },
             "additionalProperties": false

@@ -1,0 +1,16 @@
+{
+  "$schema": "../../meta/schemas/core/relationship.schema.json",
+  "id": "codex_from_canon",
+  "name": "Codex from Canon",
+  "description": "Codex entries are derived from canon packs. When canon is edited, codex entries should be flagged for review.",
+  "from_type": "canon_pack",
+  "to_type": "codex_entry",
+  "kind": "derived_from",
+  "link_field": "canon_source.pack_id",
+  "link_resolution": "by_field_match",
+  "match_field": "pack_id",
+  "impact_policy": {
+    "on_parent_edit": "flag_stale",
+    "on_parent_delete": "orphan"
+  }
+}

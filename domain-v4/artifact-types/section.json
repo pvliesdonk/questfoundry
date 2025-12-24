@@ -166,49 +166,49 @@
       {
         "id": "draft",
         "name": "Draft",
-        "description": "Section is being written by Scene Smith"
+        "description": "LLM agents actively working on content"
       },
       {
         "id": "review",
         "name": "Review",
-        "description": "Section is under Style Lead review"
-      },
-      {
-        "id": "gatecheck",
-        "name": "Gatecheck",
-        "description": "Section is awaiting Gatekeeper validation"
-      },
-      {
-        "id": "approved",
-        "name": "Approved",
-        "description": "Section has passed gatecheck, ready for Cold merge"
+        "description": "Studio work complete; ready for human review"
       },
       {
         "id": "cold",
         "name": "Cold",
-        "description": "Section is merged to Cold SoT, player-safe",
+        "description": "Canonized and immutable",
         "terminal": true
       }
     ],
     "initial_state": "draft",
     "transitions": [
-      { "from": "draft", "to": "review" },
-      { "from": "review", "to": "draft" },
-      { "from": "review", "to": "gatecheck" },
-      { "from": "gatecheck", "to": "draft" },
-      { "from": "gatecheck", "to": "approved" },
       {
-        "from": "gatecheck",
-        "to": "cold",
-        "allowed_agents": ["gatekeeper"],
-        "requires_validation": ["integrity", "reachability", "style", "presentation"]
+        "from": "draft",
+        "to": "review",
+        "allowed_agents": ["showrunner", "gatekeeper"],
+        "description": "Studio work complete"
       },
       {
-        "from": "approved",
+        "from": "review",
+        "to": "draft",
+        "description": "Explicit rework requested"
+      },
+      {
+        "from": "review",
         "to": "cold",
-        "requires_validation": ["integrity", "reachability", "style", "presentation"]
+        "allowed_agents": ["gatekeeper"],
+        "requires_validation": ["integrity", "reachability", "style", "presentation"],
+        "target_store": "manuscript",
+        "description": "Human-approved canonization"
       }
     ]
+  },
+
+  "lifecycle_policy": {
+    "edit_policy": "demote",
+    "demote_trigger_states": ["review"],
+    "demote_target_state": "draft",
+    "demote_target_store": "workspace"
   },
 
   "validation": {

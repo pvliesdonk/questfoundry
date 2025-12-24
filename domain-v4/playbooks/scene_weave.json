@@ -6,7 +6,7 @@
   "summary": "Transform briefs into prose with choices",
   "purpose": "Transform Section Briefs into full prose Sections with dialogue, sensory detail, and contrastive choices. Voice first, structure assumed stable.",
 
-  "description": "Scene Weave is the prose loop. Scene Smith fills structural shells from Story Spark with dialogue and sensory detail. The structure is assumed stable—this loop does not change topology, only inhabits it. The focus is on voice, aesthetic quality, contrastive choices, and diegetic gate phrasing. Hooks generated here are scene-level (traits, tells, props) rather than structural.",
+  "description": "Scene Weave is the prose loop. Scene Smith fills structural shells from Story Spark with dialogue and sensory detail. The structure is assumed stable—this loop does not change topology, only inhabits it. The focus is on voice, aesthetic quality, contrastive choices, and diegetic gate phrasing. Hooks generated here are scene-level (traits, tells, props) rather than structural. Sections are created in draft, promoted to review when studio work is complete. The review state means 'LLM studio is done; ready for human review'. Gatekeeper validation runs via quality bars during the playbook, not via lifecycle state changes.",
 
   "triggers": [
     {
@@ -52,7 +52,7 @@
       {
         "type": "section",
         "alias": "sections",
-        "description": "Full prose Sections with choices and gates (created in `draft`, intended to be promoted to lifecycle states like `review`/`approved` via lifecycle tools after gatecheck)",
+        "description": "Full prose Sections with choices and gates. Created in draft, promoted to review when playbook completes successfully. The review state indicates studio work is complete and sections are ready for human review or canonization.",
         "state": "review"
       }
     ],
@@ -271,7 +271,7 @@
       ],
 
       "on_success": {
-        "message": "Sections approved. Ready for Cold merge after full pipeline (Lore, Codex, etc.).",
+        "message": "Sections approved and promoted to review state. Ready for human review or canonization (review -> cold) via separate approval flow.",
         "end_playbook": true,
         "followups": {
           "runtime_actions": [

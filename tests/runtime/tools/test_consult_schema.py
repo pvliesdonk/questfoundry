@@ -20,23 +20,55 @@ def make_mock_artifact_type():
     artifact_type.category = "document"
 
     # Fields (use lowercase names to match typical field identifiers)
+    # NOTE: Must explicitly set nested attributes to None to prevent MagicMock
+    # from auto-creating them (which causes infinite recursion in _field_to_dict)
     field1 = MagicMock()
     field1.name = "title"
     field1.type = FieldType.STRING
     field1.required = True
     field1.description = "Section title"
+    field1.enum = None
+    field1.format = None
+    field1.min_length = None
+    field1.max_length = None
+    field1.min = None
+    field1.max = None
+    field1.ref_target = None
+    field1.properties = None
+    field1.items = None
+    field1.items_type = None
 
     field2 = MagicMock()
     field2.name = "body"
     field2.type = FieldType.TEXT
     field2.required = True
     field2.description = "Section content"
+    field2.enum = None
+    field2.format = None
+    field2.min_length = None
+    field2.max_length = None
+    field2.min = None
+    field2.max = None
+    field2.ref_target = None
+    field2.properties = None
+    field2.items = None
+    field2.items_type = None
 
     field3 = MagicMock()
     field3.name = "tags"
     field3.type = FieldType.ARRAY
     field3.required = False
     field3.description = "Optional tags"
+    field3.enum = None
+    field3.format = None
+    field3.min_length = None
+    field3.max_length = None
+    field3.min = None
+    field3.max = None
+    field3.ref_target = None
+    field3.properties = None
+    field3.items = None
+    field3.items_type = None
 
     artifact_type.fields = [field1, field2, field3]
 

@@ -144,5 +144,12 @@
     ]
   },
 
+  "lifecycle_policy": {
+    "edit_policy": "demote",
+    "demote_trigger_states": ["review", "validated", "published"],
+    "demote_target_state": "draft",
+    "demote_target_store": "workspace"
+  },
+
   "default_store": "codex"
 }
