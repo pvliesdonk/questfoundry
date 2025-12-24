@@ -16,9 +16,123 @@
   ],
 
   "content": {
-    "type": "file_ref",
-    "format": "markdown",
-    "file_path": "knowledge/must_know/tool_response_interpretation.md"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "definitions": [
+        {
+          "term": "action_outcome",
+          "meaning": "Whether the operation applied successfully.",
+          "distinguishing_features": [
+            "saved - Artifact was persisted → Proceed",
+            "rejected - Operation refused → Fix issues and retry",
+            "deferred - Queued for later → Wait or proceed"
+          ]
+        },
+        {
+          "term": "validation_result / overall_assessment",
+          "meaning": "Whether the data is acceptable quality.",
+          "distinguishing_features": [
+            "pass - Meets requirements → Proceed",
+            "warn - Minor issues → Consider fixing or proceed",
+            "fail - Does not meet requirements → Must fix before proceeding"
+          ]
+        },
+        {
+          "term": "recommendation",
+          "meaning": "Orchestrator-level decision guidance.",
+          "distinguishing_features": [
+            "proceed - Continue to next workflow step",
+            "rework - Send back for fixes",
+            "escalate - Ask human for guidance",
+            "hold - Address blockers first"
+          ]
+        },
+        {
+          "term": "recovery_action",
+          "meaning": "Specific fix instruction when action_outcome is rejected.",
+          "distinguishing_features": [
+            "Read this FIRST when rejected",
+            "Contains exact changes needed",
+            "Follow these instructions before retrying"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "statement": "Always read recovery_action first when action_outcome is rejected",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "The recovery_action tells you exactly what to fix."
+        },
+        {
+          "statement": "Never retry the same input after action_outcome: rejected",
+          "enforcement": "llm",
+          "severity": "error",
+          "reasoning": "The same input will fail the same way. Read recovery_action and fix first."
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Handle a tool response correctly",
+          "steps": [
+            "Check action_outcome - did the operation apply?",
+            "If rejected, read recovery_action for specific fix instructions",
+            "Check validation_result - is the data acceptable?",
+            "Check recommendation - what should happen next?"
+          ]
+        },
+        {
+          "goal": "Recover from a rejected save_artifact",
+          "steps": [
+            "Read the recovery_action field",
+            "Make the specified changes to your input",
+            "Retry with corrected input"
+          ],
+          "examples": [
+            "```json\n{\n  \"action_outcome\": \"rejected\",\n  \"rejection_reason\": \"validation_failed\",\n  \"recovery_action\": \"Rename 'content' to 'prose' and add required 'section_id' field\",\n  \"errors\": [...]\n}\n```\nDo: Rename the field, add section_id, retry\nDon't: Retry with the same payload hoping it works"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Seeing lifecycle_effect in response",
+          "guidance": "This is informational - the runtime handled it automatically. No action required from you.",
+          "examples": [
+            "```json\n{\n  \"action_outcome\": \"saved\",\n  \"lifecycle_effect\": {\n    \"demoted\": true,\n    \"from_state\": \"review\",\n    \"to_state\": \"draft\",\n    \"reason\": \"edit_policy\"\n  }\n}\n```\nThe runtime demoted the artifact automatically. Continue working."
+          ]
+        },
+        {
+          "context": "Seeing cascade_demotions in response",
+          "guidance": "Be aware that child artifacts were also demoted. They may need re-validation.",
+          "examples": [
+            "```json\n{\n  \"action_outcome\": \"saved\",\n  \"cascade_demotions\": [\n    {\"artifact_id\": \"section_abc\", \"to_state\": \"draft\"}\n  ]\n}\n```"
+          ]
+        },
+        {
+          "context": "Seeing transition_not_allowed rejection",
+          "guidance": "You're trying a lifecycle transition you're not authorized for. Delegate to the appropriate agent.",
+          "examples": [
+            "```json\n{\n  \"action_outcome\": \"rejected\",\n  \"rejection_reason\": \"transition_not_allowed\",\n  \"recovery_action\": \"Only Gatekeeper can promote to cold state\"\n}\n```\nAction: Delegate to Gatekeeper if you need cold promotion."
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Retrying same input after rejection",
+          "consequence": "Wasted turn - same input will fail the same way.",
+          "detection": "You called the same tool with identical arguments after a rejection.",
+          "prevention": "Read recovery_action, make the specified changes, then retry."
+        },
+        {
+          "failure_mode": "Ignoring recovery_action",
+          "consequence": "You don't know what to fix; likely to make wrong changes.",
+          "detection": "You modified input without reading recovery_action first.",
+          "prevention": "Always check recovery_action before modifying and retrying."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

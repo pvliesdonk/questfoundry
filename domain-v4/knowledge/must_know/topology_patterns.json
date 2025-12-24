@@ -17,9 +17,80 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Topology Patterns\n\n### Hub\n\n**Definition**: A section (or cluster) with meaningful fan-out to multiple distinct routes.\n\n**Purpose**: Give players genuine choice about where to go.\n\n**Requirements**:\n- Branches lead to genuinely different content\n- Not cosmetic variations\n- Each path has distinct stakes or outcomes\n\n**Example**: A marketplace hub where players can visit the smith, the tavern, or the docks - each offering different opportunities.\n\n### Loop\n\n**Definition**: A design that returns the reader to a prior location with difference.\n\n**Purpose**: Create depth and consequence through revisitation.\n\n**Requirements**:\n- Return changes something (context, options, relationships)\n- Usually via codeword/state change\n- Not just circular navigation\n\n**Example**: Returning to the tavern after learning a secret - new dialogue options appear.\n\n### Gateway\n\n**Definition**: A diegetic condition controlling access to content.\n\n**Purpose**: Create gated progression that feels earned.\n\n**Requirements**:\n- Clear, single condition\n- At least one obtainable path to condition\n- PN can enforce without exposing internals\n\n**Example**: 'Only those bearing the foreman's seal may enter the control room.'\n\n### Combining Patterns\n\nRich topology uses all three:\n- Hub for exploration freedom\n- Loops for depth and consequence\n- Gateways for meaningful progression"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "definitions": [
+        {
+          "term": "Hub",
+          "meaning": "A section (or cluster) with meaningful fan-out to multiple distinct routes.",
+          "distinguishing_features": [
+            "Branches lead to genuinely different content",
+            "Not cosmetic variations",
+            "Each path has distinct stakes or outcomes"
+          ],
+          "examples": [
+            "A marketplace hub where players can visit the smith, the tavern, or the docks - each offering different opportunities."
+          ]
+        },
+        {
+          "term": "Loop",
+          "meaning": "A design that returns the reader to a prior location with difference.",
+          "distinguishing_features": [
+            "Return changes something (context, options, relationships)",
+            "Usually via codeword/state change",
+            "Not just circular navigation"
+          ],
+          "examples": [
+            "Returning to the tavern after learning a secret - new dialogue options appear."
+          ]
+        },
+        {
+          "term": "Gateway",
+          "meaning": "A diegetic condition controlling access to content.",
+          "distinguishing_features": [
+            "Clear, single condition",
+            "At least one obtainable path to condition",
+            "PN can enforce without exposing internals"
+          ],
+          "examples": [
+            "'Only those bearing the foreman's seal may enter the control room.'"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Designing rich narrative topology",
+          "guidance": "Use all three patterns together: Hub for exploration freedom, Loops for depth and consequence, Gateways for meaningful progression.",
+          "reasoning": "Each pattern serves a different purpose; combining them creates layered player experience."
+        },
+        {
+          "context": "Evaluating if a Hub is meaningful",
+          "guidance": "Ask: Do the branches lead to genuinely different content with distinct stakes?",
+          "counter_examples": [
+            "Three doors that all lead to the same room",
+            "Choices that differ only in wording"
+          ]
+        },
+        {
+          "context": "Evaluating if a Loop adds depth",
+          "guidance": "Ask: Does returning change something visible to the player?",
+          "counter_examples": [
+            "Returning with no new options or dialogue",
+            "Circular paths with no state effect"
+          ]
+        },
+        {
+          "context": "Evaluating if a Gateway is well-designed",
+          "guidance": "Ask: Can the player obtain the condition, and can the PN enforce it without spoilers?",
+          "counter_examples": [
+            "Gates requiring items that don't exist",
+            "Gate text that reveals plot twists"
+          ]
+        }
+      ]
+    }
   },
 
   "applicable_to": {

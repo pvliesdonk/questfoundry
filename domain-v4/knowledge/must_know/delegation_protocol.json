@@ -16,9 +16,139 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Delegation Protocol\n\nWhen you receive a delegated task, you MUST complete it properly by returning to the orchestrator.\n\n### CRITICAL: Always Return with Artifacts\n\n**ALWAYS call `return_to_orchestrator` when your task is complete.** Include all artifact IDs you created:\n\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Created 3 sections from briefs\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"section_abc123\", \"section_def456\", \"section_ghi789\"]\n})\n```\n\n### Why Artifact Handoff Matters\n\n- Showrunner needs your artifact IDs to pass to the next agent\n- Without IDs, the workflow breaks (next agent can't find your work)\n- The `artifacts_produced` field is how the delegation chain works\n\n### The Three-Part Return\n\n1. **result_assessment** - Quality of your work:\n   - `pass` - Task completed successfully\n   - `partial` - Some issues found, work may need revision\n   - `fail` - Could not complete the task\n   - `skip` - Could not start (missing inputs)\n   - `info` - Informational only (e.g., pre-gate review)\n\n2. **recommendation** - What orchestrator should do:\n   - `proceed` - Continue to next workflow step\n   - `rework` - Send back for fixes\n   - `escalate` - Ask human for guidance\n   - `hold` - Address blockers first\n\n3. **artifacts_produced** - List of artifact IDs you created or modified\n\n### Never Do This\n\n- ❌ Stop after saving artifacts without calling `return_to_orchestrator`\n- ❌ Omit `artifacts_produced` when you created artifacts\n- ❌ Return without a summary of what you did\n\n### Examples\n\n**Creator completing work:**\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Wrote 3 sections with Agatha Christie style prose and contrastive choices\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"section_94482696\", \"section_9f09c489\", \"section_67222b03\"]\n})\n```\n\n**Validator finding issues:**\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Gatecheck complete - 6/8 bars pass, 2 need rework\",\n  \"result_assessment\": \"partial\",\n  \"recommendation\": \"rework\",\n  \"artifacts_produced\": [\"gatecheck_report_001\"],\n  \"blockers\": [\n    {\"type\": \"quality_issue\", \"description\": \"Choice Integrity: options 2 and 3 are near-synonyms\"}\n  ]\n})\n```\n\n**Blocked by missing input:**\n```json\nreturn_to_orchestrator({\n  \"summary\": \"Cannot validate - no sections found in workspace\",\n  \"result_assessment\": \"skip\",\n  \"recommendation\": \"hold\",\n  \"blockers\": [\n    {\"type\": \"missing_input\", \"description\": \"Expected section artifacts not found\"}\n  ]\n})\n```"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "contracts": [
+        {
+          "name": "Delegation Handoff",
+          "parties": ["delegated_agent", "orchestrator"],
+          "obligations": [
+            {
+              "party": "delegated_agent",
+              "must": "Call return_to_orchestrator when task is complete"
+            },
+            {
+              "party": "delegated_agent",
+              "must": "Include all artifact IDs created in artifacts_produced field"
+            },
+            {
+              "party": "delegated_agent",
+              "must": "Provide result_assessment, recommendation, and summary"
+            },
+            {
+              "party": "orchestrator",
+              "must": "Pass artifact IDs to subsequent agents that need them"
+            }
+          ],
+          "reasoning": "Showrunner needs artifact IDs to pass to the next agent. Without IDs, the workflow breaks."
+        }
+      ],
+      "definitions": [
+        {
+          "term": "result_assessment",
+          "meaning": "Quality of the delegated work.",
+          "distinguishing_features": [
+            "pass - Task completed successfully",
+            "partial - Some issues found, work may need revision",
+            "fail - Could not complete the task",
+            "skip - Could not start (missing inputs)",
+            "info - Informational only (e.g., pre-gate review)"
+          ]
+        },
+        {
+          "term": "recommendation",
+          "meaning": "What orchestrator should do next.",
+          "distinguishing_features": [
+            "proceed - Continue to next workflow step",
+            "rework - Send back for fixes",
+            "escalate - Ask human for guidance",
+            "hold - Address blockers first"
+          ]
+        },
+        {
+          "term": "artifacts_produced",
+          "meaning": "List of artifact IDs created or modified during the delegated task.",
+          "distinguishing_features": [
+            "Essential for workflow continuity",
+            "Orchestrator uses these to delegate to next agent"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "statement": "Always call return_to_orchestrator when your task is complete",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Without this call, orchestrator doesn't know you're done."
+        },
+        {
+          "statement": "Always include artifacts_produced when you created artifacts",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Next agent can't find your work without the IDs."
+        },
+        {
+          "statement": "Always provide a summary of what you did",
+          "enforcement": "llm",
+          "severity": "error"
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Stopping after saving artifacts without calling return_to_orchestrator",
+          "consequence": "Orchestrator is left waiting; workflow stalls.",
+          "prevention": "Always end with return_to_orchestrator call."
+        },
+        {
+          "failure_mode": "Omitting artifacts_produced when artifacts were created",
+          "consequence": "Next agent can't find your work; workflow breaks.",
+          "prevention": "Include all artifact IDs in the return call."
+        },
+        {
+          "failure_mode": "Returning without a summary",
+          "consequence": "Orchestrator lacks context for next decisions.",
+          "prevention": "Always describe what was accomplished."
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Complete a delegated task and return control",
+          "steps": [
+            "Execute the assigned task",
+            "Save any artifacts created",
+            "Collect artifact IDs from save responses",
+            "Call return_to_orchestrator with summary, assessment, recommendation, and artifact IDs"
+          ],
+          "examples": [
+            "```json\nreturn_to_orchestrator({\n  \"summary\": \"Created 3 sections from briefs\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"section_abc123\", \"section_def456\", \"section_ghi789\"]\n})\n```"
+          ]
+        },
+        {
+          "goal": "Return when validation finds issues",
+          "steps": [
+            "Complete validation checks",
+            "Document issues found",
+            "Save gatecheck report",
+            "Return with partial assessment and rework recommendation"
+          ],
+          "examples": [
+            "```json\nreturn_to_orchestrator({\n  \"summary\": \"Gatecheck complete - 6/8 bars pass, 2 need rework\",\n  \"result_assessment\": \"partial\",\n  \"recommendation\": \"rework\",\n  \"artifacts_produced\": [\"gatecheck_report_001\"],\n  \"blockers\": [\n    {\"type\": \"quality_issue\", \"description\": \"Choice Integrity: options 2 and 3 are near-synonyms\"}\n  ]\n})\n```"
+          ]
+        },
+        {
+          "goal": "Return when blocked by missing input",
+          "steps": [
+            "Identify what's missing",
+            "Return with skip assessment and hold recommendation"
+          ],
+          "examples": [
+            "```json\nreturn_to_orchestrator({\n  \"summary\": \"Cannot validate - no sections found in workspace\",\n  \"result_assessment\": \"skip\",\n  \"recommendation\": \"hold\",\n  \"blockers\": [\n    {\"type\": \"missing_input\", \"description\": \"Expected section artifacts not found\"}\n  ]\n})\n```"
+          ]
+        }
+      ]
+    }
   },
 
   "applicable_to": {

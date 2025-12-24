@@ -7,10 +7,10 @@ Implements the menu+consult pattern from meta/docs/knowledge-patterns.md.
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
+from questfoundry.runtime.agent.structured_renderer import render_structured_entry
 from questfoundry.runtime.models.base import KnowledgeContent
 from questfoundry.runtime.tools.base import BaseTool, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.registry import register_tool
@@ -106,38 +106,38 @@ class ConsultKnowledgeTool(BaseTool):
         return ToolResult(success=True, data=result_data)
 
     def _extract_content(self, entry: Any) -> str | None:
-        """Extract text content from a knowledge entry."""
+        """Extract text content from a knowledge entry.
+
+        For structured content, renders semantic types (rules, contracts, etc.)
+        to readable markdown using the structured_renderer.
+        """
         content = entry.content
         if content is None:
             return None
 
         # Handle dict content (raw from JSON)
         if isinstance(content, dict):
-            content_type = content.get("type", "inline")
-            if content_type == "inline":
-                return content.get("text")
-            elif content_type == "file_ref":
-                # TODO: Load from file
-                return f"(Content in file: {content.get('file_path')})"
-            elif content_type == "structured":
-                # Return JSON representation of structured data
+            content_type = content.get("type", "structured")
+            if content_type == "structured":
                 data = content.get("data", {})
-                return json.dumps(data, indent=2)
+                if data:
+                    return render_structured_entry(data)
+                return None
+            elif content_type == "file_ref":
+                # file_ref entries should be migrated to structured
+                return f"(Content in file: {content.get('file_path')})"
             elif content_type == "corpus":
-                # Corpus entries are searched via consult_corpus tool
                 return "(This is a corpus entry. Use consult_corpus tool to search.)"
-            else:
-                return content.get("text")
+            return None
 
         # Handle KnowledgeContent model
         if isinstance(content, KnowledgeContent):
-            if content.type == "inline":
-                text = content.text
-                return str(text) if text else None
+            if content.type == "structured":
+                if content.data:
+                    return render_structured_entry(content.data)
+                return None
             elif content.type == "file_ref":
                 return f"(Content in file: {content.file_path})"
-            elif content.type == "structured":
-                return json.dumps(content.data or {}, indent=2)
             elif content.type == "corpus":
                 return "(This is a corpus entry. Use consult_corpus tool to search.)"
 

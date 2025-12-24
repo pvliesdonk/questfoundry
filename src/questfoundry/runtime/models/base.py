@@ -361,12 +361,19 @@ class RelationshipDef(BaseModel):
 
 
 class KnowledgeContent(BaseModel):
-    """Knowledge content definition."""
+    """Knowledge content definition.
 
-    type: Literal["inline", "file_ref", "structured", "corpus"] = "inline"
-    text: str | None = None  # For inline type
+    Supports three content types:
+    - structured: Semantic JSON with rules, contracts, criteria, etc.
+    - file_ref: External file reference (rare, for large content)
+    - corpus: RAG-searchable reference material
+
+    Note: 'inline' type has been deprecated in favor of 'structured'.
+    """
+
+    type: Literal["file_ref", "structured", "corpus"] = "structured"
     file_path: str | None = None  # For file_ref type
-    format: Literal["markdown", "json", "yaml", "plain"] = "markdown"
+    format: Literal["markdown", "json", "yaml", "plain"] = "json"
     data: dict[str, Any] | None = None  # For structured type
     schema_ref: str | None = None  # For structured type
     corpus_ref: dict[str, Any] | None = None  # For corpus type

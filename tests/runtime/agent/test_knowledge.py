@@ -27,7 +27,10 @@ from questfoundry.runtime.models.enums import KnowledgeLayer
 
 @pytest.fixture
 def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
-    """Create mock knowledge entries for testing."""
+    """Create mock knowledge entries for testing.
+
+    Uses structured content format with semantic types (rules, definitions, etc.)
+    """
     return {
         "constitution": KnowledgeEntry(
             id="constitution",
@@ -35,8 +38,13 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.CONSTITUTION,
             summary="Inviolable principles.",
             content={
-                "type": "inline",
-                "text": "## Constitution\n\n1. Never harm users.\n2. Always be helpful.",
+                "type": "structured",
+                "data": {
+                    "rules": [
+                        {"statement": "Never harm users", "severity": "critical"},
+                        {"statement": "Always be helpful", "severity": "critical"},
+                    ]
+                },
             },
         ),
         "spoiler_hygiene": KnowledgeEntry(
@@ -45,8 +53,16 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.MUST_KNOW,
             summary="Never reveal future plot points.",
             content={
-                "type": "inline",
-                "text": "## Spoiler Hygiene\n\nNever reveal future plot points. Keep secrets safe.",
+                "type": "structured",
+                "data": {
+                    "rules": [
+                        {
+                            "statement": "Never reveal future plot points",
+                            "severity": "critical",
+                        },
+                        {"statement": "Keep secrets safe", "severity": "error"},
+                    ]
+                },
             },
         ),
         "runtime_guidelines": KnowledgeEntry(
@@ -55,8 +71,13 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.MUST_KNOW,
             summary="Guidelines for runtime behavior.",
             content={
-                "type": "inline",
-                "text": "## Runtime Guidelines\n\nAlways use tools for actions. Handle errors gracefully.",
+                "type": "structured",
+                "data": {
+                    "rules": [
+                        {"statement": "Always use tools for actions", "severity": "error"},
+                        {"statement": "Handle errors gracefully", "severity": "warning"},
+                    ]
+                },
             },
         ),
         "quality_bars": KnowledgeEntry(
@@ -65,8 +86,12 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.SHOULD_KNOW,
             summary="Overview of the 8 quality criteria.",
             content={
-                "type": "inline",
-                "text": "## Quality Bars\n\nDetailed quality criteria information...",
+                "type": "structured",
+                "data": {
+                    "definitions": [
+                        {"term": "Quality Bar", "meaning": "A threshold for acceptance"},
+                    ]
+                },
             },
         ),
         "showrunner_heuristics": KnowledgeEntry(
@@ -75,8 +100,12 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.ROLE_SPECIFIC,
             summary="Heuristics for the showrunner role.",
             content={
-                "type": "inline",
-                "text": "## Showrunner Heuristics\n\nDelegate early and often...",
+                "type": "structured",
+                "data": {
+                    "heuristics": [
+                        {"guidance": "Delegate early and often"},
+                    ]
+                },
             },
         ),
         "accessibility_guidelines": KnowledgeEntry(
@@ -85,8 +114,12 @@ def mock_knowledge_entries() -> dict[str, KnowledgeEntry]:
             layer=KnowledgeLayer.LOOKUP,
             summary="Guidelines for accessibility.",
             content={
-                "type": "inline",
-                "text": "## Accessibility\n\nVery long content that should never be inlined...",
+                "type": "structured",
+                "data": {
+                    "rules": [
+                        {"statement": "Very long content that should never be inlined..."},
+                    ]
+                },
             },
         ),
     }

@@ -17,9 +17,110 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## The 8 Quality Bars\n\nEvery merge to Cold must pass all 8 bars:\n\n### 1. Integrity\nReferences resolve; no unintended dead ends; state effects don't create contradictions.\n\n### 2. Reachability\nMust-see beats (keystones, required items) reachable via at least one viable path.\n\n### 3. Nonlinearity\nHubs/loops/gateways exist where intended and matter to play (not decorative).\n\n### 4. Gateways\nConditions are consistent, enforceable by PN, and spoiler-safe on surface.\n\n### 5. Style\nVoice, register, motifs align with guardrails; PN remains in-voice.\n\n### 6. Determinism (when promised)\nAssets reproducible from recorded parameters (seed, model, etc.).\n\n### 7. Presentation\nPlayer surfaces contain no spoilers or internal plumbing.\n\n### 8. Accessibility\nNavigation clear; alt text present; sensory considerations respected.\n\n### Gatekeeper's Role\n\n- Gatekeeper enforces all 8 bars\n- Block with specific bar citation and smallest viable fix\n- No merge on fail (exceptions are rare, explicit, time-boxed)"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "criteria": [
+        {
+          "name": "Integrity",
+          "pass_condition": "References resolve; no unintended dead ends; state effects don't create contradictions.",
+          "fail_indicators": [
+            "Broken links or references",
+            "Unreachable sections",
+            "Contradictory state changes"
+          ]
+        },
+        {
+          "name": "Reachability",
+          "pass_condition": "Must-see beats (keystones, required items) reachable via at least one viable path.",
+          "fail_indicators": [
+            "Critical content gated behind impossible conditions",
+            "Required items unreachable"
+          ]
+        },
+        {
+          "name": "Nonlinearity",
+          "pass_condition": "Hubs/loops/gateways exist where intended and matter to play (not decorative).",
+          "fail_indicators": [
+            "Claimed branches that converge without difference",
+            "Purely cosmetic choices"
+          ]
+        },
+        {
+          "name": "Gateways",
+          "pass_condition": "Conditions are consistent, enforceable by PN, and spoiler-safe on surface.",
+          "fail_indicators": [
+            "Gates with unobtainable conditions",
+            "Spoiler-revealing gate text",
+            "Inconsistent gate logic"
+          ]
+        },
+        {
+          "name": "Style",
+          "pass_condition": "Voice, register, motifs align with guardrails; PN remains in-voice.",
+          "fail_indicators": [
+            "Tone breaks from established voice",
+            "PN using out-of-character language"
+          ]
+        },
+        {
+          "name": "Determinism",
+          "pass_condition": "Assets reproducible from recorded parameters (seed, model, etc.) when determinism is promised.",
+          "fail_indicators": [
+            "Missing generation parameters",
+            "Non-reproducible outputs for deterministic content"
+          ]
+        },
+        {
+          "name": "Presentation",
+          "pass_condition": "Player surfaces contain no spoilers or internal plumbing.",
+          "fail_indicators": [
+            "Codeword names visible to players",
+            "Debug markers in output",
+            "Internal IDs exposed"
+          ]
+        },
+        {
+          "name": "Accessibility",
+          "pass_condition": "Navigation clear; alt text present; sensory considerations respected.",
+          "fail_indicators": [
+            "Missing alt text for images",
+            "Unclear navigation structure",
+            "Ignored sensory accessibility needs"
+          ]
+        }
+      ],
+      "contracts": [
+        {
+          "name": "Gatekeeper Quality Enforcement",
+          "parties": ["gatekeeper", "all_agents"],
+          "obligations": [
+            {
+              "party": "gatekeeper",
+              "must": "Enforce all 8 quality bars before allowing merge to Cold"
+            },
+            {
+              "party": "gatekeeper",
+              "must": "Block with specific bar citation and smallest viable fix",
+              "when": "Any bar fails"
+            },
+            {
+              "party": "all_agents",
+              "must": "Accept Gatekeeper's quality decisions without bypass"
+            }
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "statement": "No merge to Cold on quality bar failure",
+          "enforcement": "runtime",
+          "severity": "critical",
+          "reasoning": "Exceptions are rare, explicit, and time-boxed."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

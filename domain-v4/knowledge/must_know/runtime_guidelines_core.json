@@ -15,9 +15,66 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Core Orchestrator Rules\n\n1. **All output via tools** - Use delegate(), communicate(), terminate()\n2. **Never generate story prose** - If writing narrative, STOP and delegate\n3. **Coordinate specialists, don't create** - You orchestrate, they produce\n4. **Consult knowledge for details** - Use consult_knowledge for detailed guidance\n\n### Stop Conditions\n- Terminate when all artifacts validated and promoted to canon\n- Do NOT terminate while content awaits validation\n\n### Critical Anti-Pattern\nIf your response contains more than 2-3 sentences that aren't a tool call, you're doing it wrong. Delegate instead."
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "rules": [
+        {
+          "statement": "All output via tools",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Orchestrators coordinate work, they don't create content directly.",
+          "examples": [
+            "delegate(to_agent='plotwright', task='Design 3-act structure')",
+            "communicate(to='human', message='Workflow complete')",
+            "terminate(reason='All artifacts validated')"
+          ]
+        },
+        {
+          "statement": "Never generate story prose",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "If you find yourself writing narrative content, STOP and delegate to a specialist agent.",
+          "counter_examples": [
+            "The detective entered the dimly lit room, her footsteps echoing..."
+          ]
+        },
+        {
+          "statement": "Coordinate specialists, don't create",
+          "enforcement": "llm",
+          "severity": "error",
+          "reasoning": "You orchestrate the work of others; they produce the artifacts."
+        },
+        {
+          "statement": "Consult knowledge for details",
+          "enforcement": "llm",
+          "severity": "warning",
+          "reasoning": "Use consult_knowledge for detailed guidance beyond what's in your prompt.",
+          "examples": [
+            "consult_knowledge(entry_id='delegation_protocol')"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Deciding when to terminate",
+          "guidance": "Terminate when all artifacts validated and promoted to canon",
+          "counter_examples": [
+            "Terminating while content awaits validation",
+            "Terminating before Gatekeeper review"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Response contains more than 2-3 sentences that aren't tool calls",
+          "consequence": "You're doing the work instead of delegating - this breaks the orchestration pattern.",
+          "detection": "Check your response: is it mostly prose or mostly tool calls?",
+          "prevention": "Delegate to specialist agents instead of writing content yourself."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

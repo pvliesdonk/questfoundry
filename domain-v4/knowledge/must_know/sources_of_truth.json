@@ -17,9 +17,82 @@
   ],
 
   "content": {
-    "type": "inline",
-    "format": "markdown",
-    "text": "## Sources of Truth\n\n### Hot SoT (Workspace)\n\n**Purpose**: Discovery space for drafts, hooks, work-in-progress\n\n**Characteristics**:\n- Mutable (all agents can read/write)\n- Spoilers allowed\n- Canon work-in-progress lives here\n- Plan-only assets (art/audio) staged here\n\n### Cold SoT (Canon)\n\n**Purpose**: Curated canon and player-safe surfaces\n\n**Characteristics**:\n- Cold semantics (exclusive production by Lore Weaver)\n- No spoilers on player-facing content\n- Merge to Cold only after Gatekeeper passes all quality bars\n- Ship-ready, not staging\n\n### Snapshots and Views\n\n**Snapshot**: Immutable tag of Cold (e.g., `cold@2025-10-28`)\n- Exports are cut from snapshots\n- Views cite their source snapshot\n\n**View**: Player-safe export bundle (MD/HTML/EPUB/PDF)\n- Built from a snapshot via Binding Run\n- Never ships from Hot\n\n### The Merge Train\n\n1. Work in Hot\n2. Gatecheck (8 quality bars)\n3. Merge to Cold (on pass)\n4. Snapshot\n5. Build View\n\n### Golden Rule\n\n**Never ship from Hot. Never bypass Gatekeeper.**"
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "definitions": [
+        {
+          "term": "Hot SoT (Workspace)",
+          "meaning": "Discovery space for drafts, hooks, and work-in-progress. Mutable by all agents.",
+          "distinguishing_features": [
+            "All agents can read/write",
+            "Spoilers allowed",
+            "Canon work-in-progress lives here",
+            "Plan-only assets (art/audio) staged here"
+          ]
+        },
+        {
+          "term": "Cold SoT (Canon)",
+          "meaning": "Curated canon and player-safe surfaces. Immutable once committed.",
+          "distinguishing_features": [
+            "Cold semantics (exclusive production by Lorekeeper)",
+            "No spoilers on player-facing content",
+            "Only receives content after Gatekeeper passes all quality bars",
+            "Ship-ready, not staging"
+          ]
+        },
+        {
+          "term": "Snapshot",
+          "meaning": "Immutable tag of Cold at a point in time (e.g., `cold@2025-10-28`).",
+          "distinguishing_features": [
+            "Exports are cut from snapshots",
+            "Views cite their source snapshot",
+            "Provides versioning and rollback capability"
+          ]
+        },
+        {
+          "term": "View",
+          "meaning": "Player-safe export bundle (MD/HTML/EPUB/PDF) built from a snapshot.",
+          "distinguishing_features": [
+            "Built from a snapshot via Binding Run",
+            "Never ships from Hot",
+            "Player-facing format"
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Move content from draft to player-ready export",
+          "steps": [
+            "Work in Hot (workspace)",
+            "Request Gatecheck (8 quality bars)",
+            "Merge to Cold (on pass)",
+            "Create Snapshot",
+            "Build View from Snapshot"
+          ],
+          "postconditions": [
+            "Content is in Cold store",
+            "Snapshot is tagged",
+            "View is ready for distribution"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "statement": "Never ship from Hot",
+          "enforcement": "runtime",
+          "severity": "critical",
+          "reasoning": "Hot contains unvalidated work-in-progress that may have quality issues or spoilers."
+        },
+        {
+          "statement": "Never bypass Gatekeeper",
+          "enforcement": "runtime",
+          "severity": "critical",
+          "reasoning": "Quality bars exist to ensure player experience; bypassing breaks the guarantee."
+        }
+      ]
+    }
   },
 
   "applicable_to": {

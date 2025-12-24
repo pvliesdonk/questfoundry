@@ -14,7 +14,6 @@ Knowledge layers:
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -23,6 +22,7 @@ if TYPE_CHECKING:
 
 import logging
 
+from questfoundry.runtime.agent.structured_renderer import render_structured_entry
 from questfoundry.runtime.models.base import KnowledgeContent
 
 logger = logging.getLogger(__name__)
@@ -233,26 +233,40 @@ class KnowledgeContextBuilder:
         return None
 
     def _get_entry_content(self, entry: KnowledgeEntry) -> str | None:
-        """Extract text content from a knowledge entry."""
+        """Extract text content from a knowledge entry.
+
+        For structured content, renders semantic types (rules, contracts, etc.)
+        to readable markdown using the structured_renderer.
+        """
         content = entry.content
         if content is None:
             return None
 
         # Handle dict content (raw from JSON)
         if isinstance(content, dict):
-            content_type = content.get("type", "inline")
-            if content_type == "inline":
-                return content.get("text")
-            elif content_type == "structured":
-                return json.dumps(content.get("data", {}), indent=2)
-            return content.get("text")
+            content_type = content.get("type", "structured")
+            if content_type == "structured":
+                data = content.get("data", {})
+                if data:
+                    return render_structured_entry(data)
+                return None
+            elif content_type == "file_ref":
+                # file_ref entries should be migrated to structured
+                return f"(Content in file: {content.get('file_path')})"
+            elif content_type == "corpus":
+                return "(Corpus entry - use consult_corpus tool)"
+            return None
 
         # Handle KnowledgeContent model
         if isinstance(content, KnowledgeContent):
-            if content.type == "inline":
-                return content.text
-            elif content.type == "structured":
-                return json.dumps(content.data or {}, indent=2)
+            if content.type == "structured":
+                if content.data:
+                    return render_structured_entry(content.data)
+                return None
+            elif content.type == "file_ref":
+                return f"(Content in file: {content.file_path})"
+            elif content.type == "corpus":
+                return "(Corpus entry - use consult_corpus tool)"
 
         return str(content) if content else None
 
