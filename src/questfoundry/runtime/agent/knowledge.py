@@ -132,8 +132,8 @@ class KnowledgeContextBuilder:
 
         knowledge_req = agent.knowledge_requirements
 
-        # Find entries that apply to this agent's archetypes
-        archetype_entries = self._find_entries_by_archetype(agent, studio)
+        # Find entries that apply to this agent (via archetypes or agent ID)
+        matched_entries = self._find_entries_by_applicability(agent, studio)
 
         # 1. Constitution - always inline
         constitution_section = None
@@ -148,7 +148,7 @@ class KnowledgeContextBuilder:
         # Combine explicit must_know with archetype-matched must_know entries
         must_know_section = None
         explicit_must_know = (knowledge_req.must_know or []) if knowledge_req else []
-        archetype_must_know = archetype_entries.get("must_know", [])
+        archetype_must_know = matched_entries.get("must_know", [])
         all_must_know = _combine_entry_lists(explicit_must_know, archetype_must_know)
 
         if all_must_know:
@@ -189,7 +189,7 @@ class KnowledgeContextBuilder:
 
         # 3. Should-know - menu only (skip if already in menu or inlined)
         explicit_should_know = (knowledge_req.should_know or []) if knowledge_req else []
-        archetype_should_know = archetype_entries.get("should_know", [])
+        archetype_should_know = matched_entries.get("should_know", [])
         all_should_know = _combine_entry_lists(explicit_should_know, archetype_should_know)
         for entry_id in all_should_know:
             if entry_id in entries_in_menu or entry_id in entries_inlined:
@@ -201,7 +201,7 @@ class KnowledgeContextBuilder:
 
         # 4. Role-specific - menu only (skip if already in menu or inlined)
         explicit_role_specific = (knowledge_req.role_specific or []) if knowledge_req else []
-        archetype_role_specific = archetype_entries.get("role_specific", [])
+        archetype_role_specific = matched_entries.get("role_specific", [])
         all_role_specific = _combine_entry_lists(explicit_role_specific, archetype_role_specific)
         for entry_id in all_role_specific:
             if entry_id in entries_in_menu or entry_id in entries_inlined:
@@ -352,15 +352,18 @@ class KnowledgeContextBuilder:
         """
         return len(text) // self.config.chars_per_token
 
-    def _find_entries_by_archetype(self, agent: Agent, studio: Studio) -> dict[str, list[str]]:
+    def _find_entries_by_applicability(self, agent: Agent, studio: Studio) -> dict[str, list[str]]:
         """
-        Find knowledge entries that apply to this agent's archetypes.
+        Find knowledge entries that apply to this agent.
 
-        Checks each knowledge entry's applicable_to.archetypes field against
-        the agent's archetypes. Returns entries grouped by their layer.
+        Checks each knowledge entry's applicable_to field for matches against:
+        1. Agent's archetypes (via applicable_to.archetypes)
+        2. Agent's ID (via applicable_to.agents)
+
+        Returns entries grouped by their layer.
 
         Args:
-            agent: Agent definition with archetypes
+            agent: Agent definition with archetypes and id
             studio: Studio with knowledge entries
 
         Returns:
@@ -373,11 +376,9 @@ class KnowledgeContextBuilder:
         }
 
         agent_archetypes = set(getattr(agent, "archetypes", None) or [])
-        if not agent_archetypes:
-            return result
+        agent_id = agent.id
 
         for entry_id, entry in studio.knowledge.items():
-            # Check if entry has applicable_to with archetypes
             applicable_to = entry.applicable_to
             if not applicable_to:
                 continue
@@ -385,11 +386,16 @@ class KnowledgeContextBuilder:
             # Handle both dict and model forms
             if isinstance(applicable_to, dict):
                 entry_archetypes = set(applicable_to.get("archetypes", []))
+                entry_agents = set(applicable_to.get("agents", []))
             else:
                 entry_archetypes = set(applicable_to.archetypes or [])
+                entry_agents = set(applicable_to.agents or [])
 
-            # Check for archetype match
-            if not entry_archetypes.intersection(agent_archetypes):
+            # Check for archetype match OR agent ID match
+            archetype_match = bool(entry_archetypes.intersection(agent_archetypes))
+            agent_match = agent_id in entry_agents
+
+            if not (archetype_match or agent_match):
                 continue
 
             # Add to appropriate layer bucket
@@ -399,7 +405,7 @@ class KnowledgeContextBuilder:
             elif layer not in {"constitution", "lookup"}:
                 # Warn about unknown layers (constitution and lookup are handled separately)
                 logger.warning(
-                    "Knowledge entry '%s' has unknown layer '%s', skipping archetype inclusion",
+                    "Knowledge entry '%s' has unknown layer '%s', skipping applicability inclusion",
                     entry_id,
                     layer,
                 )
