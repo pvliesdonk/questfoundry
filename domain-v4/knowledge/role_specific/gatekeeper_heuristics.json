@@ -35,10 +35,10 @@
           "reasoning": "Gatekeeper is responsible for promoting artifacts through lifecycle states"
         },
         {
-          "statement": "Artifacts in draft state need TWO transitions to reach cold: draft \u2192 review \u2192 cold (there is NO direct draft \u2192 cold transition)",
+          "statement": "Artifacts need TWO SEPARATE transitions to reach cold: (1) draft → review after validation passes, (2) review → cold requires explicit approval flow",
           "severity": "critical",
           "enforcement": "runtime",
-          "reasoning": "Runtime enforces two-step promotion process"
+          "reasoning": "Validation (draft→review) and publishing (review→cold) are distinct steps. Cold requires explicit approval, not just passing validation."
         },
         {
           "statement": "NEVER block with vague concerns - every blocker must specify WHAT is wrong and HOW to fix it",
@@ -141,20 +141,35 @@
           ]
         },
         {
-          "goal": "Promote artifact through lifecycle states",
+          "goal": "Promote validated artifact to review state",
           "steps": [
             "Verify all quality bars pass",
             "Call request_lifecycle_transition with target_state: 'review'",
             "Wait for confirmation",
+            "Report success to orchestrator (artifact now in review = validation passed)"
+          ],
+          "preconditions": [
+            "Artifact in draft state",
+            "Quality bars pass"
+          ],
+          "postconditions": [
+            "Artifact promoted to review state (LLM work complete)"
+          ]
+        },
+        {
+          "goal": "Promote artifact from review to cold (explicit approval only)",
+          "steps": [
+            "Verify artifact is already in review state",
+            "Confirm this is an explicit approval request (not just routine validation)",
             "Call request_lifecycle_transition with target_state: 'cold'",
             "Report success to orchestrator"
           ],
           "preconditions": [
-            "Artifact in draft or review state",
-            "Quality bars pass"
+            "Artifact in review state",
+            "Explicit approval flow (binding run, human approval, or formal milestone)"
           ],
           "postconditions": [
-            "Artifact promoted to cold state"
+            "Artifact promoted to cold state (canonized)"
           ]
         }
       ],
@@ -213,14 +228,19 @@
           "prevention": "Substantiate every concern with quotes and specific fixes"
         },
         {
-          "failure_mode": "Validating successfully but not calling request_lifecycle_transition",
-          "consequence": "Artifact stays in draft/review; never reaches cold",
-          "prevention": "Always execute transitions after validation passes"
+          "failure_mode": "Validating successfully but not promoting to review",
+          "consequence": "Artifact stays in draft; LLM work not marked complete",
+          "prevention": "After validation passes, promote draft → review to signal completion"
         },
         {
-          "failure_mode": "Attempting direct draft \u2192 cold transition",
+          "failure_mode": "Attempting direct draft → cold transition",
           "consequence": "Runtime error; transition fails",
-          "prevention": "Always use two-step: draft \u2192 review, then review \u2192 cold"
+          "prevention": "Promote to review first. Cold promotion is a separate explicit approval step."
+        },
+        {
+          "failure_mode": "Auto-promoting to cold after validation without explicit approval",
+          "consequence": "Publishing without human/formal approval; bypasses approval workflow",
+          "prevention": "Validation promotes to review only. Cold requires explicit approval flow."
         },
         {
           "failure_mode": "Hot content appearing in Views",
