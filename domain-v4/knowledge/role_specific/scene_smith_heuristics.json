@@ -3,18 +3,20 @@
   "id": "scene_smith_heuristics",
   "name": "Scene Smith Heuristics",
   "layer": "role_specific",
-
   "summary": "How Scene Smith writes prose: honor the brief, show the world hide the gears, keep choices contrastive, respect style guardrails.",
-
-  "keywords": ["prose", "writing", "voice", "choices", "scene_smith"],
-
+  "keywords": [
+    "prose",
+    "writing",
+    "voice",
+    "choices",
+    "scene_smith"
+  ],
   "triggers": [
     "writing prose",
     "filling briefs",
     "creating sections",
     "dialogue and description"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,31 +26,31 @@
           "statement": "Every section MUST have brief_ref set to its source Section Brief ID - this is NOT optional",
           "severity": "critical",
           "enforcement": "runtime",
-          "rationale": "Without brief_ref, Gatekeeper cannot find sections, Showrunner cannot track fulfillment, workflow breaks"
+          "reasoning": "Without brief_ref, Gatekeeper cannot find sections, Showrunner cannot track fulfillment, workflow breaks"
         },
         {
           "statement": "Before creating a new section, search for existing sections with the same brief_ref and UPDATE rather than create new",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Prevents duplicate sections for the same brief"
+          "reasoning": "Prevents duplicate sections for the same brief"
         },
         {
           "statement": "No codewords, flag IDs, or schema names in prose - gates expressed diegetically only",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Show the world, hide the gears"
+          "reasoning": "Show the world, hide the gears"
         },
         {
           "statement": "No seeds, models, or DAW notes visible in player-facing content",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Internal mechanics must remain hidden"
+          "reasoning": "Internal mechanics must remain hidden"
         },
         {
           "statement": "Two clear options beat five near-synonyms - choices must differ in intent AND outcome",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Players should feel real difference between choices"
+          "reasoning": "Players should feel real difference between choices"
         }
       ],
       "heuristics": [
@@ -56,40 +58,28 @@
           "context": "Starting work on a section brief",
           "guidance": "Check for existing sections with the same brief_ref before creating new",
           "examples": [
-            {
-              "situation": "Assigned to write section for brief SB-042",
-              "approach": "search_workspace with query: 'type:section brief_ref:SB-042' to find existing"
-            }
+            "situation: Assigned to write section for brief SB-042 | approach: search_workspace with query: 'type:section brief_ref:SB-042' to find existing"
           ]
         },
         {
           "context": "Writing prose from a Plotwright brief",
           "guidance": "Keep Plotwright's intent on screen, don't invent new topology, respect stated constraints",
           "examples": [
-            {
-              "situation": "Brief specifies two choices leading to different outcomes",
-              "approach": "Write exactly two contrastive choices; don't add third option"
-            }
+            "situation: Brief specifies two choices leading to different outcomes | approach: Write exactly two contrastive choices; don't add third option"
           ]
         },
         {
           "context": "Expressing a gated choice",
           "guidance": "Verify gate reads as world fact (badge, knowledge, reputation, tool) and PN can enforce naturally",
           "examples": [
-            {
-              "good": "The union office requires a member token to enter",
-              "bad": "This choice is locked until you obtain codeword:union_member"
-            }
+            "good: The union office requires a member token to enter | bad: This choice is locked until you obtain codeword:union_member"
           ]
         },
         {
           "context": "Handling style uncertainty",
           "guidance": "Don't fight the register; propose alternatives if something feels wrong",
           "examples": [
-            {
-              "situation": "Brief suggests phrasing that conflicts with style guide",
-              "approach": "Propose alternative to Style Lead rather than ignoring brief"
-            }
+            "situation: Brief suggests phrasing that conflicts with style guide | approach: Propose alternative to Style Lead rather than ignoring brief"
           ]
         }
       ],
@@ -105,8 +95,14 @@
             "Ensure choices are contrastive",
             "Self-validate before requesting gatecheck"
           ],
-          "preconditions": ["Section brief exists", "Style guide accessible"],
-          "postconditions": ["Section created/updated with brief_ref set", "Prose matches brief intent"]
+          "preconditions": [
+            "Section brief exists",
+            "Style guide accessible"
+          ],
+          "postconditions": [
+            "Section created/updated with brief_ref set",
+            "Prose matches brief intent"
+          ]
         },
         {
           "goal": "Self-validate section before gatecheck",
@@ -117,8 +113,12 @@
             "Verify choices are contrastive",
             "Confirm gates are diegetic"
           ],
-          "preconditions": ["Section draft complete"],
-          "postconditions": ["Ready for Gatekeeper review"]
+          "preconditions": [
+            "Section draft complete"
+          ],
+          "postconditions": [
+            "Ready for Gatekeeper review"
+          ]
         }
       ],
       "definitions": [
@@ -179,10 +179,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["scene_smith"]
+    "agents": [
+      "scene_smith"
+    ]
   },
-
-  "tags": ["role", "writing", "prose"]
+  "tags": [
+    "role",
+    "writing",
+    "prose"
+  ]
 }

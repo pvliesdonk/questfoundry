@@ -3,18 +3,21 @@
   "id": "prose_patterns",
   "name": "Prose Patterns",
   "layer": "role_specific",
-
   "summary": "Paragraph structure, beat integration, and cadence patterns for narrative prose writing.",
-
-  "keywords": ["prose", "paragraphs", "beats", "cadence", "scenes", "micro-beats"],
-
+  "keywords": [
+    "prose",
+    "paragraphs",
+    "beats",
+    "cadence",
+    "scenes",
+    "micro-beats"
+  ],
   "triggers": [
     "writing section prose",
     "scene drafting",
     "paragraph structure",
     "beat integration"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,37 +27,37 @@
           "statement": "Default target is 3+ paragraphs per full scene",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Full scenes need sufficient space for lead image, goal/friction, and choice setup"
+          "reasoning": "Full scenes need sufficient space for lead image, goal/friction, and choice setup"
         },
         {
           "statement": "Transit-only micro-beats may be 1 paragraph if explicitly framed, but next full scene must carry reflection and affordances",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Balance brevity in transitions with depth in main scenes"
+          "reasoning": "Balance brevity in transitions with depth in main scenes"
         },
         {
           "statement": "If draft is <3 paragraphs and not a designated micro-beat, extend with movement/vector paragraph before presenting choices",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Auto-extension rule prevents thin scenes"
+          "reasoning": "Auto-extension rule prevents thin scenes"
         },
         {
           "statement": "Choices must be diegetic, not UI instructions - no meta phrasing like 'Click here' or 'Choose wisely'",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Maintain immersion"
+          "reasoning": "Maintain immersion"
         },
         {
           "statement": "No codewords or state leaks in gateway hints - gates must be PN-safe",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Hide internal mechanics"
+          "reasoning": "Hide internal mechanics"
         },
         {
           "statement": "Altered-hub returns must add second unmistakable diegetic cue if subtlety risks confusion",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Players need to recognize when returning to altered location"
+          "reasoning": "Players need to recognize when returning to altered location"
         }
       ],
       "heuristics": [
@@ -62,40 +65,28 @@
           "context": "Structuring a full scene",
           "guidance": "Follow three-paragraph cadence: lead image + motion, goal/vector + friction, choice setup",
           "examples": [
-            {
-              "situation": "Writing investigation scene",
-              "approach": "Para 1: Describe crime scene sensory details and character entering. Para 2: Character's goal to find clues and obstacles encountered. Para 3: Context for upcoming decision about next investigative step"
-            }
+            "situation: Writing investigation scene | approach: Para 1: Describe crime scene sensory details and character entering. Para 2: Character's goal to find clues and obstacles encountered. Para 3: Context for upcoming decision about next investigative step"
           ]
         },
         {
           "context": "Integrating story beats from brief",
           "guidance": "Parse briefs to extract planned beats, required choices, canon callbacks, state effects, and gateway conditions",
           "examples": [
-            {
-              "situation": "Brief mentions 'player discovers foreman's secret ledger'",
-              "approach": "Integrate discovery as beat within scene flow, show reaction, set up choices"
-            }
+            "situation: Brief mentions 'player discovers foreman's secret ledger' | approach: Integrate discovery as beat within scene flow, show reaction, set up choices"
           ]
         },
         {
           "context": "Matching register to style guide",
           "guidance": "Voice should align with established style guide for this story - check consistency within and between paragraphs",
           "examples": [
-            {
-              "situation": "Writing noir detective story",
-              "approach": "Maintain hard-boiled register, terse observations, cynical tone throughout"
-            }
+            "situation: Writing noir detective story | approach: Maintain hard-boiled register, terse observations, cynical tone throughout"
           ]
         },
         {
           "context": "Creating contrastive choices",
           "guidance": "Options must be meaningfully different - avoid cosmetic choices that lead to same outcome",
           "examples": [
-            {
-              "good": "Confront the foreman directly / Search his office after hours / Report to the union",
-              "bad": "Investigate further / Continue investigating / Keep investigating"
-            }
+            "good: Confront the foreman directly / Search his office after hours / Report to the union | bad: Investigate further / Continue investigating / Keep investigating"
           ]
         }
       ],
@@ -110,8 +101,15 @@
             "Verify paragraph count (3+ for full scene)",
             "Run style self-check"
           ],
-          "preconditions": ["Section brief available", "Style guide accessible"],
-          "postconditions": ["Scene has 3+ paragraphs", "Beats integrated", "Choices set up"]
+          "preconditions": [
+            "Section brief available",
+            "Style guide accessible"
+          ],
+          "postconditions": [
+            "Scene has 3+ paragraphs",
+            "Beats integrated",
+            "Choices set up"
+          ]
         },
         {
           "goal": "Perform style self-check before submission",
@@ -123,8 +121,12 @@
             "Verify gateways are PN-safe (no codewords)",
             "Check altered-hub returns have unmistakable cues if needed"
           ],
-          "preconditions": ["Scene draft complete"],
-          "postconditions": ["Style issues identified and addressed"]
+          "preconditions": [
+            "Scene draft complete"
+          ],
+          "postconditions": [
+            "Style issues identified and addressed"
+          ]
         }
       ],
       "definitions": [
@@ -210,11 +212,17 @@
       ]
     }
   },
-
   "applicable_to": {
-    "archetypes": ["creator"],
-    "agents": ["scene_smith"]
+    "archetypes": [
+      "creator"
+    ],
+    "agents": [
+      "scene_smith"
+    ]
   },
-
-  "tags": ["prose", "style", "drafting"]
+  "tags": [
+    "prose",
+    "style",
+    "drafting"
+  ]
 }

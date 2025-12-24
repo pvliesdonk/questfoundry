@@ -3,27 +3,29 @@
   "id": "posture_definitions",
   "name": "Posture Definitions",
   "layer": "role_specific",
-
   "summary": "Definitions for research posture levels: corroborated, plausible, disputed, uncorroborated with risk ratings.",
-
-  "keywords": ["posture", "certainty", "uncertainty", "verification", "researcher"],
-
+  "keywords": [
+    "posture",
+    "certainty",
+    "uncertainty",
+    "verification",
+    "researcher"
+  ],
   "triggers": [
     "assigning posture",
     "rating certainty",
     "uncertainty level"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
     "data": {
       "rules": [
         {
-          "statement": "Every research finding must have a posture—the certainty level of the claim.",
+          "statement": "Every research finding must have a posture\u2014the certainty level of the claim.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Posture enables downstream agents to make informed decisions about how to handle uncertain information."
+          "reasoning": "Posture enables downstream agents to make informed decisions about how to handle uncertain information."
         }
       ],
       "definitions": [
@@ -37,10 +39,7 @@
             "Multiple news sources report consistently"
           ],
           "examples": [
-            {
-              "term_usage": "Victorian London street lighting research",
-              "context": "Wikipedia and two historical archives all confirm limited electric deployment from 1878"
-            }
+            "term_usage: Victorian London street lighting research | context: Wikipedia and two historical archives all confirm limited electric deployment from 1878"
           ]
         },
         {
@@ -52,10 +51,7 @@
             "Expert opinion without contradiction"
           ],
           "examples": [
-            {
-              "term_usage": "Inferring social customs from documented laws",
-              "context": "One period etiquette manual provides guidance"
-            }
+            "term_usage: Inferring social customs from documented laws | context: One period etiquette manual provides guidance"
           ]
         },
         {
@@ -67,10 +63,7 @@
             "Regional/cultural variation exists"
           ],
           "examples": [
-            {
-              "term_usage": "Historical events with competing narratives",
-              "context": "Different historians attribute different causes to the same event"
-            }
+            "term_usage: Historical events with competing narratives | context: Different historians attribute different causes to the same event"
           ]
         },
         {
@@ -82,10 +75,7 @@
             "Flavor detail, background color, minor mechanics"
           ],
           "examples": [
-            {
-              "term_usage": "Color of tavern sign in background scene",
-              "context": "No historical record exists, but choice is narratively insignificant"
-            }
+            "term_usage: Color of tavern sign in background scene | context: No historical record exists, but choice is narratively insignificant"
           ]
         },
         {
@@ -97,10 +87,7 @@
             "Character motivation, plot device, world rule"
           ],
           "examples": [
-            {
-              "term_usage": "How a historical organization made decisions",
-              "context": "Drives character motivation but no clear historical record"
-            }
+            "term_usage: How a historical organization made decisions | context: Drives character motivation but no clear historical record"
           ]
         },
         {
@@ -113,10 +100,7 @@
             "Central premise or world rule"
           ],
           "examples": [
-            {
-              "term_usage": "Core metaphysical rule of the world",
-              "context": "No real-world analogue exists, but consistency is critical"
-            }
+            "term_usage: Core metaphysical rule of the world | context: No real-world analogue exists, but consistency is critical"
           ]
         }
       ],
@@ -125,48 +109,30 @@
           "context": "When multiple reliable sources agree",
           "guidance": "Use 'corroborated' posture. This indicates high confidence and allows direct statements in prose.",
           "examples": [
-            {
-              "situation": "Wikipedia + government archive + academic paper all confirm a historical date",
-              "response": "Assign corroborated posture"
-            }
+            "situation: Wikipedia + government archive + academic paper all confirm a historical date | response: Assign corroborated posture"
           ]
         },
         {
           "context": "When only one reliable source exists",
           "guidance": "Use 'plausible' posture. This indicates reasonable confidence but suggests soft hedging in prose.",
           "examples": [
-            {
-              "situation": "One encyclopedia entry describes a practice, no contradicting sources found",
-              "response": "Assign plausible posture"
-            }
+            "situation: One encyclopedia entry describes a practice, no contradicting sources found | response: Assign plausible posture"
           ]
         },
         {
           "context": "When sources actively disagree",
           "guidance": "Use 'disputed' posture. Present as in-world disagreement rather than stating one version as fact.",
           "examples": [
-            {
-              "situation": "Historians debate the cause of a historical event",
-              "response": "Assign disputed posture, note both positions"
-            }
+            "situation: Historians debate the cause of a historical event | response: Assign disputed posture, note both positions"
           ]
         },
         {
           "context": "When no sources found, assess story impact",
           "guidance": "Use uncorroborated with risk level: low (flavor detail), med (affects plot), high (central premise or safety-critical).",
           "examples": [
-            {
-              "situation": "Can't verify color of historical uniforms",
-              "response": "uncorroborated:low - it's background detail"
-            },
-            {
-              "situation": "Can't verify how an organization made decisions, but it drives character motivation",
-              "response": "uncorroborated:med - could cause plot issues"
-            },
-            {
-              "situation": "Can't verify a medical procedure that is central to the plot",
-              "response": "uncorroborated:high - could break story or cause safety issues"
-            }
+            "situation: Can't verify color of historical uniforms | response: uncorroborated:low - it's background detail",
+            "situation: Can't verify how an organization made decisions, but it drives character motivation | response: uncorroborated:med - could cause plot issues",
+            "situation: Can't verify a medical procedure that is central to the plot | response: uncorroborated:high - could break story or cause safety issues"
           ]
         },
         {
@@ -177,10 +143,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["researcher"]
+    "agents": [
+      "researcher"
+    ]
   },
-
-  "tags": ["research", "certainty", "methodology"]
+  "tags": [
+    "research",
+    "certainty",
+    "methodology"
+  ]
 }

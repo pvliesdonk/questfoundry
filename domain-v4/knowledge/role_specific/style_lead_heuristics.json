@@ -3,18 +3,22 @@
   "id": "style_lead_heuristics",
   "name": "Style Lead Heuristics",
   "layer": "role_specific",
-
   "summary": "Validation heuristics for unified style: voice consistency, diegetic gates, choice labels, and visual language alignment.",
-
-  "keywords": ["style", "voice", "register", "gates", "choices", "visual", "validation"],
-
+  "keywords": [
+    "style",
+    "voice",
+    "register",
+    "gates",
+    "choices",
+    "visual",
+    "validation"
+  ],
   "triggers": [
     "reviewing prose for style",
     "validating gate phrasing",
     "checking choice labels",
     "reviewing art plans for visual language"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,31 +28,31 @@
           "statement": "Consistency over perfection - A consistent B+ voice beats inconsistent A+ fragments",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "The book should feel like one author wrote it, even when multiple agents contributed"
+          "reasoning": "The book should feel like one author wrote it, even when multiple agents contributed"
         },
         {
           "statement": "Gates must feel like in-world obstacles, not game mechanics - no schema names, codeword IDs, or anchor names visible",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Maintain immersion by presenting gates as diegetic obstacles"
+          "reasoning": "Maintain immersion by presenting gates as diegetic obstacles"
         },
         {
           "statement": "Choice labels must differentiate intent through verbs and objects - no synonyms allowed",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Players need to understand what each choice actually does"
+          "reasoning": "Players need to understand what each choice actually does"
         },
         {
           "statement": "No more than one choice can use the same verb",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Ensures choices are truly contrastive"
+          "reasoning": "Ensures choices are truly contrastive"
         },
         {
           "statement": "Visual style should feel as unified as prose style",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Cross-surface coherence - visual should complement prose, not clash"
+          "reasoning": "Cross-surface coherence - visual should complement prose, not clash"
         }
       ],
       "heuristics": [
@@ -56,50 +60,35 @@
           "context": "Validating voice consistency across sections",
           "guidance": "Check for genre-appropriate register matching the expected tone (noir vs cozy vs epic)",
           "examples": [
-            {
-              "situation": "Multiple agents contributed to adjacent sections",
-              "approach": "Verify register doesn't shift between sections without narrative reason"
-            }
+            "situation: Multiple agents contributed to adjacent sections | approach: Verify register doesn't shift between sections without narrative reason"
           ]
         },
         {
           "context": "Reviewing gate phrasing",
           "guidance": "Name the obstacle specifically, imply the solution, and match the register",
           "examples": [
-            {
-              "good": "The foreman's seal is required to enter the restricted level.",
-              "bad": "This option is locked until you obtain the foreman_seal codeword."
-            }
+            "good: The foreman's seal is required to enter the restricted level. | bad: This option is locked until you obtain the foreman_seal codeword."
           ]
         },
         {
           "context": "Validating choice labels",
           "guidance": "Every choice should have verb + object, distinct consequences implied, no vague directional language",
           "examples": [
-            {
-              "good": "Confront the foreman / Report to the union / Slip away quietly",
-              "bad": "Proceed / Continue / Go forward"
-            }
+            "good: Confront the foreman / Report to the union / Slip away quietly | bad: Proceed / Continue / Go forward"
           ]
         },
         {
           "context": "Reviewing art plans for visual alignment",
           "guidance": "Validate palette adherence, composition conventions, motif threading, and lighting consistency",
           "examples": [
-            {
-              "situation": "Art Director provides composition hints",
-              "approach": "Review against Style Guide conventions, flag drift without blocking (Art Director has WHAT authority)"
-            }
+            "situation: Art Director provides composition hints | approach: Review against Style Guide conventions, flag drift without blocking (Art Director has WHAT authority)"
           ]
         },
         {
           "context": "Providing editorial feedback",
           "guidance": "Nudge, don't strangle - preserve creator intent, sharpen rather than replace",
           "examples": [
-            {
-              "situation": "Unsure what creator meant",
-              "approach": "Raise a hook to ask for clarification rather than guessing"
-            }
+            "situation: Unsure what creator meant | approach: Raise a hook to ask for clarification rather than guessing"
           ]
         }
       ],
@@ -181,10 +170,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["style_lead"]
+    "agents": [
+      "style_lead"
+    ]
   },
-
-  "tags": ["style", "validation", "heuristics"]
+  "tags": [
+    "style",
+    "validation",
+    "heuristics"
+  ]
 }

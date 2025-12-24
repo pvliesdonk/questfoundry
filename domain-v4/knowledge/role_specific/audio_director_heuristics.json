@@ -3,18 +3,22 @@
   "id": "audio_director_heuristics",
   "name": "Audio Director Heuristics",
   "layer": "role_specific",
-
   "summary": "Planning heuristics for audio coverage: cue type taxonomy, purpose taxonomy, priority setting, layering decisions, and transcript writing.",
-
-  "keywords": ["audio", "sound", "planning", "cues", "ambient", "music", "accessibility"],
-
+  "keywords": [
+    "audio",
+    "sound",
+    "planning",
+    "cues",
+    "ambient",
+    "music",
+    "accessibility"
+  ],
   "triggers": [
     "planning audio for a scope",
     "creating audio plans",
     "maintaining sonic consistency",
     "writing transcripts or captions"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,55 +28,55 @@
           "statement": "Create Audio Plans for ALL moments that would benefit from audio",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Planning is cheap (tokens), generation is expensive (API costs). Priority determines what actually gets generated within budget."
+          "reasoning": "Planning is cheap (tokens), generation is expensive (API costs). Priority determines what actually gets generated within budget."
         },
         {
           "statement": "Every Audio Plan must specify a cue type: ambient, spot, music, or voice",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Cue type determines duration, looping behavior, and usage"
+          "reasoning": "Cue type determines duration, looping behavior, and usage"
         },
         {
           "statement": "Every Audio Plan must specify a purpose from taxonomy: atmosphere, signpost, recall, or clarify",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Every sound must answer 'Why does this help the player?'"
+          "reasoning": "Every sound must answer 'Why does this help the player?'"
         },
         {
           "statement": "Generate must_have first, then nice_to_have until budget exhausted, optional only if budget remains",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Budget discipline ensures highest-value audio is generated"
+          "reasoning": "Budget discipline ensures highest-value audio is generated"
         },
         {
           "statement": "Only ONE ambient loop per location (no stacking)",
           "severity": "error",
           "enforcement": "runtime",
-          "rationale": "Multiple ambient loops create sonic mud"
+          "reasoning": "Multiple ambient loops create sonic mud"
         },
         {
           "statement": "Voice always takes priority and ducks everything else",
           "severity": "critical",
           "enforcement": "runtime",
-          "rationale": "Dialogue must always be intelligible"
+          "reasoning": "Dialogue must always be intelligible"
         },
         {
           "statement": "Transcripts are required for all audio cues",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Accessibility requirement—describes what the sound IS"
+          "reasoning": "Accessibility requirement\u2014describes what the sound IS"
         },
         {
           "statement": "Never use 'Because it would sound cool' as a purpose",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Purpose must be about player benefit, not aesthetic preference"
+          "reasoning": "Purpose must be about player benefit, not aesthetic preference"
         },
         {
           "statement": "Never mention technique in captions",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Captions are player-facing and should maintain immersion"
+          "reasoning": "Captions are player-facing and should maintain immersion"
         }
       ],
       "heuristics": [
@@ -81,7 +85,7 @@
           "guidance": "Plan liberally, prioritize ruthlessly, generate selectively. Describing 50 audio cues costs ~5000 tokens, generating 50 audio clips costs $50+ in API fees.",
           "examples": [
             "Create Audio Plans for all worthy moments, use priority to control generation",
-            "Don't self-censor during planning—let priority system manage budget"
+            "Don't self-censor during planning\u2014let priority system manage budget"
           ]
         },
         {
@@ -251,7 +255,7 @@
         },
         {
           "context": "When to create a Character Leitmotif Sheet",
-          "guidance": "Rare—only for major characters with musical association.",
+          "guidance": "Rare\u2014only for major characters with musical association.",
           "examples": [
             "Protagonist theme",
             "Major antagonist musical signature"
@@ -286,19 +290,19 @@
         {
           "goal": "Select appropriate cue type",
           "steps": [
-            "Ask: Establishing a place? → ambient",
-            "Ask: Punctuating an action? → spot",
-            "Ask: Building/releasing emotion? → music",
-            "Ask: Delivering information? → voice"
+            "Ask: Establishing a place? \u2192 ambient",
+            "Ask: Punctuating an action? \u2192 spot",
+            "Ask: Building/releasing emotion? \u2192 music",
+            "Ask: Delivering information? \u2192 voice"
           ]
         },
         {
           "goal": "Select appropriate purpose",
           "steps": [
-            "Ask: Should player feel a mood? If yes → atmosphere",
-            "Ask: Does player need to notice something? If yes → signpost",
-            "Ask: Will player need to remember this? If yes → recall",
-            "Ask: Should player understand something through sound? If yes → clarify"
+            "Ask: Should player feel a mood? If yes \u2192 atmosphere",
+            "Ask: Does player need to notice something? If yes \u2192 signpost",
+            "Ask: Will player need to remember this? If yes \u2192 recall",
+            "Ask: Should player understand something through sound? If yes \u2192 clarify"
           ]
         },
         {
@@ -452,7 +456,7 @@
       "warnings": [
         {
           "failure_mode": "Transcripts that just name the sound",
-          "consequence": "Accessibility failure—users need descriptive detail",
+          "consequence": "Accessibility failure\u2014users need descriptive detail",
           "prevention": "Write descriptive prose: 'A roll of distant thunder, lasting several seconds' not just 'thunder'"
         },
         {
@@ -462,16 +466,21 @@
         },
         {
           "failure_mode": "Stacking ambient loops",
-          "consequence": "Sonic mud—multiple ambients create confusion",
+          "consequence": "Sonic mud\u2014multiple ambients create confusion",
           "prevention": "Only ONE ambient per location, use exclusive groups to enforce"
         }
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["audio_director"]
+    "agents": [
+      "audio_director"
+    ]
   },
-
-  "tags": ["audio", "planning", "sound", "heuristics"]
+  "tags": [
+    "audio",
+    "planning",
+    "sound",
+    "heuristics"
+  ]
 }

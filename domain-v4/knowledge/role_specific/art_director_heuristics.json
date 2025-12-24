@@ -3,18 +3,21 @@
   "id": "art_director_heuristics",
   "name": "Art Director Heuristics",
   "layer": "role_specific",
-
   "summary": "Planning heuristics for illustration coverage: purpose taxonomy, priority setting, reference sheet consistency, and caption writing.",
-
-  "keywords": ["art", "illustration", "planning", "visual", "reference sheets", "priorities"],
-
+  "keywords": [
+    "art",
+    "illustration",
+    "planning",
+    "visual",
+    "reference sheets",
+    "priorities"
+  ],
   "triggers": [
     "planning illustrations for a scope",
     "creating art plans",
     "maintaining reference sheets",
     "writing captions or alt text"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,49 +27,49 @@
           "statement": "Create Art Plans for ALL scenes that would benefit from illustration",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Planning is cheap (tokens), generation is expensive (API costs). Priority determines what actually gets generated within budget."
+          "reasoning": "Planning is cheap (tokens), generation is expensive (API costs). Priority determines what actually gets generated within budget."
         },
         {
           "statement": "Every Art Plan must specify a purpose from taxonomy: clarify, recall, mood, or signpost",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Every image must answer 'Why does this help the reader?'"
+          "reasoning": "Every image must answer 'Why does this help the reader?'"
         },
         {
           "statement": "Generate must_have first, then nice_to_have until budget exhausted, optional only if budget remains",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Budget discipline ensures highest-value images are generated"
+          "reasoning": "Budget discipline ensures highest-value images are generated"
         },
         {
           "statement": "Never use 'Because it would look cool' as a purpose",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Purpose must be about reader benefit, not aesthetic preference"
+          "reasoning": "Purpose must be about reader benefit, not aesthetic preference"
         },
         {
           "statement": "Do not illustrate every page",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Over-illustration dilutes impact"
+          "reasoning": "Over-illustration dilutes impact"
         },
         {
           "statement": "Captions must never describe technique or mention generation method",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Captions are player-facing and should maintain immersion"
+          "reasoning": "Captions are player-facing and should maintain immersion"
         },
         {
           "statement": "Alt text must never say 'image of' (redundant)",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Screen readers already announce the image context"
+          "reasoning": "Screen readers already announce the image context"
         },
         {
           "statement": "Never include spoilers in captions or alt text",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Visual descriptions must preserve narrative discovery"
+          "reasoning": "Visual descriptions must preserve narrative discovery"
         }
       ],
       "heuristics": [
@@ -75,7 +78,7 @@
           "guidance": "Plan liberally, prioritize ruthlessly, generate selectively. Describing 50 scenes costs ~5000 tokens, generating 50 images costs $50+ in API fees.",
           "examples": [
             "Create Art Plans for all worthy scenes, use priority to control generation",
-            "Don't self-censor during planning—let priority system manage budget"
+            "Don't self-censor during planning\u2014let priority system manage budget"
           ]
         },
         {
@@ -186,10 +189,10 @@
         {
           "goal": "Select appropriate purpose for Art Plan",
           "steps": [
-            "Ask: Can the reader visualize this without help? If no → clarify",
-            "Ask: Will reader need to remember this later? If yes → recall",
-            "Ask: Is atmosphere more important than details? If yes → mood",
-            "Ask: Does this help player make a decision? If yes → signpost"
+            "Ask: Can the reader visualize this without help? If no \u2192 clarify",
+            "Ask: Will reader need to remember this later? If yes \u2192 recall",
+            "Ask: Is atmosphere more important than details? If yes \u2192 mood",
+            "Ask: Does this help player make a decision? If yes \u2192 signpost"
           ]
         },
         {
@@ -286,15 +289,20 @@
         {
           "failure_mode": "Art Director specifies composition technique",
           "consequence": "Conflict with Style Lead's domain ownership",
-          "prevention": "Art Director owns WHAT and WHERE (subject, placement, priority, focal point). Style Lead owns HOW (palette, composition conventions, lighting, motif). Composition_hint should align with Style Guide. When in conflict, discuss—neither role overrides unilaterally."
+          "prevention": "Art Director owns WHAT and WHERE (subject, placement, priority, focal point). Style Lead owns HOW (palette, composition conventions, lighting, motif). Composition_hint should align with Style Guide. When in conflict, discuss\u2014neither role overrides unilaterally."
         }
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["art_director"]
+    "agents": [
+      "art_director"
+    ]
   },
-
-  "tags": ["art", "planning", "visual", "heuristics"]
+  "tags": [
+    "art",
+    "planning",
+    "visual",
+    "heuristics"
+  ]
 }

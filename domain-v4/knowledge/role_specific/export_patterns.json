@@ -3,17 +3,19 @@
   "id": "export_patterns",
   "name": "Export Patterns",
   "layer": "role_specific",
-
   "summary": "Common export configurations and their use cases: playtest builds, milestone releases, full production.",
-
-  "keywords": ["export", "bundle", "release", "formats", "book_binder"],
-
+  "keywords": [
+    "export",
+    "bundle",
+    "release",
+    "formats",
+    "book_binder"
+  ],
   "triggers": [
     "choosing export options",
     "format selection",
     "release type"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -30,10 +32,7 @@
             "Speed: fast turnaround"
           ],
           "examples": [
-            {
-              "term_usage": "Testing narrative flow before full production",
-              "context": "output_formats: [markdown, html], include_art_plans: false, include_art_renders: false, include_audio_plans: false, include_audio_assets: false, languages: [en], print_friendly: true"
-            }
+            "term_usage: Testing narrative flow before full production | context: output_formats: [markdown, html], include_art_plans: false, include_art_renders: false, include_audio_plans: false, include_audio_assets: false, languages: [en], print_friendly: true"
           ]
         },
         {
@@ -47,10 +46,7 @@
             "Speed: moderate"
           ],
           "examples": [
-            {
-              "term_usage": "Sharing completed chapter with reviewers",
-              "context": "output_formats: [markdown, html, epub], include_art_plans: true, include_art_renders: false, include_audio_plans: true, include_audio_assets: false, languages: [en], print_friendly: true"
-            }
+            "term_usage: Sharing completed chapter with reviewers | context: output_formats: [markdown, html, epub], include_art_plans: true, include_art_renders: false, include_audio_plans: true, include_audio_assets: false, languages: [en], print_friendly: true"
           ]
         },
         {
@@ -64,10 +60,7 @@
             "Speed: comprehensive"
           ],
           "examples": [
-            {
-              "term_usage": "Final release to players",
-              "context": "output_formats: [markdown, html, epub, pdf], include_art_plans: false, include_art_renders: true, include_audio_plans: false, include_audio_assets: true, languages: [en, nl, de], print_friendly: true"
-            }
+            "term_usage: Final release to players | context: output_formats: [markdown, html, epub, pdf], include_art_plans: false, include_art_renders: true, include_audio_plans: false, include_audio_assets: true, languages: [en, nl, de], print_friendly: true"
           ]
         },
         {
@@ -81,10 +74,7 @@
             "Speed: fast"
           ],
           "examples": [
-            {
-              "term_usage": "Reviewing Dutch translation coverage",
-              "context": "output_formats: [markdown, html], include_art_plans: false, include_art_renders: false, include_audio_plans: false, include_audio_assets: false, languages: [en, nl], print_friendly: false"
-            }
+            "term_usage: Reviewing Dutch translation coverage | context: output_formats: [markdown, html], include_art_plans: false, include_art_renders: false, include_audio_plans: false, include_audio_assets: false, languages: [en, nl], print_friendly: false"
           ]
         }
       ],
@@ -93,40 +83,28 @@
           "context": "When asked for a quick internal review",
           "guidance": "Use playtest build pattern: MD+HTML, English only, no assets, print-friendly.",
           "examples": [
-            {
-              "situation": "Showrunner wants to review narrative flow",
-              "response": "Playtest build configuration"
-            }
+            "situation: Showrunner wants to review narrative flow | response: Playtest build configuration"
           ]
         },
         {
           "context": "When sharing progress with stakeholders",
           "guidance": "Use milestone release pattern: MD+HTML+EPUB, English only, art/audio plans included, no renders.",
           "examples": [
-            {
-              "situation": "Chapter 3 complete, need stakeholder review",
-              "response": "Milestone release configuration"
-            }
+            "situation: Chapter 3 complete, need stakeholder review | response: Milestone release configuration"
           ]
         },
         {
           "context": "When preparing for player distribution",
           "guidance": "Use full production pattern: all formats including PDF, all languages, full renders and assets, print-ready.",
           "examples": [
-            {
-              "situation": "Ready to ship to players",
-              "response": "Full production configuration"
-            }
+            "situation: Ready to ship to players | response: Full production configuration"
           ]
         },
         {
           "context": "When checking translation completeness",
           "guidance": "Use translation review pattern: MD+HTML, source and target languages, no assets, coverage flags visible.",
           "examples": [
-            {
-              "situation": "Need to verify Dutch translation coverage",
-              "response": "Translation review configuration with [en, nl]"
-            }
+            "situation: Need to verify Dutch translation coverage | response: Translation review configuration with [en, nl]"
           ]
         },
         {
@@ -154,10 +132,15 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["book_binder", "showrunner"]
+    "agents": [
+      "book_binder",
+      "showrunner"
+    ]
   },
-
-  "tags": ["export", "configuration", "patterns"]
+  "tags": [
+    "export",
+    "configuration",
+    "patterns"
+  ]
 }

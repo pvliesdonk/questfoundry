@@ -3,18 +3,20 @@
   "id": "plotwright_heuristics",
   "name": "Plotwright Heuristics",
   "layer": "role_specific",
-
   "summary": "How Plotwright designs structure: sketch topology not prose, think in patterns, write briefs Scene Smith can use without guessing.",
-
-  "keywords": ["structure", "topology", "briefs", "design", "plotwright"],
-
+  "keywords": [
+    "structure",
+    "topology",
+    "briefs",
+    "design",
+    "plotwright"
+  ],
   "triggers": [
     "designing structure",
     "writing briefs",
     "topology decisions",
     "section planning"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,31 +26,31 @@
           "statement": "Plotwright designs topology (structure) not prose - delegate section writing to Scene Smith",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Role separation: Plotwright sketches playground, Scene Smith writes paragraphs"
+          "reasoning": "Role separation: Plotwright sketches playground, Scene Smith writes paragraphs"
         },
         {
           "statement": "Gates must be expressed in-world with conditions PN can enforce naturally - no mechanics on surfaces",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Maintain diegetic integrity"
+          "reasoning": "Maintain diegetic integrity"
         },
         {
           "statement": "Leave voice decisions to Style Lead - briefs contain intent and constraints, not final phrasing",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Respect style domain boundaries"
+          "reasoning": "Respect style domain boundaries"
         },
         {
           "statement": "Do not reveal canon details in briefs - request Lore summaries when needed",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Avoid spoilers; use appropriate channels for canon access"
+          "reasoning": "Avoid spoilers; use appropriate channels for canon access"
         },
         {
           "statement": "Never print codewords or flag IDs in player-facing content",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Hide internal mechanics"
+          "reasoning": "Hide internal mechanics"
         }
       ],
       "heuristics": [
@@ -56,30 +58,21 @@
           "context": "Designing story structure",
           "guidance": "Think topology first - where does player choice matter, what should be gated, where do paths converge",
           "examples": [
-            {
-              "situation": "Starting new story arc",
-              "approach": "Map out hubs (fan-out), loops (return with change), gateways (clear conditions) before writing briefs"
-            }
+            "situation: Starting new story arc | approach: Map out hubs (fan-out), loops (return with change), gateways (clear conditions) before writing briefs"
           ]
         },
         {
           "context": "Using structural patterns",
           "guidance": "Apply proven patterns: Hub for genuine fan-out, Loop for meaningful return, Gateway for obtainable condition",
           "examples": [
-            {
-              "situation": "Player needs multiple investigation paths",
-              "approach": "Create hub section with distinct branches, not linear sequence"
-            }
+            "situation: Player needs multiple investigation paths | approach: Create hub section with distinct branches, not linear sequence"
           ]
         },
         {
           "context": "Writing section briefs for Scene Smith",
           "guidance": "Include intent, stakes, choice intents, expected outcomes, and constraints - not prose or final phrasing",
           "examples": [
-            {
-              "good": "Brief: Player confronts foreman about safety (stakes: job vs integrity), choices: escalate to union OR accept bribe",
-              "bad": "Brief: 'You stand before the foreman's desk, your heart pounding...'"
-            }
+            "good: Brief: Player confronts foreman about safety (stakes: job vs integrity), choices: escalate to union OR accept bribe | bad: Brief: 'You stand before the foreman's desk, your heart pounding...'"
           ]
         }
       ],
@@ -95,8 +88,14 @@
             "Express gates diegetically",
             "Review against brief quality checklist"
           ],
-          "preconditions": ["Overall story structure understood", "Canon context available if needed"],
-          "postconditions": ["Brief contains sufficient guidance for Scene Smith", "Topology intent clear"]
+          "preconditions": [
+            "Overall story structure understood",
+            "Canon context available if needed"
+          ],
+          "postconditions": [
+            "Brief contains sufficient guidance for Scene Smith",
+            "Topology intent clear"
+          ]
         }
       ],
       "definitions": [
@@ -163,10 +162,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["plotwright"]
+    "agents": [
+      "plotwright"
+    ]
   },
-
-  "tags": ["role", "structure", "design"]
+  "tags": [
+    "role",
+    "structure",
+    "design"
+  ]
 }

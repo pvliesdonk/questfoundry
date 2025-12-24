@@ -3,18 +3,20 @@
   "id": "book_binder_procedures",
   "name": "Book Binder Procedures",
   "layer": "role_specific",
-
   "summary": "How Book Binder exports views: Cold-only, package don't rewrite, stamp provenance, ensure navigation integrity.",
-
-  "keywords": ["export", "binding", "view", "bundle", "book_binder"],
-
+  "keywords": [
+    "export",
+    "binding",
+    "view",
+    "bundle",
+    "book_binder"
+  ],
   "triggers": [
     "export request",
     "binding run",
     "creating bundle",
     "release preparation"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,31 +26,31 @@
           "statement": "Export from one Canon snapshot per view. Never mix Hot content. Abort if Hot paths detected.",
           "severity": "critical",
           "enforcement": "runtime",
-          "rationale": "Hot content is drafts. Only cold (committed canon) should reach players. Mixed sources create inconsistencies."
+          "reasoning": "Hot content is drafts. Only cold (committed canon) should reach players. Mixed sources create inconsistencies."
         },
         {
           "statement": "Never edit prose, canon, or codex text content. Create hooks for upstream teams if changes needed.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Book Binder packages, doesn't rewrite. Content decisions belong upstream. Editing bypasses quality gates."
+          "reasoning": "Book Binder packages, doesn't rewrite. Content decisions belong upstream. Editing bypasses quality gates."
         },
         {
           "statement": "Normalize only non-semantic labels (heading case, formatting). Never change meaning.",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Format normalization is acceptable. Semantic changes must go through proper review channels."
+          "reasoning": "Format normalization is acceptable. Semantic changes must go through proper review channels."
         },
         {
           "statement": "Every export must have stamped provenance: snapshot ID, options, coverage in front matter and build manifest.",
           "severity": "critical",
           "enforcement": "runtime",
-          "rationale": "Enables debugging, version tracking, and understanding what was included in the export."
+          "reasoning": "Enables debugging, version tracking, and understanding what was included in the export."
         },
         {
           "statement": "All anchors must resolve, all crosslinks must work, no orphan pages, and codex references must land.",
           "severity": "error",
           "enforcement": "runtime",
-          "rationale": "Navigation integrity is core to player experience. Broken links frustrate players and look unprofessional."
+          "reasoning": "Navigation integrity is core to player experience. Broken links frustrate players and look unprofessional."
         },
         {
           "statement": "Do not export from Hot or mixed sources.",
@@ -182,10 +184,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["book_binder"]
+    "agents": [
+      "book_binder"
+    ]
   },
-
-  "tags": ["role", "export", "binding"]
+  "tags": [
+    "role",
+    "export",
+    "binding"
+  ]
 }

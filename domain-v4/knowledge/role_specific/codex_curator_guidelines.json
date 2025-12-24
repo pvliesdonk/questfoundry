@@ -3,18 +3,20 @@
   "id": "codex_curator_guidelines",
   "name": "Codex Curator Guidelines",
   "layer": "role_specific",
-
   "summary": "Guidelines for transforming canon into player-safe codex entries: spoiler stripping, diegetic voice, and accessibility.",
-
-  "keywords": ["codex", "glossary", "diegetic", "spoilers", "player-safe"],
-
+  "keywords": [
+    "codex",
+    "glossary",
+    "diegetic",
+    "spoilers",
+    "player-safe"
+  ],
   "triggers": [
     "writing codex entries",
     "stripping spoilers",
     "diegetic voice",
     "player-safe content"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,31 +26,31 @@
           "statement": "Write as an in-world scholar would. The codex exists within the fiction. No meta-references.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Meta-references break immersion. Players must experience codex as an in-world document."
+          "reasoning": "Meta-references break immersion. Players must experience codex as an in-world document."
         },
         {
           "statement": "Never include meta-references: 'the player', 'this chapter', game mechanics, future knowledge.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Codex is diegetic. These references reveal it's a game, breaking the fiction."
+          "reasoning": "Codex is diegetic. These references reveal it's a game, breaking the fiction."
         },
         {
           "statement": "Never include secret motivations, hidden identities, plot twists, or information players are meant to discover.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Codex must not spoil the story. Only public in-world knowledge should appear."
+          "reasoning": "Codex must not spoil the story. Only public in-world knowledge should appear."
         },
         {
           "statement": "Document what you've left out in 'spoiler_omissions' field. This is for Gatekeeper validation, never exported.",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Gatekeeper needs to validate spoiler-stripping decisions. Omissions field enables review."
+          "reasoning": "Gatekeeper needs to validate spoiler-stripping decisions. Omissions field enables review."
         },
         {
           "statement": "If canon doesn't cover something, do not invent. Raise a hook for Lore Weaver to fill the gap.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Codex Curator does not invent canon. Only Lore Weaver creates world truth."
+          "reasoning": "Codex Curator does not invent canon. Only Lore Weaver creates world truth."
         }
       ],
       "definitions": [
@@ -63,10 +65,7 @@
             "May reference in-world sources (archives, scholars)"
           ],
           "examples": [
-            {
-              "term_usage": "Guild of Artificers entry",
-              "context": "Good: 'The Guild controls much of the waterfront trade. Founded after the Collapse, they rose through unmatched logistics.' Bad: 'The Guild is a major faction in Chapter 2. Players who ally with them get better equipment.'"
-            }
+            "term_usage: Guild of Artificers entry | context: Good: 'The Guild controls much of the waterfront trade. Founded after the Collapse, they rose through unmatched logistics.' Bad: 'The Guild is a major faction in Chapter 2. Players who ally with them get better equipment.'"
           ]
         },
         {
@@ -117,24 +116,15 @@
           "context": "When determining what's safe to include",
           "guidance": "Safe: public in-world knowledge, historical facts (if not hidden history), general descriptions, cultural practices. Never: secret motivations, hidden identities, plot twists, information meant for discovery.",
           "examples": [
-            {
-              "situation": "Guild entry - founder was wealthy",
-              "response": "Safe to include if publicly known in-world"
-            },
-            {
-              "situation": "Guild entry - founder caused the Collapse",
-              "response": "Never include - this is a plot twist"
-            }
+            "situation: Guild entry - founder was wealthy | response: Safe to include if publicly known in-world",
+            "situation: Guild entry - founder caused the Collapse | response: Never include - this is a plot twist"
           ]
         },
         {
           "context": "When canon is missing for a codex entry",
           "guidance": "Do not invent. Raise hook to Lore Weaver. Write what you can with available canon, note gaps in open questions, return when lore is filled.",
           "examples": [
-            {
-              "situation": "Need to define 'The Scourge' but canon only mentions it exists",
-              "response": "Raise hook: 'Need canon for The Scourge: cause, timeline, effects. Currently blocked.' Write minimal entry, mark as incomplete."
-            }
+            "situation: Need to define 'The Scourge' but canon only mentions it exists | response: Raise hook: 'Need canon for The Scourge: cause, timeline, effects. Currently blocked.' Write minimal entry, mark as incomplete."
           ]
         },
         {
@@ -146,10 +136,7 @@
           "context": "Maintaining diegetic voice",
           "guidance": "Run through voice checklist: No meta-references? No game mechanics? No future knowledge? Appropriate formality? If any fail, rewrite without those elements.",
           "examples": [
-            {
-              "situation": "Draft says 'Players can unlock this area in Act 3'",
-              "response": "Rewrite: 'The eastern district remains sealed by order of the Council.' (in-world reason, no meta)"
-            }
+            "situation: Draft says 'Players can unlock this area in Act 3' | response: Rewrite: 'The eastern district remains sealed by order of the Council.' (in-world reason, no meta)"
           ]
         }
       ],
@@ -222,10 +209,15 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["codex_curator"]
+    "agents": [
+      "codex_curator"
+    ]
   },
-
-  "tags": ["codex", "diegetic", "spoilers", "guidelines"]
+  "tags": [
+    "codex",
+    "diegetic",
+    "spoilers",
+    "guidelines"
+  ]
 }

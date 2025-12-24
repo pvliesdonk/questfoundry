@@ -3,18 +3,20 @@
   "id": "gatekeeper_heuristics",
   "name": "Gatekeeper Heuristics",
   "layer": "role_specific",
-
   "summary": "How the Gatekeeper validates: judge substance (not rubber-stamp), block with reason, respect role boundaries, provide surgical fixes.",
-
-  "keywords": ["validation", "gatecheck", "quality", "blocking", "gatekeeper"],
-
+  "keywords": [
+    "validation",
+    "gatecheck",
+    "quality",
+    "blocking",
+    "gatekeeper"
+  ],
   "triggers": [
     "how to validate",
     "when to block",
     "giving feedback",
     "quality assessment"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,43 +26,43 @@
           "statement": "You are a JUDGE, not a rubber-stamp - always READ artifact content before making decisions, never approve based solely on tool output",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "validate_artifact checks structure; Gatekeeper judges substance (story quality, consistency, player experience)"
+          "reasoning": "validate_artifact checks structure; Gatekeeper judges substance (story quality, consistency, player experience)"
         },
         {
           "statement": "If validation passes, you MUST call request_lifecycle_transition - don't just report results, execute the transitions",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Gatekeeper is responsible for promoting artifacts through lifecycle states"
+          "reasoning": "Gatekeeper is responsible for promoting artifacts through lifecycle states"
         },
         {
-          "statement": "Artifacts in draft state need TWO transitions to reach cold: draft → review → cold (there is NO direct draft → cold transition)",
+          "statement": "Artifacts in draft state need TWO transitions to reach cold: draft \u2192 review \u2192 cold (there is NO direct draft \u2192 cold transition)",
           "severity": "critical",
           "enforcement": "runtime",
-          "rationale": "Runtime enforces two-step promotion process"
+          "reasoning": "Runtime enforces two-step promotion process"
         },
         {
           "statement": "NEVER block with vague concerns - every blocker must specify WHAT is wrong and HOW to fix it",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Vague worries are not blockers; specific failures with actionable fixes are blockers"
+          "reasoning": "Vague worries are not blockers; specific failures with actionable fixes are blockers"
         },
         {
           "statement": "Never rewrite at length - provide surgical suggestions and hand back to owners",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Respect role boundaries; don't take over their work"
+          "reasoning": "Respect role boundaries; don't take over their work"
         },
         {
           "statement": "For full-gate reviews (sections, not briefs), USE analyze_story_graph for Reachability - don't guess or defer",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "You have the tool; use it instead of deferring to 'further analysis'"
+          "reasoning": "You have the tool; use it instead of deferring to 'further analysis'"
         },
         {
           "statement": "If reviewing section_briefs and Reachability is yellow, use result_assessment: 'info' with recommendation: 'proceed'",
           "severity": "warning",
           "enforcement": "llm",
-          "rationale": "Section briefs can proceed to Scene Weave without full reachability validation"
+          "reasoning": "Section briefs can proceed to Scene Weave without full reachability validation"
         }
       ],
       "heuristics": [
@@ -68,58 +70,37 @@
           "context": "Finding artifacts to validate when delegation context includes artifact_refs",
           "guidance": "Use artifact_refs directly from delegation context as highest priority",
           "examples": [
-            {
-              "situation": "context.artifact_refs: ['section_brief_abc', 'section_brief_def']",
-              "approach": "get_artifact(['section_brief_abc', 'section_brief_def'])"
-            }
+            "situation: context.artifact_refs: ['section_brief_abc', 'section_brief_def'] | approach: get_artifact(['section_brief_abc', 'section_brief_def'])"
           ]
         },
         {
           "context": "Finding artifacts when no artifact_refs provided",
           "guidance": "Search by correct artifact type based on task description",
           "examples": [
-            {
-              "situation": "Task mentions 'section briefs'",
-              "approach": "Search for artifact_type: section_brief (NOT section)"
-            },
-            {
-              "situation": "Task mentions 'sections' (prose)",
-              "approach": "Search for artifact_type: section"
-            }
+            "situation: Task mentions 'section briefs' | approach: Search for artifact_type: section_brief (NOT section)",
+            "situation: Task mentions 'sections' (prose) | approach: Search for artifact_type: section"
           ]
         },
         {
           "context": "Conducting pre-gate reviews (section_briefs before Scene Weave)",
           "guidance": "Focus on Integrity, Nonlinearity, and Gateway structure; Reachability is INFORMATIONAL ONLY",
           "examples": [
-            {
-              "situation": "Reachability bar is yellow on section_briefs",
-              "approach": "Use result_assessment: info with recommendation: proceed - do NOT block"
-            }
+            "situation: Reachability bar is yellow on section_briefs | approach: Use result_assessment: info with recommendation: proceed - do NOT block"
           ]
         },
         {
           "context": "Conducting full-gate reviews (sections after Scene Weave)",
           "guidance": "All 8 bars apply fully; use analyze_story_graph for Reachability data",
           "examples": [
-            {
-              "situation": "Need reachability analysis for sections",
-              "approach": "Call analyze_story_graph({}) to get reachability, dead ends, missing targets"
-            }
+            "situation: Need reachability analysis for sections | approach: Call analyze_story_graph({}) to get reachability, dead ends, missing targets"
           ]
         },
         {
           "context": "Blocking artifacts with quality issues",
           "guidance": "Cite specific quality bar, explain what failed, offer smallest viable fix",
           "examples": [
-            {
-              "good": "Dead end at section_abc - add outgoing choice or mark as ending",
-              "bad": "I have some concerns about the pacing..."
-            },
-            {
-              "good": "Voice inconsistent in paragraph 3 - shifts from formal to casual mid-sentence",
-              "bad": "Style requires LLM analysis for consistency"
-            }
+            "good: Dead end at section_abc - add outgoing choice or mark as ending | bad: I have some concerns about the pacing...",
+            "good: Voice inconsistent in paragraph 3 - shifts from formal to casual mid-sentence | bad: Style requires LLM analysis for consistency"
           ]
         }
       ],
@@ -131,10 +112,16 @@
             "Check lightweight against the 8 quality bars",
             "For full-gate reviews, call analyze_story_graph if assessing Reachability",
             "Block with specific, actionable feedback if bars fail",
-            "If passed, execute lifecycle transitions (draft → review → cold)"
+            "If passed, execute lifecycle transitions (draft \u2192 review \u2192 cold)"
           ],
-          "preconditions": ["Artifact exists in workspace", "Artifact type is known"],
-          "postconditions": ["Quality assessment complete", "Lifecycle transition executed if passing"]
+          "preconditions": [
+            "Artifact exists in workspace",
+            "Artifact type is known"
+          ],
+          "postconditions": [
+            "Quality assessment complete",
+            "Lifecycle transition executed if passing"
+          ]
         },
         {
           "goal": "Return validation results to Showrunner",
@@ -146,8 +133,12 @@
             "Use blockers array to list each failed bar with specific issue",
             "Call return_to_orchestrator with structured data"
           ],
-          "preconditions": ["Validation complete"],
-          "postconditions": ["Showrunner has clear next action"]
+          "preconditions": [
+            "Validation complete"
+          ],
+          "postconditions": [
+            "Showrunner has clear next action"
+          ]
         },
         {
           "goal": "Promote artifact through lifecycle states",
@@ -158,8 +149,13 @@
             "Call request_lifecycle_transition with target_state: 'cold'",
             "Report success to orchestrator"
           ],
-          "preconditions": ["Artifact in draft or review state", "Quality bars pass"],
-          "postconditions": ["Artifact promoted to cold state"]
+          "preconditions": [
+            "Artifact in draft or review state",
+            "Quality bars pass"
+          ],
+          "postconditions": [
+            "Artifact promoted to cold state"
+          ]
         }
       ],
       "definitions": [
@@ -222,9 +218,9 @@
           "prevention": "Always execute transitions after validation passes"
         },
         {
-          "failure_mode": "Attempting direct draft → cold transition",
+          "failure_mode": "Attempting direct draft \u2192 cold transition",
           "consequence": "Runtime error; transition fails",
-          "prevention": "Always use two-step: draft → review, then review → cold"
+          "prevention": "Always use two-step: draft \u2192 review, then review \u2192 cold"
         },
         {
           "failure_mode": "Hot content appearing in Views",
@@ -239,10 +235,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["gatekeeper"]
+    "agents": [
+      "gatekeeper"
+    ]
   },
-
-  "tags": ["role", "validation", "quality"]
+  "tags": [
+    "role",
+    "validation",
+    "quality"
+  ]
 }

@@ -3,18 +3,20 @@
   "id": "lore_weaver_procedures",
   "name": "Lore Weaver Procedures",
   "layer": "role_specific",
-
   "summary": "Procedures for building canon: cause chains, timeline anchoring, consistency checking, and canon pack organization.",
-
-  "keywords": ["canon", "lore", "worldbuilding", "timeline", "consistency"],
-
+  "keywords": [
+    "canon",
+    "lore",
+    "worldbuilding",
+    "timeline",
+    "consistency"
+  ],
   "triggers": [
     "building world bible",
     "creating canon packs",
     "resolving timeline questions",
     "checking lore consistency"
   ],
-
   "content": {
     "type": "structured",
     "format": "json",
@@ -24,25 +26,25 @@
           "statement": "Every fact needs a cause. 'It just is' is not canon.",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Unjustified facts feel arbitrary and break immersion. Cause chains create depth and believability."
+          "reasoning": "Unjustified facts feel arbitrary and break immersion. Cause chains create depth and believability."
         },
         {
           "statement": "Events must have temporal relationships. Floating events create continuity errors.",
           "severity": "error",
           "enforcement": "llm",
-          "rationale": "Without temporal anchoring, events can contradict each other or violate causality."
+          "reasoning": "Without temporal anchoring, events can contradict each other or violate causality."
         },
         {
           "statement": "Do not silently overwrite existing canon when conflicts found. Raise a hook for resolution.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Silent overwrites cause continuity errors and undermine the world bible's authority."
+          "reasoning": "Silent overwrites cause continuity errors and undermine the world bible's authority."
         },
         {
           "statement": "Critical spoilers never appear in codex under any circumstances.",
           "severity": "critical",
           "enforcement": "llm",
-          "rationale": "Critical spoilers would ruin the player experience. No exceptions."
+          "reasoning": "Critical spoilers would ruin the player experience. No exceptions."
         }
       ],
       "definitions": [
@@ -56,10 +58,7 @@
             "Marks unknown causes as open questions"
           ],
           "examples": [
-            {
-              "term_usage": "The Guild controls the waterfront",
-              "context": "Truth: The Guild controls the waterfront. Cause: After the Collapse, they were the only organization with intact logistics. Deeper cause: Their founder foresaw the crisis and stockpiled resources."
-            }
+            "term_usage: The Guild controls the waterfront | context: Truth: The Guild controls the waterfront. Cause: After the Collapse, they were the only organization with intact logistics. Deeper cause: Their founder foresaw the crisis and stockpiled resources."
           ]
         },
         {
@@ -71,10 +70,7 @@
             "Sequence: order without specific duration"
           ],
           "examples": [
-            {
-              "term_usage": "The Founding",
-              "context": "Absolute: Year 347 of the New Era. Relative: Three years after the Collapse. Sequence: After the Last War but before the Guild's Rise."
-            }
+            "term_usage: The Founding | context: Absolute: Year 347 of the New Era. Relative: Three years after the Collapse. Sequence: After the Last War but before the Guild's Rise."
           ]
         },
         {
@@ -88,10 +84,7 @@
             "Scope: book (story-specific) or world (shareable)"
           ],
           "examples": [
-            {
-              "term_usage": "Age of Founding pack",
-              "context": "Era pack containing all lore about the founding period, with timeline anchors and cause chains"
-            }
+            "term_usage: Age of Founding pack | context: Era pack containing all lore about the founding period, with timeline anchors and cause chains"
           ]
         },
         {
@@ -127,62 +120,38 @@
           "context": "When organizing lore into packs",
           "guidance": "Choose pack type based on primary organizing principle: Era (time-bounded), Faction (group-focused), Metaphysics (rules), Geography (place-focused). Set scope to 'book' for story-specific lore, 'world' for shareable lore.",
           "examples": [
-            {
-              "situation": "Lore about how magic works in this world",
-              "response": "Metaphysics pack, world scope"
-            },
-            {
-              "situation": "Lore about a specific villain's organization",
-              "response": "Faction pack, book scope"
-            }
+            "situation: Lore about how magic works in this world | response: Metaphysics pack, world scope",
+            "situation: Lore about a specific villain's organization | response: Faction pack, book scope"
           ]
         },
         {
           "context": "When a fact lacks justification",
           "guidance": "Ask 'Why?' or 'How did this come to be?' Document the cause. If cause is unknown, mark as open question and flag for research or creative invention.",
           "examples": [
-            {
-              "situation": "The eastern district is abandoned",
-              "response": "Why? Document cause (plague? economic collapse? magical disaster?). If unknown, create open question."
-            }
+            "situation: The eastern district is abandoned | response: Why? Document cause (plague? economic collapse? magical disaster?). If unknown, create open question."
           ]
         },
         {
           "context": "When adding events to timeline",
           "guidance": "Give every event a timeline_position using anchors: absolute (fixed date), relative (X years after event Y), or sequential (after X, before Y). Cross-reference against existing anchors to catch impossible sequences.",
           "examples": [
-            {
-              "situation": "Adding 'The Guild's first warehouse' event",
-              "response": "Position: 3 years after the Collapse (relative anchor). Cross-check: Does this come after the Founder's stockpiling? Before the Council's formation? Flag if order is impossible."
-            }
+            "situation: Adding 'The Guild's first warehouse' event | response: Position: 3 years after the Collapse (relative anchor). Cross-check: Does this come after the Founder's stockpiling? Before the Council's formation? Flag if order is impossible."
           ]
         },
         {
           "context": "When canon conflicts are discovered",
           "guidance": "Do not silently overwrite. Raise a hook for resolution. Document both versions until resolved. Present options to Showrunner if needed.",
           "examples": [
-            {
-              "situation": "New pack says Guild was founded in Year 350, old pack says Year 347",
-              "response": "Raise hook: 'Guild founding date conflict: Pack A says 350, Pack B says 347. Which is canon?' Document both until resolved."
-            }
+            "situation: New pack says Guild was founded in Year 350, old pack says Year 347 | response: Raise hook: 'Guild founding date conflict: Pack A says 350, Pack B says 347. Which is canon?' Document both until resolved."
           ]
         },
         {
           "context": "Classifying spoiler level for codex derivation",
           "guidance": "Minor: may appear with care. Major: must be omitted or obscured. Critical: never appears. Consider what enhances vs ruins discovery.",
           "examples": [
-            {
-              "situation": "The Guild's founder was wealthy",
-              "response": "Minor spoiler - adds depth but doesn't change experience. Can include in codex."
-            },
-            {
-              "situation": "The Guild's founder foresaw the Collapse",
-              "response": "Major spoiler - affects how players interpret Guild actions. Omit from codex."
-            },
-            {
-              "situation": "The Guild's founder caused the Collapse",
-              "response": "Critical spoiler - central twist. Never in codex under any circumstances."
-            }
+            "situation: The Guild's founder was wealthy | response: Minor spoiler - adds depth but doesn't change experience. Can include in codex.",
+            "situation: The Guild's founder foresaw the Collapse | response: Major spoiler - affects how players interpret Guild actions. Omit from codex.",
+            "situation: The Guild's founder caused the Collapse | response: Critical spoiler - central twist. Never in codex under any circumstances."
           ]
         }
       ],
@@ -281,10 +250,14 @@
       ]
     }
   },
-
   "applicable_to": {
-    "agents": ["lore_weaver"]
+    "agents": [
+      "lore_weaver"
+    ]
   },
-
-  "tags": ["canon", "worldbuilding", "procedures"]
+  "tags": [
+    "canon",
+    "worldbuilding",
+    "procedures"
+  ]
 }
