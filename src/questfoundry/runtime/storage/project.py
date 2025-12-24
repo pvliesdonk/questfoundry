@@ -452,17 +452,28 @@ class Project:
         now = datetime.now().isoformat()
         new_version = existing["_version"] + 1
 
-        # Merge data
+        # Merge data (excluding system fields that have dedicated columns)
         existing_data = {k: v for k, v in existing.items() if not k.startswith("_")}
         merged_data = {**existing_data, **data}
+
+        # Extract system field updates (these need to update both JSON and dedicated columns)
+        new_lifecycle_state = data.get("_lifecycle_state", existing["_lifecycle_state"])
+        new_store = data.get("_store", existing["_store"])
 
         conn.execute(
             """
             UPDATE artifacts
-            SET _version = ?, _updated_at = ?, data = ?
+            SET _version = ?, _updated_at = ?, _lifecycle_state = ?, _store = ?, data = ?
             WHERE _id = ?
             """,
-            (new_version, now, json.dumps(merged_data), artifact_id),
+            (
+                new_version,
+                now,
+                new_lifecycle_state,
+                new_store,
+                json.dumps(merged_data),
+                artifact_id,
+            ),
         )
         conn.commit()
 
@@ -588,7 +599,11 @@ class Project:
         if relationship.link_resolution == "by_artifact_id":
             parent_value = parent_artifact.get("_id")
         else:  # by_field_match
-            parent_value = self._extract_field(parent_artifact, relationship.match_field)
+            # Default to _id if no match_field specified
+            if relationship.match_field:
+                parent_value = self._extract_field(parent_artifact, relationship.match_field)
+            else:
+                parent_value = parent_artifact.get("_id")
 
         if parent_value is None:
             return []

@@ -352,9 +352,11 @@ class RelationshipDef(BaseModel):
     from_type: str  # Parent artifact type (referenced)
     to_type: str  # Child artifact type (holds reference)
     kind: Literal["derived_from", "depends_on", "supersedes", "references"]
-    link_field: str  # JSON path on child referencing parent
+    link_field: str = Field(pattern=r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$")
     link_resolution: Literal["by_artifact_id", "by_field_match"] = "by_field_match"
-    match_field: str | None = None  # For by_field_match resolution
+    match_field: str | None = Field(
+        default=None, pattern=r"^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$"
+    )
     impact_policy: RelationshipImpactPolicy | None = None
 
 

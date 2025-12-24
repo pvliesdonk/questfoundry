@@ -12,6 +12,7 @@ import uuid
 from enum import Enum
 from typing import Any
 
+from questfoundry.runtime.storage.edit_policy import EditPolicyGuard
 from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import register_tool
 
@@ -799,9 +800,8 @@ class UpdateArtifactTool(BaseTool):
 
         # Check edit policy if managers are available
         policy_result = None
+        guard = None
         if self._context.lifecycle_manager and self._context.relationship_manager:
-            from questfoundry.runtime.storage.edit_policy import EditPolicyGuard
-
             guard = EditPolicyGuard(
                 self._context.lifecycle_manager,
                 self._context.relationship_manager,
@@ -829,9 +829,16 @@ class UpdateArtifactTool(BaseTool):
                 )
                 logger.debug(f"Saved version {version_saved} for {artifact_id}")
 
+            # Include demotion in the update data for atomicity
+            update_data = dict(data)
+            if policy_result and policy_result.demote_to_state:
+                update_data["_lifecycle_state"] = policy_result.demote_to_state
+                if policy_result.demote_to_store:
+                    update_data["_store"] = policy_result.demote_to_store
+
             updated = self._context.project.update_artifact(
                 artifact_id=artifact_id,
-                data=data,
+                data=update_data,
             )
 
             if updated:
@@ -842,17 +849,10 @@ class UpdateArtifactTool(BaseTool):
                 if version_saved is not None:
                     result_data["version_saved"] = version_saved
 
-                # Apply demotions if policy requires
-                if policy_result and self._context.lifecycle_manager:
-                    from questfoundry.runtime.storage.edit_policy import EditPolicyGuard
-
-                    guard = EditPolicyGuard(
-                        self._context.lifecycle_manager,
-                        self._context.relationship_manager,  # type: ignore[arg-type]
-                    )
-                    guard.apply_demotions(
+                # Apply cascade demotions to children (after parent update succeeds)
+                if policy_result and guard:
+                    guard.apply_cascade_demotions(
                         policy_result,
-                        existing,
                         self._context.project,
                         self._context.agent_id,
                     )
@@ -860,10 +860,6 @@ class UpdateArtifactTool(BaseTool):
                     # Add demotion info to result
                     if policy_result.demote_to_state:
                         result_data["demoted_to"] = policy_result.demote_to_state
-                        # Refresh artifact to get updated state
-                        refreshed = self._context.project.get_artifact(artifact_id)
-                        if refreshed:
-                            result_data["artifact"] = refreshed
 
                     if policy_result.cascade_demotions:
                         result_data["cascade_demotions"] = len(policy_result.cascade_demotions)

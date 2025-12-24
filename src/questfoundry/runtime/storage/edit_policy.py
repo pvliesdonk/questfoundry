@@ -95,7 +95,10 @@ class EditPolicyGuard:
             )
 
         if edit_policy == "allow":
-            # Still need to check for cascade effects
+            # Still need to check for cascade effects.
+            # Cascades are determined by the relationship's impact_policy, not the parent's
+            # edit_policy. This means children can be demoted even when the parent is
+            # freely editable - the relationship defines how changes propagate.
             cascades = self._get_cascade_demotions(artifact, project)
             return EditPolicyResult(
                 allowed=True,
@@ -214,6 +217,25 @@ class EditPolicyGuard:
                 project.update_artifact(artifact_id, update_fields, _updated_by=agent_id)
 
         # Apply cascade demotions
+        self.apply_cascade_demotions(policy_result, project, agent_id)
+
+    def apply_cascade_demotions(
+        self,
+        policy_result: EditPolicyResult,
+        project: Project,
+        agent_id: str | None = None,
+    ) -> None:
+        """
+        Apply cascade demotion effects to children.
+
+        This is called after the parent artifact has been updated to demote
+        any children that require demotion due to the relationship policy.
+
+        Args:
+            policy_result: Result from check_edit()
+            project: The project containing artifacts
+            agent_id: Agent making the edit
+        """
         if policy_result.cascade_demotions:
             for demotion in policy_result.cascade_demotions:
                 child_id: str = demotion["child_id"]

@@ -9,9 +9,48 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
+
+
+def _to_dict(obj: Any) -> dict[str, Any] | None:
+    """
+    Convert an object to a dictionary.
+
+    Handles Pydantic v2 (.model_dump), Pydantic v1 (.dict),
+    and custom objects with .to_dict() method.
+
+    Args:
+        obj: Object to convert
+
+    Returns:
+        Dictionary representation or None if conversion not possible
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return cast(dict[str, Any], obj)
+
+    # Prefer Pydantic v2-style export
+    if hasattr(obj, "model_dump"):
+        try:
+            return cast(dict[str, Any], obj.model_dump(by_alias=True))
+        except TypeError:  # pragma: no cover - defensive
+            return cast(dict[str, Any], obj.model_dump())
+
+    # Fallback to Pydantic v1-style export
+    if hasattr(obj, "dict"):
+        try:
+            return cast(dict[str, Any], obj.dict(by_alias=True))
+        except TypeError:  # pragma: no cover - defensive
+            return cast(dict[str, Any], obj.dict())
+
+    # Generic custom object export
+    if hasattr(obj, "to_dict"):
+        return cast(dict[str, Any], obj.to_dict())
+
+    return None
 
 
 @dataclass
@@ -397,30 +436,9 @@ class LifecycleManager:
                 policy_data = getattr(artifact_type, "lifecycle_policy", None)
                 default_store = getattr(artifact_type, "default_store", None)
 
-                # If lifecycle is an object, convert to a plain dict so that
-                # ArtifactLifecycle.from_dict always sees primitive structures.
-                # This handles:
-                # - Pydantic v2 models (.model_dump)
-                # - Pydantic v1 models (.dict)
-                # - Custom objects exposing .to_dict()
+                # Convert lifecycle_data to dict if needed
                 if lifecycle_data and not isinstance(lifecycle_data, dict):
-                    lifecycle_dict: dict[str, Any] | None = None
-                    # Prefer Pydantic v2-style export
-                    if hasattr(lifecycle_data, "model_dump"):
-                        try:
-                            lifecycle_dict = lifecycle_data.model_dump(by_alias=True)
-                        except TypeError:  # pragma: no cover - defensive
-                            lifecycle_dict = lifecycle_data.model_dump()
-                    # Fallback to Pydantic v1-style export
-                    elif hasattr(lifecycle_data, "dict"):
-                        try:
-                            lifecycle_dict = lifecycle_data.dict(by_alias=True)
-                        except TypeError:  # pragma: no cover - defensive
-                            lifecycle_dict = lifecycle_data.dict()
-                    # Generic custom object export
-                    elif hasattr(lifecycle_data, "to_dict"):
-                        lifecycle_dict = lifecycle_data.to_dict()
-
+                    lifecycle_dict = _to_dict(lifecycle_data)
                     if lifecycle_dict is not None:
                         lifecycle_data = lifecycle_dict
                     else:
@@ -432,20 +450,25 @@ class LifecycleManager:
                             "transitions": getattr(lifecycle_data, "transitions", []),
                         }
 
-                # Convert policy_data from object to dict if needed
+                # Convert policy_data to dict if needed
                 if policy_data and not isinstance(policy_data, dict):
-                    if hasattr(policy_data, "model_dump"):
-                        try:
-                            policy_data = policy_data.model_dump(by_alias=True)
-                        except TypeError:
-                            policy_data = policy_data.model_dump()
-                    elif hasattr(policy_data, "dict"):
-                        try:
-                            policy_data = policy_data.dict(by_alias=True)
-                        except TypeError:
-                            policy_data = policy_data.dict()
-                    elif hasattr(policy_data, "to_dict"):
-                        policy_data = policy_data.to_dict()
+                    policy_dict = _to_dict(policy_data)
+                    if policy_dict is not None:
+                        policy_data = policy_dict
+                    else:
+                        # Last-resort attribute access for policy objects
+                        policy_data = {
+                            "edit_policy": getattr(policy_data, "edit_policy", "allow"),
+                            "demote_trigger_states": getattr(
+                                policy_data, "demote_trigger_states", None
+                            ),
+                            "demote_target_state": getattr(
+                                policy_data, "demote_target_state", None
+                            ),
+                            "demote_target_store": getattr(
+                                policy_data, "demote_target_store", None
+                            ),
+                        }
 
             if type_id and lifecycle_data:
                 lifecycle = ArtifactLifecycle.from_dict(
