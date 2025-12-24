@@ -204,7 +204,7 @@ class RequestLifecycleTransitionTool(BaseTool):
 
                 # Include store migration info if applicable
                 if target_store:
-                    result_data["previous_store"] = artifact.get("_store", "workspace")
+                    result_data["previous_store"] = current_store
                     result_data["new_store"] = target_store
 
                 return ToolResult(
