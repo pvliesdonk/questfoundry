@@ -131,7 +131,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["sources_of_truth", "spoiler_hygiene"],
+    "must_know": ["sources_of_truth", "spoiler_hygiene", "artifact_model"],
     "should_know": ["quality_bars_overview"],
     "role_specific": ["book_binder_procedures", "export_patterns"],
     "can_lookup": ["accessibility_guidelines"]

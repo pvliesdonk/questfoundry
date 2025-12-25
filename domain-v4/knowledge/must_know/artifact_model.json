@@ -1,0 +1,106 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "artifact_model",
+  "name": "Artifact Model",
+  "layer": "must_know",
+
+  "summary": "What artifacts are and how they flow through the studio",
+
+  "keywords": ["artifact", "artifact type", "stores", "lifecycle", "versioning", "artifact ID"],
+
+  "triggers": [
+    "what is an artifact",
+    "how to create artifacts",
+    "artifact IDs",
+    "passing work between agents",
+    "artifact lifecycle"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "definitions": [
+        {
+          "term": "artifact",
+          "meaning": "A versioned JSON object representing work product. Each artifact has an ID, type, lifecycle state, and content fields.",
+          "distinguishing_features": [
+            "Created by agents, stored in stores (workspace, canon)",
+            "Has lifecycle: draft → review → approved → cold",
+            "Referenced by ID (e.g., 'section_abc123')",
+            "Validated against its artifact type schema"
+          ]
+        },
+        {
+          "term": "artifact_type",
+          "meaning": "A schema defining what fields an artifact contains and how it behaves.",
+          "distinguishing_features": [
+            "Defines required and optional fields",
+            "Specifies lifecycle states and transitions",
+            "Examples: section, hook_card, research_memo, codex_entry"
+          ]
+        },
+        {
+          "term": "artifact_id",
+          "meaning": "Unique identifier for an artifact instance. Format: {type}_{random_suffix}",
+          "distinguishing_features": [
+            "Used to fetch, reference, and pass artifacts between agents",
+            "Stable across lifecycle transitions",
+            "Must be included in return_to_orchestrator calls"
+          ]
+        },
+        {
+          "term": "approved",
+          "meaning": "Lifecycle state indicating an artifact has passed quality gates and is ready for canon commitment.",
+          "distinguishing_features": [
+            "Reached via: draft → review → approved",
+            "Gatekeeper validates before this transition",
+            "Next transition is to 'cold' (canon commitment)",
+            "Can still be edited if issues found before cold"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "statement": "Always include artifact IDs when returning to orchestrator",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "The orchestrator needs IDs to pass your work to the next agent. Without IDs, workflow breaks."
+        },
+        {
+          "statement": "Use search_workspace to find artifacts, get_artifact to fetch by ID",
+          "enforcement": "llm",
+          "severity": "warning",
+          "reasoning": "Search for discovery, fetch for retrieval. Don't guess IDs."
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Pass work between agents via delegation",
+          "steps": [
+            "Create artifacts in workspace",
+            "Note artifact IDs from creation responses",
+            "Include IDs in return_to_orchestrator call",
+            "Orchestrator passes IDs to next delegated agent"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Referring to artifacts by description instead of ID",
+          "consequence": "Next agent cannot find your work",
+          "prevention": "Always capture and pass artifact IDs"
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator", "creator", "validator", "researcher", "curator"]
+  },
+
+  "related_entries": ["lifecycle_contract", "delegation_protocol", "sources_of_truth"],
+
+  "tags": ["runtime", "artifacts", "core-concept"]
+}

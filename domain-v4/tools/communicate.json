@@ -3,7 +3,7 @@
   "id": "communicate",
   "name": "Communicate with Customer",
   "summary": "Send messages to customer or ask questions",
-  "description": "Send a message to the human customer.\n\nMessage types:\n- status: Brief progress update (non-blocking)\n- question: Need input from customer (blocks until answered)\n- notification: Deliverable ready or milestone reached (non-blocking)\n- error: Something failed or needs attention (may block depending on severity)",
+  "description": "Communicate with the human customer - send updates, ask questions, or report errors.\n\nALL message types terminate your turn. The difference is whether the runtime waits for a response:\n- status: Progress update - runtime continues immediately\n- notification: Milestone announcement - runtime continues immediately\n- question: Waits for customer response before resuming\n- error: May wait for customer decision depending on severity\n\nUse this when you need to report progress, request input, or escalate decisions.",
 
   "terminates_turn": true,
   "summarization_policy": "preserve",

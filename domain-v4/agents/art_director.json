@@ -147,7 +147,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene"],
+    "must_know": ["spoiler_hygiene", "artifact_model"],
     "should_know": ["quality_bars_overview", "sources_of_truth"],
     "role_specific": ["art_director_heuristics_core"],
     "can_lookup": ["accessibility_guidelines"]

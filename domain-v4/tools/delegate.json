@@ -3,7 +3,7 @@
   "id": "delegate",
   "name": "Delegate Work",
   "summary": "Assign work to another agent",
-  "description": "Assign work to another agent. Creates a delegation request with context, expected outputs, and quality criteria. The receiving agent will be notified and can accept, request clarification, or report completion.\n\nSee: delegation.schema.json for the full delegation protocol.",
+  "description": "Delegate work to another agent. This hands off control until the agent completes the task.\n\nProvide:\n- task: Clear description of what needs to be done\n- context: Relevant artifact IDs and background\n- expected_outputs: What artifacts should be produced\n- quality_criteria: How to judge completion quality\n\nThe receiving agent executes the work and returns control via return_to_orchestrator with artifact IDs and assessment.\n\nThis tool TERMINATES YOUR TURN - you yield control and resume when the agent returns.",
 
   "terminates_turn": true,
   "summarization_policy": "ultra_concise",

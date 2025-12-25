@@ -114,7 +114,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene"],
+    "must_know": ["spoiler_hygiene", "artifact_model"],
     "should_know": ["sources_of_truth", "quality_bars_overview"],
     "role_specific": ["codex_curator_guidelines"],
     "can_lookup": ["accessibility_guidelines"]

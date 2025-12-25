@@ -121,7 +121,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["choice_integrity"],
+    "must_know": ["choice_integrity", "artifact_model"],
     "should_know": ["diegetic_gates", "topology_patterns", "quality_bars_overview", "sources_of_truth"],
     "role_specific": ["plotwright_heuristics"]
   }

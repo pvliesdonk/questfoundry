@@ -3,7 +3,7 @@
   "id": "get_artifact",
   "name": "Get Artifact",
   "summary": "Retrieve an artifact by ID",
-  "description": "Retrieve artifacts by ID. Use this to fetch specific artifacts when you know their IDs. Accepts a single ID or list of IDs.\n\nUse search_workspace instead if you need to find artifacts by criteria (type, lifecycle state, text search).",
+  "description": "Retrieve one or more artifacts by ID. Returns the current version from workspace or canon stores.\n\nAccepts a single ID or list of IDs. Use search_workspace instead to find artifacts by criteria (type, lifecycle state, content search).",
 
   "summarization_policy": "concise",
   "summary_template": "Retrieved {count} artifact(s)",
