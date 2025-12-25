@@ -7,11 +7,14 @@ knowledge injection and conversation history.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.agent.content_utils import extract_knowledge_content
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Playbook, Studio
@@ -131,9 +134,10 @@ class ContextBuilder:
 
         # 2b. Must-know entries matching agent's archetypes (auto-injected)
         archetype_entries = self._load_archetype_knowledge(agent)
+        existing_entry_ids = {e.get("id") for e in context.must_know_entries}
         for entry_dict in archetype_entries:
             # Avoid duplicates if already in explicit must_know
-            if not any(e.get("id") == entry_dict.get("id") for e in context.must_know_entries):
+            if entry_dict.get("id") not in existing_entry_ids:
                 context.must_know_entries.append(entry_dict)
                 context.must_know_tokens += (
                     len(entry_dict.get("content", "")) // self.CHARS_PER_TOKEN
@@ -300,16 +304,24 @@ class ContextBuilder:
             "summary": entry.summary or "",
         }
 
+    def _get_agent_archetypes(self, agent: Agent) -> set[str]:
+        """Extract archetype strings from an agent.
+
+        Handles both string and Archetype enum values.
+
+        Args:
+            agent: The agent to get archetypes from
+
+        Returns:
+            Set of archetype strings (lowercase)
+        """
+        if not agent.archetypes:
+            return set()
+        return {a.value if hasattr(a, "value") else str(a) for a in agent.archetypes}
+
     def _is_orchestrator(self, agent: Agent) -> bool:
         """Check if agent has orchestrator archetype."""
-        if not agent.archetypes:
-            return False
-        # Handle both string and Archetype enum values
-        for a in agent.archetypes:
-            arch_str = a.value if hasattr(a, "value") else str(a)
-            if arch_str == "orchestrator":
-                return True
-        return False
+        return "orchestrator" in self._get_agent_archetypes(agent)
 
     def _load_archetype_knowledge(self, agent: Agent) -> list[dict[str, str]]:
         """Load must_know entries that apply to agent's archetypes.
@@ -324,13 +336,11 @@ class ContextBuilder:
         Returns:
             List of formatted knowledge entries for prompt injection
         """
-        if not self._domain_path or not agent.archetypes:
+        agent_archetypes = self._get_agent_archetypes(agent)
+        if not self._domain_path or not agent_archetypes:
             return []
 
         import json
-
-        # Get agent archetype strings
-        agent_archetypes = {a.value if hasattr(a, "value") else str(a) for a in agent.archetypes}
 
         entries: list[dict[str, str]] = []
         must_know_dir = self._domain_path / "knowledge" / "must_know"
@@ -348,8 +358,12 @@ class ContextBuilder:
 
                         entry = KnowledgeEntry(**data)
                         entries.append(self._format_entry_for_injection(entry))
-                except (json.JSONDecodeError, KeyError, TypeError):
-                    # Skip malformed entries
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    logger.warning(
+                        "Skipping malformed knowledge entry %s: %s",
+                        file_path,
+                        e,
+                    )
                     continue
 
         return entries
