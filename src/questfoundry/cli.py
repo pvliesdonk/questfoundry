@@ -1181,8 +1181,14 @@ async def _handle_clarification_requests(
     logger = logging.getLogger("questfoundry.cli")
 
     # Get the "customer" mailbox (special mailbox for human communication)
+    # Use get_nowait() to properly consume messages (get_all_pending doesn't remove them)
     mailbox = await broker.get_mailbox("customer")
-    pending = await mailbox.get_all_pending()
+    pending: list[Any] = []
+    while True:
+        msg = await mailbox.get_nowait()
+        if msg is None:
+            break
+        pending.append(msg)
 
     if not pending:
         return []
@@ -1331,8 +1337,7 @@ async def _handle_clarification_requests(
             answer[:50] + "..." if len(answer) > 50 else answer,
         )
 
-        # Mark request as processed (remove from mailbox)
-        # The get_all_pending already removed them; we just don't put them back
+        # Messages were already consumed from mailbox via get_nowait() above
 
         handled.append(
             {

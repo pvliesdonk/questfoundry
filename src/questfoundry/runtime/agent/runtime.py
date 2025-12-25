@@ -2508,19 +2508,22 @@ class AgentRuntime:
                         max_total_iterations=10,  # Delegations are focused tasks
                     )
 
-                    # Create success response
-                    response_msg = create_delegation_response(
-                        from_agent=agent.id,
-                        to_agent=msg.from_agent,
-                        delegation_id=delegation_id,
-                        success=True,
-                        result={"content": activation_result.content},
-                        in_reply_to=msg.id,
-                        playbook_id=msg.playbook_id,
-                        playbook_instance_id=msg.playbook_instance_id,
-                        phase_id=msg.phase_id,
-                    )
-                    await self._broker.send(response_msg)
+                    # Only create fallback response if agent didn't call return_to_orchestrator
+                    # (return_to_orchestrator already sends a proper delegation response with
+                    # semantic fields like result_assessment, recommendation, artifacts_produced)
+                    if activation_result.stop_reason != "return_to_orchestrator":
+                        response_msg = create_delegation_response(
+                            from_agent=agent.id,
+                            to_agent=msg.from_agent,
+                            delegation_id=delegation_id,
+                            success=True,
+                            result={"content": activation_result.content},
+                            in_reply_to=msg.id,
+                            playbook_id=msg.playbook_id,
+                            playbook_instance_id=msg.playbook_instance_id,
+                            phase_id=msg.phase_id,
+                        )
+                        await self._broker.send(response_msg)
 
                     results.append(
                         {
