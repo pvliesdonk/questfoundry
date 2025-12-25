@@ -152,7 +152,7 @@
   },
 
   "applicable_to": {
-    "archetypes": ["creator", "validator", "researcher", "performer"]
+    "archetypes": ["orchestrator", "creator", "validator", "researcher", "performer"]
   },
 
   "tags": ["runtime", "delegation", "handoff", "protocol"]
