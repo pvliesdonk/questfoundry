@@ -251,7 +251,11 @@ class PromptBuilder:
             if category not in by_category:
                 by_category[category] = []
 
-            desc = cap.description or cap.name
+            # Include tool_ref when available so agent knows which tool to call
+            if cap.tool_ref:
+                desc = f"{cap.description or cap.name} (`{cap.tool_ref}`)"
+            else:
+                desc = cap.description or cap.name
             by_category[category].append(desc)
 
         for category, caps in by_category.items():
