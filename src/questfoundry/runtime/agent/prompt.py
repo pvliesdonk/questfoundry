@@ -348,9 +348,9 @@ class PromptBuilder:
 
         for tool in tool_schemas:
             name = tool.get("name", "unknown")
-            # Use summary if available, otherwise first sentence of description
+            # Use summary if available, otherwise first line of description
             raw_desc = tool.get("description", "") or ""
-            desc = tool.get("summary") or (raw_desc.split(".")[0] + "." if raw_desc else "")
+            desc = tool.get("summary") or raw_desc.split("\n")[0]
             lines.append(f"- **{name}**: {desc}")
 
         return "\n".join(lines)
