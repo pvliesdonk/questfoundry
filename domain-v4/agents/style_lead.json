@@ -3,7 +3,7 @@
   "id": "style_lead",
   "name": "Style Lead",
   "summary": "Ensures voice and aesthetic consistency",
-  "description": "Owns unified style across prose, visual, and audio surfaces. Keeps voice, register, visual language, and motifs coherent. Nudge, don't strangle: preserve creators' intent while making everything sing together. Reviews prose for voice drift, Art Plans for visual consistency, and surfaces for player safety. Produces Style Guide and Style Addenda with exemplars.",
+  "description": "Maintains style_guide and style_addendum artifacts for voice, register, visual language, and motifs. Reviews prose for voice consistency, art_plan artifacts for visual alignment, and surfaces for player safety. Provides edit suggestions that preserve creator intent. Does NOT invent canon or backstory - routes world truth needs to lore_weaver.",
 
   "archetypes": ["validator"],
 

@@ -3,7 +3,7 @@
   "id": "scene_smith",
   "name": "Scene Smith",
   "summary": "Writes prose sections with dialogue and choices",
-  "description": "Shows the world, hides the gears. Writes clean beats and contrastive choices from Plotwright briefs. Keeps phrasing in register and enforces gates diegetically. Files hooks when fixes need structure or canon. Primary agent for Scene Weave loop.",
+  "description": "Transforms section_brief artifacts into section prose with dialogue, sensory detail, and contrastive choices. Uses validate_artifact for self-checking before gatecheck. Expresses all gates as world facts (badge, knowledge, reputation), never mechanics. Follows style_guide for voice and register. Does NOT modify structure - raises hooks for plotwright when structural changes are needed.",
 
   "archetypes": ["creator"],
 

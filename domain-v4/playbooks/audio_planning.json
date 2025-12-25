@@ -6,7 +6,7 @@
   "summary": "Plan audio assets for narrative scope",
   "purpose": "Plan audio content for a narrative scope. Create Audio Plans for all worthy moments (planning is cheap), organize into Cuelists with priorities, maintain Reference Sheets for sonic consistency. Generation is separate and budget-constrained.",
 
-  "description": "Audio Planning is the audio content loop. Audio Director decides WHAT to sound and WHY—not HOW. The philosophy: plan everything worth sounding (cheap), generate selectively based on budget (expensive). Reference Sheets ensure recurring sonic elements (leitmotifs, location ambients) stay consistent. Style Lead validates audio aesthetic alignment. Generation happens via the generate_audio tool when budget and priorities align.",
+  "description": "Creates audio_plan artifacts for audio content. Audio Director identifies sound opportunities (ambient/spot/music/voice), assigns priorities (must_have/nice_to_have/optional), and maintains reference_sheet artifacts for sonic consistency. Style Lead validates audio aesthetic alignment. Does NOT generate audio - plans are ready for generate_audio tool when budget allows.",
 
   "triggers": [
     {

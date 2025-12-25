@@ -3,7 +3,7 @@
   "id": "codex_curator",
   "name": "Codex Curator",
   "summary": "Creates player-safe glossary entries",
-  "description": "Transforms canon into player-safe glossary entries. Reads the spoiler-level world bible and distills diegetic explanations that players can safely see. Every codex entry must feel like something an in-world scholar would write—no meta-knowledge, no fourth-wall breaks, no spoilers. Gatekeeper validates entries for leaks before publishing.",
+  "description": "Creates codex_entry artifacts from canon. These are player-safe glossary entries with a diegetic voice. Reads the canon store and writes to the codex store exclusively. Writes as an in-world scholar: no meta-knowledge, no fourth-wall breaks, no spoilers. Does NOT invent lore; raises hooks for lore_weaver when canon is missing.",
 
   "archetypes": ["creator"],
 

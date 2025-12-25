@@ -3,7 +3,7 @@
   "id": "lore_weaver",
   "name": "Lore Weaver",
   "summary": "Creates canon packs and world truth",
-  "description": "Builds and maintains the canon—the spoiler-level world bible. Creates causes behind events, secret histories, faction motivations, metaphysical rules, and timeline anchors. Works from Showrunner briefs and Researcher findings. Canon Packs are portable lore containers shareable across multiple books. Codex Curator derives player-safe entries from this truth.",
+  "description": "Creates and maintains canon_pack artifacts containing world truth: causes behind events, secret histories, faction motivations, metaphysical rules, and timeline anchors. Works from Showrunner briefs and Researcher findings. Writes to canon store exclusively. Does NOT create player-facing content - codex_curator derives safe entries from canon.",
 
   "archetypes": ["creator"],
 

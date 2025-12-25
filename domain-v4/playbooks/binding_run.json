@@ -6,7 +6,7 @@
   "summary": "Export approved content to distributable formats",
   "purpose": "Assemble a player-safe export view from a Canon snapshot. Package manuscript, codex, and optional assets without leaking spoilers or internal plumbing.",
 
-  "description": "Binding Run is the export loop. Book Binder packages what exists—no rewrites, no content changes. The focus is on integrity (all links resolve), presentation safety (no internals leak), and clear provenance (snapshot ID and options stamped). If issues are found, they're routed upstream via hooks. The output is a distributable bundle plus view log and build manifest.",
+  "description": "Exports canon snapshots to distributable formats (MD/HTML/EPUB/PDF). Book Binder packages content without rewrites. Validates integrity (all links resolve) and presentation safety (no internals leak). Stamps provenance (snapshot ID, options). Routes issues upstream via hooks. Outputs build_manifest and view_log artifacts.",
 
   "triggers": [
     {
