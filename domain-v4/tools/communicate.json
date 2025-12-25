@@ -3,7 +3,7 @@
   "id": "communicate",
   "name": "Communicate with Customer",
   "summary": "Send messages to customer or ask questions",
-  "description": "Send a message to the human customer.\n\nMessage types:\n- status: Brief progress update (non-blocking)\n- question: Need input from customer (blocks until answered)\n- notification: Deliverable ready or milestone reached (non-blocking)\n- error: Something failed or needs attention (may block depending on severity)",
+  "description": "Communicate with the human customer - send updates, ask questions, or report errors.\n\nMessage types and behavior:\n- status: Non-blocking progress update - you continue working\n- notification: Non-blocking milestone or event announcement\n- question: BLOCKING - you wait for customer response before proceeding\n- error: Report problems - may require customer decision\n\nUse this when you need to report progress, request input, or escalate decisions.",
 
   "terminates_turn": true,
   "summarization_policy": "preserve",

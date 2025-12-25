@@ -3,7 +3,7 @@
   "id": "return_to_orchestrator",
   "name": "Return to Orchestrator",
   "summary": "Signal task completion and return control",
-  "description": "Signal task completion and return control to the orchestrator. Use this when your delegated work is complete, blocked, or needs orchestrator decision.\n\nProvide a summary, quality assessment, and recommended next action. The orchestrator will receive this information and decide next steps.",
+  "description": "Signal that your delegated task is complete and return control to the orchestrator.\n\nYou MUST include:\n- summary: What you accomplished\n- result_assessment: pass/partial/fail/skip/info\n- recommendation: proceed/rework/escalate/hold\n- artifacts_produced: List of artifact IDs you created (CRITICAL for workflow continuity)\n\nWithout artifact IDs, the orchestrator cannot pass your work to the next agent.",
 
   "terminates_turn": true,
   "summarization_policy": "ultra_concise",
