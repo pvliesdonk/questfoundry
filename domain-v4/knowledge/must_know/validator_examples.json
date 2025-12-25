@@ -1,0 +1,85 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "validator_examples",
+  "name": "Validator Few-Shot Examples",
+  "layer": "must_know",
+
+  "summary": "Complete validation cycle examples for validator agents",
+
+  "keywords": ["validate", "gatekeeper", "quality", "check", "review", "approve"],
+
+  "triggers": [
+    "how to validate",
+    "validation example",
+    "gatecheck",
+    "quality review"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "procedures": [
+        {
+          "goal": "Complete a validation cycle",
+          "steps": [
+            "Step 1 - Fetch artifact to validate: get_artifact('section-001')",
+            "Step 2 - Check each quality bar (canon consistency, prose quality, format compliance)",
+            "Step 3 - Document findings in structured report",
+            "Step 4 - Save report: save_artifact(artifact_type='gatecheck_report', data={'target_artifact': 'section-001', 'findings': [...], 'verdict': 'pass'})",
+            "Step 5 - Note report ID: {\"artifact_id\": \"GC-001\", \"status\": \"created\"}",
+            "Step 6 - Return with assessment: return_to_orchestrator(summary='Validated section-001 against quality bars', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
+          ],
+          "preconditions": [
+            "Received delegation with artifact_refs containing artifact to validate"
+          ],
+          "postconditions": [
+            "Gatecheck report saved with findings",
+            "Clear pass/fail verdict returned"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When artifacts fail validation",
+          "guidance": "Provide actionable feedback in report findings",
+          "examples": [
+            "Issue: 'Character name inconsistent' -> Action: 'Change \"John\" to \"Jonathan\" in paragraph 3'",
+            "Issue: 'Missing scene transition' -> Action: 'Add transition beat between scenes 2 and 3'"
+          ]
+        },
+        {
+          "context": "Choosing result_assessment and recommendation",
+          "guidance": "Match assessment to severity of issues found",
+          "examples": [
+            "No issues -> result_assessment='pass', recommendation='proceed'",
+            "Minor issues, fixable -> result_assessment='partial', recommendation='rework'",
+            "Critical issues, needs major revision -> result_assessment='fail', recommendation='rework'",
+            "Blocking issue, needs customer input -> result_assessment='fail', recommendation='escalate'"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Approving without reading artifact",
+          "consequence": "Quality issues slip through to canon",
+          "prevention": "Always call get_artifact to read the full content before validating"
+        },
+        {
+          "failure_mode": "Vague findings",
+          "consequence": "Creator cannot fix issues without specific guidance",
+          "prevention": "Include exact location (paragraph, sentence) and specific fix in each finding"
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["validator"]
+  },
+
+  "related_entries": ["artifact_model", "quality_bars_overview"],
+
+  "tags": ["examples", "few-shot", "validation", "quality"]
+}
