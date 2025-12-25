@@ -1,0 +1,109 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "orchestrator_onboarding",
+  "name": "Orchestrator Startup Sequence",
+  "layer": "must_know",
+
+  "summary": "How to start a session: orient, clarify, then select playbook",
+
+  "keywords": ["startup", "onboarding", "session start", "playbook selection", "clarification"],
+
+  "triggers": [
+    "starting a session",
+    "first action",
+    "which playbook to use",
+    "how to begin"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "rules": [
+        {
+          "statement": "Do not commit to a playbook until you understand the user's goal",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Prevents wasted work on wrong requirements. Clarifying first saves time."
+        },
+        {
+          "statement": "If user goal is ambiguous or open-ended, use communicate(type='question') BEFORE selecting a playbook",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Open requests like 'write a story' or 'hello' need clarification before workflow selection."
+        },
+        {
+          "statement": "Match user goal to the appropriate playbook - don't default to story_spark for everything",
+          "enforcement": "llm",
+          "severity": "critical",
+          "reasoning": "Different goals need different workflows: structure (story_spark), prose (scene_weave), export (binding_run), etc."
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Start a new session",
+          "steps": [
+            "Assess user request: Is the goal clear and specific?",
+            "If ambiguous, use communicate(type='question') to clarify genre, tone, length, or specific needs",
+            "Once requirements are clear, select the appropriate playbook based on goal type",
+            "Call consult_playbook with the selected playbook_id to get workflow steps",
+            "Execute playbook phases, delegating to specialists as directed"
+          ],
+          "preconditions": [
+            "User request received"
+          ],
+          "postconditions": [
+            "Clear requirements established",
+            "Appropriate workflow initiated"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "Matching user goal to playbook",
+          "guidance": "Select playbook based on what the user actually wants to accomplish",
+          "examples": [
+            "goal: 'create a story' or 'design story structure' | playbook: story_spark",
+            "goal: 'write prose for existing briefs' | playbook: scene_weave",
+            "goal: 'expand the world lore' | playbook: lore_deepening",
+            "goal: 'create player codex entries' | playbook: lore_deepening",
+            "goal: 'export for publication' | playbook: binding_run",
+            "goal: 'plan illustrations' | playbook: art_planning",
+            "goal: 'plan audio/soundscape' | playbook: audio_planning",
+            "goal: 'triage hooks and ideas' | playbook: hook_harvest"
+          ]
+        },
+        {
+          "context": "Ambiguous requests requiring clarification",
+          "guidance": "Ask about scope, genre, tone, or specific needs before proceeding",
+          "examples": [
+            "request: 'write a story' | ask: 'What genre and tone? How many sections? Any themes?'",
+            "request: 'hello' or 'hi' | ask: 'What would you like to work on today?'",
+            "request: 'help me with my project' | ask: 'What aspect needs attention - structure, prose, lore, or export?'"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Immediately calling consult_playbook('story_spark') without assessing user needs",
+          "consequence": "Assumes all requests are story creation. Misses lore, export, planning, or other workflows.",
+          "prevention": "Assess goal first. story_spark is for structure creation, not all requests."
+        },
+        {
+          "failure_mode": "Delegating before clarifying ambiguous request",
+          "consequence": "Agents work on wrong requirements. Wasted effort.",
+          "prevention": "Use communicate(type='question') FIRST when requirements are unclear."
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator"]
+  },
+
+  "related_entries": ["delegation_protocol", "showrunner_operating_principles", "story_building_workflow"],
+
+  "tags": ["startup", "orchestration", "workflow-selection"]
+}

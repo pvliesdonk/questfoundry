@@ -42,11 +42,11 @@ class ConsultPlaybookTool(BaseTool):
                     "action_outcome": f"listed {len(available)} playbooks",
                     "message": (
                         "You called consult_playbook without specifying a playbook_id. "
-                        "For new story requests, call again with playbook_id='story_spark'. "
+                        "Select the playbook that matches the user's goal and call again with that playbook_id. "
                         "Available playbooks:"
                     ),
                     "available_playbooks": available,
-                    "next_action": "Call consult_playbook(playbook_id='story_spark') for story creation workflow",
+                    "next_action": "Select playbook based on user goal, then call consult_playbook(playbook_id='...')",
                 },
             )
 
