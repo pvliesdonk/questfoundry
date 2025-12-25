@@ -463,7 +463,7 @@ class PromptBuilder:
                     "## Anti-Pattern Reminder",
                     "",
                     "WRONG: The detective entered the dimly lit room, her footsteps echoing...",
-                    "RIGHT:",
+                    "RIGHT: communicate(type='question', message='What genre and tone for this story?')",
                 ]
             )
         elif any(a in archetypes_lower for a in ["creator", "author", "writer"]):

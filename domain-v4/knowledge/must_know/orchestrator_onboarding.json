@@ -36,7 +36,7 @@
         {
           "statement": "Match user goal to the appropriate playbook - don't default to story_spark for everything",
           "enforcement": "llm",
-          "severity": "error",
+          "severity": "critical",
           "reasoning": "Different goals need different workflows: structure (story_spark), prose (scene_weave), export (binding_run), etc."
         }
       ],
