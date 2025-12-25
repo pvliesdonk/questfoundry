@@ -304,26 +304,26 @@ class PromptBuilder:
         Details available via list_agents() or consulting agent charters.
 
         Args:
-            agents: List of agent menu items with id, name, description, archetypes, specialties
+            agents: List of agent menu items with id, name, summary, description, archetypes, specialties
 
         Returns:
             Compact formatted agents section for the prompt
         """
         lines = ["## Available Agents for Delegation\n"]
-        lines.append("| Agent | Archetype | Specialty |")
-        lines.append("|-------|-----------|-----------|")
+        lines.append("| Agent | Archetype | Role |")
+        lines.append("|-------|-----------|------|")
 
         for ag in agents:
             name = ag.get("name", ag.get("id", "Unknown"))
             archetypes = ag.get("archetypes", [])
             archetypes_str = ", ".join(archetypes[:2]) if archetypes else "general"
-            # Use summary (preferred) or fall back to first specialty
-            specialties = ag.get("specialties", [])
-            spec = ag.get("summary") or (specialties[0] if specialties else "")
-            lines.append(f"| {name} | {archetypes_str} | {spec} |")
+            # Use summary for role description
+            role = ag.get("summary", "")
+            lines.append(f"| {name} | {archetypes_str} | {role} |")
 
         lines.append("")
         lines.append("Use `delegate(to_agent, task, expected_outputs)` to assign work.")
+        lines.append("Use `list_agents()` for full agent details.")
 
         return "\n".join(lines)
 
