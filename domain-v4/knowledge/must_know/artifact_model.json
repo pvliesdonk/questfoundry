@@ -49,6 +49,16 @@
             "Stable across lifecycle transitions",
             "Must be included in return_to_orchestrator calls"
           ]
+        },
+        {
+          "term": "approved",
+          "meaning": "Lifecycle state indicating an artifact has passed quality gates and is ready for canon commitment.",
+          "distinguishing_features": [
+            "Reached via: draft → review → approved",
+            "Gatekeeper validates before this transition",
+            "Next transition is to 'cold' (canon commitment)",
+            "Can still be edited if issues found before cold"
+          ]
         }
       ],
       "rules": [
