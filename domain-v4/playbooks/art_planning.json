@@ -6,7 +6,7 @@
   "summary": "Plan visual assets for narrative scope",
   "purpose": "Plan visual content for a narrative scope. Create Art Plans for all worthy scenes (planning is cheap), organize into Shotlists with priorities, maintain Reference Sheets for consistency. Generation is separate and budget-constrained.",
 
-  "description": "Art Planning is the visual content loop. Art Director decides WHAT to illustrate and WHY—not HOW. The philosophy: plan everything worth illustrating (cheap), generate selectively based on budget (expensive). Reference Sheets ensure recurring elements (characters, locations, objects) stay visually consistent. Style Lead validates visual language alignment. Generation happens via the generate_image tool when budget and priorities align.",
+  "description": "Creates art_plan artifacts for visual content. Art Director identifies illustration opportunities, assigns priorities (must_have/nice_to_have/optional), and maintains reference_sheet artifacts for visual consistency. Style Lead validates visual language alignment. Does NOT generate images - plans are ready for generate_image tool when budget allows.",
 
   "triggers": [
     {
