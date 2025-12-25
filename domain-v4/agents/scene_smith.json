@@ -137,7 +137,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene"],
+    "must_know": ["spoiler_hygiene", "artifact_model"],
     "should_know": ["choice_integrity", "diegetic_gates", "quality_bars_overview", "sources_of_truth"],
     "role_specific": ["scene_smith_heuristics", "prose_patterns"]
   }

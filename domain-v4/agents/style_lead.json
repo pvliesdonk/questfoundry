@@ -154,7 +154,7 @@
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["spoiler_hygiene", "choice_integrity"],
+    "must_know": ["spoiler_hygiene", "choice_integrity", "artifact_model"],
     "should_know": ["sources_of_truth", "quality_bars_overview"],
     "role_specific": ["style_lead_heuristics"],
     "can_lookup": ["accessibility_guidelines"]
