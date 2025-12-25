@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "request_lifecycle_transition",
   "name": "Request Lifecycle Transition",
+  "summary": "Request a lifecycle state change for an artifact",
   "description": "Request a lifecycle state transition for an artifact (draft→review→approved→cold). Uses the validate-with-feedback pattern: strict schema validation and clear, actionable error messages when a request is invalid or a transition is not allowed.",
 
   "summarization_policy": "preserve",

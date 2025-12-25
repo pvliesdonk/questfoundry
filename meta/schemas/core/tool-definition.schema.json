@@ -23,6 +23,11 @@
       "description": "What this tool does - included in LLM context to help it decide when to use the tool"
     },
 
+    "summary": {
+      "$ref": "_definitions.schema.json#/$defs/summary",
+      "description": "Concise one-liner for prompt injection. Use description for full explanation."
+    },
+
     "cost_tier": {
       "type": "string",
       "enum": ["low", "medium", "high", "external"],

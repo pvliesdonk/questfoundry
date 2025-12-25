@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "get_artifact",
   "name": "Get Artifact",
+  "summary": "Retrieve an artifact by ID",
   "description": "Retrieve artifacts by ID. Use this to fetch specific artifacts when you know their IDs. Accepts a single ID or list of IDs.\n\nUse search_workspace instead if you need to find artifacts by criteria (type, lifecycle state, text search).",
 
   "summarization_policy": "concise",

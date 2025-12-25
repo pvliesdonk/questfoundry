@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_knowledge",
   "name": "Consult Knowledge",
+  "summary": "Retrieve full content of a knowledge entry",
   "description": "Retrieve detailed guidance from the studio knowledge base. Use this when you need full content for entries shown in your Knowledge Menu.\n\nThe Knowledge Menu in your system prompt shows summaries of available knowledge. Use this tool to get the complete content when you need detailed guidance, examples, or procedures.\n\nCommon uses:\n- Get detailed examples when summary is insufficient\n- Retrieve full procedures or checklists\n- Access domain-specific guidance for specialized tasks",
 
   "summarization_policy": "drop",

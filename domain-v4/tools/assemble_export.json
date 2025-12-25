@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "assemble_export",
   "name": "Assemble Export",
+  "summary": "Build export bundle from canon snapshot",
   "description": "Assemble a player-safe export bundle from a Canon snapshot. Compiles manuscript, codex, and optional assets into distributable formats (MD/HTML/EPUB/PDF). Validates link integrity, generates navigation, and stamps front matter.\n\nThis tool does NOT edit content - it packages what exists. If integrity issues are found, they're reported for upstream fixes.",
 
   "summarization_policy": "preserve",

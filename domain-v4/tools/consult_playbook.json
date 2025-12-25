@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_playbook",
   "name": "Consult Playbook",
+  "summary": "Get full details of a playbook",
   "description": "Retrieve full details for a playbook/workflow. Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how a workflow should be orchestrated.",
 
   "summarization_policy": "drop",

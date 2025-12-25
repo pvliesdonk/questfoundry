@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "analyze_story_graph",
   "name": "Analyze Story Graph",
+  "summary": "Analyze narrative structure topology",
   "description": "Programmatically analyzes story topology to check reachability, dead ends, orphans, missing targets, and lifecycle status. Provides concrete data for structural analysis without requiring LLM reasoning about graph structure.\n\nChecks:\n1. Reachability - Can all nodes be reached from entry?\n2. Dead ends - Nodes with no outgoing connections\n3. Orphans - Nodes with no incoming connections (except entry)\n4. Missing targets - References to non-existent nodes\n5. Lifecycle status - What state are the paths in?\n\nReturns structured analysis with actionable recommendations.",
 
   "summarization_policy": "preserve",

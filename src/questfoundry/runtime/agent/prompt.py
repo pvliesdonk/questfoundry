@@ -344,8 +344,9 @@ class PromptBuilder:
 
         for tool in tool_schemas:
             name = tool.get("name", "unknown")
-            # Use first line of description (no truncation - keep domain data short instead)
-            desc = (tool.get("description", "") or "").split("\n")[0]
+            # Use summary if available, otherwise first sentence of description
+            raw_desc = tool.get("description", "") or ""
+            desc = tool.get("summary") or (raw_desc.split(".")[0] + "." if raw_desc else "")
             lines.append(f"- **{name}**: {desc}")
 
         return "\n".join(lines)

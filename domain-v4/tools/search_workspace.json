@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "search_workspace",
   "name": "Search Workspace",
+  "summary": "Search for artifacts in the workspace",
   "description": "Search for artifacts in the Hot SoT (workspace store). Supports filtering by artifact type, lifecycle state, and text search within fields. Returns matching artifacts with their current state.\n\nUse this to find:\n- Drafts in progress\n- Section briefs ready for implementation\n- Hooks awaiting triage\n- Related artifacts for context",
 
   "summarization_policy": "concise",
