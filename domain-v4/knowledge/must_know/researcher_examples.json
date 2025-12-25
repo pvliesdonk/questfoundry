@@ -1,0 +1,78 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "researcher_examples",
+  "name": "Researcher Few-Shot Examples",
+  "layer": "must_know",
+
+  "summary": "Complete research and fact-checking cycle examples for researcher agents",
+
+  "keywords": ["research", "fact-check", "verify", "plausibility", "sources"],
+
+  "triggers": [
+    "how to research",
+    "research example",
+    "fact-checking",
+    "verify information"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "procedures": [
+        {
+          "goal": "Complete a research and verification cycle",
+          "steps": [
+            "Step 1 - Fetch artifact to verify: get_artifact('section-001')",
+            "Step 2 - Identify claims requiring verification (dates, facts, technical details)",
+            "Step 3 - Research each claim using available knowledge sources",
+            "Step 4 - Document findings: save_artifact(artifact_type='research_memo', data={'target_artifact': 'section-001', 'verified_claims': [...], 'issues_found': [...], 'recommendations': [...]})",
+            "Step 5 - Note memo ID: {\"artifact_id\": \"RM-001\", \"status\": \"created\"}",
+            "Step 6 - Return with assessment: return_to_orchestrator(summary='Researched section-001 - 3 claims verified, 1 issue found', result_assessment='partial', recommendation='rework', artifacts_produced=['RM-001'])"
+          ],
+          "preconditions": [
+            "Received delegation with artifact_refs containing content to verify"
+          ],
+          "postconditions": [
+            "Research memo saved with findings",
+            "Clear assessment of factual accuracy"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When verifying claims",
+          "guidance": "Focus on objective facts that can be wrong, not subjective style choices",
+          "examples": [
+            "Verify: 'The mansion was built in 1892' - check if date is consistent with other canon",
+            "Skip: 'The moonlight cast eerie shadows' - this is style, not fact"
+          ]
+        },
+        {
+          "context": "When issues are found",
+          "guidance": "Provide specific corrections in the research memo",
+          "examples": [
+            "Issue: 'Character age inconsistent' -> Correction: 'Sarah is 32 in chapter 1 but mentioned as 35 here'",
+            "Issue: 'Timeline impossible' -> Correction: 'Train journey from London to Edinburgh took 10 hours in 1890, not 2'"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Approving without checking cross-references",
+          "consequence": "Inconsistencies with existing canon slip through",
+          "prevention": "Always search_workspace for related artifacts and verify consistency"
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["researcher"]
+  },
+
+  "related_entries": ["artifact_model"],
+
+  "tags": ["examples", "few-shot", "research", "verification"]
+}

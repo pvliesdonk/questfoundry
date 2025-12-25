@@ -1,0 +1,83 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "creator_examples",
+  "name": "Creator Few-Shot Examples",
+  "layer": "must_know",
+
+  "summary": "Complete creation cycle examples for creator agents",
+
+  "keywords": ["create", "save", "artifact", "return", "prose", "content"],
+
+  "triggers": [
+    "how to create artifacts",
+    "creation example",
+    "save artifact",
+    "return to orchestrator"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "procedures": [
+        {
+          "goal": "Complete a creation cycle",
+          "steps": [
+            "Step 1 - Fetch input artifact: get_artifact('SB-001')",
+            "Step 2 - Read the brief to understand requirements (beats, tone, constraints)",
+            "Step 3 - Create content following the brief",
+            "Step 4 - Save artifact: save_artifact(artifact_type='section', data={'title': 'The Arrival', 'content': '...prose...', 'brief_ref': 'SB-001'})",
+            "Step 5 - Note artifact ID from response: {\"artifact_id\": \"section-001\", \"status\": \"created\"}",
+            "Step 6 - Return to orchestrator: return_to_orchestrator(summary='Created section from brief SB-001', result_assessment='pass', recommendation='proceed', artifacts_produced=['section-001'])"
+          ],
+          "preconditions": [
+            "Received delegation with artifact_refs containing input brief"
+          ],
+          "postconditions": [
+            "Artifact saved to workspace",
+            "Artifact ID returned to orchestrator"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When creating content",
+          "guidance": "Always reference the input artifact that guided your creation",
+          "examples": [
+            "Section references its section_brief via brief_ref field",
+            "Codex entry references source sections via source_refs field"
+          ]
+        },
+        {
+          "context": "When returning to orchestrator",
+          "guidance": "Include ALL artifact IDs you created, not just the main one",
+          "examples": [
+            "Created 3 sections -> artifacts_produced=['section-001', 'section-002', 'section-003']",
+            "Created section and fixed another -> artifacts_produced=['section-004', 'section-001']"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Returning without artifact IDs",
+          "consequence": "Orchestrator cannot pass your work to next agent",
+          "prevention": "Always capture artifact_id from save_artifact response and include in return_to_orchestrator"
+        },
+        {
+          "failure_mode": "Returning with description instead of ID",
+          "consequence": "Next agent cannot find artifact by description",
+          "prevention": "Use exact artifact IDs like 'section-001', not descriptions like 'the opening scene'"
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator"]
+  },
+
+  "related_entries": ["artifact_model", "delegation_protocol"],
+
+  "tags": ["examples", "few-shot", "creation", "artifacts"]
+}

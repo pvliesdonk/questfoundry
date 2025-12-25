@@ -1,0 +1,79 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "orchestrator_examples",
+  "name": "Orchestrator Few-Shot Examples",
+  "layer": "must_know",
+
+  "summary": "Complete delegation cycle examples for orchestrator agents",
+
+  "keywords": ["delegation", "delegate", "workflow", "chain", "orchestration"],
+
+  "triggers": [
+    "how to delegate",
+    "delegation example",
+    "workflow pattern",
+    "passing artifacts"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "procedures": [
+        {
+          "goal": "Complete a delegation cycle",
+          "steps": [
+            "Step 1 - Delegate to specialist: delegate(to_agent='plotwright', task='Create section brief for opening scene', context={'artifact_refs': [], 'notes': 'Mystery genre, noir tone'}, expected_outputs=[{'artifact_type': 'section_brief'}])",
+            "Step 2 - Agent returns with artifact IDs: {\"summary\": \"Created section brief\", \"result_assessment\": \"pass\", \"recommendation\": \"proceed\", \"artifacts_produced\": [\"SB-001\"]}",
+            "Step 3 - Continue chain with artifact ID: delegate(to_agent='scene_smith', task='Write prose for section brief SB-001', context={'artifact_refs': ['SB-001']}, expected_outputs=[{'artifact_type': 'section'}])",
+            "Step 4 - Scene Smith returns: {\"summary\": \"Wrote prose\", \"result_assessment\": \"pass\", \"artifacts_produced\": [\"section-001\"]}",
+            "Step 5 - Send to validation: delegate(to_agent='gatekeeper', task='Validate section-001 against quality bars', context={'artifact_refs': ['section-001']}, expected_outputs=[{'artifact_type': 'gatecheck_report'}])"
+          ],
+          "preconditions": [
+            "User goal is clear and specific",
+            "Appropriate playbook selected"
+          ],
+          "postconditions": [
+            "Each delegation includes artifact IDs from previous agent",
+            "Chain continues until workflow complete"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When delegating work",
+          "guidance": "Always pass artifact IDs from previous agent to next agent in context.artifact_refs",
+          "examples": [
+            "Plotwright returns SB-001 -> pass 'SB-001' to Scene Smith",
+            "Scene Smith returns section-001 -> pass 'section-001' to Gatekeeper"
+          ]
+        },
+        {
+          "context": "When agent returns with issues",
+          "guidance": "Check result_assessment and recommendation to decide next action",
+          "examples": [
+            "result_assessment='pass' + recommendation='proceed' -> delegate to next agent",
+            "result_assessment='partial' + recommendation='rework' -> delegate back to same agent with fixes",
+            "result_assessment='fail' + recommendation='escalate' -> communicate(type='error') to customer"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Delegating without passing artifact IDs",
+          "consequence": "Next agent cannot find previous work, workflow breaks",
+          "prevention": "Always include artifacts_produced IDs in next delegation's context.artifact_refs"
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["orchestrator"]
+  },
+
+  "related_entries": ["delegation_protocol", "artifact_model", "orchestrator_onboarding"],
+
+  "tags": ["examples", "few-shot", "orchestration", "delegation"]
+}

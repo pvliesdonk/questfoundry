@@ -119,11 +119,21 @@ class ContextBuilder:
                 context.constitution_text = constitution_text
                 context.constitution_tokens = len(constitution_text) // self.CHARS_PER_TOKEN
 
-        # 2. Must-know entries
+        # 2. Must-know entries (explicit from agent's knowledge_requirements)
         for entry_id in reqs.must_know:
             entry = self._find_knowledge_entry(entry_id, studio)
             if entry:
                 entry_dict = self._format_entry_for_injection(entry)
+                context.must_know_entries.append(entry_dict)
+                context.must_know_tokens += (
+                    len(entry_dict.get("content", "")) // self.CHARS_PER_TOKEN
+                )
+
+        # 2b. Must-know entries matching agent's archetypes (auto-injected)
+        archetype_entries = self._load_archetype_knowledge(agent)
+        for entry_dict in archetype_entries:
+            # Avoid duplicates if already in explicit must_know
+            if not any(e.get("id") == entry_dict.get("id") for e in context.must_know_entries):
                 context.must_know_entries.append(entry_dict)
                 context.must_know_tokens += (
                     len(entry_dict.get("content", "")) // self.CHARS_PER_TOKEN
@@ -300,6 +310,49 @@ class ContextBuilder:
             if arch_str == "orchestrator":
                 return True
         return False
+
+    def _load_archetype_knowledge(self, agent: Agent) -> list[dict[str, str]]:
+        """Load must_know entries that apply to agent's archetypes.
+
+        Scans knowledge entries with applicable_to.archetypes and includes
+        those matching any of the agent's archetypes. This enables domain-driven
+        archetype-specific knowledge without hardcoding in the prompt builder.
+
+        Args:
+            agent: The agent to load knowledge for
+
+        Returns:
+            List of formatted knowledge entries for prompt injection
+        """
+        if not self._domain_path or not agent.archetypes:
+            return []
+
+        import json
+
+        # Get agent archetype strings
+        agent_archetypes = {a.value if hasattr(a, "value") else str(a) for a in agent.archetypes}
+
+        entries: list[dict[str, str]] = []
+        must_know_dir = self._domain_path / "knowledge" / "must_know"
+
+        if must_know_dir.exists():
+            for file_path in must_know_dir.glob("*.json"):
+                try:
+                    data = json.loads(file_path.read_text())
+                    applicable_to = data.get("applicable_to", {})
+                    entry_archetypes = set(applicable_to.get("archetypes", []))
+
+                    # Include if any archetype matches
+                    if agent_archetypes & entry_archetypes:
+                        from questfoundry.runtime.models.base import KnowledgeEntry
+
+                        entry = KnowledgeEntry(**data)
+                        entries.append(self._format_entry_for_injection(entry))
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    # Skip malformed entries
+                    continue
+
+        return entries
 
     def _format_playbook_for_menu(self, playbook: Playbook) -> dict[str, Any]:
         """Format a playbook for the playbooks menu.
