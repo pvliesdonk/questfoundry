@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_corpus",
   "name": "Consult Corpus",
+  "summary": "Search craft guidance in the corpus",
   "description": "Access the craft corpus for writing guidance and genre conventions. Supports multiple modes:\n\n- **toc**: Get table of contents listing all corpus files\n- **file**: Retrieve full content of a specific file\n- **cluster**: Browse files in a cluster (genre-conventions, prose-and-language, etc.)\n- **search**: Search for relevant excerpts (default mode)\n\nUse this for prose techniques, choice architecture, genre conventions, and craft guidance.",
 
   "summarization_policy": "drop",

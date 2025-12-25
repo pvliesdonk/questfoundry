@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "delegate",
   "name": "Delegate Work",
+  "summary": "Assign work to another agent",
   "description": "Assign work to another agent. Creates a delegation request with context, expected outputs, and quality criteria. The receiving agent will be notified and can accept, request clarification, or report completion.\n\nSee: delegation.schema.json for the full delegation protocol.",
 
   "terminates_turn": true,

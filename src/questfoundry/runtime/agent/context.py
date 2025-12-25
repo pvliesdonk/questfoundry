@@ -518,6 +518,7 @@ class ContextBuilder:
                 {
                     "id": target_agent.id,
                     "name": target_agent.name,
+                    "summary": target_agent.summary or "",
                     "description": target_agent.description or "",
                     "archetypes": archetypes,
                     "specialties": specialties,

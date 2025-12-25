@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "generate_audio",
   "name": "Generate Audio",
+  "summary": "Generate audio from a plan",
   "description": "Generate an audio asset from an Audio Plan. Consults Style Guide for sonic aesthetic. Returns an audio asset with determinism log (kept off-surface).\n\nThis tool is expensive—use only when budget allows. Audio Plans should exist for ALL worthy moments, but generation is selective based on priority.\n\nRuntime provides implementation (TTS, music generation, sound library, commission queue, etc.).",
 
   "cost_tier": "high",

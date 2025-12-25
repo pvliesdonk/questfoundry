@@ -192,6 +192,7 @@ class Agent(BaseModel):
 
     id: str
     name: str
+    summary: str | None = None
     description: str | None = None
     # Archetypes are flexible strings - domains can extend beyond base archetypes
     # Base archetypes: orchestrator, creator, validator, researcher, curator

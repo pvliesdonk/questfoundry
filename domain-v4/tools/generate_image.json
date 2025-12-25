@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "generate_image",
   "name": "Generate Image",
+  "summary": "Generate an image from a plan",
   "description": "Generate an illustration from an Art Plan. Consults Reference Sheets for visual consistency of recurring elements (characters, locations, objects). Returns an image asset with determinism log (kept off-surface).\n\nThis tool is expensive—use only when budget allows. Art Plans should exist for ALL worthy scenes, but generation is selective based on priority.\n\nRuntime provides implementation (DALL-E, Stable Diffusion, commission queue, etc.).",
 
   "cost_tier": "high",

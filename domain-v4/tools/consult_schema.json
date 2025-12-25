@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "consult_schema",
   "name": "Consult Schema",
+  "summary": "Get the JSON schema for an artifact type",
   "description": "Retrieve the schema definition for an artifact type. Returns the field definitions, validation rules, and lifecycle states for the specified artifact type. Use this to understand the structure of artifacts before creating or validating them.\n\nPattern: consult-schema - agent asks for schema, gets both structure and documentation.",
 
   "summarization_policy": "drop",

@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "web_fetch",
   "name": "Web Fetch",
+  "summary": "Fetch content from a URL",
   "description": "Fetch and extract content from a specific URL. Returns cleaned text content from the page, suitable for reading and analysis. Handles HTML cleanup, removes navigation/ads, and extracts main content.\n\nBest for: deep-diving a specific source, reading full articles, extracting detailed information.\nFor discovering sources, use web_search first.",
 
   "summarization_policy": "concise",

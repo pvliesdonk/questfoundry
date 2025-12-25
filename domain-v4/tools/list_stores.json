@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "list_stores",
   "name": "List Stores",
+  "summary": "List available stores and access levels",
   "description": "List all available stores with their semantics and descriptions. Use this to discover what stores exist and understand their access patterns (hot, cold, versioned, ephemeral).",
 
   "summarization_policy": "drop",

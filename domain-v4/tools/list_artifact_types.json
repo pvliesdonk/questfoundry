@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "list_artifact_types",
   "name": "List Artifact Types",
+  "summary": "List available artifact types",
   "description": "List all available artifact types with brief descriptions. Use this to discover what artifact types exist before consulting their full schemas. Returns a compact list with id, name, category, and brief description for each type.",
 
   "summarization_policy": "drop",

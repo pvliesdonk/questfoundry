@@ -2,6 +2,7 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "communicate",
   "name": "Communicate with Customer",
+  "summary": "Send messages to customer or ask questions",
   "description": "Send a message to the human customer.\n\nMessage types:\n- status: Brief progress update (non-blocking)\n- question: Need input from customer (blocks until answered)\n- notification: Deliverable ready or milestone reached (non-blocking)\n- error: Something failed or needs attention (may block depending on severity)",
 
   "terminates_turn": true,
