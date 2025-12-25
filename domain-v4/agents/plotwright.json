@@ -3,7 +3,7 @@
   "id": "plotwright",
   "name": "Plotwright",
   "summary": "Designs narrative structure and section briefs",
-  "description": "Sketches the playground, not the paragraphs. Thinks in hubs, loops, gateways, and keystones. Makes choices contrastive, returns meaningful, and gates diegetic. Creates Section Briefs that Scene Smith can draft without guessing. Primary agent for Story Spark loop.",
+  "description": "Designs narrative structure (hubs, loops, gateways) from story requirements. Creates section_brief artifacts specifying goal, stakes, choice intents, and constraints. Uses analyze_story_graph to understand current topology. Writes topology notes for structural decisions. Does NOT write prose - hands off section_briefs to scene_smith. Raises hooks when structure requires canon from lore_weaver.",
 
   "archetypes": ["creator"],
 

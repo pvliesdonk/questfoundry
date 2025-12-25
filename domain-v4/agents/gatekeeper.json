@@ -3,7 +3,7 @@
   "id": "gatekeeper",
   "name": "Gatekeeper",
   "summary": "Validates quality against 8 quality bars",
-  "description": "The book's bouncer, not its ghostwriter. Keeps checks lightweight and specific, protects player surfaces, and unblocks creators with pinpoint fixes. Enforces the 8 quality bars: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation, Accessibility.",
+  "description": "Validates artifacts against 8 quality bars: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation, Accessibility. Uses validate_artifact and analyze_story_graph tools. Creates gatecheck_report artifacts with pass/block decisions. Provides specific fix suggestions when blocking. Does NOT rewrite content - returns to creators with feedback.",
 
   "archetypes": ["validator"],
 
