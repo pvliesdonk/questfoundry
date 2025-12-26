@@ -38,8 +38,8 @@
       "input": {},
       "output": {
         "artifact_types": [
-          {"id": "section", "name": "Section", "category": "narrative", "description": "Story section with prose, choices, and gates"},
-          {"id": "section_brief", "name": "Section Brief", "category": "planning", "description": "Structural outline before prose writing"}
+          {"id": "passage", "name": "Passage", "category": "narrative", "description": "Story passage with prose, choices, and gates"},
+          {"id": "passage_brief", "name": "Passage Brief", "category": "planning", "description": "Structural outline before prose writing"}
         ],
         "count": 2,
         "recommended_action": "Call consult_schema(artifact_type_id) to get full field definitions for the type you need."

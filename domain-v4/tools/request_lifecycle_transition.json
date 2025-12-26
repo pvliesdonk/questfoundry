@@ -68,16 +68,16 @@
 
   "examples": [
     {
-      "description": "Promote a section from draft to review after self-validation",
+      "description": "Promote a passage from draft to review after self-validation",
       "input": {
-        "artifact_id": "section_001",
+        "artifact_id": "passage_001",
         "target_state": "review"
       }
     },
     {
-      "description": "Promote an approved section to cold (Gatekeeper only)",
+      "description": "Promote an approved passage to cold (Gatekeeper only)",
       "input": {
-        "artifact_id": "section_002",
+        "artifact_id": "passage_002",
         "target_state": "cold"
       }
     }

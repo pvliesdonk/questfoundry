@@ -45,13 +45,13 @@
     {
       "description": "Fetch a single artifact by ID",
       "input": {
-        "artifact_ids": "section_brief_abc123"
+        "artifact_ids": "passage_brief_abc123"
       }
     },
     {
       "description": "Fetch multiple artifacts at once",
       "input": {
-        "artifact_ids": ["section_brief_abc123", "section_brief_def456", "section_brief_ghi789"]
+        "artifact_ids": ["passage_brief_abc123", "passage_brief_def456", "passage_brief_ghi789"]
       }
     }
   ]

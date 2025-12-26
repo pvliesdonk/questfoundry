@@ -146,7 +146,7 @@
           "action": "Create hook cards for issues that require upstream fixes.",
           "depends_on": ["run_integrity_check"],
           "specific_agent": "book_binder",
-          "guidance": "Do not fix content in the binding step. Create hooks for Scene Smith (broken anchors), Codex Curator (missing entries), or Style Lead (label issues).",
+          "guidance": "Do not fix content in the binding step. Create hooks for Scene Smith (broken links), Codex Curator (missing entries), or Style Lead (label issues).",
           "inputs": [
             {
               "name": "integrity_report",

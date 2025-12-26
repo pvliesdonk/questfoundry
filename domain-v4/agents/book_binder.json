@@ -87,7 +87,7 @@
     {
       "id": "create_hooks",
       "name": "Create Hooks",
-      "description": "Raise hooks for broken anchors, label issues, or upstream fixes needed",
+      "description": "Raise hooks for broken links, label issues, or upstream fixes needed",
       "category": "artifact_action",
       "artifact_types": ["hook_card"],
       "actions": ["create", "read"]

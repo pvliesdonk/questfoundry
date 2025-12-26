@@ -122,7 +122,7 @@
             "Call return_to_orchestrator with summary, assessment, recommendation, and artifact IDs"
           ],
           "examples": [
-            "```json\nreturn_to_orchestrator({\n  \"summary\": \"Created 3 passages from briefs\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"section_abc123\", \"section_def456\", \"section_ghi789\"]\n})\n```"
+            "```json\nreturn_to_orchestrator({\n  \"summary\": \"Created 3 passages from briefs\",\n  \"result_assessment\": \"pass\",\n  \"recommendation\": \"proceed\",\n  \"artifacts_produced\": [\"passage_abc123\", \"passage_def456\", \"passage_ghi789\"]\n})\n```"
           ]
         },
         {

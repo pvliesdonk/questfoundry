@@ -91,7 +91,7 @@
             "Retry with corrected input"
           ],
           "examples": [
-            "```json\n{\n  \"action_outcome\": \"rejected\",\n  \"rejection_reason\": \"validation_failed\",\n  \"recovery_action\": \"Rename 'content' to 'prose' and add required 'section_id' field\",\n  \"errors\": [...]\n}\n```\nDo: Rename the field, add section_id, retry\nDon't: Retry with the same payload hoping it works"
+            "```json\n{\n  \"action_outcome\": \"rejected\",\n  \"rejection_reason\": \"validation_failed\",\n  \"recovery_action\": \"Rename 'content' to 'prose' and add required 'pid' field\",\n  \"errors\": [...]\n}\n```\nDo: Rename the field, add pid, retry\nDon't: Retry with the same payload hoping it works"
           ]
         }
       ],
@@ -107,7 +107,7 @@
           "context": "Seeing cascade_demotions in response",
           "guidance": "Be aware that child artifacts were also demoted. They may need re-validation.",
           "examples": [
-            "```json\n{\n  \"action_outcome\": \"saved\",\n  \"cascade_demotions\": [\n    {\"artifact_id\": \"section_abc\", \"to_state\": \"draft\"}\n  ]\n}\n```"
+            "```json\n{\n  \"action_outcome\": \"saved\",\n  \"cascade_demotions\": [\n    {\"artifact_id\": \"passage_abc\", \"to_state\": \"draft\"}\n  ]\n}\n```"
           ]
         },
         {

@@ -81,18 +81,18 @@
 
   "examples": [
     {
-      "description": "Validate a Section before merging to Cold",
+      "description": "Validate a Passage before merging to Cold",
       "input": {
-        "artifact_id": "section-001",
-        "artifact_type_id": "section",
+        "artifact_id": "passage-001",
+        "artifact_type_id": "passage",
         "validation_mode": "full"
       }
     },
     {
       "description": "Quick schema check on a draft",
       "input": {
-        "artifact_type_id": "section_brief",
-        "artifact_data": { "brief_id": "SB-001", "goal": "Test" },
+        "artifact_type_id": "passage_brief",
+        "artifact_data": { "brief_id": "PB-001", "goal": "Test" },
         "validation_mode": "schema_only"
       }
     }

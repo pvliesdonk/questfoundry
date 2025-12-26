@@ -99,7 +99,7 @@
           "context": "Blocking artifacts with quality issues",
           "guidance": "Cite specific quality bar, explain what failed, offer smallest viable fix",
           "examples": [
-            "good: Dead end at section_abc - add outgoing choice or mark as ending | bad: I have some concerns about the pacing...",
+            "good: Dead end at passage_abc - add outgoing choice or mark as ending | bad: I have some concerns about the pacing...",
             "good: Voice inconsistent in paragraph 3 - shifts from formal to casual mid-sentence | bad: Style requires LLM analysis for consistency"
           ]
         }

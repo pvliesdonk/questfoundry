@@ -9,17 +9,17 @@
   "severity": "warning",
 
   "applies_to": {
-    "artifact_types": ["section"]
+    "artifact_types": ["passage"]
   },
 
   "check": {
     "type": "llm_rubric",
     "rubric": {
-      "instructions": "Evaluate voice and style consistency. Read sections for tone coherence and alignment with established guardrails.",
+      "instructions": "Evaluate voice and style consistency. Read passages for tone coherence and alignment with established guardrails.",
       "criteria": [
         {
           "name": "voice_consistency",
-          "description": "Prose voice maintains consistent register across sections. No jarring tone shifts.",
+          "description": "Prose voice maintains consistent register across passages. No jarring tone shifts.",
           "weight": 0.4,
           "examples": {
             "good": ["Same dry, sardonic tone throughout", "Register consistent with style guide"],

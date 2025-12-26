@@ -2,14 +2,14 @@
   "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
   "id": "gateways",
   "name": "Gateways",
-  "description": "Conditions (codewords, items, states) are consistent across sections and can be enforced by the Player-Narrator without leaks. Conditions are clear and in-world.",
+  "description": "Conditions (codewords, items, states) are consistent across passages and can be enforced by the Player-Narrator without leaks. Conditions are clear and in-world.",
 
   "enforcement": "llm",
   "blocking": "gate",
   "severity": "error",
 
   "applies_to": {
-    "artifact_types": ["section"]
+    "artifact_types": ["passage"]
   },
 
   "check": {

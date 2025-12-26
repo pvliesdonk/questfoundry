@@ -13,7 +13,7 @@
     "properties": {
       "artifact_type_id": {
         "type": "string",
-        "description": "The ID of the artifact type to retrieve (e.g., 'section', 'hook_card', 'section_brief')"
+        "description": "The ID of the artifact type to retrieve (e.g., 'passage', 'hook_card', 'passage_brief')"
       },
       "include_examples": {
         "type": "boolean",
@@ -49,16 +49,16 @@
 
   "examples": [
     {
-      "description": "Get the Section Brief schema before creating one",
+      "description": "Get the Passage Brief schema before creating one",
       "input": {
-        "artifact_type_id": "section_brief",
+        "artifact_type_id": "passage_brief",
         "include_examples": true
       }
     },
     {
-      "description": "Get Section schema for validation",
+      "description": "Get Passage schema for validation",
       "input": {
-        "artifact_type_id": "section",
+        "artifact_type_id": "passage",
         "include_validation_rules": true
       }
     }

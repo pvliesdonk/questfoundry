@@ -9,7 +9,7 @@
   "severity": "critical",
 
   "applies_to": {
-    "artifact_types": ["section", "gatecheck_report"]
+    "artifact_types": ["passage", "gatecheck_report"]
   },
 
   "check": {

@@ -9,7 +9,7 @@
   "severity": "warning",
 
   "applies_to": {
-    "artifact_types": ["section"],
+    "artifact_types": ["passage"],
     "phases": ["asset_creation", "art_pass", "audio_pass"]
   },
 

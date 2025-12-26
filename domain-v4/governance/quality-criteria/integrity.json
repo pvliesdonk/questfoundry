@@ -2,14 +2,14 @@
   "$schema": "../../../meta/schemas/governance/quality-criteria.schema.json",
   "id": "integrity",
   "name": "Integrity",
-  "description": "All links and section references resolve. No unintended dead ends. Codeword/state effects don't create contradictions downstream. Only intentional terminals are permitted.",
+  "description": "All links and passage references resolve. No unintended dead ends. Codeword/state effects don't create contradictions downstream. Only intentional terminals are permitted.",
 
   "enforcement": "llm",
   "blocking": "gate",
   "severity": "error",
 
   "applies_to": {
-    "artifact_types": ["section", "section_brief"]
+    "artifact_types": ["passage", "passage_brief"]
   },
 
   "check": {
@@ -19,11 +19,11 @@
       "criteria": [
         {
           "name": "reference_resolution",
-          "description": "Every choice leads somewhere. All referenced sections exist or are clearly planned.",
+          "description": "Every choice leads somewhere. All referenced passages exist or are clearly planned.",
           "weight": 0.4,
           "examples": {
-            "good": ["All choices have valid target anchors", "Referenced sections exist in workspace"],
-            "bad": ["Choice points to non-existent section", "Dangling link with no target"]
+            "good": ["All choices have valid link targets", "Referenced passages exist in workspace"],
+            "bad": ["Choice points to non-existent passage", "Dangling link with no target"]
           }
         },
         {
@@ -31,8 +31,8 @@
           "description": "Dead ends are marked clearly as 'The End' or equivalent. No accidental terminals.",
           "weight": 0.3,
           "examples": {
-            "good": ["Terminal sections clearly marked", "Endings feel intentional"],
-            "bad": ["Section ends abruptly with no choices", "Forgotten return path from loop"]
+            "good": ["Terminal passages clearly marked", "Endings feel intentional"],
+            "bad": ["Passage ends abruptly with no choices", "Forgotten return path from loop"]
           }
         },
         {
@@ -50,5 +50,5 @@
     }
   },
 
-  "failure_guidance": "Fix dangling links by creating the target section or retargeting the choice. Add return paths for forgotten loops or mark sections as intentional terminals. Resolve state contradictions by adjusting conditions or adding fail-forward beats."
+  "failure_guidance": "Fix dangling links by creating the target passage or retargeting the choice. Add return paths for forgotten loops or mark passages as intentional terminals. Resolve state contradictions by adjusting conditions or adding fail-forward beats."
 }

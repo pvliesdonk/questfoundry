@@ -14,9 +14,9 @@
       "required": true
     },
     {
-      "name": "section_ref",
+      "name": "passage_ref",
       "type": "string",
-      "description": "Reference to the section this illustration supports (e.g., 'act1/foreman-gate')",
+      "description": "Reference to the passage this illustration supports (e.g., 'act1/foreman-gate')",
       "required": true
     },
     {
@@ -76,7 +76,7 @@
       "name": "placement",
       "type": "string",
       "description": "Where the image appears relative to prose",
-      "enum": ["section_start", "before_choice_block", "after_choice_block", "inline", "standalone"]
+      "enum": ["passage_start", "before_choice_block", "after_choice_block", "inline", "standalone"]
     },
     {
       "name": "inclusion_condition",
