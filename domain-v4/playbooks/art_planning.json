@@ -14,7 +14,7 @@
       "priority": 1
     },
     {
-      "condition": "Sections from Scene Weave approved and stable",
+      "condition": "Passages from Scene Weave approved and stable",
       "priority": 1
     },
     {
@@ -31,9 +31,9 @@
     "required_artifacts": [],
     "optional_artifacts": [
       {
-        "type": "section",
-        "alias": "sections",
-        "description": "Approved sections to plan illustrations for",
+        "type": "passage",
+        "alias": "passages",
+        "description": "Approved passages to plan illustrations for",
         "state": "approved"
       },
       {
@@ -92,13 +92,13 @@
 
       "steps": {
         "survey_scope": {
-          "action": "Review sections to identify illustration opportunities. Consider: key moments, complex environments, memorable characters, important choices, atmosphere-setting scenes.",
+          "action": "Review passages to identify illustration opportunities. Consider: key moments, complex environments, memorable characters, important choices, atmosphere-setting scenes.",
           "specific_agent": "art_director",
           "guidance": "Think like a reader: where would an image help them understand, remember, or feel? Plan liberally—we can prioritize later. Look for: clarify (make things legible), recall (aid memory), mood (set atmosphere), signpost (reduce choice hesitation).",
           "inputs": [
             {
-              "name": "sections",
-              "artifact_type": "section"
+              "name": "passages",
+              "artifact_type": "passage"
             }
           ],
           "outputs": [
