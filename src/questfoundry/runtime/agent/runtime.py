@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
+from questfoundry.runtime.agent.context import AgentContext, ContextBuilder, ModelClass
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
 from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
@@ -557,9 +557,38 @@ class AgentRuntime:
                 return agent
         return None
 
+    def _get_model_class(self) -> ModelClass:
+        """Determine model class from model name.
+
+        Uses heuristics to classify models:
+        - "small": 8B parameters and under (e.g., qwen3:8b, llama3.2:3b)
+        - "medium": 9B-70B parameters (e.g., qwen3:32b, llama3.1:70b)
+        - "large": 70B+ or cloud models (e.g., gpt-4, claude)
+
+        Returns:
+            Model class: "small", "medium", or "large"
+        """
+        model = self._model.lower()
+
+        # Small model patterns (8B and under)
+        small_patterns = ["1b", "3b", "4b", "7b", "8b", ":1b", ":3b", ":4b", ":7b", ":8b"]
+        for pattern in small_patterns:
+            if pattern in model:
+                return "small"
+
+        # Medium model patterns (9B-70B)
+        medium_patterns = ["14b", "32b", "70b", ":14b", ":32b", ":70b"]
+        for pattern in medium_patterns:
+            if pattern in model:
+                return "medium"
+
+        # Cloud models and large models default to "large"
+        return "large"
+
     def build_context(self, agent: Agent) -> AgentContext:
         """Build context for an agent."""
-        return self._context_builder.build(agent, self._studio)
+        model_class = self._get_model_class()
+        return self._context_builder.build(agent, self._studio, model_class=model_class)
 
     def get_tool_schemas(self, agent: Agent, session_id: str | None = None) -> list[dict[str, Any]]:
         """
