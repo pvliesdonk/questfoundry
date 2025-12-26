@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.runtime.agent.content_utils import extract_knowledge_content
 
@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Playbook, Studio
+
+# Model class type alias for prompt optimization
+ModelClass = Literal["small", "medium", "large"]
 
 
 @dataclass
@@ -97,18 +100,25 @@ class ContextBuilder:
         self._domain_path = domain_path
         self._knowledge_cache: dict[str, dict[str, Any]] = {}
 
-    def build(self, agent: Agent, studio: Studio) -> AgentContext:
+    def build(
+        self, agent: Agent, studio: Studio, model_class: ModelClass = "large"
+    ) -> AgentContext:
         """
         Build context for agent activation.
 
         Args:
             agent: The agent to build context for
             studio: The studio containing knowledge entries
+            model_class: Model size class for prompt optimization
+                - "small": Use concise variants, minimal knowledge
+                - "medium": Normal content, some optimization
+                - "large": Full knowledge content (default)
 
         Returns:
             AgentContext with all prepared knowledge
         """
         context = AgentContext()
+        use_concise = model_class == "small"
 
         if not agent.knowledge_requirements:
             return context
@@ -122,32 +132,48 @@ class ContextBuilder:
                 context.constitution_text = constitution_text
                 context.constitution_tokens = len(constitution_text) // self.CHARS_PER_TOKEN
 
-        # 2. Must-know entries (explicit from agent's knowledge_requirements)
-        for entry_id in reqs.must_know:
+        # 2. Must-know entries
+        # For small models, use small_model_must_know if defined
+        using_small_model_override = False
+        if use_concise and reqs.small_model_must_know:
+            must_know_ids = reqs.small_model_must_know
+            using_small_model_override = True
+        else:
+            must_know_ids = reqs.must_know
+
+        for entry_id in must_know_ids:
             entry = self._find_knowledge_entry(entry_id, studio)
             if entry:
-                entry_dict = self._format_entry_for_injection(entry)
+                entry_dict = self._format_entry_for_injection(entry, use_concise)
+                # Skip entries excluded for small models (concise_description == "")
+                if entry_dict is None:
+                    continue
                 context.must_know_entries.append(entry_dict)
                 context.must_know_tokens += (
                     len(entry_dict.get("content", "")) // self.CHARS_PER_TOKEN
                 )
 
         # 2b. Must-know entries matching agent's archetypes (auto-injected)
-        archetype_entries = self._load_archetype_knowledge(agent)
-        existing_entry_ids = {e.get("id") for e in context.must_know_entries}
-        for entry_dict in archetype_entries:
-            # Avoid duplicates if already in explicit must_know
-            if entry_dict.get("id") not in existing_entry_ids:
-                context.must_know_entries.append(entry_dict)
-                context.must_know_tokens += (
-                    len(entry_dict.get("content", "")) // self.CHARS_PER_TOKEN
-                )
+        # Skip archetype loading for small models with explicit override
+        if not using_small_model_override:
+            archetype_entries = self._load_archetype_knowledge(agent, use_concise)
+            existing_entry_ids = {e.get("id") for e in context.must_know_entries}
+            for entry_dict in archetype_entries:
+                # Avoid duplicates if already in explicit must_know
+                if entry_dict.get("id") not in existing_entry_ids:
+                    context.must_know_entries.append(entry_dict)
+                    context.must_know_tokens += (
+                        len(entry_dict.get("content", "")) // self.CHARS_PER_TOKEN
+                    )
 
         # 3. Role-specific entries (as menu items)
         for entry_id in reqs.role_specific:
             entry = self._find_knowledge_entry(entry_id, studio)
             if entry:
-                menu_item = self._format_entry_for_menu(entry)
+                menu_item = self._format_entry_for_menu(entry, use_concise)
+                # Skip entries excluded for small models
+                if menu_item is None:
+                    continue
                 context.role_specific_menu.append(menu_item)
                 context.menu_tokens += len(menu_item.get("summary", "")) // self.CHARS_PER_TOKEN
 
@@ -286,9 +312,30 @@ class ContextBuilder:
 
         return None
 
-    def _format_entry_for_injection(self, entry: KnowledgeEntry) -> dict[str, str]:
-        """Format a knowledge entry for prompt injection."""
-        content = extract_knowledge_content(entry, self._domain_path) or ""
+    def _format_entry_for_injection(
+        self, entry: KnowledgeEntry, use_concise: bool = False
+    ) -> dict[str, str] | None:
+        """Format a knowledge entry for prompt injection.
+
+        Args:
+            entry: The knowledge entry to format
+            use_concise: If True, use concise_description for small models
+
+        Returns:
+            Dict with id, name, content or None if entry should be excluded
+        """
+        if use_concise:
+            # Check for concise_description (small model optimization)
+            concise = entry.concise_description
+            if concise is not None:
+                if concise == "":
+                    return None  # Exclude for small models
+                content = concise
+            else:
+                # Fall back to normal content
+                content = extract_knowledge_content(entry, self._domain_path) or ""
+        else:
+            content = extract_knowledge_content(entry, self._domain_path) or ""
 
         return {
             "id": entry.id,
@@ -296,12 +343,35 @@ class ContextBuilder:
             "content": content,
         }
 
-    def _format_entry_for_menu(self, entry: KnowledgeEntry) -> dict[str, str]:
-        """Format a knowledge entry for the knowledge menu."""
+    def _format_entry_for_menu(
+        self, entry: KnowledgeEntry, use_concise: bool = False
+    ) -> dict[str, str] | None:
+        """Format a knowledge entry for the knowledge menu.
+
+        Args:
+            entry: The knowledge entry to format
+            use_concise: If True, use concise_summary for small models
+
+        Returns:
+            Dict with id, name, summary or None if entry should be excluded
+        """
+        if use_concise:
+            # Check for concise_summary (small model optimization)
+            concise = entry.concise_summary
+            if concise is not None:
+                if concise == "":
+                    return None  # Exclude from menu for small models
+                summary = concise
+            else:
+                # Fall back to normal summary
+                summary = entry.summary or ""
+        else:
+            summary = entry.summary or ""
+
         return {
             "id": entry.id,
             "name": entry.name or entry.id,
-            "summary": entry.summary or "",
+            "summary": summary,
         }
 
     def _get_agent_archetypes(self, agent: Agent) -> set[str]:
@@ -323,7 +393,9 @@ class ContextBuilder:
         """Check if agent has orchestrator archetype."""
         return "orchestrator" in self._get_agent_archetypes(agent)
 
-    def _load_archetype_knowledge(self, agent: Agent) -> list[dict[str, str]]:
+    def _load_archetype_knowledge(
+        self, agent: Agent, use_concise: bool = False
+    ) -> list[dict[str, str]]:
         """Load must_know entries that apply to agent's archetypes.
 
         Scans knowledge entries with applicable_to.archetypes and includes
@@ -332,6 +404,7 @@ class ContextBuilder:
 
         Args:
             agent: The agent to load knowledge for
+            use_concise: If True, use concise variants for small models
 
         Returns:
             List of formatted knowledge entries for prompt injection
@@ -357,7 +430,10 @@ class ContextBuilder:
                         from questfoundry.runtime.models.base import KnowledgeEntry
 
                         entry = KnowledgeEntry(**data)
-                        entries.append(self._format_entry_for_injection(entry))
+                        entry_dict = self._format_entry_for_injection(entry, use_concise)
+                        # Skip entries excluded for small models
+                        if entry_dict is not None:
+                            entries.append(entry_dict)
                 except (json.JSONDecodeError, KeyError, TypeError) as e:
                     logger.warning(
                         "Skipping malformed knowledge entry %s: %s",
@@ -600,7 +676,21 @@ def build_context(
     agent: Agent,
     studio: Studio,
     domain_path: Path | None = None,
+    model_class: ModelClass = "large",
 ) -> AgentContext:
-    """Build context for an agent."""
+    """Build context for an agent.
+
+    Args:
+        agent: The agent to build context for
+        studio: The studio containing knowledge entries
+        domain_path: Path to domain directory
+        model_class: Model size class for prompt optimization
+            - "small": Use concise variants, minimal knowledge
+            - "medium": Normal content, some optimization
+            - "large": Full knowledge content (default)
+
+    Returns:
+        AgentContext with all prepared knowledge
+    """
     builder = ContextBuilder(domain_path=domain_path)
-    return builder.build(agent, studio)
+    return builder.build(agent, studio, model_class=model_class)

@@ -6,6 +6,10 @@
 
   "summary": "What artifacts are and how they flow through the studio",
 
+  "concise_summary": "Artifacts are versioned work products. Always pass artifact IDs.",
+
+  "concise_description": "",
+
   "keywords": ["artifact", "artifact type", "stores", "lifecycle", "versioning", "artifact ID"],
 
   "triggers": [

@@ -6,6 +6,10 @@
 
   "summary": "How delegated agents complete work and return control to the orchestrator with artifact handoff.",
 
+  "concise_summary": "Call return_to_orchestrator with artifact IDs when done. Consult for details.",
+
+  "concise_description": "",
+
   "keywords": ["delegation", "return", "handoff", "artifacts", "orchestrator"],
 
   "triggers": [

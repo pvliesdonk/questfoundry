@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
+from questfoundry.runtime.agent.context import AgentContext, ContextBuilder, ModelClass
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
 from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
@@ -557,9 +557,47 @@ class AgentRuntime:
                 return agent
         return None
 
+    def _get_model_class(self) -> ModelClass:
+        """Determine model class from model name.
+
+        Uses heuristics to classify models:
+        - "small": 8B parameters and under (e.g., qwen3:8b, llama3.2:3b)
+        - "medium": 9B-70B parameters (e.g., qwen3:32b, llama3.1:70b)
+        - "large": 70B+ or cloud models (e.g., gpt-4, claude)
+
+        Returns:
+            Model class: "small", "medium", or "large"
+        """
+        import re
+
+        model = self._model.lower()
+
+        # Use regex with word boundaries to avoid false positives
+        # e.g., "mixtral:18b" should not match "8b"
+
+        # Small model patterns (8B and under)
+        if re.search(r"[:\-_]?8b\b", model):
+            return "small"
+        if re.search(r"[:\-_]?7b\b", model):
+            return "small"
+        if re.search(r"[:\-_]?[1-4]b\b", model):
+            return "small"
+
+        # Medium model patterns (9B-70B)
+        if re.search(r"[:\-_]?70b\b", model):
+            return "medium"
+        if re.search(r"[:\-_]?32b\b", model):
+            return "medium"
+        if re.search(r"[:\-_]?(14|22|27)b\b", model):
+            return "medium"
+
+        # Cloud models and large models default to "large"
+        return "large"
+
     def build_context(self, agent: Agent) -> AgentContext:
         """Build context for an agent."""
-        return self._context_builder.build(agent, self._studio)
+        model_class = self._get_model_class()
+        return self._context_builder.build(agent, self._studio, model_class=model_class)
 
     def get_tool_schemas(self, agent: Agent, session_id: str | None = None) -> list[dict[str, Any]]:
         """

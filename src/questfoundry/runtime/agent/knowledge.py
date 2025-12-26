@@ -10,6 +10,11 @@ Knowledge layers:
 - should_know: Menu only (summary with consult hint)
 - role_specific: Menu only (specialist reference)
 - lookup: Never shown (query via tool only)
+
+Model class support:
+- Large models: Use normal summary/content, all must_know entries
+- Small models: Use concise_summary/concise_description, small_model_must_know list
+- Empty string in concise_* means exclude for small models
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
@@ -30,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 # Valid knowledge layers for archetype-based inclusion
 VALID_LAYERS = frozenset({"must_know", "should_know", "role_specific"})
+
+# Model class type alias
+ModelClass = Literal["small", "medium", "large"]
 
 
 def _combine_entry_lists(explicit: list[str], archetype_matched: list[str]) -> list[str]:
@@ -109,16 +117,25 @@ class KnowledgeContextBuilder:
         self.config = config or KnowledgeBudgetConfig()
         self._domain_path = Path(domain_path) if domain_path else None
 
-    def build_context(self, agent: Agent, studio: Studio) -> KnowledgeContext:
+    def build_context(
+        self,
+        agent: Agent,
+        studio: Studio,
+        model_class: ModelClass = "large",
+    ) -> KnowledgeContext:
         """
         Build knowledge context for an agent.
 
         Includes both explicitly listed entries from agent.knowledge_requirements
         and entries that match the agent's archetypes via applicable_to.archetypes.
 
+        For small models, uses concise_summary/concise_description when available,
+        and respects small_model_must_know override.
+
         Args:
             agent: Agent definition with knowledge_requirements
             studio: Studio with knowledge entries
+            model_class: Model size class ("small", "medium", "large")
 
         Returns:
             KnowledgeContext with formatted text and tracking info
@@ -128,6 +145,7 @@ class KnowledgeContextBuilder:
         entries_inlined: list[str] = []
         entries_in_menu: list[str] = []
         used_tokens = 0
+        use_concise = model_class == "small"
 
         knowledge_req = agent.knowledge_requirements
 
@@ -144,11 +162,25 @@ class KnowledgeContextBuilder:
                 used_tokens += self._count_tokens(constitution_section)
 
         # 2. Must-know - inline up to budget, overflow to menu
-        # Combine explicit must_know with archetype-matched must_know entries
+        # For small models, use small_model_must_know if available
+        # When using small_model_must_know, skip archetype matching to keep prompt minimal
         must_know_section = None
-        explicit_must_know = (knowledge_req.must_know or []) if knowledge_req else []
-        archetype_must_know = matched_entries.get("must_know", [])
-        all_must_know = _combine_entry_lists(explicit_must_know, archetype_must_know)
+        using_small_model_override = False
+        if knowledge_req:
+            if use_concise and knowledge_req.small_model_must_know:
+                explicit_must_know = knowledge_req.small_model_must_know
+                using_small_model_override = True
+            else:
+                explicit_must_know = knowledge_req.must_know or []
+        else:
+            explicit_must_know = []
+
+        # Skip archetype matching for small models with explicit override
+        if using_small_model_override:
+            all_must_know = list(explicit_must_know)
+        else:
+            archetype_must_know = matched_entries.get("must_know", [])
+            all_must_know = _combine_entry_lists(explicit_must_know, archetype_must_know)
 
         if all_must_know:
             must_know_lines: list[str] = []
@@ -160,11 +192,12 @@ class KnowledgeContextBuilder:
                 if not entry:
                     continue
 
-                content = self._get_entry_content(entry)
-                if not content:
-                    # No content - add to menu instead (if not already there)
-                    if entry_id not in entries_in_menu:
-                        menu_items.append(self._format_menu_item(entry))
+                content = self._get_entry_content_for_model(entry, use_concise)
+                if content is None:
+                    # Excluded for small models or no content - add to menu
+                    summary = self._get_entry_summary_for_model(entry, use_concise)
+                    if summary is not None and entry_id not in entries_in_menu:
+                        menu_items.append(self._format_menu_item_with_summary(entry, summary))
                         entries_in_menu.append(entry_id)
                     continue
 
@@ -179,8 +212,10 @@ class KnowledgeContextBuilder:
                 else:
                     # Over budget - add to menu instead (if not already there)
                     if entry_id not in entries_in_menu:
-                        menu_items.append(self._format_menu_item(entry))
-                        entries_in_menu.append(entry_id)
+                        summary = self._get_entry_summary_for_model(entry, use_concise)
+                        if summary is not None:
+                            menu_items.append(self._format_menu_item_with_summary(entry, summary))
+                            entries_in_menu.append(entry_id)
 
             if must_know_lines:
                 must_know_section = "## Critical Knowledge\n\n" + "\n\n".join(must_know_lines)
@@ -195,8 +230,10 @@ class KnowledgeContextBuilder:
                 continue
             entry = studio.knowledge.get(entry_id)
             if entry:
-                menu_items.append(self._format_menu_item(entry))
-                entries_in_menu.append(entry_id)
+                summary = self._get_entry_summary_for_model(entry, use_concise)
+                if summary is not None:  # None means excluded for small models
+                    menu_items.append(self._format_menu_item_with_summary(entry, summary))
+                    entries_in_menu.append(entry_id)
 
         # 4. Role-specific - menu only (skip if already in menu or inlined)
         explicit_role_specific = (knowledge_req.role_specific or []) if knowledge_req else []
@@ -207,8 +244,10 @@ class KnowledgeContextBuilder:
                 continue
             entry = studio.knowledge.get(entry_id)
             if entry:
-                menu_items.append(self._format_menu_item(entry))
-                entries_in_menu.append(entry_id)
+                summary = self._get_entry_summary_for_model(entry, use_concise)
+                if summary is not None:
+                    menu_items.append(self._format_menu_item_with_summary(entry, summary))
+                    entries_in_menu.append(entry_id)
 
         # 5. Build menu section
         menu_section = None
@@ -229,6 +268,47 @@ class KnowledgeContextBuilder:
             entries_in_menu=entries_in_menu,
             tokens_used=used_tokens,
         )
+
+    def _get_entry_summary_for_model(self, entry: KnowledgeEntry, use_concise: bool) -> str | None:
+        """Get appropriate summary based on model class.
+
+        For small models, uses concise_summary if available.
+        Empty string means exclude entirely for small models.
+
+        Returns None if entry should be excluded.
+        """
+        if use_concise:
+            concise = entry.concise_summary
+            if concise is not None:
+                if concise == "":
+                    return None  # Exclude from menu
+                return concise
+        return entry.summary or "(No summary)"
+
+    def _get_entry_content_for_model(self, entry: KnowledgeEntry, use_concise: bool) -> str | None:
+        """Get appropriate content based on model class.
+
+        For small models, uses concise_description if available.
+        Empty string means exclude entirely for small models.
+
+        Returns None if entry should be excluded or has no content.
+        """
+        if use_concise:
+            concise = entry.concise_description
+            if concise is not None:
+                if concise == "":
+                    return None  # Exclude from consult
+                return concise
+        # Fall back to normal content extraction
+        return self._get_entry_content(entry)
+
+    def _format_menu_item_with_summary(self, entry: KnowledgeEntry, summary: str) -> dict[str, str]:
+        """Format a knowledge entry for the menu with explicit summary."""
+        return {
+            "id": entry.id,
+            "name": entry.name or entry.id,
+            "summary": summary,
+        }
 
     def _get_constitution_text(self, studio: Studio) -> str | None:
         """Get constitution text from studio.
@@ -387,6 +467,7 @@ def build_knowledge_context(
     studio: Studio,
     config: KnowledgeBudgetConfig | None = None,
     domain_path: Path | str | None = None,
+    model_class: ModelClass = "large",
 ) -> KnowledgeContext:
     """
     Convenience function to build knowledge context for an agent.
@@ -396,9 +477,10 @@ def build_knowledge_context(
         studio: Studio with knowledge entries
         config: Optional budget configuration
         domain_path: Path to domain directory for loading constitution
+        model_class: Model size class ("small", "medium", "large")
 
     Returns:
         KnowledgeContext with formatted text
     """
     builder = KnowledgeContextBuilder(config, domain_path=domain_path)
-    return builder.build_context(agent, studio)
+    return builder.build_context(agent, studio, model_class=model_class)

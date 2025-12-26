@@ -6,6 +6,12 @@
 
   "summary": "Essential orchestrator rules: tools-only output, no prose generation.",
 
+  "concise_summary": "Tools only. Never write prose.",
+
+  "concise_description": "1. All output via tools (delegate, communicate, terminate)\n2. NEVER write story prose yourself\n3. Coordinate specialists, don't create content",
+
+  "injection_priority": "critical",
+
   "keywords": ["runtime", "tools", "orchestrator", "rules"],
 
   "triggers": [

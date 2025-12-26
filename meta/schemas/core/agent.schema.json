@@ -105,6 +105,12 @@
           "default": [],
           "description": "IDs of must-know knowledge entries to include in system prompt"
         },
+        "small_model_must_know": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Override must_know for small models (8B and under). If empty, falls back to must_know. Allows reducing context size for small model compatibility while preserving full knowledge for large models."
+        },
         "should_know": {
           "type": "array",
           "items": { "type": "string" },
