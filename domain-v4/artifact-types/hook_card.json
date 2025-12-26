@@ -8,6 +8,11 @@
 
   "fields": [
     {
+      "name": "ifid",
+      "type": "string",
+      "description": "References the parent Story's IFID (optional, for story-scoped hooks)"
+    },
+    {
       "name": "hook_id",
       "type": "string",
       "description": "Unique identifier (format: HK-YYYYMMDD-NN)",
