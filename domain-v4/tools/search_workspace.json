@@ -3,7 +3,7 @@
   "id": "search_workspace",
   "name": "Search Workspace",
   "summary": "Search for artifacts in the workspace",
-  "description": "Search for artifacts in the Hot SoT (workspace store). Supports filtering by artifact type, lifecycle state, and text search within fields. Returns matching artifacts with their current state.\n\nUse this to find:\n- Drafts in progress\n- Section briefs ready for implementation\n- Hooks awaiting triage\n- Related artifacts for context",
+  "description": "Search for artifacts in the Hot SoT (workspace store). Supports filtering by artifact type, lifecycle state, and text search within fields. Returns matching artifacts with their current state.\n\nUse this to find:\n- Drafts in progress\n- Passage briefs ready for implementation\n- Hooks awaiting triage\n- Related artifacts for context",
 
   "summarization_policy": "concise",
   "summary_template": "Found {total_count} artifacts matching query",
@@ -23,7 +23,7 @@
         "items": {
           "type": "string"
         },
-        "description": "Filter by artifact type(s) (e.g., ['section', 'section_brief'])"
+        "description": "Filter by artifact type(s) (e.g., ['passage', 'passage_brief'])"
       },
       "lifecycle_states": {
         "type": "array",
@@ -82,9 +82,9 @@
 
   "examples": [
     {
-      "description": "Find all Section Briefs in draft state",
+      "description": "Find all Passage Briefs in draft state",
       "input": {
-        "artifact_types": ["section_brief"],
+        "artifact_types": ["passage_brief"],
         "lifecycle_states": ["draft"]
       }
     },
@@ -103,9 +103,9 @@
       }
     },
     {
-      "description": "Search for multiple section briefs by ID (OR search)",
+      "description": "Search for multiple passage briefs by ID (OR search)",
       "input": {
-        "query": ["section_brief_abc123", "section_brief_def456", "section_brief_ghi789"]
+        "query": ["passage_brief_abc123", "passage_brief_def456", "passage_brief_ghi789"]
       }
     },
     {

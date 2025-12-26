@@ -93,7 +93,7 @@
             }
           ],
           "examples": [
-            "Editing a section_brief demotes its derived section"
+            "Editing a passage_brief demotes its derived passage"
           ]
         }
       ],
@@ -116,7 +116,7 @@
           "context": "Working with artifact lifecycle",
           "guidance": "Creators work in draft. Gatekeeper validates and promotes to review. Cold promotion is a separate approval step.",
           "examples": [
-            "Scene Smith creates section in draft → delegates to Gatekeeper → GK validates and promotes to review",
+            "Scene Smith creates passage in draft → delegates to Gatekeeper → GK validates and promotes to review",
             "Showrunner wants content validated → delegates to Gatekeeper (NOT calling lifecycle tools directly)"
           ],
           "counter_examples": [

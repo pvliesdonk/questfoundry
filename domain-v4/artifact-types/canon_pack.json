@@ -8,6 +8,11 @@
 
   "fields": [
     {
+      "name": "ifid",
+      "type": "string",
+      "description": "References the parent Story's IFID (optional, for story-scoped canon)"
+    },
+    {
       "name": "pack_id",
       "type": "string",
       "description": "Unique identifier (format: CP-NNN)",
@@ -146,6 +151,12 @@
           }
         ]
       }
+    },
+    {
+      "name": "origin_hooks",
+      "type": "array",
+      "description": "Hook card IDs that triggered the creation or expansion of this canon pack",
+      "items_type": "string"
     }
   ],
 

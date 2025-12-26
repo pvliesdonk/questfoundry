@@ -4,15 +4,15 @@
   "name": "Story Building Workflow",
   "layer": "must_know",
 
-  "summary": "How stories are built: section_briefs (structure) → sections (prose). Use story_spark for briefs, scene_weave for prose.",
+  "summary": "How stories are built: passage_briefs (structure) → passages (prose). Use story_spark for briefs, scene_weave for prose.",
 
-  "keywords": ["story", "sections", "briefs", "playbooks", "story_spark", "scene_weave", "structure"],
+  "keywords": ["story", "passages", "briefs", "playbooks", "story_spark", "scene_weave", "structure"],
 
   "triggers": [
     "create a story",
-    "write sections",
+    "write passages",
     "build story structure",
-    "how many sections",
+    "how many passages",
     "create briefs"
   ],
 
@@ -22,21 +22,21 @@
     "data": {
       "definitions": [
         {
-          "term": "section_brief",
-          "meaning": "Structural planning document that defines a section's purpose, beats, and choices BEFORE prose is written.",
+          "term": "passage_brief",
+          "meaning": "Structural planning document that defines a passage's purpose, beats, and choices BEFORE prose is written.",
           "distinguishing_features": [
             "Created by Plotwright via story_spark playbook",
             "Contains: title, summary, beats, choices with anchors",
-            "Must exist BEFORE a section can be written",
-            "One section_brief produces one section"
+            "Must exist BEFORE a passage can be written",
+            "One passage_brief produces one passage"
           ]
         },
         {
-          "term": "section",
+          "term": "passage",
           "meaning": "Full prose content that players read. Dialogue, sensory detail, and formatted choices.",
           "distinguishing_features": [
             "Created by Scene Smith via scene_weave playbook",
-            "Derived from a section_brief (requires brief to exist first)",
+            "Derived from a passage_brief (requires brief to exist first)",
             "Contains: prose, formatted choices, anchor links"
           ]
         }
@@ -49,21 +49,21 @@
             {
               "party": "showrunner",
               "must": "Run story_spark BEFORE scene_weave",
-              "when": "User requests sections or a story"
+              "when": "User requests passages or a story"
             },
             {
               "party": "plotwright",
-              "must": "Create section_briefs for all planned sections",
+              "must": "Create passage_briefs for all planned passages",
               "when": "Delegated via story_spark playbook"
             },
             {
               "party": "scene_smith",
-              "must": "Create sections from existing section_briefs only",
+              "must": "Create passages from existing passage_briefs only",
               "when": "Delegated via scene_weave playbook"
             },
             {
               "party": "gatekeeper",
-              "must": "Validate briefs (pre-gate) before scene_weave, validate sections (full-gate) after",
+              "must": "Validate briefs (pre-gate) before scene_weave, validate passages (full-gate) after",
               "when": "Delegated for quality checks"
             }
           ]
@@ -71,19 +71,19 @@
       ],
       "rules": [
         {
-          "statement": "To get N sections, you MUST first create N section_briefs via story_spark",
+          "statement": "To get N passages, you MUST first create N passage_briefs via story_spark",
           "severity": "critical",
           "enforcement": "llm",
-          "reasoning": "Scene Smith can only write prose from existing briefs. No brief = no section."
+          "reasoning": "Scene Smith can only write prose from existing briefs. No brief = no passage."
         },
         {
-          "statement": "story_spark creates structure (briefs), scene_weave creates prose (sections)",
+          "statement": "story_spark creates structure (briefs), scene_weave creates prose (passages)",
           "severity": "critical",
           "enforcement": "llm",
           "reasoning": "Structure first, prose second. Don't skip to prose without planning."
         },
         {
-          "statement": "If user asks for 'a story with 10 sections', interpret as: run story_spark for 10 briefs, then scene_weave for 10 sections",
+          "statement": "If user asks for 'a story with 10 passages', interpret as: run story_spark for 10 briefs, then scene_weave for 10 passages",
           "severity": "error",
           "enforcement": "llm",
           "reasoning": "Common request pattern. Briefs come first, always."
@@ -91,49 +91,49 @@
       ],
       "procedures": [
         {
-          "goal": "Create a story with N sections",
+          "goal": "Create a story with N passages",
           "steps": [
             "Clarify requirements with user if needed (genre, tone, themes)",
-            "Run story_spark playbook: Plotwright creates N section_briefs",
+            "Run story_spark playbook: Plotwright creates N passage_briefs",
             "Gatekeeper pre-gate review of briefs",
             "Run scene_weave playbook: Scene Smith writes prose for each brief",
-            "Gatekeeper full-gate review of sections",
+            "Gatekeeper full-gate review of passages",
             "Report completion to user"
           ],
           "preconditions": [
-            "User has specified desired number of sections",
+            "User has specified desired number of passages",
             "Genre/tone/themes are clear"
           ],
           "postconditions": [
-            "N section_briefs exist (structure)",
-            "N sections exist (prose)",
+            "N passage_briefs exist (structure)",
+            "N passages exist (prose)",
             "All pass quality validation"
           ]
         },
         {
-          "goal": "Add more sections to existing story",
+          "goal": "Add more passages to existing story",
           "steps": [
-            "Search workspace for existing section_briefs to understand current structure",
-            "Run story_spark to create new section_briefs (Plotwright)",
+            "Search workspace for existing passage_briefs to understand current structure",
+            "Run story_spark to create new passage_briefs (Plotwright)",
             "Pre-gate review new briefs",
-            "Run scene_weave to create new sections (Scene Smith)",
-            "Full-gate review new sections"
+            "Run scene_weave to create new passages (Scene Smith)",
+            "Full-gate review new passages"
           ],
           "preconditions": [
             "Story already has some structure"
           ],
           "postconditions": [
-            "New sections integrated into existing story"
+            "New passages integrated into existing story"
           ]
         }
       ],
       "heuristics": [
         {
-          "context": "User says 'create 3 sections' or 'a story with 3 sections'",
-          "guidance": "This means: 3 section_briefs (via story_spark) then 3 sections (via scene_weave)",
+          "context": "User says 'create 3 passages' or 'a story with 3 passages'",
+          "guidance": "This means: 3 passage_briefs (via story_spark) then 3 passages (via scene_weave)",
           "examples": [
-            "situation: 'create a mystery with 5 sections' | approach: story_spark for 5 briefs → scene_weave for 5 sections",
-            "situation: 'expand to 10 sections' | approach: story_spark for additional briefs → scene_weave for those sections"
+            "situation: 'create a mystery with 5 passages' | approach: story_spark for 5 briefs → scene_weave for 5 passages",
+            "situation: 'expand to 10 passages' | approach: story_spark for additional briefs → scene_weave for those passages"
           ]
         },
         {
@@ -148,14 +148,14 @@
       ],
       "warnings": [
         {
-          "failure_mode": "Delegating to Scene Smith without existing section_briefs",
+          "failure_mode": "Delegating to Scene Smith without existing passage_briefs",
           "consequence": "Scene Smith has no structure to write from. Will fail or hallucinate structure.",
           "prevention": "Always run story_spark first to create briefs, then scene_weave for prose."
         },
         {
-          "failure_mode": "Interpreting 'sections' request as single section_brief with internal sections",
-          "consequence": "Creates 1 brief with 3 sub-components instead of 3 separate briefs → 3 sections.",
-          "prevention": "'N sections' means N separate artifacts. One brief = one section."
+          "failure_mode": "Interpreting 'passages' request as single passage_brief with internal passages",
+          "consequence": "Creates 1 brief with 3 sub-components instead of 3 separate briefs → 3 passages.",
+          "prevention": "'N passages' means N separate artifacts. One brief = one passage."
         },
         {
           "failure_mode": "Skipping story_spark and going directly to prose",
@@ -164,8 +164,8 @@
         },
         {
           "failure_mode": "Terminating after story_spark without scene_weave",
-          "consequence": "User asked for sections but only got briefs. Incomplete delivery.",
-          "prevention": "If user wants 'sections' (prose), must complete scene_weave after story_spark."
+          "consequence": "User asked for passages but only got briefs. Incomplete delivery.",
+          "prevention": "If user wants 'passages' (prose), must complete scene_weave after story_spark."
         }
       ]
     }
@@ -175,5 +175,5 @@
     "archetypes": ["orchestrator"]
   },
 
-  "tags": ["workflow", "playbooks", "structure", "prose", "sections"]
+  "tags": ["workflow", "playbooks", "structure", "prose", "passages"]
 }

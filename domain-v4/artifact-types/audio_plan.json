@@ -14,9 +14,9 @@
       "required": true
     },
     {
-      "name": "section_ref",
+      "name": "passage_ref",
       "type": "string",
-      "description": "Reference to the section this audio supports (e.g., 'act1/foreman-gate')",
+      "description": "Reference to the passage this audio supports (e.g., 'act1/foreman-gate')",
       "required": true
     },
     {
@@ -83,7 +83,7 @@
       "name": "trigger",
       "type": "string",
       "description": "When this cue plays",
-      "enum": ["section_enter", "choice_presented", "choice_selected", "condition_met", "manual"]
+      "enum": ["passage_enter", "choice_presented", "choice_selected", "condition_met", "manual"]
     },
     {
       "name": "trigger_condition",

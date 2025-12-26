@@ -1,29 +1,40 @@
 {
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
-  "id": "section_brief",
-  "name": "Section Brief",
-  "summary": "Structure spec for scene_smith",
-  "description": "Writing instructions from Plotwright to Scene Smith for drafting a specific section. Defines goal, beats, choice intents, and expected outcomes. Section Briefs are the bridge between Story Spark (structure) and Scene Weave (prose). They remain in Hot as working documents and are not exported to players.",
+  "id": "passage_brief",
+  "name": "Passage Brief",
+  "summary": "Structure spec for Scene Smith",
+  "description": "Writing instructions from Plotwright to Scene Smith for drafting a specific passage. Defines goal, beats, choice intents, and expected outcomes. Passage Briefs are the bridge between Story Spark (structure) and Scene Weave (prose). They remain in Hot as working documents and are not exported to players. Terminology aligned with Twine/Twee for export compatibility.",
   "category": "document",
 
   "fields": [
     {
+      "name": "ifid",
+      "type": "string",
+      "description": "References the parent Story's IFID",
+      "required": true
+    },
+    {
       "name": "brief_id",
       "type": "string",
-      "description": "Unique identifier (format: SB-NNN)",
+      "description": "Unique identifier (format: PB-NNN)",
       "required": true
     },
     {
-      "name": "section_title",
+      "name": "passage_title",
       "type": "string",
-      "description": "Human-readable title for the section being planned",
+      "description": "Human-readable title for the passage being planned",
       "required": true
     },
     {
-      "name": "target_anchor",
+      "name": "target",
       "type": "string",
-      "description": "Anchor ID for the section this brief describes (e.g., anchor005)",
+      "description": "PID for the passage this brief describes (must match topology.passages[].pid)",
       "required": true
+    },
+    {
+      "name": "topology_passage_ref",
+      "type": "string",
+      "description": "Reference to the topology passage (same as target, explicit for relationship tracking)"
     },
     {
       "name": "topology_context",
@@ -33,14 +44,9 @@
       "required": true
     },
     {
-      "name": "tu_ref",
-      "type": "string",
-      "description": "Reference to originating TU Brief"
-    },
-    {
       "name": "goal",
       "type": "text",
-      "description": "What this section accomplishes narratively (1-2 sentences)",
+      "description": "What this passage accomplishes narratively (1-2 sentences)",
       "required": true
     },
     {
@@ -81,9 +87,9 @@
             "description": "Clear verb + object describing what player does"
           },
           {
-            "name": "target_anchor",
+            "name": "target",
             "type": "string",
-            "description": "Anchor ID this choice leads to"
+            "description": "PID this choice leads to (must match a topology link)"
           },
           {
             "name": "outcome_difference",
@@ -103,7 +109,7 @@
     {
       "name": "expected_outcomes",
       "type": "text",
-      "description": "What the player should understand after reading this section (player-safe, no spoilers)"
+      "description": "What the player should understand after reading this passage (player-safe, no spoilers)"
     },
     {
       "name": "open_questions",
@@ -144,7 +150,7 @@
         {
           "name": "continuity_notes",
           "type": "text",
-          "description": "References to prior sections/choices"
+          "description": "References to prior passages/choices"
         },
         {
           "name": "accessibility_notes",
@@ -187,12 +193,12 @@
       {
         "id": "in_use",
         "name": "In Use",
-        "description": "Scene Smith is actively drafting the section"
+        "description": "Scene Smith is actively drafting the passage"
       },
       {
         "id": "archived",
         "name": "Archived",
-        "description": "Section has been completed and merged to Cold",
+        "description": "Passage has been completed and merged to Cold",
         "terminal": true
       }
     ],

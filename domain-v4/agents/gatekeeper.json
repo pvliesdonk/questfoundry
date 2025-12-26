@@ -59,7 +59,7 @@
     {
       "id": "use_analyze_story_graph",
       "name": "Analyze Story Graph",
-      "description": "Programmatic reachability analysis. Use this to check story topology for unreachable nodes, dead ends, missing targets, and lifecycle status without LLM reasoning about graph structure.",
+      "description": "Programmatic reachability analysis using the topology artifact. Reads passage graph structure from topology to check for unreachable nodes, dead ends, missing link targets, and lifecycle status. Use this instead of LLM reasoning about graph structure.",
       "category": "tool",
       "tool_ref": "analyze_story_graph"
     },
@@ -82,7 +82,7 @@
     {
       "id": "write_manuscript",
       "name": "Write to Manuscript",
-      "description": "Can promote validated sections to narrative canon after gatecheck passes",
+      "description": "Can promote validated passages to narrative canon after gatecheck passes",
       "category": "store_access",
       "stores": ["manuscript"],
       "access_level": "write"

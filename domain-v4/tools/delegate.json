@@ -107,7 +107,7 @@
           "notes": "Hub with 3 exits; player discovers lighthouse is locked"
         },
         "expected_outputs": [
-          { "artifact_type": "section", "description": "Draft section with 3 choices" }
+          { "artifact_type": "passage", "description": "Draft passage with 3 choices" }
         ],
         "quality_criteria": ["choice_integrity", "diegetic_gates"]
       }
@@ -116,9 +116,9 @@
       "description": "Request gatecheck from Gatekeeper",
       "input": {
         "to_agent": "gatekeeper",
-        "task": "Gatecheck section-005 for Cold merge",
+        "task": "Gatecheck passage-005 for Cold merge",
         "context": {
-          "artifact_refs": ["section-005"]
+          "artifact_refs": ["passage-005"]
         },
         "expected_outputs": [
           { "artifact_type": "gatecheck_report", "description": "All 8 bars assessed" }

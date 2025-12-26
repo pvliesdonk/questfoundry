@@ -1,0 +1,167 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "topology",
+  "name": "Story Topology",
+  "summary": "Graph structure of story navigation",
+  "description": "The Topology artifact defines the explicit graph structure of a story: passages (nodes) and links (edges). It is the single source of truth for story structure. Passages define navigation points; links define possible transitions between them. Gates on links represent diegetic conditions (player-facing conditions like 'have key'). Created by story_spark before any passage_briefs.",
+  "category": "manifest",
+
+  "fields": [
+    {
+      "name": "ifid",
+      "type": "string",
+      "description": "References the parent Story's IFID",
+      "required": true
+    },
+    {
+      "name": "passages",
+      "type": "array",
+      "description": "Graph nodes representing navigable story points",
+      "items": {
+        "name": "passage_node",
+        "type": "object",
+        "properties": [
+          {
+            "name": "pid",
+            "type": "string",
+            "description": "Passage identifier (unique within this topology)",
+            "required": true
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Human-readable title for this passage",
+            "required": true
+          },
+          {
+            "name": "tags",
+            "type": "array",
+            "items_type": "string",
+            "description": "Tags for categorization (Twine-compatible)"
+          },
+          {
+            "name": "is_ending",
+            "type": "boolean",
+            "description": "True if this passage is a terminal ending",
+            "default": false
+          },
+          {
+            "name": "topology_role",
+            "type": "string",
+            "description": "Structural role in the narrative graph",
+            "enum": ["hub", "loop", "gateway", "linear"]
+          },
+          {
+            "name": "position",
+            "type": "string",
+            "description": "Visual position for editors (format: 'x,y')"
+          },
+          {
+            "name": "size",
+            "type": "string",
+            "description": "Visual size for editors (format: 'width,height')"
+          }
+        ]
+      },
+      "min_length": 1,
+      "required": true
+    },
+    {
+      "name": "links",
+      "type": "array",
+      "description": "Graph edges representing possible transitions between passages",
+      "items": {
+        "name": "link",
+        "type": "object",
+        "properties": [
+          {
+            "name": "from",
+            "type": "string",
+            "description": "Source passage PID",
+            "required": true
+          },
+          {
+            "name": "to",
+            "type": "string",
+            "description": "Target passage PID",
+            "required": true
+          },
+          {
+            "name": "gate",
+            "type": "object",
+            "description": "Diegetic gate condition (player-facing)",
+            "properties": [
+              {
+                "name": "condition",
+                "type": "string",
+                "description": "Player-visible condition text (e.g., 'have the brass key')"
+              },
+              {
+                "name": "mechanics",
+                "type": "string",
+                "description": "Internal mechanics note (not shown to players)"
+              }
+            ]
+          }
+        ]
+      },
+      "required": true
+    }
+  ],
+
+  "validation": {
+    "custom_rules": [
+      {
+        "id": "reachability",
+        "description": "All passages must be reachable from the start passage (defined in story.start)",
+        "enforcement": "runtime"
+      },
+      {
+        "id": "link_targets_exist",
+        "description": "All link 'from' and 'to' values must reference existing passage PIDs",
+        "enforcement": "runtime"
+      },
+      {
+        "id": "endings_terminal",
+        "description": "Passages with is_ending=true should have no outgoing links",
+        "enforcement": "llm"
+      }
+    ]
+  },
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Topology is being designed"
+      },
+      {
+        "id": "validated",
+        "name": "Validated",
+        "description": "Topology passes structural validation"
+      },
+      {
+        "id": "frozen",
+        "name": "Frozen",
+        "description": "Topology is locked for prose generation",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "validated" },
+      { "from": "validated", "to": "draft" },
+      { "from": "validated", "to": "frozen" }
+    ]
+  },
+
+  "lifecycle_policy": {
+    "edit_policy": "demote",
+    "demote_trigger_states": ["validated"],
+    "demote_target_state": "draft",
+    "demote_target_store": "workspace"
+  },
+
+  "default_store": "workspace"
+}

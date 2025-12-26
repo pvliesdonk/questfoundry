@@ -7,8 +7,10 @@
   "semantics": "mutable",
 
   "artifact_types": [
-    "section_brief",
-    "section",
+    "story",
+    "topology",
+    "passage_brief",
+    "passage",
     "hook_card",
     "gatecheck_report"
   ],

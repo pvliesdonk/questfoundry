@@ -57,10 +57,10 @@
       ],
       "heuristics": [
         {
-          "context": "Validating voice consistency across sections",
+          "context": "Validating voice consistency across passages",
           "guidance": "Check for genre-appropriate register matching the expected tone (noir vs cozy vs epic)",
           "examples": [
-            "situation: Multiple agents contributed to adjacent sections | approach: Verify register doesn't shift between sections without narrative reason"
+            "situation: Multiple agents contributed to adjacent passages | approach: Verify register doesn't shift between passages without narrative reason"
           ]
         },
         {
@@ -94,7 +94,7 @@
       ],
       "warnings": [
         {
-          "failure_mode": "Sudden formality shifts mid-section",
+          "failure_mode": "Sudden formality shifts mid-passage",
           "consequence": "Breaks reader immersion and reveals multi-agent authorship",
           "prevention": "Check register consistency across paragraph boundaries"
         },
@@ -132,7 +132,7 @@
         {
           "goal": "Create style addenda for recurring patterns",
           "steps": [
-            "Identify recurring style issues across multiple sections",
+            "Identify recurring style issues across multiple passages",
             "Document pattern with good and bad exemplars",
             "Mark severity (suggestion vs warning vs error)",
             "Add to Style Guide for future reference"

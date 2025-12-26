@@ -161,7 +161,7 @@ Small time shifts—morning to evening, skipping ahead a few days. Most common u
 Significant shifts in setting. Only necessary if the jump feels jarring.
 
 **POV Changes:**
-Always use a section break when changing narrator or POV character.
+Always use a passage break when changing narrator or POV character.
 
 **Flashbacks and Dreams:**
 Use scene breaks to signpost flashbacks, differentiating present from past.
@@ -175,7 +175,7 @@ Cut right before revealing something important. Hero about to open door to murde
 ### How to Format Scene Breaks
 
 **White Space:**
-Skip one or two lines between sections. Often enough of a visual cue.
+Skip one or two lines between passages. Often enough of a visual cue.
 
 **Dinkus (Symbols):**
 

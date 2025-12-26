@@ -24,11 +24,11 @@
         {
           "goal": "Complete a delegation cycle",
           "steps": [
-            "Step 1 - Delegate to specialist: delegate(to_agent='plotwright', task='Create section brief for opening scene', context={'artifact_refs': [], 'notes': 'Mystery genre, noir tone'}, expected_outputs=[{'artifact_type': 'section_brief'}])",
-            "Step 2 - Agent returns with artifact IDs: {\"summary\": \"Created section brief\", \"result_assessment\": \"pass\", \"recommendation\": \"proceed\", \"artifacts_produced\": [\"SB-001\"]}",
-            "Step 3 - Continue chain with artifact ID: delegate(to_agent='scene_smith', task='Write prose for section brief SB-001', context={'artifact_refs': ['SB-001']}, expected_outputs=[{'artifact_type': 'section'}])",
-            "Step 4 - Scene Smith returns: {\"summary\": \"Wrote prose\", \"result_assessment\": \"pass\", \"artifacts_produced\": [\"section-001\"]}",
-            "Step 5 - Send to validation: delegate(to_agent='gatekeeper', task='Validate section-001 against quality bars', context={'artifact_refs': ['section-001']}, expected_outputs=[{'artifact_type': 'gatecheck_report'}])"
+            "Step 1 - Delegate to specialist: delegate(to_agent='plotwright', task='Create passage brief for opening scene', context={'artifact_refs': [], 'notes': 'Mystery genre, noir tone'}, expected_outputs=[{'artifact_type': 'passage_brief'}])",
+            "Step 2 - Agent returns with artifact IDs: {\"summary\": \"Created passage brief\", \"result_assessment\": \"pass\", \"recommendation\": \"proceed\", \"artifacts_produced\": [\"SB-001\"]}",
+            "Step 3 - Continue chain with artifact ID: delegate(to_agent='scene_smith', task='Write prose for passage brief SB-001', context={'artifact_refs': ['SB-001']}, expected_outputs=[{'artifact_type': 'passage'}])",
+            "Step 4 - Scene Smith returns: {\"summary\": \"Wrote prose\", \"result_assessment\": \"pass\", \"artifacts_produced\": [\"passage-001\"]}",
+            "Step 5 - Send to validation: delegate(to_agent='gatekeeper', task='Validate passage-001 against quality bars', context={'artifact_refs': ['passage-001']}, expected_outputs=[{'artifact_type': 'gatecheck_report'}])"
           ],
           "preconditions": [
             "User goal is clear and specific",
@@ -46,7 +46,7 @@
           "guidance": "Always pass artifact IDs from previous agent to next agent in context.artifact_refs",
           "examples": [
             "Plotwright returns SB-001 -> pass 'SB-001' to Scene Smith",
-            "Scene Smith returns section-001 -> pass 'section-001' to Gatekeeper"
+            "Scene Smith returns passage-001 -> pass 'passage-001' to Gatekeeper"
           ]
         },
         {

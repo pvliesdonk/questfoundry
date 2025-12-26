@@ -24,7 +24,7 @@
       "definitions": [
         {
           "term": "Hub",
-          "meaning": "A section (or cluster) with meaningful fan-out to multiple distinct routes.",
+          "meaning": "A passage (or cluster) with meaningful fan-out to multiple distinct routes.",
           "distinguishing_features": [
             "Branches lead to genuinely different content",
             "Not cosmetic variations",

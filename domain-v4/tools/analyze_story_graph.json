@@ -15,9 +15,9 @@
         "default": true,
         "description": "Whether to include draft lifecycle nodes in analysis"
       },
-      "entry_anchor": {
+      "entry_pid": {
         "type": "string",
-        "description": "Optional explicit entry point anchor. If not provided, nodes with no incoming connections are treated as entry points."
+        "description": "Optional explicit entry point passage pid. If not provided, nodes with no incoming connections are treated as entry points."
       }
     }
   },
@@ -111,11 +111,11 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "anchor_id": { "type": "string" },
+                "pid": { "type": "string" },
                 "artifact_id": { "type": "string" },
                 "title": { "type": "string" },
                 "lifecycle_state": { "type": "string" },
-                "type": { "type": "string", "enum": ["section_brief", "section"] },
+                "type": { "type": "string", "enum": ["passage_brief", "passage"] },
                 "outgoing": { "type": "array", "items": { "type": "string" } },
                 "incoming": { "type": "array", "items": { "type": "string" } }
               }
@@ -134,7 +134,7 @@
     {
       "description": "Validate from specific entry point, excluding drafts",
       "input": {
-        "entry_anchor": "opening_scene",
+        "entry_pid": "opening_scene",
         "include_drafts": false
       }
     }

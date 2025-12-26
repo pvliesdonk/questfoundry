@@ -9,7 +9,7 @@
   "severity": "error",
 
   "applies_to": {
-    "artifact_types": ["section"]
+    "artifact_types": ["passage"]
   },
 
   "check": {

@@ -2,8 +2,8 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "plotwright",
   "name": "Plotwright",
-  "summary": "Designs narrative structure and section briefs",
-  "description": "Designs narrative structure (hubs, loops, gateways) from story requirements. Creates section_brief artifacts specifying goal, stakes, choice intents, and constraints. Uses analyze_story_graph to understand current topology. Writes topology notes for structural decisions. Does NOT write prose - hands off section_briefs to scene_smith. Raises hooks when structure requires canon from lore_weaver.",
+  "summary": "Designs narrative structure and passage briefs",
+  "description": "Designs narrative structure (hubs, loops, gateways) from story requirements. Creates story, topology, and passage_brief artifacts specifying goal, stakes, choice intents, and constraints. Uses analyze_story_graph to understand current topology. Does NOT write prose - hands off passage_briefs to scene_smith. Raises hooks when structure requires canon from lore_weaver.",
 
   "archetypes": ["creator"],
 
@@ -61,17 +61,17 @@
     {
       "id": "write_workspace",
       "name": "Write to Workspace",
-      "description": "Can write section briefs, topology notes, and hooks",
+      "description": "Can write story, topology, passage briefs, and hooks",
       "category": "store_access",
       "stores": ["workspace"],
       "access_level": "write"
     },
     {
-      "id": "create_section_briefs",
-      "name": "Create Section Briefs",
-      "description": "Create and update section briefs for Scene Smith",
+      "id": "create_passage_briefs",
+      "name": "Create Passage Briefs",
+      "description": "Create and update passage briefs for Scene Smith",
       "category": "artifact_action",
-      "artifact_types": ["section_brief"],
+      "artifact_types": ["passage_brief"],
       "actions": ["create", "read", "update"]
     },
     {
@@ -112,7 +112,7 @@
     {
       "id": "no_direct_prose",
       "name": "No Direct Prose Writing",
-      "rule": "Write briefs and topology notes, not section prose. Scene Smith handles prose—Showrunner will coordinate that handoff.",
+      "rule": "Write story, topology, and briefs, not passage prose. Scene Smith handles prose—Showrunner will coordinate that handoff.",
       "category": "content",
       "enforcement": "llm",
       "severity": "warning"

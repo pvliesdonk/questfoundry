@@ -28,7 +28,7 @@
           "distinguishing_features": [
             "Created by agents, stored in stores (workspace, canon)",
             "Has lifecycle: draft → review → approved → cold",
-            "Referenced by ID (e.g., 'section_abc123')",
+            "Referenced by ID (e.g., 'passage_abc123')",
             "Validated against its artifact type schema"
           ]
         },
@@ -38,7 +38,7 @@
           "distinguishing_features": [
             "Defines required and optional fields",
             "Specifies lifecycle states and transitions",
-            "Examples: section, hook_card, research_memo, codex_entry"
+            "Examples: passage, hook_card, research_memo, codex_entry"
           ]
         },
         {

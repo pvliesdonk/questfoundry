@@ -1,10 +1,10 @@
 ---
 title: Scope and Length Guidelines for Interactive Fiction
-summary: Sizing IF projects with word counts, section metrics, branching depth, and scope-quality balance guidance.
+summary: Sizing IF projects with word counts, passage metrics, branching depth, and scope-quality balance guidance.
 topics:
   - project-scope
   - word-counts
-  - section-metrics
+  - passage-metrics
   - branching-depth
   - play-time
   - multiple-endings
@@ -14,7 +14,7 @@ cluster: scope-and-planning
 
 # Scope and Length Guidelines for Interactive Fiction
 
-Craft guidance for sizing interactive fiction projects—word counts, section metrics, branching depth, and balancing scope with quality.
+Craft guidance for sizing interactive fiction projects—word counts, passage metrics, branching depth, and balancing scope with quality.
 
 ---
 
@@ -24,7 +24,7 @@ Craft guidance for sizing interactive fiction projects—word counts, section me
 
 Interactive fiction varies enormously in scope. A short Twine experiment might take five minutes to play; an epic Choice of Games title might take twenty hours. Understanding scale helps set realistic expectations.
 
-| Scale | Total Words | Play Time | Sections | Endings |
+| Scale | Total Words | Play Time | Passages | Endings |
 |-------|-------------|-----------|----------|---------|
 | Micro | 1,000–5,000 | 5–15 min | 10–30 | 2–4 |
 | Short | 5,000–20,000 | 15–60 min | 30–100 | 3–8 |
@@ -84,13 +84,13 @@ Ideal for: Flagship commercial titles, series entries.
 
 ---
 
-## Section/Passage Metrics
+## Passage Metrics
 
-### Words Per Section
+### Words Per Passage
 
 Different platforms have different norms:
 
-| Platform Style | Words per Section | Notes |
+| Platform Style | Words per Passage | Notes |
 |----------------|-------------------|-------|
 | Twine (short) | 50–200 | Quick, punchy passages |
 | Twine (literary) | 200–500 | More prose-focused |
@@ -98,7 +98,7 @@ Different platforms have different norms:
 | Visual Novel | 50–150 | With accompanying art |
 | Parser IF | Variable | Room descriptions + responses |
 
-### Paragraphs Per Section
+### Paragraphs Per Passage
 
 - **Minimum:** 1–2 paragraphs (for action/tension moments)
 - **Typical:** 3–5 paragraphs (balanced reading)
@@ -108,7 +108,7 @@ Longer passages risk reader fatigue. Break at natural pause points.
 
 ### The Screen Rule
 
-A section should fit comfortably on one screen without scrolling. If readers must scroll extensively, consider splitting the section.
+A passage should fit comfortably on one screen without scrolling. If readers must scroll extensively, consider splitting the passage.
 
 ### Sentence Count Guidance
 
@@ -130,9 +130,9 @@ Readers expect agency. Long stretches without choices feel like reading, not pla
 | High agency | 100–300 | Frequent decisions |
 | Balanced | 300–600 | Standard pacing |
 | Narrative-heavy | 600–1000 | Story-focused |
-| Kinetic sections | 1000+ | Deliberate no-choice zones |
+| Kinetic passages | 1000+ | Deliberate no-choice zones |
 
-### Choices Per Section
+### Choices Per Passage
 
 - **Typical:** 2–4 choices per decision point
 - **Complex moments:** Up to 5–6 choices acceptable
@@ -141,7 +141,7 @@ Readers expect agency. Long stretches without choices feel like reading, not pla
 
 ### Choice Fatigue
 
-Too many choices exhaust readers. Not every moment needs a decision. Use choiceless sections for:
+Too many choices exhaust readers. Not every moment needs a decision. Use choiceless passages for:
 
 - Emotional beats that shouldn't be interrupted
 - Consequences playing out from previous choices
@@ -186,7 +186,7 @@ Single path with variations based on accumulated choices/stats.
 
 Plan where paths merge:
 
-- **Frequent convergence:** Every 3–5 sections
+- **Frequent convergence:** Every 3–5 passages
 - **Moderate convergence:** Every chapter/act
 - **Rare convergence:** Only at major story beats
 
@@ -322,9 +322,9 @@ A "simple" early choice that creates two paths doubles everything that follows. 
 
 Spending equal time on all paths means the path most players take gets the same attention as paths 5% will see.
 
-### Inconsistent Section Length
+### Inconsistent Passage Length
 
-Wildly varying section lengths disrupt reading rhythm. Establish norms and stick to them.
+Wildly varying passage lengths disrupt reading rhythm. Establish norms and stick to them.
 
 ### No Convergence Plan
 
@@ -340,7 +340,7 @@ Branches that never rejoin create exponential content growth. Plan merge points 
 | Solo developer | Cap at Medium scale |
 | Choice frequency | Every 300–600 words |
 | Choices per decision | 2–4 typically |
-| Section length | 200–500 words |
+| Passage length | 200–500 words |
 | Branching model | Bottleneck for sustainability |
 | Testing buffer | 20–30% of development time |
 | Endings | 3–8 for most projects |

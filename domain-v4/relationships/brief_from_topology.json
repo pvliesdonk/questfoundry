@@ -1,0 +1,11 @@
+{
+  "$schema": "../../meta/schemas/core/relationship.schema.json",
+  "id": "brief_from_topology",
+  "name": "Brief from Topology",
+  "description": "Passage briefs reference topology passages by pid. Each brief's topology_passage_ref field holds a passage pid that should exist in the parent topology. Runtime validates pid existence through custom checks, not relationship matching (array element matching not supported by relationship schema).",
+  "from_type": "topology",
+  "to_type": "passage_brief",
+  "kind": "references",
+  "link_field": "topology_passage_ref",
+  "link_resolution": "by_artifact_id"
+}

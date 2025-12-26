@@ -209,9 +209,9 @@
         },
         {
           "context": "Trigger selection for ambient",
-          "guidance": "Use section_enter to start ambient when player arrives.",
+          "guidance": "Use passage_enter to start ambient when player arrives.",
           "examples": [
-            "Forest ambient starts when entering forest section"
+            "Forest ambient starts when entering forest passage"
           ]
         },
         {
@@ -224,9 +224,9 @@
         },
         {
           "context": "Trigger selection for music",
-          "guidance": "Use section_enter or choice_selected for transitions.",
+          "guidance": "Use passage_enter or choice_selected for transitions.",
           "examples": [
-            "Tension music starts at climax section",
+            "Tension music starts at climax passage",
             "Victory theme when player chooses winning path"
           ]
         },

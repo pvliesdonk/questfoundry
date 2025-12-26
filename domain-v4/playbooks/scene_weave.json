@@ -2,15 +2,15 @@
   "$schema": "../../meta/schemas/core/playbook.schema.json",
   "id": "scene_weave",
   "name": "Scene Weave",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "summary": "Transform briefs into prose with choices",
-  "purpose": "Transform Section Briefs into full prose Sections with dialogue, sensory detail, and contrastive choices. Voice first, structure assumed stable.",
+  "purpose": "Transform Passage Briefs into full prose Passages with dialogue, sensory detail, and contrastive choices. Voice first, structure assumed stable.",
 
-  "description": "Transforms section_brief artifacts into section prose. Scene Smith writes dialogue, sensory detail, and contrastive choices. Style Lead reviews for voice consistency. Gatekeeper validates against quality bars. Does NOT modify topology - structure is assumed stable from story_spark. Outputs section artifacts in review state ready for canonization.",
+  "description": "Transforms passage_brief artifacts into passage prose. Scene Smith writes dialogue, sensory detail, and contrastive choices. Style Lead reviews for voice consistency. Gatekeeper validates against quality bars. Does NOT modify topology - structure is assumed stable from story_spark. Outputs passage artifacts in review state ready for canonization.",
 
   "triggers": [
     {
-      "condition": "Section Briefs are ready from Story Spark",
+      "condition": "Passage Briefs are ready from Story Spark",
       "priority": 1
     },
     {
@@ -18,7 +18,7 @@
       "priority": 2
     },
     {
-      "condition": "Gatekeeper flags style or presentation issues in existing sections",
+      "condition": "Gatekeeper flags style or presentation issues in existing passages",
       "priority": 3
     }
   ],
@@ -26,9 +26,21 @@
   "inputs": {
     "required_artifacts": [
       {
-        "type": "section_brief",
+        "type": "story",
+        "alias": "story",
+        "description": "Story manifest for context and IFID",
+        "state": "active"
+      },
+      {
+        "type": "topology",
+        "alias": "topology",
+        "description": "Topology artifact for validating choice targets",
+        "state": "validated"
+      },
+      {
+        "type": "passage_brief",
         "alias": "briefs",
-        "description": "Section Briefs from Story Spark defining structure and intent",
+        "description": "Passage Briefs from Story Spark defining structure and intent",
         "state": "ready"
       }
     ],
@@ -42,7 +54,7 @@
     ],
     "context_requirements": [
       "Style Guide from workspace (voice, register, visual language)",
-      "Codex entries relevant to the section (player-safe references)",
+      "Codex entries relevant to the passage (player-safe references)",
       "Canon summaries if needed for accurate portrayal (request from Lore Weaver)"
     ]
   },
@@ -50,9 +62,9 @@
   "outputs": {
     "required_artifacts": [
       {
-        "type": "section",
-        "alias": "sections",
-        "description": "Full prose Sections with choices and gates. Created in draft, promoted to review when playbook completes successfully. The review state indicates studio work is complete and sections are ready for human review or canonization.",
+        "type": "passage",
+        "alias": "passages",
+        "description": "Full prose Passages with choices and gates. Created in draft, promoted to review when playbook completes successfully. The review state indicates studio work is complete and passages are ready for human review or canonization.",
         "state": "review"
       }
     ],
@@ -72,32 +84,68 @@
   "phases": {
     "prose_drafting": {
       "name": "Prose Drafting",
-      "purpose": "Transform each Section Brief into draft prose with dialogue, choices, and sensory detail",
+      "purpose": "Transform each Passage Brief into draft prose with dialogue, choices, and sensory detail",
 
       "steps": {
-        "draft_prose": {
-          "action": "Draft section prose following the brief's intent, stakes, and choice intents. Make choices clear and contrastive. Express gates diegetically.",
+        "load_context": {
+          "action": "Load story and topology artifacts to understand the overall structure and validate choice targets.",
           "specific_agent": "scene_smith",
-          "guidance": "Honor the Plotwright brief—do not invent new topology. Two clear options beat five near-synonyms. Gates must read as world facts (badge, knowledge, reputation, tool), never as mechanics. Never print codeword names, flag IDs, or schema references in prose.",
+          "guidance": "Read the topology to understand which passages connect to which. Your choice targets MUST match the topology links. Do not invent new connections.",
           "inputs": [
             {
-              "name": "section_briefs",
-              "artifact_type": "section_brief"
+              "name": "story",
+              "artifact_type": "story"
+            },
+            {
+              "name": "topology",
+              "artifact_type": "topology"
+            }
+          ]
+        },
+        "draft_prose": {
+          "action": "Draft passage prose following the brief's intent, stakes, and choice intents. Make choices clear and contrastive. Express gates diegetically. Validate that choice targets match topology links.",
+          "depends_on": ["load_context"],
+          "specific_agent": "scene_smith",
+          "guidance": "Honor the Plotwright brief - do not invent new topology. Two clear options beat five near-synonyms. Gates must read as world facts (badge, knowledge, reputation, tool), never as mechanics. Never print codeword names, flag IDs, or schema references in prose. Each choice target MUST reference a valid topology link from this passage's pid.",
+          "inputs": [
+            {
+              "name": "passage_briefs",
+              "artifact_type": "passage_brief"
+            },
+            {
+              "name": "topology",
+              "artifact_type": "topology"
             }
           ],
           "outputs": [
             {
-              "name": "draft_sections",
-              "artifact_type": "section",
-              "description": "Draft sections ready for style review"
+              "name": "draft_passages",
+              "artifact_type": "passage",
+              "description": "Draft passages ready for style review"
+            }
+          ]
+        },
+        "validate_topology_alignment": {
+          "action": "Verify all passage choice targets match topology links from the source passage.",
+          "depends_on": ["draft_prose"],
+          "specific_agent": "scene_smith",
+          "guidance": "For each choice in the passage, verify the target matches a link in topology.links where from == this passage's pid. If misaligned, either fix the choice target or escalate to Plotwright via hook.",
+          "inputs": [
+            {
+              "name": "draft_passages",
+              "from_step": "draft_prose"
+            },
+            {
+              "name": "topology",
+              "artifact_type": "topology"
             }
           ]
         },
         "generate_scene_hooks": {
           "action": "Create hook cards for scene-level questions: character traits, environmental tells, props that could matter, style uncertainties.",
-          "depends_on": ["draft_prose"],
+          "depends_on": ["validate_topology_alignment"],
           "specific_agent": "scene_smith",
-          "guidance": "Scene hooks capture aesthetic possibilities, not structural changes. If you discover a structural problem, escalate to Plotwright via hook rather than fixing it in prose.",
+          "guidance": "Scene hooks capture aesthetic possibilities, not structural changes. If you discover a structural problem, escalate to Plotwright via hook rather than fixing it in prose. Structural hooks should trigger story_spark, not scene_weave.",
           "outputs": [
             {
               "name": "scene_hooks",
@@ -108,10 +156,11 @@
       },
 
       "completion_criteria": [
-        "Every Section Brief has a corresponding draft Section",
+        "Every Passage Brief has a corresponding draft Passage",
         "Choices are contrastive (differ in intent and outcome)",
         "Gates are expressed diegetically",
-        "No internal mechanics visible in prose"
+        "No internal mechanics visible in prose",
+        "All choice targets align with topology links"
       ],
 
       "on_success": {
@@ -128,12 +177,12 @@
 
       "steps": {
         "check_voice": {
-          "action": "Review draft sections for voice, register, visual language alignment, and motif consistency. Flag drift and propose corrections.",
+          "action": "Review draft passages for voice, register, visual language alignment, and motif consistency. Flag drift and propose corrections.",
           "specific_agent": "style_lead",
           "guidance": "Style Lead reviews prose for voice consistency and visual language alignment. Cross-check against Style Guide. Flag drift but offer smallest viable fix.",
           "inputs": [
             {
-              "name": "draft_sections",
+              "name": "draft_passages",
               "from_step": "draft_prose",
               "from_phase": "prose_drafting"
             }
@@ -146,7 +195,7 @@
           ]
         },
         "apply_corrections": {
-          "action": "Apply style corrections to draft sections based on feedback.",
+          "action": "Apply style corrections to draft passages based on feedback.",
           "depends_on": ["check_voice"],
           "specific_agent": "scene_smith",
           "condition": "Style notes contain actionable corrections",
@@ -156,22 +205,22 @@
               "from_step": "check_voice"
             },
             {
-              "name": "draft_sections",
+              "name": "draft_passages",
               "from_step": "draft_prose",
               "from_phase": "prose_drafting"
             }
           ],
           "outputs": [
             {
-              "name": "revised_sections",
-              "artifact_type": "section"
+              "name": "revised_passages",
+              "artifact_type": "passage"
             }
           ]
         }
       },
 
       "completion_criteria": [
-        "Sections are in-voice per style guardrails",
+        "Passages are in-voice per style guardrails",
         "No register drift flagged",
         "Motif threading is consistent"
       ],
@@ -192,34 +241,39 @@
       "depends_on": ["style_review"],
 
       "steps": {
-        "validate_sections": {
-          "action": "Self-validate sections against schema and quality criteria. Use validate_artifact tool.",
+        "validate_passages": {
+          "action": "Self-validate passages against schema and quality criteria. Use validate_artifact tool.",
           "specific_agent": "scene_smith",
-          "guidance": "Check: anchor resolution (all choices lead somewhere), spoiler hygiene (no canon leakage), choice integrity (contrastive options), diegetic gates (no mechanics). Fix any issues before requesting gatecheck.",
+          "guidance": "Check: topology alignment (all choices match links), spoiler hygiene (no canon leakage), choice integrity (contrastive options), diegetic gates (no mechanics). Fix any issues before requesting gatecheck.",
           "validation": {
-            "quality_criteria": ["choice_integrity", "spoiler_hygiene", "diegetic_gates"],
+            "quality_criteria": ["choice_integrity", "spoiler_hygiene", "diegetic_gates", "topology_alignment"],
             "blocking": false
           },
           "inputs": [
             {
-              "name": "revised_sections",
+              "name": "revised_passages",
               "from_step": "apply_corrections",
               "from_phase": "style_review"
+            },
+            {
+              "name": "topology",
+              "artifact_type": "topology"
             }
           ],
           "outputs": [
             {
-              "name": "validated_sections",
-              "artifact_type": "section",
-              "description": "Sections ready for formal gatecheck"
+              "name": "validated_passages",
+              "artifact_type": "passage",
+              "description": "Passages ready for formal gatecheck"
             }
           ]
         }
       },
 
       "completion_criteria": [
-        "All sections pass self-validation",
+        "All passages pass self-validation",
         "No schema violations",
+        "All choice targets align with topology",
         "Ready for Gatekeeper review"
       ],
 
@@ -235,18 +289,18 @@
 
     "gatecheck_request": {
       "name": "Gatecheck Request",
-      "purpose": "Request formal Gatekeeper review of completed sections",
+      "purpose": "Request formal Gatekeeper review of completed passages",
       "depends_on": ["self_validation"],
 
       "steps": {
         "submit_for_review": {
-          "action": "Submit sections to Gatekeeper for formal gatecheck against all 8 quality bars.",
+          "action": "Submit passages to Gatekeeper for formal gatecheck against all 8 quality bars.",
           "specific_agent": "gatekeeper",
           "guidance": "Gatekeeper enforces: Integrity, Reachability, Nonlinearity, Gateways, Style, Determinism, Presentation, Accessibility. Block with reason and offer smallest viable fix.",
           "inputs": [
             {
-              "name": "validated_sections",
-              "from_step": "validate_sections",
+              "name": "validated_passages",
+              "from_step": "validate_passages",
               "from_phase": "self_validation"
             }
           ],
@@ -266,19 +320,19 @@
       },
 
       "completion_criteria": [
-        "Gatekeeper has reviewed all sections",
+        "Gatekeeper has reviewed all passages",
         "Gatecheck report issued with pass/conditional_pass/block"
       ],
 
       "on_success": {
-        "message": "Sections approved and promoted to review state. Ready for human review or canonization (review -> cold) via separate approval flow.",
+        "message": "Passages approved and promoted to review state. Ready for human review or canonization (review -> cold) via separate approval flow.",
         "end_playbook": true,
         "followups": {
           "runtime_actions": [
             {
               "action": "commit_to_cold",
-              "condition": "Gatekeeper approved all sections",
-              "description": "Commit approved sections to canon store"
+              "condition": "Gatekeeper approved all passages",
+              "description": "Commit approved passages to manuscript store"
             }
           ],
           "parallel": [
@@ -294,7 +348,7 @@
           "conditional": [
             {
               "playbook": "binding_run",
-              "condition": "All sections for current milestone are in cold store",
+              "condition": "All passages for current milestone are in manuscript store",
               "description": "Export completed story segment for distribution",
               "priority": 3
             }
@@ -309,7 +363,7 @@
     }
   },
 
-  "quality_criteria": ["integrity", "style", "presentation", "accessibility", "choice_integrity", "spoiler_hygiene", "diegetic_gates"],
+  "quality_criteria": ["integrity", "style", "presentation", "accessibility", "choice_integrity", "spoiler_hygiene", "diegetic_gates", "topology_alignment"],
 
   "max_rework_cycles": 3
 }

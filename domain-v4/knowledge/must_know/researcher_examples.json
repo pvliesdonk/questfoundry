@@ -24,12 +24,12 @@
         {
           "goal": "Complete a research and verification cycle",
           "steps": [
-            "Step 1 - Fetch artifact to verify: get_artifact('section-001')",
+            "Step 1 - Fetch artifact to verify: get_artifact('passage-001')",
             "Step 2 - Identify claims requiring verification (dates, facts, technical details)",
             "Step 3 - Research each claim using available knowledge sources",
-            "Step 4 - Document findings: save_artifact(artifact_type='research_memo', data={'target_artifact': 'section-001', 'verified_claims': [...], 'issues_found': [...], 'recommendations': [...]})",
+            "Step 4 - Document findings: save_artifact(artifact_type='research_memo', data={'target_artifact': 'passage-001', 'verified_claims': [...], 'issues_found': [...], 'recommendations': [...]})",
             "Step 5 - Note memo ID: {\"artifact_id\": \"RM-001\", \"status\": \"created\"}",
-            "Step 6 - Return with assessment: return_to_orchestrator(summary='Researched section-001 - 3 claims verified, 1 issue found', result_assessment='partial', recommendation='rework', artifacts_produced=['RM-001'])"
+            "Step 6 - Return with assessment: return_to_orchestrator(summary='Researched passage-001 - 3 claims verified, 1 issue found', result_assessment='partial', recommendation='rework', artifacts_produced=['RM-001'])"
           ],
           "preconditions": [
             "Received delegation with artifact_refs containing content to verify"

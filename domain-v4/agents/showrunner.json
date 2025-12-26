@@ -123,7 +123,7 @@
     {
       "id": "no_direct_prose_writing",
       "name": "No Direct Prose Writing",
-      "rule": "Do not write section prose directly. Delegate to Scene Smith.",
+      "rule": "Do not write passage prose directly. Delegate to Scene Smith.",
       "category": "content",
       "enforcement": "llm",
       "severity": "warning"

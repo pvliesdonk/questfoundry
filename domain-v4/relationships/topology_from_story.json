@@ -1,0 +1,16 @@
+{
+  "$schema": "../../meta/schemas/core/relationship.schema.json",
+  "id": "topology_from_story",
+  "name": "Topology from Story",
+  "description": "Topology is derived from story. Each story has exactly one topology artifact that defines its graph structure. When a story is edited, the topology should be flagged for review.",
+  "from_type": "story",
+  "to_type": "topology",
+  "kind": "derived_from",
+  "link_field": "ifid",
+  "link_resolution": "by_field_match",
+  "match_field": "ifid",
+  "impact_policy": {
+    "on_parent_edit": "flag_stale",
+    "on_parent_delete": "cascade_delete"
+  }
+}

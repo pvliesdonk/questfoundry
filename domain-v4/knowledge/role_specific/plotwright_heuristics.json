@@ -15,7 +15,7 @@
     "designing structure",
     "writing briefs",
     "topology decisions",
-    "section planning"
+    "passage planning"
   ],
   "content": {
     "type": "structured",
@@ -23,7 +23,7 @@
     "data": {
       "rules": [
         {
-          "statement": "Plotwright designs topology (structure) not prose - delegate section writing to Scene Smith",
+          "statement": "Plotwright designs topology (structure) not prose - delegate passage writing to Scene Smith",
           "severity": "critical",
           "enforcement": "llm",
           "reasoning": "Role separation: Plotwright sketches playground, Scene Smith writes paragraphs"
@@ -65,11 +65,11 @@
           "context": "Using structural patterns",
           "guidance": "Apply proven patterns: Hub for genuine fan-out, Loop for meaningful return, Gateway for obtainable condition",
           "examples": [
-            "situation: Player needs multiple investigation paths | approach: Create hub section with distinct branches, not linear sequence"
+            "situation: Player needs multiple investigation paths | approach: Create hub passage with distinct branches, not linear sequence"
           ]
         },
         {
-          "context": "Writing section briefs for Scene Smith",
+          "context": "Writing passage briefs for Scene Smith",
           "guidance": "Include intent, stakes, choice intents, expected outcomes, and constraints - not prose or final phrasing",
           "examples": [
             "good: Brief: Player confronts foreman about safety (stakes: job vs integrity), choices: escalate to union OR accept bribe | bad: Brief: 'You stand before the foreman's desk, your heart pounding...'"
@@ -78,9 +78,9 @@
       ],
       "procedures": [
         {
-          "goal": "Create quality section brief",
+          "goal": "Create quality passage brief",
           "steps": [
-            "Identify player's goal in this section",
+            "Identify player's goal in this passage",
             "Define what's at stake",
             "Design contrastive choice intents (how should options differ)",
             "Map expected outcomes and how they connect to larger topology",
@@ -127,7 +127,7 @@
           ]
         },
         {
-          "term": "Section Brief",
+          "term": "Passage Brief",
           "meaning": "Blueprint for Scene Smith containing intent, stakes, and constraints without final prose",
           "distinguishing_features": [
             "Answers: what is player trying to achieve?",
@@ -140,7 +140,7 @@
       ],
       "warnings": [
         {
-          "failure_mode": "Writing prose in section briefs",
+          "failure_mode": "Writing prose in passage briefs",
           "consequence": "Overrides Scene Smith's role; creates rigid constraints on voice",
           "prevention": "Describe intent and structure, not final paragraphs"
         },

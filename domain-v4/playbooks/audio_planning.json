@@ -14,7 +14,7 @@
       "priority": 1
     },
     {
-      "condition": "Sections from Scene Weave approved and stable",
+      "condition": "Passages from Scene Weave approved and stable",
       "priority": 1
     },
     {
@@ -31,9 +31,9 @@
     "required_artifacts": [],
     "optional_artifacts": [
       {
-        "type": "section",
-        "alias": "sections",
-        "description": "Approved sections to plan audio for",
+        "type": "passage",
+        "alias": "passages",
+        "description": "Approved passages to plan audio for",
         "state": "approved"
       },
       {
@@ -92,13 +92,13 @@
 
       "steps": {
         "survey_scope": {
-          "action": "Review sections to identify audio opportunities. Consider: atmosphere-setting moments, tension-building scenes, important choices, recurring locations, emotional beats.",
+          "action": "Review passages to identify audio opportunities. Consider: atmosphere-setting moments, tension-building scenes, important choices, recurring locations, emotional beats.",
           "specific_agent": "audio_director",
           "guidance": "Think like a player: where would sound help them feel immersed, remember something, or notice a cue? Plan liberally—we can prioritize later. Look for: atmosphere (set mood), signpost (signal transition or choice), recall (memory anchor), clarify (make things tangible).",
           "inputs": [
             {
-              "name": "sections",
-              "artifact_type": "section"
+              "name": "passages",
+              "artifact_type": "passage"
             }
           ],
           "outputs": [
