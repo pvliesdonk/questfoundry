@@ -145,13 +145,13 @@
           "action": "Create hook cards for ideas that arose during prose writing. This step is MANDATORY - at least one hook or explicit justification required.",
           "depends_on": ["validate_topology_alignment"],
           "specific_agent": "scene_smith",
-          "guidance": "Review your prose and create hooks for ANY of these triggers:\n- Character trait or tell emerged → character_note\n- Environmental detail worth expanding → scene_idea\n- Style/voice question arose → style_note\n- Visual/audio opportunity → media_cue\n- Canon gap noticed → canon_gap (structural - route to story_spark)\n\nIf no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
+          "guidance": "Review your prose and create hooks for ANY of these triggers:\n- Character trait or tell emerged → character_note\n- Environmental detail worth expanding → scene_idea\n- Style/voice question arose → style_note\n- Visual/audio opportunity → media_cue\n- Canon gap noticed → canon_gap (lore issue)\n\nIf no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
           "triggers": [
             "character_note: Character trait or tell emerged",
             "scene_idea: Environmental detail worth expanding",
             "style_note: Voice or register uncertainty",
             "media_cue: Visual or audio enhancement opportunity",
-            "canon_gap: Missing lore discovered (routes to story_spark)"
+            "canon_gap: Missing lore discovered (lore issue)"
           ],
           "outputs": [
             {
