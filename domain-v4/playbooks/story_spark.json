@@ -298,10 +298,10 @@
           ]
         },
         "generate_hooks": {
-          "action": "Create hook cards for narrative elements, scene details, and factual questions that arose during topology design.",
+          "action": "Create hook cards for any ideas that arose during topology design. This step is MANDATORY - at least one hook or explicit justification required.",
           "depends_on": ["write_briefs"],
           "specific_agent": "plotwright",
-          "guidance": "Hooks capture ideas that need resolution but shouldn't block the current work. Mark uncertainty levels and suggested owners.",
+          "guidance": "Review your work and create hooks for ANY of these triggers: (1) canon_gap: Lore referenced but not established, (2) scene_idea: Opportunity for future content, (3) fact_check: Real-world verification needed, (4) style_note: Voice or register uncertainty. If no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
           "outputs": [
             {
               "name": "proposed_hooks",
@@ -315,7 +315,8 @@
         "Every topology passage has a Passage Brief",
         "Briefs specify goal, stakes, choice intents, and constraints",
         "Briefs reference topology_passage_ref matching topology pids",
-        "Generated hooks are tagged with classification and uncertainty"
+        "At least one hook_card created OR explicit justification that no triggers occurred",
+        "All hooks tagged with classification, uncertainty, and suggested_owner"
       ],
 
       "on_success": {
@@ -332,9 +333,9 @@
 
       "steps": {
         "pre_gate_check": {
-          "action": "Run a quick pre-gate review: check for accidental dead ends (Integrity), keystone reachability (Reachability), and meaningful hubs/loops (Nonlinearity).",
+          "action": "Run pre-gate review using analyze_story_graph: check for structural integrity, reachability, and nonlinearity. Block on structural failures.",
           "specific_agent": "gatekeeper",
-          "guidance": "This is a preview, not a full gatecheck. Flag risks but do not block unless critical. The goal is to give Showrunner a risk snapshot.",
+          "guidance": "Use analyze_story_graph to check graph structure. BLOCKING issues (unreachable passages, missing link targets, no start passage) MUST be fixed here - scene_weave CANNOT fix structural problems. Only proceed to scene_weave if analyze_story_graph returns no blocking issues.",
           "inputs": [
             {
               "name": "passage_briefs",
@@ -363,12 +364,14 @@
       },
 
       "completion_criteria": [
-        "Pre-gate note documents any risks",
-        "No critical dead ends or unreachable keystones"
+        "analyze_story_graph returns no blocking issues",
+        "All passages reachable from start",
+        "All link targets exist in topology",
+        "Pre-gate note documents any warnings (non-blocking)"
       ],
 
       "on_success": {
-        "message": "Passage Briefs ready for Scene Weave. Hooks ready for Hook Harvest.",
+        "message": "Topology validated. Passage Briefs ready for Scene Weave. Hooks ready for Hook Harvest.",
         "end_playbook": true,
         "followups": {
           "primary": {
@@ -401,8 +404,8 @@
       },
 
       "on_failure": {
-        "next_phases": ["brief_creation"],
-        "message": "Pre-gate found issues. Return to Brief Creation with Gatekeeper feedback."
+        "next_phases": ["topology_design"],
+        "message": "Structural issues found - must be fixed before scene_weave. Return to Topology Design to fix blocking issues. scene_weave CANNOT fix topology problems."
       }
     }
   },

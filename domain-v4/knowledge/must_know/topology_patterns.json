@@ -59,11 +59,39 @@
           ]
         }
       ],
+      "procedures": [
+        {
+          "goal": "Design topology for N passages (CRITICAL: N passages = at most N unique PIDs. Each target PID costs one from your budget.)",
+          "steps": [
+            "Step 1 - State scope explicitly: 'I have N passages to work with'",
+            "Step 2 - Select pattern that fits N: linear (N=any), hub-with-endings (N≥3), merge (N≥3)",
+            "Step 3 - Sketch passage PIDs: list each PID and its outgoing links",
+            "Step 4 - Count unique PIDs: verify total ≤ N",
+            "Step 5 - Call analyze_story_graph to validate structure before creating briefs",
+            "Step 6 - If validation fails or scope exceeded: simplify pattern OR escalate to Showrunner",
+            "Step 7 - Only create passage_briefs AFTER structure validates"
+          ],
+          "examples": [
+            "3 passages, linear: passage_001 → passage_002 → passage_003 (ending)",
+            "3 passages, hub: passage_001 → [passage_002 (ending A), passage_003 (ending B)]",
+            "WRONG: 3 passages, branching: passage_001 → [passage_002, passage_003, passage_004, passage_005] - exceeds budget"
+          ]
+        }
+      ],
       "heuristics": [
         {
           "context": "Designing rich narrative topology",
           "guidance": "Use all three patterns together: Hub for exploration freedom, Loops for depth and consequence, Gateways for meaningful progression.",
           "reasoning": "Each pattern serves a different purpose; combining them creates layered player experience."
+        },
+        {
+          "context": "Scope budget constraint",
+          "guidance": "N passages means N unique PIDs maximum. Choose patterns that fit your budget.",
+          "reasoning": "Cannot create 7 branches for a 3-passage story. Scope defines the playground size.",
+          "counter_examples": [
+            "3-passage story with 5 branches (2 passages unwritten)",
+            "Creating topology with placeholder passages you can't fill"
+          ]
         },
         {
           "context": "Evaluating if a Hub is meaningful",

@@ -6,7 +6,7 @@
   "summary": "Transform briefs into prose with choices",
   "purpose": "Transform Passage Briefs into full prose Passages with dialogue, sensory detail, and contrastive choices. Voice first, structure assumed stable.",
 
-  "description": "Transforms passage_brief artifacts into passage prose. Scene Smith writes dialogue, sensory detail, and contrastive choices. Style Lead reviews for voice consistency. Gatekeeper validates against quality bars. Does NOT modify topology - structure is assumed stable from story_spark. Outputs passage artifacts in review state ready for canonization.",
+  "description": "Transforms passage_brief artifacts into passage prose. Scene Smith writes dialogue, sensory detail, and contrastive choices. Style Lead reviews for voice consistency. Gatekeeper validates against quality bars. Does NOT modify topology - structure is assumed stable from story_spark. CRITICAL: If structural issues (integrity, reachability, invalid topology) are found, ESCALATE to Showrunner for story_spark rework. scene_weave cannot fix structural problems. Outputs passage artifacts in review state ready for canonization.",
 
   "triggers": [
     {
@@ -142,10 +142,10 @@
           ]
         },
         "generate_scene_hooks": {
-          "action": "Create hook cards for scene-level questions: character traits, environmental tells, props that could matter, style uncertainties.",
+          "action": "Create hook cards for ideas that arose during prose writing. This step is MANDATORY - at least one hook or explicit justification required.",
           "depends_on": ["validate_topology_alignment"],
           "specific_agent": "scene_smith",
-          "guidance": "Scene hooks capture aesthetic possibilities, not structural changes. If you discover a structural problem, escalate to Plotwright via hook rather than fixing it in prose. Structural hooks should trigger story_spark, not scene_weave.",
+          "guidance": "Review your prose and create hooks for ANY of these triggers: (1) character_note: Character trait or tell emerged, (2) scene_idea: Environmental detail worth expanding, (3) style_note: Voice or register uncertainty, (4) media_cue: Visual or audio enhancement opportunity, (5) canon_gap: Missing lore discovered (lore issue). If no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
           "outputs": [
             {
               "name": "scene_hooks",
@@ -160,7 +160,8 @@
         "Choices are contrastive (differ in intent and outcome)",
         "Gates are expressed diegetically",
         "No internal mechanics visible in prose",
-        "All choice targets align with topology links"
+        "All choice targets align with topology links",
+        "At least one hook_card created OR explicit justification that no triggers occurred"
       ],
 
       "on_success": {
@@ -358,7 +359,8 @@
 
       "on_failure": {
         "next_phases": ["prose_drafting"],
-        "message": "Gatecheck blocked. Return to Prose Drafting with Gatekeeper feedback."
+        "escalate": true,
+        "message": "Gatecheck blocked. For non-structural issues (style, presentation), return to Prose Drafting. For STRUCTURAL issues (integrity, reachability, topology), escalate to Showrunner for story_spark rework - scene_weave CANNOT fix structural problems."
       }
     }
   },
