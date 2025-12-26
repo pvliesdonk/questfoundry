@@ -54,6 +54,13 @@
       "description": "What this agent can do (tools, permissions, actions)"
     },
 
+    "small_model_tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Complete tool set for small models (8B and under). If defined and non-empty, this REPLACES the tools derived from capabilities. Can include different tools than capabilities (e.g., unified 'consult' instead of individual consult_* tools). Fallback: if empty or not defined, tools are derived from capabilities."
+    },
+
     "constraints": {
       "type": "array",
       "items": {

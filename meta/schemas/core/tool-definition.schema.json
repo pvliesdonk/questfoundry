@@ -28,6 +28,11 @@
       "description": "Concise one-liner for prompt injection. Use description for full explanation."
     },
 
+    "concise_description": {
+      "type": "string",
+      "description": "Simplified description for small models (8B and under). Drops nuances that small models cannot handle. If not specified, falls back to description. Use this to provide a shorter, more direct explanation suitable for limited context windows."
+    },
+
     "cost_tier": {
       "type": "string",
       "enum": ["low", "medium", "high", "external"],

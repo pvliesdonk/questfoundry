@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from questfoundry.runtime.models.enums import ModelClass
 from questfoundry.runtime.tools.base import BaseTool, CapabilityViolationError, ToolResult
 from questfoundry.runtime.tools.registry import (
     TOOL_IMPLEMENTATIONS,
@@ -326,3 +327,155 @@ class TestToolRegistryInteractiveMode:
 
         for tool in tools:
             assert tool.context.interactive is False
+
+
+class TestSmallModelTools:
+    """Tests for small_model_tools feature (issue #293)."""
+
+    def test_small_model_tools_is_complete_replacement(self):
+        """small_model_tools replaces capability-derived tools entirely for small models."""
+        studio = MagicMock()
+
+        # Define tools
+        delegate = MagicMock()
+        delegate.id = "delegate"
+        delegate.name = "Delegate"
+        delegate.description = "Delegate work"
+        delegate.timeout_ms = 30000
+        delegate.input_schema = None
+        delegate.concise_description = None
+
+        consult = MagicMock()
+        consult.id = "consult"
+        consult.name = "Consult"
+        consult.description = "Unified consult tool"
+        consult.timeout_ms = 30000
+        consult.input_schema = None
+        consult.concise_description = None
+
+        consult_playbook = MagicMock()
+        consult_playbook.id = "consult_playbook"
+        consult_playbook.name = "Consult Playbook"
+        consult_playbook.description = "Get playbook details"
+        consult_playbook.timeout_ms = 30000
+        consult_playbook.input_schema = None
+        consult_playbook.concise_description = None
+
+        consult_schema = MagicMock()
+        consult_schema.id = "consult_schema"
+        consult_schema.name = "Consult Schema"
+        consult_schema.description = "Get schema info"
+        consult_schema.timeout_ms = 30000
+        consult_schema.input_schema = None
+        consult_schema.concise_description = None
+
+        studio.tools = [delegate, consult, consult_playbook, consult_schema]
+
+        # Create agent with capabilities for individual consult tools
+        # BUT small_model_tools specifies unified consult tool
+        agent = MagicMock()
+        agent.id = "test_agent"
+
+        cap1 = MagicMock()
+        cap1.tool_ref = "delegate"
+        cap1.category = "tool"
+        cap1.access_level = None
+
+        cap2 = MagicMock()
+        cap2.tool_ref = "consult_playbook"
+        cap2.category = "tool"
+        cap2.access_level = None
+
+        cap3 = MagicMock()
+        cap3.tool_ref = "consult_schema"
+        cap3.category = "tool"
+        cap3.access_level = None
+
+        agent.capabilities = [cap1, cap2, cap3]
+        agent.small_model_tools = ["delegate", "consult"]  # Different tool!
+
+        registry = ToolRegistry(studio)
+
+        # Large model: should get capability-derived tools
+        tools_large = registry.get_agent_tools(agent, model_class=ModelClass.LARGE)
+        tool_ids_large = {t.id for t in tools_large}
+        assert tool_ids_large == {"delegate", "consult_playbook", "consult_schema"}
+
+        # Small model: should get small_model_tools (complete replacement)
+        tools_small = registry.get_agent_tools(agent, model_class=ModelClass.SMALL)
+        tool_ids_small = {t.id for t in tools_small}
+        assert tool_ids_small == {"delegate", "consult"}
+
+    def test_small_model_tools_fallback_to_capabilities(self):
+        """Without small_model_tools, derive from capabilities for all model sizes."""
+        studio, agent = make_mock_studio_with_tools()
+
+        # Ensure no small_model_tools defined
+        agent.small_model_tools = []
+
+        registry = ToolRegistry(studio)
+
+        # Large model: from capabilities
+        tools_large = registry.get_agent_tools(agent, model_class=ModelClass.LARGE)
+        tool_ids_large = {t.id for t in tools_large}
+        assert "delegate" in tool_ids_large
+        assert "consult_schema" in tool_ids_large
+
+        # Small model: also from capabilities (fallback)
+        tools_small = registry.get_agent_tools(agent, model_class=ModelClass.SMALL)
+        tool_ids_small = {t.id for t in tools_small}
+        assert tool_ids_small == tool_ids_large
+
+    def test_small_model_tools_none_falls_back(self):
+        """When small_model_tools is None, derive from capabilities."""
+        studio, agent = make_mock_studio_with_tools()
+
+        # No small_model_tools attribute
+        agent.small_model_tools = None
+
+        registry = ToolRegistry(studio)
+
+        tools = registry.get_agent_tools(agent, model_class=ModelClass.SMALL)
+        tool_ids = {t.id for t in tools}
+        assert "delegate" in tool_ids
+        assert "consult_schema" in tool_ids
+
+    def test_medium_model_uses_capabilities_not_small_model_tools(self):
+        """Medium model should use capabilities, not small_model_tools."""
+        studio = MagicMock()
+
+        delegate = MagicMock()
+        delegate.id = "delegate"
+        delegate.name = "Delegate"
+        delegate.description = "Delegate work"
+        delegate.timeout_ms = 30000
+        delegate.input_schema = None
+        delegate.concise_description = None
+
+        consult = MagicMock()
+        consult.id = "consult"
+        consult.name = "Consult"
+        consult.description = "Unified consult"
+        consult.timeout_ms = 30000
+        consult.input_schema = None
+        consult.concise_description = None
+
+        studio.tools = [delegate, consult]
+
+        agent = MagicMock()
+        agent.id = "test_agent"
+
+        cap = MagicMock()
+        cap.tool_ref = "delegate"
+        cap.category = "tool"
+        cap.access_level = None
+
+        agent.capabilities = [cap]
+        agent.small_model_tools = ["delegate", "consult"]
+
+        registry = ToolRegistry(studio)
+
+        # Medium model should use capabilities, not small_model_tools
+        tools = registry.get_agent_tools(agent, model_class=ModelClass.MEDIUM)
+        tool_ids = {t.id for t in tools}
+        assert tool_ids == {"delegate"}

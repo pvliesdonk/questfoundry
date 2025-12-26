@@ -15,6 +15,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.models import Tool
+from questfoundry.runtime.models.enums import ModelClass
 from questfoundry.runtime.tools.base import (
     BaseTool,
     CapabilityViolationError,
@@ -220,6 +221,7 @@ class ToolRegistry:
         self,
         agent: Agent,
         session_id: str | None = None,
+        model_class: ModelClass = ModelClass.LARGE,
     ) -> list[BaseTool]:
         """
         Get all tools an agent has capability to use.
@@ -227,13 +229,22 @@ class ToolRegistry:
         Args:
             agent: Agent to get tools for
             session_id: Current session ID
+            model_class: Model size class (small, medium, large). Small models
+                        use the agent's small_model_tools if defined.
 
         Returns:
             List of instantiated tools the agent can use
         """
         tools = []
-        allowed_tool_ids = self._get_agent_tool_refs(agent)
-        allowed_tool_ids.update(self._get_implicit_tool_refs(agent))
+
+        # For small models with small_model_tools defined, use it as complete replacement
+        if model_class == ModelClass.SMALL and agent.small_model_tools:
+            allowed_tool_ids = set(agent.small_model_tools)
+            logger.debug(f"Using small_model_tools for agent '{agent.id}': {allowed_tool_ids}")
+        else:
+            # Normal path: derive from capabilities + implicit tools
+            allowed_tool_ids = self._get_agent_tool_refs(agent)
+            allowed_tool_ids.update(self._get_implicit_tool_refs(agent))
 
         for tool_id in allowed_tool_ids:
             # Skip interactive-only tools when not in interactive mode
@@ -325,6 +336,7 @@ class ToolRegistry:
         self,
         agent: Agent,
         session_id: str | None = None,
+        model_class: ModelClass = ModelClass.LARGE,
     ) -> list[dict[str, Any]]:
         """
         Get LangChain-compatible tool schemas for an agent.
@@ -334,12 +346,15 @@ class ToolRegistry:
         Args:
             agent: Agent to get tools for
             session_id: Current session ID
+            model_class: Model size class for tool filtering
 
         Returns:
             List of tool schemas for LangChain
         """
-        tools = self.get_agent_tools(agent, session_id)
-        return [tool.to_langchain_schema() for tool in tools if tool.check_availability()]
+        tools = self.get_agent_tools(agent, session_id, model_class)
+        return [
+            tool.to_langchain_schema(model_class) for tool in tools if tool.check_availability()
+        ]
 
     def list_all_tools(self) -> list[str]:
         """List all tool IDs defined in the studio."""

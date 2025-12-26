@@ -260,6 +260,7 @@ class Agent(BaseModel):
     is_entry_agent: bool = False
 
     capabilities: list[Capability] = Field(default_factory=list)
+    small_model_tools: list[str] = Field(default_factory=list)
     constraints: list[Constraint] = Field(default_factory=list)
     exclusive_stores: list[str] = Field(default_factory=list)
     knowledge_requirements: KnowledgeRequirements | None = None
@@ -288,6 +289,7 @@ class Tool(BaseModel):
     id: str
     name: str
     description: str
+    concise_description: str | None = None  # Simplified description for small models
 
     input_schema: ToolInputSchema | None = None
     output_schema: dict[str, Any] | None = None

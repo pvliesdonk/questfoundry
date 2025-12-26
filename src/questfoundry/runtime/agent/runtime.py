@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.runtime.agent.context import AgentContext, ContextBuilder, ModelClass
+from questfoundry.runtime.agent.context import AgentContext, ContextBuilder
 from questfoundry.runtime.agent.prompt import PromptBuilder, build_prompt
 from questfoundry.runtime.agent.turn_validator import (
     TurnValidationConfig,
@@ -51,6 +51,7 @@ from questfoundry.runtime.context import (
     render_cached_hit_message,
     summarize_messages,
 )
+from questfoundry.runtime.models.enums import ModelClass
 from questfoundry.runtime.observability import EventType
 from questfoundry.runtime.providers import (
     ContextOverflowError,
@@ -561,12 +562,12 @@ class AgentRuntime:
         """Determine model class from model name.
 
         Uses heuristics to classify models:
-        - "small": 8B parameters and under (e.g., qwen3:8b, llama3.2:3b)
-        - "medium": 9B-70B parameters (e.g., qwen3:32b, llama3.1:70b)
-        - "large": 70B+ or cloud models (e.g., gpt-4, claude)
+        - SMALL: 8B parameters and under (e.g., qwen3:8b, llama3.2:3b)
+        - MEDIUM: 9B-70B parameters (e.g., qwen3:32b, llama3.1:70b)
+        - LARGE: 70B+ or cloud models (e.g., gpt-4, claude)
 
         Returns:
-            Model class: "small", "medium", or "large"
+            ModelClass enum value
         """
         import re
 
@@ -577,22 +578,22 @@ class AgentRuntime:
 
         # Small model patterns (8B and under)
         if re.search(r"[:\-_]?8b\b", model):
-            return "small"
+            return ModelClass.SMALL
         if re.search(r"[:\-_]?7b\b", model):
-            return "small"
+            return ModelClass.SMALL
         if re.search(r"[:\-_]?[1-4]b\b", model):
-            return "small"
+            return ModelClass.SMALL
 
         # Medium model patterns (9B-70B)
         if re.search(r"[:\-_]?70b\b", model):
-            return "medium"
+            return ModelClass.MEDIUM
         if re.search(r"[:\-_]?32b\b", model):
-            return "medium"
+            return ModelClass.MEDIUM
         if re.search(r"[:\-_]?(14|22|27)b\b", model):
-            return "medium"
+            return ModelClass.MEDIUM
 
-        # Cloud models and large models default to "large"
-        return "large"
+        # Cloud models and large models default to LARGE
+        return ModelClass.LARGE
 
     def build_context(self, agent: Agent) -> AgentContext:
         """Build context for an agent."""
@@ -612,7 +613,8 @@ class AgentRuntime:
         """
         if not self.tool_registry:
             return []
-        return self.tool_registry.get_langchain_tools(agent, session_id)
+        model_class = self._get_model_class()
+        return self.tool_registry.get_langchain_tools(agent, session_id, model_class)
 
     def build_messages(
         self,

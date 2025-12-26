@@ -9,6 +9,8 @@
 
   "is_entry_agent": true,
 
+  "small_model_tools": ["delegate", "communicate", "terminate_session", "consult"],
+
   "capabilities": [
     {
       "id": "delegate_all",
