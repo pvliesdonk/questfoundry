@@ -2,30 +2,46 @@
   "$schema": "../../meta/schemas/core/playbook.schema.json",
   "id": "story_spark",
   "name": "Story Spark",
-  "version": "1.0.0",
-  "summary": "Design story structure and produce Section Briefs",
-  "purpose": "Design or reshape narrative topology (hubs, loops, gateways, codewords) and produce Section Briefs for Scene Weave. Structure first, prose second.",
+  "version": "2.0.0",
+  "summary": "Design story structure with first-class topology and produce Passage Briefs",
+  "purpose": "Create or update story identity (IFID), design narrative topology (passages, links, hubs, loops, gateways), and produce Passage Briefs for Scene Weave. Topology first, briefs second, prose never.",
 
-  "description": "Produces section_brief artifacts from story requirements. Plotwright designs topology (hubs, loops, gateways) and writes briefs specifying goal, stakes, and choice intents for each section. Gatekeeper runs preview validation for integrity and reachability. Does NOT produce prose - outputs ready section_briefs for scene_weave. Raises hooks for canon gaps requiring lore_deepening.",
+  "description": "Produces story, topology, and passage_brief artifacts from story requirements. Plotwright designs topology (passages with roles, links with optional gates) and writes briefs specifying goal, stakes, and choice intents for each passage. Gatekeeper validates topology integrity (reachability, single start, valid links). Does NOT produce prose - outputs ready passage_briefs for scene_weave. Raises hooks for canon gaps requiring lore_deepening.",
 
   "triggers": [
     {
-      "condition": "New chapter, act, subplot, or restructure request",
+      "condition": "New story project initialization",
       "priority": 1
     },
     {
-      "condition": "Fixes needed for reachability or nonlinearity issues",
+      "condition": "New chapter, act, subplot, or restructure request",
       "priority": 2
     },
     {
-      "condition": "Hook-led expansion suggesting new hub or gateway",
+      "condition": "Fixes needed for reachability or topology issues",
       "priority": 3
+    },
+    {
+      "condition": "Hook-led expansion suggesting new passages or links",
+      "priority": 4
     }
   ],
 
   "inputs": {
     "required_artifacts": [],
     "optional_artifacts": [
+      {
+        "type": "story",
+        "alias": "existing_story",
+        "description": "Existing story manifest if updating",
+        "state": "any"
+      },
+      {
+        "type": "topology",
+        "alias": "existing_topology",
+        "description": "Existing topology if restructuring",
+        "state": "any"
+      },
       {
         "type": "hook_card",
         "alias": "structure_hooks",
@@ -35,7 +51,6 @@
     ],
     "context_requirements": [
       "Current Cold snapshot (canon, codex, style guardrails)",
-      "Prior topology notes from workspace",
       "Known QA findings (Integrity/Reachability/Nonlinearity)"
     ]
   },
@@ -43,9 +58,21 @@
   "outputs": {
     "required_artifacts": [
       {
-        "type": "section_brief",
+        "type": "story",
+        "alias": "story",
+        "description": "Story manifest with IFID, name, and project metadata",
+        "state": "active"
+      },
+      {
+        "type": "topology",
+        "alias": "topology",
+        "description": "Graph structure with passages and links",
+        "state": "validated"
+      },
+      {
+        "type": "passage_brief",
         "alias": "briefs",
-        "description": "Section Briefs for each new or affected section (to be promoted to lifecycle state `ready` via lifecycle tools after preview gate passes)",
+        "description": "Passage Briefs for each topology passage (promoted to ready after preview gate)",
         "state": "ready"
       }
     ],
@@ -58,77 +85,215 @@
       }
     ],
     "context_requirements": [
-      "Topology notes in workspace (human prose describing hubs/loops/gateways)",
       "Pre-gate note from Gatekeeper preview"
     ]
   },
 
-  "entry_phase": "topology_design",
+  "entry_phase": "story_setup",
 
   "phases": {
-    "topology_design": {
-      "name": "Topology Design",
-      "purpose": "Map the structure: parts/chapters, hubs (fan-out), loops (return-with-difference), gateways (state-gated)",
+    "story_setup": {
+      "name": "Story Setup",
+      "purpose": "Create or update the story manifest with IFID and core metadata",
 
       "steps": {
-        "sketch_structure": {
-          "action": "Map parts/chapters and designate hubs, loops, and gateways. For each gateway, write a diegetic condition the Player-Narrator can enforce.",
+        "create_or_update_story": {
+          "action": "Create a new story artifact with UUID v4 IFID, or load existing story for updates. Set name, logline, theme, genre, tone, and target format.",
           "specific_agent": "plotwright",
-          "guidance": "Think in terms of player navigation: where do choices fan out (hub), where do players return changed (loop), where is progress gated (gateway). Never use schema names or flag IDs—write conditions in-world ('foreman's token', 'maintenance hex-key').",
+          "guidance": "If this is a new story, generate a fresh IFID (UUID v4). For existing stories, preserve the IFID and increment current_pass. The IFID is the story's permanent identity across all artifacts.",
           "outputs": [
             {
-              "name": "topology_notes",
-              "description": "Human-readable topology delta with rationale"
-            }
-          ]
-        },
-        "feasibility_check": {
-          "action": "Review topology for canon collisions and flag where Lore Deepening will be needed.",
-          "depends_on": ["sketch_structure"],
-          "agent_archetype": "curator",
-          "guidance": "Identify any canon constraints that affect the proposed structure. Do not block—note concerns and suggest where deepening is needed.",
-          "inputs": [
-            {
-              "name": "topology_notes",
-              "from_step": "sketch_structure"
+              "name": "story",
+              "artifact_type": "story",
+              "description": "Story manifest with IFID"
             }
           ]
         }
       },
 
       "completion_criteria": [
-        "Topology notes document all new hubs, loops, and gateways",
-        "Each gateway has a diegetic condition in human terms",
+        "Story artifact exists with valid IFID",
+        "Story has name, logline, and active_phase set to 'structure'"
+      ],
+
+      "on_success": {
+        "next_phases": ["topology_design"]
+      }
+    },
+
+    "topology_design": {
+      "name": "Topology Design",
+      "purpose": "Create the graph structure: passages (nodes) with roles and links (edges) with optional gates",
+      "depends_on": ["story_setup"],
+
+      "steps": {
+        "design_passages": {
+          "action": "Define passages with pid, name, tags, and topology_role (hub, loop, gateway, linear). Mark exactly one passage as is_start and identify ending passages.",
+          "specific_agent": "plotwright",
+          "guidance": "Think in terms of player navigation: where do choices fan out (hub), where do players return changed (loop), where is progress gated (gateway). Passages are graph nodes - structure only, no prose yet.",
+          "inputs": [
+            {
+              "name": "story",
+              "from_step": "create_or_update_story",
+              "from_phase": "story_setup"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "passages_draft",
+              "description": "List of passages with pids and roles"
+            }
+          ]
+        },
+        "design_links": {
+          "action": "Define links between passages. For gated links, write diegetic gate conditions the Player-Narrator can enforce.",
+          "depends_on": ["design_passages"],
+          "specific_agent": "plotwright",
+          "guidance": "Links are directed edges from one passage to another. Gate conditions must be in-world terms ('foreman's token', 'maintenance hex-key'), never schema names or flag IDs.",
+          "inputs": [
+            {
+              "name": "passages_draft",
+              "from_step": "design_passages"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "links_draft",
+              "description": "List of links with from/to pids and optional gates"
+            }
+          ]
+        },
+        "create_topology": {
+          "action": "Assemble passages and links into the topology artifact, referencing the story's IFID.",
+          "depends_on": ["design_links"],
+          "specific_agent": "plotwright",
+          "guidance": "The topology artifact is the authoritative graph structure. All passage_briefs and passages will reference this topology via topology_passage_ref.",
+          "inputs": [
+            {
+              "name": "story",
+              "from_step": "create_or_update_story",
+              "from_phase": "story_setup"
+            },
+            {
+              "name": "passages_draft",
+              "from_step": "design_passages"
+            },
+            {
+              "name": "links_draft",
+              "from_step": "design_links"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "topology",
+              "artifact_type": "topology",
+              "description": "Complete graph structure"
+            }
+          ]
+        },
+        "feasibility_check": {
+          "action": "Review topology for canon collisions and flag where Lore Deepening will be needed.",
+          "depends_on": ["create_topology"],
+          "agent_archetype": "curator",
+          "guidance": "Identify any canon constraints that affect the proposed structure. Do not block - note concerns and suggest where deepening is needed.",
+          "inputs": [
+            {
+              "name": "topology",
+              "from_step": "create_topology"
+            }
+          ]
+        }
+      },
+
+      "completion_criteria": [
+        "Topology artifact exists with ifid matching story",
+        "Exactly one passage marked is_start",
+        "All passages have pid, name, and topology_role",
+        "All links reference valid passage pids",
         "Canon feasibility concerns are documented"
       ],
 
       "on_success": {
-        "next_phases": ["brief_creation"]
+        "next_phases": ["topology_validation"]
       }
     },
 
-    "brief_creation": {
-      "name": "Brief Creation",
-      "purpose": "Create Section Briefs that Scene Smith can draft from without ambiguity",
+    "topology_validation": {
+      "name": "Topology Validation",
+      "purpose": "Validate graph structure before creating briefs",
       "depends_on": ["topology_design"],
 
       "steps": {
-        "write_briefs": {
-          "action": "For each new or affected section, create a Section Brief with goal, key beats, choice intents, and constraints.",
-          "specific_agent": "plotwright",
-          "guidance": "A good brief answers: What is the player trying to achieve? What are the stakes? What choices should feel meaningfully different? What outcomes connect to the larger topology? Leave voice/register decisions to Style Lead.",
+        "validate_structure": {
+          "action": "Validate topology: single start, all passages reachable from start, all link targets exist, at least one ending.",
+          "specific_agent": "gatekeeper",
+          "guidance": "This is structural validation only. Check graph properties without considering prose or narrative quality.",
           "inputs": [
             {
-              "name": "topology_notes",
-              "from_step": "sketch_structure",
+              "name": "topology",
+              "from_step": "create_topology",
               "from_phase": "topology_design"
             }
           ],
           "outputs": [
             {
-              "name": "section_briefs",
-              "artifact_type": "section_brief",
-              "description": "Section Briefs ready for Scene Weave"
+              "name": "validation_result",
+              "description": "Pass/fail with any structural issues found"
+            }
+          ]
+        }
+      },
+
+      "quality_checkpoint": {
+        "criteria": ["integrity", "reachability"],
+        "validator_archetype": "validator",
+        "pass_threshold": "all"
+      },
+
+      "completion_criteria": [
+        "Exactly one start passage",
+        "All passages reachable from start",
+        "All link targets reference existing passages",
+        "At least one ending passage exists"
+      ],
+
+      "on_success": {
+        "next_phases": ["brief_creation"]
+      },
+
+      "on_failure": {
+        "next_phases": ["topology_design"],
+        "message": "Topology validation failed. Return to Topology Design to fix structural issues."
+      }
+    },
+
+    "brief_creation": {
+      "name": "Brief Creation",
+      "purpose": "Create Passage Briefs that Scene Smith can draft from without ambiguity",
+      "depends_on": ["topology_validation"],
+
+      "steps": {
+        "write_briefs": {
+          "action": "For each topology passage, create a Passage Brief with goal, key beats, choice intents, and constraints. Reference topology_passage_ref to the passage pid.",
+          "specific_agent": "plotwright",
+          "guidance": "A good brief answers: What is the player trying to achieve? What are the stakes? What choices should feel meaningfully different? What outcomes connect to the larger topology? Leave voice/register decisions to Style Lead.",
+          "inputs": [
+            {
+              "name": "story",
+              "from_step": "create_or_update_story",
+              "from_phase": "story_setup"
+            },
+            {
+              "name": "topology",
+              "from_step": "create_topology",
+              "from_phase": "topology_design"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "passage_briefs",
+              "artifact_type": "passage_brief",
+              "description": "Passage Briefs ready for Scene Weave"
             }
           ]
         },
@@ -147,8 +312,9 @@
       },
 
       "completion_criteria": [
-        "Every new section has a Section Brief",
+        "Every topology passage has a Passage Brief",
         "Briefs specify goal, stakes, choice intents, and constraints",
+        "Briefs reference topology_passage_ref matching topology pids",
         "Generated hooks are tagged with classification and uncertainty"
       ],
 
@@ -171,13 +337,13 @@
           "guidance": "This is a preview, not a full gatecheck. Flag risks but do not block unless critical. The goal is to give Showrunner a risk snapshot.",
           "inputs": [
             {
-              "name": "section_briefs",
+              "name": "passage_briefs",
               "from_step": "write_briefs",
               "from_phase": "brief_creation"
             },
             {
-              "name": "topology_notes",
-              "from_step": "sketch_structure",
+              "name": "topology",
+              "from_step": "create_topology",
               "from_phase": "topology_design"
             }
           ],
@@ -202,16 +368,16 @@
       ],
 
       "on_success": {
-        "message": "Section Briefs ready for Scene Weave. Hooks ready for Hook Harvest.",
+        "message": "Passage Briefs ready for Scene Weave. Hooks ready for Hook Harvest.",
         "end_playbook": true,
         "followups": {
           "primary": {
             "playbook": "scene_weave",
             "artifact_condition": {
-              "artifact_type": "section_brief",
+              "artifact_type": "passage_brief",
               "state": "ready"
             },
-            "description": "Write prose from the completed section briefs"
+            "description": "Write prose from the completed passage briefs"
           },
           "parallel": [
             {
@@ -243,5 +409,12 @@
 
   "quality_criteria": ["integrity", "reachability", "nonlinearity", "gateways"],
 
-  "max_rework_cycles": 3
+  "max_rework_cycles": 3,
+
+  "permissions": {
+    "may_create": ["story", "topology", "passage_brief", "hook_card"],
+    "may_modify": ["story", "topology"],
+    "must_not_modify": ["passage", "canon_pack", "codex_entry"],
+    "escalation_path": "If blocked by canon or style constraints, raise hook for lore_deepening or style_tune_up"
+  }
 }
