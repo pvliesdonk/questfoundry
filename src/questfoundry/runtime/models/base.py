@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.runtime.models.enums import (
     AssetCategory,
@@ -109,6 +109,61 @@ class LifecycleState(BaseModel):
     terminal: bool = False
 
 
+class RequiresArtifact(BaseModel):
+    """Precondition requiring an artifact of a specific type to exist.
+
+    The optional ``match_field`` can be used to further restrict which artifacts
+    satisfy this precondition. When set, the required artifact must have the
+    same value for this field as the source artifact (e.g., both artifacts
+    sharing the same ``ifid`` identifier).
+    """
+
+    artifact_type: str
+    match_field: str | None = None
+
+
+class FieldReferences(BaseModel):
+    """Precondition validating a field value exists in another artifact's array.
+
+    Validates that the value of ``source_field`` exists somewhere in the array
+    at ``target_path`` within an artifact of type ``target_artifact_type``.
+
+    Example: If source_field='target' has value 'PID-001', and target_path is
+    'passages[].pid', this checks that 'PID-001' appears in the passages array
+    of the target artifact.
+
+    The optional ``match_field`` filters which target artifacts to check
+    (e.g., only check topology artifacts with matching ifid).
+    """
+
+    source_field: str
+    target_artifact_type: str
+    target_path: str
+    match_field: str | None = None
+
+
+class TransitionPrecondition(BaseModel):
+    """Precondition that must be satisfied before a lifecycle transition.
+
+    Exactly one of ``requires_artifact`` or ``field_references`` must be set.
+    This matches the oneOf constraint in the JSON schema.
+    """
+
+    requires_artifact: RequiresArtifact | None = None
+    field_references: FieldReferences | None = None
+
+    @model_validator(mode="after")
+    def check_exactly_one(self) -> TransitionPrecondition:
+        """Enforce that exactly one precondition type is specified."""
+        has_requires = self.requires_artifact is not None
+        has_references = self.field_references is not None
+        if has_requires == has_references:  # Both True or both False
+            raise ValueError(
+                "Exactly one of 'requires_artifact' or 'field_references' must be provided"
+            )
+        return self
+
+
 class LifecycleTransition(BaseModel):
     """Lifecycle state transition."""
 
@@ -116,6 +171,9 @@ class LifecycleTransition(BaseModel):
     to_state: str = Field(alias="to")
     allowed_agents: list[str] = Field(default_factory=list)
     requires_validation: list[str] = Field(default_factory=list)
+    preconditions: list[TransitionPrecondition] = Field(default_factory=list)
+    target_store: str | None = None
+    description: str | None = None
 
     model_config = {"populate_by_name": True}
 

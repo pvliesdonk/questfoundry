@@ -18,7 +18,10 @@ from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import TOOL_IMPLEMENTATIONS, register_tool
 
 if TYPE_CHECKING:
-    from questfoundry.runtime.storage.lifecycle import LifecycleManager
+    from questfoundry.runtime.storage.lifecycle import (
+        LifecycleManager,
+        TransitionPrecondition,
+    )
     from questfoundry.runtime.storage.store_manager import StoreManager
 
 logger = logging.getLogger(__name__)
@@ -115,6 +118,29 @@ class RequestLifecycleTransitionTool(BaseTool):
                     },
                     error=f"Transition not allowed: {reason}",
                 )
+
+            # Check preconditions (artifact dependencies)
+            preconditions = lifecycle_manager.get_preconditions(
+                artifact_type, current_state, target_state
+            )
+
+            if preconditions:
+                precondition_result = self._validate_preconditions(
+                    artifact=artifact,
+                    preconditions=preconditions,
+                )
+
+                if not precondition_result["satisfied"]:
+                    return ToolResult(
+                        success=False,
+                        data={
+                            "artifact_id": artifact_id,
+                            "current_state": current_state,
+                            "target_state": target_state,
+                            "precondition_failures": precondition_result["failures"],
+                        },
+                        error=f"Preconditions not met: {precondition_result['summary']}",
+                    )
 
             # Check for required validations
             required_validations = lifecycle_manager.get_required_validations(
@@ -233,6 +259,244 @@ class RequestLifecycleTransitionTool(BaseTool):
     def _get_store_manager(self) -> StoreManager | None:
         """Get store manager from context."""
         return getattr(self._context, "store_manager", None)
+
+    def _validate_preconditions(
+        self,
+        artifact: dict[str, Any],
+        preconditions: list[TransitionPrecondition],
+    ) -> dict[str, Any]:
+        """
+        Validate transition preconditions against current project state.
+
+        Args:
+            artifact: The artifact being transitioned
+            preconditions: List of TransitionPrecondition objects
+
+        Returns:
+            Dict with:
+                satisfied: bool - True if all preconditions are met
+                failures: list - Details of failed preconditions
+                summary: str - Human-readable summary of failures
+        """
+        if not self._context.project:
+            return {
+                "satisfied": False,
+                "failures": [{"type": "no_project", "message": "No project available"}],
+                "summary": "No project available to check preconditions",
+            }
+
+        failures: list[dict[str, Any]] = []
+        project = self._context.project
+
+        for precondition in preconditions:
+            # Handle requires_artifact precondition
+            if precondition.requires_artifact:
+                req = precondition.requires_artifact
+                target_type = req.artifact_type
+                match_field = req.match_field
+
+                # Find artifacts of the required type
+                matching_artifacts = project.list_artifacts(artifact_type=target_type)
+
+                if not matching_artifacts:
+                    failures.append(
+                        {
+                            "type": "requires_artifact",
+                            "artifact_type": target_type,
+                            "message": f"No '{target_type}' artifact exists",
+                            "fix": f"Create a '{target_type}' artifact before this transition",
+                        }
+                    )
+                    continue
+
+                # If match_field specified, check for matching value
+                if match_field:
+                    source_value = artifact.get(match_field)
+                    # Check if source artifact has the match_field
+                    if source_value is None:
+                        failures.append(
+                            {
+                                "type": "requires_artifact",
+                                "artifact_type": target_type,
+                                "match_field": match_field,
+                                "message": (
+                                    f"Source artifact missing '{match_field}' field "
+                                    f"required for matching"
+                                ),
+                                "fix": (f"Set the '{match_field}' field on the source artifact"),
+                            }
+                        )
+                        continue
+
+                    found_match = False
+                    for candidate in matching_artifacts:
+                        if candidate.get(match_field) == source_value:
+                            found_match = True
+                            break
+
+                    if not found_match:
+                        failures.append(
+                            {
+                                "type": "requires_artifact",
+                                "artifact_type": target_type,
+                                "match_field": match_field,
+                                "expected_value": source_value,
+                                "message": (
+                                    f"No '{target_type}' artifact with "
+                                    f"{match_field}='{source_value}'"
+                                ),
+                                "fix": (
+                                    f"Create a '{target_type}' artifact with "
+                                    f"{match_field}='{source_value}'"
+                                ),
+                            }
+                        )
+
+            # Handle field_references precondition
+            if precondition.field_references:
+                ref = precondition.field_references
+                source_field = ref.source_field
+                target_type = ref.target_artifact_type
+                target_path = ref.target_path
+                match_field = ref.match_field
+
+                # Get source value from artifact
+                source_value = artifact.get(source_field)
+                if source_value is None:
+                    failures.append(
+                        {
+                            "type": "field_references",
+                            "source_field": source_field,
+                            "message": f"Source field '{source_field}' is not set",
+                            "fix": f"Set the '{source_field}' field before this transition",
+                        }
+                    )
+                    continue
+
+                # Find target artifact
+                target_artifacts = project.list_artifacts(artifact_type=target_type)
+
+                # Filter by match_field if specified
+                if match_field:
+                    match_value = artifact.get(match_field)
+                    # Check if source artifact has the match_field
+                    if match_value is None:
+                        failures.append(
+                            {
+                                "type": "field_references",
+                                "match_field": match_field,
+                                "message": (
+                                    f"Source artifact missing '{match_field}' field "
+                                    f"required for filtering target artifacts"
+                                ),
+                                "fix": (f"Set the '{match_field}' field on the source artifact"),
+                            }
+                        )
+                        continue
+                    target_artifacts = [
+                        a for a in target_artifacts if a.get(match_field) == match_value
+                    ]
+
+                if not target_artifacts:
+                    failures.append(
+                        {
+                            "type": "field_references",
+                            "target_artifact_type": target_type,
+                            "message": f"No '{target_type}' artifact exists",
+                            "fix": f"Create a '{target_type}' artifact first",
+                        }
+                    )
+                    continue
+
+                # Check if source_value exists in target_path
+                # Parse target_path like "passages[].pid"
+                found_in_any = False
+                for target_artifact in target_artifacts:
+                    if self._check_value_in_path(target_artifact, target_path, source_value):
+                        found_in_any = True
+                        break
+
+                if not found_in_any:
+                    failures.append(
+                        {
+                            "type": "field_references",
+                            "source_field": source_field,
+                            "source_value": source_value,
+                            "target_artifact_type": target_type,
+                            "target_path": target_path,
+                            "message": (
+                                f"Value '{source_value}' from '{source_field}' not found "
+                                f"in {target_type}.{target_path}"
+                            ),
+                            "fix": (
+                                f"Ensure '{source_value}' exists in the "
+                                f"'{target_type}' artifact's {target_path}"
+                            ),
+                        }
+                    )
+
+        if failures:
+            summary_parts = [f["message"] for f in failures]
+            return {
+                "satisfied": False,
+                "failures": failures,
+                "summary": "; ".join(summary_parts),
+            }
+
+        return {
+            "satisfied": True,
+            "failures": [],
+            "summary": "",
+        }
+
+    def _check_value_in_path(
+        self,
+        artifact: dict[str, Any],
+        path: str,
+        value: Any,
+    ) -> bool:
+        """
+        Check if a value exists at a JSONPath-like path in an artifact.
+
+        Supports paths like:
+        - "passages[].pid" - check pid field in each item of passages array
+        - "name" - check top-level field
+
+        Args:
+            artifact: The artifact to search
+            path: JSONPath-like expression
+            value: Value to find
+
+        Returns:
+            True if value found at path
+        """
+        # Parse path like "passages[].pid"
+        if "[]." in path:
+            array_field, item_field = path.split("[].", 1)
+            array_data = artifact.get(array_field, [])
+            if not isinstance(array_data, list):
+                return False
+
+            for item in array_data:
+                if isinstance(item, dict):
+                    # Handle nested path like "pid"
+                    if "." in item_field:
+                        # Recursively check nested path
+                        if self._check_value_in_path(item, item_field, value):
+                            return True
+                    elif item.get(item_field) == value:
+                        return True
+            return False
+
+        # Simple field lookup
+        if "." in path:
+            parts = path.split(".", 1)
+            nested = artifact.get(parts[0])
+            if isinstance(nested, dict):
+                return self._check_value_in_path(nested, parts[1], value)
+            return False
+
+        return bool(artifact.get(path) == value)
 
     def _handle_cold_transition(
         self,

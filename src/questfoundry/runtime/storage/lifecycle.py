@@ -74,6 +74,66 @@ class LifecycleState:
 
 
 @dataclass
+class RequiresArtifactPrecondition:
+    """Precondition requiring an artifact of a specific type to exist."""
+
+    artifact_type: str
+    match_field: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RequiresArtifactPrecondition:
+        """Create from dictionary."""
+        return cls(
+            artifact_type=data["artifact_type"],
+            match_field=data.get("match_field"),
+        )
+
+
+@dataclass
+class FieldReferencesPrecondition:
+    """Precondition validating a field value exists in another artifact."""
+
+    source_field: str
+    target_artifact_type: str
+    target_path: str
+    match_field: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FieldReferencesPrecondition:
+        """Create from dictionary."""
+        return cls(
+            source_field=data["source_field"],
+            target_artifact_type=data["target_artifact_type"],
+            target_path=data["target_path"],
+            match_field=data.get("match_field"),
+        )
+
+
+@dataclass
+class TransitionPrecondition:
+    """Precondition that must be satisfied before a lifecycle transition."""
+
+    requires_artifact: RequiresArtifactPrecondition | None = None
+    field_references: FieldReferencesPrecondition | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TransitionPrecondition:
+        """Create from dictionary."""
+        requires_artifact = None
+        field_references = None
+
+        if "requires_artifact" in data:
+            requires_artifact = RequiresArtifactPrecondition.from_dict(data["requires_artifact"])
+        if "field_references" in data:
+            field_references = FieldReferencesPrecondition.from_dict(data["field_references"])
+
+        return cls(
+            requires_artifact=requires_artifact,
+            field_references=field_references,
+        )
+
+
+@dataclass
 class LifecycleTransition:
     """A transition between lifecycle states."""
 
@@ -81,16 +141,26 @@ class LifecycleTransition:
     to_state: str
     allowed_agents: list[str] = field(default_factory=list)
     requires_validation: list[str] = field(default_factory=list)
+    preconditions: list[TransitionPrecondition] = field(default_factory=list)
     target_store: str | None = None  # Store migration on transition
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> LifecycleTransition:
         """Create from dictionary."""
+        preconditions = []
+        for pc_data in data.get("preconditions", []):
+            if isinstance(pc_data, dict):
+                preconditions.append(TransitionPrecondition.from_dict(pc_data))
+            else:
+                # Already a TransitionPrecondition object
+                preconditions.append(pc_data)
+
         return cls(
             from_state=data["from"],
             to_state=data["to"],
             allowed_agents=data.get("allowed_agents", []),
             requires_validation=data.get("requires_validation", []),
+            preconditions=preconditions,
             target_store=data.get("target_store"),
         )
 
@@ -409,6 +479,30 @@ class LifecycleManager:
             return []
 
         return transition.requires_validation
+
+    def get_preconditions(
+        self, artifact_type_id: str, from_state: str, to_state: str
+    ) -> list[TransitionPrecondition]:
+        """
+        Get preconditions for a transition.
+
+        Args:
+            artifact_type_id: Artifact type
+            from_state: Current state
+            to_state: Target state
+
+        Returns:
+            List of preconditions that must be satisfied
+        """
+        lifecycle = self._lifecycles.get(artifact_type_id)
+        if lifecycle is None:
+            return []
+
+        transition = lifecycle.get_transition(from_state, to_state)
+        if transition is None:
+            return []
+
+        return transition.preconditions
 
     @classmethod
     def from_artifact_types(cls, artifact_types: list[Any]) -> LifecycleManager:

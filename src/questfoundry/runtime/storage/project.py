@@ -572,6 +572,25 @@ class Project:
 
         return results
 
+    def list_artifacts(
+        self,
+        artifact_type: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """
+        List artifacts, optionally filtered by type.
+
+        This is a convenience method that wraps query_artifacts for simpler use cases.
+
+        Args:
+            artifact_type: Filter by artifact type (e.g., "topology")
+            limit: Maximum results (default 100)
+
+        Returns:
+            List of matching artifacts
+        """
+        return self.query_artifacts(artifact_type=artifact_type, limit=limit)
+
     def get_children_by_relationship(
         self,
         parent_artifact: dict[str, Any],

@@ -143,6 +143,11 @@
                 "items": { "type": "string" },
                 "description": "IDs of quality criteria that must pass for this transition"
               },
+              "preconditions": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/transition_precondition" },
+                "description": "Artifact dependency preconditions that must be satisfied before this transition. Runtime validates these and blocks transition with actionable error if unmet."
+              },
               "target_store": {
                 "$ref": "_definitions.schema.json#/$defs/store_ref",
                 "description": "Store to migrate artifact to on this transition. Generalizes cold migration - any transition can trigger store migration. Runtime updates both _lifecycle_state and _store atomically."
@@ -226,6 +231,67 @@
         }
       },
       "additionalProperties": false
+    },
+
+    "transition_precondition": {
+      "type": "object",
+      "description": "Precondition that must be satisfied before a lifecycle transition. Used to enforce artifact dependencies at transition time rather than save time, allowing flexible creation order.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["requires_artifact"],
+          "properties": {
+            "requires_artifact": {
+              "type": "object",
+              "required": ["artifact_type"],
+              "properties": {
+                "artifact_type": {
+                  "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+                  "description": "Type of artifact that must exist"
+                },
+                "match_field": {
+                  "type": "string",
+                  "description": "Field in both artifacts that must match (e.g., 'ifid'). If omitted, just checks existence."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Requires an artifact of specified type to exist, optionally with matching field value"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["field_references"],
+          "properties": {
+            "field_references": {
+              "type": "object",
+              "required": ["source_field", "target_artifact_type", "target_path"],
+              "properties": {
+                "source_field": {
+                  "type": "string",
+                  "description": "Field in this artifact containing the reference value"
+                },
+                "target_artifact_type": {
+                  "$ref": "_definitions.schema.json#/$defs/artifact_type_ref",
+                  "description": "Type of artifact to check"
+                },
+                "target_path": {
+                  "type": "string",
+                  "description": "JSONPath-like expression to array of valid values (e.g., 'passages[].pid')"
+                },
+                "match_field": {
+                  "type": "string",
+                  "description": "Field to match when finding the target artifact (e.g., 'ifid')"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Validates that source_field value exists in target artifact's array"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }
