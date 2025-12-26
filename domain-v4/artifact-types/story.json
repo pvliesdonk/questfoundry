@@ -1,0 +1,111 @@
+{
+  "$schema": "../../meta/schemas/core/artifact-type.schema.json",
+  "id": "story",
+  "name": "Story",
+  "summary": "Root manifest for a story project",
+  "description": "The Story artifact is the root of truth for a complete interactive fiction project. It holds the IFID (Interactive Fiction Identifier - a UUID v4), global metadata, and configuration. All other story-related artifacts reference the Story via its ifid. Compatible with Twine tw-storydata format for export.",
+  "category": "manifest",
+
+  "fields": [
+    {
+      "name": "ifid",
+      "type": "string",
+      "description": "Interactive Fiction Identifier (UUID v4, uppercase). Unique across all IF works. Format: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+      "required": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "description": "Story title (displayed to players and in exports)",
+      "required": true
+    },
+    {
+      "name": "start",
+      "type": "string",
+      "description": "PID of the starting passage (must match a passage in the topology)"
+    },
+    {
+      "name": "format",
+      "type": "string",
+      "description": "Target export format",
+      "enum": ["twee", "ink", "custom"],
+      "default": "twee"
+    },
+    {
+      "name": "logline",
+      "type": "text",
+      "description": "One-sentence hook that captures the story's premise"
+    },
+    {
+      "name": "theme",
+      "type": "string",
+      "description": "Central theme or message (e.g., 'redemption', 'consequences of power')"
+    },
+    {
+      "name": "genre",
+      "type": "string",
+      "description": "Primary genre (e.g., 'mystery', 'fantasy', 'horror')"
+    },
+    {
+      "name": "tone",
+      "type": "string",
+      "description": "Overall tone (e.g., 'dark', 'whimsical', 'gritty', 'hopeful')"
+    },
+    {
+      "name": "current_pass",
+      "type": "integer",
+      "description": "Incremented each time story_spark runs a structure pass",
+      "default": 1
+    },
+    {
+      "name": "active_phase",
+      "type": "string",
+      "description": "Current development phase",
+      "enum": ["structure", "prose", "lore", "media", "export"]
+    },
+    {
+      "name": "tags",
+      "type": "object",
+      "description": "Tag definitions with colors for visual editors (Twine-compatible). Keys are tag names, values are color codes."
+    },
+    {
+      "name": "creator",
+      "type": "string",
+      "description": "Author or studio name"
+    },
+    {
+      "name": "creator_version",
+      "type": "string",
+      "description": "Version of the authoring tool (QuestFoundry version)"
+    }
+  ],
+
+  "lifecycle": {
+    "states": [
+      {
+        "id": "draft",
+        "name": "Draft",
+        "description": "Story is being planned and structured"
+      },
+      {
+        "id": "active",
+        "name": "Active",
+        "description": "Story is in active development (prose, lore, media)"
+      },
+      {
+        "id": "complete",
+        "name": "Complete",
+        "description": "Story is finished and ready for export",
+        "terminal": true
+      }
+    ],
+    "initial_state": "draft",
+    "transitions": [
+      { "from": "draft", "to": "active" },
+      { "from": "active", "to": "draft" },
+      { "from": "active", "to": "complete" }
+    ]
+  },
+
+  "default_store": "workspace"
+}
