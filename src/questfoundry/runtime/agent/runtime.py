@@ -568,19 +568,28 @@ class AgentRuntime:
         Returns:
             Model class: "small", "medium", or "large"
         """
+        import re
+
         model = self._model.lower()
 
+        # Use regex with word boundaries to avoid false positives
+        # e.g., "mixtral:18b" should not match "8b"
+
         # Small model patterns (8B and under)
-        small_patterns = ["1b", "3b", "4b", "7b", "8b", ":1b", ":3b", ":4b", ":7b", ":8b"]
-        for pattern in small_patterns:
-            if pattern in model:
-                return "small"
+        if re.search(r"[:\-_]?8b\b", model):
+            return "small"
+        if re.search(r"[:\-_]?7b\b", model):
+            return "small"
+        if re.search(r"[:\-_]?[1-4]b\b", model):
+            return "small"
 
         # Medium model patterns (9B-70B)
-        medium_patterns = ["14b", "32b", "70b", ":14b", ":32b", ":70b"]
-        for pattern in medium_patterns:
-            if pattern in model:
-                return "medium"
+        if re.search(r"[:\-_]?70b\b", model):
+            return "medium"
+        if re.search(r"[:\-_]?32b\b", model):
+            return "medium"
+        if re.search(r"[:\-_]?(14|22|27)b\b", model):
+            return "medium"
 
         # Cloud models and large models default to "large"
         return "large"

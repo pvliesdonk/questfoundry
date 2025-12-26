@@ -125,7 +125,7 @@ Models under 8B parameters have distinct limitations:
 | Model Class | Recommended System Prompt Size |
 |-------------|-------------------------------|
 | Small (≤8B) | ≤2,000 tokens                 |
-| Medium (8-70B) | ≤6,000 tokens              |
+| Medium (9B-70B) | ≤6,000 tokens              |
 | Large (70B+) | ≤12,000 tokens              |
 
 Exceeding these budgets leads to:
@@ -195,7 +195,7 @@ Given the U-shaped attention curve, structure prompts strategically:
 
 1. **Critical behavioral constraints** (lines 1-20)
 2. **Role identity and purpose** (lines 21-50)
-3. **Tool descriptions** (injected by LangChain)
+3. **Tool descriptions** (injected by runtime)
 4. **Reference material** (middle - lowest attention)
 5. **Knowledge menu** (for consult pattern)
 6. **Critical reminder** (last 10-20 lines)

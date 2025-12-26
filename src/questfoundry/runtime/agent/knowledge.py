@@ -278,7 +278,7 @@ class KnowledgeContextBuilder:
         Returns None if entry should be excluded.
         """
         if use_concise:
-            concise: str | None = getattr(entry, "concise_summary", None)
+            concise = entry.concise_summary
             if concise is not None:
                 if concise == "":
                     return None  # Exclude from menu
@@ -294,7 +294,7 @@ class KnowledgeContextBuilder:
         Returns None if entry should be excluded or has no content.
         """
         if use_concise:
-            concise: str | None = getattr(entry, "concise_description", None)
+            concise = entry.concise_description
             if concise is not None:
                 if concise == "":
                     return None  # Exclude from consult

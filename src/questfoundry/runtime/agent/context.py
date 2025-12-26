@@ -326,7 +326,7 @@ class ContextBuilder:
         """
         if use_concise:
             # Check for concise_description (small model optimization)
-            concise: str | None = getattr(entry, "concise_description", None)
+            concise = entry.concise_description
             if concise is not None:
                 if concise == "":
                     return None  # Exclude for small models
@@ -357,7 +357,7 @@ class ContextBuilder:
         """
         if use_concise:
             # Check for concise_summary (small model optimization)
-            concise: str | None = getattr(entry, "concise_summary", None)
+            concise = entry.concise_summary
             if concise is not None:
                 if concise == "":
                     return None  # Exclude from menu for small models

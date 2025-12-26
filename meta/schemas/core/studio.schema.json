@@ -274,7 +274,7 @@
             },
             "medium": {
               "$ref": "#/$defs/model_class_definition",
-              "description": "Medium models (8B-70B parameters)"
+              "description": "Medium models (9B-70B parameters)"
             },
             "large": {
               "$ref": "#/$defs/model_class_definition",
