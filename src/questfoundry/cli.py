@@ -2771,6 +2771,285 @@ async def _agent_list_async(domain_path: Path, archetype: str | None) -> None:
 
 
 # =============================================================================
+# Playbook Inspection Commands
+# =============================================================================
+
+playbook_app = typer.Typer(help="Inspect playbook configuration", no_args_is_help=True)
+app.add_typer(playbook_app, name="playbook")
+
+
+@playbook_app.command("show")
+def playbook_show(
+    playbook_id: Annotated[str, typer.Argument(help="Playbook ID (e.g., story_spark)")],
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+    raw: Annotated[
+        bool,
+        typer.Option("--raw", "-r", help="Output raw text (no panels/formatting)"),
+    ] = False,
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", "-j", help="Output as JSON (same as consult_playbook returns)"),
+    ] = False,
+) -> None:
+    """Show playbook as agents see it (same as consult_playbook returns).
+
+    This command displays the playbook details using the same code path
+    as the consult_playbook tool, so you see exactly what agents receive.
+
+    Includes:
+    - Purpose and description
+    - Phases with steps and agent assignments
+    - Inputs/outputs
+    - Completion criteria
+    - Quality checkpoints
+
+    Examples:
+        qf playbook show story_spark
+        qf playbook show story_spark --raw > story_spark.md
+        qf playbook show story_spark --json > story_spark.json
+    """
+    asyncio.run(_playbook_show_async(playbook_id, domain, raw, json_out))
+
+
+async def _playbook_show_async(
+    playbook_id: str,
+    domain_path: Path,
+    raw: bool,
+    json_out: bool,
+) -> None:
+    """Async implementation of playbook show command."""
+    import json
+
+    from questfoundry.runtime.domain import load_studio
+    from questfoundry.runtime.tools.consult_playbook import ConsultPlaybookTool
+
+    # Load domain
+    result = await load_studio(domain_path)
+    if not result.success or not result.studio:
+        console.print("[red]✗ Failed to load domain[/red]")
+        for error in result.errors:
+            console.print(f"  [red]• {error.message}[/red]")
+        raise typer.Exit(1)
+
+    studio = result.studio
+
+    # Find playbook
+    playbook = next((p for p in studio.playbooks if p.id == playbook_id), None)
+    if not playbook:
+        console.print(f"[red]✗ Playbook not found: {playbook_id}[/red]")
+        available = [p.id for p in studio.playbooks]
+        console.print(f"[dim]Available: {', '.join(available)}[/dim]")
+        raise typer.Exit(1)
+
+    # Use the same formatting as consult_playbook tool
+    tool = ConsultPlaybookTool.__new__(ConsultPlaybookTool)
+    formatted = tool._format_playbook(playbook)
+
+    # JSON output
+    if json_out:
+        console.print(json.dumps(formatted, indent=2))
+        return
+
+    # Build display text
+    lines = []
+
+    # Header
+    lines.append(f"# {formatted.get('name', playbook_id)}")
+    lines.append("")
+
+    if formatted.get("purpose"):
+        lines.append(f"**Purpose:** {formatted['purpose']}")
+        lines.append("")
+
+    if formatted.get("description"):
+        lines.append(formatted["description"])
+        lines.append("")
+
+    # Triggers
+    if formatted.get("triggers"):
+        lines.append("## Triggers")
+        for t in formatted["triggers"]:
+            lines.append(f"- {t}")
+        lines.append("")
+
+    # Inputs
+    if formatted.get("inputs"):
+        inputs = formatted["inputs"]
+        lines.append("## Inputs")
+        if inputs.get("required_artifacts"):
+            lines.append("**Required:**")
+            for a in inputs["required_artifacts"]:
+                desc = a.get("description", a.get("type", ""))
+                lines.append(f"- {a.get('type', 'unknown')}: {desc}")
+        if inputs.get("optional_artifacts"):
+            lines.append("**Optional:**")
+            for a in inputs["optional_artifacts"]:
+                desc = a.get("description", a.get("type", ""))
+                lines.append(f"- {a.get('type', 'unknown')}: {desc}")
+        if inputs.get("context_requirements"):
+            lines.append("**Context:**")
+            for c in inputs["context_requirements"]:
+                lines.append(f"- {c}")
+        lines.append("")
+
+    # Outputs
+    if formatted.get("outputs"):
+        outputs = formatted["outputs"]
+        lines.append("## Outputs")
+        if outputs.get("required_artifacts"):
+            lines.append("**Required:**")
+            for a in outputs["required_artifacts"]:
+                desc = a.get("description", a.get("type", ""))
+                lines.append(f"- {a.get('type', 'unknown')}: {desc}")
+        if outputs.get("optional_artifacts"):
+            lines.append("**Optional:**")
+            for a in outputs["optional_artifacts"]:
+                desc = a.get("description", a.get("type", ""))
+                lines.append(f"- {a.get('type', 'unknown')}: {desc}")
+        lines.append("")
+
+    # Entry phase
+    if formatted.get("entry_phase"):
+        lines.append(f"**Entry Phase:** {formatted['entry_phase']}")
+        lines.append("")
+
+    # Phases
+    if formatted.get("phases"):
+        lines.append("## Phases")
+        lines.append("")
+        for phase in formatted["phases"]:
+            lines.append(f"### {phase.get('name', phase.get('id', 'Unknown'))}")
+            if phase.get("purpose"):
+                lines.append(f"*{phase['purpose']}*")
+            lines.append("")
+
+            if phase.get("depends_on"):
+                lines.append(f"**Depends on:** {', '.join(phase['depends_on'])}")
+                lines.append("")
+
+            if phase.get("steps"):
+                lines.append("**Steps:**")
+                for step in phase["steps"]:
+                    agent = step.get("agent", step.get("agent_archetype", "[any]"))
+                    action = step.get("action", step.get("id", ""))
+                    lines.append(f"1. **{agent}**: {action}")
+                    if step.get("guidance"):
+                        lines.append(f"   - Guidance: {step['guidance'][:100]}...")
+                    if step.get("outputs"):
+                        for out in step["outputs"]:
+                            lines.append(
+                                f"   - Output: {out.get('name', '')} ({out.get('artifact_type', 'note')})"
+                            )
+                lines.append("")
+
+            if phase.get("completion_criteria"):
+                lines.append("**Done when:**")
+                for c in phase["completion_criteria"]:
+                    lines.append(f"- {c}")
+                lines.append("")
+
+            if phase.get("quality_checkpoint"):
+                qc = phase["quality_checkpoint"]
+                lines.append(f"**Quality checkpoint:** {', '.join(qc.get('criteria', []))}")
+                lines.append("")
+
+            if phase.get("on_success"):
+                on_success = phase["on_success"]
+                if on_success.get("next_phases"):
+                    lines.append(f"**On success:** → {', '.join(on_success['next_phases'])}")
+                elif on_success.get("end_playbook"):
+                    lines.append("**On success:** End playbook")
+                lines.append("")
+
+    # Quality criteria
+    if formatted.get("quality_criteria"):
+        lines.append("## Quality Criteria")
+        lines.append(", ".join(formatted["quality_criteria"]))
+        lines.append("")
+
+    # Max rework
+    if formatted.get("max_rework_cycles"):
+        lines.append(f"**Max rework cycles:** {formatted['max_rework_cycles']}")
+        lines.append("")
+
+    # Summary (from tool)
+    if formatted.get("summary"):
+        lines.append("---")
+        lines.append("## Agent Summary View")
+        lines.append(formatted["summary"])
+
+    text = "\n".join(lines)
+
+    # Output
+    if raw:
+        console.print(text)
+    else:
+        console.print()
+        console.print(f"[bold]Playbook: {playbook.name or playbook_id}[/bold]")
+        console.print(f"[dim]ID: {playbook_id}[/dim]")
+        console.print()
+        console.print(Panel(text, title="Playbook Details", border_style="magenta"))
+
+        # Stats
+        console.print()
+        console.print("[bold]Summary:[/bold]")
+        console.print(f"  Phases: {len(formatted.get('phases', []))}")
+        total_steps = sum(len(p.get("steps", [])) for p in formatted.get("phases", []))
+        console.print(f"  Total steps: {total_steps}")
+        console.print(f"  Quality criteria: {', '.join(formatted.get('quality_criteria', []))}")
+
+
+@playbook_app.command("list")
+def playbook_list(
+    domain: Annotated[
+        Path,
+        typer.Option("--domain", "-d", help="Path to domain directory"),
+    ] = Path("domain-v4"),
+) -> None:
+    """List all playbooks in the domain."""
+    asyncio.run(_playbook_list_async(domain))
+
+
+async def _playbook_list_async(domain_path: Path) -> None:
+    """Async implementation of playbook list command."""
+    from questfoundry.runtime.domain import load_studio
+
+    result = await load_studio(domain_path)
+    if not result.success or not result.studio:
+        console.print("[red]✗ Failed to load domain[/red]")
+        for error in result.errors:
+            console.print(f"  [red]• {error.message}[/red]")
+        raise typer.Exit(1)
+
+    studio = result.studio
+
+    table = Table(title=f"Playbooks in {studio.name}")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Purpose")
+    table.add_column("Phases")
+    table.add_column("Quality")
+
+    for playbook in sorted(studio.playbooks, key=lambda p: p.id):
+        phase_count = len(playbook.phases) if playbook.phases else 0
+        quality = ", ".join(playbook.quality_criteria) if playbook.quality_criteria else "-"
+        table.add_row(
+            playbook.id,
+            playbook.name or "-",
+            (playbook.purpose or "-")[:50] + "..."
+            if len(playbook.purpose or "") > 50
+            else (playbook.purpose or "-"),
+            str(phase_count),
+            quality[:30] + "..." if len(quality) > 30 else quality,
+        )
+
+    console.print(table)
+
+
+# =============================================================================
 # Export Command (Stub)
 # =============================================================================
 
