@@ -5,9 +5,12 @@ import pytest
 from questfoundry.runtime.models.enums import StoreSemantics
 from questfoundry.runtime.storage.lifecycle import (
     ArtifactLifecycle,
+    FieldReferencesPrecondition,
     LifecycleManager,
     LifecycleState,
     LifecycleTransition,
+    RequiresArtifactPrecondition,
+    TransitionPrecondition,
 )
 from questfoundry.runtime.storage.store_manager import (
     StoreDefinition,
@@ -42,6 +45,14 @@ class MockProject:
             return None
         self.artifacts[artifact_id].update(data)
         return self.artifacts[artifact_id]
+
+    def list_artifacts(self, artifact_type: str | None = None) -> list[dict]:
+        """List artifacts, optionally filtering by type."""
+        results = []
+        for artifact in self.artifacts.values():
+            if artifact_type is None or artifact.get("_type") == artifact_type:
+                results.append(artifact)
+        return results
 
 
 class MockToolDefinition:
@@ -1167,3 +1178,327 @@ class TestDirectGatecheckToColdTransition:
 
         assert result.success is False
         assert "not allowed" in result.error.lower()
+
+
+class TestTransitionPreconditions:
+    """Tests for transition precondition validation."""
+
+    @pytest.fixture
+    def lifecycle_manager_with_preconditions(self):
+        """Create lifecycle manager with preconditions on transitions."""
+        manager = LifecycleManager()
+
+        passage_brief_lifecycle = ArtifactLifecycle(
+            artifact_type_id="passage_brief",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "ready": LifecycleState(id="ready", name="Ready"),
+            },
+            transitions=[
+                LifecycleTransition(
+                    from_state="draft",
+                    to_state="ready",
+                    preconditions=[
+                        TransitionPrecondition(
+                            requires_artifact=RequiresArtifactPrecondition(
+                                artifact_type="topology",
+                                match_field="ifid",
+                            )
+                        ),
+                        TransitionPrecondition(
+                            field_references=FieldReferencesPrecondition(
+                                source_field="target",
+                                target_artifact_type="topology",
+                                target_path="passages[].pid",
+                                match_field="ifid",
+                            )
+                        ),
+                    ],
+                ),
+            ],
+            initial_state="draft",
+        )
+        manager.register_lifecycle(passage_brief_lifecycle)
+        return manager
+
+    @pytest.fixture
+    def precondition_project(self):
+        """Create project with passage_brief and topology artifacts."""
+        project = MockProject()
+        project.artifacts = {
+            "brief_001": {
+                "_id": "brief_001",
+                "_type": "passage_brief",
+                "_lifecycle_state": "draft",
+                "ifid": "story-123",
+                "target": "passage-1",
+                "title": "Test Brief",
+            },
+        }
+        return project
+
+    @pytest.mark.asyncio
+    async def test_precondition_blocks_when_required_artifact_missing(
+        self, precondition_project, lifecycle_manager_with_preconditions
+    ):
+        """Transition blocked when required artifact type doesn't exist."""
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=precondition_project,
+            agent_id="plotwright",
+            lifecycle_manager=lifecycle_manager_with_preconditions,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        # No topology exists - should fail
+        result = await tool.execute(
+            {
+                "artifact_id": "brief_001",
+                "target_state": "ready",
+            }
+        )
+
+        assert result.success is False
+        assert "Preconditions not met" in result.error
+        assert "topology" in result.error.lower()
+        assert result.data.get("precondition_failures")
+        failures = result.data["precondition_failures"]
+        assert any(f["type"] == "requires_artifact" for f in failures)
+
+    @pytest.mark.asyncio
+    async def test_precondition_blocks_when_match_field_differs(
+        self, precondition_project, lifecycle_manager_with_preconditions
+    ):
+        """Transition blocked when artifact exists but match_field doesn't match."""
+        # Add topology with different ifid
+        precondition_project.artifacts["topology_001"] = {
+            "_id": "topology_001",
+            "_type": "topology",
+            "ifid": "different-story",  # Different ifid
+            "passages": [{"pid": "passage-1", "name": "Passage 1"}],
+        }
+
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=precondition_project,
+            agent_id="plotwright",
+            lifecycle_manager=lifecycle_manager_with_preconditions,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "brief_001",
+                "target_state": "ready",
+            }
+        )
+
+        assert result.success is False
+        assert "Preconditions not met" in result.error
+        # Should complain about match_field mismatch
+        failures = result.data["precondition_failures"]
+        assert any(
+            f["type"] == "requires_artifact" and f.get("match_field") == "ifid" for f in failures
+        )
+
+    @pytest.mark.asyncio
+    async def test_precondition_blocks_when_field_reference_missing(
+        self, precondition_project, lifecycle_manager_with_preconditions
+    ):
+        """Transition blocked when field value doesn't exist in target artifact."""
+        # Add topology with matching ifid but missing passage
+        precondition_project.artifacts["topology_001"] = {
+            "_id": "topology_001",
+            "_type": "topology",
+            "ifid": "story-123",  # Matching ifid
+            "passages": [
+                {"pid": "other-passage", "name": "Other Passage"}  # Different pid
+            ],
+        }
+
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=precondition_project,
+            agent_id="plotwright",
+            lifecycle_manager=lifecycle_manager_with_preconditions,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "brief_001",
+                "target_state": "ready",
+            }
+        )
+
+        assert result.success is False
+        assert "Preconditions not met" in result.error
+        failures = result.data["precondition_failures"]
+        assert any(f["type"] == "field_references" for f in failures)
+        # Should mention the missing passage-1
+        assert any("passage-1" in f.get("source_value", "") for f in failures)
+
+    @pytest.mark.asyncio
+    async def test_precondition_succeeds_when_all_met(
+        self, precondition_project, lifecycle_manager_with_preconditions
+    ):
+        """Transition succeeds when all preconditions are satisfied."""
+        # Add topology with matching ifid and passage
+        precondition_project.artifacts["topology_001"] = {
+            "_id": "topology_001",
+            "_type": "topology",
+            "ifid": "story-123",  # Matching ifid
+            "passages": [
+                {"pid": "passage-1", "name": "Passage 1"},  # Matching pid
+                {"pid": "passage-2", "name": "Passage 2"},
+            ],
+        }
+
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=precondition_project,
+            agent_id="plotwright",
+            lifecycle_manager=lifecycle_manager_with_preconditions,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "brief_001",
+                "target_state": "ready",
+            }
+        )
+
+        assert result.success is True
+        assert result.data["transitioned"] is True
+        assert result.data["new_state"] == "ready"
+        # Verify artifact was updated
+        artifact = precondition_project.artifacts["brief_001"]
+        assert artifact["_lifecycle_state"] == "ready"
+
+    @pytest.mark.asyncio
+    async def test_precondition_blocks_when_source_field_missing(
+        self, precondition_project, lifecycle_manager_with_preconditions
+    ):
+        """Transition blocked when source field for field_references is not set."""
+        # Add topology with matching ifid
+        precondition_project.artifacts["topology_001"] = {
+            "_id": "topology_001",
+            "_type": "topology",
+            "ifid": "story-123",
+            "passages": [{"pid": "passage-1", "name": "Passage 1"}],
+        }
+
+        # Remove target field from brief
+        del precondition_project.artifacts["brief_001"]["target"]
+
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=precondition_project,
+            agent_id="plotwright",
+            lifecycle_manager=lifecycle_manager_with_preconditions,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "brief_001",
+                "target_state": "ready",
+            }
+        )
+
+        assert result.success is False
+        assert "Preconditions not met" in result.error
+        failures = result.data["precondition_failures"]
+        assert any(
+            f["type"] == "field_references" and "target" in f.get("source_field", "")
+            for f in failures
+        )
+
+    @pytest.mark.asyncio
+    async def test_precondition_requires_artifact_without_match_field(self):
+        """Test requires_artifact precondition without match_field (just type check)."""
+        manager = LifecycleManager()
+
+        # Simpler precondition - just requires artifact type to exist
+        simple_lifecycle = ArtifactLifecycle(
+            artifact_type_id="brief",
+            states={
+                "draft": LifecycleState(id="draft", name="Draft"),
+                "ready": LifecycleState(id="ready", name="Ready"),
+            },
+            transitions=[
+                LifecycleTransition(
+                    from_state="draft",
+                    to_state="ready",
+                    preconditions=[
+                        TransitionPrecondition(
+                            requires_artifact=RequiresArtifactPrecondition(
+                                artifact_type="story",  # Just needs a story to exist
+                                match_field=None,
+                            )
+                        ),
+                    ],
+                ),
+            ],
+            initial_state="draft",
+        )
+        manager.register_lifecycle(simple_lifecycle)
+
+        project = MockProject()
+        project.artifacts = {
+            "brief_001": {
+                "_id": "brief_001",
+                "_type": "brief",
+                "_lifecycle_state": "draft",
+                "title": "Test Brief",
+            },
+        }
+
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=project,
+            agent_id="plotwright",
+            lifecycle_manager=manager,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        # No story exists - should fail
+        result = await tool.execute({"artifact_id": "brief_001", "target_state": "ready"})
+        assert result.success is False
+        assert "story" in result.error.lower()
+
+        # Add any story - should succeed
+        project.artifacts["story_001"] = {
+            "_id": "story_001",
+            "_type": "story",
+            "name": "Test Story",
+        }
+
+        result = await tool.execute({"artifact_id": "brief_001", "target_state": "ready"})
+        assert result.success is True
+        assert result.data["transitioned"] is True
