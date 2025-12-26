@@ -1,33 +1,38 @@
 {
   "$schema": "../../meta/schemas/core/artifact-type.schema.json",
-  "id": "section",
-  "name": "Section",
-  "summary": "Interactive story section with choices",
-  "description": "A complete unit of narrative prose ending in one or more player-facing choices. Sections are the atomic reading units of the manuscript, written by Scene Smith from Section Briefs. Sections are drafted in workspace (draft/review/approved states), then Gatekeeper promotes approved sections to manuscript store (cold state). In Cold state, sections are player-safe and ready for export.",
+  "id": "passage",
+  "name": "Passage",
+  "summary": "Interactive story passage with choices",
+  "description": "A complete unit of narrative prose ending in one or more player-facing choices. Passages are the atomic reading units of the manuscript, written by Scene Smith from Passage Briefs. Passages are drafted in workspace (draft/review/approved states), then Gatekeeper promotes approved passages to manuscript store (cold state). In Cold state, passages are player-safe and ready for export. Terminology aligned with Twine/Twee for export compatibility.",
   "category": "document",
 
   "fields": [
     {
-      "name": "anchor",
+      "name": "ifid",
       "type": "string",
-      "description": "Unique anchor identifier (e.g., anchor001)",
+      "description": "References the parent Story's IFID"
+    },
+    {
+      "name": "pid",
+      "type": "string",
+      "description": "Passage identifier (unique within the story, e.g., 'intro', 'kitchen-discovery')",
       "required": true
     },
     {
       "name": "title",
       "type": "string",
-      "description": "Human-readable section title",
+      "description": "Human-readable passage title",
       "required": true
     },
     {
       "name": "brief_ref",
       "type": "string",
-      "description": "Reference to the Section Brief this implements (format: SB-NNN)"
+      "description": "Reference to the Passage Brief this implements (format: PB-NNN)"
     },
     {
-      "name": "tu_ref",
+      "name": "topology_passage_ref",
       "type": "string",
-      "description": "Reference to originating TU Brief"
+      "description": "Reference to the topology passage this implements (must match topology.passages[].pid)"
     },
     {
       "name": "prose",
@@ -39,7 +44,7 @@
     {
       "name": "choices",
       "type": "array",
-      "description": "Player-facing choices at the end of the section. Minimum 2, maximum 5.",
+      "description": "Player-facing choices at the end of the passage. Minimum 2, maximum 5.",
       "items": {
         "name": "choice",
         "type": "object",
@@ -51,9 +56,9 @@
             "required": true
           },
           {
-            "name": "target_anchor",
+            "name": "target",
             "type": "string",
-            "description": "Anchor ID this choice leads to",
+            "description": "PID this choice leads to (must match a topology link)",
             "required": true
           },
           {
@@ -89,7 +94,7 @@
       "name": "codex_refs",
       "type": "array",
       "items_type": "string",
-      "description": "List of codex entry IDs referenced in this section"
+      "description": "List of codex entry IDs referenced in this passage"
     },
     {
       "name": "art_placements",
@@ -151,13 +156,19 @@
     {
       "name": "convergence_notes",
       "type": "text",
-      "description": "If this section converges from multiple paths, notes for immediate reflection"
+      "description": "If this passage converges from multiple paths, notes for immediate reflection"
     },
     {
       "name": "content_warnings",
       "type": "array",
       "items_type": "string",
       "description": "Content warning tags if needed"
+    },
+    {
+      "name": "tags",
+      "type": "array",
+      "items_type": "string",
+      "description": "Passage tags for categorization (Twine-compatible)"
     }
   ],
 
@@ -229,8 +240,8 @@
         "enforcement": "llm"
       },
       {
-        "id": "anchor_resolution",
-        "description": "All target anchors must resolve to valid sections",
+        "id": "topology_alignment",
+        "description": "All choice targets must match links defined in the topology for this passage",
         "enforcement": "runtime"
       }
     ]
