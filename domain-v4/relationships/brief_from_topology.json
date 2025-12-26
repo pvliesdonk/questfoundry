@@ -1,0 +1,16 @@
+{
+  "$schema": "../../meta/schemas/core/relationship.schema.json",
+  "id": "brief_from_topology",
+  "name": "Brief from Topology",
+  "description": "Passage briefs are derived from topology passages. Each topology passage should have a corresponding brief for prose planning. When topology structure changes, affected briefs should be flagged for review.",
+  "from_type": "topology",
+  "to_type": "passage_brief",
+  "kind": "derived_from",
+  "link_field": "topology_passage_ref",
+  "link_resolution": "by_field_match",
+  "match_field": "passages[].pid",
+  "impact_policy": {
+    "on_parent_edit": "flag_stale",
+    "on_parent_delete": "orphan"
+  }
+}

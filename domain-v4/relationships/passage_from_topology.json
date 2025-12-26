@@ -1,0 +1,16 @@
+{
+  "$schema": "../../meta/schemas/core/relationship.schema.json",
+  "id": "passage_from_topology",
+  "name": "Passage from Topology",
+  "description": "Passages (prose content) are aligned to topology passages. Each passage must reference a valid topology passage. When topology structure changes, affected passages should be flagged as stale.",
+  "from_type": "topology",
+  "to_type": "passage",
+  "kind": "derived_from",
+  "link_field": "topology_passage_ref",
+  "link_resolution": "by_field_match",
+  "match_field": "passages[].pid",
+  "impact_policy": {
+    "on_parent_edit": "flag_stale",
+    "on_parent_delete": "orphan"
+  }
+}
