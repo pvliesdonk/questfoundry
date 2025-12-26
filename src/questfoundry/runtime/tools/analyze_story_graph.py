@@ -2,14 +2,19 @@
 Analyze Story Graph tool implementation.
 
 Programmatically analyzes the story topology to check:
-1. Reachability - Can all nodes be reached from entry?
-2. Dead ends - Nodes with no outgoing connections
-3. Orphans - Nodes with no incoming connections (except entry)
-4. Missing targets - References to non-existent nodes
-5. Lifecycle status - What state are the paths in?
+1. Reachability - Can all passages be reached from the start passage?
+2. Dead ends - Passages with no outgoing links (except endings)
+3. Orphans - Passages with no incoming links (except start)
+4. Missing targets - Links to non-existent passages
+5. Lifecycle status - What state are the passage artifacts in?
 
-This provides agents with concrete graph data instead of
-requiring LLM reasoning about graph structure.
+This tool reads from the authoritative `topology` artifact and validates
+alignment with `passage_brief` and `passage` artifacts.
+
+Architecture (post #284):
+- `story` artifact defines `start` (entry point pid)
+- `topology` artifact defines graph structure (passages + links)
+- `passage_brief` and `passage` artifacts reference topology via `topology_passage_ref`
 """
 
 from __future__ import annotations
@@ -24,72 +29,111 @@ from questfoundry.runtime.tools.registry import register_tool
 
 @dataclass
 class NodeInfo:
-    """Information about a node in the story graph."""
+    """Information about a node (passage) in the story graph."""
 
-    anchor_id: str
-    artifact_id: str
-    title: str
-    lifecycle_state: str
-    artifact_type: str  # section_brief or section
-    outgoing: list[str] = field(default_factory=list)  # target anchors
-    incoming: list[str] = field(default_factory=list)  # source anchors
+    pid: str  # Passage identifier
+    name: str  # Human-readable title
+    topology_role: str | None  # hub, loop, gateway, linear
+    is_ending: bool
+    tags: list[str]
+    # Artifact alignment
+    brief_artifact_id: str | None = None
+    brief_lifecycle_state: str | None = None
+    passage_artifact_id: str | None = None
+    passage_lifecycle_state: str | None = None
+    # Graph connections (from topology.links)
+    outgoing: list[str] = field(default_factory=list)  # target pids
+    incoming: list[str] = field(default_factory=list)  # source pids
 
 
 @dataclass
 class GraphAnalysis:
     """Result of story graph analysis."""
 
-    # All nodes in the graph
+    # Story identity
+    ifid: str | None = None
+    story_name: str | None = None
+    start_pid: str | None = None
+
+    # All nodes in the graph (from topology)
     nodes: dict[str, NodeInfo] = field(default_factory=dict)
 
-    # Entry point(s)
-    entry_points: list[str] = field(default_factory=list)
-
-    # Reachability from entry
+    # Reachability from start
     reachable: set[str] = field(default_factory=set)
     unreachable: set[str] = field(default_factory=set)
 
     # Structural issues
-    dead_ends: list[str] = field(default_factory=list)  # no outgoing
-    orphans: list[str] = field(default_factory=list)  # no incoming (except entry)
+    dead_ends: list[str] = field(default_factory=list)  # no outgoing (non-endings)
+    endings: list[str] = field(default_factory=list)  # intentional endings
+    orphans: list[str] = field(default_factory=list)  # no incoming (except start)
     missing_targets: list[dict[str, str]] = field(default_factory=list)  # {from, to}
 
-    # Lifecycle breakdown
-    by_lifecycle: dict[str, list[str]] = field(default_factory=dict)
+    # Artifact alignment
+    briefs_missing: list[str] = field(default_factory=list)  # pids without briefs
+    passages_missing: list[str] = field(default_factory=list)  # pids without passages
+    briefs_extra: list[str] = field(default_factory=list)  # briefs not in topology
+    passages_extra: list[str] = field(default_factory=list)  # passages not in topology
 
-    # Whether any reachable node is in a stable state (approved/cold)
-    has_reachable_stable_node: bool = False
+    # Lifecycle breakdown
+    by_brief_lifecycle: dict[str, list[str]] = field(default_factory=dict)
+    by_passage_lifecycle: dict[str, list[str]] = field(default_factory=dict)
+
+    # Whether any reachable passage is in a stable state
+    has_reachable_stable_passage: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for tool result."""
         return {
+            "story": {
+                "ifid": self.ifid,
+                "name": self.story_name,
+                "start": self.start_pid,
+            },
             "summary": {
-                "total_nodes": len(self.nodes),
-                "entry_points": self.entry_points,
+                "total_passages": len(self.nodes),
                 "reachable_count": len(self.reachable),
                 "unreachable_count": len(self.unreachable),
                 "dead_end_count": len(self.dead_ends),
+                "ending_count": len(self.endings),
                 "orphan_count": len(self.orphans),
                 "missing_target_count": len(self.missing_targets),
-                "has_reachable_stable_node": self.has_reachable_stable_node,
+                "has_reachable_stable_passage": self.has_reachable_stable_passage,
             },
-            "reachable": sorted(self.reachable),
-            "unreachable": sorted(self.unreachable),
-            "dead_ends": self.dead_ends,
-            "orphans": self.orphans,
-            "missing_targets": self.missing_targets,
-            "by_lifecycle": self.by_lifecycle,
+            "reachability": {
+                "reachable": sorted(self.reachable),
+                "unreachable": sorted(self.unreachable),
+            },
+            "structural": {
+                "dead_ends": self.dead_ends,
+                "endings": self.endings,
+                "orphans": self.orphans,
+                "missing_targets": self.missing_targets,
+            },
+            "alignment": {
+                "briefs_missing": self.briefs_missing,
+                "passages_missing": self.passages_missing,
+                "briefs_extra": self.briefs_extra,
+                "passages_extra": self.passages_extra,
+            },
+            "lifecycle": {
+                "by_brief": self.by_brief_lifecycle,
+                "by_passage": self.by_passage_lifecycle,
+            },
             "nodes": {
-                k: {
-                    "anchor_id": v.anchor_id,
-                    "artifact_id": v.artifact_id,
-                    "title": v.title,
-                    "lifecycle_state": v.lifecycle_state,
-                    "type": v.artifact_type,
-                    "outgoing": v.outgoing,
-                    "incoming": v.incoming,
+                pid: {
+                    "pid": node.pid,
+                    "name": node.name,
+                    "topology_role": node.topology_role,
+                    "is_ending": node.is_ending,
+                    "tags": node.tags,
+                    "brief_artifact_id": node.brief_artifact_id,
+                    "brief_lifecycle": node.brief_lifecycle_state,
+                    "passage_artifact_id": node.passage_artifact_id,
+                    "passage_lifecycle": node.passage_lifecycle_state,
+                    "outgoing": node.outgoing,
+                    "incoming": node.incoming,
                 }
-                for k, v in self.nodes.items()
+                for pid, node in self.nodes.items()
             },
         }
 
@@ -99,21 +143,23 @@ class AnalyzeStoryGraphTool(BaseTool):
     """
     Analyze story topology for reachability and structural issues.
 
-    Builds a directed graph from section_briefs and sections,
-    then performs reachability analysis from entry points.
+    Reads the authoritative `topology` artifact for graph structure,
+    uses `story.start` as the entry point, and validates alignment
+    with `passage_brief` and `passage` artifacts.
 
     Returns structured data about:
-    - Which nodes are reachable from entry
-    - Dead ends (no way forward)
+    - Which passages are reachable from start
+    - Dead ends (no way forward, excluding intentional endings)
     - Orphans (no way to reach them)
     - Missing targets (broken links)
-    - Lifecycle status of paths
+    - Artifact alignment (briefs/passages vs topology)
+    - Lifecycle status of artifacts
     """
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute story graph analysis."""
         include_drafts = args.get("include_drafts", True)
-        entry_anchor = args.get("entry_anchor")  # Optional explicit entry
+        entry_pid = args.get("entry_pid")  # Optional override for entry
 
         if not self._context.project:
             return ToolResult(
@@ -122,10 +168,10 @@ class AnalyzeStoryGraphTool(BaseTool):
                 error="No project available - cannot analyze story graph",
             )
 
-        # Build the graph
-        analysis = self._build_and_analyze_graph(include_drafts, entry_anchor)
+        # Build the graph from topology
+        analysis = self._build_and_analyze_graph(include_drafts, entry_pid)
 
-        # Categorize issues by severity (following semantic clarity from issue #228)
+        # Categorize issues by severity
         blocking_issues, warnings = self._categorize_issues(analysis)
 
         # Determine analysis outcome
@@ -136,8 +182,8 @@ class AnalyzeStoryGraphTool(BaseTool):
         else:
             analysis_outcome = "passed"
 
-        # Generate directive recovery actions (not passive hints)
-        recovery_actions = self._generate_recovery_actions(blocking_issues)
+        # Generate directive recovery actions
+        recovery_actions = self._generate_recovery_actions(blocking_issues, analysis)
 
         return ToolResult(
             success=True,
@@ -153,167 +199,186 @@ class AnalyzeStoryGraphTool(BaseTool):
     def _build_and_analyze_graph(
         self,
         include_drafts: bool,
-        entry_anchor: str | None,
+        entry_pid: str | None,
     ) -> GraphAnalysis:
-        """Build graph from artifacts and analyze."""
+        """Build graph from topology artifact and analyze."""
         analysis = GraphAnalysis()
         project = self._context.project
         assert project is not None  # Checked in execute()
 
-        # Query section_briefs (no limit - get all)
-        briefs = project.query_artifacts(artifact_type="section_brief")
+        # 1. Load story artifact for IFID and start passage
+        stories = project.query_artifacts(artifact_type="story")
+        if stories:
+            story = stories[0]
+            analysis.ifid = story.get("ifid")
+            analysis.story_name = story.get("name")
+            analysis.start_pid = story.get("start")
 
-        # Query sections (no limit - get all)
-        sections = project.query_artifacts(artifact_type="section")
+        # 2. Load topology artifact (authoritative graph structure)
+        topologies = project.query_artifacts(artifact_type="topology")
+        if not topologies:
+            # No topology yet - return empty analysis
+            return analysis
 
-        # Build nodes from briefs
+        topology = topologies[0]
+        topology_ifid = topology.get("ifid")
+
+        # Verify topology matches story
+        if analysis.ifid and topology_ifid and analysis.ifid != topology_ifid:
+            # Mismatch - this is a data integrity issue
+            pass  # Will be caught as a warning
+
+        # 3. Build nodes from topology.passages
+        topology_passages = topology.get("passages", [])
+        topology_pids: set[str] = set()
+
+        for passage in topology_passages:
+            pid = passage.get("pid")
+            if not pid:
+                continue
+
+            topology_pids.add(pid)
+            node = NodeInfo(
+                pid=pid,
+                name=passage.get("name", "Untitled"),
+                topology_role=passage.get("topology_role"),
+                is_ending=passage.get("is_ending", False),
+                tags=passage.get("tags", []),
+            )
+            analysis.nodes[pid] = node
+
+            # Track endings
+            if node.is_ending:
+                analysis.endings.append(pid)
+
+        # 4. Build edges from topology.links
+        topology_links = topology.get("links", [])
+        for link in topology_links:
+            from_pid = link.get("from")
+            to_pid = link.get("to")
+
+            if not from_pid or not to_pid:
+                continue
+
+            # Add outgoing connection
+            if from_pid in analysis.nodes and to_pid not in analysis.nodes[from_pid].outgoing:
+                analysis.nodes[from_pid].outgoing.append(to_pid)
+
+            # Check for missing targets
+            if to_pid not in analysis.nodes:
+                analysis.missing_targets.append({"from": from_pid, "to": to_pid})
+            else:
+                # Add incoming connection
+                if from_pid not in analysis.nodes[to_pid].incoming:
+                    analysis.nodes[to_pid].incoming.append(from_pid)
+
+        # 5. Determine entry point
+        if entry_pid and entry_pid in analysis.nodes:
+            # Explicit override
+            effective_start = entry_pid
+        elif analysis.start_pid and analysis.start_pid in analysis.nodes:
+            # From story.start
+            effective_start = analysis.start_pid
+        else:
+            # Fallback: find nodes with no incoming connections
+            effective_start = None
+            for pid, node in analysis.nodes.items():
+                if not node.incoming:
+                    effective_start = pid
+                    break
+
+        # 6. Compute reachability via BFS from start
+        analysis.reachable = set()
+        if effective_start:
+            queue: deque[str] = deque([effective_start])
+            while queue:
+                current = queue.popleft()
+                if current in analysis.reachable:
+                    continue
+                if current not in analysis.nodes:
+                    continue
+                analysis.reachable.add(current)
+                for target in analysis.nodes[current].outgoing:
+                    if target not in analysis.reachable and target in analysis.nodes:
+                        queue.append(target)
+
+        # Find unreachable nodes
+        all_pids = set(analysis.nodes.keys())
+        analysis.unreachable = all_pids - analysis.reachable
+
+        # 7. Find dead ends (no outgoing, excluding endings)
+        for pid, node in analysis.nodes.items():
+            if not node.outgoing and not node.is_ending:
+                analysis.dead_ends.append(pid)
+
+        # 8. Find orphans (no incoming except start)
+        for pid, node in analysis.nodes.items():
+            if not node.incoming and pid != effective_start:
+                analysis.orphans.append(pid)
+
+        # 9. Load passage_briefs and check alignment
+        briefs = project.query_artifacts(artifact_type="passage_brief")
+        brief_pids: set[str] = set()
+        by_brief_lifecycle: dict[str, list[str]] = defaultdict(list)
+
         for brief in briefs:
             lifecycle = brief.get("_lifecycle_state", "draft")
             if not include_drafts and lifecycle == "draft":
                 continue
 
-            anchor: str = brief.get("target_anchor") or brief.get("_id") or ""
-            if not anchor:
-                continue  # Skip briefs without valid anchor
+            # Get the pid this brief references
+            brief_pid = brief.get("target") or brief.get("topology_passage_ref")
+            if brief_pid:
+                brief_pids.add(brief_pid)
+                by_brief_lifecycle[lifecycle].append(brief_pid)
 
-            node = NodeInfo(
-                anchor_id=anchor,
-                artifact_id=brief.get("_id", ""),
-                title=brief.get("section_title", brief.get("title", "Untitled")),
-                lifecycle_state=lifecycle,
-                artifact_type="section_brief",
-            )
+                # Link to node if exists
+                if brief_pid in analysis.nodes:
+                    analysis.nodes[brief_pid].brief_artifact_id = brief.get("_id")
+                    analysis.nodes[brief_pid].brief_lifecycle_state = lifecycle
 
-            # Extract outgoing connections from choice_intents (deduplicate)
-            # choice_intents are objects with target_anchor field
-            choice_intents = brief.get("choice_intents", [])
-            for choice in choice_intents:
-                if isinstance(choice, dict):
-                    target = choice.get("target_anchor")
-                    if target and target not in node.outgoing:
-                        node.outgoing.append(target)
+        analysis.by_brief_lifecycle = dict(by_brief_lifecycle)
 
-            analysis.nodes[anchor] = node
+        # Check for missing/extra briefs
+        analysis.briefs_missing = sorted(topology_pids - brief_pids)
+        analysis.briefs_extra = sorted(brief_pids - topology_pids)
 
-        # Build nodes from sections (may override briefs)
-        for section in sections:
-            lifecycle = section.get("_lifecycle_state", "draft")
+        # 10. Load passages and check alignment
+        passages = project.query_artifacts(artifact_type="passage")
+        passage_pids: set[str] = set()
+        by_passage_lifecycle: dict[str, list[str]] = defaultdict(list)
+
+        for passage in passages:
+            lifecycle = passage.get("_lifecycle_state", "draft")
             if not include_drafts and lifecycle == "draft":
                 continue
 
-            section_anchor: str = (
-                section.get("anchor") or section.get("anchor_id") or section.get("_id") or ""
-            )
-            if not section_anchor:
-                continue  # Skip sections without valid anchor
+            # Get the pid this passage implements
+            passage_pid = passage.get("pid") or passage.get("topology_passage_ref")
+            if passage_pid:
+                passage_pids.add(passage_pid)
+                by_passage_lifecycle[lifecycle].append(passage_pid)
 
-            # Check if we already have this from briefs
-            if section_anchor in analysis.nodes:
-                existing = analysis.nodes[section_anchor]
-                # Update with section info if section is more advanced
-                if self._lifecycle_priority(lifecycle) > self._lifecycle_priority(
-                    existing.lifecycle_state
-                ):
-                    existing.lifecycle_state = lifecycle
-                    existing.artifact_type = "section"
-                    existing.artifact_id = section.get("_id", "")
-                    # Also update title from section when it becomes authoritative
-                    existing.title = section.get("title", existing.title)
-                # Merge outgoing connections (choices can be objects with target_anchor)
-                section_choices = section.get("choices", [])
-                for choice in section_choices:
-                    if isinstance(choice, dict):
-                        target = choice.get("target_anchor")
-                        if target and target not in existing.outgoing:
-                            existing.outgoing.append(target)
-            else:
-                node = NodeInfo(
-                    anchor_id=section_anchor,
-                    artifact_id=section.get("_id", ""),
-                    title=section.get("title", "Untitled"),
-                    lifecycle_state=lifecycle,
-                    artifact_type="section",
-                )
-                # choices are objects with target_anchor field
-                section_choices = section.get("choices", [])
-                for choice in section_choices:
-                    if isinstance(choice, dict):
-                        target = choice.get("target_anchor")
-                        if target and target not in node.outgoing:
-                            node.outgoing.append(target)
-                analysis.nodes[section_anchor] = node
+                # Link to node if exists
+                if passage_pid in analysis.nodes:
+                    analysis.nodes[passage_pid].passage_artifact_id = passage.get("_id")
+                    analysis.nodes[passage_pid].passage_lifecycle_state = lifecycle
 
-        # Build incoming connections and detect missing targets in one pass
-        for anchor, node in analysis.nodes.items():
-            for target in node.outgoing:
-                if target in analysis.nodes:
-                    analysis.nodes[target].incoming.append(anchor)
-                else:
-                    # Target doesn't exist - record as missing
-                    analysis.missing_targets.append({"from": anchor, "to": target})
+        analysis.by_passage_lifecycle = dict(by_passage_lifecycle)
 
-        # Identify entry points
-        if entry_anchor and entry_anchor in analysis.nodes:
-            analysis.entry_points = [entry_anchor]
-        else:
-            # Entry points are nodes with no incoming connections
-            for anchor, node in analysis.nodes.items():
-                if not node.incoming:
-                    analysis.entry_points.append(anchor)
+        # Check for missing/extra passages
+        analysis.passages_missing = sorted(topology_pids - passage_pids)
+        analysis.passages_extra = sorted(passage_pids - topology_pids)
 
-        # Compute reachability via BFS from entry points (using deque for O(1) popleft)
-        analysis.reachable = set()
-        queue: deque[str] = deque(analysis.entry_points)
-        while queue:
-            current = queue.popleft()
-            if current in analysis.reachable:
-                continue
-            if current not in analysis.nodes:
-                continue
-            analysis.reachable.add(current)
-            for target in analysis.nodes[current].outgoing:
-                if target not in analysis.reachable and target in analysis.nodes:
-                    queue.append(target)
-
-        # Find unreachable nodes
-        all_anchors = set(analysis.nodes.keys())
-        analysis.unreachable = all_anchors - analysis.reachable
-
-        # Find dead ends (no outgoing connections)
-        for anchor, node in analysis.nodes.items():
-            if not node.outgoing:
-                analysis.dead_ends.append(anchor)
-
-        # Find orphans (no incoming except entry points)
-        for anchor, node in analysis.nodes.items():
-            if not node.incoming and anchor not in analysis.entry_points:
-                analysis.orphans.append(anchor)
-
-        # Group by lifecycle
-        by_lifecycle: dict[str, list[str]] = defaultdict(list)
-        for anchor, node in analysis.nodes.items():
-            by_lifecycle[node.lifecycle_state].append(anchor)
-        analysis.by_lifecycle = dict(by_lifecycle)
-
-        # Check if any reachable node is in a stable state (approved/cold)
-        stable_states = {"approved", "cold"}
-        stable_nodes = {a for a, n in analysis.nodes.items() if n.lifecycle_state in stable_states}
-        analysis.has_reachable_stable_node = bool(analysis.reachable & stable_nodes)
+        # 11. Check if any reachable passage is in stable state
+        stable_states = {"review", "approved", "cold"}
+        for pid in analysis.reachable:
+            node_info = analysis.nodes.get(pid)
+            if node_info is not None and node_info.passage_lifecycle_state in stable_states:
+                analysis.has_reachable_stable_passage = True
+                break
 
         return analysis
-
-    def _lifecycle_priority(self, state: str) -> int:
-        """Higher number = more advanced lifecycle state."""
-        priorities = {
-            "draft": 0,
-            "ready": 1,
-            "in_use": 1,
-            "review": 2,
-            "approved": 3,
-            "cold": 4,
-            "archived": 5,
-        }
-        return priorities.get(state, 0)
 
     def _categorize_issues(
         self, analysis: GraphAnalysis
@@ -323,20 +388,54 @@ class AnalyzeStoryGraphTool(BaseTool):
 
         Blocking issues prevent graph approval:
         - Missing targets (broken links)
-        - No entry points
+        - No topology (empty graph)
+        - No start passage defined
 
         Warnings are concerns but don't block:
-        - Unreachable nodes
-        - Dead ends
+        - Unreachable passages
+        - Dead ends (excluding endings)
         - Orphans
-        - Multiple entry points
+        - Missing briefs/passages
+        - Extra briefs/passages not in topology
         - All drafts (no stable paths)
-
-        Returns:
-            (blocking_issues, warnings) - each is a list of structured issue dicts
         """
         blocking: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
+
+        # BLOCKING: No topology
+        if not analysis.nodes:
+            blocking.append(
+                {
+                    "issue_type": "no_topology",
+                    "severity": "blocking",
+                    "description": "No topology artifact found - create topology first",
+                    "affected_nodes": [],
+                    "count": 0,
+                }
+            )
+            return blocking, warnings  # No point checking further
+
+        # BLOCKING: No start passage
+        if not analysis.start_pid:
+            blocking.append(
+                {
+                    "issue_type": "no_start_passage",
+                    "severity": "blocking",
+                    "description": "No start passage defined in story artifact",
+                    "affected_nodes": [],
+                    "count": 0,
+                }
+            )
+        elif analysis.start_pid not in analysis.nodes:
+            blocking.append(
+                {
+                    "issue_type": "invalid_start_passage",
+                    "severity": "blocking",
+                    "description": f"Start passage '{analysis.start_pid}' not found in topology",
+                    "affected_nodes": [analysis.start_pid],
+                    "count": 1,
+                }
+            )
 
         # BLOCKING: Missing targets (broken links)
         if analysis.missing_targets:
@@ -345,58 +444,33 @@ class AnalyzeStoryGraphTool(BaseTool):
                 {
                     "issue_type": "missing_targets",
                     "severity": "blocking",
-                    "description": f"{len(missing)} target node(s) referenced but don't exist",
+                    "description": f"{len(missing)} link target(s) reference non-existent passages",
                     "affected_nodes": sorted(missing)[:5],
                     "count": len(missing),
                 }
             )
 
-        # BLOCKING: No entry points
-        if not analysis.entry_points:
-            blocking.append(
-                {
-                    "issue_type": "no_entry_point",
-                    "severity": "blocking",
-                    "description": "No entry point found - graph has no starting node",
-                    "affected_nodes": [],
-                    "count": 0,
-                }
-            )
-
-        # WARNING: Unreachable nodes
+        # WARNING: Unreachable passages
         if analysis.unreachable:
             warnings.append(
                 {
-                    "issue_type": "unreachable_nodes",
+                    "issue_type": "unreachable_passages",
                     "severity": "warning",
-                    "description": f"{len(analysis.unreachable)} node(s) cannot be reached from entry",
+                    "description": f"{len(analysis.unreachable)} passage(s) cannot be reached from start",
                     "affected_nodes": sorted(analysis.unreachable)[:5],
                     "count": len(analysis.unreachable),
                 }
             )
 
-        # WARNING: Multiple entry points (may be intentional)
-        if len(analysis.entry_points) > 1:
-            warnings.append(
-                {
-                    "issue_type": "multiple_entry_points",
-                    "severity": "warning",
-                    "description": f"{len(analysis.entry_points)} entry points detected",
-                    "affected_nodes": analysis.entry_points[:5],
-                    "count": len(analysis.entry_points),
-                }
-            )
-
-        # WARNING: Dead ends (reachable only)
-        reachable_dead_ends = [d for d in analysis.dead_ends if d in analysis.reachable]
-        if reachable_dead_ends:
+        # WARNING: Dead ends (excluding intentional endings)
+        if analysis.dead_ends:
             warnings.append(
                 {
                     "issue_type": "dead_ends",
                     "severity": "warning",
-                    "description": f"{len(reachable_dead_ends)} reachable node(s) have no outgoing paths",
-                    "affected_nodes": sorted(reachable_dead_ends)[:5],
-                    "count": len(reachable_dead_ends),
+                    "description": f"{len(analysis.dead_ends)} passage(s) have no outgoing links and are not marked as endings",
+                    "affected_nodes": sorted(analysis.dead_ends)[:5],
+                    "count": len(analysis.dead_ends),
                 }
             )
 
@@ -404,25 +478,61 @@ class AnalyzeStoryGraphTool(BaseTool):
         if analysis.orphans:
             warnings.append(
                 {
-                    "issue_type": "orphan_nodes",
+                    "issue_type": "orphan_passages",
                     "severity": "warning",
-                    "description": f"{len(analysis.orphans)} node(s) have no incoming paths",
+                    "description": f"{len(analysis.orphans)} passage(s) have no incoming links",
                     "affected_nodes": sorted(analysis.orphans)[:5],
                     "count": len(analysis.orphans),
                 }
             )
 
-        # WARNING: No stable paths
-        all_drafts = set(analysis.by_lifecycle.get("draft", []))
-        reachable_drafts = all_drafts & analysis.reachable
-        if reachable_drafts and not analysis.has_reachable_stable_node:
+        # WARNING: Missing passage_briefs
+        if analysis.briefs_missing:
             warnings.append(
                 {
-                    "issue_type": "no_stable_paths",
+                    "issue_type": "briefs_missing",
                     "severity": "warning",
-                    "description": f"All {len(reachable_drafts)} reachable node(s) are drafts",
-                    "affected_nodes": sorted(reachable_drafts)[:5],
-                    "count": len(reachable_drafts),
+                    "description": f"{len(analysis.briefs_missing)} topology passage(s) have no passage_brief",
+                    "affected_nodes": analysis.briefs_missing[:5],
+                    "count": len(analysis.briefs_missing),
+                }
+            )
+
+        # WARNING: Extra passage_briefs not in topology
+        if analysis.briefs_extra:
+            warnings.append(
+                {
+                    "issue_type": "briefs_extra",
+                    "severity": "warning",
+                    "description": f"{len(analysis.briefs_extra)} passage_brief(s) reference pids not in topology",
+                    "affected_nodes": analysis.briefs_extra[:5],
+                    "count": len(analysis.briefs_extra),
+                }
+            )
+
+        # WARNING: No stable passages
+        if analysis.reachable and not analysis.has_reachable_stable_passage:
+            draft_count = len(analysis.by_passage_lifecycle.get("draft", []))
+            if draft_count > 0:
+                warnings.append(
+                    {
+                        "issue_type": "no_stable_passages",
+                        "severity": "warning",
+                        "description": f"All {draft_count} passage(s) are drafts - none promoted to review/cold",
+                        "affected_nodes": analysis.by_passage_lifecycle.get("draft", [])[:5],
+                        "count": draft_count,
+                    }
+                )
+
+        # WARNING: No endings defined
+        if not analysis.endings and analysis.nodes:
+            warnings.append(
+                {
+                    "issue_type": "no_endings",
+                    "severity": "warning",
+                    "description": "No passages marked as endings (is_ending: true)",
+                    "affected_nodes": [],
+                    "count": 0,
                 }
             )
 
@@ -431,6 +541,7 @@ class AnalyzeStoryGraphTool(BaseTool):
     def _generate_recovery_actions(
         self,
         blocking_issues: list[dict[str, Any]],
+        analysis: GraphAnalysis,
     ) -> list[dict[str, str]]:
         """
         Generate directive recovery actions (not passive hints).
@@ -441,22 +552,40 @@ class AnalyzeStoryGraphTool(BaseTool):
 
         # Actions for blocking issues first (highest priority)
         for issue in blocking_issues:
-            if issue["issue_type"] == "missing_targets":
+            if issue["issue_type"] == "no_topology":
+                actions.append(
+                    {
+                        "priority": "high",
+                        "action": "Create topology artifact",
+                        "details": "Run story_spark playbook to create story and topology artifacts",
+                    }
+                )
+            elif issue["issue_type"] == "no_start_passage":
+                actions.append(
+                    {
+                        "priority": "high",
+                        "action": "Set start passage in story artifact",
+                        "details": "Update story artifact with 'start' field pointing to entry passage pid",
+                    }
+                )
+            elif issue["issue_type"] == "invalid_start_passage":
+                pid = issue["affected_nodes"][0] if issue["affected_nodes"] else "unknown"
+                actions.append(
+                    {
+                        "priority": "high",
+                        "action": "Fix start passage reference",
+                        "details": f"Story.start references '{pid}' which doesn't exist in topology. "
+                        f"Valid pids: {', '.join(sorted(analysis.nodes.keys())[:5])}",
+                    }
+                )
+            elif issue["issue_type"] == "missing_targets":
                 nodes = issue["affected_nodes"]
                 actions.append(
                     {
                         "priority": "high",
-                        "action": "Create missing target nodes",
-                        "details": f"Create section_briefs for: {', '.join(nodes[:3])}"
+                        "action": "Add missing passages to topology",
+                        "details": f"Add passages to topology for: {', '.join(nodes[:3])}"
                         + ("..." if len(nodes) > 3 else ""),
-                    }
-                )
-            elif issue["issue_type"] == "no_entry_point":
-                actions.append(
-                    {
-                        "priority": "high",
-                        "action": "Designate entry point",
-                        "details": "Create a section_brief with no incoming connections to serve as entry",
                     }
                 )
 

@@ -2,8 +2,8 @@
   "$schema": "../../meta/schemas/core/tool-definition.schema.json",
   "id": "analyze_story_graph",
   "name": "Analyze Story Graph",
-  "summary": "Analyze narrative structure topology",
-  "description": "Programmatically analyzes story topology to check reachability, dead ends, orphans, missing targets, and lifecycle status. Provides concrete data for structural analysis without requiring LLM reasoning about graph structure.\n\nChecks:\n1. Reachability - Can all nodes be reached from entry?\n2. Dead ends - Nodes with no outgoing connections\n3. Orphans - Nodes with no incoming connections (except entry)\n4. Missing targets - References to non-existent nodes\n5. Lifecycle status - What state are the paths in?\n\nReturns structured analysis with actionable recommendations.",
+  "summary": "Analyze story topology for structural issues",
+  "description": "Reads the authoritative topology artifact and validates story structure. Uses story.start as entry point and checks alignment with passage_brief and passage artifacts.\n\nAnalysis checks:\n1. Reachability - Can all passages be reached from start?\n2. Dead ends - Passages with no outgoing links (except endings)\n3. Orphans - Passages with no incoming links (except start)\n4. Missing targets - Links to non-existent passages\n5. Alignment - Do briefs/passages match topology?\n6. Lifecycle - What state are the artifacts in?\n\nReturns structured analysis with actionable recovery actions.",
 
   "summarization_policy": "preserve",
 
@@ -13,18 +13,18 @@
       "include_drafts": {
         "type": "boolean",
         "default": true,
-        "description": "Whether to include draft lifecycle nodes in analysis"
+        "description": "Whether to include draft lifecycle artifacts in analysis"
       },
       "entry_pid": {
         "type": "string",
-        "description": "Optional explicit entry point passage pid. If not provided, nodes with no incoming connections are treated as entry points."
+        "description": "Optional explicit entry point passage pid. If not provided, uses story.start."
       }
     }
   },
 
   "output_schema": {
     "type": "object",
-    "description": "Semantically clear analysis result (see issue #228 for rationale)",
+    "description": "Structured analysis result with blocking issues, warnings, and recovery actions",
     "properties": {
       "analysis_outcome": {
         "type": "string",
@@ -37,7 +37,10 @@
         "items": {
           "type": "object",
           "properties": {
-            "issue_type": { "type": "string", "enum": ["missing_targets", "no_entry_point"] },
+            "issue_type": {
+              "type": "string",
+              "enum": ["no_topology", "no_start_passage", "invalid_start_passage", "missing_targets"]
+            },
             "severity": { "type": "string", "enum": ["blocking"] },
             "description": { "type": "string" },
             "affected_nodes": { "type": "array", "items": { "type": "string" } },
@@ -51,7 +54,10 @@
         "items": {
           "type": "object",
           "properties": {
-            "issue_type": { "type": "string", "enum": ["unreachable_nodes", "multiple_entry_points", "dead_ends", "orphan_nodes", "no_stable_paths"] },
+            "issue_type": {
+              "type": "string",
+              "enum": ["unreachable_passages", "dead_ends", "orphan_passages", "briefs_missing", "briefs_extra", "no_stable_passages", "no_endings"]
+            },
             "severity": { "type": "string", "enum": ["warning"] },
             "description": { "type": "string" },
             "affected_nodes": { "type": "array", "items": { "type": "string" } },
@@ -75,47 +81,91 @@
         "type": "object",
         "description": "Detailed graph analysis data",
         "properties": {
+          "story": {
+            "type": "object",
+            "description": "Story identity from story artifact",
+            "properties": {
+              "ifid": { "type": "string", "description": "Story IFID" },
+              "name": { "type": "string", "description": "Story name" },
+              "start": { "type": "string", "description": "Start passage pid" }
+            }
+          },
           "summary": {
             "type": "object",
             "properties": {
-              "total_nodes": { "type": "integer" },
-              "entry_points": { "type": "array", "items": { "type": "string" } },
+              "total_passages": { "type": "integer" },
               "reachable_count": { "type": "integer" },
               "unreachable_count": { "type": "integer" },
               "dead_end_count": { "type": "integer" },
+              "ending_count": { "type": "integer" },
               "orphan_count": { "type": "integer" },
               "missing_target_count": { "type": "integer" },
-              "has_reachable_stable_node": { "type": "boolean" }
+              "has_reachable_stable_passage": { "type": "boolean" }
             }
           },
-          "reachable": { "type": "array", "items": { "type": "string" } },
-          "unreachable": { "type": "array", "items": { "type": "string" } },
-          "dead_ends": { "type": "array", "items": { "type": "string" } },
-          "orphans": { "type": "array", "items": { "type": "string" } },
-          "missing_targets": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "from": { "type": "string" },
-                "to": { "type": "string" }
+          "reachability": {
+            "type": "object",
+            "properties": {
+              "reachable": { "type": "array", "items": { "type": "string" } },
+              "unreachable": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "structural": {
+            "type": "object",
+            "properties": {
+              "dead_ends": { "type": "array", "items": { "type": "string" } },
+              "endings": { "type": "array", "items": { "type": "string" } },
+              "orphans": { "type": "array", "items": { "type": "string" } },
+              "missing_targets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": { "type": "string" },
+                    "to": { "type": "string" }
+                  }
+                }
               }
             }
           },
-          "by_lifecycle": {
+          "alignment": {
             "type": "object",
-            "additionalProperties": { "type": "array", "items": { "type": "string" } }
+            "description": "Alignment between topology and passage artifacts",
+            "properties": {
+              "briefs_missing": { "type": "array", "items": { "type": "string" } },
+              "passages_missing": { "type": "array", "items": { "type": "string" } },
+              "briefs_extra": { "type": "array", "items": { "type": "string" } },
+              "passages_extra": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "lifecycle": {
+            "type": "object",
+            "properties": {
+              "by_brief": {
+                "type": "object",
+                "additionalProperties": { "type": "array", "items": { "type": "string" } }
+              },
+              "by_passage": {
+                "type": "object",
+                "additionalProperties": { "type": "array", "items": { "type": "string" } }
+              }
+            }
           },
           "nodes": {
             "type": "object",
+            "description": "Per-passage node details from topology",
             "additionalProperties": {
               "type": "object",
               "properties": {
                 "pid": { "type": "string" },
-                "artifact_id": { "type": "string" },
-                "title": { "type": "string" },
-                "lifecycle_state": { "type": "string" },
-                "type": { "type": "string", "enum": ["passage_brief", "passage"] },
+                "name": { "type": "string" },
+                "topology_role": { "type": "string", "enum": ["hub", "loop", "gateway", "linear"] },
+                "is_ending": { "type": "boolean" },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "brief_artifact_id": { "type": "string" },
+                "brief_lifecycle": { "type": "string" },
+                "passage_artifact_id": { "type": "string" },
+                "passage_lifecycle": { "type": "string" },
                 "outgoing": { "type": "array", "items": { "type": "string" } },
                 "incoming": { "type": "array", "items": { "type": "string" } }
               }
@@ -134,7 +184,7 @@
     {
       "description": "Validate from specific entry point, excluding drafts",
       "input": {
-        "entry_pid": "opening_scene",
+        "entry_pid": "the-invitation",
         "include_drafts": false
       }
     }
