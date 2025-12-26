@@ -116,6 +116,22 @@
       "category": "content",
       "enforcement": "llm",
       "severity": "warning"
+    },
+    {
+      "id": "validate_before_briefs",
+      "name": "Validate Structure Before Creating Briefs",
+      "rule": "Call analyze_story_graph BEFORE creating passage_briefs to validate topology structure. If blocking issues found, fix topology first. N passages means at most N unique PIDs in your topology.",
+      "category": "process",
+      "enforcement": "llm",
+      "severity": "error"
+    },
+    {
+      "id": "scope_budget",
+      "name": "Respect Scope Budget",
+      "rule": "Each unique target PID costs one passage from your budget. If story needs more passages than requested scope allows, escalate to Showrunner BEFORE creating invalid topology.",
+      "category": "process",
+      "enforcement": "llm",
+      "severity": "error"
     }
   ],
 

@@ -143,12 +143,20 @@
       "category": "safety",
       "enforcement": "llm",
       "severity": "critical"
+    },
+    {
+      "id": "promote_before_returning",
+      "name": "Promote Before Returning Pass",
+      "rule": "NEVER return_to_orchestrator with pass/proceed until you have called request_lifecycle_transition to promote ALL validated artifacts to review state. Sequence: validate → promote → return.",
+      "category": "process",
+      "enforcement": "llm",
+      "severity": "critical"
     }
   ],
 
   "knowledge_requirements": {
     "constitution": true,
-    "must_know": ["quality_bars_overview", "spoiler_hygiene", "artifact_model"],
+    "must_know": ["quality_bars_overview", "spoiler_hygiene", "artifact_model", "validator_examples"],
     "should_know": ["sources_of_truth"],
     "role_specific": ["gatekeeper_heuristics"]
   }

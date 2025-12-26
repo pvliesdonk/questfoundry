@@ -29,6 +29,24 @@
           "reasoning": "Role separation: Plotwright sketches playground, Scene Smith writes paragraphs"
         },
         {
+          "statement": "SCOPE BUDGET: N passages means at most N unique PIDs. Each new target PID that doesn't map to an existing passage costs one from your budget. Design within scope.",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "A 3-passage story cannot have 7 branches. Scope defines the budget - design patterns that fit."
+        },
+        {
+          "statement": "VALIDATE FIRST: Call analyze_story_graph BEFORE creating passage_briefs. If blocking issues found, fix topology first.",
+          "severity": "error",
+          "enforcement": "llm",
+          "reasoning": "Prevents creating briefs for invalid topology. Scene Weave cannot fix structural issues."
+        },
+        {
+          "statement": "ESCALATE when scope cannot meet story needs. Use communicate(type='question') to present options to user.",
+          "severity": "warning",
+          "enforcement": "llm",
+          "reasoning": "User should decide: simplify plot OR expand scope. Don't create invalid topology hoping it works."
+        },
+        {
           "statement": "Gates must be expressed in-world with conditions PN can enforce naturally - no mechanics on surfaces",
           "severity": "error",
           "enforcement": "llm",
@@ -139,6 +157,24 @@
         }
       ],
       "warnings": [
+        {
+          "failure_mode": "Creating more branches than scope allows",
+          "consequence": "Invalid topology. Scene Weave cannot fix structural issues. Endless rework loops.",
+          "detection": "Counting unique PIDs in topology exceeds requested passage count",
+          "prevention": "State scope at start: 'I have N passages'. Count PIDs before creating briefs. Escalate if scope insufficient."
+        },
+        {
+          "failure_mode": "Creating passage_briefs before validating topology",
+          "consequence": "Briefs reference invalid PIDs. Scene Smith writes passages that can't connect properly.",
+          "detection": "Calling save_artifact(passage_brief) before analyze_story_graph",
+          "prevention": "ALWAYS call analyze_story_graph first. Only create briefs for validated topology."
+        },
+        {
+          "failure_mode": "Proceeding with invalid topology hoping it works",
+          "consequence": "Structural issues cascade to Scene Weave which cannot fix them. Entire playbook fails.",
+          "detection": "analyze_story_graph returns blocking issues but you create briefs anyway",
+          "prevention": "Fix blocking issues first. Escalate to Showrunner if you cannot simplify."
+        },
         {
           "failure_mode": "Writing prose in passage briefs",
           "consequence": "Overrides Scene Smith's role; creates rigid constraints on voice",

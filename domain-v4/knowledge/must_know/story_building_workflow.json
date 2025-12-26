@@ -26,7 +26,7 @@
           "meaning": "Structural planning document that defines a passage's purpose, beats, and choices BEFORE prose is written.",
           "distinguishing_features": [
             "Created by Plotwright via story_spark playbook",
-            "Contains: title, summary, beats, choices with anchors",
+            "Contains: title, summary, beats, choices with targets (pids)",
             "Must exist BEFORE a passage can be written",
             "One passage_brief produces one passage"
           ]
@@ -37,7 +37,7 @@
           "distinguishing_features": [
             "Created by Scene Smith via scene_weave playbook",
             "Derived from a passage_brief (requires brief to exist first)",
-            "Contains: prose, formatted choices, anchor links"
+            "Contains: prose, formatted choices, pid links"
           ]
         }
       ],

@@ -23,22 +23,39 @@
       "procedures": [
         {
           "goal": "Complete a validation cycle with lifecycle promotion",
+          "critical_note": "You MUST promote artifacts BEFORE returning. Do NOT return pass/proceed without calling request_lifecycle_transition first.",
           "steps": [
             "Step 1 - Fetch artifact to validate: get_artifact('passage-001')",
             "Step 2 - Validate using tool: validate_artifact(artifact_id='passage-001')",
             "Step 3 - Check tool result: If all bars pass, proceed. If issues found, document them.",
             "Step 4 - Save gatecheck report: save_artifact(artifact_type='gatecheck_report', data={'target_artifact': 'passage-001', 'bar_results': [...], 'verdict': 'pass'})",
             "Step 5 - Note report ID: {\"artifact_id\": \"GC-001\", \"status\": \"created\"}",
-            "Step 6 - If verdict is pass, promote artifact: request_lifecycle_transition(artifact_id='passage-001', target_state='review')",
-            "Step 7 - Return with assessment: return_to_orchestrator(summary='Validated passage-001 - all bars pass, promoted to review', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
+            "Step 6 - CRITICAL: Promote BEFORE returning: request_lifecycle_transition(artifact_id='passage-001', target_state='review')",
+            "Step 7 - Verify promotion succeeded before returning",
+            "Step 8 - Return with assessment: return_to_orchestrator(summary='Validated passage-001 - all bars pass, promoted to review', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
           ],
           "preconditions": [
             "Received delegation with artifact_refs containing artifact to validate"
           ],
           "postconditions": [
             "Gatecheck report saved with findings",
-            "Passing artifacts promoted to review state",
+            "ALL passing artifacts promoted to review state (verified)",
             "Clear pass/fail verdict returned"
+          ]
+        },
+        {
+          "goal": "WRONG: Example of what NOT to do",
+          "wrong_sequence": [
+            "validate_artifact('passage-001') -> all bars pass",
+            "save_artifact(gatecheck_report)",
+            "return_to_orchestrator(result_assessment='pass', recommendation='proceed')"
+          ],
+          "why_wrong": "This returns 'pass' without calling request_lifecycle_transition. The artifact stays in 'draft' forever. Workflow appears complete but artifacts never reach review state.",
+          "correct_sequence": [
+            "validate_artifact('passage-001') -> all bars pass",
+            "save_artifact(gatecheck_report)",
+            "request_lifecycle_transition(artifact_id='passage-001', target_state='review')",
+            "return_to_orchestrator(result_assessment='pass', recommendation='proceed')"
           ]
         }
       ],

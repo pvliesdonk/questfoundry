@@ -218,6 +218,12 @@
       ],
       "warnings": [
         {
+          "failure_mode": "CRITICAL: Returning pass/proceed without promoting artifacts first",
+          "consequence": "Workflow terminates but artifacts stay in draft forever. They NEVER reach review. The workflow appears complete but nothing was actually approved.",
+          "detection": "You called return_to_orchestrator with pass/proceed but did NOT call request_lifecycle_transition",
+          "prevention": "ALWAYS promote BEFORE returning. Sequence: validate → promote → return. Check your tool call sequence before returning."
+        },
+        {
           "failure_mode": "Approving based on validate_artifact output without reading content",
           "consequence": "Quality issues ship to players; Gatekeeper becomes rubber-stamp",
           "prevention": "Always read artifact prose/content before deciding"

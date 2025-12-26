@@ -108,7 +108,7 @@
           "goal": "Self-validate passage before gatecheck",
           "steps": [
             "Verify brief_ref is set to Passage Brief ID (SB-NNN)",
-            "Check all choices lead somewhere (anchor resolution)",
+            "Check all choices lead somewhere (pid resolution)",
             "Confirm no spoilers in prose",
             "Verify choices are contrastive",
             "Confirm gates are diegetic"

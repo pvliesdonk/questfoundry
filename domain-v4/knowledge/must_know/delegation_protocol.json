@@ -43,6 +43,26 @@
             }
           ],
           "reasoning": "Showrunner needs artifact IDs to pass to the next agent. Without IDs, the workflow breaks."
+        },
+        {
+          "name": "Playbook Boundaries",
+          "description": "What each playbook can and cannot change. Violations require escalation.",
+          "playbook_contracts": {
+            "story_spark": {
+              "may_change": ["story", "topology", "passage_brief"],
+              "must_not_change": ["passage prose"],
+              "escalation_target": "showrunner",
+              "structural_authority": true
+            },
+            "scene_weave": {
+              "may_change": ["passage prose", "passage choices text"],
+              "must_not_change": ["topology", "passage_brief structure", "link targets"],
+              "escalation_target": "showrunner",
+              "structural_authority": false,
+              "structural_issues_require": "story_spark rework via showrunner"
+            }
+          },
+          "reasoning": "scene_weave cannot fix topology - it writes prose, not structure. Structural issues MUST route back to story_spark."
         }
       ],
       "definitions": [
@@ -63,9 +83,20 @@
           "distinguishing_features": [
             "proceed - Continue to next workflow step",
             "rework - Send back for fixes",
-            "escalate - Ask human for guidance",
+            "escalate - Ask human for guidance (see escalation_mapping)",
             "hold - Address blockers first"
           ]
+        },
+        {
+          "term": "escalation_mapping",
+          "meaning": "How to implement 'escalate' recommendation using valid communicate types",
+          "distinguishing_features": [
+            "recommendation_escalate: When delegated agent returns escalate, Showrunner uses communicate(type='question') with options for user to choose",
+            "structural_blocker: When playbook cannot proceed due to structural issues, use communicate(type='error') explaining what cannot proceed and why",
+            "clarification_needed: When scope or requirements are unclear, use communicate(type='question') with specific question",
+            "scope_conflict: When requested scope cannot be met, use communicate(type='question') presenting options: simplify OR expand"
+          ],
+          "note": "communicate(type='escalate') is NOT a valid type. Use 'question' or 'error' instead."
         },
         {
           "term": "artifacts_produced",
@@ -145,6 +176,20 @@
           ],
           "examples": [
             "```json\nreturn_to_orchestrator({\n  \"summary\": \"Cannot validate - no passages found in workspace\",\n  \"result_assessment\": \"skip\",\n  \"recommendation\": \"hold\",\n  \"blockers\": [\n    {\"type\": \"missing_input\", \"description\": \"Expected passage artifacts not found\"}\n  ]\n})\n```"
+          ]
+        },
+        {
+          "goal": "Handle escalation recommendation (Showrunner)",
+          "steps": [
+            "Receive return with recommendation='escalate'",
+            "Identify blocker type from blockers array (structural, lore, style, scope)",
+            "If structural: communicate(type='question', message='Structural issue found in story_spark output. Options: (a) Simplify plot to fit scope, (b) Expand scope. Which do you prefer?')",
+            "If lore: Delegate to lore_deepening playbook",
+            "If scope: communicate(type='question', message='Requested N passages but story requires M. Options: (a) Simplify, (b) Expand to M passages')",
+            "If unrecoverable: communicate(type='error', message='Cannot proceed: [specific issue]')"
+          ],
+          "examples": [
+            "```json\ncommunicate({\n  \"type\": \"question\",\n  \"message\": \"The 3-passage story structure requires 5 branches. Options: (a) Simplify to linear 3-passage story, (b) Expand to 5 passages. Which would you like?\"\n})\n```"
           ]
         }
       ]
