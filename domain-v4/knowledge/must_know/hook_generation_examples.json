@@ -33,17 +33,8 @@
       ],
       "rules": [
         {
-          "statement": "MANDATORY: Create at least one hook_card if ANY of these triggers occur during your work",
+          "statement": "MANDATORY: Create at least one hook_card if ANY of these occur during your work: (1) You notice lore that SHOULD exist but doesn't → canon_gap hook, (2) You have an idea for a scene to add later → scene_idea hook, (3) A fact needs real-world verification → fact_check hook, (4) Style guidance is ambiguous or missing → style_note hook, (5) A character trait or tell emerges but isn't formally recorded → character_note hook, (6) You see an opportunity for visual/audio enhancement → media_cue hook. Only skip if you can explicitly justify that NONE of these occurred.",
           "severity": "error",
-          "triggers": [
-            "You notice lore that SHOULD exist but doesn't → canon_gap hook",
-            "You have an idea for a scene to add later → scene_idea hook",
-            "A fact needs real-world verification → fact_check hook",
-            "Style guidance is ambiguous or missing → style_note hook",
-            "A character trait or tell emerges but isn't formally recorded → character_note hook",
-            "You see an opportunity for visual/audio enhancement → media_cue hook"
-          ],
-          "exception": "Only skip hook generation if you can explicitly justify that NONE of the triggers occurred during your work",
           "enforcement": "llm"
         }
       ],
@@ -93,48 +84,6 @@
             "context: 'SB-003 implies keeper has a secret but no canon explains it'",
             "suggested_owner: 'lore_weaver' (who should address this)"
           ]
-        }
-      ],
-      "examples": [
-        {
-          "context": "Plotwright designing topology, realizes manor backstory is undefined",
-          "hook_card": {
-            "hook_type": "canon_gap",
-            "summary": "Manor's history before the murder not established",
-            "context": "Writing passage_001, need backstory for setting atmosphere but no canon exists",
-            "uncertainty": "high",
-            "suggested_owner": "lore_weaver"
-          }
-        },
-        {
-          "context": "Scene Smith writing dialogue, thinks of a future scene",
-          "hook_card": {
-            "hook_type": "scene_idea",
-            "summary": "Return to conservatory with new information",
-            "context": "Player could revisit conservatory after learning about the poison - new dialogue opportunity",
-            "uncertainty": "low",
-            "suggested_owner": "plotwright"
-          }
-        },
-        {
-          "context": "Plotwright referencing historical event, unsure if accurate",
-          "hook_card": {
-            "hook_type": "fact_check",
-            "summary": "1920s telephone technology for manor setting",
-            "context": "Brief mentions calling for help - verify phone availability in remote 1920s manor",
-            "uncertainty": "medium",
-            "suggested_owner": "researcher"
-          }
-        },
-        {
-          "context": "Scene Smith uncertain about character voice register",
-          "hook_card": {
-            "hook_type": "style_note",
-            "summary": "Butler's formality level unclear",
-            "context": "Is butler formal-Victorian or warm-but-professional? Need style guidance",
-            "uncertainty": "medium",
-            "suggested_owner": "style_lead"
-          }
         }
       ],
       "warnings": [

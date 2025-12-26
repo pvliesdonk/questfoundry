@@ -22,8 +22,7 @@
     "data": {
       "procedures": [
         {
-          "goal": "Complete a validation cycle with lifecycle promotion",
-          "critical_note": "You MUST promote artifacts BEFORE returning. Do NOT return pass/proceed without calling request_lifecycle_transition first.",
+          "goal": "Complete a validation cycle with lifecycle promotion (CRITICAL: You MUST promote artifacts BEFORE returning. Do NOT return pass/proceed without calling request_lifecycle_transition first.)",
           "steps": [
             "Step 1 - Fetch artifact to validate: get_artifact('passage-001')",
             "Step 2 - Validate using tool: validate_artifact(artifact_id='passage-001')",
@@ -44,18 +43,13 @@
           ]
         },
         {
-          "goal": "WRONG: Example of what NOT to do",
-          "wrong_sequence": [
-            "validate_artifact('passage-001') -> all bars pass",
-            "save_artifact(gatecheck_report)",
-            "return_to_orchestrator(result_assessment='pass', recommendation='proceed')"
-          ],
-          "why_wrong": "This returns 'pass' without calling request_lifecycle_transition. The artifact stays in 'draft' forever. Workflow appears complete but artifacts never reach review state.",
-          "correct_sequence": [
-            "validate_artifact('passage-001') -> all bars pass",
-            "save_artifact(gatecheck_report)",
-            "request_lifecycle_transition(artifact_id='passage-001', target_state='review')",
-            "return_to_orchestrator(result_assessment='pass', recommendation='proceed')"
+          "goal": "WRONG example: What NOT to do when validation passes",
+          "steps": [
+            "WRONG Step 1: validate_artifact('passage-001') -> all bars pass",
+            "WRONG Step 2: save_artifact(gatecheck_report)",
+            "WRONG Step 3: return_to_orchestrator(result_assessment='pass', recommendation='proceed') - MISSING PROMOTION!",
+            "WHY THIS IS WRONG: Returns 'pass' without calling request_lifecycle_transition. Artifact stays in 'draft' forever.",
+            "CORRECT: After step 2, call request_lifecycle_transition(artifact_id='passage-001', target_state='review') BEFORE returning"
           ]
         }
       ],

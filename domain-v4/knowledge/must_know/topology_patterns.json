@@ -61,8 +61,7 @@
       ],
       "procedures": [
         {
-          "goal": "Design topology for N passages",
-          "critical_note": "N passages = at most N unique PIDs. Each target PID costs one from your budget.",
+          "goal": "Design topology for N passages (CRITICAL: N passages = at most N unique PIDs. Each target PID costs one from your budget.)",
           "steps": [
             "Step 1 - State scope explicitly: 'I have N passages to work with'",
             "Step 2 - Select pattern that fits N: linear (N=any), hub-with-endings (N≥3), merge (N≥3)",

@@ -145,14 +145,7 @@
           "action": "Create hook cards for ideas that arose during prose writing. This step is MANDATORY - at least one hook or explicit justification required.",
           "depends_on": ["validate_topology_alignment"],
           "specific_agent": "scene_smith",
-          "guidance": "Review your prose and create hooks for ANY of these triggers:\n- Character trait or tell emerged → character_note\n- Environmental detail worth expanding → scene_idea\n- Style/voice question arose → style_note\n- Visual/audio opportunity → media_cue\n- Canon gap noticed → canon_gap (lore issue)\n\nIf no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
-          "triggers": [
-            "character_note: Character trait or tell emerged",
-            "scene_idea: Environmental detail worth expanding",
-            "style_note: Voice or register uncertainty",
-            "media_cue: Visual or audio enhancement opportunity",
-            "canon_gap: Missing lore discovered (lore issue)"
-          ],
+          "guidance": "Review your prose and create hooks for ANY of these triggers: (1) character_note: Character trait or tell emerged, (2) scene_idea: Environmental detail worth expanding, (3) style_note: Voice or register uncertainty, (4) media_cue: Visual or audio enhancement opportunity, (5) canon_gap: Missing lore discovered (lore issue). If no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
           "outputs": [
             {
               "name": "scene_hooks",
@@ -365,26 +358,11 @@
       },
 
       "on_failure": {
-        "conditional": [
-          {
-            "condition": "Structural issues (integrity, reachability, topology) found",
-            "action": "escalate_to_showrunner",
-            "message": "STRUCTURAL ISSUE: Cannot fix in scene_weave. Topology integrity, reachability, or link errors require story_spark rework. Return to Showrunner for story_spark routing."
-          }
-        ],
-        "default": {
-          "next_phases": ["prose_drafting"],
-          "message": "Gatecheck blocked on non-structural issues. Return to Prose Drafting with Gatekeeper feedback."
-        }
+        "next_phases": ["prose_drafting"],
+        "escalate": true,
+        "message": "Gatecheck blocked. For non-structural issues (style, presentation), return to Prose Drafting. For STRUCTURAL issues (integrity, reachability, topology), escalate to Showrunner for story_spark rework - scene_weave CANNOT fix structural problems."
       }
     }
-  },
-
-  "structural_escalation": {
-    "description": "Structural issues CANNOT be fixed in scene_weave. They require story_spark.",
-    "structural_issues": ["integrity", "reachability", "topology_alignment", "missing_link_targets"],
-    "action": "Return to Showrunner with recommendation='escalate' and message explaining structural issue requires story_spark",
-    "do_not": "Loop to prose_drafting for structural failures - prose changes cannot fix graph structure"
   },
 
   "quality_criteria": ["integrity", "style", "presentation", "accessibility", "choice_integrity", "spoiler_hygiene", "diegetic_gates", "topology_alignment"],

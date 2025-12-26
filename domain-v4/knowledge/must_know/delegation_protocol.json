@@ -46,22 +46,26 @@
         },
         {
           "name": "Playbook Boundaries",
-          "description": "What each playbook can and cannot change. Violations require escalation.",
-          "playbook_contracts": {
-            "story_spark": {
-              "may_change": ["story", "topology", "passage_brief"],
-              "must_not_change": ["passage prose"],
-              "escalation_target": "showrunner",
-              "structural_authority": true
+          "parties": ["story_spark", "scene_weave", "showrunner"],
+          "obligations": [
+            {
+              "party": "story_spark",
+              "must": "Only change story, topology, and passage_brief artifacts. Never modify passage prose."
             },
-            "scene_weave": {
-              "may_change": ["passage prose", "passage choices text"],
-              "must_not_change": ["topology", "passage_brief structure", "link targets"],
-              "escalation_target": "showrunner",
-              "structural_authority": false,
-              "structural_issues_require": "story_spark rework via showrunner"
+            {
+              "party": "scene_weave",
+              "must": "Only change passage prose and choice text. Never modify topology or passage_brief structure."
+            },
+            {
+              "party": "scene_weave",
+              "must": "Escalate structural issues (integrity, reachability, topology) to showrunner for story_spark rework",
+              "when": "Structural issues are discovered during prose writing"
+            },
+            {
+              "party": "showrunner",
+              "must": "Route structural issues back to story_spark, not prose_drafting"
             }
-          },
+          ],
           "reasoning": "scene_weave cannot fix topology - it writes prose, not structure. Structural issues MUST route back to story_spark."
         }
       ],
@@ -96,7 +100,9 @@
             "clarification_needed: When scope or requirements are unclear, use communicate(type='question') with specific question",
             "scope_conflict: When requested scope cannot be met, use communicate(type='question') presenting options: simplify OR expand"
           ],
-          "note": "communicate(type='escalate') is NOT a valid type. Use 'question' or 'error' instead."
+          "examples": [
+            "communicate(type='escalate') is NOT a valid type. Use 'question' or 'error' instead."
+          ]
         },
         {
           "term": "artifacts_produced",

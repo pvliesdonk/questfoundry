@@ -301,13 +301,7 @@
           "action": "Create hook cards for any ideas that arose during topology design. This step is MANDATORY - at least one hook or explicit justification required.",
           "depends_on": ["write_briefs"],
           "specific_agent": "plotwright",
-          "guidance": "Review your work and create hooks for ANY of these triggers:\n- Lore that SHOULD exist but doesn't → canon_gap\n- Ideas for future scenes → scene_idea\n- Facts needing verification → fact_check\n- Style questions → style_note\n\nIf no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
-          "triggers": [
-            "canon_gap: Lore referenced but not established",
-            "scene_idea: Opportunity for future content",
-            "fact_check: Real-world verification needed",
-            "style_note: Voice or register uncertainty"
-          ],
+          "guidance": "Review your work and create hooks for ANY of these triggers: (1) canon_gap: Lore referenced but not established, (2) scene_idea: Opportunity for future content, (3) fact_check: Real-world verification needed, (4) style_note: Voice or register uncertainty. If no triggers occurred, you MUST state explicitly: 'No hook triggers occurred because [reason]'",
           "outputs": [
             {
               "name": "proposed_hooks",
