@@ -10,7 +10,7 @@ Best practices for crafting effective agent prompts, derived from empirical test
 - Stanford research on "Lost in the Middle" attention patterns
 - [Prompt Engineering Guide](https://www.promptingguide.ai/) - Context engineering for AI agents
 - [Less is More: Optimizing Function Calling for LLM Execution on Edge Devices](https://arxiv.org/abs/2411.15399) (2024)
-- [RAG-MCP: Mitigating Prompt Bloat in LLM Tool Selection](https://arxiv.org/html/2505.03275v1) (2025)
+- [RAG-MCP: Mitigating Prompt Bloat in LLM Tool Selection](https://arxiv.org/abs/2505.03275) (2025)
 - [Anthropic Token-Efficient Tool Use](https://docs.claude.com/en/docs/agents-and-tools/tool-use/token-efficient-tool-use)
 - [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
 
@@ -82,7 +82,7 @@ When using function calling, tool schemas are sent with every request:
 | Description | 50-150 tokens |
 | Parameter schema | 100-300 tokens |
 | **Per tool total** | 150-450 tokens |
-| **13 tools** | **2,000-6,000 tokens** |
+| **13 tools** | **2,000-5,900 tokens** |
 
 This overhead exists *in addition to* the system prompt.
 
@@ -114,7 +114,7 @@ For large tool libraries (20+), use a retrieval-based approach:
 2. **Agent selects** which tool(s) are relevant
 3. **Stage 2**: Load full schema only for selected tools
 
-Research shows this can reduce token usage by 50%+ while improving accuracy 3x.
+Per RAG-MCP research, this can reduce token usage by 50%+ while improving accuracy 3x.
 
 #### 3. Deferred Tool Loading
 
@@ -136,7 +136,7 @@ Write descriptions that are 1-2 sentences max:
 **Before** (~80 tokens):
 
 ```text
-"Delegate work to another agent. This hands off control until the agent completes the task. Provide task description, context, expected outputs, and quality criteria. The receiving agent executes and returns via return_to_orchestrator with artifacts and assessment."
+"Delegate work to another agent. This hands off control until the agent completes the task. Provide task description, context, expected outputs, and quality criteria. The receiving agent executes and returns control with artifacts and assessment."
 ```
 
 **After** (~20 tokens):
@@ -188,7 +188,7 @@ Optional parameters can be omitted for small models—they'll use reasonable def
 
 - "Less is More: Optimizing Function Calling for LLM Execution on Edge Devices" (2024)
 - "RAG-MCP: Mitigating Prompt Bloat in LLM Tool Selection" (2025)
-- Anthropic's Tool Search Tool documentation
+- Anthropic's Token-Efficient Tool Use documentation
 
 ---
 
@@ -448,7 +448,7 @@ Before deploying prompts:
 - [ ] Critical instructions at start AND end (sandwich pattern)
 - [ ] Tool descriptions are neutral, not prescriptive
 - [ ] Tool descriptions concise (1-2 sentences max)
-- [ ] Tool count appropriate for model size (≤8 for small models)
+- [ ] Tool count appropriate for model size (8 or fewer for small models)
 - [ ] `small_model_tools` defined for agents used with small models
 - [ ] System prompt within token budget
 - [ ] Context organized into layers (system, task, tool, memory)
