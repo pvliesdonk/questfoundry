@@ -6,7 +6,13 @@ Best practices for crafting effective agent prompts, derived from empirical test
 
 - Issue #242: Extensive testing of Qwen3:8b tool calling behavior
 - Issue #256: Investigation of v3 vs v4 prompt size regression
+- Issue #293: Tool schema bloat analysis
 - Stanford research on "Lost in the Middle" attention patterns
+- [Prompt Engineering Guide](https://www.promptingguide.ai/) - Context engineering for AI agents
+- [Less is More: Optimizing Function Calling for LLM Execution on Edge Devices](https://arxiv.org/abs/2411.15399) (2024)
+- [RAG-MCP: Mitigating Prompt Bloat in LLM Tool Selection](https://arxiv.org/html/2505.03275v1) (2025)
+- [Anthropic Token-Efficient Tool Use](https://docs.claude.com/en/docs/agents-and-tools/tool-use/token-efficient-tool-use)
+- [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
 
 ---
 
@@ -62,7 +68,179 @@ Testing with Qwen3:8b revealed a strong correlation between tool count and compl
 
 ---
 
-## 3. Tool Description Biasing
+## 3. Tool Schema Optimization
+
+Tool schemas sent via API function calling are a major source of token overhead—often larger than the system prompt itself.
+
+### The Hidden Cost
+
+When using function calling, tool schemas are sent with every request:
+
+| Component | Typical Size |
+|-----------|--------------|
+| Tool name | ~5 tokens |
+| Description | 50-150 tokens |
+| Parameter schema | 100-300 tokens |
+| **Per tool total** | 150-450 tokens |
+| **13 tools** | **2,000-6,000 tokens** |
+
+This overhead exists *in addition to* the system prompt.
+
+### Optimization Strategies
+
+#### 1. Model-Class Tool Filtering
+
+Define a reduced tool set for small models using `small_model_tools`:
+
+```json
+{
+  "capabilities": [
+    {"tool_ref": "delegate"},
+    {"tool_ref": "communicate"},
+    {"tool_ref": "search_workspace"},
+    ...
+  ],
+  "small_model_tools": ["delegate", "communicate", "terminate_session"]
+}
+```
+
+This mirrors the `small_model_must_know` pattern for knowledge.
+
+#### 2. Two-Stage Tool Selection
+
+For large tool libraries (20+), use a retrieval-based approach:
+
+1. **Stage 1**: Show lightweight tool menu (name + summary only)
+2. **Agent selects** which tool(s) are relevant
+3. **Stage 2**: Load full schema only for selected tools
+
+Research shows this can reduce token usage by 50%+ while improving accuracy 3x.
+
+#### 3. Deferred Tool Loading
+
+Mark tools as discoverable but not pre-loaded:
+
+```json
+{
+  "id": "generate_image",
+  "defer_loading": true
+}
+```
+
+Deferred tools appear in a "tool search" interface rather than being sent to the API upfront. This approach achieved 85% token reduction in internal testing at Anthropic.
+
+#### 4. Concise Tool Descriptions
+
+Write descriptions that are 1-2 sentences max:
+
+**Before** (~80 tokens):
+
+```text
+"Delegate work to another agent. This hands off control until the agent completes the task. Provide task description, context, expected outputs, and quality criteria. The receiving agent executes and returns via return_to_orchestrator with artifacts and assessment."
+```
+
+**After** (~20 tokens):
+
+```text
+"Hand off a task to another agent. Control returns when they complete."
+```
+
+The detailed usage guidance belongs in knowledge entries, not tool descriptions.
+
+#### 5. Minimal Parameter Schemas
+
+For small models, consider simplified schemas:
+
+**Full schema** (~200 tokens):
+
+```json
+{
+  "to_agent": {"type": "string", "description": "ID of agent"},
+  "to_archetype": {"type": "string", "enum": [...]},
+  "task": {"type": "string"},
+  "context": {"type": "object", "properties": {...}},
+  "expected_outputs": {"type": "array", "items": {...}},
+  "quality_criteria": {"type": "array"},
+  "priority": {"type": "string", "enum": [...]},
+  "playbook_ref": {"type": "string"},
+  "phase_ref": {"type": "string"}
+}
+```
+
+**Minimal schema** (~50 tokens):
+
+```json
+{
+  "to_agent": {"type": "string"},
+  "task": {"type": "string"}
+}
+```
+
+Optional parameters can be omitted for small models—they'll use reasonable defaults.
+
+### Provider-Specific Optimizations
+
+- **Anthropic**: Use `token-efficient-tools-2025-02-19` beta header for up to 70% output token reduction
+- **OpenAI**: Consider fine-tuning to reduce schema tokens for frequently-used patterns
+- **Local models**: Tool retrieval is essential—small models struggle with 10+ tools
+
+### Research References
+
+- "Less is More: Optimizing Function Calling for LLM Execution on Edge Devices" (2024)
+- "RAG-MCP: Mitigating Prompt Bloat in LLM Tool Selection" (2025)
+- Anthropic's Tool Search Tool documentation
+
+---
+
+## 4. Layered Context Architecture
+
+Organize agent prompts into distinct layers, each with a specific purpose:
+
+### The Four Layers
+
+| Layer | Purpose | Token Priority |
+|-------|---------|----------------|
+| **System** | Core agent identity, constraints | High (always include) |
+| **Task** | Current task instructions | High |
+| **Tool** | Tool descriptions and schemas | Medium (filter for small models) |
+| **Memory** | Historical context, conversation | Variable (summarize as needed) |
+
+### Layer Separation Benefits
+
+- **Debugging**: Can isolate which layer caused unexpected behavior
+- **Model switching**: System layer stays constant across model sizes
+- **Token management**: Each layer can be independently compressed
+- **Caching**: System and tool layers can be cached between turns
+
+### Implementation
+
+```
+System Layer (always in system prompt):
+├── Role identity
+├── Behavioral constraints
+└── Output format rules
+
+Task Layer (per-turn):
+├── Current objective
+├── Relevant artifacts
+└── Quality criteria
+
+Tool Layer (configurable):
+├── Tool schemas (via API)
+├── Tool menu (in prompt)
+└── Usage hints
+
+Memory Layer (dynamic):
+├── Conversation summary
+├── Previous outputs
+└── Error history
+```
+
+This architecture aligns with the "separation of concerns" pattern used in orchestrator-worker agent systems.
+
+---
+
+## 5. Tool Description Biasing
 
 Tool descriptions have **higher influence** than system prompt content when models decide which tool to call.
 
@@ -96,7 +274,7 @@ Let the **system prompt** dictate when to use tools, not the tool descriptions.
 
 ---
 
-## 4. Prompt-History Conflicts
+## 6. Prompt-History Conflicts
 
 When the system prompt says "MUST do X first" but the conversation history shows the model already did Y, confusion results.
 
@@ -116,7 +294,7 @@ Model: "But I already delegated... should I undo it? Call consult now?"
 
 ---
 
-## 5. Small Model Considerations
+## 7. Small Model Considerations
 
 Models under 8B parameters have distinct limitations:
 
@@ -165,7 +343,7 @@ Runtime selects the appropriate version based on model class.
 
 ---
 
-## 6. Semantic Ambiguity
+## 8. Semantic Ambiguity
 
 Avoid instructions that can be interpreted multiple ways.
 
@@ -187,7 +365,7 @@ Be explicit:
 
 ---
 
-## 7. Ordering for Attention
+## 9. Ordering for Attention
 
 Given the U-shaped attention curve, structure prompts strategically:
 
@@ -210,7 +388,7 @@ Lower-priority content that can be consulted on demand:
 
 ---
 
-## 8. Menu + Consult Pattern
+## 10. Menu + Consult Pattern
 
 For knowledge that agents need access to but not always in context:
 
@@ -245,7 +423,7 @@ System prompt does NOT contain:
 
 ---
 
-## 9. Testing Prompts
+## 11. Testing Prompts
 
 ### With Small Models
 
@@ -269,8 +447,11 @@ Before deploying prompts:
 
 - [ ] Critical instructions at start AND end (sandwich pattern)
 - [ ] Tool descriptions are neutral, not prescriptive
-- [ ] Tool count appropriate for model size
+- [ ] Tool descriptions concise (1-2 sentences max)
+- [ ] Tool count appropriate for model size (≤8 for small models)
+- [ ] `small_model_tools` defined for agents used with small models
 - [ ] System prompt within token budget
+- [ ] Context organized into layers (system, task, tool, memory)
 - [ ] No prompt-history conflicts
 - [ ] Complex logic simplified for small models
 - [ ] Menu + consult pattern for reference material
