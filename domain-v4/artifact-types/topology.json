@@ -40,12 +40,6 @@
             "description": "Tags for categorization (Twine-compatible)"
           },
           {
-            "name": "is_start",
-            "type": "boolean",
-            "description": "True if this is the story entry point (exactly one per topology)",
-            "default": false
-          },
-          {
             "name": "is_ending",
             "type": "boolean",
             "description": "True if this passage is a terminal ending",
@@ -118,13 +112,8 @@
   "validation": {
     "custom_rules": [
       {
-        "id": "single_start",
-        "description": "Exactly one passage must have is_start=true",
-        "enforcement": "runtime"
-      },
-      {
         "id": "reachability",
-        "description": "All passages must be reachable from the start passage",
+        "description": "All passages must be reachable from the start passage (defined in story.start)",
         "enforcement": "runtime"
       },
       {

@@ -10,7 +10,8 @@
     {
       "name": "ifid",
       "type": "string",
-      "description": "References the parent Story's IFID"
+      "description": "References the parent Story's IFID",
+      "required": true
     },
     {
       "name": "pid",

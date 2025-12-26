@@ -77,7 +77,7 @@
           "context": "Finding artifacts when no artifact_refs provided",
           "guidance": "Search by correct artifact type based on task description",
           "examples": [
-            "situation: Task mentions 'passage briefs' | approach: Search for artifact_type: passage_brief (NOT passage_brief)",
+            "situation: Task mentions 'passage briefs' | approach: Search for artifact_type: passage_brief (NOT passage)",
             "situation: Task mentions 'passages' (prose) | approach: Search for artifact_type: passage"
           ]
         },

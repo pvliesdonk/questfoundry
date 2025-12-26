@@ -30,15 +30,17 @@ Create `story` and `topology` artifacts; refactor `story_spark`.
 ### New Artifacts
 
 **story.json** - Root manifest with:
+
 - `ifid` (UUID v4 story identity)
-- `name`, `start`, `format`, `logline`, `theme`, `genre`, `tone`
+- `name`, `start` (pid of the starting passage), `format`, `logline`, `theme`, `genre`, `tone`
 - `current_pass`, `active_phase`
 - `tags` (Twine-compatible)
 
 **topology.json** - Graph structure with:
+
 - `ifid` (references parent story)
-- `passages[]` - nodes with `pid`, `name`, `tags`, `is_start`, `is_ending`, `topology_role`
-- `links[]` - edges with `from`, `to`, `gate`
+- `passages[]` - nodes with `pid`, `name`, `tags`, `is_ending`, `topology_role` (e.g., "hub", "loop", "gateway", "linear")
+- `links[]` - edges with `from`, `to`, `gate` (object with `condition` and `mechanics` fields)
 
 ## Epic 2: The Narrative Alignment
 
