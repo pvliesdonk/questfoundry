@@ -13,7 +13,7 @@
     "micro-beats"
   ],
   "triggers": [
-    "writing section prose",
+    "writing passage prose",
     "scene drafting",
     "paragraph structure",
     "beat integration"
@@ -102,7 +102,7 @@
             "Run style self-check"
           ],
           "preconditions": [
-            "Section brief available",
+            "Passage brief available",
             "Style guide accessible"
           ],
           "postconditions": [

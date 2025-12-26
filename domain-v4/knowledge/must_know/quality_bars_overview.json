@@ -27,7 +27,7 @@
           "pass_condition": "References resolve; no unintended dead ends; state effects don't create contradictions.",
           "fail_indicators": [
             "Broken links or references",
-            "Unreachable sections",
+            "Unreachable passages",
             "Contradictory state changes"
           ]
         },

@@ -24,13 +24,13 @@
         {
           "goal": "Complete a validation cycle with lifecycle promotion",
           "steps": [
-            "Step 1 - Fetch artifact to validate: get_artifact('section-001')",
-            "Step 2 - Validate using tool: validate_artifact(artifact_id='section-001')",
+            "Step 1 - Fetch artifact to validate: get_artifact('passage-001')",
+            "Step 2 - Validate using tool: validate_artifact(artifact_id='passage-001')",
             "Step 3 - Check tool result: If all bars pass, proceed. If issues found, document them.",
-            "Step 4 - Save gatecheck report: save_artifact(artifact_type='gatecheck_report', data={'target_artifact': 'section-001', 'bar_results': [...], 'verdict': 'pass'})",
+            "Step 4 - Save gatecheck report: save_artifact(artifact_type='gatecheck_report', data={'target_artifact': 'passage-001', 'bar_results': [...], 'verdict': 'pass'})",
             "Step 5 - Note report ID: {\"artifact_id\": \"GC-001\", \"status\": \"created\"}",
-            "Step 6 - If verdict is pass, promote artifact: request_lifecycle_transition(artifact_id='section-001', target_state='review')",
-            "Step 7 - Return with assessment: return_to_orchestrator(summary='Validated section-001 - all bars pass, promoted to review', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
+            "Step 6 - If verdict is pass, promote artifact: request_lifecycle_transition(artifact_id='passage-001', target_state='review')",
+            "Step 7 - Return with assessment: return_to_orchestrator(summary='Validated passage-001 - all bars pass, promoted to review', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
           ],
           "preconditions": [
             "Received delegation with artifact_refs containing artifact to validate"

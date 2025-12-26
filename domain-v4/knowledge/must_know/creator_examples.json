@@ -27,9 +27,9 @@
             "Step 1 - Fetch input artifact: get_artifact('SB-001')",
             "Step 2 - Read the brief to understand requirements (beats, tone, constraints)",
             "Step 3 - Create content following the brief",
-            "Step 4 - Save artifact: save_artifact(artifact_type='section', data={'title': 'The Arrival', 'content': '...prose...', 'brief_ref': 'SB-001'})",
-            "Step 5 - Note artifact ID from response: {\"artifact_id\": \"section-001\", \"status\": \"created\"}",
-            "Step 6 - Return to orchestrator: return_to_orchestrator(summary='Created section from brief SB-001', result_assessment='pass', recommendation='proceed', artifacts_produced=['section-001'])"
+            "Step 4 - Save artifact: save_artifact(artifact_type='passage', data={'title': 'The Arrival', 'content': '...prose...', 'brief_ref': 'SB-001'})",
+            "Step 5 - Note artifact ID from response: {\"artifact_id\": \"passage-001\", \"status\": \"created\"}",
+            "Step 6 - Return to orchestrator: return_to_orchestrator(summary='Created passage from brief SB-001', result_assessment='pass', recommendation='proceed', artifacts_produced=['passage-001'])"
           ],
           "preconditions": [
             "Received delegation with artifact_refs containing input brief"
@@ -45,16 +45,16 @@
           "context": "When creating content",
           "guidance": "Always reference the input artifact that guided your creation",
           "examples": [
-            "Section references its section_brief via brief_ref field",
-            "Codex entry references source sections via source_refs field"
+            "Passage references its passage_brief via brief_ref field",
+            "Codex entry references source passages via source_refs field"
           ]
         },
         {
           "context": "When returning to orchestrator",
           "guidance": "Include ALL artifact IDs you created, not just the main one",
           "examples": [
-            "Created 3 sections -> artifacts_produced=['section-001', 'section-002', 'section-003']",
-            "Created section and fixed another -> artifacts_produced=['section-004', 'section-001']"
+            "Created 3 passages -> artifacts_produced=['passage-001', 'passage-002', 'passage-003']",
+            "Created passage and fixed another -> artifacts_produced=['passage-004', 'passage-001']"
           ]
         }
       ],
@@ -67,7 +67,7 @@
         {
           "failure_mode": "Returning with description instead of ID",
           "consequence": "Next agent cannot find artifact by description",
-          "prevention": "Use exact artifact IDs like 'section-001', not descriptions like 'the opening scene'"
+          "prevention": "Use exact artifact IDs like 'passage-001', not descriptions like 'the opening scene'"
         }
       ]
     }

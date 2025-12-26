@@ -38,7 +38,7 @@
           "distinguishing_features": [
             "Defines required and optional fields",
             "Specifies lifecycle states and transitions",
-            "Examples: section, hook_card, research_memo, codex_entry"
+            "Examples: passage, hook_card, research_memo, codex_entry"
           ]
         },
         {

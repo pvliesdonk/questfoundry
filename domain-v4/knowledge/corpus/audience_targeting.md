@@ -281,7 +281,7 @@ Score from 0–100 (higher = easier).
 | Audience | How Far Ahead? |
 |----------|----------------|
 | Early Readers | Immediate |
-| Middle Grade | 1–3 sections |
+| Middle Grade | 1–3 passages |
 | Young Adult | Full story |
 | Adult | Full story |
 

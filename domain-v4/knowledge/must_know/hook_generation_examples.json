@@ -33,11 +33,11 @@
       ],
       "procedures": [
         {
-          "goal": "Generate hooks during section brief creation",
+          "goal": "Generate hooks during passage brief creation",
           "steps": [
             "Step 1 - While creating briefs, note ideas that arise but aren't needed now",
             "Step 2 - Identify hook types: canon_gap (missing lore), scene_idea (future scene), fact_check (needs research), style_note (aesthetic opportunity)",
-            "Step 3 - Create hook cards: save_artifact(artifact_type='hook_card', data={'hook_type': 'canon_gap', 'summary': 'Lighthouse keeper backstory unexplained', 'context': 'Referenced in section SB-003 but no canon exists', 'suggested_owner': 'lore_weaver'})",
+            "Step 3 - Create hook cards: save_artifact(artifact_type='hook_card', data={'hook_type': 'canon_gap', 'summary': 'Lighthouse keeper backstory unexplained', 'context': 'Referenced in passage brief SB-003 but no canon exists', 'suggested_owner': 'lore_weaver'})",
             "Step 4 - Note hook IDs: {\"artifact_id\": \"hook_001\", \"status\": \"created\"}",
             "Step 5 - Include hooks in return: return_to_orchestrator(summary='Created 3 briefs and 2 hooks', artifacts_produced=['SB-001', 'SB-002', 'SB-003', 'hook_001', 'hook_002'])"
           ],

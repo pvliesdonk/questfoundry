@@ -78,7 +78,7 @@
           "context": "Ambiguous requests requiring clarification",
           "guidance": "Ask about scope, genre, tone, or specific needs before proceeding",
           "examples": [
-            "request: 'write a story' | ask: 'What genre and tone? How many sections? Any themes?'",
+            "request: 'write a story' | ask: 'What genre and tone? How many passages? Any themes?'",
             "request: 'hello' or 'hi' | ask: 'What would you like to work on today?'",
             "request: 'help me with my project' | ask: 'What aspect needs attention - structure, prose, lore, or export?'"
           ]

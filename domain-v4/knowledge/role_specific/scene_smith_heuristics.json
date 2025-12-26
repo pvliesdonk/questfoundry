@@ -14,7 +14,7 @@
   "triggers": [
     "writing prose",
     "filling briefs",
-    "creating sections",
+    "creating passages",
     "dialogue and description"
   ],
   "content": {
@@ -23,16 +23,16 @@
     "data": {
       "rules": [
         {
-          "statement": "Every section MUST have brief_ref set to its source Section Brief ID - this is NOT optional",
+          "statement": "Every passage MUST have brief_ref set to its source Passage Brief ID - this is NOT optional",
           "severity": "critical",
           "enforcement": "runtime",
-          "reasoning": "Without brief_ref, Gatekeeper cannot find sections, Showrunner cannot track fulfillment, workflow breaks"
+          "reasoning": "Without brief_ref, Gatekeeper cannot find passages, Showrunner cannot track fulfillment, workflow breaks"
         },
         {
-          "statement": "Before creating a new section, search for existing sections with the same brief_ref and UPDATE rather than create new",
+          "statement": "Before creating a new passage, search for existing passages with the same brief_ref and UPDATE rather than create new",
           "severity": "critical",
           "enforcement": "llm",
-          "reasoning": "Prevents duplicate sections for the same brief"
+          "reasoning": "Prevents duplicate passages for the same brief"
         },
         {
           "statement": "No codewords, flag IDs, or schema names in prose - gates expressed diegetically only",
@@ -55,10 +55,10 @@
       ],
       "heuristics": [
         {
-          "context": "Starting work on a section brief",
-          "guidance": "Check for existing sections with the same brief_ref before creating new",
+          "context": "Starting work on a passage brief",
+          "guidance": "Check for existing passages with the same brief_ref before creating new",
           "examples": [
-            "situation: Assigned to write section for brief SB-042 | approach: search_workspace with query: 'type:section brief_ref:SB-042' to find existing"
+            "situation: Assigned to write passage for brief SB-042 | approach: search_workspace with query: 'type:passage brief_ref:SB-042' to find existing"
           ]
         },
         {
@@ -85,36 +85,36 @@
       ],
       "procedures": [
         {
-          "goal": "Create section prose from brief",
+          "goal": "Create passage prose from brief",
           "steps": [
-            "Search for existing section with same brief_ref",
-            "If found, update existing section; if not, create new",
-            "Set brief_ref to Section Brief ID (format: SB-NNN)",
+            "Search for existing passage with same brief_ref",
+            "If found, update existing passage; if not, create new",
+            "Set brief_ref to Passage Brief ID (format: SB-NNN)",
             "Write prose honoring Plotwright intent",
             "Express all gates diegetically",
             "Ensure choices are contrastive",
             "Self-validate before requesting gatecheck"
           ],
           "preconditions": [
-            "Section brief exists",
+            "Passage brief exists",
             "Style guide accessible"
           ],
           "postconditions": [
-            "Section created/updated with brief_ref set",
+            "Passage created/updated with brief_ref set",
             "Prose matches brief intent"
           ]
         },
         {
-          "goal": "Self-validate section before gatecheck",
+          "goal": "Self-validate passage before gatecheck",
           "steps": [
-            "Verify brief_ref is set to Section Brief ID (SB-NNN)",
+            "Verify brief_ref is set to Passage Brief ID (SB-NNN)",
             "Check all choices lead somewhere (anchor resolution)",
             "Confirm no spoilers in prose",
             "Verify choices are contrastive",
             "Confirm gates are diegetic"
           ],
           "preconditions": [
-            "Section draft complete"
+            "Passage draft complete"
           ],
           "postconditions": [
             "Ready for Gatekeeper review"
@@ -142,24 +142,24 @@
         },
         {
           "term": "brief_ref",
-          "meaning": "Required field linking section to its source Section Brief",
+          "meaning": "Required field linking passage to its source Passage Brief",
           "distinguishing_features": [
             "Format: SB-NNN",
-            "Must be set on every section artifact",
+            "Must be set on every passage artifact",
             "Enables workflow tracking"
           ]
         }
       ],
       "warnings": [
         {
-          "failure_mode": "Creating section without brief_ref",
-          "consequence": "Orphaned section; Gatekeeper can't find it; Showrunner can't track progress",
-          "prevention": "Always set brief_ref when creating section"
+          "failure_mode": "Creating passage without brief_ref",
+          "consequence": "Orphaned passage; Gatekeeper can't find it; Showrunner can't track progress",
+          "prevention": "Always set brief_ref when creating passage"
         },
         {
-          "failure_mode": "Creating duplicate section for same brief",
-          "consequence": "Multiple sections reference same brief; ambiguity in which is canonical",
-          "prevention": "Search for existing section with brief_ref before creating new"
+          "failure_mode": "Creating duplicate passage for same brief",
+          "consequence": "Multiple passages reference same brief; ambiguity in which is canonical",
+          "prevention": "Search for existing passage with brief_ref before creating new"
         },
         {
           "failure_mode": "Exposing codewords or flag IDs in prose",

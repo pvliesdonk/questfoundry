@@ -53,16 +53,16 @@
           "reasoning": "Respect role boundaries; don't take over their work"
         },
         {
-          "statement": "For full-gate reviews (sections, not briefs), USE analyze_story_graph for Reachability - don't guess or defer",
+          "statement": "For full-gate reviews (passages, not briefs), USE analyze_story_graph for Reachability - don't guess or defer",
           "severity": "error",
           "enforcement": "llm",
           "reasoning": "You have the tool; use it instead of deferring to 'further analysis'"
         },
         {
-          "statement": "If reviewing section_briefs and Reachability is yellow, use result_assessment: 'info' with recommendation: 'proceed'",
+          "statement": "If reviewing passage_briefs and Reachability is yellow, use result_assessment: 'info' with recommendation: 'proceed'",
           "severity": "warning",
           "enforcement": "llm",
-          "reasoning": "Section briefs can proceed to Scene Weave without full reachability validation"
+          "reasoning": "Passage briefs can proceed to Scene Weave without full reachability validation"
         }
       ],
       "heuristics": [
@@ -70,29 +70,29 @@
           "context": "Finding artifacts to validate when delegation context includes artifact_refs",
           "guidance": "Use artifact_refs directly from delegation context as highest priority",
           "examples": [
-            "situation: context.artifact_refs: ['section_brief_abc', 'section_brief_def'] | approach: get_artifact(['section_brief_abc', 'section_brief_def'])"
+            "situation: context.artifact_refs: ['passage_brief_abc', 'passage_brief_def'] | approach: get_artifact(['passage_brief_abc', 'passage_brief_def'])"
           ]
         },
         {
           "context": "Finding artifacts when no artifact_refs provided",
           "guidance": "Search by correct artifact type based on task description",
           "examples": [
-            "situation: Task mentions 'section briefs' | approach: Search for artifact_type: section_brief (NOT section)",
-            "situation: Task mentions 'sections' (prose) | approach: Search for artifact_type: section"
+            "situation: Task mentions 'passage briefs' | approach: Search for artifact_type: passage_brief (NOT passage_brief)",
+            "situation: Task mentions 'passages' (prose) | approach: Search for artifact_type: passage"
           ]
         },
         {
-          "context": "Conducting pre-gate reviews (section_briefs before Scene Weave)",
+          "context": "Conducting pre-gate reviews (passage_briefs before Scene Weave)",
           "guidance": "Focus on Integrity, Nonlinearity, and Gateway structure; Reachability is INFORMATIONAL ONLY",
           "examples": [
-            "situation: Reachability bar is yellow on section_briefs | approach: Use result_assessment: info with recommendation: proceed - do NOT block"
+            "situation: Reachability bar is yellow on passage_briefs | approach: Use result_assessment: info with recommendation: proceed - do NOT block"
           ]
         },
         {
-          "context": "Conducting full-gate reviews (sections after Scene Weave)",
+          "context": "Conducting full-gate reviews (passages after Scene Weave)",
           "guidance": "All 8 bars apply fully; use analyze_story_graph for Reachability data",
           "examples": [
-            "situation: Need reachability analysis for sections | approach: Call analyze_story_graph({}) to get reachability, dead ends, missing targets"
+            "situation: Need reachability analysis for passages | approach: Call analyze_story_graph({}) to get reachability, dead ends, missing targets"
           ]
         },
         {
@@ -190,7 +190,7 @@
         },
         {
           "term": "Pre-gate review",
-          "meaning": "Validation of section_briefs before Scene Weave",
+          "meaning": "Validation of passage_briefs before Scene Weave",
           "distinguishing_features": [
             "Focus on Integrity, Nonlinearity, Gateway structure",
             "Reachability is informational only (yellow bar OK)",
@@ -199,7 +199,7 @@
         },
         {
           "term": "Full-gate review",
-          "meaning": "Validation of sections after Scene Weave",
+          "meaning": "Validation of passages after Scene Weave",
           "distinguishing_features": [
             "All 8 bars apply fully",
             "Must use analyze_story_graph for Reachability",

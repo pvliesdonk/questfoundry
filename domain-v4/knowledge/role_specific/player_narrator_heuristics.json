@@ -13,7 +13,7 @@
     "gamemaster"
   ],
   "triggers": [
-    "narrating a section to a player",
+    "narrating a passage to a player",
     "presenting choices",
     "player attempts off-script action",
     "enforcing a gate diegetically",
@@ -98,7 +98,7 @@
         },
         {
           "context": "Pacing prose narration",
-          "guidance": "Don't dump entire sections at once. Pause at natural break points. Match intensity to content\u2014slow for atmosphere, quick for action.",
+          "guidance": "Don't dump entire passages at once. Pause at natural break points. Match intensity to content\u2014slow for atmosphere, quick for action.",
           "examples": [
             "Pause after atmospheric description before action",
             "Quick, punchy sentences during combat",

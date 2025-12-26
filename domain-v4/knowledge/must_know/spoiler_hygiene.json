@@ -46,7 +46,7 @@
             "Codeword names or gate logic (CODEWORD: …, flag=true, DC checks, RNG)",
             "Determinism or production details (seeds, models, DAW, plugins, sampler settings)",
             "Canon twists, hidden allegiances, behind-the-scenes causes",
-            "Internal identifiers (schema field names, section IDs as canonical truth, file paths)",
+            "Internal identifiers (schema field names, passage IDs as canonical truth, file paths)",
             "Reviewer/debug marks ('TODO', 'FIXME', 'dev note')",
             "Out-of-world directives ('click', 'flag', 'roll', 'invoke schema')"
           ]
