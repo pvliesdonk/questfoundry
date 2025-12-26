@@ -18,7 +18,10 @@ from questfoundry.runtime.tools.base import BaseTool, ToolResult
 from questfoundry.runtime.tools.registry import TOOL_IMPLEMENTATIONS, register_tool
 
 if TYPE_CHECKING:
-    from questfoundry.runtime.storage.lifecycle import LifecycleManager
+    from questfoundry.runtime.storage.lifecycle import (
+        LifecycleManager,
+        TransitionPrecondition,
+    )
     from questfoundry.runtime.storage.store_manager import StoreManager
 
 logger = logging.getLogger(__name__)
@@ -260,7 +263,7 @@ class RequestLifecycleTransitionTool(BaseTool):
     def _validate_preconditions(
         self,
         artifact: dict[str, Any],
-        preconditions: list[Any],
+        preconditions: list[TransitionPrecondition],
     ) -> dict[str, Any]:
         """
         Validate transition preconditions against current project state.
@@ -309,6 +312,22 @@ class RequestLifecycleTransitionTool(BaseTool):
                 # If match_field specified, check for matching value
                 if match_field:
                     source_value = artifact.get(match_field)
+                    # Check if source artifact has the match_field
+                    if source_value is None:
+                        failures.append(
+                            {
+                                "type": "requires_artifact",
+                                "artifact_type": target_type,
+                                "match_field": match_field,
+                                "message": (
+                                    f"Source artifact missing '{match_field}' field "
+                                    f"required for matching"
+                                ),
+                                "fix": (f"Set the '{match_field}' field on the source artifact"),
+                            }
+                        )
+                        continue
+
                     found_match = False
                     for candidate in matching_artifacts:
                         if candidate.get(match_field) == source_value:
@@ -360,6 +379,20 @@ class RequestLifecycleTransitionTool(BaseTool):
                 # Filter by match_field if specified
                 if match_field:
                     match_value = artifact.get(match_field)
+                    # Check if source artifact has the match_field
+                    if match_value is None:
+                        failures.append(
+                            {
+                                "type": "field_references",
+                                "match_field": match_field,
+                                "message": (
+                                    f"Source artifact missing '{match_field}' field "
+                                    f"required for filtering target artifacts"
+                                ),
+                                "fix": (f"Set the '{match_field}' field on the source artifact"),
+                            }
+                        )
+                        continue
                     target_artifacts = [
                         a for a in target_artifacts if a.get(match_field) == match_value
                     ]

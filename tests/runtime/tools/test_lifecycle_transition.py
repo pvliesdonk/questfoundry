@@ -1502,3 +1502,47 @@ class TestTransitionPreconditions:
         result = await tool.execute({"artifact_id": "brief_001", "target_state": "ready"})
         assert result.success is True
         assert result.data["transitioned"] is True
+
+    @pytest.mark.asyncio
+    async def test_precondition_blocks_when_match_field_missing_on_source(
+        self, precondition_project, lifecycle_manager_with_preconditions
+    ):
+        """Transition blocked when match_field is specified but source artifact lacks it."""
+        # Add topology with ifid
+        precondition_project.artifacts["topology_001"] = {
+            "_id": "topology_001",
+            "_type": "topology",
+            "ifid": "story-123",
+            "passages": [{"pid": "passage-1", "name": "Passage 1"}],
+        }
+
+        # Remove ifid from the source brief - match_field won't find a value
+        del precondition_project.artifacts["brief_001"]["ifid"]
+
+        ctx = ToolContext(
+            studio=MockStudio(),
+            project=precondition_project,
+            agent_id="plotwright",
+            lifecycle_manager=lifecycle_manager_with_preconditions,
+        )
+
+        tool = RequestLifecycleTransitionTool(
+            MockToolDefinition("request_lifecycle_transition"),
+            ctx,
+        )
+
+        result = await tool.execute(
+            {
+                "artifact_id": "brief_001",
+                "target_state": "ready",
+            }
+        )
+
+        assert result.success is False
+        assert "Preconditions not met" in result.error
+        failures = result.data["precondition_failures"]
+        # Should complain about missing match_field on source artifact
+        assert any(
+            "missing" in f.get("message", "").lower() and "ifid" in f.get("message", "")
+            for f in failures
+        )
