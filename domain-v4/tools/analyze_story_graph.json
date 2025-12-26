@@ -56,7 +56,7 @@
           "properties": {
             "issue_type": {
               "type": "string",
-              "enum": ["unreachable_passages", "dead_ends", "orphan_passages", "briefs_missing", "briefs_extra", "no_stable_passages", "no_endings"]
+              "enum": ["unreachable_passages", "dead_ends", "orphan_passages", "briefs_missing", "briefs_extra", "passages_missing", "passages_extra", "no_stable_passages", "no_endings", "ifid_mismatch", "multiple_entry_points", "duplicate_pids"]
             },
             "severity": { "type": "string", "enum": ["warning"] },
             "description": { "type": "string" },
@@ -159,7 +159,7 @@
               "properties": {
                 "pid": { "type": "string" },
                 "name": { "type": "string" },
-                "topology_role": { "type": "string", "enum": ["hub", "loop", "gateway", "linear"] },
+                "topology_role": { "type": ["string", "null"], "enum": ["hub", "loop", "gateway", "linear", null] },
                 "is_ending": { "type": "boolean" },
                 "tags": { "type": "array", "items": { "type": "string" } },
                 "brief_artifact_id": { "type": "string" },
