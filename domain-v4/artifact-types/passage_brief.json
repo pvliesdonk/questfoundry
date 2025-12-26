@@ -204,7 +204,27 @@
     ],
     "initial_state": "draft",
     "transitions": [
-      { "from": "draft", "to": "ready" },
+      {
+        "from": "draft",
+        "to": "ready",
+        "description": "Brief is complete and ready for Scene Smith. Requires topology to exist.",
+        "preconditions": [
+          {
+            "requires_artifact": {
+              "artifact_type": "topology",
+              "match_field": "ifid"
+            }
+          },
+          {
+            "field_references": {
+              "source_field": "target",
+              "target_artifact_type": "topology",
+              "target_path": "passages[].pid",
+              "match_field": "ifid"
+            }
+          }
+        ]
+      },
       { "from": "ready", "to": "in_use" },
       { "from": "in_use", "to": "ready" },
       { "from": "in_use", "to": "archived" }

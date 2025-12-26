@@ -109,6 +109,29 @@ class LifecycleState(BaseModel):
     terminal: bool = False
 
 
+class RequiresArtifact(BaseModel):
+    """Precondition requiring an artifact of a specific type to exist."""
+
+    artifact_type: str
+    match_field: str | None = None
+
+
+class FieldReferences(BaseModel):
+    """Precondition validating a field value exists in another artifact."""
+
+    source_field: str
+    target_artifact_type: str
+    target_path: str
+    match_field: str | None = None
+
+
+class TransitionPrecondition(BaseModel):
+    """Precondition that must be satisfied before a lifecycle transition."""
+
+    requires_artifact: RequiresArtifact | None = None
+    field_references: FieldReferences | None = None
+
+
 class LifecycleTransition(BaseModel):
     """Lifecycle state transition."""
 
@@ -116,6 +139,9 @@ class LifecycleTransition(BaseModel):
     to_state: str = Field(alias="to")
     allowed_agents: list[str] = Field(default_factory=list)
     requires_validation: list[str] = Field(default_factory=list)
+    preconditions: list[TransitionPrecondition] = Field(default_factory=list)
+    target_store: str | None = None
+    description: str | None = None
 
     model_config = {"populate_by_name": True}
 
