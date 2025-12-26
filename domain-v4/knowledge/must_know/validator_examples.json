@@ -22,25 +22,35 @@
     "data": {
       "procedures": [
         {
-          "goal": "Complete a validation cycle",
+          "goal": "Complete a validation cycle with lifecycle promotion",
           "steps": [
             "Step 1 - Fetch artifact to validate: get_artifact('section-001')",
-            "Step 2 - Check each quality bar (canon consistency, prose quality, format compliance)",
-            "Step 3 - Document findings in structured report",
-            "Step 4 - Save report: save_artifact(artifact_type='gatecheck_report', data={'target_artifact': 'section-001', 'findings': [...], 'verdict': 'pass'})",
+            "Step 2 - Validate using tool: validate_artifact(artifact_id='section-001')",
+            "Step 3 - Check tool result: If all bars pass, proceed. If issues found, document them.",
+            "Step 4 - Save gatecheck report: save_artifact(artifact_type='gatecheck_report', data={'target_artifact': 'section-001', 'bar_results': [...], 'verdict': 'pass'})",
             "Step 5 - Note report ID: {\"artifact_id\": \"GC-001\", \"status\": \"created\"}",
-            "Step 6 - Return with assessment: return_to_orchestrator(summary='Validated section-001 against quality bars', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
+            "Step 6 - If verdict is pass, promote artifact: request_lifecycle_transition(artifact_id='section-001', target_state='review')",
+            "Step 7 - Return with assessment: return_to_orchestrator(summary='Validated section-001 - all bars pass, promoted to review', result_assessment='pass', recommendation='proceed', artifacts_produced=['GC-001'])"
           ],
           "preconditions": [
             "Received delegation with artifact_refs containing artifact to validate"
           ],
           "postconditions": [
             "Gatecheck report saved with findings",
+            "Passing artifacts promoted to review state",
             "Clear pass/fail verdict returned"
           ]
         }
       ],
       "heuristics": [
+        {
+          "context": "When validate_artifact tool returns all bars passing",
+          "guidance": "Trust the tool result. Return pass/proceed and promote to review. Do NOT add subjective concerns beyond what the tool checked.",
+          "examples": [
+            "Tool says all bars pass -> result_assessment='pass', promote to review",
+            "Tool says integrity/nonlinearity/style pass -> accept this verdict, don't second-guess"
+          ]
+        },
         {
           "context": "When artifacts fail validation",
           "guidance": "Provide actionable feedback in report findings",
@@ -51,12 +61,12 @@
         },
         {
           "context": "Choosing result_assessment and recommendation",
-          "guidance": "Match assessment to severity of issues found",
+          "guidance": "Match assessment to severity of issues found by validate_artifact tool",
           "examples": [
-            "No issues -> result_assessment='pass', recommendation='proceed'",
-            "Minor issues, fixable -> result_assessment='partial', recommendation='rework'",
-            "Critical issues, needs major revision -> result_assessment='fail', recommendation='rework'",
-            "Blocking issue, needs customer input -> result_assessment='fail', recommendation='escalate'"
+            "All bars pass -> result_assessment='pass', recommendation='proceed', promote to review",
+            "Some bars warn but none fail -> result_assessment='pass', recommendation='proceed'",
+            "One or more bars fail -> result_assessment='partial', recommendation='rework'",
+            "Critical structural issues -> result_assessment='fail', recommendation='rework'"
           ]
         }
       ],
@@ -70,6 +80,16 @@
           "failure_mode": "Vague findings",
           "consequence": "Creator cannot fix issues without specific guidance",
           "prevention": "Include exact location (paragraph, sentence) and specific fix in each finding"
+        },
+        {
+          "failure_mode": "Adding subjective concerns when validate_artifact passes",
+          "consequence": "Unnecessary rework cycles. Wastes time on non-issues.",
+          "prevention": "If validate_artifact says all bars pass, return pass/proceed. Don't invent concerns the tool didn't find."
+        },
+        {
+          "failure_mode": "Returning pass but not promoting to review",
+          "consequence": "Artifacts stay in draft forever. Workflow stalls.",
+          "prevention": "When validation passes, call request_lifecycle_transition to promote to review state."
         }
       ]
     }

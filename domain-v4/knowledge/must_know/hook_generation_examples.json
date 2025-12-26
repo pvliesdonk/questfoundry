@@ -1,0 +1,104 @@
+{
+  "$schema": "../../../meta/schemas/knowledge/knowledge-entry.schema.json",
+  "id": "hook_generation_examples",
+  "name": "Hook Generation Examples",
+  "layer": "must_know",
+
+  "summary": "How to generate hook_card artifacts during creative work to capture ideas for later",
+
+  "keywords": ["hook", "hook_card", "ideas", "capture", "defer", "future"],
+
+  "triggers": [
+    "generate hooks",
+    "hook cards",
+    "capture ideas",
+    "defer for later"
+  ],
+
+  "content": {
+    "type": "structured",
+    "format": "json",
+    "schema_ref": "knowledge/structured-content.schema.json#/$defs/structured_entry",
+    "data": {
+      "definitions": [
+        {
+          "term": "hook_card",
+          "meaning": "A captured idea, question, or opportunity that doesn't need resolution now but should be tracked for future work.",
+          "distinguishing_features": [
+            "Created during creative work when ideas arise",
+            "State 'proposed' means awaiting triage",
+            "Hook Harvest playbook will later decide: accept, defer, or reject"
+          ]
+        }
+      ],
+      "procedures": [
+        {
+          "goal": "Generate hooks during section brief creation",
+          "steps": [
+            "Step 1 - While creating briefs, note ideas that arise but aren't needed now",
+            "Step 2 - Identify hook types: canon_gap (missing lore), scene_idea (future scene), fact_check (needs research), style_note (aesthetic opportunity)",
+            "Step 3 - Create hook cards: save_artifact(artifact_type='hook_card', data={'hook_type': 'canon_gap', 'summary': 'Lighthouse keeper backstory unexplained', 'context': 'Referenced in section SB-003 but no canon exists', 'suggested_owner': 'lore_weaver'})",
+            "Step 4 - Note hook IDs: {\"artifact_id\": \"hook_001\", \"status\": \"created\"}",
+            "Step 5 - Include hooks in return: return_to_orchestrator(summary='Created 3 briefs and 2 hooks', artifacts_produced=['SB-001', 'SB-002', 'SB-003', 'hook_001', 'hook_002'])"
+          ],
+          "preconditions": [
+            "Working on creative task (briefs, prose, lore)"
+          ],
+          "postconditions": [
+            "Ideas captured as hook_cards in proposed state",
+            "Hook IDs included in artifacts_produced"
+          ]
+        }
+      ],
+      "heuristics": [
+        {
+          "context": "When to create a hook",
+          "guidance": "Create hooks for ideas that would improve the story but aren't required for the current task",
+          "examples": [
+            "Writing a scene and thinking 'this character could have an interesting backstory' -> hook_card",
+            "Referencing a location that has no established lore -> hook_card with hook_type='canon_gap'",
+            "Noticing a fact that should be verified -> hook_card with hook_type='fact_check'",
+            "Imagining a future scene that would be cool -> hook_card with hook_type='scene_idea'"
+          ]
+        },
+        {
+          "context": "When NOT to create a hook",
+          "guidance": "Don't create hooks for things required to complete the current task",
+          "examples": [
+            "Missing information needed NOW -> ask orchestrator or research, don't defer",
+            "Core plot element -> include in brief, don't defer to hook"
+          ]
+        },
+        {
+          "context": "Hook card content",
+          "guidance": "Include enough context for Hook Harvest to make a decision",
+          "examples": [
+            "summary: 'Lighthouse keeper motivation unclear'",
+            "context: 'SB-003 implies keeper has a secret but no canon explains it'",
+            "suggested_owner: 'lore_weaver' (who should address this)"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "failure_mode": "Not creating hooks when ideas arise",
+          "consequence": "Good ideas are lost. Story misses opportunities for depth.",
+          "prevention": "Whenever an idea arises that isn't needed now, save it as a hook_card."
+        },
+        {
+          "failure_mode": "Not including hooks in artifacts_produced",
+          "consequence": "Orchestrator doesn't know hooks were created. Hook Harvest never sees them.",
+          "prevention": "Always include hook IDs in return_to_orchestrator artifacts_produced."
+        }
+      ]
+    }
+  },
+
+  "applicable_to": {
+    "archetypes": ["creator", "architect"]
+  },
+
+  "related_entries": ["artifact_model", "creator_examples"],
+
+  "tags": ["examples", "few-shot", "hooks", "ideas", "capture"]
+}
