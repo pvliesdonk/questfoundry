@@ -122,9 +122,9 @@ class TransitionPrecondition:
         requires_artifact = None
         field_references = None
 
-        if "requires_artifact" in data:
+        if data.get("requires_artifact"):
             requires_artifact = RequiresArtifactPrecondition.from_dict(data["requires_artifact"])
-        if "field_references" in data:
+        if data.get("field_references"):
             field_references = FieldReferencesPrecondition.from_dict(data["field_references"])
 
         return cls(
