@@ -48,8 +48,10 @@
   ],
 
   "artifact_types": [
-    "artifact-types/section_brief.json",
-    "artifact-types/section.json",
+    "artifact-types/story.json",
+    "artifact-types/topology.json",
+    "artifact-types/passage_brief.json",
+    "artifact-types/passage.json",
     "artifact-types/hook_card.json",
     "artifact-types/gatecheck_report.json",
     "artifact-types/research_memo.json",
@@ -96,7 +98,10 @@
   ],
 
   "relationships": [
-    "relationships/section_from_brief.json",
+    "relationships/topology_from_story.json",
+    "relationships/brief_from_topology.json",
+    "relationships/passage_from_brief.json",
+    "relationships/passage_from_topology.json",
     "relationships/codex_from_canon.json"
   ],
 
@@ -121,8 +126,8 @@
   },
 
   "metadata": {
-    "wave": 7,
+    "wave": 8,
     "status": "complete",
-    "notes": "Wave 7: Added list_* tools for explicit discovery (list_artifact_types, list_stores, list_agents). V3 pattern: compact menus in prompt with consult tools for full details. Studio definition: 12 agents, 20 tools, 16 artifact types, 2 asset types, 7 playbooks."
+    "notes": "Wave 8: Story Architecture Overhaul - Added story and topology artifacts, adopted Twine terminology (section→passage), topology-first workflow. Studio definition: 12 agents, 20 tools, 18 artifact types, 2 asset types, 7 playbooks, 5 relationships."
   }
 }
