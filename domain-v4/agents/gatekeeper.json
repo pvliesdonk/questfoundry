@@ -82,7 +82,7 @@
     {
       "id": "write_manuscript",
       "name": "Write to Manuscript",
-      "description": "Can promote validated sections to narrative canon after gatecheck passes",
+      "description": "Can promote validated passages to narrative canon after gatecheck passes",
       "category": "store_access",
       "stores": ["manuscript"],
       "access_level": "write"

@@ -2,8 +2,8 @@
   "$schema": "../../meta/schemas/core/agent.schema.json",
   "id": "scene_smith",
   "name": "Scene Smith",
-  "summary": "Writes prose sections with dialogue and choices",
-  "description": "Transforms section_brief artifacts into section prose with dialogue, sensory detail, and contrastive choices. Uses validate_artifact for self-checking before gatecheck. Expresses all gates as world facts (badge, knowledge, reputation), never mechanics. Follows style_guide for voice and register. Does NOT modify structure - raises hooks for plotwright when structural changes are needed.",
+  "summary": "Writes prose passages with dialogue and choices",
+  "description": "Transforms passage_brief artifacts into passage prose with dialogue, sensory detail, and contrastive choices. Uses validate_artifact for self-checking before gatecheck. Expresses all gates as world facts (badge, knowledge, reputation), never mechanics. Follows style_guide for voice and register. Does NOT modify structure - raises hooks for plotwright when structural changes are needed.",
 
   "archetypes": ["creator"],
 
@@ -61,17 +61,17 @@
     {
       "id": "write_workspace",
       "name": "Write to Workspace",
-      "description": "Can write draft sections and hooks",
+      "description": "Can write draft passages and hooks",
       "category": "store_access",
       "stores": ["workspace"],
       "access_level": "write"
     },
     {
-      "id": "create_sections",
-      "name": "Create Sections",
-      "description": "Create and update section prose from briefs",
+      "id": "create_passages",
+      "name": "Create Passages",
+      "description": "Create and update passage prose from briefs",
       "category": "artifact_action",
-      "artifact_types": ["section"],
+      "artifact_types": ["passage"],
       "actions": ["create", "read", "update"]
     },
     {

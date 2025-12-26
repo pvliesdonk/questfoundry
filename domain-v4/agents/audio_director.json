@@ -70,7 +70,7 @@
     {
       "id": "manage_cuelists",
       "name": "Manage Cuelists",
-      "description": "Organize audio plans into cuelists by scene/section",
+      "description": "Organize audio plans into cuelists by scene/passage",
       "category": "artifact_action",
       "artifact_types": ["cuelist"],
       "actions": ["create", "read", "update"]
