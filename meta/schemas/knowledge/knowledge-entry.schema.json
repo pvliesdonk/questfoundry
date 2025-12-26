@@ -29,6 +29,24 @@
       "description": "Brief summary for the 'menu' - shown in system prompt for must_know, or as search result preview. Keep concise for context efficiency."
     },
 
+    "concise_summary": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Menu display for small models. Simpler than summary, removes nuances small models can't handle. Empty string means exclude from small model context entirely. If undefined, falls back to 'summary'."
+    },
+
+    "concise_description": {
+      "type": "string",
+      "description": "Full content for small models when entry is consulted. Simpler than normal description, may omit edge cases and conditional logic. Empty string means exclude from small model consult results. If undefined, falls back to normal rendered content."
+    },
+
+    "injection_priority": {
+      "type": "string",
+      "enum": ["critical", "high", "normal", "low"],
+      "default": "normal",
+      "description": "Controls ordering in prompt to address 'Lost in the Middle' attention issues. Critical items appear at start AND end of prompt (sandwich pattern). High items near start, low items in middle."
+    },
+
     "keywords": {
       "type": "array",
       "items": { "type": "string" },

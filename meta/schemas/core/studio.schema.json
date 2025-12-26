@@ -164,6 +164,11 @@
       "description": "File path to knowledge layer configuration (e.g., 'knowledge/layers.json')"
     },
 
+    "model_class_config": {
+      "$ref": "#/$defs/model_class_config",
+      "description": "Configuration for model size classes, controlling prompt optimization and knowledge injection based on model capability"
+    },
+
     "defaults": {
       "$ref": "#/$defs/studio_defaults",
       "description": "Default values and configurations"
@@ -254,6 +259,67 @@
         }
       },
       "additionalProperties": true
+    },
+
+    "model_class_config": {
+      "type": "object",
+      "description": "Configuration for model size classes. Used to optimize prompts based on model capability. Addresses 'Lost in the Middle' attention issues and token budget constraints in smaller models.",
+      "properties": {
+        "classes": {
+          "type": "object",
+          "properties": {
+            "small": {
+              "$ref": "#/$defs/model_class_definition",
+              "description": "Small models (8B parameters and under)"
+            },
+            "medium": {
+              "$ref": "#/$defs/model_class_definition",
+              "description": "Medium models (8B-70B parameters)"
+            },
+            "large": {
+              "$ref": "#/$defs/model_class_definition",
+              "description": "Large models (70B+ parameters or frontier models)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "model_mappings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["small", "medium", "large"]
+          },
+          "description": "Map specific model names to size classes. E.g., {'qwen3:8b': 'small', 'llama3.1:70b': 'medium', 'gpt-4o': 'large'}"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "model_class_definition": {
+      "type": "object",
+      "description": "Settings for a specific model size class",
+      "properties": {
+        "max_params": {
+          "type": "string",
+          "description": "Maximum parameter count (e.g., '8B', '70B'). Null means no limit."
+        },
+        "prompt_budget_tokens": {
+          "type": "integer",
+          "minimum": 500,
+          "description": "Target maximum tokens for system prompt. Smaller budget forces more aggressive optimization."
+        },
+        "use_concise_content": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to prefer concise_summary and concise_description over normal versions"
+        },
+        "use_sandwich_pattern": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to repeat critical instructions at end of prompt"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

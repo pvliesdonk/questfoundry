@@ -60,6 +60,7 @@ class KnowledgeRequirements(BaseModel):
 
     constitution: bool = False
     must_know: list[str] = Field(default_factory=list)
+    small_model_must_know: list[str] = Field(default_factory=list)
     should_know: list[str] = Field(default_factory=list)
     role_specific: list[str] = Field(default_factory=list)
     can_lookup: list[str] = Field(default_factory=list)
@@ -457,6 +458,11 @@ class KnowledgeEntry(BaseModel):
     name: str | None = None
     summary: str | None = None
     layer: KnowledgeLayer = KnowledgeLayer.LOOKUP
+
+    # Small model optimization fields
+    concise_summary: str | None = None  # Menu display for small models
+    concise_description: str | None = None  # Full content for small models
+    injection_priority: str = "normal"  # critical, high, normal, low
 
     # Discovery fields
     keywords: list[str] = Field(default_factory=list)

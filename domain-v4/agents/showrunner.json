@@ -141,6 +141,7 @@
   "knowledge_requirements": {
     "constitution": true,
     "must_know": ["orchestrator_onboarding", "runtime_guidelines_core", "story_building_workflow", "delegation_protocol", "artifact_model"],
+    "small_model_must_know": ["runtime_guidelines_core"],
     "should_know": ["spoiler_hygiene", "sources_of_truth", "quality_bars_overview", "showrunner_operating_principles", "runtime_guidelines"],
     "role_specific": []
   },

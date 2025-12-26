@@ -6,6 +6,10 @@
 
   "summary": "How stories are built: passage_briefs (structure) → passages (prose). Use story_spark for briefs, scene_weave for prose.",
 
+  "concise_summary": "story_spark (briefs) → scene_weave (prose). Consult for details.",
+
+  "concise_description": "",
+
   "keywords": ["story", "passages", "briefs", "playbooks", "story_spark", "scene_weave", "structure"],
 
   "triggers": [

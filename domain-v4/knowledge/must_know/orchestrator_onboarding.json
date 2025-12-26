@@ -6,6 +6,10 @@
 
   "summary": "How to start a session: orient, clarify, then select playbook",
 
+  "concise_summary": "Clarify goal, then select playbook. Consult for details.",
+
+  "concise_description": "",
+
   "keywords": ["startup", "onboarding", "session start", "playbook selection", "clarification"],
 
   "triggers": [
