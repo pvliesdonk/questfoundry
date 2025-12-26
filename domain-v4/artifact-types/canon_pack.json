@@ -151,6 +151,12 @@
           }
         ]
       }
+    },
+    {
+      "name": "origin_hooks",
+      "type": "array",
+      "description": "Hook card IDs that triggered the creation or expansion of this canon pack",
+      "items_type": "string"
     }
   ],
 

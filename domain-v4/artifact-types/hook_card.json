@@ -47,6 +47,24 @@
       "description": "Cold snapshot date for context (format: Cold @ YYYY-MM-DD)"
     },
     {
+      "name": "target_ref",
+      "type": "object",
+      "description": "Reference to the artifact this hook targets",
+      "properties": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "Type of artifact being targeted",
+          "enum": ["story", "topology", "passage", "passage_brief", "canon_pack", "codex_entry", "global"]
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "description": "ID of the target artifact (e.g., passage pid, canon pack ID)"
+        }
+      ]
+    },
+    {
       "name": "classification",
       "type": "object",
       "description": "Hook type classification",
