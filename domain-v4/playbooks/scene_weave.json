@@ -365,12 +365,5 @@
 
   "quality_criteria": ["integrity", "style", "presentation", "accessibility", "choice_integrity", "spoiler_hygiene", "diegetic_gates", "topology_alignment"],
 
-  "max_rework_cycles": 3,
-
-  "permissions": {
-    "may_create": ["passage", "hook_card"],
-    "may_modify": ["passage"],
-    "must_not_modify": ["story", "topology", "passage_brief", "canon_pack", "codex_entry"],
-    "escalation_path": "If blocked by topology constraints, raise hook for story_spark. If blocked by canon, raise hook for lore_deepening."
-  }
+  "max_rework_cycles": 3
 }

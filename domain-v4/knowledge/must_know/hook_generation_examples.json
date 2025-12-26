@@ -95,7 +95,7 @@
   },
 
   "applicable_to": {
-    "archetypes": ["creator", "architect"]
+    "archetypes": ["creator"]
   },
 
   "related_entries": ["artifact_model", "creator_examples"],

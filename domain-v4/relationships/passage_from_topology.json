@@ -6,5 +6,6 @@
   "from_type": "topology",
   "to_type": "passage",
   "kind": "references",
-  "link_field": "topology_passage_ref"
+  "link_field": "topology_passage_ref",
+  "link_resolution": "by_artifact_id"
 }

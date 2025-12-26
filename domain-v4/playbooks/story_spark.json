@@ -409,12 +409,5 @@
 
   "quality_criteria": ["integrity", "reachability", "nonlinearity", "gateways"],
 
-  "max_rework_cycles": 3,
-
-  "permissions": {
-    "may_create": ["story", "topology", "passage_brief", "hook_card"],
-    "may_modify": ["story", "topology"],
-    "must_not_modify": ["passage", "canon_pack", "codex_entry"],
-    "escalation_path": "If blocked by canon or style constraints, raise hook for lore_deepening or style_tune_up"
-  }
+  "max_rework_cycles": 3
 }
