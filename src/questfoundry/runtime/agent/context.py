@@ -320,7 +320,8 @@ class ContextBuilder:
             use_concise: If True, use concise_description for small models
 
         Returns:
-            Dict with id, name, content or None if entry should be excluded
+            Dict with id, name, content, injection_priority, concise_summary
+            or None if entry should be excluded
         """
         if use_concise:
             # Check for concise_description (small model optimization)
@@ -339,6 +340,8 @@ class ContextBuilder:
             "id": entry.id,
             "name": entry.name or entry.id,
             "content": content,
+            "injection_priority": entry.injection_priority,
+            "concise_summary": entry.concise_summary or entry.summary or "",
         }
 
     def _format_entry_for_menu(

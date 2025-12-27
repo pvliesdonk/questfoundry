@@ -178,6 +178,13 @@ class PromptBuilder:
             menu = self._build_knowledge_menu(role_specific_menu)
             self.add_section("knowledge_menu", menu, priority=45)
 
+        # 13. Critical Reminder (sandwich pattern - LOWEST priority = appears LAST)
+        # Repeats critical knowledge at end to combat "Lost in the Middle" effect
+        if must_know_entries:
+            reminder = self._build_critical_reminder_section(must_know_entries)
+            if reminder:
+                self.add_section("critical_reminder", reminder, priority=0)
+
         return self._assemble()
 
     def _build_identity_section(self, agent: Agent) -> str:
@@ -209,6 +216,36 @@ class PromptBuilder:
             lines.append(f"### {name}\n")
             lines.append(content)
             lines.append("")
+
+        return "\n".join(lines)
+
+    def _build_critical_reminder_section(self, entries: list[dict[str, str]]) -> str | None:
+        """Build the critical reminder section (sandwich pattern).
+
+        Extracts entries with injection_priority="critical" and repeats
+        them at the END of the prompt in condensed form. This combats
+        the "Lost in the Middle" effect where models forget instructions
+        that appear in the middle of long prompts.
+
+        Args:
+            entries: List of must_know entries with injection_priority and concise_summary
+
+        Returns:
+            Formatted reminder section, or None if no critical entries
+        """
+        critical_entries = [e for e in entries if e.get("injection_priority") == "critical"]
+
+        if not critical_entries:
+            return None
+
+        lines = ["## REMEMBER (Critical Rules)"]
+        lines.append("")
+
+        for entry in critical_entries:
+            # Use concise_summary for the reminder (not full content)
+            summary = entry.get("concise_summary", "")
+            if summary:
+                lines.append(f"**{entry.get('name', entry.get('id'))}**: {summary}")
 
         return "\n".join(lines)
 

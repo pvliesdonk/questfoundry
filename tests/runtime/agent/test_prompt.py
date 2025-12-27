@@ -227,3 +227,160 @@ class TestBuildPromptConvenience:
         assert isinstance(result, BuiltPrompt)
         assert "Test Agent" in result.text
         assert "Test constitution" in result.text
+
+
+class TestSandwichPattern:
+    """Tests for the sandwich pattern (critical reminder at end)."""
+
+    def test_critical_reminder_appears_at_end(self, basic_agent: Agent) -> None:
+        """Critical entries are repeated at the end of the prompt."""
+        builder = PromptBuilder()
+        must_know = [
+            {
+                "id": "critical_rules",
+                "name": "Critical Rules",
+                "content": "Full content of critical rules here.",
+                "injection_priority": "critical",
+                "concise_summary": "Tools only. Never write prose.",
+            },
+        ]
+
+        result = builder.build_for_agent(basic_agent, must_know_entries=must_know)
+
+        # Check that reminder section exists
+        assert "REMEMBER (Critical Rules)" in result.text
+
+        # Check the condensed summary is used
+        assert "Tools only. Never write prose." in result.text
+
+        # Verify reminder appears AFTER the main must_know section
+        must_know_pos = result.text.find("Critical Knowledge")
+        reminder_pos = result.text.find("REMEMBER (Critical Rules)")
+        assert reminder_pos > must_know_pos
+
+    def test_no_reminder_for_non_critical_entries(self, basic_agent: Agent) -> None:
+        """No reminder section when no critical entries exist."""
+        builder = PromptBuilder()
+        must_know = [
+            {
+                "id": "normal_knowledge",
+                "name": "Normal Knowledge",
+                "content": "Some normal knowledge.",
+                "injection_priority": "normal",
+                "concise_summary": "Just normal stuff.",
+            },
+        ]
+
+        result = builder.build_for_agent(basic_agent, must_know_entries=must_know)
+
+        # No reminder section
+        assert "REMEMBER" not in result.text
+
+    def test_reminder_uses_concise_summary_not_full_content(self, basic_agent: Agent) -> None:
+        """Reminder uses concise_summary to avoid repeating full content."""
+        builder = PromptBuilder()
+        must_know = [
+            {
+                "id": "verbose_entry",
+                "name": "Verbose Entry",
+                "content": "This is a very long full content that should not appear twice.",
+                "injection_priority": "critical",
+                "concise_summary": "Short reminder.",
+            },
+        ]
+
+        result = builder.build_for_agent(basic_agent, must_know_entries=must_know)
+
+        # Full content appears once (in must_know section)
+        assert result.text.count("very long full content") == 1
+
+        # Concise summary appears in reminder
+        assert "Short reminder." in result.text
+
+    def test_multiple_critical_entries_in_reminder(self, basic_agent: Agent) -> None:
+        """Multiple critical entries all appear in the reminder."""
+        builder = PromptBuilder()
+        must_know = [
+            {
+                "id": "rule1",
+                "name": "Rule One",
+                "content": "Full rule one.",
+                "injection_priority": "critical",
+                "concise_summary": "Summary one.",
+            },
+            {
+                "id": "rule2",
+                "name": "Rule Two",
+                "content": "Full rule two.",
+                "injection_priority": "critical",
+                "concise_summary": "Summary two.",
+            },
+            {
+                "id": "optional",
+                "name": "Optional Info",
+                "content": "Not critical.",
+                "injection_priority": "low",
+                "concise_summary": "Low priority.",
+            },
+        ]
+
+        result = builder.build_for_agent(basic_agent, must_know_entries=must_know)
+
+        # Both critical summaries appear
+        assert "Summary one." in result.text
+        assert "Summary two." in result.text
+
+        # Low priority entry NOT in reminder
+        # Check that "Low priority." only appears in the must_know section, not in REMEMBER
+        reminder_section = result.text.split("REMEMBER")[-1] if "REMEMBER" in result.text else ""
+        assert "Low priority." not in reminder_section
+
+    def test_reminder_section_has_lowest_priority(self, basic_agent: Agent) -> None:
+        """Critical reminder section has priority=0 (appears last)."""
+        builder = PromptBuilder()
+        must_know = [
+            {
+                "id": "critical_rules",
+                "name": "Critical Rules",
+                "content": "Critical content.",
+                "injection_priority": "critical",
+                "concise_summary": "Remember this.",
+            },
+        ]
+
+        result = builder.build_for_agent(
+            basic_agent,
+            must_know_entries=must_know,
+            role_specific_menu=[{"id": "menu1", "name": "Menu Item", "summary": "Menu summary"}],
+        )
+
+        # Find the critical_reminder section
+        reminder_section = None
+        for section in result.sections:
+            if section.name == "critical_reminder":
+                reminder_section = section
+                break
+
+        assert reminder_section is not None
+        assert reminder_section.priority == 0  # Lowest priority = appears last
+
+    def test_empty_concise_summary_skipped(self, basic_agent: Agent) -> None:
+        """Entries with empty concise_summary are skipped in reminder."""
+        builder = PromptBuilder()
+        must_know = [
+            {
+                "id": "no_summary",
+                "name": "No Summary Entry",
+                "content": "Has content but no summary.",
+                "injection_priority": "critical",
+                "concise_summary": "",
+            },
+        ]
+
+        result = builder.build_for_agent(basic_agent, must_know_entries=must_know)
+
+        # Reminder section may exist but without this entry's name
+        # (since its summary is empty, it won't be added to the reminder)
+        if "REMEMBER" in result.text:
+            reminder_section = result.text.split("REMEMBER")[-1]
+            assert "No Summary Entry" not in reminder_section
