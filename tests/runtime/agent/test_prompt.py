@@ -365,7 +365,7 @@ class TestSandwichPattern:
         assert reminder_section.priority == 0  # Lowest priority = appears last
 
     def test_empty_concise_summary_skipped(self, basic_agent: Agent) -> None:
-        """Entries with empty concise_summary are skipped in reminder."""
+        """No REMEMBER section when only critical entry has empty summary."""
         builder = PromptBuilder()
         must_know = [
             {
@@ -379,8 +379,5 @@ class TestSandwichPattern:
 
         result = builder.build_for_agent(basic_agent, must_know_entries=must_know)
 
-        # Reminder section may exist but without this entry's name
-        # (since its summary is empty, it won't be added to the reminder)
-        if "REMEMBER" in result.text:
-            reminder_section = result.text.split("REMEMBER")[-1]
-            assert "No Summary Entry" not in reminder_section
+        # The REMEMBER section should not be generated at all if it would be empty
+        assert "REMEMBER" not in result.text

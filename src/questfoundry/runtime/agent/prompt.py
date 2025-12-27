@@ -231,22 +231,21 @@ class PromptBuilder:
             entries: List of must_know entries with injection_priority and concise_summary
 
         Returns:
-            Formatted reminder section, or None if no critical entries
+            Formatted reminder section, or None if no critical entries with summaries
         """
-        critical_entries = [e for e in entries if e.get("injection_priority") == "critical"]
+        # Collect reminder lines first, then check if any exist
+        reminder_lines = []
+        for entry in entries:
+            if entry.get("injection_priority") == "critical":
+                summary = entry.get("concise_summary", "")
+                if summary:
+                    reminder_lines.append(f"**{entry.get('name', entry.get('id'))}**: {summary}")
 
-        if not critical_entries:
+        if not reminder_lines:
             return None
 
-        lines = ["## REMEMBER (Critical Rules)"]
-        lines.append("")
-
-        for entry in critical_entries:
-            # Use concise_summary for the reminder (not full content)
-            summary = entry.get("concise_summary", "")
-            if summary:
-                lines.append(f"**{entry.get('name', entry.get('id'))}**: {summary}")
-
+        lines = ["## REMEMBER (Critical Rules)", ""]
+        lines.extend(reminder_lines)
         return "\n".join(lines)
 
     def _build_constraints_section(self, agent: Agent) -> str:
