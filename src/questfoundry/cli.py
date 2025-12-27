@@ -14,8 +14,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -1351,26 +1352,63 @@ async def _handle_clarification_requests(
     return handled
 
 
-async def _ask_single(
+# =============================================================================
+# Session Lifecycle (Issue #211 - Consolidate CLI code paths)
+# =============================================================================
+
+
+@dataclass
+class _SessionContext:
+    """Context holder for CLI session lifecycle (Issue #211).
+
+    This dataclass holds all the runtime components needed for a CLI session,
+    enabling code reuse between single-shot and REPL modes.
+    """
+
+    project: Project
+    studio: Studio
+    runtime: AgentRuntime
+    agent: Agent
+    session: Session
+    provider: LLMProvider
+    event_logger: EventLogger | None
+    log_path: Path | None
+    broker: AsyncMessageBroker
+    tracing_manager: TracingManager | None
+    respond: Callable[..., Awaitable[str]]
+
+
+@asynccontextmanager
+async def _session_lifecycle(
     project_id: str,
-    prompt: str,
     entry_agent_id: str | None,
     domain_path: Path,
     projects_dir: Path,
     provider_name: str | None,
     model: str | None,
-    log: bool = False,
-    interactive: bool = True,
-    stream: bool = True,
-    from_checkpoint: str | None = None,
-    project_created: bool = False,
-) -> None:
-    """Execute a single-shot query."""
-    from questfoundry.runtime.providers import ContextOverflowError, ProviderError
+    log: bool,
+    interactive: bool,
+    stream: bool,
+    from_checkpoint: str | None,
+    project_created: bool,
+) -> AsyncIterator[_SessionContext]:
+    """
+    Context manager for common CLI session lifecycle (Issue #211).
 
+    Handles:
+    - Runtime initialization via _setup_runtime
+    - Session start reporting
+    - LangSmith session tracing context
+    - Cleanup: tracing end, event logger flush, status reporting, resource closing
+
+    Example:
+        async with _session_lifecycle(...) as ctx:
+            await ctx.respond(ctx.runtime, ctx.agent, prompt, ctx.session)
+    """
+    # Initialize runtime
     (
         project,
-        _studio,
+        studio,
         runtime,
         agent,
         session,
@@ -1395,7 +1433,7 @@ async def _ask_single(
     # Select response function based on streaming preference
     respond = _stream_response if stream else _invoke_response
 
-    # Report session start via status reporter
+    # Report session start
     if _status_reporter:
         _status_reporter.session_start(
             session_id=session.id,
@@ -1405,6 +1443,20 @@ async def _ask_single(
             model=runtime._model,
         )
 
+    ctx = _SessionContext(
+        project=project,
+        studio=studio,
+        runtime=runtime,
+        agent=agent,
+        session=session,
+        provider=provider,
+        event_logger=event_logger,
+        log_path=log_path,
+        broker=broker,
+        tracing_manager=tracing_manager,
+        respond=respond,
+    )
+
     # Wrap execution in LangSmith session tracing
     with (
         tracing_manager.session(session.id, agent.id, project_id)
@@ -1412,42 +1464,7 @@ async def _ask_single(
         else nullcontext()
     ):
         try:
-            # Report turn start
-            if _status_reporter:
-                _status_reporter.turn_start(
-                    turn_number=session.turn_count + 1,
-                    agent_id=agent.id,
-                    agent_name=agent.name,
-                )
-
-            await respond(runtime, agent, prompt, session)
-            console.print()
-
-            # Handle clarification requests in a loop
-            # Agent may ask multiple questions before completing
-            while True:
-                clarifications = await _handle_clarification_requests(broker)
-                if not clarifications:
-                    break
-
-                # Re-activate agent with the clarification response context
-                # The response was sent to agent's mailbox - agent will receive it
-                for clarification in clarifications:
-                    from_agent = clarification["from_agent"]
-                    answer = clarification["answer"]
-
-                    console.print()
-                    console.print(f"[dim]{from_agent} (continuing):[/dim]")
-
-                    # Build a context message for the agent with the clarification response
-                    context_msg = f"[Customer response to your question: {answer}]"
-                    await respond(runtime, agent, context_msg, session)
-                    console.print()
-
-        except ContextOverflowError as e:
-            console.print(f"[red]✗ Context overflow: {e}[/red]")
-        except ProviderError as e:
-            console.print(f"[red]✗ Provider error: {e}[/red]")
+            yield ctx
         finally:
             # End session tracing
             if tracing_manager:
@@ -1464,6 +1481,91 @@ async def _ask_single(
             project.close()
 
 
+async def _handle_clarification_loop(
+    broker: AsyncMessageBroker,
+    respond: Callable[..., Awaitable[str]],
+    runtime: AgentRuntime,
+    agent: Agent,
+    session: Session,
+) -> None:
+    """
+    Handle clarification requests in a loop (Issue #211).
+
+    Agent may ask multiple questions before completing work.
+    This is shared between single-shot and REPL modes.
+    """
+    while True:
+        clarifications = await _handle_clarification_requests(broker)
+        if not clarifications:
+            break
+
+        # Re-activate agent with the clarification response context
+        for clarification in clarifications:
+            from_agent = clarification["from_agent"]
+            answer = clarification["answer"]
+
+            console.print()
+            console.print(f"[dim]{from_agent} (continuing):[/dim]")
+
+            # Build context message for the agent
+            context_msg = f"[Customer response to your question: {answer}]"
+            await respond(runtime, agent, context_msg, session)
+            console.print()
+
+
+async def _ask_single(
+    project_id: str,
+    prompt: str,
+    entry_agent_id: str | None,
+    domain_path: Path,
+    projects_dir: Path,
+    provider_name: str | None,
+    model: str | None,
+    log: bool = False,
+    interactive: bool = True,
+    stream: bool = True,
+    from_checkpoint: str | None = None,
+    project_created: bool = False,
+) -> None:
+    """Execute a single-shot query (Issue #211 - uses consolidated lifecycle)."""
+    from questfoundry.runtime.providers import ContextOverflowError, ProviderError
+
+    async with _session_lifecycle(
+        project_id=project_id,
+        entry_agent_id=entry_agent_id,
+        domain_path=domain_path,
+        projects_dir=projects_dir,
+        provider_name=provider_name,
+        model=model,
+        log=log,
+        interactive=interactive,
+        stream=stream,
+        from_checkpoint=from_checkpoint,
+        project_created=project_created,
+    ) as ctx:
+        try:
+            # Report turn start
+            if _status_reporter:
+                _status_reporter.turn_start(
+                    turn_number=ctx.session.turn_count + 1,
+                    agent_id=ctx.agent.id,
+                    agent_name=ctx.agent.name,
+                )
+
+            await ctx.respond(ctx.runtime, ctx.agent, prompt, ctx.session)
+            console.print()
+
+            # Handle clarification requests (Issue #211 - consolidated)
+            await _handle_clarification_loop(
+                ctx.broker, ctx.respond, ctx.runtime, ctx.agent, ctx.session
+            )
+
+        except ContextOverflowError as e:
+            console.print(f"[red]✗ Context overflow: {e}[/red]")
+        except ProviderError as e:
+            console.print(f"[red]✗ Provider error: {e}[/red]")
+
+
 async def _ask_repl(
     project_id: str,
     entry_agent_id: str | None,
@@ -1477,68 +1579,39 @@ async def _ask_repl(
     from_checkpoint: str | None = None,
     project_created: bool = False,
 ) -> None:
-    """Run interactive REPL mode."""
+    """Run interactive REPL mode (Issue #211 - uses consolidated lifecycle)."""
     from questfoundry.runtime.providers import ContextOverflowError, ProviderError
     from questfoundry.runtime.session.turn import TurnStatus
 
-    # Select response function based on streaming preference
-    respond = _stream_response if stream else _invoke_response
+    async with _session_lifecycle(
+        project_id=project_id,
+        entry_agent_id=entry_agent_id,
+        domain_path=domain_path,
+        projects_dir=projects_dir,
+        provider_name=provider_name,
+        model=model,
+        log=log,
+        interactive=interactive,
+        stream=stream,
+        from_checkpoint=from_checkpoint,
+        project_created=project_created,
+    ) as ctx:
+        # REPL-specific: fallback header if no status reporter
+        if not _status_reporter:
+            console.print()
+            console.print("[bold]QuestFoundry Interactive Session[/bold]")
+            console.print(f"Project: [cyan]{project_id}[/cyan]")
+            console.print(f"Agent: [green]{ctx.agent.name}[/green] ({ctx.agent.id})")
 
-    (
-        project,
-        _studio,
-        runtime,
-        agent,
-        session,
-        provider,
-        event_logger,
-        log_path,
-        broker,
-        tracing_manager,
-    ) = await _setup_runtime(
-        project_id,
-        entry_agent_id,
-        domain_path,
-        projects_dir,
-        provider_name,
-        model,
-        log,
-        interactive,
-        from_checkpoint,
-        project_created,
-    )
-
-    # Report session start via status reporter
-    if _status_reporter:
-        _status_reporter.session_start(
-            session_id=session.id,
-            project_id=project_id,
-            agent_name=agent.name,
-            agent_id=agent.id,
-            model=runtime._model,
-        )
-    else:
-        # Fallback to old-style header if no status reporter
+        # Show extra debug info
+        if _verbosity >= 1:
+            if ctx.log_path:
+                log_console.print(f"[dim]Logging: {ctx.log_path}[/dim]")
+            if ctx.tracing_manager:
+                log_console.print("[dim]LangSmith tracing: enabled[/dim]")
+        console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
         console.print()
-        console.print("[bold]QuestFoundry Interactive Session[/bold]")
-        console.print(f"Project: [cyan]{project_id}[/cyan]")
-        console.print(f"Agent: [green]{agent.name}[/green] ({agent.id})")
 
-    # Show extra debug info
-    if _verbosity >= 1:
-        if log_path:
-            log_console.print(f"[dim]Logging: {log_path}[/dim]")
-        if tracing_manager:
-            log_console.print("[dim]LangSmith tracing: enabled[/dim]")
-    console.print("[dim]Type 'exit' or Ctrl+D to quit[/dim]")
-    console.print()
-
-    # Wrap execution in LangSmith session tracing
-    with (
-        tracing_manager.session(session.id, agent.id, project_id)
-        if tracing_manager
-        else nullcontext()
-    ):
         try:
             while True:
                 try:
@@ -1555,34 +1628,19 @@ async def _ask_repl(
                     # Report turn start
                     if _status_reporter:
                         _status_reporter.turn_start(
-                            turn_number=session.turn_count + 1,
-                            agent_id=agent.id,
-                            agent_name=agent.name,
+                            turn_number=ctx.session.turn_count + 1,
+                            agent_id=ctx.agent.id,
+                            agent_name=ctx.agent.name,
                         )
 
                     # Get response (streaming or non-streaming based on flag)
-                    await respond(runtime, agent, user_input, session)
+                    await ctx.respond(ctx.runtime, ctx.agent, user_input, ctx.session)
                     console.print()
 
-                    # Handle clarification requests
-                    # Agent may ask questions before completing
-                    while True:
-                        clarifications = await _handle_clarification_requests(broker)
-                        if not clarifications:
-                            break
-
-                        # Re-activate agent with the clarification response context
-                        for clarification in clarifications:
-                            from_agent = clarification["from_agent"]
-                            answer = clarification["answer"]
-
-                            console.print()
-                            console.print(f"[dim]{from_agent} (continuing):[/dim]")
-
-                            # Build context message for the agent
-                            context_msg = f"[Customer response to your question: {answer}]"
-                            await respond(runtime, agent, context_msg, session)
-                            console.print()
+                    # Handle clarification requests (Issue #211 - consolidated)
+                    await _handle_clarification_loop(
+                        ctx.broker, ctx.respond, ctx.runtime, ctx.agent, ctx.session
+                    )
 
                 except ContextOverflowError as e:
                     console.print(f"[red]✗ Context overflow: {e}[/red]")
@@ -1594,28 +1652,15 @@ async def _ask_repl(
 
         except (KeyboardInterrupt, EOFError):
             # Cancel any in-progress turn
-            current = session.current_turn
+            current = ctx.session.current_turn
             if current and current.status == TurnStatus.STREAMING:
-                session.cancel_turn(current, "Interrupted by user")
+                ctx.session.cancel_turn(current, "Interrupted by user")
             console.print("\n[dim]Cancelled[/dim]")
 
-        finally:
-            # End session tracing
-            if tracing_manager:
-                tracing_manager.end_session(turn_count=session.turn_count)
-            # Log session end and flush
-            if event_logger:
-                event_logger.session_complete(session_id=session.id, turn_count=session.turn_count)
-                if _verbosity >= 1:
-                    log_console.print(f"[dim]Events logged to: {log_path}[/dim]")
-            # Report session end with summary
-            if _status_reporter:
-                _status_reporter.session_end(turn_count=session.turn_count)
-            else:
-                console.print()
-                console.print(f"[dim]Session ended: {session.turn_count} turns[/dim]")
-            await provider.close()
-            project.close()
+        # REPL-specific: fallback session ended message
+        if not _status_reporter:
+            console.print()
+            console.print(f"[dim]Session ended: {ctx.session.turn_count} turns[/dim]")
 
 
 # =============================================================================
