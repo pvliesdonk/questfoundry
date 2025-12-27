@@ -1862,6 +1862,29 @@ class AgentRuntime:
         # Log error
         self._log_turn_error(session.id, setup.turn.turn_number, str(error))
 
+    def _handle_activation_error_or_fallback(
+        self,
+        session: Session,
+        setup: _ActivationSetup | None,
+        error: Exception,
+    ) -> None:
+        """
+        Handle activation error with fallback for setup failures (Issue #211).
+
+        When setup is available, delegates to _handle_activation_error.
+        When setup is None (error during setup before object creation),
+        finds and marks the most recent turn as error.
+        """
+        if setup is not None:
+            self._handle_activation_error(session, setup, error)
+        elif session.turn_count > 0:
+            # Error during setup before setup object was created.
+            # The turn was created inside _setup_activation but we don't have
+            # the full setup. Find and mark the most recent turn as error.
+            last_turn = session.turns[-1]
+            session.error_turn(last_turn, str(error))
+            self._log_turn_error(session.id, last_turn.turn_number, str(error))
+
     async def activate(
         self,
         agent: Agent,
@@ -2196,16 +2219,7 @@ class AgentRuntime:
 
         except Exception as e:
             # Common error handling (Issue #211 - consolidated code)
-            if setup is not None:
-                self._handle_activation_error(session, setup, e)
-            else:
-                # Error during setup before setup object was created.
-                # The turn was created inside _setup_activation but we don't have
-                # the full setup. Find and mark the most recent turn as error.
-                if session.turn_count > 0:
-                    last_turn = session.turns[-1]
-                    session.error_turn(last_turn, str(e))
-                    self._log_turn_error(session.id, last_turn.turn_number, str(e))
+            self._handle_activation_error_or_fallback(session, setup, e)
             raise
 
     async def activate_streaming(
@@ -2589,16 +2603,7 @@ class AgentRuntime:
 
         except Exception as e:
             # Common error handling (Issue #211 - consolidated code)
-            if setup is not None:
-                self._handle_activation_error(session, setup, e)
-            else:
-                # Error during setup before setup object was created.
-                # The turn was created inside _setup_activation but we don't have
-                # the full setup. Find and mark the most recent turn as error.
-                if session.turn_count > 0:
-                    last_turn = session.turns[-1]
-                    session.error_turn(last_turn, str(e))
-                    self._log_turn_error(session.id, last_turn.turn_number, str(e))
+            self._handle_activation_error_or_fallback(session, setup, e)
             raise
 
     async def process_pending_delegations(

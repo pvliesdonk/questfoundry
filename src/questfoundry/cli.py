@@ -1365,17 +1365,17 @@ class _SessionContext:
     enabling code reuse between single-shot and REPL modes.
     """
 
-    project: Any  # Project
-    studio: Any  # Studio
-    runtime: Any  # AgentRuntime
-    agent: Any  # Agent
-    session: Any  # Session
-    provider: Any  # LLMProvider
-    event_logger: Any | None
+    project: Project
+    studio: Studio
+    runtime: AgentRuntime
+    agent: Agent
+    session: Session
+    provider: LLMProvider
+    event_logger: EventLogger | None
     log_path: Path | None
-    broker: Any  # MessageBroker
-    tracing_manager: Any | None
-    respond: Any  # Response function (_stream_response or _invoke_response)
+    broker: AsyncMessageBroker
+    tracing_manager: TracingManager | None
+    respond: Callable[..., Awaitable[str]]
 
 
 @asynccontextmanager
@@ -1482,11 +1482,11 @@ async def _session_lifecycle(
 
 
 async def _handle_clarification_loop(
-    broker: Any,
-    respond: Any,
-    runtime: Any,
-    agent: Any,
-    session: Any,
+    broker: AsyncMessageBroker,
+    respond: Callable[..., Awaitable[str]],
+    runtime: AgentRuntime,
+    agent: Agent,
+    session: Session,
 ) -> None:
     """
     Handle clarification requests in a loop (Issue #211).
