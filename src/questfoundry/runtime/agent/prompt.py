@@ -132,6 +132,11 @@ class PromptBuilder:
         behavioral = self._build_behavioral_guidance(archetypes, has_persistence_tool)
         self.add_section("behavioral", behavioral, priority=98)
 
+        # 3.5. Language Enforcement (operational - how to communicate)
+        # Critical for multilingual models that may default to other languages
+        language = self._build_language_section()
+        self.add_section("language", language, priority=96)
+
         # 4. Available Tools (actionable - how to act)
         if tool_schemas:
             tools_section = self._build_tools_section(tool_schemas)
@@ -200,6 +205,23 @@ class PromptBuilder:
             lines.append(f"Your role archetype(s): {archetypes_str}")
 
         return "\n".join(lines)
+
+    def _build_language_section(self) -> str:
+        """Build the language enforcement section.
+
+        Critical for multilingual models (e.g., Qwen3) that may default
+        to Chinese or other languages during generation.
+        """
+        return """## Language
+
+ALL communication MUST be in English:
+- Tool calls and their parameters
+- Responses to other agents
+- Status updates and reasoning
+- Questions and clarifications
+
+Story content language may vary based on project settings, but system
+communication is always English."""
 
     def _format_constitution(self, text: str) -> str:
         """Format constitution for injection."""
