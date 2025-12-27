@@ -479,3 +479,34 @@ class TestSmallModelTools:
         tools = registry.get_agent_tools(agent, model_class=ModelClass.MEDIUM)
         tool_ids = {t.id for t in tools}
         assert tool_ids == {"delegate"}
+
+    def test_check_capability_small_model_with_small_model_tools(self):
+        """Capability check uses small_model_tools for small models."""
+        studio, agent = make_mock_studio_with_tools()
+
+        # Agent has consult in small_model_tools but not in capabilities
+        agent.small_model_tools = ["delegate", "consult"]
+
+        registry = ToolRegistry(studio)
+
+        # For small model, consult should be allowed (via small_model_tools)
+        assert registry.check_capability(agent, "consult", model_class=ModelClass.SMALL)
+
+        # For large model, consult should NOT be allowed (not in capabilities)
+        assert not registry.check_capability(agent, "consult", model_class=ModelClass.LARGE)
+
+    def test_enforce_capability_small_model_with_small_model_tools(self):
+        """Capability enforcement uses small_model_tools for small models."""
+        studio, agent = make_mock_studio_with_tools()
+
+        # Agent has consult in small_model_tools but not in capabilities
+        agent.small_model_tools = ["delegate", "consult"]
+
+        registry = ToolRegistry(studio)
+
+        # For small model, consult should not raise
+        registry.enforce_capability(agent, "consult", model_class=ModelClass.SMALL)
+
+        # For large model, consult should raise
+        with pytest.raises(CapabilityViolationError):
+            registry.enforce_capability(agent, "consult", model_class=ModelClass.LARGE)

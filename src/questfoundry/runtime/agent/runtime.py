@@ -496,8 +496,9 @@ class AgentRuntime:
                 error="Tool registry not available",
             )
 
-        # Enforce capability
-        self.tool_registry.enforce_capability(agent, tool_id)
+        # Enforce capability (model_class determines which tools are allowed)
+        model_class = self._get_model_class()
+        self.tool_registry.enforce_capability(agent, tool_id, model_class)
 
         # Get and execute tool
         tool = self.tool_registry.get_tool(tool_id, agent.id, session_id)
