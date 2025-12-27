@@ -38,7 +38,9 @@
   "examples": [
     {
       "description": "Discover available artifact types",
-      "input": {},
+      "input": {
+        "reasoning": "I want to see what artifact types are available before deciding which schema to consult"
+      },
       "output": {
         "artifact_types": [
           {

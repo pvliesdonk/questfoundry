@@ -34,7 +34,9 @@
   "examples": [
     {
       "description": "Discover available stores",
-      "input": {},
+      "input": {
+        "reasoning": "Need to discover what storage systems are available for artifact management"
+      },
       "output": {
         "stores": [
           {

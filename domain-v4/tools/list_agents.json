@@ -34,7 +34,9 @@
   "examples": [
     {
       "description": "Discover available agents for delegation",
-      "input": {},
+      "input": {
+        "reasoning": "I want to see which specialist agents are available so I can decide which one to delegate my task to"
+      },
       "output": {
         "agents": [
           {
