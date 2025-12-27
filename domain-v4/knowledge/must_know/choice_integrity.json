@@ -6,6 +6,10 @@
 
   "summary": "Choices must be contrastive (differ in intent and outcome). Two clear options beat five near-synonyms. Convergence must be acknowledged.",
 
+  "concise_summary": "Choices must differ in intent AND outcome. No near-synonyms.",
+
+  "injection_priority": "critical",
+
   "keywords": ["choices", "contrastive", "convergence", "fake agency", "meaningful choices"],
 
   "triggers": [

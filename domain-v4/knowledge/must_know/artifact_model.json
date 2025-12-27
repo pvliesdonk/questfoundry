@@ -10,6 +10,8 @@
 
   "concise_description": "",
 
+  "injection_priority": "critical",
+
   "keywords": ["artifact", "artifact type", "stores", "lifecycle", "versioning", "artifact ID"],
 
   "triggers": [
