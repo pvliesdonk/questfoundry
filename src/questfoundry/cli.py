@@ -216,15 +216,18 @@ def config_show(
     config = load_config()
 
     # Build providers dict for display
-    providers_dict: dict[str, dict[str, str | None]] = {}
+    providers_dict: dict[str, dict[str, Any]] = {}
     for name, provider in config.providers.items():
-        providers_dict[name] = {
+        prov_dict: dict[str, Any] = {
             "state": provider.state.value,
             "host": provider.host,
             "default_model": provider.default_model,
             # Don't show API keys
             "api_key": "***" if provider.api_key else None,
         }
+        if provider.model_options:
+            prov_dict["model_options"] = provider.model_options
+        providers_dict[name] = prov_dict
 
     # Build config dict for display
     config_dict = {
@@ -694,13 +697,14 @@ async def _setup_runtime(
                     lifecycle_state=result.get("lifecycle_state", "draft"),
                 )
 
-    # Create runtime
+    # Create runtime with provider-specific model options (e.g., num_ctx for Ollama)
     runtime = AgentRuntime(
         provider=provider,
         studio=studio,
         domain_path=domain_path,
         project=project,
         model=model_to_use,
+        model_options=provider_config.model_options,
         event_logger=event_logger,
         tracing_manager=tracing_manager if tracing_manager.enabled else None,
         broker=broker,

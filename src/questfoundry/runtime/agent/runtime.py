@@ -234,6 +234,7 @@ class AgentRuntime:
         domain_path: Path | None = None,
         project: Project | None = None,
         model: str = "qwen3:8b",
+        model_options: dict[str, Any] | None = None,
         context_limit: int | None = None,
         event_logger: EventLogger | None = None,
         tracing_manager: TracingManager | None = None,
@@ -254,6 +255,7 @@ class AgentRuntime:
             domain_path: Path to domain directory (for knowledge loading)
             project: Optional project for tool storage access
             model: Model to use for LLM calls
+            model_options: Provider-specific options (e.g., num_ctx for Ollama)
             context_limit: Maximum context size (tokens), raises error if exceeded
             event_logger: Optional JSONL event logger
             tracing_manager: Optional LangSmith tracing manager
@@ -271,6 +273,7 @@ class AgentRuntime:
         self._domain_path = domain_path
         self._project = project
         self._model = model
+        self._model_options = model_options or {}
         self._context_limit = context_limit
         self._event_logger = event_logger
         self._tracing_manager = tracing_manager
@@ -1952,6 +1955,13 @@ class AgentRuntime:
                 stacklevel=2,
             )
             max_total_iterations = max_tool_iterations
+
+        # Apply default model options if not provided
+        if options is None:
+            options = InvokeOptions(model_options=self._model_options)
+        elif not options.model_options and self._model_options:
+            # Merge runtime's model_options if caller didn't specify any
+            options.model_options = self._model_options
 
         # Common setup (Issue #211 - consolidated code)
         # Must be inside try block to handle ContextOverflowError during validation

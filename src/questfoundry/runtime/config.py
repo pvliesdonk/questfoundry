@@ -43,6 +43,8 @@ class ProviderConfig:
     host: str | None = None  # For Ollama
     api_key: str | None = None  # For cloud providers
     default_model: str | None = None
+    model_options: dict[str, Any] = field(default_factory=dict)
+    """Provider-specific options (e.g., num_ctx for Ollama)."""
 
 
 @dataclass
@@ -212,6 +214,8 @@ def _merge_yaml_config(config: RuntimeConfig, yaml_config: dict[str, Any]) -> No
                     config.providers[name].api_key = provider_cfg["api_key"]
                 if "default_model" in provider_cfg:
                     config.providers[name].default_model = provider_cfg["default_model"]
+                if "model_options" in provider_cfg:
+                    config.providers[name].model_options = provider_cfg["model_options"]
 
     if "model_classes" in yaml_config:
         for class_name, mappings in yaml_config["model_classes"].items():
