@@ -6,6 +6,10 @@
 
   "summary": "Player-facing surfaces must never reveal twists, secrets, or backstory that the narrative intends to reveal through play. Keep canon separate from codex.",
 
+  "concise_summary": "Never reveal twists, secrets, or mechanics on player surfaces.",
+
+  "injection_priority": "critical",
+
   "keywords": ["spoilers", "player-safe", "canon", "codex", "secrets", "twists", "player surfaces"],
 
   "triggers": [
