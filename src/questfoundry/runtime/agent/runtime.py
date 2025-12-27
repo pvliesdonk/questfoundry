@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import warnings
 from collections.abc import AsyncIterator
@@ -75,6 +76,23 @@ if TYPE_CHECKING:
 from questfoundry.runtime.tools import BaseTool, ToolExecutionError, ToolRegistry, ToolResult
 
 logger = logging.getLogger(__name__)
+
+# Pattern to match <think>...</think> blocks (Qwen3 thinking mode)
+_THINKING_TAG_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def strip_thinking_tags(content: str) -> str:
+    """
+    Remove <think>...</think> blocks from LLM output.
+
+    Some models (e.g., Qwen3) include thinking blocks in their output.
+    These should be stripped before processing to avoid polluting
+    responses and tool calls.
+    """
+    if not content:
+        return content
+    stripped = _THINKING_TAG_PATTERN.sub("", content)
+    return stripped.strip()
 
 
 @dataclass
@@ -1989,6 +2007,10 @@ class AgentRuntime:
                     tools=tool_schemas if tool_schemas else None,
                     callbacks=callbacks,
                 )
+
+                # Strip thinking tags from response (Qwen3 and similar models)
+                if response.content:
+                    response.content = strip_thinking_tags(response.content)
 
                 # Accumulate token usage
                 if response.prompt_tokens:
