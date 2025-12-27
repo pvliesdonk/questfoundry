@@ -10,17 +10,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.runtime.agent.content_utils import extract_knowledge_content
+from questfoundry.runtime.models.enums import ModelClass
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Playbook, Studio
-
-# Model class type alias for prompt optimization
-ModelClass = Literal["small", "medium", "large"]
 
 
 @dataclass
@@ -101,7 +99,7 @@ class ContextBuilder:
         self._knowledge_cache: dict[str, dict[str, Any]] = {}
 
     def build(
-        self, agent: Agent, studio: Studio, model_class: ModelClass = "large"
+        self, agent: Agent, studio: Studio, model_class: ModelClass = ModelClass.LARGE
     ) -> AgentContext:
         """
         Build context for agent activation.
@@ -118,7 +116,7 @@ class ContextBuilder:
             AgentContext with all prepared knowledge
         """
         context = AgentContext()
-        use_concise = model_class == "small"
+        use_concise = model_class == ModelClass.SMALL
 
         if not agent.knowledge_requirements:
             return context
@@ -676,7 +674,7 @@ def build_context(
     agent: Agent,
     studio: Studio,
     domain_path: Path | None = None,
-    model_class: ModelClass = "large",
+    model_class: ModelClass = ModelClass.LARGE,
 ) -> AgentContext:
     """Build context for an agent.
 
@@ -685,9 +683,9 @@ def build_context(
         studio: The studio containing knowledge entries
         domain_path: Path to domain directory
         model_class: Model size class for prompt optimization
-            - "small": Use concise variants, minimal knowledge
-            - "medium": Normal content, some optimization
-            - "large": Full knowledge content (default)
+            - SMALL: Use concise variants, minimal knowledge
+            - MEDIUM: Normal content, some optimization
+            - LARGE: Full knowledge content (default)
 
     Returns:
         AgentContext with all prepared knowledge

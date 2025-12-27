@@ -113,3 +113,17 @@ class CompletionStatus(str, Enum):
     FAILED = "failed"
     BLOCKED = "blocked"
     CANCELLED = "cancelled"
+
+
+class ModelClass(str, Enum):
+    """Model size class for tool and knowledge filtering.
+
+    Used to optimize prompts for different model capacities:
+    - SMALL: 8B parameters and under (local models)
+    - MEDIUM: 9B-70B parameters
+    - LARGE: 70B+ or cloud models (GPT-4, Claude)
+    """
+
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"

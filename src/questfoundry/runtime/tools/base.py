@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.runtime.models.enums import ModelClass
+
 if TYPE_CHECKING:
     from questfoundry.runtime.messaging.broker import AsyncMessageBroker
     from questfoundry.runtime.models import Studio, Tool
@@ -291,13 +293,21 @@ class BaseTool(ABC):
                 execution_time_ms=(time.time() - start_time) * 1000,
             )
 
-    def to_langchain_schema(self) -> dict[str, Any]:
+    def to_langchain_schema(self, model_class: ModelClass = ModelClass.LARGE) -> dict[str, Any]:
         """
         Convert tool to LangChain-compatible schema for bind_tools().
+
+        Args:
+            model_class: Model size class. Small models use concise_description if available.
 
         Returns:
             Dict with name, description, and parameters
         """
+        # Use concise_description for small models if available
+        description = self.description
+        if model_class == ModelClass.SMALL and self._definition.concise_description:
+            description = self._definition.concise_description
+
         parameters = {"type": "object", "properties": {}, "required": []}
 
         if self._definition.input_schema:
@@ -306,7 +316,7 @@ class BaseTool(ABC):
 
         return {
             "name": self.id,
-            "description": self.description,
+            "description": description,
             "parameters": parameters,
         }
 

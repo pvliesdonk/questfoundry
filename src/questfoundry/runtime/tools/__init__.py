@@ -21,6 +21,7 @@ Usage:
 from questfoundry.runtime.tools import (
     analyze_story_graph,  # noqa: F401  # Programmatic graph topology analysis
     communicate,  # noqa: F401  # Phase 7: unified human communication
+    consult,  # noqa: F401  # Unified consult for small models
     consult_corpus,  # noqa: F401
     consult_knowledge,  # noqa: F401  # Phase 7: knowledge menu+consult pattern
     consult_playbook,  # noqa: F401

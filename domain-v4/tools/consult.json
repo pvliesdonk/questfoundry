@@ -1,0 +1,83 @@
+{
+  "$schema": "../../meta/schemas/core/tool-definition.schema.json",
+  "id": "consult",
+  "name": "Consult Reference",
+  "summary": "Look up playbooks, knowledge, or schemas",
+  "description": "Unified lookup tool for reference material. Use this to retrieve detailed guidance, workflow definitions, or artifact schemas.\n\nLookup types:\n- playbook: Get workflow phases, steps, agents, and completion criteria\n- knowledge: Get full content of knowledge entries from your Knowledge Menu\n- schema: Get artifact type definitions with fields and validation rules",
+  "concise_description": "Look up reference material by type and ID.",
+
+  "summarization_policy": "drop",
+  "summary_template": "Retrieved {lookup_type}: {id}",
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "lookup_type": {
+        "type": "string",
+        "enum": ["playbook", "knowledge", "schema"],
+        "description": "Type of reference to look up"
+      },
+      "id": {
+        "type": "string",
+        "description": "ID of the playbook, knowledge entry, or artifact type to retrieve"
+      },
+      "section": {
+        "type": "string",
+        "description": "For knowledge lookups: optional section heading to retrieve"
+      },
+      "include_examples": {
+        "type": "boolean",
+        "default": true,
+        "description": "For schema lookups: include usage examples"
+      },
+      "include_validation_rules": {
+        "type": "boolean",
+        "default": true,
+        "description": "For schema lookups: include validation rules"
+      }
+    },
+    "required": ["lookup_type", "id"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "lookup_type": {
+        "type": "string",
+        "description": "The type of lookup that was performed"
+      },
+      "id": {
+        "type": "string",
+        "description": "The requested ID"
+      },
+      "content": {
+        "type": "object",
+        "description": "The retrieved content (structure varies by lookup_type)"
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "description": "Get playbook details for Story Spark workflow",
+      "input": {
+        "lookup_type": "playbook",
+        "id": "story_spark"
+      }
+    },
+    {
+      "description": "Get knowledge entry for spoiler hygiene guidelines",
+      "input": {
+        "lookup_type": "knowledge",
+        "id": "spoiler_hygiene"
+      }
+    },
+    {
+      "description": "Get artifact schema for Passage Brief",
+      "input": {
+        "lookup_type": "schema",
+        "id": "passage_brief"
+      }
+    }
+  ]
+}

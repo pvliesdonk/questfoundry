@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.runtime.models import Agent, KnowledgeEntry, Studio
@@ -30,14 +30,12 @@ if TYPE_CHECKING:
 import logging
 
 from questfoundry.runtime.agent.content_utils import extract_knowledge_content
+from questfoundry.runtime.models.enums import ModelClass
 
 logger = logging.getLogger(__name__)
 
 # Valid knowledge layers for archetype-based inclusion
 VALID_LAYERS = frozenset({"must_know", "should_know", "role_specific"})
-
-# Model class type alias
-ModelClass = Literal["small", "medium", "large"]
 
 
 def _combine_entry_lists(explicit: list[str], archetype_matched: list[str]) -> list[str]:
@@ -121,7 +119,7 @@ class KnowledgeContextBuilder:
         self,
         agent: Agent,
         studio: Studio,
-        model_class: ModelClass = "large",
+        model_class: ModelClass = ModelClass.LARGE,
     ) -> KnowledgeContext:
         """
         Build knowledge context for an agent.
@@ -145,7 +143,7 @@ class KnowledgeContextBuilder:
         entries_inlined: list[str] = []
         entries_in_menu: list[str] = []
         used_tokens = 0
-        use_concise = model_class == "small"
+        use_concise = model_class == ModelClass.SMALL
 
         knowledge_req = agent.knowledge_requirements
 
@@ -467,7 +465,7 @@ def build_knowledge_context(
     studio: Studio,
     config: KnowledgeBudgetConfig | None = None,
     domain_path: Path | str | None = None,
-    model_class: ModelClass = "large",
+    model_class: ModelClass = ModelClass.LARGE,
 ) -> KnowledgeContext:
     """
     Convenience function to build knowledge context for an agent.
@@ -477,7 +475,7 @@ def build_knowledge_context(
         studio: Studio with knowledge entries
         config: Optional budget configuration
         domain_path: Path to domain directory for loading constitution
-        model_class: Model size class ("small", "medium", "large")
+        model_class: Model size class (ModelClass.SMALL, MEDIUM, LARGE)
 
     Returns:
         KnowledgeContext with formatted text
