@@ -278,8 +278,9 @@ class ConsultCorpusTool(BaseTool):
         results = await searcher.search(query, max_results=max_results)
         search_method = searcher.get_search_method()
 
-        # Transform results to match expected output schema
-        excerpts = [r.to_dict() for r in results]
+        # Transform results with rank (1-indexed position indicates relevance)
+        # Scores are intentionally omitted - ordering is what matters
+        excerpts = [r.to_dict(rank=i + 1) for i, r in enumerate(results)]
 
         return ToolResult(
             success=True,

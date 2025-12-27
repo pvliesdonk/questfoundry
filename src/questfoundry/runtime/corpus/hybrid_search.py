@@ -35,16 +35,26 @@ class SearchResult:
     keyword_score: float | None = None
     vector_score: float | None = None
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for tool output."""
-        return {
-            "heading": self.heading,
+    def to_dict(self, rank: int | None = None) -> dict[str, Any]:
+        """Convert to dictionary for tool output.
+
+        Args:
+            rank: Optional position in results (1-indexed). If provided,
+                  included in output for clarity.
+
+        Returns:
+            Dictionary with source, section, content. Relevance scores are
+            intentionally omitted as they confuse agents (RRF scores ~0.016
+            look like "1.6% relevant" which is misleading).
+        """
+        result: dict[str, Any] = {
+            "source": self.title,
+            "section": self.heading,
             "content": self.content,
-            "source_file": self.source_file,
-            "title": self.title,
-            "cluster": self.cluster,
-            "relevance_score": round(self.combined_score, 4),
         }
+        if rank is not None:
+            result["rank"] = rank
+        return result
 
 
 def reciprocal_rank_fusion(
