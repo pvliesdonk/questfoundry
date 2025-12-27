@@ -381,3 +381,37 @@ class TestSandwichPattern:
 
         # The REMEMBER section should not be generated at all if it would be empty
         assert "REMEMBER" not in result.text
+
+
+class TestChainOfThoughtGuidance:
+    """Tests for Chain-of-Thought reasoning guidance in prompts."""
+
+    def test_tools_section_includes_reasoning_guidance(self, basic_agent: Agent) -> None:
+        """Tools section includes CoT reasoning instruction."""
+        builder = PromptBuilder()
+        tool_schemas = [
+            {"name": "test_tool", "description": "A test tool for testing."},
+        ]
+
+        result = builder.build_for_agent(basic_agent, tool_schemas=tool_schemas)
+
+        # Check that reasoning guidance is present
+        assert "reasoning" in result.text
+        assert "WHY" in result.text
+        assert "WHAT" in result.text
+        assert "HOW" in result.text
+
+    def test_reasoning_guidance_appears_before_tool_list(self, basic_agent: Agent) -> None:
+        """Reasoning guidance appears before the tool list."""
+        builder = PromptBuilder()
+        tool_schemas = [
+            {"name": "delegate", "description": "Delegate work to another agent."},
+        ]
+
+        result = builder.build_for_agent(basic_agent, tool_schemas=tool_schemas)
+
+        # Reasoning guidance should appear before the tool list
+        reasoning_pos = result.text.find("reasoning")
+        tool_pos = result.text.find("delegate")
+
+        assert reasoning_pos < tool_pos, "Reasoning guidance should appear before tool list"

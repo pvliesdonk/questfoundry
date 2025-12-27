@@ -951,3 +951,151 @@ class TestProgressBasedIterationLimits:
             deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
             assert len(deprecation_warnings) >= 1
             assert "max_tool_iterations" in str(deprecation_warnings[0].message)
+
+
+class TestChainOfThoughtReasoningLogging:
+    """Tests for Chain-of-Thought reasoning logging in tool execution."""
+
+    @pytest.mark.asyncio
+    async def test_reasoning_logged_at_info_level(
+        self,
+        mock_provider: MagicMock,
+        project: Project,
+        caplog,
+    ) -> None:
+        """Reasoning argument is logged at INFO level before tool execution."""
+        import logging
+        from typing import Any
+
+        from questfoundry.runtime.models.base import Agent, Capability, Studio, Tool
+        from questfoundry.runtime.tools.base import BaseTool, ToolContext, ToolResult
+        from questfoundry.runtime.tools.registry import ToolRegistry
+
+        # Create a mock tool
+        class MockTool(BaseTool):
+            async def execute(self, _args: dict[str, Any]) -> ToolResult:
+                return ToolResult(success=True, data={"result": "done"})
+
+        # Create tool definition
+        tool_def = Tool(
+            id="test_tool",
+            name="Test Tool",
+            description="A test tool",
+        )
+
+        # Create agent with capability to use the test tool
+        agent = Agent(
+            id="test_agent",
+            name="Test Agent",
+            description="Test agent",
+            archetypes=["creator"],
+            capabilities=[
+                Capability(
+                    id="use_test_tool",
+                    name="Use Test Tool",
+                    description="Can use test_tool",
+                    category="tools",
+                    tool_ref="test_tool",
+                ),
+            ],
+        )
+
+        # Create studio with the tool and agent
+        studio = Studio(
+            id="test_studio",
+            name="Test Studio",
+            agents=[agent],
+            tools=[tool_def],
+        )
+
+        tool_context = ToolContext(studio=studio, project=project)
+        mock_tool = MockTool(definition=tool_def, context=tool_context)
+
+        # Setup runtime with tool registry
+        runtime = AgentRuntime(provider=mock_provider, studio=studio, project=project)
+        runtime._tool_registry = ToolRegistry(studio=studio, project=project)
+        runtime._tool_registry._tool_cache["test_tool"] = mock_tool
+
+        # Execute tool with reasoning
+        with caplog.at_level(logging.INFO, logger="questfoundry.runtime.agent.runtime"):
+            await runtime.execute_tool(
+                agent=agent,
+                tool_id="test_tool",
+                args={"reasoning": "Testing CoT logging", "other_arg": "value"},
+                session_id="test-session",
+                turn_number=1,
+            )
+
+        # Check that reasoning was logged
+        assert any("Testing CoT logging" in record.message for record in caplog.records), (
+            f"Expected reasoning in log, got: {[r.message for r in caplog.records]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_log_when_reasoning_absent(
+        self,
+        mock_provider: MagicMock,
+        project: Project,
+        caplog,
+    ) -> None:
+        """No reasoning log when reasoning argument is not provided."""
+        import logging
+        from typing import Any
+
+        from questfoundry.runtime.models.base import Agent, Capability, Studio, Tool
+        from questfoundry.runtime.tools.base import BaseTool, ToolContext, ToolResult
+        from questfoundry.runtime.tools.registry import ToolRegistry
+
+        class MockTool(BaseTool):
+            async def execute(self, _args: dict[str, Any]) -> ToolResult:
+                return ToolResult(success=True, data={"result": "done"})
+
+        tool_def = Tool(
+            id="test_tool",
+            name="Test Tool",
+            description="A test tool",
+        )
+
+        agent = Agent(
+            id="test_agent",
+            name="Test Agent",
+            description="Test agent",
+            archetypes=["creator"],
+            capabilities=[
+                Capability(
+                    id="use_test_tool",
+                    name="Use Test Tool",
+                    description="Can use test_tool",
+                    category="tools",
+                    tool_ref="test_tool",
+                ),
+            ],
+        )
+
+        studio = Studio(
+            id="test_studio",
+            name="Test Studio",
+            agents=[agent],
+            tools=[tool_def],
+        )
+
+        tool_context = ToolContext(studio=studio, project=project)
+        mock_tool = MockTool(definition=tool_def, context=tool_context)
+
+        runtime = AgentRuntime(provider=mock_provider, studio=studio, project=project)
+        runtime._tool_registry = ToolRegistry(studio=studio, project=project)
+        runtime._tool_registry._tool_cache["test_tool"] = mock_tool
+
+        # Execute tool WITHOUT reasoning
+        with caplog.at_level(logging.INFO, logger="questfoundry.runtime.agent.runtime"):
+            await runtime.execute_tool(
+                agent=agent,
+                tool_id="test_tool",
+                args={"other_arg": "value"},  # No reasoning
+                session_id="test-session",
+                turn_number=1,
+            )
+
+        # Check that no reasoning-related log was emitted
+        reasoning_logs = [r for r in caplog.records if "reasoning" in r.message.lower()]
+        assert len(reasoning_logs) == 0, f"Unexpected reasoning log: {reasoning_logs}"
