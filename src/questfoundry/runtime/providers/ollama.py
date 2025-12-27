@@ -134,14 +134,19 @@ class OllamaProvider(LLMProvider):
         if not await self.check_availability():
             raise ProviderUnavailableError(f"Ollama not available at {self._host}")
 
-        # Build langchain ChatOllama
-        llm: Any = ChatOllama(
-            model=model,
-            base_url=self._host,
-            temperature=options.temperature,
-            num_predict=options.max_tokens,
-            stop=options.stop_sequences if options.stop_sequences else None,
-        )
+        # Build langchain ChatOllama with optional model-specific options
+        ollama_kwargs: dict[str, Any] = {
+            "model": model,
+            "base_url": self._host,
+            "temperature": options.temperature,
+            "num_predict": options.max_tokens,
+            "stop": options.stop_sequences if options.stop_sequences else None,
+        }
+        # Add num_ctx if specified in model_options
+        if num_ctx := options.model_options.get("num_ctx"):
+            ollama_kwargs["num_ctx"] = num_ctx
+
+        llm: Any = ChatOllama(**ollama_kwargs)
 
         # Bind tools if provided
         if tools:
@@ -218,14 +223,19 @@ class OllamaProvider(LLMProvider):
         if not await self.check_availability():
             raise ProviderUnavailableError(f"Ollama not available at {self._host}")
 
-        # Build langchain ChatOllama
-        llm: Any = ChatOllama(
-            model=model,
-            base_url=self._host,
-            temperature=options.temperature,
-            num_predict=options.max_tokens,
-            stop=options.stop_sequences if options.stop_sequences else None,
-        )
+        # Build langchain ChatOllama with optional model-specific options
+        ollama_kwargs: dict[str, Any] = {
+            "model": model,
+            "base_url": self._host,
+            "temperature": options.temperature,
+            "num_predict": options.max_tokens,
+            "stop": options.stop_sequences if options.stop_sequences else None,
+        }
+        # Add num_ctx if specified in model_options
+        if num_ctx := options.model_options.get("num_ctx"):
+            ollama_kwargs["num_ctx"] = num_ctx
+
+        llm: Any = ChatOllama(**ollama_kwargs)
 
         # Bind tools if provided
         if tools:
