@@ -1042,3 +1042,82 @@ class TestChainOfThoughtReasoningLogging:
 
         reasoning_logs = [r for r in caplog.records if "reasoning" in r.message.lower()]
         assert len(reasoning_logs) == 0, f"Unexpected reasoning log: {reasoning_logs}"
+
+
+class TestStripThinkingTags:
+    """Tests for strip_thinking_tags function."""
+
+    def test_strip_simple_thinking_block(self) -> None:
+        """Strip single thinking block from content."""
+        from questfoundry.runtime.agent.runtime import strip_thinking_tags
+
+        content = "<think>Internal reasoning here</think>The actual response"
+        result = strip_thinking_tags(content)
+        assert result == "The actual response"
+
+    def test_strip_multiline_thinking_block(self) -> None:
+        """Strip multiline thinking block."""
+        from questfoundry.runtime.agent.runtime import strip_thinking_tags
+
+        content = """<think>
+First line of thinking
+Second line of thinking
+</think>The actual response after thinking"""
+        result = strip_thinking_tags(content)
+        assert result == "The actual response after thinking"
+
+    def test_strip_multiple_thinking_blocks(self) -> None:
+        """Strip multiple thinking blocks."""
+        from questfoundry.runtime.agent.runtime import strip_thinking_tags
+
+        content = "<think>First thought</think>Middle text<think>Second thought</think>End"
+        result = strip_thinking_tags(content)
+        assert result == "Middle textEnd"
+
+    def test_preserve_content_without_thinking(self) -> None:
+        """Content without thinking blocks is unchanged."""
+        from questfoundry.runtime.agent.runtime import strip_thinking_tags
+
+        content = "This is normal content without thinking tags"
+        result = strip_thinking_tags(content)
+        assert result == content
+
+    def test_empty_content(self) -> None:
+        """Empty content returns empty string."""
+        from questfoundry.runtime.agent.runtime import strip_thinking_tags
+
+        assert strip_thinking_tags("") == ""
+
+    def test_none_like_handling(self) -> None:
+        """Empty string is handled correctly."""
+        from questfoundry.runtime.agent.runtime import strip_thinking_tags
+
+        assert strip_thinking_tags("") == ""
+
+
+class TestModelOptions:
+    """Tests for model_options support in AgentRuntime."""
+
+    def test_runtime_stores_model_options(
+        self, mock_provider: MagicMock, basic_studio: Studio
+    ) -> None:
+        """Runtime stores model_options from constructor."""
+        model_options = {"num_ctx": 32768}
+        runtime = AgentRuntime(
+            provider=mock_provider,
+            studio=basic_studio,
+            model_options=model_options,
+        )
+
+        assert runtime._model_options == model_options
+
+    def test_runtime_defaults_empty_model_options(
+        self, mock_provider: MagicMock, basic_studio: Studio
+    ) -> None:
+        """Runtime defaults to empty dict when no model_options provided."""
+        runtime = AgentRuntime(
+            provider=mock_provider,
+            studio=basic_studio,
+        )
+
+        assert runtime._model_options == {}
