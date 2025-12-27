@@ -116,7 +116,7 @@
   "$defs": {
     "tool_input_schema": {
       "type": "object",
-      "description": "JSON Schema for tool arguments. The Runtime validates agent tool calls against this schema before execution.",
+      "description": "JSON Schema for tool arguments. The Runtime validates agent tool calls against this schema before execution.\n\nRECOMMENDED: All tools should include a 'reasoning' property in their input_schema. This enables Chain-of-Thought prompting by requiring agents to explain WHY they are calling the tool before execution. The reasoning is logged at INFO level for observability.\n\nExample reasoning property:\n```json\n\"reasoning\": {\n  \"type\": \"string\",\n  \"description\": \"Explain why you are calling this tool and what you expect to achieve.\"\n}\n```",
       "properties": {
         "type": {
           "const": "object",
@@ -128,12 +128,12 @@
             "type": "object",
             "description": "JSON Schema for each argument"
           },
-          "description": "The tool's arguments"
+          "description": "The tool's arguments. RECOMMENDED: Include a 'reasoning' property for Chain-of-Thought prompting."
         },
         "required": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Which arguments are required"
+          "description": "Which arguments are required. RECOMMENDED: Include 'reasoning' in this array."
         }
       },
       "additionalProperties": true
