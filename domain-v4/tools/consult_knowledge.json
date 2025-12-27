@@ -4,13 +4,15 @@
   "name": "Consult Knowledge",
   "summary": "Retrieve full content of a knowledge entry",
   "description": "Retrieve detailed guidance from the studio knowledge base. Use this when you need full content for entries shown in your Knowledge Menu.\n\nThe Knowledge Menu in your system prompt shows summaries of available knowledge. Use this tool to get the complete content when you need detailed guidance, examples, or procedures.\n\nCommon uses:\n- Get detailed examples when summary is insufficient\n- Retrieve full procedures or checklists\n- Access domain-specific guidance for specialized tasks",
-
   "summarization_policy": "drop",
   "summary_template": "Retrieved knowledge: {name}",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "entry_id": {
         "type": "string",
         "description": "The knowledge entry ID (e.g., 'spoiler_hygiene', 'runtime_guidelines', 'style_lead_heuristics')"
@@ -20,9 +22,11 @@
         "description": "Optional: specific section heading within the entry to retrieve. Use when you only need part of a large entry."
       }
     },
-    "required": ["entry_id"]
+    "required": [
+      "reasoning",
+      "entry_id"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -36,7 +40,13 @@
       },
       "layer": {
         "type": "string",
-        "enum": ["constitution", "must_know", "should_know", "role_specific", "lookup"],
+        "enum": [
+          "constitution",
+          "must_know",
+          "should_know",
+          "role_specific",
+          "lookup"
+        ],
         "description": "Which knowledge layer this entry belongs to. See domain-v4/knowledge/layers.json for layer definitions."
       },
       "content": {
@@ -45,12 +55,13 @@
       },
       "related_entries": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "description": "IDs of related knowledge entries you might also want to consult"
       }
     }
   },
-
   "examples": [
     {
       "description": "Get spoiler hygiene guidance",
@@ -62,7 +73,10 @@
         "name": "Spoiler Hygiene",
         "layer": "must_know",
         "content": "## Spoiler Hygiene\n\nNever reveal future plot points...",
-        "related_entries": ["sources_of_truth", "diegetic_gating"]
+        "related_entries": [
+          "sources_of_truth",
+          "diegetic_gating"
+        ]
       }
     },
     {

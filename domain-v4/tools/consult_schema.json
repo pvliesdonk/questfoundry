@@ -4,13 +4,15 @@
   "name": "Consult Schema",
   "summary": "Get the JSON schema for an artifact type",
   "description": "Retrieve the schema definition for an artifact type. Returns the field definitions, validation rules, and lifecycle states for the specified artifact type. Use this to understand the structure of artifacts before creating or validating them.\n\nPattern: consult-schema - agent asks for schema, gets both structure and documentation.",
-
   "summarization_policy": "drop",
   "summary_template": "Schema for {artifact_type_id} retrieved",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "artifact_type_id": {
         "type": "string",
         "description": "The ID of the artifact type to retrieve (e.g., 'passage', 'hook_card', 'passage_brief')"
@@ -26,9 +28,11 @@
         "description": "Whether to include validation rules in the response"
       }
     },
-    "required": ["artifact_type_id"]
+    "required": [
+      "reasoning",
+      "artifact_type_id"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -46,7 +50,6 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Get the Passage Brief schema before creating one",

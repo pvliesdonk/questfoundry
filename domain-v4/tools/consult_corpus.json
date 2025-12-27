@@ -4,16 +4,23 @@
   "name": "Consult Corpus",
   "summary": "Search craft guidance in the corpus",
   "description": "Access the craft corpus for writing guidance and genre conventions. Supports multiple modes:\n\n- **toc**: Get table of contents listing all corpus files\n- **file**: Retrieve full content of a specific file\n- **cluster**: Browse files in a cluster (genre-conventions, prose-and-language, etc.)\n- **search**: Search for relevant excerpts (default mode)\n\nUse this for prose techniques, choice architecture, genre conventions, and craft guidance.",
-
   "summarization_policy": "drop",
   "summary_template": "Retrieved {excerpt_count} excerpts from corpus",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "mode": {
         "type": "string",
-        "enum": ["search", "toc", "file", "cluster"],
+        "enum": [
+          "search",
+          "toc",
+          "file",
+          "cluster"
+        ],
         "default": "search",
         "description": "Operation mode: 'search' for keyword/semantic search, 'toc' for table of contents, 'file' for direct file access, 'cluster' for browsing by cluster"
       },
@@ -45,9 +52,11 @@
         "maximum": 10,
         "description": "Maximum number of excerpts to return (mode=search only)"
       }
-    }
+    },
+    "required": [
+      "reasoning"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -98,10 +107,18 @@
         "items": {
           "type": "object",
           "properties": {
-            "title": { "type": "string" },
-            "summary": { "type": "string" },
-            "cluster": { "type": "string" },
-            "path": { "type": "string" }
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "cluster": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
           }
         }
       },
@@ -109,17 +126,29 @@
         "type": "object",
         "description": "File content (mode=file)",
         "properties": {
-          "title": { "type": "string" },
-          "summary": { "type": "string" },
-          "cluster": { "type": "string" },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
           "sections": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "heading": { "type": "string" },
-                "level": { "type": "integer" },
-                "content": { "type": "string" }
+                "heading": {
+                  "type": "string"
+                },
+                "level": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -131,15 +160,20 @@
         "items": {
           "type": "object",
           "properties": {
-            "title": { "type": "string" },
-            "summary": { "type": "string" },
-            "path": { "type": "string" }
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
           }
         }
       }
     }
   },
-
   "examples": [
     {
       "description": "Get table of contents",

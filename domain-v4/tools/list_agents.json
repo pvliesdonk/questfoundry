@@ -4,16 +4,20 @@
   "name": "List Agents",
   "summary": "List available agents and their capabilities",
   "description": "List all agents available for delegation. Use this to discover what specialist agents exist and their archetypes before delegating work. Returns a compact list with id, name, archetypes, and brief description.",
-
   "summarization_policy": "drop",
   "summary_template": "Listed {count} agents",
-
   "input_schema": {
     "type": "object",
-    "properties": {},
-    "required": []
+    "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      }
+    },
+    "required": [
+      "reasoning"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -27,15 +31,29 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Discover available agents for delegation",
       "input": {},
       "output": {
         "agents": [
-          {"id": "plotwright", "name": "Plotwright", "archetypes": ["architect"], "description": "Designs story topology and structure"},
-          {"id": "scene_smith", "name": "Scene Smith", "archetypes": ["author", "creator"], "description": "Transforms skeleton scenes into engaging prose"}
+          {
+            "id": "plotwright",
+            "name": "Plotwright",
+            "archetypes": [
+              "architect"
+            ],
+            "description": "Designs story topology and structure"
+          },
+          {
+            "id": "scene_smith",
+            "name": "Scene Smith",
+            "archetypes": [
+              "author",
+              "creator"
+            ],
+            "description": "Transforms skeleton scenes into engaging prose"
+          }
         ],
         "count": 2
       }

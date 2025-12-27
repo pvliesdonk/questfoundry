@@ -4,13 +4,15 @@
   "name": "Web Fetch",
   "summary": "Fetch content from a URL",
   "description": "Fetch and extract content from a specific URL. Returns cleaned text content from the page, suitable for reading and analysis. Handles HTML cleanup, removes navigation/ads, and extracts main content.\n\nBest for: deep-diving a specific source, reading full articles, extracting detailed information.\nFor discovering sources, use web_search first.",
-
   "summarization_policy": "concise",
   "summary_template": "Fetched content from {url}",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "url": {
         "type": "string",
         "format": "uri",
@@ -18,7 +20,11 @@
       },
       "extract_mode": {
         "type": "string",
-        "enum": ["article", "full", "summary"],
+        "enum": [
+          "article",
+          "full",
+          "summary"
+        ],
         "default": "article",
         "description": "article: extract main content only. full: include all text. summary: AI-generated summary of the page."
       },
@@ -30,9 +36,11 @@
         "description": "Maximum characters to return"
       }
     },
-    "required": ["url"]
+    "required": [
+      "reasoning",
+      "url"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -62,22 +70,22 @@
       }
     }
   },
-
   "timeout_ms": 30000,
-
   "retry_policy": {
     "max_retries": 2,
     "initial_delay_ms": 2000,
     "backoff_multiplier": 2,
-    "retryable_errors": ["timeout", "rate_limited", "service_unavailable"]
+    "retryable_errors": [
+      "timeout",
+      "rate_limited",
+      "service_unavailable"
+    ]
   },
-
   "rate_limit": {
     "requests_per_minute": 20,
     "requests_per_agent_per_minute": 5,
     "burst_limit": 3
   },
-
   "examples": [
     {
       "description": "Read a Wikipedia article for fact verification",

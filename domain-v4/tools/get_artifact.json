@@ -4,24 +4,35 @@
   "name": "Get Artifact",
   "summary": "Retrieve an artifact by ID",
   "description": "Retrieve one or more artifacts by ID. Returns the current version from workspace or canon stores.\n\nAccepts a single ID or list of IDs. Use search_workspace instead to find artifacts by criteria (type, lifecycle state, content search).",
-
   "summarization_policy": "concise",
   "summary_template": "Retrieved {count} artifact(s)",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "artifact_ids": {
         "oneOf": [
-          { "type": "string" },
-          { "type": "array", "items": { "type": "string" } }
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         ],
         "description": "Artifact ID(s) to fetch - single string or array of strings"
       }
     },
-    "required": ["artifact_ids"]
+    "required": [
+      "reasoning",
+      "artifact_ids"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -35,12 +46,13 @@
       },
       "not_found": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "description": "IDs that were not found (only present if some IDs not found)"
       }
     }
   },
-
   "examples": [
     {
       "description": "Fetch a single artifact by ID",
@@ -51,7 +63,11 @@
     {
       "description": "Fetch multiple artifacts at once",
       "input": {
-        "artifact_ids": ["passage_brief_abc123", "passage_brief_def456", "passage_brief_ghi789"]
+        "artifact_ids": [
+          "passage_brief_abc123",
+          "passage_brief_def456",
+          "passage_brief_ghi789"
+        ]
       }
     }
   ]

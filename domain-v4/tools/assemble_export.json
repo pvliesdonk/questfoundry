@@ -4,12 +4,14 @@
   "name": "Assemble Export",
   "summary": "Build export bundle from canon snapshot",
   "description": "Assemble a player-safe export bundle from a Canon snapshot. Compiles manuscript, codex, and optional assets into distributable formats (MD/HTML/EPUB/PDF). Validates link integrity, generates navigation, and stamps front matter.\n\nThis tool does NOT edit content - it packages what exists. If integrity issues are found, they're reported for upstream fixes.",
-
   "summarization_policy": "preserve",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "snapshot_id": {
         "type": "string",
         "description": "Canon snapshot ID to export from (e.g., 'canon@2025-12-13T10:00:00Z' or a tag name)"
@@ -18,9 +20,17 @@
         "type": "array",
         "items": {
           "type": "string",
-          "enum": ["markdown", "html", "epub", "pdf"]
+          "enum": [
+            "markdown",
+            "html",
+            "epub",
+            "pdf"
+          ]
         },
-        "default": ["markdown", "html"],
+        "default": [
+          "markdown",
+          "html"
+        ],
         "description": "Output formats to generate"
       },
       "options": {
@@ -48,8 +58,12 @@
           },
           "languages": {
             "type": "array",
-            "items": { "type": "string" },
-            "default": ["en"],
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "en"
+            ],
             "description": "Language codes to include"
           },
           "print_friendly": {
@@ -66,9 +80,11 @@
         "description": "If true, run integrity checks without generating output"
       }
     },
-    "required": ["snapshot_id"]
+    "required": [
+      "reasoning",
+      "snapshot_id"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -84,49 +100,80 @@
         "items": {
           "type": "object",
           "properties": {
-            "format": { "type": "string" },
-            "path": { "type": "string" },
-            "size_bytes": { "type": "integer" }
+            "format": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "size_bytes": {
+              "type": "integer"
+            }
           }
         }
       },
       "integrity_report": {
         "type": "object",
         "properties": {
-          "total_anchors": { "type": "integer" },
-          "broken_links": { "type": "array", "items": { "type": "string" } },
-          "missing_alt_text": { "type": "array", "items": { "type": "string" } },
-          "orphan_pages": { "type": "array", "items": { "type": "string" } }
+          "total_anchors": {
+            "type": "integer"
+          },
+          "broken_links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing_alt_text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orphan_pages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       },
       "coverage": {
         "type": "object",
         "description": "Coverage percentages by language",
-        "additionalProperties": { "type": "number" }
+        "additionalProperties": {
+          "type": "number"
+        }
       },
       "warnings": {
         "type": "array",
-        "items": { "type": "string" }
+        "items": {
+          "type": "string"
+        }
       }
     }
   },
-
   "timeout_ms": 120000,
-
   "retry_policy": {
     "max_retries": 1,
     "initial_delay_ms": 5000,
-    "retryable_errors": ["timeout"]
+    "retryable_errors": [
+      "timeout"
+    ]
   },
-
   "examples": [
     {
       "description": "Export a chapter for playtest",
       "input": {
         "snapshot_id": "canon@2025-12-01",
-        "output_formats": ["markdown", "html"],
+        "output_formats": [
+          "markdown",
+          "html"
+        ],
         "options": {
-          "languages": ["en"],
+          "languages": [
+            "en"
+          ],
           "print_friendly": true
         }
       }
@@ -142,10 +189,19 @@
       "description": "Full export with art and translations",
       "input": {
         "snapshot_id": "release-v1.0",
-        "output_formats": ["markdown", "html", "epub", "pdf"],
+        "output_formats": [
+          "markdown",
+          "html",
+          "epub",
+          "pdf"
+        ],
         "options": {
           "include_art_renders": true,
-          "languages": ["en", "nl", "de"],
+          "languages": [
+            "en",
+            "nl",
+            "de"
+          ],
           "print_friendly": true
         }
       }

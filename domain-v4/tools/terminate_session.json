@@ -9,9 +9,18 @@
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "reason": {
         "type": "string",
-        "enum": ["complete", "user_requested", "error", "blocked"],
+        "enum": [
+          "complete",
+          "user_requested",
+          "error",
+          "blocked"
+        ],
         "description": "Why the session is ending:\n- complete: All requested work finished successfully\n- user_requested: User explicitly asked to end session\n- error: Unrecoverable error prevents further progress\n- blocked: Cannot proceed without human intervention that won't come"
       },
       "summary": {
@@ -20,12 +29,18 @@
       },
       "artifacts_produced": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "default": [],
         "description": "IDs of artifacts produced during session"
       }
     },
-    "required": ["reason", "summary"]
+    "required": [
+      "reasoning",
+      "reason",
+      "summary"
+    ]
   },
   "summarization_policy": "preserve",
   "summary_template": "Session terminated: {reason}"

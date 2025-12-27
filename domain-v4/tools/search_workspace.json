@@ -4,17 +4,26 @@
   "name": "Search Workspace",
   "summary": "Search for artifacts in the workspace",
   "description": "Search for artifacts in the Hot SoT (workspace store). Supports filtering by artifact type, lifecycle state, and text search within fields. Returns matching artifacts with their current state.\n\nUse this to find:\n- Drafts in progress\n- Passage briefs ready for implementation\n- Hooks awaiting triage\n- Related artifacts for context",
-
   "summarization_policy": "concise",
   "summary_template": "Found {total_count} artifacts matching query",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "query": {
         "oneOf": [
-          { "type": "string" },
-          { "type": "array", "items": { "type": "string" } }
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         ],
         "description": "Text search query - single string or array of strings (OR search)"
       },
@@ -29,7 +38,12 @@
         "type": "array",
         "items": {
           "type": "string",
-          "enum": ["draft", "review", "approved", "cold"]
+          "enum": [
+            "draft",
+            "review",
+            "approved",
+            "cold"
+          ]
         },
         "description": "Filter by lifecycle state(s). Valid states: draft (new/WIP), review (awaiting gating), approved (passed gates), cold (committed to canon)"
       },
@@ -53,9 +67,11 @@
         "default": 20,
         "description": "Maximum results to return"
       }
-    }
+    },
+    "required": [
+      "reasoning"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -64,12 +80,24 @@
         "items": {
           "type": "object",
           "properties": {
-            "artifact_id": { "type": "string" },
-            "artifact_type": { "type": "string" },
-            "lifecycle_state": { "type": "string" },
-            "summary": { "type": "string" },
-            "created_by": { "type": "string" },
-            "created_at": { "type": "string" }
+            "artifact_id": {
+              "type": "string"
+            },
+            "artifact_type": {
+              "type": "string"
+            },
+            "lifecycle_state": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            }
           }
         }
       },
@@ -79,45 +107,60 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Find all Passage Briefs in draft state",
       "input": {
-        "artifact_types": ["passage_brief"],
-        "lifecycle_states": ["draft"]
+        "artifact_types": [
+          "passage_brief"
+        ],
+        "lifecycle_states": [
+          "draft"
+        ]
       }
     },
     {
       "description": "Search for hooks mentioning 'lighthouse'",
       "input": {
         "query": "lighthouse",
-        "artifact_types": ["hook_card"]
+        "artifact_types": [
+          "hook_card"
+        ]
       }
     },
     {
       "description": "Find drafts created by Plotwright",
       "input": {
         "created_by": "plotwright",
-        "lifecycle_states": ["draft"]
+        "lifecycle_states": [
+          "draft"
+        ]
       }
     },
     {
       "description": "Search for multiple passage briefs by ID (OR search)",
       "input": {
-        "query": ["passage_brief_abc123", "passage_brief_def456", "passage_brief_ghi789"]
+        "query": [
+          "passage_brief_abc123",
+          "passage_brief_def456",
+          "passage_brief_ghi789"
+        ]
       }
     },
     {
       "description": "Find artifacts awaiting quality review",
       "input": {
-        "lifecycle_states": ["review"]
+        "lifecycle_states": [
+          "review"
+        ]
       }
     },
     {
       "description": "Find approved artifacts ready for canon",
       "input": {
-        "lifecycle_states": ["approved"]
+        "lifecycle_states": [
+          "approved"
+        ]
       }
     }
   ]

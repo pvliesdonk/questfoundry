@@ -4,14 +4,15 @@
   "name": "Validate Artifact",
   "summary": "Check an artifact against quality criteria",
   "description": "Validate an artifact against its type schema and the 8 quality bars. Returns validation results with specific errors and suggested fixes.\n\nQuality Bars checked:\n1. Integrity - No contradictions or dead links\n2. Reachability - Critical content accessible\n3. Nonlinearity - Branches matter\n4. Gateways - Conditions enforceable\n5. Style - Voice consistent\n6. Determinism - Reproducible where promised\n7. Presentation - Spoiler-safe\n8. Accessibility - Navigation clear\n\nPattern: validate-with-feedback - strict validation, clear rejection messages with remediation guidance.",
-
   "summarization_policy": "preserve",
-
   "can_reject": true,
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "artifact_id": {
         "type": "string",
         "description": "ID of the artifact to validate"
@@ -26,7 +27,11 @@
       },
       "validation_mode": {
         "type": "string",
-        "enum": ["schema_only", "bars_only", "full"],
+        "enum": [
+          "schema_only",
+          "bars_only",
+          "full"
+        ],
         "default": "full",
         "description": "What to validate: schema compliance only, quality bars only, or both"
       },
@@ -34,14 +39,25 @@
         "type": "array",
         "items": {
           "type": "string",
-          "enum": ["integrity", "reachability", "nonlinearity", "gateways", "style", "determinism", "presentation", "accessibility"]
+          "enum": [
+            "integrity",
+            "reachability",
+            "nonlinearity",
+            "gateways",
+            "style",
+            "determinism",
+            "presentation",
+            "accessibility"
+          ]
         },
         "description": "Specific bars to check (default: all 8)"
       }
     },
-    "required": ["artifact_type_id"]
+    "required": [
+      "reasoning",
+      "artifact_type_id"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -54,9 +70,15 @@
         "items": {
           "type": "object",
           "properties": {
-            "field": { "type": "string" },
-            "error": { "type": "string" },
-            "suggested_fix": { "type": "string" }
+            "field": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "suggested_fix": {
+              "type": "string"
+            }
           }
         }
       },
@@ -65,20 +87,32 @@
         "items": {
           "type": "object",
           "properties": {
-            "bar": { "type": "string", "description": "Name of the quality bar checked" },
+            "bar": {
+              "type": "string",
+              "description": "Name of the quality bar checked"
+            },
             "status": {
               "type": "string",
-              "enum": ["pass", "warn", "fail"],
+              "enum": [
+                "pass",
+                "warn",
+                "fail"
+              ],
               "description": "Result of the check: pass=meets requirements, warn=minor issues, fail=blocking issues"
             },
-            "evidence": { "type": "string", "description": "What was observed" },
-            "smallest_fix": { "type": "string", "description": "Minimal change needed to address issues" }
+            "evidence": {
+              "type": "string",
+              "description": "What was observed"
+            },
+            "smallest_fix": {
+              "type": "string",
+              "description": "Minimal change needed to address issues"
+            }
           }
         }
       }
     }
   },
-
   "examples": [
     {
       "description": "Validate a Passage before merging to Cold",
@@ -92,7 +126,10 @@
       "description": "Quick schema check on a draft",
       "input": {
         "artifact_type_id": "passage_brief",
-        "artifact_data": { "brief_id": "PB-001", "goal": "Test" },
+        "artifact_data": {
+          "brief_id": "PB-001",
+          "goal": "Test"
+        },
         "validation_mode": "schema_only"
       }
     }

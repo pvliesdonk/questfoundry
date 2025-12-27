@@ -4,13 +4,15 @@
   "name": "Web Search",
   "summary": "Search the web for information",
   "description": "Search the web for factual information. Returns a list of relevant results with titles, snippets, and URLs. Use this to find sources for verification, corroborate claims, or discover current information.\n\nBest for: broad queries, finding multiple sources, discovering what exists.\nFor deep-diving a specific page, use web_fetch instead.",
-
   "summarization_policy": "concise",
   "summary_template": "Web search for '{query}': found results",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "query": {
         "type": "string",
         "description": "The search query. Be specific and include relevant context for better results."
@@ -28,14 +30,22 @@
       },
       "recency": {
         "type": "string",
-        "enum": ["all_time", "day", "week", "month", "year"],
+        "enum": [
+          "all_time",
+          "day",
+          "week",
+          "month",
+          "year"
+        ],
         "default": "all_time",
         "description": "Filter by content freshness. 'all_time' returns results regardless of date."
       }
     },
-    "required": ["query"]
+    "required": [
+      "reasoning",
+      "query"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -44,10 +54,22 @@
         "items": {
           "type": "object",
           "properties": {
-            "title": { "type": "string", "description": "Page title" },
-            "url": { "type": "string", "description": "Full URL to the page" },
-            "snippet": { "type": "string", "description": "Content excerpt from the search result" },
-            "published_date": { "type": "string", "description": "Publication date if available (ISO 8601 format)" }
+            "title": {
+              "type": "string",
+              "description": "Page title"
+            },
+            "url": {
+              "type": "string",
+              "description": "Full URL to the page"
+            },
+            "snippet": {
+              "type": "string",
+              "description": "Content excerpt from the search result"
+            },
+            "published_date": {
+              "type": "string",
+              "description": "Publication date if available (ISO 8601 format)"
+            }
           }
         }
       },
@@ -61,21 +83,21 @@
       }
     }
   },
-
   "timeout_ms": 15000,
-
   "retry_policy": {
     "max_retries": 2,
     "initial_delay_ms": 1000,
     "backoff_multiplier": 2,
-    "retryable_errors": ["timeout", "rate_limited", "service_unavailable"]
+    "retryable_errors": [
+      "timeout",
+      "rate_limited",
+      "service_unavailable"
+    ]
   },
-
   "rate_limit": {
     "requests_per_minute": 30,
     "requests_per_agent_per_minute": 10
   },
-
   "examples": [
     {
       "description": "Verify a historical claim",
