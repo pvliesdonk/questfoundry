@@ -443,6 +443,72 @@ Before deploying prompts:
 
 ---
 
+## 12. Chain-of-Thought (CoT)
+
+For complex logical tasks, forcing the model to articulate its reasoning *before* acting significantly reduces hallucination and logic errors.
+
+### The Problem
+
+Zero-shot tool calling often fails on multi-step problems because the model commits to an action before fully processing the constraints.
+
+### Best Practice
+
+Require explicit reasoning steps in the output structure:
+
+- **Structure**: `<thought>Analysis of constraints...</thought>` followed by tool call.
+- **Tooling**: Add a mandatory `reasoning` parameter to critical tools.
+- **Benefits**:
+  - **Debuggability**: exposing the "why" behind an action.
+  - **Accuracy**: +40-50% improvement on complex reasoning benchmarks.
+
+---
+
+## 13. Dynamic Few-Shot Prompting
+
+Static lists of examples ("fixed few-shot") consume tokens and may not match the specific nuance of the current task.
+
+### Best Practice
+
+Use Retrieval-Augmented Generation (RAG) to inject context-aware examples.
+
+1. **Store** a library of high-quality examples (hooks, story beats, validation reports) as vectors.
+2. **Query** this library using the current task description.
+3. **Inject** the top 3-5 most relevant examples into the `Task Layer` of the prompt.
+
+**Standard**: Prefer dynamic injection over static "Must Know" lists for examples. This ensures the agent sees relevant patterns without context window bloat.
+
+---
+
+## 14. Reflection & Self-Correction
+
+Models perform significantly better when asked to critique their own work before finalizing it ("Reflexion").
+
+### Best Practice
+
+Implement a "Check-Act" loop for high-stakes actions (e.g., modifying Canon, finalizing a chapter).
+
+1. **Draft**: Agent generates a preliminary plan or content.
+2. **Critique**: Agent (or a separate "Critic" persona) evaluates the draft against `Constraints` and `Constitution`.
+3. **Refine**: Agent generates the final output based on the critique.
+
+**Implementation**: Use a `validate_plan` tool or an internal thought step to simulate this loop within a single turn for capable models.
+
+---
+
+## 15. Active Context Pruning
+
+Long-running sessions suffer from "Context Rot" where old, irrelevant details confuse the model, even within the token limit.
+
+### Best Practice
+
+Treat context as a garden that must be actively weeded, not just a log file.
+
+- **Semantic Chunking**: Group history by "Episodes" or "Tasks".
+- **Active Forgetting**: When a task is marked complete (e.g., `binding_run` finished), summarize that segment into a high-level outcome and **remove** the raw turns from the active prompt.
+- **State-over-History**: Prefer providing the current *State* (artifacts, flags) over the *History* of how that state was reached.
+
+---
+
 ## Summary Checklist
 
 - [ ] Critical instructions at start AND end (sandwich pattern)
@@ -457,3 +523,7 @@ Before deploying prompts:
 - [ ] Menu + consult pattern for reference material
 - [ ] `injection_priority: "critical"` on must-follow rules
 - [ ] Tested with smallest target model
+- [ ] **CoT/Reasoning enabled for complex tasks**
+- [ ] **Dynamic few-shot used for examples (vs static)**
+- [ ] **Self-correction/Reflection loops implemented**
+- [ ] **Active context pruning strategy defined**
