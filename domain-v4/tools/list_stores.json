@@ -4,16 +4,20 @@
   "name": "List Stores",
   "summary": "List available stores and access levels",
   "description": "List all available stores with their semantics and descriptions. Use this to discover what stores exist and understand their access patterns (hot, cold, versioned, ephemeral).",
-
   "summarization_policy": "drop",
   "summary_template": "Listed {count} stores",
-
   "input_schema": {
     "type": "object",
-    "properties": {},
-    "required": []
+    "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      }
+    },
+    "required": [
+      "reasoning"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -27,15 +31,26 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Discover available stores",
-      "input": {},
+      "input": {
+        "reasoning": "Need to discover what storage systems are available for artifact management"
+      },
       "output": {
         "stores": [
-          {"id": "workspace", "name": "Workspace", "semantics": "hot", "description": "Working memory for drafts and in-progress work"},
-          {"id": "canon", "name": "Canon Store", "semantics": "cold", "description": "Permanent storage for approved artifacts"}
+          {
+            "id": "workspace",
+            "name": "Workspace",
+            "semantics": "hot",
+            "description": "Working memory for drafts and in-progress work"
+          },
+          {
+            "id": "canon",
+            "name": "Canon Store",
+            "semantics": "cold",
+            "description": "Permanent storage for approved artifacts"
+          }
         ],
         "count": 2
       }

@@ -4,12 +4,14 @@
   "name": "Analyze Story Graph",
   "summary": "Analyze story topology for structural issues",
   "description": "Reads the authoritative topology artifact and validates story structure. Uses story.start as entry point and checks alignment with passage_brief and passage artifacts.\n\nAnalysis checks:\n1. Reachability - Can all passages be reached from start?\n2. Dead ends - Passages with no outgoing links (except endings)\n3. Orphans - Passages with no incoming links (except start)\n4. Missing targets - Links to non-existent passages\n5. Alignment - Do briefs/passages match topology?\n6. Lifecycle - What state are the artifacts in?\n\nReturns structured analysis with actionable recovery actions.",
-
   "summarization_policy": "preserve",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "include_drafts": {
         "type": "boolean",
         "default": true,
@@ -19,16 +21,22 @@
         "type": "string",
         "description": "Optional explicit entry point passage pid. If not provided, uses story.start."
       }
-    }
+    },
+    "required": [
+      "reasoning"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "description": "Structured analysis result with blocking issues, warnings, and recovery actions",
     "properties": {
       "analysis_outcome": {
         "type": "string",
-        "enum": ["passed", "warnings", "failed"],
+        "enum": [
+          "passed",
+          "warnings",
+          "failed"
+        ],
         "description": "Analysis outcome: passed (no issues), warnings (non-blocking concerns), failed (blocking issues)"
       },
       "blocking_issues": {
@@ -39,12 +47,31 @@
           "properties": {
             "issue_type": {
               "type": "string",
-              "enum": ["no_topology", "no_start_passage", "invalid_start_passage", "missing_targets"]
+              "enum": [
+                "no_topology",
+                "no_start_passage",
+                "invalid_start_passage",
+                "missing_targets"
+              ]
             },
-            "severity": { "type": "string", "enum": ["blocking"] },
-            "description": { "type": "string" },
-            "affected_nodes": { "type": "array", "items": { "type": "string" } },
-            "count": { "type": "integer" }
+            "severity": {
+              "type": "string",
+              "enum": [
+                "blocking"
+              ]
+            },
+            "description": {
+              "type": "string"
+            },
+            "affected_nodes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "count": {
+              "type": "integer"
+            }
           }
         }
       },
@@ -56,12 +83,39 @@
           "properties": {
             "issue_type": {
               "type": "string",
-              "enum": ["unreachable_passages", "dead_ends", "orphan_passages", "briefs_missing", "briefs_extra", "passages_missing", "passages_extra", "no_stable_passages", "no_endings", "ifid_mismatch", "multiple_entry_points", "duplicate_pids"]
+              "enum": [
+                "unreachable_passages",
+                "dead_ends",
+                "orphan_passages",
+                "briefs_missing",
+                "briefs_extra",
+                "passages_missing",
+                "passages_extra",
+                "no_stable_passages",
+                "no_endings",
+                "ifid_mismatch",
+                "multiple_entry_points",
+                "duplicate_pids"
+              ]
             },
-            "severity": { "type": "string", "enum": ["warning"] },
-            "description": { "type": "string" },
-            "affected_nodes": { "type": "array", "items": { "type": "string" } },
-            "count": { "type": "integer" }
+            "severity": {
+              "type": "string",
+              "enum": [
+                "warning"
+              ]
+            },
+            "description": {
+              "type": "string"
+            },
+            "affected_nodes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "count": {
+              "type": "integer"
+            }
           }
         }
       },
@@ -71,9 +125,23 @@
         "items": {
           "type": "object",
           "properties": {
-            "priority": { "type": "string", "enum": ["high", "medium", "low", "info"] },
-            "action": { "type": "string", "description": "What to do" },
-            "details": { "type": "string", "description": "Specific details" }
+            "priority": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low",
+                "info"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "description": "What to do"
+            },
+            "details": {
+              "type": "string",
+              "description": "Specific details"
+            }
           }
         }
       },
@@ -85,44 +153,98 @@
             "type": "object",
             "description": "Story identity from story artifact",
             "properties": {
-              "ifid": { "type": "string", "description": "Story IFID" },
-              "name": { "type": "string", "description": "Story name" },
-              "start": { "type": "string", "description": "Start passage pid" }
+              "ifid": {
+                "type": "string",
+                "description": "Story IFID"
+              },
+              "name": {
+                "type": "string",
+                "description": "Story name"
+              },
+              "start": {
+                "type": "string",
+                "description": "Start passage pid"
+              }
             }
           },
           "summary": {
             "type": "object",
             "properties": {
-              "total_passages": { "type": "integer" },
-              "reachable_count": { "type": "integer" },
-              "unreachable_count": { "type": "integer" },
-              "dead_end_count": { "type": "integer" },
-              "ending_count": { "type": "integer" },
-              "orphan_count": { "type": "integer" },
-              "missing_target_count": { "type": "integer" },
-              "has_reachable_stable_passage": { "type": "boolean" }
+              "total_passages": {
+                "type": "integer"
+              },
+              "reachable_count": {
+                "type": "integer"
+              },
+              "unreachable_count": {
+                "type": "integer"
+              },
+              "dead_end_count": {
+                "type": "integer"
+              },
+              "ending_count": {
+                "type": "integer"
+              },
+              "orphan_count": {
+                "type": "integer"
+              },
+              "missing_target_count": {
+                "type": "integer"
+              },
+              "has_reachable_stable_passage": {
+                "type": "boolean"
+              }
             }
           },
           "reachability": {
             "type": "object",
             "properties": {
-              "reachable": { "type": "array", "items": { "type": "string" } },
-              "unreachable": { "type": "array", "items": { "type": "string" } }
+              "reachable": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "unreachable": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "structural": {
             "type": "object",
             "properties": {
-              "dead_ends": { "type": "array", "items": { "type": "string" } },
-              "endings": { "type": "array", "items": { "type": "string" } },
-              "orphans": { "type": "array", "items": { "type": "string" } },
+              "dead_ends": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "endings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "orphans": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "missing_targets": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "from": { "type": "string" },
-                    "to": { "type": "string" }
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -132,10 +254,30 @@
             "type": "object",
             "description": "Alignment between topology and passage artifacts",
             "properties": {
-              "briefs_missing": { "type": "array", "items": { "type": "string" } },
-              "passages_missing": { "type": "array", "items": { "type": "string" } },
-              "briefs_extra": { "type": "array", "items": { "type": "string" } },
-              "passages_extra": { "type": "array", "items": { "type": "string" } }
+              "briefs_missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "passages_missing": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "briefs_extra": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "passages_extra": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "lifecycle": {
@@ -143,11 +285,21 @@
             "properties": {
               "by_brief": {
                 "type": "object",
-                "additionalProperties": { "type": "array", "items": { "type": "string" } }
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               },
               "by_passage": {
                 "type": "object",
-                "additionalProperties": { "type": "array", "items": { "type": "string" } }
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             }
           },
@@ -157,17 +309,58 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
-                "pid": { "type": "string" },
-                "name": { "type": "string" },
-                "topology_role": { "type": ["string", "null"], "enum": ["hub", "loop", "gateway", "linear", null] },
-                "is_ending": { "type": "boolean" },
-                "tags": { "type": "array", "items": { "type": "string" } },
-                "brief_artifact_id": { "type": "string" },
-                "brief_lifecycle": { "type": "string" },
-                "passage_artifact_id": { "type": "string" },
-                "passage_lifecycle": { "type": "string" },
-                "outgoing": { "type": "array", "items": { "type": "string" } },
-                "incoming": { "type": "array", "items": { "type": "string" } }
+                "pid": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "topology_role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "hub",
+                    "loop",
+                    "gateway",
+                    "linear",
+                    null
+                  ]
+                },
+                "is_ending": {
+                  "type": "boolean"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "brief_artifact_id": {
+                  "type": "string"
+                },
+                "brief_lifecycle": {
+                  "type": "string"
+                },
+                "passage_artifact_id": {
+                  "type": "string"
+                },
+                "passage_lifecycle": {
+                  "type": "string"
+                },
+                "outgoing": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "incoming": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             }
           }
@@ -175,7 +368,6 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Full story graph validation",

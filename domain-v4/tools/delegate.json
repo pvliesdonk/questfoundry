@@ -4,21 +4,29 @@
   "name": "Delegate Work",
   "summary": "Assign work to another agent",
   "description": "Delegate work to another agent. This hands off control until the agent completes the task.\n\nProvide:\n- task: Clear description of what needs to be done\n- context: Relevant artifact IDs and background\n- expected_outputs: What artifacts should be produced\n- quality_criteria: How to judge completion quality\n\nThe receiving agent executes the work and returns control via return_to_orchestrator with artifact IDs and assessment.\n\nThis tool TERMINATES YOUR TURN - you yield control and resume when the agent returns.",
-
   "terminates_turn": true,
   "summarization_policy": "ultra_concise",
   "summary_template": "Delegated to {assigned_to}: {task}",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "to_agent": {
         "type": "string",
         "description": "ID of the agent to delegate to (e.g., 'scene_smith', 'gatekeeper')"
       },
       "to_archetype": {
         "type": "string",
-        "enum": ["orchestrator", "creator", "validator", "researcher", "curator"],
+        "enum": [
+          "orchestrator",
+          "creator",
+          "validator",
+          "researcher",
+          "curator"
+        ],
         "description": "Alternative: delegate to any agent of this archetype"
       },
       "task": {
@@ -30,12 +38,16 @@
         "properties": {
           "artifact_refs": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "IDs of relevant artifacts"
           },
           "knowledge_refs": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "References to relevant knowledge entries"
           },
           "notes": {
@@ -49,20 +61,31 @@
         "items": {
           "type": "object",
           "properties": {
-            "artifact_type": { "type": "string" },
-            "description": { "type": "string" }
+            "artifact_type": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            }
           }
         },
         "description": "What artifacts should be produced"
       },
       "quality_criteria": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "description": "Specific quality criteria to meet"
       },
       "priority": {
         "type": "string",
-        "enum": ["low", "normal", "high", "urgent"],
+        "enum": [
+          "low",
+          "normal",
+          "high",
+          "urgent"
+        ],
         "default": "normal"
       },
       "playbook_ref": {
@@ -74,9 +97,11 @@
         "description": "Reference to playbook phase"
       }
     },
-    "required": ["task"]
+    "required": [
+      "reasoning",
+      "task"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -86,7 +111,13 @@
       },
       "status": {
         "type": "string",
-        "enum": ["sent", "accepted", "in_progress", "completed", "blocked"],
+        "enum": [
+          "sent",
+          "accepted",
+          "in_progress",
+          "completed",
+          "blocked"
+        ],
         "description": "Current delegation status"
       },
       "assigned_to": {
@@ -95,7 +126,6 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Delegate section drafting to Scene Smith",
@@ -103,13 +133,21 @@
         "to_agent": "scene_smith",
         "task": "Draft section prose for SB-005 (The Lighthouse Lock)",
         "context": {
-          "artifact_refs": ["SB-005"],
+          "artifact_refs": [
+            "SB-005"
+          ],
           "notes": "Hub with 3 exits; player discovers lighthouse is locked"
         },
         "expected_outputs": [
-          { "artifact_type": "passage", "description": "Draft passage with 3 choices" }
+          {
+            "artifact_type": "passage",
+            "description": "Draft passage with 3 choices"
+          }
         ],
-        "quality_criteria": ["choice_integrity", "diegetic_gates"]
+        "quality_criteria": [
+          "choice_integrity",
+          "diegetic_gates"
+        ]
       }
     },
     {
@@ -118,10 +156,15 @@
         "to_agent": "gatekeeper",
         "task": "Gatecheck passage-005 for Cold merge",
         "context": {
-          "artifact_refs": ["passage-005"]
+          "artifact_refs": [
+            "passage-005"
+          ]
         },
         "expected_outputs": [
-          { "artifact_type": "gatecheck_report", "description": "All 8 bars assessed" }
+          {
+            "artifact_type": "gatecheck_report",
+            "description": "All 8 bars assessed"
+          }
         ]
       }
     }

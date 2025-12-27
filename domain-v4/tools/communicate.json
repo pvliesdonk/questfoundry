@@ -4,16 +4,23 @@
   "name": "Communicate with Customer",
   "summary": "Send messages to customer or ask questions",
   "description": "Communicate with the human customer - send updates, ask questions, or report errors.\n\nALL message types terminate your turn. The difference is whether the runtime waits for a response:\n- status: Progress update - runtime continues immediately\n- notification: Milestone announcement - runtime continues immediately\n- question: Waits for customer response before resuming\n- error: May wait for customer decision depending on severity\n\nUse this when you need to report progress, request input, or escalate decisions.",
-
   "terminates_turn": true,
   "summarization_policy": "preserve",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "type": {
         "type": "string",
-        "enum": ["status", "question", "notification", "error"],
+        "enum": [
+          "status",
+          "question",
+          "notification",
+          "error"
+        ],
         "description": "Type of communication"
       },
       "message": {
@@ -42,7 +49,10 @@
               "description": "What choosing this option would lead to"
             }
           },
-          "required": ["id", "description"]
+          "required": [
+            "id",
+            "description"
+          ]
         },
         "description": "For questions: structured choices to present"
       },
@@ -59,14 +69,21 @@
       },
       "severity": {
         "type": "string",
-        "enum": ["info", "warning", "error"],
+        "enum": [
+          "info",
+          "warning",
+          "error"
+        ],
         "default": "info",
         "description": "For errors: severity level. 'error' severity may block for customer decision."
       }
     },
-    "required": ["type", "message"]
+    "required": [
+      "reasoning",
+      "type",
+      "message"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -90,7 +107,6 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Status update",
@@ -106,9 +122,21 @@
         "message": "What tone would you like for this story?",
         "context": "The tone will affect word choice, pacing, and themes throughout.",
         "options": [
-          { "id": "dark", "description": "Dark and serious", "implications": "Gothic atmosphere, moral ambiguity" },
-          { "id": "light", "description": "Light and adventurous", "implications": "Upbeat pacing, clear heroes/villains" },
-          { "id": "balanced", "description": "Balanced mix", "implications": "Varies by scene as appropriate" }
+          {
+            "id": "dark",
+            "description": "Dark and serious",
+            "implications": "Gothic atmosphere, moral ambiguity"
+          },
+          {
+            "id": "light",
+            "description": "Light and adventurous",
+            "implications": "Upbeat pacing, clear heroes/villains"
+          },
+          {
+            "id": "balanced",
+            "description": "Balanced mix",
+            "implications": "Varies by scene as appropriate"
+          }
         ],
         "default_option": "balanced"
       }
@@ -118,7 +146,9 @@
       "input": {
         "type": "notification",
         "message": "Chapter 1 draft is ready for your review.",
-        "artifacts": ["workspace:section:chapter_1_v1"]
+        "artifacts": [
+          "workspace:section:chapter_1_v1"
+        ]
       }
     },
     {

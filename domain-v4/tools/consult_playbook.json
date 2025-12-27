@@ -4,21 +4,25 @@
   "name": "Consult Playbook",
   "summary": "Get full details of a playbook",
   "description": "Retrieve full details for a playbook/workflow. Returns the sequence of phases and steps, which agents handle each step, input/output artifacts, completion criteria, and quality checkpoints. Use this to understand how a workflow should be orchestrated.",
-
   "summarization_policy": "drop",
   "summary_template": "Retrieved playbook: {name}",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "playbook_id": {
         "type": "string",
         "description": "The ID of the playbook to retrieve (e.g., 'story_spark', 'scene_weave'). See prompt for available playbook IDs."
       }
     },
-    "required": ["playbook_id"]
+    "required": [
+      "reasoning",
+      "playbook_id"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -56,7 +60,6 @@
       }
     }
   },
-
   "examples": [
     {
       "description": "Get full details for the Story Spark workflow",

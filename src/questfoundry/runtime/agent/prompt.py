@@ -382,6 +382,13 @@ class PromptBuilder:
         """
         lines = ["## Your Tools\n"]
 
+        # Chain-of-Thought: Require reasoning for every tool call
+        lines.append("**IMPORTANT:** Before calling any tool, provide a `reasoning` parameter:")
+        lines.append("- Explain WHY you are using this specific tool")
+        lines.append("- State WHAT you expect to achieve")
+        lines.append("- Describe HOW it advances your current task")
+        lines.append("")
+
         for tool in tool_schemas:
             name = tool.get("name", "unknown")
             # Use summary if available, otherwise first line of description

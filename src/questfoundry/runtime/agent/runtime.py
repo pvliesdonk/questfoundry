@@ -530,6 +530,11 @@ class AgentRuntime:
                 args=args,
             )
 
+        # Log reasoning at INFO level for Chain-of-Thought observability
+        reasoning = args.get("reasoning")
+        if reasoning:
+            logger.info("[%s] Tool %s reasoning: %s", agent.id, tool_id, reasoning)
+
         tool_trace_ctx = (
             self._tracing_manager.tool_call(
                 tool_id,

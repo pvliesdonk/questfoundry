@@ -3,16 +3,17 @@
   "id": "generate_image",
   "name": "Generate Image",
   "summary": "Generate an image from a plan",
-  "description": "Generate an illustration from an Art Plan. Consults Reference Sheets for visual consistency of recurring elements (characters, locations, objects). Returns an image asset with determinism log (kept off-surface).\n\nThis tool is expensive—use only when budget allows. Art Plans should exist for ALL worthy scenes, but generation is selective based on priority.\n\nRuntime provides implementation (DALL-E, Stable Diffusion, commission queue, etc.).",
-
+  "description": "Generate an illustration from an Art Plan. Consults Reference Sheets for visual consistency of recurring elements (characters, locations, objects). Returns an image asset with determinism log (kept off-surface).\n\nThis tool is expensive\u2014use only when budget allows. Art Plans should exist for ALL worthy scenes, but generation is selective based on priority.\n\nRuntime provides implementation (DALL-E, Stable Diffusion, commission queue, etc.).",
   "cost_tier": "high",
-
   "summarization_policy": "ultra_concise",
   "summary_template": "Generated image from {source_plan}",
-
   "input_schema": {
     "type": "object",
     "properties": {
+      "reasoning": {
+        "type": "string",
+        "description": "Explain why you are calling this tool and what you expect to achieve. This helps ensure thoughtful tool usage."
+      },
       "art_plan_ref": {
         "type": "string",
         "description": "Reference to the Art Plan artifact (e.g., 'AP-001')"
@@ -23,20 +24,34 @@
       },
       "reference_sheet_refs": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "description": "References to Reference Sheets for recurring elements in this image (characters, locations, objects)"
       },
       "output_format": {
         "type": "string",
-        "enum": ["png", "jpeg", "webp"],
+        "enum": [
+          "png",
+          "jpeg",
+          "webp"
+        ],
         "default": "png",
         "description": "Output image format"
       },
       "dimensions": {
         "type": "object",
         "properties": {
-          "width": { "type": "integer", "minimum": 256, "maximum": 4096 },
-          "height": { "type": "integer", "minimum": 256, "maximum": 4096 }
+          "width": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 4096
+          }
         },
         "description": "Target dimensions. If not specified, uses Art Plan guidance or defaults."
       },
@@ -48,9 +63,11 @@
         "description": "Number of variants to generate for selection"
       }
     },
-    "required": ["art_plan_ref"]
+    "required": [
+      "reasoning",
+      "art_plan_ref"
+    ]
   },
-
   "output_schema": {
     "type": "object",
     "properties": {
@@ -58,13 +75,27 @@
         "type": "object",
         "description": "The generated illustration asset",
         "properties": {
-          "asset_id": { "type": "string" },
-          "file_path": { "type": "string" },
-          "file_hash": { "type": "string" },
-          "mime_type": { "type": "string" },
-          "size_bytes": { "type": "integer" },
-          "width": { "type": "integer" },
-          "height": { "type": "integer" }
+          "asset_id": {
+            "type": "string"
+          },
+          "file_path": {
+            "type": "string"
+          },
+          "file_hash": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          }
         }
       },
       "source_plan": {
@@ -75,12 +106,32 @@
         "type": "object",
         "description": "Off-surface generation details for reproducibility",
         "properties": {
-          "tool": { "type": "string", "description": "Generation tool used (e.g., 'dalle-3', 'sdxl')" },
-          "prompt_hash": { "type": "string", "description": "Hash of the prompt used" },
-          "seed": { "type": ["integer", "null"], "description": "Seed if deterministic generation supported" },
-          "model_version": { "type": "string" },
-          "settings": { "type": "object", "description": "Tool-specific settings" },
-          "timestamp": { "type": "string", "format": "date-time" }
+          "tool": {
+            "type": "string",
+            "description": "Generation tool used (e.g., 'dalle-3', 'sdxl')"
+          },
+          "prompt_hash": {
+            "type": "string",
+            "description": "Hash of the prompt used"
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Seed if deterministic generation supported"
+          },
+          "model_version": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "object",
+            "description": "Tool-specific settings"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "variants": {
@@ -89,36 +140,43 @@
         "items": {
           "type": "object",
           "properties": {
-            "variant_id": { "type": "string" },
-            "file_path": { "type": "string" },
-            "selected": { "type": "boolean" }
+            "variant_id": {
+              "type": "string"
+            },
+            "file_path": {
+              "type": "string"
+            },
+            "selected": {
+              "type": "boolean"
+            }
           }
         }
       }
     }
   },
-
   "timeout_ms": 120000,
-
   "retry_policy": {
     "max_retries": 1,
     "initial_delay_ms": 5000,
     "backoff_multiplier": 2,
-    "retryable_errors": ["timeout", "service_unavailable"]
+    "retryable_errors": [
+      "timeout",
+      "service_unavailable"
+    ]
   },
-
   "rate_limit": {
     "requests_per_minute": 10,
     "requests_per_agent_per_minute": 5
   },
-
   "examples": [
     {
       "description": "Generate illustration for a signpost scene",
       "input": {
         "art_plan_ref": "AP-001",
         "style_guide_ref": "SG-001",
-        "reference_sheet_refs": ["RS-foreman"],
+        "reference_sheet_refs": [
+          "RS-foreman"
+        ],
         "output_format": "png",
         "variants_requested": 2
       }
@@ -129,7 +187,10 @@
         "art_plan_ref": "AP-015",
         "style_guide_ref": "SG-001",
         "output_format": "webp",
-        "dimensions": { "width": 1920, "height": 1080 }
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
       }
     }
   ]
