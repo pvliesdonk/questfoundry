@@ -153,6 +153,8 @@ class InvokeOptions:
     max_tokens: int | None = None
     stop_sequences: list[str] = field(default_factory=list)
     timeout_seconds: float = 120.0
+    model_options: dict[str, Any] = field(default_factory=dict)
+    """Provider-specific options (e.g., num_ctx for Ollama)."""
 
 
 class LLMProvider(ABC):
