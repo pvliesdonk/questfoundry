@@ -76,22 +76,9 @@ class ConsultTool(BaseTool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         """Execute lookup by dispatching to the appropriate tool."""
-        lookup_type = args.get("lookup_type")
-        lookup_id = args.get("id")
-
-        if not lookup_type:
-            return ToolResult(
-                success=False,
-                data={},
-                error="lookup_type is required. Use 'playbook', 'knowledge', or 'schema'.",
-            )
-
-        if not lookup_id:
-            return ToolResult(
-                success=False,
-                data={},
-                error="id is required. Specify the ID of the playbook, knowledge entry, or artifact type.",
-            )
+        # Args are validated by validate_input() before execute() is called
+        lookup_type = args["lookup_type"]
+        lookup_id = args["id"]
 
         if lookup_type == "playbook":
             return await self._consult_playbook(lookup_id)
@@ -102,12 +89,9 @@ class ConsultTool(BaseTool):
             include_examples = args.get("include_examples", True)
             include_validation_rules = args.get("include_validation_rules", True)
             return await self._consult_schema(lookup_id, include_examples, include_validation_rules)
-        else:
-            return ToolResult(
-                success=False,
-                data={},
-                error=f"Unknown lookup_type: {lookup_type}. Use 'playbook', 'knowledge', or 'schema'.",
-            )
+
+        # This path should be unreachable if validation is correct
+        raise AssertionError(f"Invalid lookup_type '{lookup_type}' was not caught by validation.")
 
     async def _consult_playbook(self, playbook_id: str) -> ToolResult:
         """Delegate to consult_playbook."""
@@ -155,21 +139,12 @@ class ConsultTool(BaseTool):
 
     def validate_input(self, args: dict[str, Any]) -> None:
         """Validate input arguments."""
+        # Base class validates types and required fields from JSON schema
         super().validate_input(args)
 
+        # Additional validation: enum check for lookup_type
         lookup_type = args.get("lookup_type")
-        if lookup_type is not None:
-            if not isinstance(lookup_type, str):
-                raise ToolValidationError("lookup_type must be a string")
-            if lookup_type not in ("playbook", "knowledge", "schema"):
-                raise ToolValidationError(
-                    f"lookup_type must be 'playbook', 'knowledge', or 'schema', got '{lookup_type}'"
-                )
-
-        lookup_id = args.get("id")
-        if lookup_id is not None and not isinstance(lookup_id, str):
-            raise ToolValidationError("id must be a string")
-
-        section = args.get("section")
-        if section is not None and not isinstance(section, str):
-            raise ToolValidationError("section must be a string")
+        if lookup_type is not None and lookup_type not in ("playbook", "knowledge", "schema"):
+            raise ToolValidationError(
+                f"'lookup_type' must be 'playbook', 'knowledge', or 'schema', got '{lookup_type}'"
+            )

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from questfoundry.runtime.tools.base import ToolContext, ToolResult
+from questfoundry.runtime.tools.base import ToolContext, ToolResult, ToolValidationError
 from questfoundry.runtime.tools.consult import ConsultTool
 
 
@@ -40,43 +40,23 @@ def mock_context():
 class TestConsultTool:
     """Tests for ConsultTool."""
 
-    def test_requires_lookup_type(self, mock_tool_definition, mock_context):
-        """lookup_type is required."""
+    def test_validate_input_rejects_invalid_lookup_type(self, mock_tool_definition, mock_context):
+        """validate_input rejects invalid lookup_type values."""
         tool = ConsultTool(mock_tool_definition, mock_context)
 
-        # Execute without lookup_type
-        import asyncio
+        with pytest.raises(
+            ToolValidationError, match="must be 'playbook', 'knowledge', or 'schema'"
+        ):
+            tool.validate_input({"lookup_type": "invalid", "id": "test"})
 
-        result = asyncio.get_event_loop().run_until_complete(tool.execute({"id": "some_id"}))
-
-        assert not result.success
-        assert "lookup_type is required" in result.error
-
-    def test_requires_id(self, mock_tool_definition, mock_context):
-        """id is required."""
+    def test_validate_input_accepts_valid_lookup_types(self, mock_tool_definition, mock_context):
+        """validate_input accepts valid lookup_type values."""
         tool = ConsultTool(mock_tool_definition, mock_context)
 
-        import asyncio
-
-        result = asyncio.get_event_loop().run_until_complete(
-            tool.execute({"lookup_type": "playbook"})
-        )
-
-        assert not result.success
-        assert "id is required" in result.error
-
-    def test_unknown_lookup_type(self, mock_tool_definition, mock_context):
-        """Unknown lookup_type returns error."""
-        tool = ConsultTool(mock_tool_definition, mock_context)
-
-        import asyncio
-
-        result = asyncio.get_event_loop().run_until_complete(
-            tool.execute({"lookup_type": "invalid", "id": "some_id"})
-        )
-
-        assert not result.success
-        assert "Unknown lookup_type" in result.error
+        # These should not raise
+        tool.validate_input({"lookup_type": "playbook", "id": "test"})
+        tool.validate_input({"lookup_type": "knowledge", "id": "test"})
+        tool.validate_input({"lookup_type": "schema", "id": "test"})
 
     @pytest.mark.asyncio
     async def test_dispatches_to_playbook(self, mock_tool_definition, mock_context):
@@ -172,31 +152,35 @@ class TestConsultTool:
             assert result.success
             assert result.data["lookup_type"] == "schema"
 
-    def test_validate_input_lookup_type_must_be_string(self, mock_tool_definition, mock_context):
-        """lookup_type must be a string."""
+    @pytest.mark.asyncio
+    async def test_dispatches_to_schema_with_options(self, mock_tool_definition, mock_context):
+        """lookup_type=schema respects include_examples and include_validation_rules."""
         tool = ConsultTool(mock_tool_definition, mock_context)
 
-        from questfoundry.runtime.tools.base import ToolValidationError
+        mock_result = ToolResult(
+            success=True,
+            data={"artifact_type": "passage"},
+        )
 
-        with pytest.raises(ToolValidationError, match="'lookup_type'.*must be a string"):
-            tool.validate_input({"lookup_type": 123, "id": "test"})
+        with patch.object(tool, "_get_schema_tool") as mock_get:
+            mock_schema_tool = AsyncMock()
+            mock_schema_tool.execute.return_value = mock_result
+            mock_get.return_value = mock_schema_tool
 
-    def test_validate_input_lookup_type_must_be_valid(self, mock_tool_definition, mock_context):
-        """lookup_type must be playbook, knowledge, or schema."""
-        tool = ConsultTool(mock_tool_definition, mock_context)
+            result = await tool.execute(
+                {
+                    "lookup_type": "schema",
+                    "id": "passage",
+                    "include_examples": False,
+                    "include_validation_rules": False,
+                }
+            )
 
-        from questfoundry.runtime.tools.base import ToolValidationError
-
-        with pytest.raises(
-            ToolValidationError, match="must be 'playbook', 'knowledge', or 'schema'"
-        ):
-            tool.validate_input({"lookup_type": "invalid", "id": "test"})
-
-    def test_validate_input_id_must_be_string(self, mock_tool_definition, mock_context):
-        """id must be a string."""
-        tool = ConsultTool(mock_tool_definition, mock_context)
-
-        from questfoundry.runtime.tools.base import ToolValidationError
-
-        with pytest.raises(ToolValidationError, match="'id'.*must be a string"):
-            tool.validate_input({"lookup_type": "playbook", "id": 123})
+            mock_schema_tool.execute.assert_called_once_with(
+                {
+                    "artifact_type_id": "passage",
+                    "include_examples": False,
+                    "include_validation_rules": False,
+                }
+            )
+            assert result.success
