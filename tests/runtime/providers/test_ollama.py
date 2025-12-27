@@ -235,6 +235,64 @@ class TestOllamaProviderInvoke:
             assert call_kwargs["stop"] == ["###"]
 
     @pytest.mark.asyncio
+    async def test_invoke_with_num_ctx(self) -> None:
+        """num_ctx from model_options is passed to ChatOllama."""
+        provider = OllamaProvider()
+
+        mock_response = MagicMock()
+        mock_response.content = "Response"
+        mock_response.usage_metadata = None
+
+        with (
+            patch.object(provider, "check_availability", return_value=True),
+            patch("questfoundry.runtime.providers.ollama.ChatOllama") as mock_chat,
+        ):
+            mock_llm = AsyncMock()
+            mock_llm.ainvoke.return_value = mock_response
+            mock_chat.return_value = mock_llm
+
+            await provider.invoke(
+                messages=[LLMMessage(role="user", content="Hello")],
+                model="qwen3:8b",
+                options=InvokeOptions(
+                    model_options={"num_ctx": 32768},
+                ),
+            )
+
+            # Verify ChatOllama was called with num_ctx
+            mock_chat.assert_called_once()
+            call_kwargs = mock_chat.call_args.kwargs
+            assert call_kwargs["num_ctx"] == 32768
+
+    @pytest.mark.asyncio
+    async def test_invoke_without_num_ctx(self) -> None:
+        """num_ctx is not passed to ChatOllama when not in model_options."""
+        provider = OllamaProvider()
+
+        mock_response = MagicMock()
+        mock_response.content = "Response"
+        mock_response.usage_metadata = None
+
+        with (
+            patch.object(provider, "check_availability", return_value=True),
+            patch("questfoundry.runtime.providers.ollama.ChatOllama") as mock_chat,
+        ):
+            mock_llm = AsyncMock()
+            mock_llm.ainvoke.return_value = mock_response
+            mock_chat.return_value = mock_llm
+
+            await provider.invoke(
+                messages=[LLMMessage(role="user", content="Hello")],
+                model="qwen3:8b",
+                options=InvokeOptions(),  # No model_options
+            )
+
+            # Verify ChatOllama was called without num_ctx
+            mock_chat.assert_called_once()
+            call_kwargs = mock_chat.call_args.kwargs
+            assert "num_ctx" not in call_kwargs
+
+    @pytest.mark.asyncio
     async def test_invoke_timeout(self) -> None:
         """Raises ProviderError on timeout."""
         provider = OllamaProvider()

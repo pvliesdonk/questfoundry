@@ -122,6 +122,7 @@ def _default_config() -> RuntimeConfig:
                 name="ollama",
                 host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
                 default_model="qwen3:8b",
+                model_options={"num_ctx": 32768},
             ),
             "openai": ProviderConfig(
                 name="openai",

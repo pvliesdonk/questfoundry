@@ -253,3 +253,48 @@ model_classes:
             assert openai.state == ProviderState.AVAILABLE
         else:
             assert openai.state == ProviderState.UNCONFIGURED
+
+
+class TestModelOptionsDefaults:
+    """Tests for model_options default configuration."""
+
+    def test_ollama_has_default_num_ctx(self):
+        """Ollama provider has default num_ctx=32768."""
+        config = load_config()
+
+        ollama = config.providers.get("ollama")
+        assert ollama is not None
+        assert ollama.model_options == {"num_ctx": 32768}
+
+    def test_openai_has_empty_model_options(self):
+        """OpenAI provider has empty model_options (num_ctx not applicable)."""
+        config = load_config()
+
+        openai = config.providers.get("openai")
+        assert openai is not None
+        assert openai.model_options == {}
+
+    def test_google_has_empty_model_options(self):
+        """Google provider has empty model_options (num_ctx not applicable)."""
+        config = load_config()
+
+        google = config.providers.get("google")
+        assert google is not None
+        assert google.model_options == {}
+
+    def test_model_options_from_yaml_override(self, tmp_path: Path):
+        """model_options from YAML override defaults."""
+        yaml_content = """
+providers:
+  ollama:
+    model_options:
+      num_ctx: 65536
+"""
+        config_file = tmp_path / "qf.yaml"
+        config_file.write_text(yaml_content)
+
+        config = load_config(config_path=config_file)
+
+        ollama = config.providers.get("ollama")
+        assert ollama is not None
+        assert ollama.model_options == {"num_ctx": 65536}
