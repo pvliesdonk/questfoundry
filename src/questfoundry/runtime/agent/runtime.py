@@ -152,6 +152,24 @@ class ActivationResult:
     session_terminated: bool = False  # True if a tool with terminates_session=True was called
 
 
+@dataclass
+class _ActivationSetup:
+    """Internal state from activation setup (Issue #211 - consolidate setup code).
+
+    This dataclass holds all the common state created during activation setup,
+    enabling code reuse between streaming and non-streaming paths.
+    """
+
+    turn: Turn
+    start_time: float
+    turn_ctx: Any  # TracingManager context, if enabled
+    callbacks: list[Any] | None  # LangChain callbacks for tracing
+    context: AgentContext
+    tool_schemas: list[dict[str, Any]] | None
+    messages: list[LLMMessage]
+    new_message_start: int  # Index where new turn messages start
+
+
 # Tool names that are "stop tools" - calling them returns control to orchestrator/human
 STOP_TOOL_NAMES = frozenset(
     {
@@ -1464,6 +1482,386 @@ class AgentRuntime:
             rejected_tool_calls=rejected,
         )
 
+    # =========================================================================
+    # Logging Helpers (Issue #211 - Consolidate duplicated logging code)
+    # =========================================================================
+
+    def _log_turn_start(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        input_text: str,
+    ) -> None:
+        """Log turn start event."""
+        if self._event_logger:
+            self._event_logger.turn_start(
+                session_id=session_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                input_text=input_text,
+            )
+
+    def _log_context_build(
+        self,
+        session_id: str,
+        agent_id: str,
+        context: AgentContext,
+    ) -> None:
+        """Log context building event."""
+        if self._event_logger:
+            self._event_logger.context_build(
+                session_id=session_id,
+                agent_id=agent_id,
+                knowledge_count=len(context.must_know_entries),
+                total_chars=context.total_tokens * 4,  # Rough estimate
+            )
+
+    def _log_prompt_build(
+        self,
+        session_id: str,
+        agent_id: str,
+        messages: list[LLMMessage],
+        tool_count: int,
+    ) -> None:
+        """Log prompt build event with system prompt."""
+        if self._event_logger:
+            system_prompt = ""
+            if messages and messages[0].role == "system":
+                system_prompt = messages[0].content
+            self._event_logger.prompt_build(
+                session_id=session_id,
+                agent_id=agent_id,
+                prompt_text=system_prompt,
+                tool_count=tool_count,
+            )
+
+    def _log_messages_sent(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        messages: list[LLMMessage],
+    ) -> None:
+        """Log messages sent to LLM."""
+        if self._event_logger:
+            self._event_logger.messages_sent(
+                session_id=session_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                messages=[{"role": m.role, "content": m.content} for m in messages],
+            )
+
+    def _log_llm_call_start(
+        self,
+        session_id: str,
+        turn_id: int,
+        prompt_tokens: int,
+    ) -> None:
+        """Log LLM call start event."""
+        if self._event_logger:
+            self._event_logger.llm_call_start(
+                session_id=session_id,
+                turn_id=turn_id,
+                model=self._model,
+                provider=self._provider.name,
+                prompt_tokens=prompt_tokens,
+            )
+
+    def _log_llm_call_complete(
+        self,
+        session_id: str,
+        turn_id: int,
+        completion_tokens: int | None,
+        total_tokens: int | None,
+        duration_ms: float | None,
+    ) -> None:
+        """Log LLM call completion event."""
+        if self._event_logger:
+            self._event_logger.llm_call_complete(
+                session_id=session_id,
+                turn_id=turn_id,
+                model=self._model,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                duration_ms=duration_ms,
+            )
+
+    def _log_llm_response(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent_id: str,
+        content: str | None,
+        tool_calls: list[ToolCallRequest] | None,
+    ) -> None:
+        """Log full LLM response for debugging."""
+        if self._event_logger:
+            tool_calls_data = None
+            if tool_calls:
+                tool_calls_data = [
+                    {"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in tool_calls
+                ]
+            self._event_logger.llm_response(
+                session_id=session_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                content=content,
+                tool_calls=tool_calls_data,
+                has_tool_calls=bool(tool_calls),
+            )
+
+    def _log_turn_validation(
+        self,
+        session_id: str,
+        turn_id: int,
+        agent: Agent,
+        validation: Any,  # TurnValidationResult
+        tool_calls: list[ToolCallRequest],
+    ) -> None:
+        """Log turn validation result."""
+        if self._event_logger:
+            self._event_logger.turn_validation(
+                session_id=session_id,
+                turn_id=turn_id,
+                agent_id=agent.id,
+                valid=validation.valid,
+                is_orchestrator=self._is_orchestrator(agent),
+                tool_calls_made=[tc.name for tc in tool_calls],
+                terminating_tool=validation.terminating_tool_id,
+                nudge_message=validation.nudge_message,
+            )
+
+    def _log_turn_complete(
+        self,
+        session_id: str,
+        turn_id: int,
+        content: str,
+        usage: TokenUsage | None,
+        duration_ms: float,
+    ) -> None:
+        """Log turn completion event."""
+        if self._event_logger:
+            self._event_logger.turn_complete(
+                session_id=session_id,
+                turn_id=turn_id,
+                output_length=len(content),
+                prompt_tokens=usage.prompt_tokens if usage else None,
+                completion_tokens=usage.completion_tokens if usage else None,
+                duration_ms=duration_ms,
+            )
+
+    def _log_turn_error(
+        self,
+        session_id: str,
+        turn_id: int,
+        error: str,
+    ) -> None:
+        """Log turn error event."""
+        if self._event_logger:
+            self._event_logger.turn_error(
+                session_id=session_id,
+                turn_id=turn_id,
+                error=error,
+            )
+
+    # =========================================================================
+    # Activation Setup/Teardown Helpers (Issue #211 - Consolidate duplicated code)
+    # =========================================================================
+
+    def _setup_activation(
+        self,
+        agent: Agent,
+        user_input: str,
+        session: Session,
+    ) -> _ActivationSetup:
+        """
+        Common setup for both streaming and non-streaming activation.
+
+        Performs:
+        - Turn start and logging
+        - Tracing context setup
+        - Context building
+        - Tool schema retrieval
+        - History retrieval
+        - Message building
+        - Logging of prompt and messages
+
+        Returns:
+            _ActivationSetup with all prepared state
+        """
+        # Start turn
+        turn = session.start_turn(agent.id, user_input)
+        start_time = time.time()
+
+        # Log turn start
+        self._log_turn_start(session.id, turn.turn_number, agent.id, user_input)
+
+        # Start turn tracing if enabled
+        turn_ctx = None
+        callbacks = None
+        if self._tracing_manager:
+            turn_ctx = self._tracing_manager.turn(
+                turn_id=turn.turn_number,
+                user_input=user_input,
+                agent_id=agent.id,
+                agent_name=agent.name,
+            )
+            turn_ctx.__enter__()
+            callbacks = self._tracing_manager.get_langchain_callbacks()
+
+        # Build context and messages
+        context = self.build_context(agent)
+
+        # Log context building
+        self._log_context_build(session.id, agent.id, context)
+
+        # Get tool schemas for this agent
+        tool_schemas = self.get_tool_schemas(agent, session.id)
+
+        # Get agent-specific history (not other agents' conversations)
+        # Note: Current turn has no messages yet (just started), so
+        # get_agent_history naturally excludes it via its messages filter.
+        history = self._get_agent_history_with_summarization(session, agent.id)
+
+        # Build messages
+        messages = self.build_messages(agent, user_input, context, history, tool_schemas)
+
+        # Track where new messages start (after system prompt + history)
+        # This is used to store only this turn's messages, not the full trace
+        # Structure: [system, *history, user_input, ...]
+        # New messages start at: 1 (system) + len(history)
+        history_len = len(history) if history else 0
+        new_message_start = 1 + history_len
+
+        # Log system prompt for debugging
+        self._log_prompt_build(
+            session.id, agent.id, messages, len(tool_schemas) if tool_schemas else 0
+        )
+
+        # Log messages sent to LLM
+        self._log_messages_sent(session.id, turn.turn_number, agent.id, messages)
+
+        # Validate context size
+        self.validate_context_size(messages)
+
+        # Update Secretary's context tracking for tiered summarization (per-agent)
+        self._secretary.update_context_size(self.estimate_tokens(messages), agent.id)
+
+        return _ActivationSetup(
+            turn=turn,
+            start_time=start_time,
+            turn_ctx=turn_ctx,
+            callbacks=callbacks,
+            context=context,
+            tool_schemas=tool_schemas,
+            messages=messages,
+            new_message_start=new_message_start,
+        )
+
+    async def _complete_activation(
+        self,
+        agent: Agent,
+        session: Session,
+        setup: _ActivationSetup,
+        final_content: str,
+        usage: TokenUsage | None,
+        all_tool_calls: list[ToolCall],
+        stop_reason: str | None,
+        prepared_messages: list[LLMMessage],
+    ) -> ActivationResult:
+        """
+        Common completion for both streaming and non-streaming activation.
+
+        Performs:
+        - Turn completion and message storage
+        - Logging of turn completion
+        - Tracing cleanup
+        - Context usage tracking
+        - Auto-checkpoint for orchestrators
+        - Activation cache cleanup
+
+        Returns:
+            ActivationResult with final state
+        """
+        duration_ms = (time.time() - setup.start_time) * 1000
+
+        # Store only this turn's new messages, not the full trace including history
+        # This prevents O(n²) storage growth where each turn duplicates prior turns
+        # If summarization changed message structure, adjust slice index
+        slice_start = min(setup.new_message_start, len(prepared_messages))
+        turn_messages = prepared_messages[slice_start:]
+        session.complete_turn(
+            setup.turn, final_content, usage, messages=turn_messages, tool_calls=all_tool_calls
+        )
+
+        # Log turn completion
+        self._log_turn_complete(
+            session.id, setup.turn.turn_number, final_content, usage, duration_ms
+        )
+
+        # End turn tracing with success
+        if setup.turn_ctx and self._tracing_manager:
+            self._tracing_manager.end_turn(
+                output=final_content,
+                token_usage={
+                    "prompt_tokens": usage.prompt_tokens or 0,
+                    "completion_tokens": usage.completion_tokens or 0,
+                    "total_tokens": usage.total_tokens or 0,
+                }
+                if usage
+                else None,
+            )
+            setup.turn_ctx.__exit__(None, None, None)
+
+        # Update context usage tracking
+        if usage:
+            self._update_context_usage(agent.id, usage)
+
+        # Check if session should terminate
+        session_terminated = self._check_for_session_terminating_tool(all_tool_calls)
+
+        # Auto-checkpoint after orchestrator turns
+        if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
+            await self._create_auto_checkpoint(session)
+
+        # Clean up activation cache to prevent memory leaks
+        activation_id = f"{session.id}:{setup.turn.turn_number}"
+        self._tool_cache.clear_activation(activation_id)
+
+        return ActivationResult(
+            content=final_content,
+            agent_id=agent.id,
+            turn=setup.turn,
+            usage=usage,
+            tool_calls=all_tool_calls,
+            stop_reason=stop_reason,
+            session_terminated=session_terminated,
+        )
+
+    def _handle_activation_error(
+        self,
+        session: Session,
+        setup: _ActivationSetup,
+        error: Exception,
+    ) -> None:
+        """
+        Common error handling for both streaming and non-streaming activation.
+
+        Performs:
+        - Tracing cleanup with error
+        - Turn error recording
+        - Error logging
+        """
+        # End turn tracing with error
+        if setup.turn_ctx and self._tracing_manager:
+            self._tracing_manager.end_turn(error=str(error))
+            setup.turn_ctx.__exit__(type(error), error, error.__traceback__)
+
+        session.error_turn(setup.turn, str(error))
+        # Log error
+        self._log_turn_error(session.id, setup.turn.turn_number, str(error))
+
     async def activate(
         self,
         agent: Agent,
@@ -1508,90 +1906,16 @@ class AgentRuntime:
                 stacklevel=2,
             )
             max_total_iterations = max_tool_iterations
-        # Start turn
-        turn = session.start_turn(agent.id, user_input)
-        start_time = time.time()
 
-        # Log turn start
-        if self._event_logger:
-            self._event_logger.turn_start(
-                session_id=session.id,
-                turn_id=turn.turn_number,
-                agent_id=agent.id,
-                input_text=user_input,
-            )
-
-        # Start turn tracing if enabled
-        turn_ctx = None
-        callbacks = None
-        if self._tracing_manager:
-            turn_ctx = self._tracing_manager.turn(
-                turn_id=turn.turn_number,
-                user_input=user_input,
-                agent_id=agent.id,
-                agent_name=agent.name,
-            )
-            turn_ctx.__enter__()
-            callbacks = self._tracing_manager.get_langchain_callbacks()
-
+        # Common setup (Issue #211 - consolidated code)
+        # Must be inside try block to handle ContextOverflowError during validation
+        setup: _ActivationSetup | None = None
         try:
-            # Build context and messages
-            context = self.build_context(agent)
-
-            # Log context building
-            if self._event_logger:
-                self._event_logger.context_build(
-                    session_id=session.id,
-                    agent_id=agent.id,
-                    knowledge_count=len(context.must_know_entries),
-                    total_chars=context.total_tokens * 4,  # Rough estimate,
-                )
-
-            # Get tool schemas for this agent
-            tool_schemas = self.get_tool_schemas(agent, session.id)
-
-            # Get agent-specific history (not other agents' conversations)
-            # Note: Current turn has no messages yet (just started), so
-            # get_agent_history naturally excludes it via its messages filter.
-            history = self._get_agent_history_with_summarization(session, agent.id)
-
-            # Build messages
-            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
-
-            # Track where new messages start (after system prompt + history)
-            # This is used to store only this turn's messages, not the full trace
-            # Structure: [system, *history, user_input, ...]
-            # New messages start at: 1 (system) + len(history)
-            history_len = len(history) if history else 0
-            new_message_start = 1 + history_len
-
-            # Log system prompt for debugging
-            if self._event_logger:
-                system_prompt = ""
-                if messages and messages[0].role == "system":
-                    system_prompt = messages[0].content
-                self._event_logger.prompt_build(
-                    session_id=session.id,
-                    agent_id=agent.id,
-                    prompt_text=system_prompt,
-                    tool_count=len(tool_schemas) if tool_schemas else 0,
-                )
-
-            # Log messages sent to LLM
-            if self._event_logger:
-                self._event_logger.messages_sent(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    agent_id=agent.id,
-                    messages=[{"role": m.role, "content": m.content} for m in messages],
-                )
-
-            # Validate context size
-            self.validate_context_size(messages)
-
-            # Update Secretary's context tracking for tiered summarization (per-agent)
-            estimated_tokens = self.estimate_tokens(messages)
-            self._secretary.update_context_size(estimated_tokens, agent.id)
+            setup = self._setup_activation(agent, user_input, session)
+            turn = setup.turn
+            tool_schemas = setup.tool_schemas
+            messages = setup.messages
+            callbacks = setup.callbacks
 
             # Track all tool calls made during this activation
             all_tool_calls: list[ToolCall] = []
@@ -1608,14 +1932,7 @@ class AgentRuntime:
                 iteration_number = iteration + 1
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
-                if self._event_logger:
-                    self._event_logger.llm_call_start(
-                        session_id=session.id,
-                        turn_id=turn.turn_number,
-                        model=self._model,
-                        provider=self._provider.name,
-                        prompt_tokens=estimated_tokens,
-                    )
+                self._log_llm_call_start(session.id, turn.turn_number, estimated_tokens)
 
                 # Apply LLM-based context summarization at 90% threshold
                 # This uses a fast model to intelligently compress older turns
@@ -1652,32 +1969,22 @@ class AgentRuntime:
                     total_completion_tokens += response.completion_tokens
 
                 # Log LLM call complete
-                if self._event_logger:
-                    self._event_logger.llm_call_complete(
-                        session_id=session.id,
-                        turn_id=turn.turn_number,
-                        model=self._model,
-                        completion_tokens=response.completion_tokens,
-                        total_tokens=response.total_tokens,
-                        duration_ms=response.duration_ms,
-                    )
+                self._log_llm_call_complete(
+                    session.id,
+                    turn.turn_number,
+                    response.completion_tokens,
+                    response.total_tokens,
+                    response.duration_ms,
+                )
 
                 # Log full LLM response for debugging
-                if self._event_logger:
-                    tool_calls_data = None
-                    if response.tool_calls:
-                        tool_calls_data = [
-                            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-                            for tc in response.tool_calls
-                        ]
-                    self._event_logger.llm_response(
-                        session_id=session.id,
-                        turn_id=turn.turn_number,
-                        agent_id=agent.id,
-                        content=response.content,
-                        tool_calls=tool_calls_data,
-                        has_tool_calls=response.has_tool_calls,
-                    )
+                self._log_llm_response(
+                    session.id,
+                    turn.turn_number,
+                    agent.id,
+                    response.content,
+                    response.tool_calls,
+                )
 
                 # Check for tool calls
                 if not response.has_tool_calls or not response.tool_calls:
@@ -1732,17 +2039,9 @@ class AgentRuntime:
                 validation = self._turn_validator.validate_turn(agent, tool_calls)
 
                 # Log turn validation for debugging
-                if self._event_logger:
-                    self._event_logger.turn_validation(
-                        session_id=session.id,
-                        turn_id=turn.turn_number,
-                        agent_id=agent.id,
-                        valid=validation.valid,
-                        is_orchestrator=self._is_orchestrator(agent),
-                        tool_calls_made=[tc.name for tc in tool_calls],
-                        terminating_tool=validation.terminating_tool_id,
-                        nudge_message=validation.nudge_message,
-                    )
+                self._log_turn_validation(
+                    session.id, turn.turn_number, agent, validation, tool_calls
+                )
 
                 # Evaluate progress for this iteration (issue #234)
                 outcome = self._evaluate_iteration_outcome(tool_results)
@@ -1882,82 +2181,31 @@ class AgentRuntime:
                 else None,
             )
             final_content = response.content if response else ""
-            # Store only this turn's new messages, not the full trace including history
-            # This prevents O(n²) storage growth where each turn duplicates prior turns
-            # Use prepared.messages since that's what was sent to the LLM
-            final_messages = prepared.messages
-            # If summarization changed message structure, adjust slice index
-            slice_start = min(new_message_start, len(final_messages))
-            turn_messages = final_messages[slice_start:]
-            session.complete_turn(
-                turn, final_content, usage, messages=turn_messages, tool_calls=all_tool_calls
-            )
-            duration_ms = (time.time() - start_time) * 1000
 
-            # Log turn completion
-            if self._event_logger:
-                self._event_logger.turn_complete(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    output_length=len(final_content),
-                    prompt_tokens=usage.prompt_tokens,
-                    completion_tokens=usage.completion_tokens,
-                    duration_ms=duration_ms,
-                )
-
-            # End turn tracing with success
-            if turn_ctx and self._tracing_manager:
-                self._tracing_manager.end_turn(
-                    output=final_content,
-                    token_usage={
-                        "prompt_tokens": usage.prompt_tokens or 0,
-                        "completion_tokens": usage.completion_tokens or 0,
-                        "total_tokens": usage.total_tokens or 0,
-                    }
-                    if usage
-                    else None,
-                )
-                turn_ctx.__exit__(None, None, None)
-
-            # Update context usage tracking
-            if usage:
-                self._update_context_usage(agent.id, usage)
-
-            # Check if session should terminate
-            session_terminated = self._check_for_session_terminating_tool(all_tool_calls)
-
-            # Auto-checkpoint after orchestrator turns
-            if self._is_orchestrator(agent) and self._checkpoint_manager and self._broker:
-                await self._create_auto_checkpoint(session)
-
-            # Clean up activation cache to prevent memory leaks
-            activation_id = f"{session.id}:{turn.turn_number}"
-            self._tool_cache.clear_activation(activation_id)
-
-            return ActivationResult(
-                content=final_content,
-                agent_id=agent.id,
-                turn=turn,
+            # Common completion (Issue #211 - consolidated code)
+            return await self._complete_activation(
+                agent=agent,
+                session=session,
+                setup=setup,
+                final_content=final_content,
                 usage=usage,
-                tool_calls=all_tool_calls,
+                all_tool_calls=all_tool_calls,
                 stop_reason=stop_reason,
-                session_terminated=session_terminated,
+                prepared_messages=prepared.messages,
             )
 
         except Exception as e:
-            # End turn tracing with error
-            if turn_ctx and self._tracing_manager:
-                self._tracing_manager.end_turn(error=str(e))
-                turn_ctx.__exit__(type(e), e, e.__traceback__)
-
-            session.error_turn(turn, str(e))
-            # Log error
-            if self._event_logger:
-                self._event_logger.turn_error(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    error=str(e),
-                )
+            # Common error handling (Issue #211 - consolidated code)
+            if setup is not None:
+                self._handle_activation_error(session, setup, e)
+            else:
+                # Error during setup before setup object was created.
+                # The turn was created inside _setup_activation but we don't have
+                # the full setup. Find and mark the most recent turn as error.
+                if session.turn_count > 0:
+                    last_turn = session.turns[-1]
+                    session.error_turn(last_turn, str(e))
+                    self._log_turn_error(session.id, last_turn.turn_number, str(e))
             raise
 
     async def activate_streaming(
@@ -2008,89 +2256,16 @@ class AgentRuntime:
                 stacklevel=2,
             )
             max_total_iterations = max_iterations
-        # Start turn
-        turn = session.start_turn(agent.id, user_input)
-        start_time = time.time()
 
-        # Log turn start
-        if self._event_logger:
-            self._event_logger.turn_start(
-                session_id=session.id,
-                turn_id=turn.turn_number,
-                agent_id=agent.id,
-                input_text=user_input,
-            )
-
-        # Start turn tracing if enabled
-        turn_ctx = None
-        callbacks = None
-        if self._tracing_manager:
-            turn_ctx = self._tracing_manager.turn(
-                turn_id=turn.turn_number,
-                user_input=user_input,
-                agent_id=agent.id,
-                agent_name=agent.name,
-            )
-            turn_ctx.__enter__()
-            callbacks = self._tracing_manager.get_langchain_callbacks()
-
+        # Common setup (Issue #211 - consolidated code)
+        # Must be inside try block to handle ContextOverflowError during validation
+        setup: _ActivationSetup | None = None
         try:
-            # Build context and messages
-            context = self.build_context(agent)
-
-            # Log context building
-            if self._event_logger:
-                self._event_logger.context_build(
-                    session_id=session.id,
-                    agent_id=agent.id,
-                    knowledge_count=len(context.must_know_entries),
-                    total_chars=context.total_tokens * 4,  # Rough estimate,
-                )
-
-            # Get tool schemas for this agent
-            tool_schemas = self.get_tool_schemas(agent, session.id)
-
-            # Get agent-specific history (not other agents' conversations)
-            # Note: Current turn has no messages yet (just started), so
-            # get_agent_history naturally excludes it via its messages filter.
-            history = self._get_agent_history_with_summarization(session, agent.id)
-
-            # Build messages
-            messages = self.build_messages(agent, user_input, context, history, tool_schemas)
-
-            # Track where new messages start (after system prompt + history)
-            # This is used to store only this turn's messages, not the full trace
-            # Structure: [system, *history, user_input, ...]
-            # New messages start at: 1 (system) + len(history)
-            history_len = len(history) if history else 0
-            new_message_start = 1 + history_len
-
-            # Log system prompt for debugging (streaming path)
-            if self._event_logger:
-                system_prompt = ""
-                if messages and messages[0].role == "system":
-                    system_prompt = messages[0].content
-                self._event_logger.prompt_build(
-                    session_id=session.id,
-                    agent_id=agent.id,
-                    prompt_text=system_prompt,
-                    tool_count=len(tool_schemas) if tool_schemas else 0,
-                )
-
-            # Log messages sent to LLM (streaming path)
-            if self._event_logger:
-                self._event_logger.messages_sent(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    agent_id=agent.id,
-                    messages=[{"role": m.role, "content": m.content} for m in messages],
-                )
-
-            # Validate context size
-            self.validate_context_size(messages)
-
-            # Update Secretary's context tracking for tiered summarization (per-agent)
-            self._secretary.update_context_size(self.estimate_tokens(messages), agent.id)
+            setup = self._setup_activation(agent, user_input, session)
+            turn = setup.turn
+            tool_schemas = setup.tool_schemas
+            messages = setup.messages
+            callbacks = setup.callbacks
 
             # Collect response for turn completion
             full_content = ""
@@ -2105,14 +2280,7 @@ class AgentRuntime:
                 iteration_number = iteration + 1
                 # Log LLM call start
                 estimated_tokens = self.estimate_tokens(messages)
-                if self._event_logger:
-                    self._event_logger.llm_call_start(
-                        session_id=session.id,
-                        turn_id=turn.turn_number,
-                        model=self._model,
-                        provider=self._provider.name,
-                        prompt_tokens=estimated_tokens,
-                    )
+                self._log_llm_call_start(session.id, turn.turn_number, estimated_tokens)
 
                 # Apply LLM-based context summarization at 90% threshold
                 # This uses a fast model to intelligently compress older turns
@@ -2173,20 +2341,14 @@ class AgentRuntime:
 
                 # Handle tool calls if present
                 if pending_tool_calls:
-                    # Log LLM response for debugging (streaming path)
-                    if self._event_logger:
-                        tool_calls_data = [
-                            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-                            for tc in pending_tool_calls
-                        ]
-                        self._event_logger.llm_response(
-                            session_id=session.id,
-                            turn_id=turn.turn_number,
-                            agent_id=agent.id,
-                            content=iteration_content,
-                            tool_calls=tool_calls_data,
-                            has_tool_calls=True,
-                        )
+                    # Log LLM response for debugging
+                    self._log_llm_response(
+                        session.id,
+                        turn.turn_number,
+                        agent.id,
+                        iteration_content,
+                        pending_tool_calls,
+                    )
 
                     # Execute tool calls first (always execute, even if validation will fail)
                     logger.info(
@@ -2202,18 +2364,10 @@ class AgentRuntime:
                     # Orchestrators with runtime enforcement always require terminating tools.
                     validation = self._turn_validator.validate_turn(agent, pending_tool_calls)
 
-                    # Log turn validation for debugging (streaming path)
-                    if self._event_logger:
-                        self._event_logger.turn_validation(
-                            session_id=session.id,
-                            turn_id=turn.turn_number,
-                            agent_id=agent.id,
-                            valid=validation.valid,
-                            is_orchestrator=self._is_orchestrator(agent),
-                            tool_calls_made=[tc.name for tc in pending_tool_calls],
-                            terminating_tool=validation.terminating_tool_id,
-                            nudge_message=validation.nudge_message,
-                        )
+                    # Log turn validation for debugging
+                    self._log_turn_validation(
+                        session.id, turn.turn_number, agent, validation, pending_tool_calls
+                    )
 
                     # Evaluate progress for this iteration (issue #234)
                     outcome = self._evaluate_iteration_outcome(tool_results)
@@ -2388,34 +2542,27 @@ class AgentRuntime:
             # Use prepared.messages since that's what was sent to the LLM
             final_messages = prepared.messages
             # If summarization changed message structure, adjust slice index
-            slice_start = min(new_message_start, len(final_messages))
+            slice_start = min(setup.new_message_start, len(final_messages))
             turn_messages = final_messages[slice_start:]
             session.complete_turn(
                 turn, full_content, final_usage, messages=turn_messages, tool_calls=all_tool_calls
             )
-            duration_ms = (time.time() - start_time) * 1000
+            duration_ms = (time.time() - setup.start_time) * 1000
 
             # Log completion
-            if self._event_logger:
-                self._event_logger.llm_call_complete(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    model=self._model,
-                    completion_tokens=final_usage.completion_tokens if final_usage else None,
-                    total_tokens=final_usage.total_tokens if final_usage else None,
-                    duration_ms=duration_ms,
-                )
-                self._event_logger.turn_complete(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    output_length=len(full_content),
-                    prompt_tokens=final_usage.prompt_tokens if final_usage else None,
-                    completion_tokens=final_usage.completion_tokens if final_usage else None,
-                    duration_ms=duration_ms,
-                )
+            self._log_llm_call_complete(
+                session.id,
+                turn.turn_number,
+                final_usage.completion_tokens if final_usage else None,
+                final_usage.total_tokens if final_usage else None,
+                duration_ms,
+            )
+            self._log_turn_complete(
+                session.id, turn.turn_number, full_content, final_usage, duration_ms
+            )
 
             # End turn tracing with success
-            if turn_ctx and self._tracing_manager:
+            if setup.turn_ctx and self._tracing_manager:
                 self._tracing_manager.end_turn(
                     output=full_content,
                     token_usage={
@@ -2426,7 +2573,7 @@ class AgentRuntime:
                     if final_usage
                     else None,
                 )
-                turn_ctx.__exit__(None, None, None)
+                setup.turn_ctx.__exit__(None, None, None)
 
             # Update context usage tracking
             if final_usage:
@@ -2441,19 +2588,17 @@ class AgentRuntime:
             self._tool_cache.clear_activation(activation_id)
 
         except Exception as e:
-            # End turn tracing with error
-            if turn_ctx and self._tracing_manager:
-                self._tracing_manager.end_turn(error=str(e))
-                turn_ctx.__exit__(type(e), e, e.__traceback__)
-
-            session.error_turn(turn, str(e))
-            # Log error
-            if self._event_logger:
-                self._event_logger.turn_error(
-                    session_id=session.id,
-                    turn_id=turn.turn_number,
-                    error=str(e),
-                )
+            # Common error handling (Issue #211 - consolidated code)
+            if setup is not None:
+                self._handle_activation_error(session, setup, e)
+            else:
+                # Error during setup before setup object was created.
+                # The turn was created inside _setup_activation but we don't have
+                # the full setup. Find and mark the most recent turn as error.
+                if session.turn_count > 0:
+                    last_turn = session.turns[-1]
+                    session.error_turn(last_turn, str(e))
+                    self._log_turn_error(session.id, last_turn.turn_number, str(e))
             raise
 
     async def process_pending_delegations(
