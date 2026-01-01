@@ -16,7 +16,7 @@ def test_version_matches_pyproject() -> None:
     from pathlib import Path
 
     pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
-    with open(pyproject_path, "rb") as f:
+    with pyproject_path.open("rb") as f:
         pyproject = tomllib.load(f)
 
     assert __version__ == pyproject["project"]["version"]
