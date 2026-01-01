@@ -1,0 +1,140 @@
+# Architecture Overview
+
+**Last Updated**: 2026-01-01
+**Implementation Status**: Slice 1 (In Progress)
+
+---
+
+## Project Structure
+
+```
+questfoundry/
+├── src/questfoundry/           # Main package
+│   ├── cli.py                  # Typer CLI entry point
+│   ├── pipeline/               # Pipeline orchestration
+│   │   └── stages/             # Stage implementations
+│   ├── prompts/                # Prompt compiler
+│   ├── artifacts/              # YAML artifact handling
+│   ├── providers/              # LLM providers (Ollama, OpenAI)
+│   ├── validation/             # Topology, state, quality bars
+│   └── export/                 # Output formats (Twee, HTML, JSON)
+├── prompts/                    # Prompt templates (external to src/)
+│   ├── templates/              # Stage-specific prompts
+│   ├── components/             # Reusable prompt pieces
+│   └── schemas/                # Output format schemas
+├── schemas/                    # JSON schemas for artifacts
+├── tests/                      # Test suite
+│   ├── unit/
+│   ├── integration/
+│   └── e2e/
+└── docs/
+    ├── design/                 # Design specifications
+    └── architecture/           # Implementation docs (this dir)
+```
+
+---
+
+## Component Status
+
+### Implemented
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Project skeleton | Done | pyproject.toml, directories, basic CLI |
+| CLI entry point | Minimal | `qf version`, `qf status` stub |
+
+### In Progress (Slice 1)
+
+| Component | Status | Issue |
+|-----------|--------|-------|
+| Pipeline orchestrator | Planned | TBD |
+| DREAM stage | Planned | TBD |
+| Prompt compiler (basic) | Planned | TBD |
+| DREAM artifact schema | Planned | TBD |
+| Ollama provider | Planned | TBD |
+
+### Planned (Future Slices)
+
+- Slice 2: BRAINSTORM, SEED stages, multi-stage execution
+- Slice 3: Full GROW decomposition
+- Slice 4: FILL, SHIP, exports
+
+---
+
+## Technology Choices
+
+### Runtime
+- **Python 3.11+** - Required for performance and `tomllib`
+- **uv** - Package manager
+
+### CLI
+- **typer** - Type-hint based CLI framework
+- **rich** - Terminal formatting and output
+
+### Data
+- **pydantic** - Data validation with type hints
+- **ruamel.yaml** - YAML with comment preservation
+- **jsonschema** - JSON Schema validation
+
+### LLM
+- **Ollama** - Local inference (qwen3:8b default)
+- **OpenAI** - Cloud fallback
+- **httpx** - Async HTTP client for API calls
+
+### Testing
+- **pytest** - Test framework
+- **pytest-asyncio** - Async test support
+- **pytest-cov** - Coverage (target: 70%)
+
+---
+
+## Key Design Decisions
+
+See [decisions.md](./decisions.md) for Architecture Decision Records.
+
+---
+
+## Data Flow
+
+```
+User Prompt
+    ↓
+┌─────────┐
+│  DREAM  │ → dream.yaml
+└────┬────┘
+     ↓
+┌───────────┐
+│ BRAINSTORM │ → brainstorm.yaml
+└─────┬─────┘
+     ↓
+┌──────┐
+│ SEED │ → seed.yaml
+└───┬──┘
+    ↓
+┌──────┐
+│ GROW │ → spine.yaml, anchors.yaml, branches/, briefs/
+└───┬──┘
+    ↓
+┌──────┐
+│ FILL │ → scenes/
+└───┬──┘
+    ↓
+┌──────┐
+│ SHIP │ → story.tw, story.html, story.json
+└──────┘
+```
+
+Each stage:
+1. Reads prior artifacts
+2. Compiles prompt with context
+3. Makes LLM call
+4. Validates and writes output artifact
+5. Waits for human gate (if required)
+
+---
+
+## References
+
+- Design specs: [../design/](../design/)
+- Original vision: https://gist.github.com/pvliesdonk/35b36897a42c41b371c8898bfec55882
+- v4 reference issues: https://github.com/pvliesdonk/questfoundry-v4/issues/350
