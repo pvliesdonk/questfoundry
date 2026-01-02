@@ -56,9 +56,10 @@ DRESS stage (art direction) is deferred for later implementation.
 
 ### Git Workflow
 
+- **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base
 - **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 - **Small, atomic commits** - one logical change per commit
-- **Branch per feature/issue** - create from `main`
+- **Branch per feature/issue** - create from `origin/main` (not local main)
 - **Document in issues and PRs** - link to related issues
 
 ### Pull Request Process

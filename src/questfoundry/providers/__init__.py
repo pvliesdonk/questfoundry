@@ -1,4 +1,4 @@
-"""LLM provider integrations (Ollama, OpenAI)."""
+"""LLM provider integrations using LangChain."""
 
 from questfoundry.providers.base import (
     LLMProvider,
@@ -9,17 +9,17 @@ from questfoundry.providers.base import (
     ProviderModelError,
     ProviderRateLimitError,
 )
-from questfoundry.providers.ollama import OllamaProvider
-from questfoundry.providers.openai_provider import OpenAIProvider
+from questfoundry.providers.factory import create_provider
+from questfoundry.providers.langchain_wrapper import LangChainProvider
 
 __all__ = [
     "LLMProvider",
     "LLMResponse",
+    "LangChainProvider",
     "Message",
-    "OllamaProvider",
-    "OpenAIProvider",
     "ProviderConnectionError",
     "ProviderError",
     "ProviderModelError",
     "ProviderRateLimitError",
+    "create_provider",
 ]
