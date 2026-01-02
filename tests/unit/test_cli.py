@@ -25,6 +25,6 @@ def test_status_command() -> None:
 def test_no_args_shows_help() -> None:
     """Test that no arguments shows help."""
     result = runner.invoke(app, [])
-    # Typer returns exit code 0 for --help, but 2 for no_args_is_help
-    # The important thing is that help text is shown
+    # no_args_is_help=True returns exit code 2 (not 0 like --help)
+    assert result.exit_code == 2
     assert "QuestFoundry" in result.stdout
