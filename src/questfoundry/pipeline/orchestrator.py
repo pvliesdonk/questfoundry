@@ -206,8 +206,12 @@ class PipelineOrchestrator:
             # Get stage implementation
             stage = self._get_stage_implementation(stage_name)
 
-            # Get provider
+            # Get provider (with logging wrapper if enabled)
             provider = self._get_provider()
+            if self._enable_llm_logging:
+                from questfoundry.providers import LoggingProvider
+
+                provider = LoggingProvider(provider, self._llm_logger, stage_name)
 
             # Create prompt compiler
             compiler = PromptCompiler(self._prompts_path)
