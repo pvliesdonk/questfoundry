@@ -168,7 +168,7 @@ def dream(
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
         orchestrator = _get_orchestrator(project, provider_override=provider)
-        log.debug("provider_configured", provider=f"{orchestrator._config.provider.name}")
+        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
         try:
             return await orchestrator.run_stage("dream", {"user_prompt": prompt})
         finally:
@@ -276,10 +276,6 @@ def doctor(
     Validates environment variables, tests provider connections,
     and optionally checks project configuration.
     """
-    import os
-
-    import httpx
-
     console.print("[bold]QuestFoundry Doctor[/bold]")
     console.print()
 
@@ -292,7 +288,7 @@ def doctor(
     all_ok &= asyncio.run(_check_providers())
 
     # Check project (if specified or current dir has project.yaml)
-    project_path = project or Path(".")
+    project_path = project or Path()
     if (project_path / "project.yaml").exists():
         all_ok &= _check_project(project_path)
 

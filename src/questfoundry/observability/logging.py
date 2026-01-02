@@ -6,7 +6,6 @@ Uses structlog with Rich integration for beautiful console output.
 from __future__ import annotations
 
 import logging
-import sys
 from typing import TYPE_CHECKING
 
 import structlog
@@ -81,7 +80,7 @@ def configure_logging(verbosity: int = 0) -> None:
     _configured = True
 
 
-def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
+def get_logger(name: str | None = None) -> structlog.typing.FilteringBoundLogger:
     """Get a structured logger instance.
 
     Automatically configures logging if not already done.
@@ -95,4 +94,5 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     if not _configured:
         configure_logging()
 
-    return structlog.get_logger(name)
+    logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(name)
+    return logger
