@@ -44,7 +44,7 @@ gh pr create --base main --title "feat(ci): add CI workflow"
 
 # WAIT HERE - don't create PR #2 yet
 # Check for review comments in 2-5 minutes
-gh pr view 1 --comments
+gh pr view <PR_NUMBER> --comments
 
 # Address any review comments
 # ... make fixes ...
@@ -87,8 +87,8 @@ git checkout origin/main -b feat/layer-clean
 # Cherry-pick only this PR's commits
 git cherry-pick <commit1> <commit2>
 
-# Force-push to fix the PR
-git push origin feat/layer-clean:feat/layer --force-with-lease
+# Force-push the clean branch to overwrite the original PR branch
+git push origin feat/layer-clean:<original-pr-branch-name> --force-with-lease
 ```
 
 ## Summary

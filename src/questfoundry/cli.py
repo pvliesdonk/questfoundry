@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
-    from questfoundry.pipeline import PipelineOrchestrator
+    from questfoundry.pipeline import PipelineOrchestrator, StageResult
 
 app = typer.Typer(
     name="qf",
@@ -132,7 +132,7 @@ def dream(
     console.print()
     console.print("[dim]Running DREAM stage...[/dim]")
 
-    async def _run_dream() -> tuple:
+    async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
         orchestrator = _get_orchestrator(project)
         try:
