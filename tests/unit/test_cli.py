@@ -255,3 +255,114 @@ def test_dream_prompts_for_input(tmp_path: Path) -> None:
     call_args = mock_orchestrator.run_stage.call_args
     assert call_args[0][0] == "dream"
     assert call_args[0][1]["user_prompt"] == "A mystery story"
+
+
+# --- Verbosity Flag Tests ---
+
+
+def test_verbose_flag_exists() -> None:
+    """Test -v flag is recognized."""
+    result = runner.invoke(app, ["-v", "version"])
+    assert result.exit_code == 0
+
+
+def test_verbose_flag_countable() -> None:
+    """Test -vv and -vvv are recognized."""
+    result = runner.invoke(app, ["-vv", "version"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, ["-vvv", "version"])
+    assert result.exit_code == 0
+
+
+# --- Doctor Command Tests ---
+
+
+def test_doctor_help() -> None:
+    """Test qf doctor --help shows command help."""
+    result = runner.invoke(app, ["doctor", "--help"])
+
+    assert result.exit_code == 0
+    assert "configuration" in result.stdout.lower()
+    assert "connectivity" in result.stdout.lower()
+
+
+def test_doctor_shows_configuration() -> None:
+    """Test qf doctor shows configuration section."""
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch("questfoundry.cli._check_providers", return_value=True),
+    ):
+        result = runner.invoke(app, ["doctor"])
+
+    assert "Configuration" in result.stdout
+
+
+def test_doctor_checks_ollama_host() -> None:
+    """Test qf doctor checks OLLAMA_HOST."""
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch("questfoundry.cli._check_providers", return_value=True),
+    ):
+        result = runner.invoke(app, ["doctor"])
+
+    assert "OLLAMA_HOST" in result.stdout
+    assert "http://test:11434" in result.stdout
+
+
+def test_doctor_masks_api_keys() -> None:
+    """Test qf doctor masks API keys in output."""
+    with (
+        patch.dict(
+            "os.environ",
+            {"OPENAI_API_KEY": "sk-1234567890abcdef"},
+            clear=False,
+        ),
+        patch("questfoundry.cli._check_providers", return_value=True),
+    ):
+        result = runner.invoke(app, ["doctor"])
+
+    # Should mask the key (first 7 chars + ... + last 3 chars)
+    assert "sk-1234" in result.stdout
+    assert "...def" in result.stdout
+    # Should NOT show full key
+    assert "sk-1234567890abcdef" not in result.stdout
+
+
+def test_doctor_shows_unconfigured() -> None:
+    """Test qf doctor shows unconfigured providers."""
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("questfoundry.cli._check_providers", return_value=False),
+    ):
+        result = runner.invoke(app, ["doctor"])
+
+    assert "not configured" in result.stdout
+
+
+def test_doctor_checks_project_when_present(tmp_path: Path) -> None:
+    """Test qf doctor checks project.yaml when present."""
+    # Create project
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("questfoundry.cli._check_providers", return_value=True),
+    ):
+        result = runner.invoke(app, ["doctor", "--project", str(project_path)])
+
+    assert "Project" in result.stdout
+    assert "project.yaml" in result.stdout
+
+
+def test_doctor_exit_code_on_failure() -> None:
+    """Test qf doctor exits with code 1 on failure."""
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("questfoundry.cli._check_providers", return_value=False),
+    ):
+        result = runner.invoke(app, ["doctor"])
+
+    # No providers configured should result in failure
+    assert result.exit_code == 1

@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
+
+from questfoundry.observability import configure_logging, get_logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +26,22 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+
+@app.callback()
+def main(
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "-v",
+            "--verbose",
+            count=True,
+            help="Increase verbosity: -v for INFO, -vv or more for DEBUG.",
+        ),
+    ] = 0,
+) -> None:
+    """QuestFoundry: Pipeline-driven interactive fiction generation."""
+    configure_logging(verbose)
 
 
 def _require_project(project_path: Path) -> None:
@@ -134,31 +153,52 @@ def dream(
     Takes a story idea and generates a creative vision artifact with
     genre, tone, themes, and style direction.
     """
+    # Get logger after configure_logging was called by callback
+    log = get_logger(__name__)
+
     _require_project(project)
 
     # Get prompt interactively if not provided
     if prompt is None:
         prompt = typer.prompt("Enter your story idea")
 
-    console.print()
-    console.print("[dim]Running DREAM stage...[/dim]")
+    log.info("stage_start", stage="dream")
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
         orchestrator = _get_orchestrator(project, provider_override=provider)
+        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
         try:
             return await orchestrator.run_stage("dream", {"user_prompt": prompt})
         finally:
             await orchestrator.close()
 
-    result = asyncio.run(_run_dream())
+    # Run with progress spinner
+    console.print()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Running DREAM stage...", total=None)
+        result = asyncio.run(_run_dream())
 
     if result.status == "failed":
+        log.error("stage_failed", stage="dream", errors=result.errors)
         console.print()
         console.print("[red]✗[/red] DREAM stage failed")
         for error in result.errors:
             console.print(f"  [red]•[/red] {error}")
         raise typer.Exit(1)
+
+    log.info(
+        "stage_complete",
+        stage="dream",
+        tokens=result.tokens_used,
+        duration=result.duration_seconds,
+    )
 
     # Display success
     console.print()
@@ -222,6 +262,225 @@ def status(
     console.print()
     console.print(table)
     console.print()
+
+
+@app.command()
+def doctor(
+    project: Annotated[
+        Path | None,
+        typer.Option("--project", "-p", help="Project directory (optional)"),
+    ] = None,
+) -> None:
+    """Check configuration and provider connectivity.
+
+    Validates environment variables, tests provider connections,
+    and optionally checks project configuration.
+    """
+    console.print("[bold]QuestFoundry Doctor[/bold]")
+    console.print()
+
+    all_ok = True
+
+    # Check configuration
+    all_ok &= _check_configuration()
+
+    # Check provider connectivity
+    all_ok &= asyncio.run(_check_providers())
+
+    # Check project (if specified or current dir has project.yaml)
+    project_path = project or Path()
+    if (project_path / "project.yaml").exists():
+        all_ok &= _check_project(project_path)
+
+    console.print()
+    if all_ok:
+        console.print("[green]All checks passed![/green]")
+    else:
+        console.print("[yellow]Some checks failed or were skipped.[/yellow]")
+        raise typer.Exit(1)
+
+
+def _check_configuration() -> bool:
+    """Check environment configuration."""
+    import os
+
+    console.print("[bold]Configuration[/bold]")
+
+    checks = [
+        ("OLLAMA_HOST", os.getenv("OLLAMA_HOST")),
+        ("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY")),
+        ("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY")),
+        ("LANGSMITH_API_KEY", os.getenv("LANGSMITH_API_KEY")),
+    ]
+
+    any_provider = False
+    for name, value in checks:
+        if value:
+            # Mask secrets
+            if "KEY" in name:
+                display = f"{value[:7]}...{value[-3:]}" if len(value) > 10 else "(set)"
+            else:
+                display = value
+            console.print(f"  [green]✓[/green] {name}: {display}")
+            any_provider = True
+        else:
+            console.print(f"  [dim]○[/dim] {name}: not configured")
+
+    console.print()
+    return any_provider  # At least one provider configured
+
+
+async def _check_providers() -> bool:
+    """Check provider connectivity."""
+    import os
+
+    console.print("[bold]Provider Connectivity[/bold]")
+
+    all_ok = True
+
+    # Check Ollama
+    if os.getenv("OLLAMA_HOST"):
+        all_ok &= await _check_ollama()
+    else:
+        console.print("  [dim]○[/dim] ollama: Skipped (OLLAMA_HOST not set)")
+
+    # Check OpenAI
+    if os.getenv("OPENAI_API_KEY"):
+        all_ok &= await _check_openai()
+    else:
+        console.print("  [dim]○[/dim] openai: Skipped (not configured)")
+
+    # Check Anthropic
+    if os.getenv("ANTHROPIC_API_KEY"):
+        all_ok &= await _check_anthropic()
+    else:
+        console.print("  [dim]○[/dim] anthropic: Skipped (not configured)")
+
+    console.print()
+    return all_ok
+
+
+async def _check_ollama() -> bool:
+    """Check Ollama connectivity and list models."""
+    import json
+    import os
+
+    import httpx
+
+    host = os.getenv("OLLAMA_HOST")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{host}/api/tags")
+            if response.status_code == 200:
+                data = response.json()
+                models = [m.get("name", "") for m in data.get("models", [])]
+                if models:
+                    model_list = ", ".join(models[:5])
+                    if len(models) > 5:
+                        model_list += f", +{len(models) - 5} more"
+                    console.print(f"  [green]✓[/green] ollama: Connected ({model_list})")
+                else:
+                    console.print("  [yellow]![/yellow] ollama: Connected (no models pulled)")
+                return True
+            else:
+                console.print(f"  [red]✗[/red] ollama: HTTP {response.status_code}")
+                return False
+    except httpx.ConnectError:
+        console.print(f"  [red]✗[/red] ollama: Connection refused ({host})")
+        return False
+    except httpx.TimeoutException:
+        console.print(f"  [red]✗[/red] ollama: Connection timeout ({host})")
+        return False
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] ollama: Request error - {e}")
+        return False
+    except json.JSONDecodeError:
+        console.print("  [red]✗[/red] ollama: Invalid JSON response")
+        return False
+
+
+async def _check_openai() -> bool:
+    """Check OpenAI API key validity."""
+    import os
+
+    import httpx
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            if response.status_code == 200:
+                console.print("  [green]✓[/green] openai: Connected (API key valid)")
+                return True
+            elif response.status_code == 401:
+                console.print("  [red]✗[/red] openai: Invalid API key")
+                return False
+            else:
+                console.print(f"  [red]✗[/red] openai: HTTP {response.status_code}")
+                return False
+    except httpx.TimeoutException:
+        console.print("  [red]✗[/red] openai: Connection timeout")
+        return False
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] openai: Request error - {e}")
+        return False
+
+
+async def _check_anthropic() -> bool:
+    """Check Anthropic API key validity."""
+    import os
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    # Anthropic doesn't have a simple models endpoint,
+    # so we just verify the key format
+    if api_key and api_key.startswith("sk-ant-"):
+        console.print("  [green]✓[/green] anthropic: API key configured")
+        return True
+    elif api_key:
+        console.print("  [yellow]![/yellow] anthropic: Unusual key format")
+        return False
+    return False
+
+
+def _check_project(project_path: Path) -> bool:
+    """Check project configuration."""
+    from questfoundry.pipeline.config import ProjectConfigError, load_project_config
+
+    console.print("[bold]Project[/bold]")
+
+    all_ok = True
+
+    # Check project.yaml
+    config_file = project_path / "project.yaml"
+    if config_file.exists():
+        console.print("  [green]✓[/green] project.yaml: Found")
+
+        # Load and validate config
+        try:
+            config = load_project_config(project_path)
+            console.print(f"  [green]✓[/green] Project name: {config.name}")
+            console.print(
+                f"  [green]✓[/green] Default provider: {config.provider.name}/{config.provider.model}"
+            )
+        except ProjectConfigError as e:
+            console.print(f"  [red]✗[/red] Config error: {e}")
+            all_ok = False
+    else:
+        console.print("  [dim]○[/dim] project.yaml: Not found (not in a project)")
+
+    # Check artifacts directory
+    artifacts_dir = project_path / "artifacts"
+    if artifacts_dir.exists():
+        artifact_count = len(list(artifacts_dir.glob("*.yaml")))
+        console.print(f"  [green]✓[/green] Artifacts directory: {artifact_count} artifact(s)")
+    else:
+        console.print("  [dim]○[/dim] Artifacts directory: Not found")
+
+    console.print()
+    return all_ok
 
 
 if __name__ == "__main__":

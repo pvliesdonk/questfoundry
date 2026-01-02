@@ -31,6 +31,8 @@ dependencies = [
     "rich>=13.0",
     "tiktoken>=0.5",
     "python-dotenv>=1.0",
+    "structlog>=24.0",
+    "httpx>=0.27",
     # LangChain core
     "langchain-core>=0.3",
 ]
