@@ -22,12 +22,14 @@
     },
     "subgenre": {
       "type": "string",
+      "minLength": 1,
       "description": "Optional genre refinement"
     },
     "tone": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "minLength": 1
       },
       "minItems": 1,
       "description": "Tone descriptors"
@@ -40,13 +42,15 @@
     "themes": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "minLength": 1
       },
       "minItems": 1,
       "description": "Thematic elements"
     },
     "style_notes": {
       "type": "string",
+      "minLength": 1,
       "description": "Style guidance"
     },
     "scope": {
@@ -80,14 +84,16 @@
         "includes": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "description": "Content included"
         },
         "excludes": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "description": "Content excluded"
         }

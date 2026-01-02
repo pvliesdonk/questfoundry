@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+
+# Non-empty string type for list items
+NonEmptyStr = Annotated[str, StringConstraints(min_length=1)]
 
 
 class Scope(BaseModel):
@@ -23,8 +26,8 @@ class Scope(BaseModel):
 class ContentNotes(BaseModel):
     """Content boundaries for the story."""
 
-    includes: list[str] = Field(default_factory=list, description="Content included")
-    excludes: list[str] = Field(default_factory=list, description="Content excluded")
+    includes: list[NonEmptyStr] = Field(default_factory=list, description="Content included")
+    excludes: list[NonEmptyStr] = Field(default_factory=list, description="Content excluded")
 
 
 class DreamArtifact(BaseModel):
@@ -35,13 +38,13 @@ class DreamArtifact(BaseModel):
 
     # Core creative direction
     genre: str = Field(min_length=1, description="Primary genre")
-    subgenre: str | None = Field(default=None, description="Optional refinement")
-    tone: list[str] = Field(min_length=1, description="Tone descriptors")
+    subgenre: str | None = Field(default=None, min_length=1, description="Optional refinement")
+    tone: list[NonEmptyStr] = Field(min_length=1, description="Tone descriptors")
     audience: Literal["adult", "young_adult", "all_ages"] = Field(description="Target audience")
-    themes: list[str] = Field(min_length=1, description="Thematic elements")
+    themes: list[NonEmptyStr] = Field(min_length=1, description="Thematic elements")
 
     # Optional fields
-    style_notes: str | None = Field(default=None, description="Style guidance")
+    style_notes: str | None = Field(default=None, min_length=1, description="Style guidance")
     scope: Scope | None = Field(default=None, description="Scope constraints")
     content_notes: ContentNotes | None = Field(default=None, description="Content boundaries")
 

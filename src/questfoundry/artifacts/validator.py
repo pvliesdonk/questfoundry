@@ -170,6 +170,8 @@ class ArtifactValidator:
     def is_valid(self, data: dict[str, Any], stage_name: str) -> bool:
         """Check if artifact data is valid.
 
+        More efficient than validate() as it stops at the first error.
+
         Args:
             data: The artifact data to validate.
             stage_name: Name of the stage.
@@ -177,4 +179,21 @@ class ArtifactValidator:
         Returns:
             True if the artifact is valid.
         """
-        return len(self.validate(data, stage_name)) == 0
+        # Validate with JSON Schema first
+        try:
+            schema = self._load_schema(stage_name)
+            validator = jsonschema.Draft7Validator(schema)
+            if not validator.is_valid(data):
+                return False
+        except SchemaNotFoundError:
+            pass  # No schema file, skip JSON Schema validation
+
+        # Validate with Pydantic model
+        model = STAGE_MODELS.get(stage_name)
+        if model:
+            try:
+                model.model_validate(data)
+            except ValidationError:
+                return False
+
+        return True
