@@ -354,7 +354,7 @@ def test_validator_invalid_data_schema() -> None:
         "version": 1,
         "genre": "mystery",
         "tone": ["dark"],
-        "audience": "invalid_audience",  # Invalid enum value
+        "audience": "",  # Empty string not allowed (minLength=1)
         "themes": ["betrayal"],
     }
 

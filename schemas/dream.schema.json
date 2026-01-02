@@ -36,8 +36,8 @@
     },
     "audience": {
       "type": "string",
-      "enum": ["adult", "young_adult", "all_ages"],
-      "description": "Target audience"
+      "minLength": 1,
+      "description": "Target audience (e.g., adult, young adult, all ages, mature)"
     },
     "themes": {
       "type": "array",
@@ -68,8 +68,8 @@
         },
         "branching_depth": {
           "type": "string",
-          "enum": ["light", "moderate", "heavy"],
-          "description": "Branching complexity"
+          "minLength": 1,
+          "description": "Branching complexity (e.g., light, moderate, heavy, extensive)"
         },
         "estimated_playtime_minutes": {
           "type": "integer",
