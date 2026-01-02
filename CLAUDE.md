@@ -202,6 +202,61 @@ LANGSMITH_TRACING=true
 
 **Note**: `OLLAMA_HOST` and `OPENAI_API_KEY` are required for their respective providers. There are no defaults - you must explicitly configure them.
 
+## Debugging LLM Output Issues
+
+When stage validation fails or LLM output doesn't match expectations:
+
+### 1. Enable LLM Logging
+
+```bash
+uv run qf --log -vvv dream --project myproject "prompt"
+```
+
+This creates:
+- `{project}/logs/llm_calls.jsonl` - Full request/response for each LLM call
+- `{project}/logs/debug.jsonl` - Structured application logs
+
+### 2. Analyze the Response
+
+```bash
+# Pretty-print the LLM response
+python3 -c "import json; d=json.load(open('myproject/logs/llm_calls.jsonl')); print(d['content'])"
+
+# Debug YAML parsing
+python3 -c "
+import json, yaml
+d = json.load(open('myproject/logs/llm_calls.jsonl'))
+parsed = yaml.safe_load(d['content'])
+print(json.dumps(parsed, indent=2))
+"
+```
+
+### 3. Common Issues
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| Empty field in parsed YAML | YAML block extraction stops early | Check `_extract_yaml_block` handles multi-line content |
+| YAML parse error | Model includes prose around YAML | Improve fence detection or extraction |
+| Missing fields | Model omits optional fields | Make schema fields optional with defaults |
+
+### 4. Prompt Engineering Reference
+
+See `/mnt/code/if-craft-corpus/corpus/agent-design/agent_prompt_engineering.md` for:
+- **Sandwich pattern**: Repeat critical instructions at start AND end of prompt
+- **Validate → Feedback → Repair loop**: For structured output, validate and ask model to fix errors
+- **Discuss → Freeze → Serialize**: Separate conversation from structured output generation
+- **Model size considerations**: Small models (≤8B) need simpler prompts, fewer tools
+
+### 5. Schema Design for LLM Output
+
+Since artifacts will be interpreted by other LLMs (not programmatic code), prefer:
+- **Strings with examples** over strict enums (e.g., `audience: str` not `Literal["adult",...]`)
+- **Inline examples in prompts** to guide format: `audience: <e.g., adult, young adult, mature>`
+- **min_length=1 constraints** to catch empty values while accepting variations
+
+This allows LLM-generated variations like "adults" or "extensive" to pass validation
+while still providing guidance through examples in the prompt template.
+
 ## Related Resources
 
 - Original vision: https://gist.github.com/pvliesdonk/35b36897a42c41b371c8898bfec55882
