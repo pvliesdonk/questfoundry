@@ -83,6 +83,7 @@ class PipelineOrchestrator:
         project_path: Path,
         gate: GateHook | None = None,
         provider_override: str | None = None,
+        enable_llm_logging: bool = False,
     ) -> None:
         """Initialize the orchestrator.
 
@@ -92,6 +93,7 @@ class PipelineOrchestrator:
                 Defaults to AutoApproveGate.
             provider_override: Optional provider string (e.g., "openai/gpt-4o")
                 to override the project config.
+            enable_llm_logging: If True, log LLM calls to logs/llm_calls.jsonl.
 
         Raises:
             ProjectConfigError: If project.yaml cannot be loaded.
@@ -99,6 +101,7 @@ class PipelineOrchestrator:
         self.project_path = project_path
         self._gate = gate or AutoApproveGate()
         self._provider_override = provider_override
+        self._enable_llm_logging = enable_llm_logging
 
         # Load configuration
         try:
@@ -121,6 +124,11 @@ class PipelineOrchestrator:
 
         # Provider will be lazily initialized
         self._provider: LLMProvider | None = None
+
+        # LLM logger (enabled via --log flag)
+        from questfoundry.observability import LLMLogger
+
+        self._llm_logger = LLMLogger(project_path, enabled=enable_llm_logging)
 
     def _get_provider(self) -> LLMProvider:
         """Get or create the LLM provider.
