@@ -15,8 +15,10 @@ class Scope(BaseModel):
 
     target_word_count: int = Field(ge=1000, description="Approximate final length")
     estimated_passages: int = Field(ge=5, description="Target scene count")
-    branching_depth: Literal["light", "moderate", "heavy"] = Field(
-        default="moderate", description="Branching complexity"
+    branching_depth: str = Field(
+        default="moderate",
+        min_length=1,
+        description="Branching complexity (e.g., light, moderate, heavy)",
     )
     estimated_playtime_minutes: int | None = Field(
         default=None, ge=1, description="Target reading time"
@@ -40,7 +42,10 @@ class DreamArtifact(BaseModel):
     genre: str = Field(min_length=1, description="Primary genre")
     subgenre: str | None = Field(default=None, min_length=1, description="Optional refinement")
     tone: list[NonEmptyStr] = Field(min_length=1, description="Tone descriptors")
-    audience: Literal["adult", "young_adult", "all_ages"] = Field(description="Target audience")
+    audience: str = Field(
+        min_length=1,
+        description="Target audience (e.g., adult, young_adult, all_ages)",
+    )
     themes: list[NonEmptyStr] = Field(min_length=1, description="Thematic elements")
 
     # Optional fields
