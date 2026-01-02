@@ -29,9 +29,6 @@ class PromptTemplate:
 
         Returns:
             PromptTemplate instance.
-
-        Raises:
-            KeyError: If required fields are missing.
         """
         return cls(
             name=data.get("name", name),

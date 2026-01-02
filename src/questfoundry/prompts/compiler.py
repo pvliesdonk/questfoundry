@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003 - used at runtime
@@ -136,8 +137,6 @@ class PromptCompiler:
         # Convert to string
         if isinstance(value, (list, dict)):
             # Format lists/dicts nicely
-            import json
-
             return json.dumps(value, indent=2)
         return str(value)
 
