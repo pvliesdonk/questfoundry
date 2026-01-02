@@ -24,23 +24,23 @@ user: |
 
   type: dream
   version: 1
-  genre: <primary genre>
-  subgenre: <optional refinement>
+  genre: <primary genre, e.g., Mystery, Fantasy, Horror, Romance, Sci-Fi>
+  subgenre: <optional refinement, e.g., Cozy Mystery, Urban Fantasy, Gothic Horror>
   tone:
-    - <tone descriptor 1>
-    - <tone descriptor 2>
-    - <tone descriptor 3>
-  audience: <adult | young_adult | all_ages>
+    - <tone descriptor, e.g., dark and brooding>
+    - <tone descriptor, e.g., whimsical>
+    - <tone descriptor, e.g., tense and suspenseful>
+  audience: <target readers, e.g., adult, young adult, all ages, mature>
   themes:
-    - <theme 1>
-    - <theme 2>
-    - <theme 3>
+    - <thematic element, e.g., redemption>
+    - <thematic element, e.g., the cost of ambition>
+    - <thematic element, e.g., found family>
   style_notes: |
-    <writing style guidance>
+    <writing style guidance - describe prose style, pacing, narrative voice>
   scope:
-    target_word_count: <number>
-    estimated_passages: <number>
-    branching_depth: <light | moderate | heavy>
+    target_word_count: <approximate length, e.g., 50000>
+    estimated_passages: <scene count, e.g., 25>
+    branching_depth: <complexity, e.g., light, moderate, heavy, extensive>
 
   Be creative but grounded. Make choices that serve the story.
 

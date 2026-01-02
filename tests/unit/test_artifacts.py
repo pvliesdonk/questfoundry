@@ -79,12 +79,12 @@ def test_dream_artifact_invalid_empty_tone() -> None:
 
 
 def test_dream_artifact_invalid_audience() -> None:
-    """Invalid audience value should fail validation."""
+    """Empty audience should fail validation."""
     with pytest.raises(ValidationError) as exc_info:
         DreamArtifact(
             genre="mystery",
             tone=["dark"],
-            audience="invalid",  # type: ignore[arg-type]
+            audience="",  # Empty string not allowed
             themes=["betrayal"],
         )
     assert "audience" in str(exc_info.value)
@@ -113,14 +113,35 @@ def test_scope_invalid_word_count() -> None:
 
 
 def test_scope_invalid_branching_depth() -> None:
-    """Invalid branching depth should fail."""
+    """Empty branching depth should fail."""
     with pytest.raises(ValidationError) as exc_info:
         Scope(
             target_word_count=10000,
             estimated_passages=10,
-            branching_depth="extreme",  # type: ignore[arg-type]
+            branching_depth="",  # Empty string not allowed
         )
     assert "branching_depth" in str(exc_info.value)
+
+
+def test_dream_artifact_accepts_flexible_audience() -> None:
+    """Audience accepts any non-empty string for LLM flexibility."""
+    artifact = DreamArtifact(
+        genre="mystery",
+        tone=["dark"],
+        audience="adults",  # Not strictly "adult" but valid
+        themes=["betrayal"],
+    )
+    assert artifact.audience == "adults"
+
+
+def test_scope_accepts_flexible_branching_depth() -> None:
+    """Branching depth accepts any non-empty string for LLM flexibility."""
+    scope = Scope(
+        target_word_count=10000,
+        estimated_passages=10,
+        branching_depth="extensive",  # Custom value
+    )
+    assert scope.branching_depth == "extensive"
 
 
 # --- ArtifactWriter Tests ---
@@ -333,7 +354,7 @@ def test_validator_invalid_data_schema() -> None:
         "version": 1,
         "genre": "mystery",
         "tone": ["dark"],
-        "audience": "invalid_audience",  # Invalid enum value
+        "audience": "",  # Empty string not allowed (minLength=1)
         "themes": ["betrayal"],
     }
 

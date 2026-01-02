@@ -42,16 +42,16 @@ class LangChainProvider:
         self,
         messages: list[Message],
         model: str | None = None,
-        _temperature: float = 0.7,
-        _max_tokens: int = 4096,
+        temperature: float = 0.7,  # noqa: ARG002 - set at model construction
+        max_tokens: int = 4096,  # noqa: ARG002 - set at model construction
     ) -> LLMResponse:
         """Generate a completion from the given messages.
 
         Args:
             messages: List of conversation messages.
             model: Model override for response metadata.
-            _temperature: Unused - set at model construction.
-            _max_tokens: Unused - set at model construction.
+            temperature: Unused - set at model construction.
+            max_tokens: Unused - set at model construction.
 
         Returns:
             LLMResponse with content and metadata.

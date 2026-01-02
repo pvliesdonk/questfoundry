@@ -156,7 +156,8 @@ class DreamStage:
                     continue
                 if stripped.startswith("#") and not yaml_lines:
                     continue
-                if stripped and not self._is_yaml_line(stripped):
+                # Pass original line to preserve indentation for continuation check
+                if stripped and not self._is_yaml_line(line):
                     break
                 yaml_lines.append(line)
 
@@ -166,20 +167,21 @@ class DreamStage:
         """Check if a line looks like YAML content.
 
         Args:
-            line: Stripped line to check.
+            line: Line to check (may include leading whitespace).
 
         Returns:
             True if line appears to be YAML.
         """
-        # YAML patterns: key:, - item, continuation indent
+        # Continuation: starts with whitespace (check first, before stripping)
+        if line.startswith(" ") or line.startswith("\t"):
+            return True
+        # YAML patterns: key:, - item
+        stripped = line.strip()
         # Key pattern: word characters followed by colon (not just ":" anywhere)
-        if re.match(r"^\w[\w\s]*:", line):
+        if re.match(r"^\w[\w\s]*:", stripped):
             return True
         # List item: dash followed by space
-        if line.startswith("- "):
-            return True
-        # Continuation: starts with whitespace
-        return line.startswith(" ") or line.startswith("\t")
+        return stripped.startswith("- ")
 
 
 # Create singleton instance for registration
