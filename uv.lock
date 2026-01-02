@@ -953,6 +953,7 @@ viz = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pre-commit" },
     { name = "types-pyyaml" },
 ]
 
@@ -983,7 +984,10 @@ requires-dist = [
 provides-extras = ["ollama", "openai", "all-providers", "dev", "viz"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "types-pyyaml", specifier = ">=6.0.12.20250915" }]
+dev = [
+    { name = "pre-commit", specifier = ">=4.5.1" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
+]
 
 [[package]]
 name = "referencing"

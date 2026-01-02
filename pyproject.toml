@@ -157,5 +157,6 @@ indent-style = "space"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.5.1",
     "types-pyyaml>=6.0.12.20250915",
 ]
