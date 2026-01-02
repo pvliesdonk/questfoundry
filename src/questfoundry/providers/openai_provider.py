@@ -87,7 +87,7 @@ class OpenAIProvider:
 
         payload = {
             "model": model,
-            "messages": [dict(m) for m in messages],
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }

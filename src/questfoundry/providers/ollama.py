@@ -75,7 +75,7 @@ class OllamaProvider:
 
         payload = {
             "model": model,
-            "messages": [dict(m) for m in messages],
+            "messages": messages,
             "stream": False,
             "options": {
                 "temperature": temperature,
@@ -126,9 +126,14 @@ class OllamaProvider:
         prompt_eval_count = data.get("prompt_eval_count", 0)
         tokens_used = eval_count + prompt_eval_count
 
-        # Determine finish reason
-        done_reason = data.get("done_reason", "unknown")
-        finish_reason = "stop" if done_reason == "stop" or data.get("done", False) else done_reason
+        # Determine finish reason - prioritize done_reason over done flag
+        done_reason = data.get("done_reason", "")
+        if done_reason:
+            finish_reason = done_reason
+        elif data.get("done", False):
+            finish_reason = "stop"
+        else:
+            finish_reason = "unknown"
 
         return LLMResponse(
             content=content,
