@@ -109,9 +109,10 @@ class PipelineOrchestrator:
         self._reader = ArtifactReader(project_path)
         self._writer = ArtifactWriter(project_path)
         self._validator = ArtifactValidator()
-        self._prompts_path = project_path.parent / "prompts"  # Default prompts location
+        # Look for prompts in project first, then package
+        self._prompts_path = project_path / "prompts"
         if not self._prompts_path.exists():
-            # Try project root prompts
+            # Fall back to package prompts
             self._prompts_path = Path(__file__).parent.parent.parent.parent / "prompts"
 
         # Provider will be lazily initialized
@@ -199,8 +200,10 @@ class PipelineOrchestrator:
             if validation_errors:
                 errors.extend(validation_errors)
 
-            # Write artifact
-            artifact_path = self._writer.write(artifact_data, stage_name)
+            # Only write artifact if validation passed
+            artifact_path: Path | None = None
+            if not validation_errors:
+                artifact_path = self._writer.write(artifact_data, stage_name)
 
             # Calculate duration
             duration = time.perf_counter() - start_time

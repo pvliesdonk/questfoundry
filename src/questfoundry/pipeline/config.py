@@ -8,13 +8,18 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+# Default configuration values
+DEFAULT_PROVIDER = "ollama"
+DEFAULT_MODEL = "qwen3:8b"
+DEFAULT_STAGES = ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
+
 
 @dataclass
 class ProviderConfig:
     """Configuration for LLM provider."""
 
-    name: str = "ollama"
-    model: str = "qwen3:8b"
+    name: str = DEFAULT_PROVIDER
+    model: str = DEFAULT_MODEL
 
 
 @dataclass
@@ -32,9 +37,7 @@ class ProjectConfig:
     name: str
     version: int = 1
     provider: ProviderConfig = field(default_factory=ProviderConfig)
-    stages: list[str] = field(
-        default_factory=lambda: ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
-    )
+    stages: list[str] = field(default_factory=lambda: list(DEFAULT_STAGES))
     gates: list[GateConfig] = field(default_factory=list)
 
     @classmethod
@@ -49,19 +52,17 @@ class ProjectConfig:
         """
         # Parse provider
         provider_data = data.get("providers", {})
-        default_provider = provider_data.get("default", "ollama/qwen3:8b")
+        default_provider = provider_data.get("default", f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}")
         if "/" in default_provider:
             provider_name, model = default_provider.split("/", 1)
         else:
-            provider_name, model = default_provider, "qwen3:8b"
+            provider_name, model = default_provider, DEFAULT_MODEL
 
         provider = ProviderConfig(name=provider_name, model=model)
 
         # Parse stages
         pipeline_data = data.get("pipeline", {})
-        stages = pipeline_data.get(
-            "stages", ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
-        )
+        stages = pipeline_data.get("stages", list(DEFAULT_STAGES))
 
         # Parse gates
         gates_data = pipeline_data.get("gates", {})
