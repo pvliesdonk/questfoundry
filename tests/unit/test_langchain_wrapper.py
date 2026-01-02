@@ -98,7 +98,7 @@ async def test_complete_no_response_metadata(mock_chat_model: MagicMock) -> None
 
     result = await provider.complete([{"role": "user", "content": "Hi"}])
 
-    assert result.finish_reason == "stop"  # Default
+    assert result.finish_reason == "unknown"  # Safe default
 
 
 @pytest.mark.asyncio

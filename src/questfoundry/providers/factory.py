@@ -109,7 +109,7 @@ def _create_anthropic(model: str, **kwargs: Any) -> LangChainProvider:
         )
 
     chat_model = ChatAnthropic(  # type: ignore[call-arg]
-        model_name=model,
+        model=model,
         api_key=api_key,  # type: ignore[arg-type]
         temperature=kwargs.get("temperature", 0.7),
     )

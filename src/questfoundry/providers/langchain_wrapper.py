@@ -73,10 +73,10 @@ class LangChainProvider:
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             tokens_used = response.usage_metadata.get("total_tokens", 0)
 
-        # Extract finish reason
-        finish_reason = "stop"
+        # Extract finish reason (default to "unknown" for safety)
+        finish_reason = "unknown"
         if hasattr(response, "response_metadata") and response.response_metadata:
-            finish_reason = response.response_metadata.get("finish_reason", "stop")
+            finish_reason = response.response_metadata.get("finish_reason", "unknown")
 
         # Handle content (can be str or list)
         content = response.content

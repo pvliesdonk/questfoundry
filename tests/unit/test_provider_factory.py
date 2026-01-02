@@ -61,31 +61,24 @@ def test_create_ollama_with_custom_host() -> None:
 
 def test_create_ollama_import_error() -> None:
     """Factory raises error when langchain-ollama not installed."""
-    with (
-        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch.dict("sys.modules", {"langchain_ollama": None}),
-    ):
-        # Force re-import to trigger error
+    import questfoundry.providers.factory as factory_module
 
-        import questfoundry.providers.factory as factory_module
+    original = factory_module._create_ollama
 
-        # Save original and replace with raising import
-        original_create_ollama = factory_module._create_ollama
+    def mock_create_ollama(_model: str, **_kwargs: object) -> None:
+        raise ProviderError(
+            "ollama",
+            "langchain-ollama not installed. Run: uv add langchain-ollama",
+        )
 
-        def mock_create_ollama(_model: str, **_kwargs: object) -> None:
-            raise ProviderError(
-                "ollama",
-                "langchain-ollama not installed. Run: uv add langchain-ollama",
-            )
+    factory_module._create_ollama = mock_create_ollama  # type: ignore[assignment]
+    try:
+        with pytest.raises(ProviderError) as exc_info:
+            create_provider("ollama", "model", host="http://test:11434")
 
-        factory_module._create_ollama = mock_create_ollama
-        try:
-            with pytest.raises(ProviderError) as exc_info:
-                create_provider("ollama", "model")
-
-            assert "langchain-ollama not installed" in str(exc_info.value)
-        finally:
-            factory_module._create_ollama = original_create_ollama
+        assert "langchain-ollama not installed" in str(exc_info.value)
+    finally:
+        factory_module._create_ollama = original
 
 
 def test_create_openai_missing_key() -> None:
@@ -169,7 +162,7 @@ def test_create_anthropic_success() -> None:
 
     assert provider.default_model == "claude-3-opus"
     mock_chat.assert_called_once_with(
-        model_name="claude-3-opus",
+        model="claude-3-opus",
         api_key="sk-ant-test",
         temperature=0.7,
     )

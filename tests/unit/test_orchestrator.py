@@ -213,9 +213,7 @@ async def test_orchestrator_run_stage_not_found(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_stage_with_mock(
-    tmp_path: Path, mock_provider: MagicMock
-) -> None:
+async def test_orchestrator_run_stage_with_mock(tmp_path: Path, mock_provider: MagicMock) -> None:
     """Orchestrator executes stage with mocked components."""
     # Register a mock stage
     mock_stage = MagicMock()
@@ -244,9 +242,7 @@ async def test_orchestrator_run_stage_with_mock(
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_stage_with_errors(
-    tmp_path: Path, mock_provider: MagicMock
-) -> None:
+async def test_orchestrator_run_stage_with_errors(tmp_path: Path, mock_provider: MagicMock) -> None:
     """Orchestrator handles stage execution errors."""
     # Register a stage that raises an error
     mock_stage = MagicMock()
@@ -295,9 +291,7 @@ pipeline:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_gate_rejection(
-    tmp_path: Path, mock_provider: MagicMock
-) -> None:
+async def test_orchestrator_gate_rejection(tmp_path: Path, mock_provider: MagicMock) -> None:
     """Orchestrator respects gate rejection."""
     # Register mock stage
     mock_stage = MagicMock()
