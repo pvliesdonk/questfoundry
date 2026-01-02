@@ -172,10 +172,13 @@ class DreamStage:
             True if line appears to be YAML.
         """
         # YAML patterns: key:, - item, continuation indent
-        if ":" in line:
+        # Key pattern: word characters followed by colon (not just ":" anywhere)
+        if re.match(r"^\w[\w\s]*:", line):
             return True
-        if line.startswith("-"):
+        # List item: dash followed by space
+        if line.startswith("- "):
             return True
+        # Continuation: starts with whitespace
         return line.startswith(" ") or line.startswith("\t")
 
 
