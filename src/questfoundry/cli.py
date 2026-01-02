@@ -7,8 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
+
+# Load environment variables from .env file
+load_dotenv()
 
 if TYPE_CHECKING:
     from questfoundry.pipeline import PipelineOrchestrator, StageResult
@@ -35,18 +39,21 @@ def _require_project(project_path: Path) -> None:
         raise typer.Exit(1)
 
 
-def _get_orchestrator(project_path: Path) -> PipelineOrchestrator:
+def _get_orchestrator(
+    project_path: Path, provider_override: str | None = None
+) -> PipelineOrchestrator:
     """Get a pipeline orchestrator for the project.
 
     Args:
         project_path: Path to the project directory.
+        provider_override: Optional provider string (e.g., "openai/gpt-4o") to override config.
 
     Returns:
         Configured PipelineOrchestrator.
     """
     from questfoundry.pipeline import PipelineOrchestrator
 
-    return PipelineOrchestrator(project_path)
+    return PipelineOrchestrator(project_path, provider_override=provider_override)
 
 
 @app.command()
@@ -117,6 +124,10 @@ def init(
 def dream(
     prompt: Annotated[str | None, typer.Argument(help="Story idea or concept")] = None,
     project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+    ] = None,
 ) -> None:
     """Run DREAM stage - establish creative vision.
 
@@ -134,7 +145,7 @@ def dream(
 
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
-        orchestrator = _get_orchestrator(project)
+        orchestrator = _get_orchestrator(project, provider_override=provider)
         try:
             return await orchestrator.run_stage("dream", {"user_prompt": prompt})
         finally:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -82,6 +83,7 @@ class PipelineOrchestrator:
         self,
         project_path: Path,
         gate: GateHook | None = None,
+        provider_override: str | None = None,
     ) -> None:
         """Initialize the orchestrator.
 
@@ -89,12 +91,15 @@ class PipelineOrchestrator:
             project_path: Path to the project root directory.
             gate: Optional gate hook for stage transitions.
                 Defaults to AutoApproveGate.
+            provider_override: Optional provider string (e.g., "openai/gpt-4o")
+                to override the project config.
 
         Raises:
             ProjectConfigError: If project.yaml cannot be loaded.
         """
         self.project_path = project_path
         self._gate = gate or AutoApproveGate()
+        self._provider_override = provider_override
 
         # Load configuration
         try:
@@ -121,14 +126,32 @@ class PipelineOrchestrator:
     def _get_provider(self) -> LLMProvider:
         """Get or create the LLM provider.
 
+        Provider resolution order (highest priority first):
+        1. CLI --provider flag (provider_override)
+        2. QF_PROVIDER environment variable
+        3. project.yaml providers.default
+        4. Default: ollama/qwen3:8b
+
         Returns:
             Configured LLM provider.
         """
         if self._provider is not None:
             return self._provider
 
-        provider_name = self.config.provider.name.lower()
-        model = self.config.provider.model
+        # Determine provider string from override, env, or config
+        provider_string = (
+            self._provider_override
+            or os.environ.get("QF_PROVIDER")
+            or f"{self.config.provider.name}/{self.config.provider.model}"
+        )
+
+        if "/" in provider_string:
+            provider_name, model = provider_string.split("/", 1)
+        else:
+            provider_name = provider_string
+            model = self.config.provider.model
+
+        provider_name = provider_name.lower()
 
         if provider_name == "ollama":
             self._provider = OllamaProvider(default_model=model)

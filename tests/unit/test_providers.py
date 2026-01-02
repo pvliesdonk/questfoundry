@@ -57,11 +57,13 @@ def test_llm_response_not_complete_length() -> None:
 # --- OllamaProvider Tests ---
 
 
-def test_ollama_default_host() -> None:
-    """OllamaProvider uses default host."""
+def test_ollama_requires_host() -> None:
+    """OllamaProvider raises error without OLLAMA_HOST."""
     with patch.dict("os.environ", {}, clear=True):
-        provider = OllamaProvider()
-        assert provider.host == "http://localhost:11434"
+        with pytest.raises(ProviderError) as exc_info:
+            OllamaProvider()
+
+        assert "OLLAMA_HOST not configured" in str(exc_info.value)
 
 
 def test_ollama_env_host() -> None:
@@ -79,20 +81,20 @@ def test_ollama_custom_host() -> None:
 
 def test_ollama_default_model() -> None:
     """OllamaProvider has correct default model."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
     assert provider.default_model == "qwen3:8b"
 
 
 def test_ollama_custom_model() -> None:
     """OllamaProvider uses custom default model."""
-    provider = OllamaProvider(default_model="llama3:8b")
+    provider = OllamaProvider(host="http://test:11434", default_model="llama3:8b")
     assert provider.default_model == "llama3:8b"
 
 
 @pytest.mark.asyncio
 async def test_ollama_complete_success() -> None:
     """OllamaProvider successfully completes a request."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -118,7 +120,7 @@ async def test_ollama_complete_success() -> None:
 @pytest.mark.asyncio
 async def test_ollama_complete_custom_model() -> None:
     """OllamaProvider uses custom model when specified."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -143,7 +145,7 @@ async def test_ollama_complete_custom_model() -> None:
 @pytest.mark.asyncio
 async def test_ollama_complete_connection_error() -> None:
     """OllamaProvider raises ProviderConnectionError on connection failure."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     with patch.object(
         provider._client, "post", new=AsyncMock(side_effect=httpx.ConnectError("Failed"))
@@ -159,7 +161,7 @@ async def test_ollama_complete_connection_error() -> None:
 @pytest.mark.asyncio
 async def test_ollama_complete_timeout() -> None:
     """OllamaProvider raises ProviderConnectionError on timeout."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     with patch.object(
         provider._client, "post", new=AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
@@ -174,7 +176,7 @@ async def test_ollama_complete_timeout() -> None:
 @pytest.mark.asyncio
 async def test_ollama_complete_model_not_found() -> None:
     """OllamaProvider raises ProviderModelError when model not found."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     mock_response = MagicMock()
     mock_response.status_code = 404
@@ -191,7 +193,7 @@ async def test_ollama_complete_model_not_found() -> None:
 @pytest.mark.asyncio
 async def test_ollama_complete_api_error() -> None:
     """OllamaProvider raises ProviderError on API error."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     mock_response = MagicMock()
     mock_response.status_code = 500
@@ -208,14 +210,14 @@ async def test_ollama_complete_api_error() -> None:
 @pytest.mark.asyncio
 async def test_ollama_context_manager() -> None:
     """OllamaProvider works as async context manager."""
-    async with OllamaProvider() as provider:
+    async with OllamaProvider(host="http://test:11434") as provider:
         assert provider.default_model == "qwen3:8b"
 
 
 @pytest.mark.asyncio
 async def test_ollama_list_models() -> None:
     """OllamaProvider lists available models."""
-    provider = OllamaProvider()
+    provider = OllamaProvider(host="http://test:11434")
 
     mock_response = MagicMock()
     mock_response.status_code = 200

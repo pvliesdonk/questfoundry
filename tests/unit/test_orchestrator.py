@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -217,10 +217,11 @@ async def test_orchestrator_run_stage_with_mock(tmp_path: Path) -> None:
     )
     register_stage(mock_stage)
 
-    orchestrator = PipelineOrchestrator(tmp_path)
+    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
+        orchestrator = PipelineOrchestrator(tmp_path)
 
-    # Run stage
-    result = await orchestrator.run_stage("mock", {"test": "context"})
+        # Run stage
+        result = await orchestrator.run_stage("mock", {"test": "context"})
 
     assert result.stage == "mock"
     assert result.llm_calls == 1
@@ -238,9 +239,10 @@ async def test_orchestrator_run_stage_with_errors(tmp_path: Path) -> None:
     mock_stage.execute = AsyncMock(side_effect=RuntimeError("Stage failed"))
     register_stage(mock_stage)
 
-    orchestrator = PipelineOrchestrator(tmp_path)
+    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
+        orchestrator = PipelineOrchestrator(tmp_path)
 
-    result = await orchestrator.run_stage("failing")
+        result = await orchestrator.run_stage("failing")
 
     assert result.stage == "failing"
     assert result.status == "failed"
@@ -296,8 +298,9 @@ async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
         async def on_stage_complete(self, _stage: str, _result: StageResult) -> str:
             return "reject"
 
-    orchestrator = PipelineOrchestrator(tmp_path, gate=RejectGate())
-    result = await orchestrator.run_stage("gated")
+    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
+        orchestrator = PipelineOrchestrator(tmp_path, gate=RejectGate())
+        result = await orchestrator.run_stage("gated")
 
     assert result.status == "pending_review"
 
@@ -305,12 +308,13 @@ async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_orchestrator_close(tmp_path: Path) -> None:
     """Orchestrator closes provider on close."""
-    orchestrator = PipelineOrchestrator(tmp_path)
+    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
+        orchestrator = PipelineOrchestrator(tmp_path)
 
-    # Initialize provider
-    _ = orchestrator._get_provider()
+        # Initialize provider
+        _ = orchestrator._get_provider()
 
-    # Close orchestrator
-    await orchestrator.close()
+        # Close orchestrator
+        await orchestrator.close()
 
-    assert orchestrator._provider is None
+        assert orchestrator._provider is None

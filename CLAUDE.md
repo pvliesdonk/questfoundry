@@ -178,13 +178,28 @@ qf status                     # Show pipeline state
 - Target **70% coverage** initially, increase later
 - Use pytest fixtures for common test data
 
-## Environment Variables
+## Configuration
+
+Configuration follows a strict precedence order (highest to lowest):
+
+1. **CLI flags** - `--provider ollama/qwen3:8b`
+2. **Environment variables** - `QF_PROVIDER=openai/gpt-4o` (can be set in your shell or a `.env` file)
+3. **Project config** - `project.yaml` providers.default
+4. **Defaults** - `ollama/qwen3:8b`
+
+### Environment Variables
 
 ```bash
-OLLAMA_HOST=http://athena.int.liesdonk.nl:11434
-OPENAI_API_KEY=sk-...
-LANGSMITH_TRACING=true  # Optional observability
+# Provider configuration
+QF_PROVIDER=ollama/qwen3:8b    # Override default provider
+OLLAMA_HOST=http://athena.int.liesdonk.nl:11434  # Required for Ollama
+OPENAI_API_KEY=sk-...          # Required for OpenAI
+
+# Optional observability
+LANGSMITH_TRACING=true
 ```
+
+**Note**: `OLLAMA_HOST` and `OPENAI_API_KEY` are required for their respective providers. There are no defaults - you must explicitly configure them.
 
 ## Related Resources
 

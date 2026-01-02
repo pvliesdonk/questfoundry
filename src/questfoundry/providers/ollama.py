@@ -34,11 +34,19 @@ class OllamaProvider:
         """Initialize the Ollama provider.
 
         Args:
-            host: Ollama server URL. Defaults to OLLAMA_HOST env var
-                or http://localhost:11434.
+            host: Ollama server URL. If not provided, reads from OLLAMA_HOST env var.
             default_model: Default model for completions.
+
+        Raises:
+            ProviderError: If OLLAMA_HOST is not configured.
         """
-        self.host = host or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.host = host or os.getenv("OLLAMA_HOST")
+        if not self.host:
+            raise ProviderError(
+                "ollama",
+                "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable "
+                "or add it to your .env file.",
+            )
         self._default_model = default_model
         self._client = httpx.AsyncClient(timeout=300.0)
 
