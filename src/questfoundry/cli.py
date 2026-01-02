@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -12,7 +13,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from questfoundry.observability import configure_logging, get_logger
+from questfoundry.observability import close_file_logging, configure_logging, get_logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -68,6 +69,7 @@ def _configure_project_logging(project_path: Path) -> None:
     """
     if _log_enabled:
         configure_logging(verbosity=_verbose, log_to_file=True, project_path=project_path)
+        atexit.register(close_file_logging)
 
 
 def _require_project(project_path: Path) -> None:

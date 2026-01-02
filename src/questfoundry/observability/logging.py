@@ -37,14 +37,19 @@ class JSONLFileHandler(logging.FileHandler):
                 "timestamp": datetime.now(UTC).isoformat(),
                 "level": record.levelname,
                 "logger": record.name,
-                "message": record.getMessage(),
             }
 
-            # Add structlog context if available
-            if hasattr(record, "positional_args") and record.positional_args:
-                for arg in record.positional_args:
-                    if isinstance(arg, dict):
-                        entry.update(arg)
+            # Add structlog context if available, extracting event as message
+            # structlog passes event dict via record.msg when using wrap_for_formatter
+            if isinstance(record.msg, dict):
+                event_dict = record.msg.copy()
+                # Remove structlog internal fields we already capture
+                event_dict.pop("level", None)
+                event_dict.pop("timestamp", None)
+                entry["message"] = event_dict.pop("event", str(record.msg))
+                entry.update(event_dict)
+            else:
+                entry["message"] = record.getMessage()
 
             # Write as JSON line
             line = json.dumps(entry) + "\n"
@@ -66,8 +71,20 @@ def configure_logging(
         verbosity: 0=WARNING (default), 1=INFO, 2+=DEBUG
         log_to_file: If True, enable file logging to {project_path}/logs/.
         project_path: Project directory for file logging. Required if log_to_file=True.
+
+    Raises:
+        ValueError: If log_to_file=True but project_path is not provided.
     """
     global _configured, _file_handler, _logs_dir
+
+    # Validate arguments
+    if log_to_file and project_path is None:
+        raise ValueError("project_path is required when log_to_file=True")
+
+    # Close existing file handler if reconfiguring
+    if _file_handler is not None:
+        _file_handler.close()
+        _file_handler = None
 
     # Map verbosity to log level
     levels = {0: logging.WARNING, 1: logging.INFO}
