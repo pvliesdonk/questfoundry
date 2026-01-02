@@ -27,6 +27,10 @@ app = typer.Typer(
 )
 console = Console()
 
+# Global state for logging flags (set by callback, used by commands)
+_verbose: int = 0
+_log_enabled: bool = False
+
 
 @app.callback()
 def main(
@@ -36,12 +40,34 @@ def main(
             "-v",
             "--verbose",
             count=True,
-            help="Increase verbosity: -v for INFO, -vv or more for DEBUG.",
+            help="Increase verbosity: -v for INFO, -vv for DEBUG.",
         ),
     ] = 0,
+    log: Annotated[
+        bool,
+        typer.Option(
+            "--log",
+            help="Enable file logging to {project}/logs/ (debug.jsonl, llm_calls.jsonl).",
+        ),
+    ] = False,
 ) -> None:
     """QuestFoundry: Pipeline-driven interactive fiction generation."""
-    configure_logging(verbose)
+    global _verbose, _log_enabled
+    _verbose = verbose
+    _log_enabled = log
+
+    # Configure console logging (file logging configured later when project is known)
+    configure_logging(verbosity=verbose)
+
+
+def _configure_project_logging(project_path: Path) -> None:
+    """Configure file logging if --log flag was set.
+
+    Args:
+        project_path: Path to the project directory.
+    """
+    if _log_enabled:
+        configure_logging(verbosity=_verbose, log_to_file=True, project_path=project_path)
 
 
 def _require_project(project_path: Path) -> None:
@@ -72,7 +98,11 @@ def _get_orchestrator(
     """
     from questfoundry.pipeline import PipelineOrchestrator
 
-    return PipelineOrchestrator(project_path, provider_override=provider_override)
+    return PipelineOrchestrator(
+        project_path,
+        provider_override=provider_override,
+        enable_llm_logging=_log_enabled,
+    )
 
 
 @app.command()
@@ -153,10 +183,11 @@ def dream(
     Takes a story idea and generates a creative vision artifact with
     genre, tone, themes, and style direction.
     """
-    # Get logger after configure_logging was called by callback
-    log = get_logger(__name__)
-
     _require_project(project)
+    _configure_project_logging(project)
+
+    # Get logger after logging is fully configured
+    log = get_logger(__name__)
 
     # Get prompt interactively if not provided
     if prompt is None:
@@ -206,6 +237,9 @@ def dream(
     console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
     console.print(f"  Tokens: {result.tokens_used:,}")
     console.print(f"  Duration: {result.duration_seconds:.1f}s")
+
+    if _log_enabled:
+        console.print(f"  Logs: [dim]{project / 'logs'}[/dim]")
 
     # Show preview of artifact
     if result.artifact_path and result.artifact_path.exists():

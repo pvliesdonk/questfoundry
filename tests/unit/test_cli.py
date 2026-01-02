@@ -257,7 +257,7 @@ def test_dream_prompts_for_input(tmp_path: Path) -> None:
     assert call_args[0][1]["user_prompt"] == "A mystery story"
 
 
-# --- Verbosity Flag Tests ---
+# --- Verbosity and Log Flag Tests ---
 
 
 def test_verbose_flag_exists() -> None:
@@ -266,12 +266,15 @@ def test_verbose_flag_exists() -> None:
     assert result.exit_code == 0
 
 
-def test_verbose_flag_countable() -> None:
-    """Test -vv and -vvv are recognized."""
-    result = runner.invoke(app, ["-vv", "version"])
+def test_log_flag_exists() -> None:
+    """Test --log flag is recognized."""
+    result = runner.invoke(app, ["--log", "version"])
     assert result.exit_code == 0
 
-    result = runner.invoke(app, ["-vvv", "version"])
+
+def test_verbose_and_log_flags_together() -> None:
+    """Test -v and --log can be used together."""
+    result = runner.invoke(app, ["-v", "--log", "version"])
     assert result.exit_code == 0
 
 

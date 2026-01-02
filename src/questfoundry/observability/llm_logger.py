@@ -1,7 +1,9 @@
 """JSONL logger for LLM calls.
 
-Writes structured log entries for each LLM call to artifacts/.llm_calls.jsonl.
+Writes structured log entries for each LLM call to logs/llm_calls.jsonl.
 Content is never truncated - full prompts and responses are preserved.
+
+Only active when --log flag is passed to CLI.
 """
 
 from __future__ import annotations
@@ -42,21 +44,25 @@ class LLMLogEntry:
 class LLMLogger:
     """Logger for LLM calls in JSONL format.
 
-    Writes one JSON object per line to artifacts/.llm_calls.jsonl.
+    Writes one JSON object per line to logs/llm_calls.jsonl.
     Content is never truncated - full prompts and responses are preserved.
 
     Attributes:
         log_path: Path to the JSONL log file.
+        enabled: Whether logging is enabled.
     """
 
-    def __init__(self, project_path: Path) -> None:
+    def __init__(self, project_path: Path, enabled: bool = True) -> None:
         """Initialize LLM logger.
 
         Args:
             project_path: Root path of the project.
+            enabled: Whether to actually write logs.
         """
-        self.log_path = project_path / "artifacts" / ".llm_calls.jsonl"
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.enabled = enabled
+        self.log_path = project_path / "logs" / "llm_calls.jsonl"
+        if enabled:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def log(self, entry: LLMLogEntry) -> None:
         """Append an entry to the JSONL log.
@@ -64,6 +70,9 @@ class LLMLogger:
         Args:
             entry: Log entry to write.
         """
+        if not self.enabled:
+            return
+
         with self.log_path.open("a") as f:
             f.write(json.dumps(asdict(entry)) + "\n")
 
