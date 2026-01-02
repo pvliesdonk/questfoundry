@@ -13,7 +13,6 @@ from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWr
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.prompts import PromptCompiler
-from questfoundry.providers import OllamaProvider, OpenAIProvider
 
 if TYPE_CHECKING:
     from questfoundry.providers import LLMProvider
@@ -151,16 +150,10 @@ class PipelineOrchestrator:
             provider_name = provider_string
             model = self.config.provider.model
 
-        provider_name = provider_name.lower()
+        # Use LangChain factory
+        from questfoundry.providers.factory import create_provider
 
-        if provider_name == "ollama":
-            self._provider = OllamaProvider(default_model=model)
-        elif provider_name == "openai":
-            self._provider = OpenAIProvider(default_model=model)
-        else:
-            # Default to Ollama
-            self._provider = OllamaProvider(default_model=model)
-
+        self._provider = create_provider(provider_name, model)
         return self._provider
 
     def _get_stage_implementation(self, stage_name: str) -> Any:

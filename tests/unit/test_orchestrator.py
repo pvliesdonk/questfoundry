@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -22,6 +22,16 @@ from questfoundry.pipeline.stages import get_stage, list_stages, register_stage
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.fixture
+def mock_provider() -> MagicMock:
+    """Create a mock LLM provider."""
+    provider = MagicMock()
+    provider.default_model = "test-model"
+    provider.complete = AsyncMock()
+    provider.close = AsyncMock()
+    return provider
 
 
 # --- ProjectConfig Tests ---
@@ -203,7 +213,9 @@ async def test_orchestrator_run_stage_not_found(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_stage_with_mock(tmp_path: Path) -> None:
+async def test_orchestrator_run_stage_with_mock(
+    tmp_path: Path, mock_provider: MagicMock
+) -> None:
     """Orchestrator executes stage with mocked components."""
     # Register a mock stage
     mock_stage = MagicMock()
@@ -217,11 +229,12 @@ async def test_orchestrator_run_stage_with_mock(tmp_path: Path) -> None:
     )
     register_stage(mock_stage)
 
-    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
-        orchestrator = PipelineOrchestrator(tmp_path)
+    orchestrator = PipelineOrchestrator(tmp_path)
+    # Inject mock provider directly
+    orchestrator._provider = mock_provider
 
-        # Run stage
-        result = await orchestrator.run_stage("mock", {"test": "context"})
+    # Run stage
+    result = await orchestrator.run_stage("mock", {"test": "context"})
 
     assert result.stage == "mock"
     assert result.llm_calls == 1
@@ -231,7 +244,9 @@ async def test_orchestrator_run_stage_with_mock(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_stage_with_errors(tmp_path: Path) -> None:
+async def test_orchestrator_run_stage_with_errors(
+    tmp_path: Path, mock_provider: MagicMock
+) -> None:
     """Orchestrator handles stage execution errors."""
     # Register a stage that raises an error
     mock_stage = MagicMock()
@@ -239,10 +254,11 @@ async def test_orchestrator_run_stage_with_errors(tmp_path: Path) -> None:
     mock_stage.execute = AsyncMock(side_effect=RuntimeError("Stage failed"))
     register_stage(mock_stage)
 
-    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
-        orchestrator = PipelineOrchestrator(tmp_path)
+    orchestrator = PipelineOrchestrator(tmp_path)
+    # Inject mock provider directly
+    orchestrator._provider = mock_provider
 
-        result = await orchestrator.run_stage("failing")
+    result = await orchestrator.run_stage("failing")
 
     assert result.stage == "failing"
     assert result.status == "failed"
@@ -279,7 +295,9 @@ pipeline:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
+async def test_orchestrator_gate_rejection(
+    tmp_path: Path, mock_provider: MagicMock
+) -> None:
     """Orchestrator respects gate rejection."""
     # Register mock stage
     mock_stage = MagicMock()
@@ -298,23 +316,24 @@ async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
         async def on_stage_complete(self, _stage: str, _result: StageResult) -> str:
             return "reject"
 
-    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
-        orchestrator = PipelineOrchestrator(tmp_path, gate=RejectGate())
-        result = await orchestrator.run_stage("gated")
+    orchestrator = PipelineOrchestrator(tmp_path, gate=RejectGate())
+    # Inject mock provider directly
+    orchestrator._provider = mock_provider
+
+    result = await orchestrator.run_stage("gated")
 
     assert result.status == "pending_review"
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_close(tmp_path: Path) -> None:
+async def test_orchestrator_close(tmp_path: Path, mock_provider: MagicMock) -> None:
     """Orchestrator closes provider on close."""
-    with patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}):
-        orchestrator = PipelineOrchestrator(tmp_path)
+    orchestrator = PipelineOrchestrator(tmp_path)
+    # Inject mock provider directly
+    orchestrator._provider = mock_provider
 
-        # Initialize provider
-        _ = orchestrator._get_provider()
+    # Close orchestrator
+    await orchestrator.close()
 
-        # Close orchestrator
-        await orchestrator.close()
-
-        assert orchestrator._provider is None
+    assert orchestrator._provider is None
+    mock_provider.close.assert_awaited_once()
