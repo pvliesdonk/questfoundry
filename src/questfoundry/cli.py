@@ -27,9 +27,6 @@ app = typer.Typer(
 )
 console = Console()
 
-# Module logger
-log = get_logger(__name__)
-
 
 @app.callback()
 def main(
@@ -39,7 +36,7 @@ def main(
             "-v",
             "--verbose",
             count=True,
-            help="Increase verbosity. Use -v for INFO, -vv for DEBUG.",
+            help="Increase verbosity: -v for INFO, -vv or more for DEBUG.",
         ),
     ] = 0,
 ) -> None:
@@ -156,6 +153,9 @@ def dream(
     Takes a story idea and generates a creative vision artifact with
     genre, tone, themes, and style direction.
     """
+    # Get logger after configure_logging was called by callback
+    log = get_logger(__name__)
+
     _require_project(project)
 
     # Get prompt interactively if not provided
@@ -362,6 +362,7 @@ async def _check_providers() -> bool:
 
 async def _check_ollama() -> bool:
     """Check Ollama connectivity and list models."""
+    import json
     import os
 
     import httpx
@@ -390,8 +391,11 @@ async def _check_ollama() -> bool:
     except httpx.TimeoutException:
         console.print(f"  [red]✗[/red] ollama: Connection timeout ({host})")
         return False
-    except Exception as e:
-        console.print(f"  [red]✗[/red] ollama: {e}")
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] ollama: Request error - {e}")
+        return False
+    except json.JSONDecodeError:
+        console.print("  [red]✗[/red] ollama: Invalid JSON response")
         return False
 
 
@@ -417,8 +421,11 @@ async def _check_openai() -> bool:
             else:
                 console.print(f"  [red]✗[/red] openai: HTTP {response.status_code}")
                 return False
-    except Exception as e:
-        console.print(f"  [red]✗[/red] openai: {e}")
+    except httpx.TimeoutException:
+        console.print("  [red]✗[/red] openai: Connection timeout")
+        return False
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] openai: Request error - {e}")
         return False
 
 
@@ -434,12 +441,14 @@ async def _check_anthropic() -> bool:
         return True
     elif api_key:
         console.print("  [yellow]![/yellow] anthropic: Unusual key format")
-        return True
+        return False
     return False
 
 
 def _check_project(project_path: Path) -> bool:
     """Check project configuration."""
+    from questfoundry.pipeline.config import ProjectConfigError, load_project_config
+
     console.print("[bold]Project[/bold]")
 
     all_ok = True
@@ -451,14 +460,12 @@ def _check_project(project_path: Path) -> bool:
 
         # Load and validate config
         try:
-            from questfoundry.pipeline.config import load_project_config
-
             config = load_project_config(project_path)
             console.print(f"  [green]✓[/green] Project name: {config.name}")
             console.print(
                 f"  [green]✓[/green] Default provider: {config.provider.name}/{config.provider.model}"
             )
-        except Exception as e:
+        except ProjectConfigError as e:
             console.print(f"  [red]✗[/red] Config error: {e}")
             all_ok = False
     else:
