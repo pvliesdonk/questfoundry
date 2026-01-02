@@ -42,8 +42,8 @@ class LangChainProvider:
         self,
         messages: list[Message],
         model: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
+        temperature: float = 0.7,  # noqa: ARG002 - set at model construction
+        max_tokens: int = 4096,  # noqa: ARG002 - set at model construction
     ) -> LLMResponse:
         """Generate a completion from the given messages.
 

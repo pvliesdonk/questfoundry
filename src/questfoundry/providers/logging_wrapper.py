@@ -5,11 +5,10 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from questfoundry.providers.base import LLMResponse, Message
-
 if TYPE_CHECKING:
     from questfoundry.observability import LLMLogger
     from questfoundry.providers import LLMProvider
+    from questfoundry.providers.base import LLMResponse, Message
 
 
 class LoggingProvider:
@@ -79,7 +78,7 @@ class LoggingProvider:
             entry = self._logger.create_entry(
                 stage=self._stage,
                 model=model or self.default_model,
-                messages=[dict(m) for m in messages],
+                messages=[{**m} for m in messages],  # type: ignore[dict-item]
                 content="",
                 tokens_used=0,
                 finish_reason="error",
@@ -97,7 +96,7 @@ class LoggingProvider:
         entry = self._logger.create_entry(
             stage=self._stage,
             model=response.model,
-            messages=[dict(m) for m in messages],
+            messages=[{**m} for m in messages],  # type: ignore[dict-item]
             content=response.content,
             tokens_used=response.tokens_used,
             finish_reason=response.finish_reason,
@@ -114,7 +113,7 @@ class LoggingProvider:
         if hasattr(self._provider, "close"):
             await self._provider.close()
 
-    async def __aenter__(self) -> "LoggingProvider":
+    async def __aenter__(self) -> LoggingProvider:
         """Enter async context."""
         return self
 

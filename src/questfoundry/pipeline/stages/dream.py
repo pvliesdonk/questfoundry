@@ -181,9 +181,7 @@ class DreamStage:
         if re.match(r"^\w[\w\s]*:", stripped):
             return True
         # List item: dash followed by space
-        if stripped.startswith("- "):
-            return True
-        return False
+        return stripped.startswith("- ")
 
 
 # Create singleton instance for registration
