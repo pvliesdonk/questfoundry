@@ -39,7 +39,9 @@ def _require_project(project_path: Path) -> None:
         raise typer.Exit(1)
 
 
-def _get_orchestrator(project_path: Path, provider_override: str | None = None) -> PipelineOrchestrator:
+def _get_orchestrator(
+    project_path: Path, provider_override: str | None = None
+) -> PipelineOrchestrator:
     """Get a pipeline orchestrator for the project.
 
     Args:
@@ -123,7 +125,8 @@ def dream(
     prompt: Annotated[str | None, typer.Argument(help="Story idea or concept")] = None,
     project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
     provider: Annotated[
-        str | None, typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)")
+        str | None,
+        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
     ] = None,
 ) -> None:
     """Run DREAM stage - establish creative vision.
