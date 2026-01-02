@@ -21,6 +21,20 @@ app = typer.Typer(
 console = Console()
 
 
+def _require_project(project_path: Path) -> None:
+    """Verify project.yaml exists, exit with error if not.
+
+    Args:
+        project_path: Path to the project directory.
+    """
+    config_file = project_path / "project.yaml"
+    if not config_file.exists():
+        console.print(
+            "[red]Error:[/red] No project.yaml found. Run 'qf init <name>' first or use --project."
+        )
+        raise typer.Exit(1)
+
+
 def _get_orchestrator(project_path: Path) -> PipelineOrchestrator:
     """Get a pipeline orchestrator for the project.
 
@@ -56,7 +70,7 @@ def init(
     - project.yaml: Project configuration
     - artifacts/: Generated stage outputs
     """
-    import yaml
+    from ruamel.yaml import YAML
 
     from questfoundry.pipeline.config import create_default_config
 
@@ -86,8 +100,10 @@ def init(
     }
 
     config_file = project_path / "project.yaml"
+    yaml_writer = YAML()
+    yaml_writer.default_flow_style = False
     with config_file.open("w") as f:
-        yaml.safe_dump(config_data, f, default_flow_style=False, sort_keys=False)
+        yaml_writer.dump(config_data, f)
 
     console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
     console.print(f"  Location: {project_path.absolute()}")
@@ -107,13 +123,7 @@ def dream(
     Takes a story idea and generates a creative vision artifact with
     genre, tone, themes, and style direction.
     """
-    # Check for project.yaml
-    config_file = project / "project.yaml"
-    if not config_file.exists():
-        console.print(
-            "[red]Error:[/red] No project.yaml found. Run 'qf init <name>' first or use --project."
-        )
-        raise typer.Exit(1)
+    _require_project(project)
 
     # Get prompt interactively if not provided
     if prompt is None:
@@ -122,13 +132,15 @@ def dream(
     console.print()
     console.print("[dim]Running DREAM stage...[/dim]")
 
-    # Run the stage
-    orchestrator = _get_orchestrator(project)
+    async def _run_dream() -> tuple:
+        """Run DREAM stage and close orchestrator."""
+        orchestrator = _get_orchestrator(project)
+        try:
+            return await orchestrator.run_stage("dream", {"user_prompt": prompt})
+        finally:
+            await orchestrator.close()
 
-    try:
-        result = asyncio.run(orchestrator.run_stage("dream", {"user_prompt": prompt}))
-    finally:
-        asyncio.run(orchestrator.close())
+    result = asyncio.run(_run_dream())
 
     if result.status == "failed":
         console.print()
@@ -146,10 +158,11 @@ def dream(
 
     # Show preview of artifact
     if result.artifact_path and result.artifact_path.exists():
-        import yaml
+        from ruamel.yaml import YAML
 
+        yaml_reader = YAML()
         with result.artifact_path.open() as f:
-            artifact = yaml.safe_load(f)
+            artifact = yaml_reader.load(f)
 
         console.print()
         genre = artifact.get("genre", "unknown")
@@ -173,13 +186,7 @@ def status(
     project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
 ) -> None:
     """Show pipeline status for current project."""
-    # Check for project.yaml
-    config_file = project / "project.yaml"
-    if not config_file.exists():
-        console.print(
-            "[red]Error:[/red] No project.yaml found. Run 'qf init <name>' first or use --project."
-        )
-        raise typer.Exit(1)
+    _require_project(project)
 
     orchestrator = _get_orchestrator(project)
     pipeline_status = orchestrator.get_status()
