@@ -183,10 +183,9 @@ qf status                     # Show pipeline state
 Configuration follows a strict precedence order (highest to lowest):
 
 1. **CLI flags** - `--provider ollama/qwen3:8b`
-2. **Environment variables** - `QF_PROVIDER=openai/gpt-4o`
+2. **Environment variables** - `QF_PROVIDER=openai/gpt-4o` (can be set in your shell or a `.env` file)
 3. **Project config** - `project.yaml` providers.default
-4. **.env file** - loaded at CLI startup via python-dotenv
-5. **Defaults** - ollama/qwen3:8b
+4. **Defaults** - `ollama/qwen3:8b`
 
 ### Environment Variables
 
