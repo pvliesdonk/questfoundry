@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
+
+from questfoundry.observability import configure_logging, get_logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +26,25 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+# Module logger
+log = get_logger(__name__)
+
+
+@app.callback()
+def main(
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "-v",
+            "--verbose",
+            count=True,
+            help="Increase verbosity. Use -v for INFO, -vv for DEBUG.",
+        ),
+    ] = 0,
+) -> None:
+    """QuestFoundry: Pipeline-driven interactive fiction generation."""
+    configure_logging(verbose)
 
 
 def _require_project(project_path: Path) -> None:
@@ -140,25 +162,43 @@ def dream(
     if prompt is None:
         prompt = typer.prompt("Enter your story idea")
 
-    console.print()
-    console.print("[dim]Running DREAM stage...[/dim]")
+    log.info("stage_start", stage="dream")
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
         orchestrator = _get_orchestrator(project, provider_override=provider)
+        log.debug("provider_configured", provider=f"{orchestrator._config.provider.name}")
         try:
             return await orchestrator.run_stage("dream", {"user_prompt": prompt})
         finally:
             await orchestrator.close()
 
-    result = asyncio.run(_run_dream())
+    # Run with progress spinner
+    console.print()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task("Running DREAM stage...", total=None)
+        result = asyncio.run(_run_dream())
 
     if result.status == "failed":
+        log.error("stage_failed", stage="dream", errors=result.errors)
         console.print()
         console.print("[red]✗[/red] DREAM stage failed")
         for error in result.errors:
             console.print(f"  [red]•[/red] {error}")
         raise typer.Exit(1)
+
+    log.info(
+        "stage_complete",
+        stage="dream",
+        tokens=result.tokens_used,
+        duration=result.duration_seconds,
+    )
 
     # Display success
     console.print()
