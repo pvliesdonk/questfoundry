@@ -13,6 +13,7 @@ from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWr
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.prompts import PromptCompiler
+from questfoundry.providers import LoggingProvider
 
 if TYPE_CHECKING:
     from questfoundry.providers import LLMProvider
@@ -209,8 +210,6 @@ class PipelineOrchestrator:
             # Get provider (with logging wrapper if enabled)
             provider = self._get_provider()
             if self._enable_llm_logging:
-                from questfoundry.providers import LoggingProvider
-
                 provider = LoggingProvider(provider, self._llm_logger, stage_name)
 
             # Create prompt compiler

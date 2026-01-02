@@ -48,16 +48,16 @@ class LoggingProvider:
         self,
         messages: list[Message],
         model: str | None = None,
-        _temperature: float = 0.7,
-        _max_tokens: int = 4096,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
     ) -> LLMResponse:
         """Generate completion and log the call.
 
         Args:
             messages: List of conversation messages.
             model: Optional model override.
-            _temperature: Sampling temperature (logged, may be unused by provider).
-            _max_tokens: Maximum tokens (logged, may be unused by provider).
+            temperature: Sampling temperature.
+            max_tokens: Maximum tokens to generate.
 
         Returns:
             LLMResponse from underlying provider.
@@ -69,6 +69,8 @@ class LoggingProvider:
             response = await self._provider.complete(
                 messages=messages,
                 model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         except Exception as e:
             error_msg = str(e)
@@ -82,8 +84,8 @@ class LoggingProvider:
                 tokens_used=0,
                 finish_reason="error",
                 duration_seconds=duration,
-                temperature=_temperature,
-                max_tokens=_max_tokens,
+                temperature=temperature,
+                max_tokens=max_tokens,
                 error=error_msg,
             )
             self._logger.log(entry)
@@ -100,8 +102,8 @@ class LoggingProvider:
             tokens_used=response.tokens_used,
             finish_reason=response.finish_reason,
             duration_seconds=duration,
-            temperature=_temperature,
-            max_tokens=_max_tokens,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         self._logger.log(entry)
 

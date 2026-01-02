@@ -219,13 +219,20 @@ This creates:
 ### 2. Analyze the Response
 
 ```bash
-# Pretty-print the LLM response
-python3 -c "import json; d=json.load(open('myproject/logs/llm_calls.jsonl')); print(d['content'])"
+# Pretty-print the last LLM response (JSONL = one JSON object per line)
+python3 -c "
+import json
+with open('myproject/logs/llm_calls.jsonl') as f:
+    lines = f.readlines()
+    d = json.loads(lines[-1])  # Get last call
+    print(d['content'])
+"
 
 # Debug YAML parsing
 python3 -c "
 import json, yaml
-d = json.load(open('myproject/logs/llm_calls.jsonl'))
+with open('myproject/logs/llm_calls.jsonl') as f:
+    d = json.loads(f.readlines()[-1])
 parsed = yaml.safe_load(d['content'])
 print(json.dumps(parsed, indent=2))
 "
@@ -241,7 +248,7 @@ print(json.dumps(parsed, indent=2))
 
 ### 4. Prompt Engineering Reference
 
-See `/mnt/code/if-craft-corpus/corpus/agent-design/agent_prompt_engineering.md` for:
+Key patterns for working with LLMs:
 - **Sandwich pattern**: Repeat critical instructions at start AND end of prompt
 - **Validate → Feedback → Repair loop**: For structured output, validate and ask model to fix errors
 - **Discuss → Freeze → Serialize**: Separate conversation from structured output generation
