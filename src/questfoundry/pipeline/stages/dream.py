@@ -269,7 +269,10 @@ content_notes:
 Be creative but grounded. Make choices that serve the story."""
 
     def _validate_dream(self, data: dict[str, Any]) -> ValidationResult:
-        """Validate dream artifact data.
+        """Validate dream artifact data using Pydantic model.
+
+        Uses the DreamArtifact model for full validation, providing
+        detailed error messages for the LLM to correct.
 
         Args:
             data: Artifact data to validate.
@@ -277,30 +280,28 @@ Be creative but grounded. Make choices that serve the story."""
         Returns:
             ValidationResult with valid=True if data passes validation.
         """
-        required_fields = ["genre", "tone", "audience", "themes"]
-        missing = [f for f in required_fields if f not in data or not data[f]]
+        from pydantic import ValidationError
 
-        if missing:
+        from questfoundry.artifacts.models import DreamArtifact
+
+        try:
+            # Validate using Pydantic model
+            validated = DreamArtifact.model_validate(data)
+            return ValidationResult(valid=True, data=validated.model_dump())
+        except ValidationError as e:
+            # Format errors for LLM feedback
+            errors = []
+            for error in e.errors():
+                loc = ".".join(str(part) for part in error["loc"])
+                msg = error["msg"]
+                if loc:
+                    errors.append(f"{loc}: {msg}")
+                else:
+                    errors.append(msg)
             return ValidationResult(
                 valid=False,
-                error=f"Missing required fields: {', '.join(missing)}",
+                error=f"Validation errors: {'; '.join(errors)}",
             )
-
-        # Validate tone is a list
-        if not isinstance(data.get("tone"), list):
-            return ValidationResult(
-                valid=False,
-                error="'tone' must be a list of strings",
-            )
-
-        # Validate themes is a list
-        if not isinstance(data.get("themes"), list):
-            return ValidationResult(
-                valid=False,
-                error="'themes' must be a list of strings",
-            )
-
-        return ValidationResult(valid=True, data=data)
 
     def _parse_response(self, content: str) -> dict[str, Any]:
         """Parse YAML artifact from LLM response.
