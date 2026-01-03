@@ -181,7 +181,7 @@ themes:
 
 @pytest.mark.asyncio
 async def test_execute_with_mock_provider() -> None:
-    """Execute DREAM stage with mocked LLM provider."""
+    """Execute DREAM stage with mocked LLM provider (direct mode)."""
     stage = DreamStage()
 
     # Mock provider
@@ -213,8 +213,8 @@ style_notes: Focus on world-building and character growth.
     mock_prompt.user = "Create a vision for: epic quest"
     mock_compiler.compile.return_value = mock_prompt
 
-    # Execute
-    context = {"user_prompt": "An epic quest to save the world"}
+    # Execute in direct mode (non-interactive)
+    context = {"user_prompt": "An epic quest to save the world", "interactive": False}
     artifact, llm_calls, tokens = await stage.execute(context, mock_provider, mock_compiler)
 
     assert artifact["type"] == "dream"
@@ -227,7 +227,8 @@ style_notes: Focus on world-building and character growth.
     # Verify provider was called correctly
     mock_provider.complete.assert_called_once()
     call_args = mock_provider.complete.call_args
-    messages = call_args[0][0]
+    # Can be positional or keyword arg
+    messages = call_args.args[0] if call_args.args else call_args.kwargs.get("messages", [])
     assert len(messages) == 2
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
@@ -235,7 +236,7 @@ style_notes: Focus on world-building and character growth.
 
 @pytest.mark.asyncio
 async def test_execute_preserves_version() -> None:
-    """Execute preserves version from LLM response."""
+    """Execute preserves version from LLM response (direct mode)."""
     stage = DreamStage()
 
     mock_provider = MagicMock()
@@ -262,14 +263,14 @@ themes:
     mock_prompt.user = "user"
     mock_compiler.compile.return_value = mock_prompt
 
-    artifact, _, _ = await stage.execute({}, mock_provider, mock_compiler)
+    artifact, _, _ = await stage.execute({"interactive": False}, mock_provider, mock_compiler)
 
     assert artifact["version"] == 2
 
 
 @pytest.mark.asyncio
 async def test_execute_empty_context() -> None:
-    """Execute with empty context uses empty user_prompt."""
+    """Execute with empty context uses empty user_prompt (direct mode)."""
     stage = DreamStage()
 
     mock_provider = MagicMock()
@@ -288,16 +289,22 @@ async def test_execute_empty_context() -> None:
     mock_prompt.user = "user"
     mock_compiler.compile.return_value = mock_prompt
 
-    artifact, _, _ = await stage.execute({}, mock_provider, mock_compiler)
+    artifact, _, _ = await stage.execute({"interactive": False}, mock_provider, mock_compiler)
 
-    # Compiler should be called with empty user_prompt
-    mock_compiler.compile.assert_called_once_with("dream", {"user_prompt": ""})
+    # Compiler should be called with mode-specific context
+    mock_compiler.compile.assert_called_once()
+    call_args = mock_compiler.compile.call_args
+    assert call_args.args[0] == "dream"
+    context = call_args.args[1]
+    assert "mode_instructions" in context
+    assert "mode_reminder" in context
+    assert "user_message" in context
     assert artifact["genre"] == "general"
 
 
 @pytest.mark.asyncio
 async def test_execute_parse_error_propagates() -> None:
-    """Execute propagates parse errors from LLM response."""
+    """Execute propagates parse errors from LLM response (direct mode)."""
     stage = DreamStage()
 
     mock_provider = MagicMock()
@@ -317,7 +324,7 @@ async def test_execute_parse_error_propagates() -> None:
     mock_compiler.compile.return_value = mock_prompt
 
     with pytest.raises(DreamParseError):
-        await stage.execute({}, mock_provider, mock_compiler)
+        await stage.execute({"interactive": False}, mock_provider, mock_compiler)
 
 
 # --- Edge Cases ---
