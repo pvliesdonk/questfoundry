@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from questfoundry.observability import LLMLogger
     from questfoundry.providers import LLMProvider
     from questfoundry.providers.base import LLMResponse, Message
+    from questfoundry.tools import ToolDefinition
 
 
 class LoggingProvider:
@@ -49,6 +50,8 @@ class LoggingProvider:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[ToolDefinition] | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         """Generate completion and log the call.
 
@@ -57,6 +60,8 @@ class LoggingProvider:
             model: Optional model override.
             temperature: Sampling temperature.
             max_tokens: Maximum tokens to generate.
+            tools: Optional tools to bind.
+            tool_choice: Tool selection mode.
 
         Returns:
             LLMResponse from underlying provider.
@@ -70,6 +75,8 @@ class LoggingProvider:
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                tools=tools,
+                tool_choice=tool_choice,
             )
         except Exception as e:
             error_msg = str(e)
@@ -92,7 +99,7 @@ class LoggingProvider:
 
         duration = time.perf_counter() - start_time
 
-        # Log successful call
+        # Log successful call (including tool calls if present)
         entry = self._logger.create_entry(
             stage=self._stage,
             model=response.model,
