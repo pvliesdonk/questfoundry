@@ -158,7 +158,9 @@ class LangChainProvider:
             return AIMessage(content=content)
         elif role == "tool":
             # Tool result message - needs tool_call_id
-            tool_call_id = msg.get("tool_call_id", "")
+            tool_call_id = msg.get("tool_call_id")
+            if not tool_call_id:
+                raise ValueError("Message with role 'tool' must have a 'tool_call_id'")
             return ToolMessage(content=content, tool_call_id=tool_call_id)
         else:
             raise ValueError(f"Unknown role: {role}")
