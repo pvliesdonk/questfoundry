@@ -215,19 +215,35 @@ class ConversationRunner:
             if validator is not None:
                 result = validator(data)
                 if not result.valid:
-                    # Add error feedback with full context for repair
-                    # Following validate-with-feedback pattern:
-                    # 1. Include previous candidate verbatim
-                    # 2. List validation errors by field
-                    # 3. Give strict repair instructions
-                    error_msg = (
-                        f"Validation failed. Your submitted data:\n\n"
-                        f"```json\n{json.dumps(data, indent=2)}\n```\n\n"
-                        f"Errors:\n{result.error}\n\n"
-                        f"Call {self._finalization_tool}() again with corrected data. "
-                        f"Fix ONLY the errors listed above. Do not change valid fields."
-                    )
-                    state.add_tool_result(tool_call.id, error_msg)
+                    # Validate-with-feedback pattern: structured error response
+                    # Lets LLM understand exactly what failed and how to fix it
+                    feedback = {
+                        "success": False,
+                        "error": "Validation failed for submitted artifact",
+                        "error_count": len(result.error.split(";")) if result.error else 1,
+                        "invalid_fields": [],
+                        "missing_fields": [],
+                        "submitted_data": data,
+                        "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
+                    }
+
+                    # Parse validation errors into structured format
+                    if result.error:
+                        for err in result.error.replace("Validation errors: ", "").split("; "):
+                            if ": " in err:
+                                field, issue = err.split(": ", 1)
+                                if "required" in issue.lower() or "missing" in issue.lower():
+                                    feedback["missing_fields"].append(field)
+                                else:
+                                    feedback["invalid_fields"].append(
+                                        {
+                                            "field": field,
+                                            "provided": data.get(field.split(".")[0]),
+                                            "issue": issue,
+                                        }
+                                    )
+
+                    state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
 
                     # Request retry from LLM
                     response = await self._provider.complete(
