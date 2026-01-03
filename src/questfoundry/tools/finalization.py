@@ -9,9 +9,14 @@ that validates and captures the structured output.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.tools.base import ToolDefinition
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from questfoundry.tools.base import Tool
 
 
 class SubmitDreamTool:
@@ -188,14 +193,14 @@ class SubmitBrainstormTool:
 
 
 # Registry of finalization tools by stage name
-FINALIZATION_TOOLS: dict[str, type] = {
+FINALIZATION_TOOLS: dict[str, Callable[[], Tool]] = {
     "dream": SubmitDreamTool,
     "brainstorm": SubmitBrainstormTool,
     # Future stages: seed, grow, fill, ship
 }
 
 
-def get_finalization_tool(stage: str) -> SubmitDreamTool | SubmitBrainstormTool | None:
+def get_finalization_tool(stage: str) -> Tool | None:
     """Get the finalization tool for a stage.
 
     Args:
@@ -206,8 +211,5 @@ def get_finalization_tool(stage: str) -> SubmitDreamTool | SubmitBrainstormTool 
     """
     tool_class = FINALIZATION_TOOLS.get(stage)
     if tool_class is not None:
-        tool = tool_class()
-        # Cast to the known return types
-        if isinstance(tool, (SubmitDreamTool, SubmitBrainstormTool)):
-            return tool
+        return tool_class()
     return None

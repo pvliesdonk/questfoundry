@@ -25,6 +25,7 @@ from questfoundry.tools import SubmitDreamTool
 if TYPE_CHECKING:
     from questfoundry.prompts import PromptCompiler
     from questfoundry.providers import LLMProvider
+    from questfoundry.providers.base import Message
     from questfoundry.tools import Tool
 
 
@@ -144,14 +145,14 @@ class DreamStage:
         )
 
         # Build initial messages
-        initial_messages: list[dict[str, str]] = [
+        initial_messages: list[Message] = [
             {"role": "system", "content": prompt.system},
             {"role": "user", "content": prompt.user},
         ]
 
         # Run conversation
         artifact_data, state = await runner.run(
-            initial_messages=initial_messages,  # type: ignore[arg-type]
+            initial_messages=initial_messages,
             user_input_fn=user_input_fn,
             validator=self._validate_dream,
         )

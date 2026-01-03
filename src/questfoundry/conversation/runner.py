@@ -228,13 +228,22 @@ class ConversationRunner:
                     state.tokens_used += response.tokens_used
 
                     # Extract new tool call
+                    found_new_call = False
                     if response.has_tool_calls and response.tool_calls:
                         for tc in response.tool_calls:
                             if tc.name == self._finalization_tool:
                                 data = tc.arguments
                                 tool_call = tc
+                                found_new_call = True
                                 break
+
                     retries += 1
+                    if not found_new_call:
+                        # LLM didn't provide expected tool call, count as failed attempt
+                        state.add_message({
+                            "role": "assistant",
+                            "content": response.content or "(no tool call provided)",
+                        })
                     continue
                 else:
                     # Use validated/transformed data if provided
