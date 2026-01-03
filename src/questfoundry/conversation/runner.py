@@ -102,6 +102,7 @@ class ConversationRunner:
         initial_messages: list[Message],
         user_input_fn: Callable[[], Awaitable[str | None]] | None = None,
         validator: Callable[[dict[str, Any]], ValidationResult] | None = None,
+        on_assistant_message: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], ConversationState]:
         """Run the conversation until finalization.
 
@@ -111,6 +112,8 @@ class ConversationRunner:
                 returns None/empty, conversation continues without user input.
             validator: Optional function to validate finalization data.
                 Called with tool arguments, returns ValidationResult.
+            on_assistant_message: Optional callback for assistant messages.
+                Called with the message content for display purposes.
 
         Returns:
             Tuple of (artifact_data, conversation_state).
@@ -145,6 +148,8 @@ class ConversationRunner:
             # Add assistant message if there's content
             if response.content:
                 state.add_message({"role": "assistant", "content": response.content})
+                if on_assistant_message is not None:
+                    on_assistant_message(response.content)
 
             # Check if we should get user input
             if user_input_fn is not None:
