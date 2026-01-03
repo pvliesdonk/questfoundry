@@ -7,6 +7,7 @@ conversational refinement before structured output.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -214,8 +215,18 @@ class ConversationRunner:
             if validator is not None:
                 result = validator(data)
                 if not result.valid:
-                    # Add error feedback to conversation
-                    error_msg = f"Validation failed: {result.error}. Please fix and try again."
+                    # Add error feedback with full context for repair
+                    # Following validate-with-feedback pattern:
+                    # 1. Include previous candidate verbatim
+                    # 2. List validation errors by field
+                    # 3. Give strict repair instructions
+                    error_msg = (
+                        f"Validation failed. Your submitted data:\n\n"
+                        f"```json\n{json.dumps(data, indent=2)}\n```\n\n"
+                        f"Errors:\n{result.error}\n\n"
+                        f"Call {self._finalization_tool}() again with corrected data. "
+                        f"Fix ONLY the errors listed above. Do not change valid fields."
+                    )
                     state.add_tool_result(tool_call.id, error_msg)
 
                     # Request retry from LLM
