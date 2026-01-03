@@ -179,11 +179,23 @@ def dream(
         str | None,
         typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
     ] = None,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
+        ),
+    ] = None,
 ) -> None:
     """Run DREAM stage - establish creative vision.
 
     Takes a story idea and generates a creative vision artifact with
     genre, tone, themes, and style direction.
+
+    By default, interactive mode is auto-detected based on whether the
+    terminal is a TTY. Use --interactive/-i to force interactive mode,
+    or --no-interactive/-I to force direct mode.
     """
     _require_project(project)
     _configure_project_logging(project)
@@ -198,12 +210,18 @@ def dream(
     log.info("stage_start", stage="dream")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
+    # Build context - interactive is None if not specified (auto-detect via TTY)
+    context: dict[str, object] = {"user_prompt": prompt}
+    if interactive is not None:
+        context["interactive"] = interactive
+        log.debug("interactive_mode", mode="forced" if interactive else "disabled")
+
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
         orchestrator = _get_orchestrator(project, provider_override=provider)
         log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
         try:
-            return await orchestrator.run_stage("dream", {"user_prompt": prompt})
+            return await orchestrator.run_stage("dream", context)
         finally:
             await orchestrator.close()
 
