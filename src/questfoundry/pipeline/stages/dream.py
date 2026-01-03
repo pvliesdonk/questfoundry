@@ -108,6 +108,7 @@ class DreamStage:
         """
         user_prompt = context.get("user_prompt", "")
         user_input_fn = context.get("user_input_fn")
+        on_assistant_message = context.get("on_assistant_message")
         research_tools: list[Tool] = context.get("research_tools", [])
 
         # Build prompt context for interactive mode (sandwich pattern)
@@ -155,6 +156,7 @@ class DreamStage:
             initial_messages=initial_messages,
             user_input_fn=user_input_fn,
             validator=self._validate_dream,
+            on_assistant_message=on_assistant_message,
         )
 
         # Add required fields

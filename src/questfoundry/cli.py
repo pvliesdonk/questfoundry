@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -14,6 +15,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from questfoundry.observability import close_file_logging, configure_logging, get_logger
+
+
+def _is_interactive_tty() -> bool:
+    """Check if stdin/stdout are connected to a TTY."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -210,11 +217,37 @@ def dream(
     log.info("stage_start", stage="dream")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
-    # Build context - interactive is None if not specified (auto-detect via TTY)
-    context: dict[str, object] = {"user_prompt": prompt}
-    if interactive is not None:
-        context["interactive"] = interactive
-        log.debug("interactive_mode", mode="forced" if interactive else "disabled")
+    # Determine interactive mode: explicit flag > TTY detection
+    use_interactive = interactive if interactive is not None else _is_interactive_tty()
+
+    # Build context
+    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
+    if use_interactive:
+        log.debug("interactive_mode", mode="enabled")
+
+        async def _async_user_input() -> str | None:
+            """Get user input asynchronously."""
+            console.print()
+            try:
+                # Use run_in_executor for blocking input
+                loop = asyncio.get_event_loop()
+                user_input = await loop.run_in_executor(
+                    None, lambda: console.input("[bold cyan]You:[/bold cyan] ")
+                )
+                return user_input if user_input.strip() else None
+            except (EOFError, KeyboardInterrupt):
+                return None
+
+        def _display_assistant_message(content: str) -> None:
+            """Display assistant message with formatting."""
+            console.print()
+            console.print("[bold green]Assistant:[/bold green]")
+            console.print(content)
+
+        context["user_input_fn"] = _async_user_input
+        context["on_assistant_message"] = _display_assistant_message
+    else:
+        log.debug("interactive_mode", mode="disabled")
 
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
@@ -225,16 +258,24 @@ def dream(
         finally:
             await orchestrator.close()
 
-    # Run with progress spinner
     console.print()
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-        progress.add_task("Running DREAM stage...", total=None)
+
+    if use_interactive:
+        # Interactive mode: no spinner, direct output
+        console.print("[dim]Starting interactive DREAM stage...[/dim]")
+        console.print("[dim]The AI will discuss your story idea with you.[/dim]")
+        console.print()
         result = asyncio.run(_run_dream())
+    else:
+        # Non-interactive: use progress spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task("Running DREAM stage...", total=None)
+            result = asyncio.run(_run_dream())
 
     if result.status == "failed":
         log.error("stage_failed", stage="dream", errors=result.errors)
