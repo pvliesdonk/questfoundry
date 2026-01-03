@@ -207,9 +207,7 @@ async def test_runner_conversation_before_finalization() -> None:
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_1", name="submit_test", arguments={"data": "final"})
-            ],
+            tool_calls=[ToolCall(id="call_1", name="submit_test", arguments={"data": "final"})],
         ),
     ]
 
@@ -246,9 +244,7 @@ async def test_runner_with_user_input() -> None:
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_1", name="submit_test", arguments={"data": "fantasy"})
-            ],
+            tool_calls=[ToolCall(id="call_1", name="submit_test", arguments={"data": "fantasy"})],
         ),
     ]
 
@@ -319,9 +315,7 @@ async def test_runner_research_tool_execution() -> None:
             model="test",
             tokens_used=50,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_search", name="search", arguments={"query": "noir"})
-            ],
+            tool_calls=[ToolCall(id="call_search", name="search", arguments={"query": "noir"})],
         ),
         # Second: finalization
         LLMResponse(
@@ -362,9 +356,7 @@ async def test_runner_validation_success() -> None:
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_1", name="submit_test", arguments={"data": "valid"})
-            ],
+            tool_calls=[ToolCall(id="call_1", name="submit_test", arguments={"data": "valid"})],
         )
     )
 
@@ -397,18 +389,14 @@ async def test_runner_validation_retry() -> None:
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_1", name="submit_test", arguments={"data": "invalid"})
-            ],
+            tool_calls=[ToolCall(id="call_1", name="submit_test", arguments={"data": "invalid"})],
         ),
         LLMResponse(
             content="",
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_2", name="submit_test", arguments={"data": "valid"})
-            ],
+            tool_calls=[ToolCall(id="call_2", name="submit_test", arguments={"data": "valid"})],
         ),
     ]
 
@@ -486,18 +474,14 @@ async def test_runner_unknown_tool() -> None:
             model="test",
             tokens_used=50,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_1", name="unknown_tool", arguments={})
-            ],
+            tool_calls=[ToolCall(id="call_1", name="unknown_tool", arguments={})],
         ),
         LLMResponse(
             content="",
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_2", name="submit_test", arguments={"data": "ok"})
-            ],
+            tool_calls=[ToolCall(id="call_2", name="submit_test", arguments={"data": "ok"})],
         ),
     ]
 
@@ -535,18 +519,14 @@ async def test_runner_tool_execution_error() -> None:
             model="test",
             tokens_used=50,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_1", name="failing", arguments={})
-            ],
+            tool_calls=[ToolCall(id="call_1", name="failing", arguments={})],
         ),
         LLMResponse(
             content="",
             model="test",
             tokens_used=100,
             finish_reason="tool_calls",
-            tool_calls=[
-                ToolCall(id="call_2", name="submit_test", arguments={"data": "ok"})
-            ],
+            tool_calls=[ToolCall(id="call_2", name="submit_test", arguments={"data": "ok"})],
         ),
     ]
 

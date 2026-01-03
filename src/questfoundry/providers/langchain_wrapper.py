@@ -71,9 +71,7 @@ class LangChainProvider:
         lc_model: Any = self._model
         if tools:
             lc_tools = [self._to_langchain_tool(t) for t in tools]
-            lc_model = lc_model.bind_tools(
-                lc_tools, tool_choice=self._map_tool_choice(tool_choice)
-            )
+            lc_model = lc_model.bind_tools(lc_tools, tool_choice=self._map_tool_choice(tool_choice))
 
         try:
             # Call the model

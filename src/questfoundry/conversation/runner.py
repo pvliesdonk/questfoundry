@@ -240,10 +240,12 @@ class ConversationRunner:
                     retries += 1
                     if not found_new_call:
                         # LLM didn't provide expected tool call, count as failed attempt
-                        state.add_message({
-                            "role": "assistant",
-                            "content": response.content or "(no tool call provided)",
-                        })
+                        state.add_message(
+                            {
+                                "role": "assistant",
+                                "content": response.content or "(no tool call provided)",
+                            }
+                        )
                     continue
                 else:
                     # Use validated/transformed data if provided
