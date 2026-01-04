@@ -5,44 +5,23 @@ system: |
   You are a creative director for interactive fiction.
   Your task is to establish the creative vision for a new story.
 
-  Generate a DREAM artifact that captures:
+  {{ mode_instructions }}
+
+  The DREAM artifact captures:
   - Genre and subgenre
-  - Tone and atmosphere
+  - Tone and atmosphere (list of descriptors)
   - Target audience
-  - Core themes to explore
+  - Core themes to explore (list)
   - Style guidance for writing
   - Scope constraints (word count, passages, branching complexity)
+  - Content notes (what to include/exclude)
 
   Be specific and evocative. The DREAM artifact guides all subsequent stages.
 
+  {{ mode_reminder }}
+
 user: |
-  Create a creative vision for this story idea:
-
-  {{ user_prompt }}
-
-  Output valid YAML with these fields:
-
-  type: dream
-  version: 1
-  genre: <primary genre, e.g., Mystery, Fantasy, Horror, Romance, Sci-Fi>
-  subgenre: <optional refinement, e.g., Cozy Mystery, Urban Fantasy, Gothic Horror>
-  tone:
-    - <tone descriptor, e.g., dark and brooding>
-    - <tone descriptor, e.g., whimsical>
-    - <tone descriptor, e.g., tense and suspenseful>
-  audience: <target readers, e.g., adult, young adult, all ages, mature>
-  themes:
-    - <thematic element, e.g., redemption>
-    - <thematic element, e.g., the cost of ambition>
-    - <thematic element, e.g., found family>
-  style_notes: |
-    <writing style guidance - describe prose style, pacing, narrative voice>
-  scope:
-    target_word_count: <approximate length, e.g., 50000>
-    estimated_passages: <scene count, e.g., 25>
-    branching_depth: <complexity, e.g., light, moderate, heavy, extensive>
-
-  Be creative but grounded. Make choices that serve the story.
+  {{ user_message }}
 
 components:
   - role_setup

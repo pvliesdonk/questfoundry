@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -14,6 +15,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from questfoundry.observability import close_file_logging, configure_logging, get_logger
+
+
+def _is_interactive_tty() -> bool:
+    """Check if stdin/stdout are connected to a TTY."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -179,11 +186,23 @@ def dream(
         str | None,
         typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
     ] = None,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
+        ),
+    ] = None,
 ) -> None:
     """Run DREAM stage - establish creative vision.
 
     Takes a story idea and generates a creative vision artifact with
     genre, tone, themes, and style direction.
+
+    By default, interactive mode is auto-detected based on whether the
+    terminal is a TTY. Use --interactive/-i to force interactive mode,
+    or --no-interactive/-I to force direct mode.
     """
     _require_project(project)
     _configure_project_logging(project)
@@ -198,25 +217,65 @@ def dream(
     log.info("stage_start", stage="dream")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
+    # Determine interactive mode: explicit flag > TTY detection
+    use_interactive = interactive if interactive is not None else _is_interactive_tty()
+
+    # Build context
+    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
+    if use_interactive:
+        log.debug("interactive_mode", mode="enabled")
+
+        async def _async_user_input() -> str | None:
+            """Get user input asynchronously."""
+            console.print()
+            try:
+                # Use run_in_executor for blocking input
+                loop = asyncio.get_running_loop()
+                user_input = await loop.run_in_executor(
+                    None, lambda: console.input("[bold cyan]You:[/bold cyan] ")
+                )
+                return user_input if user_input.strip() else None
+            except (EOFError, KeyboardInterrupt):
+                return None
+
+        def _display_assistant_message(content: str) -> None:
+            """Display assistant message with formatting."""
+            console.print()
+            console.print("[bold green]Assistant:[/bold green]")
+            console.print(content)
+
+        context["user_input_fn"] = _async_user_input
+        context["on_assistant_message"] = _display_assistant_message
+    else:
+        log.debug("interactive_mode", mode="disabled")
+
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
         orchestrator = _get_orchestrator(project, provider_override=provider)
         log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
         try:
-            return await orchestrator.run_stage("dream", {"user_prompt": prompt})
+            return await orchestrator.run_stage("dream", context)
         finally:
             await orchestrator.close()
 
-    # Run with progress spinner
     console.print()
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-        progress.add_task("Running DREAM stage...", total=None)
+
+    if use_interactive:
+        # Interactive mode: no spinner, direct output
+        console.print("[dim]Starting interactive DREAM stage...[/dim]")
+        console.print("[dim]The AI will discuss your story idea with you.[/dim]")
+        console.print()
         result = asyncio.run(_run_dream())
+    else:
+        # Non-interactive: use progress spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task("Running DREAM stage...", total=None)
+            result = asyncio.run(_run_dream())
 
     if result.status == "failed":
         log.error("stage_failed", stage="dream", errors=result.errors)
