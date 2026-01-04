@@ -71,9 +71,7 @@ class LangChainProvider:
         lc_model: Any = self._model
         if tools:
             lc_tools = [self._to_langchain_tool(t) for t in tools]
-            lc_model = lc_model.bind_tools(
-                lc_tools, tool_choice=self._map_tool_choice(tool_choice)
-            )
+            lc_model = lc_model.bind_tools(lc_tools, tool_choice=self._map_tool_choice(tool_choice))
 
         try:
             # Call the model
@@ -158,7 +156,9 @@ class LangChainProvider:
             return AIMessage(content=content)
         elif role == "tool":
             # Tool result message - needs tool_call_id
-            tool_call_id = msg.get("tool_call_id", "")
+            tool_call_id = msg.get("tool_call_id")
+            if not tool_call_id:
+                raise ValueError("Message with role 'tool' must have a 'tool_call_id'")
             return ToolMessage(content=content, tool_call_id=tool_call_id)
         else:
             raise ValueError(f"Unknown role: {role}")

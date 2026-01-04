@@ -307,7 +307,12 @@ def test_dream_template_compiles() -> None:
     prompts_path = project_root / "prompts"
 
     compiler = PromptCompiler(prompts_path)
-    context = {"user_prompt": "A noir mystery in 1940s Los Angeles"}
+    # New context structure with mode-aware fields
+    context = {
+        "mode_instructions": "Generate a creative vision directly.",
+        "mode_reminder": "",
+        "user_message": "A noir mystery in 1940s Los Angeles",
+    }
     prompt = compiler.compile("dream", context)
 
     assert "creative director" in prompt.system.lower()
