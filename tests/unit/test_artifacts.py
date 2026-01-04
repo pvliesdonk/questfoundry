@@ -427,3 +427,134 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
     assert loaded.style_notes == original.style_notes
     assert loaded.scope is not None
     assert loaded.scope.target_word_count == original.scope.target_word_count
+
+
+# --- Schema/Model Contract Tests ---
+
+
+def test_schema_model_required_fields_match() -> None:
+    """Verify JSON schema required fields match Pydantic model requirements.
+
+    This test ensures the JSON schema and Pydantic model stay in sync.
+    The schema defines required fields for external validation, while the
+    Pydantic model enforces them at runtime.
+    """
+    import json
+    from pathlib import Path
+
+    # Load JSON schema
+    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
+    with schema_path.open() as f:
+        schema = json.load(f)
+
+    # Get required fields from schema
+    schema_required = set(schema.get("required", []))
+
+    # Get required fields from Pydantic model (fields without defaults)
+    model_fields = DreamArtifact.model_fields
+    model_required = set()
+    for name, field_info in model_fields.items():
+        # A field is required if it has no default and is not Optional
+        if field_info.is_required():
+            model_required.add(name)
+
+    # Check that schema requires at least the same fields as Pydantic
+    # (schema may require more for external tool compatibility)
+    missing_from_schema = model_required - schema_required
+    assert not missing_from_schema, (
+        f"Model requires fields not in schema: {missing_from_schema}. "
+        "Update schemas/dream.schema.json to include these in 'required'."
+    )
+
+
+def test_scope_required_fields_in_schema() -> None:
+    """Verify scope object in schema requires target_word_count and estimated_passages.
+
+    The Scope Pydantic model requires these fields (no defaults), so the JSON
+    schema must also require them to ensure consistent validation.
+    """
+    import json
+    from pathlib import Path
+
+    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
+    with schema_path.open() as f:
+        schema = json.load(f)
+
+    scope_schema = schema.get("properties", {}).get("scope", {})
+    scope_required = set(scope_schema.get("required", []))
+
+    # These are required in Pydantic Scope model
+    expected = {"target_word_count", "estimated_passages"}
+
+    assert expected == scope_required, (
+        f"Schema scope.required should be {expected}, got {scope_required}. "
+        "The Scope Pydantic model requires these fields."
+    )
+
+
+def test_scope_requires_word_count_and_passages() -> None:
+    """Scope model requires target_word_count and estimated_passages.
+
+    These fields have no defaults in the Pydantic model, so they must
+    be provided when creating a Scope instance.
+    """
+    # Missing target_word_count should fail
+    with pytest.raises(ValidationError) as exc_info:
+        Scope(estimated_passages=10)  # type: ignore[call-arg]
+    assert "target_word_count" in str(exc_info.value)
+
+    # Missing estimated_passages should fail
+    with pytest.raises(ValidationError) as exc_info:
+        Scope(target_word_count=10000)  # type: ignore[call-arg]
+    assert "estimated_passages" in str(exc_info.value)
+
+    # Both provided should succeed
+    scope = Scope(target_word_count=10000, estimated_passages=10)
+    assert scope.target_word_count == 10000
+    assert scope.estimated_passages == 10
+
+
+def test_optional_scope_is_none_by_default() -> None:
+    """DreamArtifact.scope defaults to None.
+
+    The scope field is optional in DreamArtifact - it can be omitted entirely.
+    This is different from scope's internal required fields.
+    """
+    artifact = DreamArtifact(
+        genre="mystery",
+        tone=["dark"],
+        audience="adult",
+        themes=["betrayal"],
+        # scope not provided
+    )
+    assert artifact.scope is None
+
+
+def test_tool_schema_matches_json_schema_scope_required() -> None:
+    """Verify SubmitDreamTool schema matches JSON schema for scope requirements.
+
+    The tool definition and JSON schema should have identical required fields
+    for the scope object to ensure consistent validation.
+    """
+    import json
+    from pathlib import Path
+
+    from questfoundry.tools.finalization import SubmitDreamTool
+
+    # Get JSON schema scope requirements
+    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
+    with schema_path.open() as f:
+        json_schema = json.load(f)
+    json_scope_required = set(
+        json_schema.get("properties", {}).get("scope", {}).get("required", [])
+    )
+
+    # Get tool schema scope requirements
+    tool = SubmitDreamTool()
+    tool_scope = tool.definition.parameters.get("properties", {}).get("scope", {})
+    tool_scope_required = set(tool_scope.get("required", []))
+
+    assert json_scope_required == tool_scope_required, (
+        f"Tool scope.required {tool_scope_required} doesn't match "
+        f"JSON schema scope.required {json_scope_required}"
+    )

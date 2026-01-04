@@ -99,7 +99,7 @@ content_notes:
     },
     "audience": {
       "type": "string",
-      "enum": ["adult", "young_adult", "all_ages"]
+      "minLength": 1
     },
     "themes": {
       "type": "array",
@@ -109,12 +109,13 @@ content_notes:
     "style_notes": { "type": "string" },
     "scope": {
       "type": "object",
+      "required": ["target_word_count", "estimated_passages"],
       "properties": {
         "target_word_count": { "type": "integer", "minimum": 1000 },
         "estimated_passages": { "type": "integer", "minimum": 5 },
         "branching_depth": {
           "type": "string",
-          "enum": ["light", "moderate", "heavy"]
+          "minLength": 1
         }
       }
     }
