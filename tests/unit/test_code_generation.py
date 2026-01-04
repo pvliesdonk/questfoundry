@@ -429,3 +429,151 @@ class TestGeneratorHandlesDefaultValues:
         # Check that defaults are generated correctly
         assert "default=42" in content
         assert 'default="default_label"' in content
+
+
+class TestGeneratorHandlesConstValues:
+    """Tests for const value handling in generator."""
+
+    def test_string_const_generates_literal(self) -> None:
+        """String const should generate Literal type."""
+        from questfoundry.artifacts.generated import DreamArtifact
+
+        # type field is a const="dream"
+        artifact = DreamArtifact(
+            genre="test",
+            tone=["dark"],
+            audience="adult",
+            themes=["test"],
+        )
+        assert artifact.type == "dream"
+
+    def test_integer_const_generates_correctly(self, tmp_path: Path) -> None:
+        """Integer const should generate Literal[123] not Literal['123']."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["version"],
+            "properties": {
+                "version": {"const": 42},
+            },
+        }
+        schema_path = schema_dir / "intconst.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Should be Literal[42] not Literal["42"]
+        assert "Literal[42]" in content
+        assert "= 42" in content
+
+
+class TestGeneratorHandlesPythonKeywords:
+    """Tests for Python keyword handling in generator."""
+
+    def test_keyword_field_gets_alias(self, tmp_path: Path) -> None:
+        """Fields named after Python keywords should get aliases."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["from", "class"],
+            "properties": {
+                "from": {"type": "string", "minLength": 1, "description": "Source"},
+                "class": {"type": "string", "minLength": 1, "description": "Category"},
+            },
+        }
+        schema_path = schema_dir / "keywords.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Should have from_ and class_ with aliases
+        assert "from_:" in content
+        assert 'alias="from"' in content
+        assert "class_:" in content
+        assert 'alias="class"' in content
+
+
+class TestEscapeDescription:
+    """Tests for escape_description function."""
+
+    def test_escapes_special_characters(self, tmp_path: Path) -> None:
+        """Description with special chars should be escaped."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": 'Has "quotes" and\nnewlines and\ttabs',
+                },
+            },
+        }
+        schema_path = schema_dir / "escape.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Should have escaped newlines and tabs (ruff may use single quotes for strings)
+        assert "\\n" in content
+        assert "\\t" in content
+        # The quotes should be present (either escaped or in single-quoted string)
+        assert "quotes" in content

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import keyword
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +50,21 @@ from pydantic import BaseModel, Field, StringConstraints
 '''
 
 
+def safe_field_name(name: str) -> tuple[str, str | None]:
+    """Convert a field name to a safe Python identifier.
+
+    Args:
+        name: The original field name from the schema.
+
+    Returns:
+        Tuple of (python_name, alias_or_none). If the name is a Python keyword,
+        returns (name_, name). Otherwise returns (name, None).
+    """
+    if keyword.iskeyword(name):
+        return f"{name}_", name
+    return name, None
+
+
 def escape_description(desc: str) -> str:
     """Escape special characters in description strings for Python code.
 
@@ -58,7 +74,13 @@ def escape_description(desc: str) -> str:
     Returns:
         Escaped string safe for use in generated Python code.
     """
-    return desc.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return (
+        desc.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
 
 
 def format_default_value(value: Any) -> str:
@@ -103,7 +125,8 @@ def schema_to_python_type(
     # Handle const (Literal type)
     if "const" in prop:
         const_val = prop["const"]
-        return f'Literal["{const_val}"]', f'"{const_val}"'
+        const_val_str = format_default_value(const_val)
+        return f"Literal[{const_val_str}]", const_val_str
 
     # Handle integer
     if prop_type == "integer":
@@ -239,7 +262,17 @@ def generate_nested_class(
     for field_name in sorted(properties.keys()):
         field_schema = properties[field_name]
         type_anno, field_def = schema_to_python_type(field_schema, field_name, required)
-        lines.append(f"    {field_name}: {type_anno} = {field_def}")
+
+        # Handle Python keywords
+        py_name, alias = safe_field_name(field_name)
+        if alias:
+            # Inject alias into Field()
+            if field_def == "...":
+                field_def = f'Field(alias="{alias}")'
+            elif field_def.startswith("Field("):
+                field_def = field_def.replace("Field(", f'Field(alias="{alias}", ', 1)
+
+        lines.append(f"    {py_name}: {type_anno} = {field_def}")
 
     lines.append("")
     return "\n".join(lines)
@@ -280,7 +313,17 @@ def generate_artifact_class(
             nested_classes.append(nested_class)
 
         type_anno, field_def = schema_to_python_type(field_schema, field_name, required)
-        lines.append(f"    {field_name}: {type_anno} = {field_def}")
+
+        # Handle Python keywords
+        py_name, alias = safe_field_name(field_name)
+        if alias:
+            # Inject alias into Field()
+            if field_def == "...":
+                field_def = f'Field(alias="{alias}")'
+            elif field_def.startswith("Field("):
+                field_def = field_def.replace("Field(", f'Field(alias="{alias}", ', 1)
+
+        lines.append(f"    {py_name}: {type_anno} = {field_def}")
 
     lines.append("")
     return "\n".join(lines), nested_classes
@@ -342,8 +385,8 @@ def format_with_ruff(file_path: Path) -> bool:
 
         return True
     except FileNotFoundError:
-        print("ruff not found, skipping formatting", file=sys.stderr)
-        return True
+        print("Error: ruff not found - cannot format generated code", file=sys.stderr)
+        return False
 
 
 def parse_args() -> argparse.Namespace:
