@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from questfoundry.tools.base import ToolDefinition
+from questfoundry.tools.base import Tool, ToolDefinition
 
 
 class SubmitDreamTool:
@@ -188,14 +188,15 @@ class SubmitBrainstormTool:
 
 
 # Registry of finalization tools by stage name
-FINALIZATION_TOOLS: dict[str, type] = {
+# Each value is a callable that returns a Tool-compatible instance
+FINALIZATION_TOOLS: dict[str, type[SubmitDreamTool] | type[SubmitBrainstormTool]] = {
     "dream": SubmitDreamTool,
     "brainstorm": SubmitBrainstormTool,
     # Future stages: seed, grow, fill, ship
 }
 
 
-def get_finalization_tool(stage: str) -> SubmitDreamTool | SubmitBrainstormTool | None:
+def get_finalization_tool(stage: str) -> Tool | None:
     """Get the finalization tool for a stage.
 
     Args:
@@ -206,8 +207,5 @@ def get_finalization_tool(stage: str) -> SubmitDreamTool | SubmitBrainstormTool 
     """
     tool_class = FINALIZATION_TOOLS.get(stage)
     if tool_class is not None:
-        tool = tool_class()
-        # Cast to the known return types
-        if isinstance(tool, (SubmitDreamTool, SubmitBrainstormTool)):
-            return tool
+        return tool_class()
     return None
