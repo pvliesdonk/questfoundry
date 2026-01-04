@@ -146,6 +146,26 @@ For PRs > 300 lines, add a **Review Guide** section with suggested file/commit o
 - Never mix formatting/refactoring with behavior changes
 - If running a formatter, isolate it in its own commit (or separate PR for large reformats)
 
+### Pre-Push Self-Review
+
+**Before every push, do a code review of your own changes.**
+
+After rebasing, resolving conflicts, or completing a feature:
+
+1. **Run `git diff origin/main`** - review ALL changes that will be in the PR
+2. **Read each changed file** - don't just skim, actually read the code
+3. **Check for regressions** - especially after conflict resolution, verify you didn't break something that was working
+4. **Verify types and contracts** - TypedDicts, Protocols, return types should be semantically correct
+5. **Run tests** - `uv run pytest` must pass before push
+
+**Common mistakes to catch:**
+- Conflict resolution taking wrong version (e.g., breaking a TypedDict by making required fields optional)
+- Forgetting to handle `None` cases (use `or []` not `get(..., [])` when value might be explicitly `None`)
+- Redundant code left from earlier iterations
+- Import statements that are no longer needed
+
+**Don't blindly trust "main is correct"** - conflicts happen because code diverged, and either side might have the bug.
+
 ### Stop-and-Split Protocol
 
 If estimated diff will exceed the target size:
