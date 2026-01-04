@@ -26,3 +26,14 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
+      - id: check-json
+        files: ^schemas/.*\.json$
+
+  - repo: local
+    hooks:
+      - id: check-schema-model-sync
+        name: Check schema/model sync
+        entry: uv run python scripts/check_schema_model_sync.py
+        language: system
+        files: ^(schemas/.*\.schema\.json|src/questfoundry/artifacts/models\.py|src/questfoundry/tools/finalization\.py)$
+        pass_filenames: false

@@ -66,6 +66,7 @@ class SubmitDreamTool:
                     "scope": {
                         "type": "object",
                         "description": "Story scope parameters",
+                        "required": ["target_word_count", "estimated_passages"],
                         "properties": {
                             "target_word_count": {
                                 "type": "integer",
