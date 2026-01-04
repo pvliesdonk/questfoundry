@@ -97,7 +97,7 @@ class DreamStage:
         user_prompt = context.get("user_prompt", "")
         user_input_fn = context.get("user_input_fn")
         on_assistant_message = context.get("on_assistant_message")
-        research_tools: list[Tool] = context.get("research_tools", [])
+        research_tools: list[Tool] = context.get("research_tools") or []
 
         # Build prompt context for interactive mode (sandwich pattern)
         prompt_context = {
@@ -122,7 +122,7 @@ class DreamStage:
         prompt = compiler.compile("dream", prompt_context)
 
         # Build tool list: finalization + research tools
-        tools: list[Tool] = [SubmitDreamTool(), *list(research_tools)]
+        tools: list[Tool] = [SubmitDreamTool(), *research_tools]
 
         # Create conversation runner
         runner = ConversationRunner(
