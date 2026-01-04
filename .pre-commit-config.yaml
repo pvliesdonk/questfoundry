@@ -10,6 +10,8 @@ repos:
     rev: v1.14.1
     hooks:
       - id: mypy
+        # Only run on src/ to match CI behavior (tests have untyped pytest decorators)
+        files: ^src/
         additional_dependencies:
           - httpx
           - pydantic
