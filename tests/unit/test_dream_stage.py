@@ -454,17 +454,25 @@ def test_validate_dream_handles_nested_errors() -> None:
             "tone": ["epic"],
             "audience": "adult",
             "themes": ["heroism"],
-            "scope": {"target_word_count": 100},  # Below minimum, missing estimated_passages
+            "scope": {"target_word_count": 100},  # Below minimum (1000), missing estimated_passages
         }
     )
 
     assert not result.valid
     assert result.errors is not None
 
-    # Should have nested field paths
+    # Should have nested field paths for specific scope errors
     fields = {e.field for e in result.errors}
-    has_nested = any("scope." in f for f in fields)
-    assert has_nested, f"Expected nested scope errors, got: {fields}"
+
+    # target_word_count=100 is below minimum of 1000
+    assert "scope.target_word_count" in fields, f"Expected scope.target_word_count error, got: {fields}"
+
+    # estimated_passages is required when scope is provided
+    assert "scope.estimated_passages" in fields, f"Expected scope.estimated_passages error, got: {fields}"
+
+    # Verify provided values are captured correctly
+    word_count_error = next(e for e in result.errors if e.field == "scope.target_word_count")
+    assert word_count_error.provided == 100
 
 
 def test_validate_dream_valid_data_returns_no_errors() -> None:
