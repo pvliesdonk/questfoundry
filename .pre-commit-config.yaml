@@ -35,5 +35,5 @@ repos:
         name: Check schema/model sync
         entry: uv run python scripts/check_schema_model_sync.py
         language: system
-        files: ^(schemas/.*\.schema\.json|src/questfoundry/artifacts/models\.py)$
+        files: ^(schemas/.*\.schema\.json|src/questfoundry/artifacts/models\.py|src/questfoundry/tools/finalization\.py)$
         pass_filenames: false

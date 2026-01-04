@@ -51,8 +51,8 @@ def check_dream_schema_sync() -> list[str]:
     missing_from_schema = model_required - schema_required
     if missing_from_schema:
         errors.append(
-            f"DreamArtifact requires {missing_from_schema} but schema doesn't. "
-            "Update schemas/dream.schema.json required array."
+            f"{DreamArtifact.__name__} requires {missing_from_schema} but schema doesn't. "
+            f"Update {schema_path.name} required array."
         )
 
     # Check scope required fields
@@ -64,8 +64,8 @@ def check_dream_schema_sync() -> list[str]:
     missing_scope_fields = scope_model_required - scope_schema_required
     if missing_scope_fields:
         errors.append(
-            f"Scope model requires {missing_scope_fields} but schema.scope doesn't. "
-            "Update schemas/dream.schema.json scope.required array."
+            f"{Scope.__name__} model requires {missing_scope_fields} but schema.scope doesn't. "
+            f"Update {schema_path.name} scope.required array."
         )
 
     return errors
@@ -90,11 +90,6 @@ def main() -> int:
         print("Schema/Model sync errors found:", file=sys.stderr)
         for error in all_errors:
             print(f"  - {error}", file=sys.stderr)
-        print(
-            "\nNote: When PR #2 (code generation) is merged, run "
-            "'uv run python scripts/generate_models.py' to fix drift.",
-            file=sys.stderr,
-        )
         return 1
 
     print("All schemas in sync with Pydantic models.")

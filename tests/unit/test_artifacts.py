@@ -1,6 +1,8 @@
 """Tests for artifact reading, writing, and validation."""
 
+import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +16,17 @@ from questfoundry.artifacts import (
     DreamArtifact,
     Scope,
 )
+
+# --- Fixtures ---
+
+
+@pytest.fixture
+def dream_json_schema() -> dict[str, Any]:
+    """Load the DREAM artifact JSON schema."""
+    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
+    with schema_path.open() as f:
+        return json.load(f)
+
 
 # --- DreamArtifact Model Tests ---
 
@@ -432,23 +445,15 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
 # --- Schema/Model Contract Tests ---
 
 
-def test_schema_model_required_fields_match() -> None:
+def test_schema_model_required_fields_match(dream_json_schema: dict[str, Any]) -> None:
     """Verify JSON schema required fields match Pydantic model requirements.
 
     This test ensures the JSON schema and Pydantic model stay in sync.
     The schema defines required fields for external validation, while the
     Pydantic model enforces them at runtime.
     """
-    import json
-    from pathlib import Path
-
-    # Load JSON schema
-    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
-    with schema_path.open() as f:
-        schema = json.load(f)
-
     # Get required fields from schema
-    schema_required = set(schema.get("required", []))
+    schema_required = set(dream_json_schema.get("required", []))
 
     # Get required fields from Pydantic model (fields without defaults)
     model_fields = DreamArtifact.model_fields
@@ -467,20 +472,13 @@ def test_schema_model_required_fields_match() -> None:
     )
 
 
-def test_scope_required_fields_in_schema() -> None:
+def test_scope_required_fields_in_schema(dream_json_schema: dict[str, Any]) -> None:
     """Verify scope object in schema requires target_word_count and estimated_passages.
 
     The Scope Pydantic model requires these fields (no defaults), so the JSON
     schema must also require them to ensure consistent validation.
     """
-    import json
-    from pathlib import Path
-
-    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
-    with schema_path.open() as f:
-        schema = json.load(f)
-
-    scope_schema = schema.get("properties", {}).get("scope", {})
+    scope_schema = dream_json_schema.get("properties", {}).get("scope", {})
     scope_required = set(scope_schema.get("required", []))
 
     # These are required in Pydantic Scope model
@@ -530,23 +528,19 @@ def test_optional_scope_is_none_by_default() -> None:
     assert artifact.scope is None
 
 
-def test_tool_schema_matches_json_schema_scope_required() -> None:
+def test_tool_schema_matches_json_schema_scope_required(
+    dream_json_schema: dict[str, Any],
+) -> None:
     """Verify SubmitDreamTool schema matches JSON schema for scope requirements.
 
     The tool definition and JSON schema should have identical required fields
     for the scope object to ensure consistent validation.
     """
-    import json
-    from pathlib import Path
-
     from questfoundry.tools.finalization import SubmitDreamTool
 
     # Get JSON schema scope requirements
-    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
-    with schema_path.open() as f:
-        json_schema = json.load(f)
     json_scope_required = set(
-        json_schema.get("properties", {}).get("scope", {}).get("required", [])
+        dream_json_schema.get("properties", {}).get("scope", {}).get("required", [])
     )
 
     # Get tool schema scope requirements
