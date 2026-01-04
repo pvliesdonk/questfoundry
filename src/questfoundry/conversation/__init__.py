@@ -7,6 +7,7 @@ LLM interactions with tool calling support.
 from questfoundry.conversation.runner import (
     ConversationError,
     ConversationRunner,
+    ValidationErrorDetail,
     ValidationResult,
 )
 from questfoundry.conversation.state import ConversationState
@@ -15,5 +16,6 @@ __all__ = [
     "ConversationError",
     "ConversationRunner",
     "ConversationState",
+    "ValidationErrorDetail",
     "ValidationResult",
 ]

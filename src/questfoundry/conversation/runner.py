@@ -38,17 +38,34 @@ class ConversationError(Exception):
 
 
 @dataclass
+class ValidationErrorDetail:
+    """Details of a single validation error.
+
+    Attributes:
+        field: The field path that failed validation (e.g., "genre", "scope.target_word_count").
+        issue: Description of what went wrong.
+        provided: The value that was provided (if any).
+    """
+
+    field: str
+    issue: str
+    provided: Any = None
+
+
+@dataclass
 class ValidationResult:
     """Result of validating tool call arguments.
 
     Attributes:
         valid: Whether validation passed.
-        error: Error message if validation failed.
+        error: Error message if validation failed (for display/logging).
+        errors: Structured list of validation errors (preferred over error string).
         data: Validated/transformed data if validation passed.
     """
 
     valid: bool
     error: str | None = None
+    errors: list[ValidationErrorDetail] | None = None
     data: dict[str, Any] | None = None
 
 
@@ -230,11 +247,24 @@ class ConversationRunner:
                     missing_fields: list[str] = []
                     invalid_fields: list[dict[str, Any]] = []
 
-                    # Parse validation errors into structured format
-                    if result.error:
-                        for err in result.error.replace("Validation errors: ", "").split("; "):
-                            if ": " in err:
-                                field, issue = err.split(": ", 1)
+                    # Use structured errors if available (preferred)
+                    if result.errors:
+                        for err in result.errors:
+                            if "required" in err.issue.lower() or "missing" in err.issue.lower():
+                                missing_fields.append(err.field)
+                            else:
+                                invalid_fields.append(
+                                    {
+                                        "field": err.field,
+                                        "provided": err.provided,
+                                        "issue": err.issue,
+                                    }
+                                )
+                    # Fallback: parse error string (legacy support)
+                    elif result.error:
+                        for err_str in result.error.replace("Validation errors: ", "").split("; "):
+                            if ": " in err_str:
+                                field, issue = err_str.split(": ", 1)
                                 if "required" in issue.lower() or "missing" in issue.lower():
                                     missing_fields.append(field)
                                 else:
@@ -246,10 +276,15 @@ class ConversationRunner:
                                         }
                                     )
 
+                    error_count = (
+                        len(result.errors)
+                        if result.errors
+                        else (len(result.error.split(";")) if result.error else 1)
+                    )
                     feedback = {
                         "success": False,
                         "error": "Validation failed for submitted artifact",
-                        "error_count": len(result.error.split(";")) if result.error else 1,
+                        "error_count": error_count,
                         "invalid_fields": invalid_fields,
                         "missing_fields": missing_fields,
                         "submitted_data": data,
@@ -292,8 +327,13 @@ class ConversationRunner:
                     # Use validated/transformed data if provided
                     data = result.data if result.data is not None else data
 
-            # Validation passed or no validator
-            state.add_tool_result(tool_call.id, "Artifact submitted successfully.")
+            # Validation passed or no validator - call tool.execute() for confirmation
+            tool = self._tools.get(self._finalization_tool)
+            if tool is not None:
+                result_message = tool.execute(data)
+            else:
+                result_message = "Artifact submitted successfully."
+            state.add_tool_result(tool_call.id, result_message)
             return data
 
         raise ConversationError(
