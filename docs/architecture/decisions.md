@@ -121,6 +121,69 @@ Original vision included DRESS stage for art direction/image prompts.
 
 ---
 
+## ADR-006: Schema-First Artifact Design
+
+**Date**: 2026-01-03
+**Status**: Accepted
+
+### Context
+Artifact structure needs to be defined somewhere. Options:
+
+1. **Pydantic-first**: Define in Python, generate JSON Schema
+2. **Schema-first**: Define in JSON Schema, generate Pydantic
+
+### Decision
+Use **JSON Schema as the source of truth**. Generate Pydantic models from schemas using `datamodel-code-generator`.
+
+### Rationale
+- **Format independence** — Artifacts are YAML files that exist independently of Python code
+- **Interoperability** — Any JSON Schema tool can validate artifacts
+- **Human-editable** — Schemas document the format clearly
+- **v4 pattern** — Follows proven approach from questfoundry-v4
+- **No drift** — Generated code can't diverge from schema
+
+### Consequences
+- JSON Schemas live in `schemas/`
+- Pydantic models generated to `src/questfoundry/artifacts/generated.py`
+- Must run `uv run python scripts/generate_models.py` after schema changes
+- Generated code is committed to version control
+
+### References
+- [14-validation-architecture.md](../design/14-validation-architecture.md)
+- v4: `meta/schemas/core/*.schema.json`
+
+---
+
+## ADR-007: Validate-with-Feedback Pattern
+
+**Date**: 2026-01-03
+**Status**: Accepted
+
+### Context
+When LLM output fails validation, the model needs actionable feedback to self-correct. Vague error messages cause retry loops without progress.
+
+### Decision
+Implement **validate-with-feedback** pattern with action-first structured feedback.
+
+### Rationale
+- **Action-first** — Recovery directive at top, not buried
+- **Fuzzy matching** — Detect field name typos and suggest corrections
+- **Semantic** — Separate outcome, reason, and action
+- **v4 proven** — Pattern refined through PR #227
+
+### Consequences
+- All validation returns structured feedback dict
+- Feedback includes `action_outcome`, `rejection_reason`, `recovery_action`
+- Field corrections detected via suffix/prefix/synonym matching
+- Retry loop continues on validation failure (up to 3 attempts)
+
+### References
+- [14-validation-architecture.md](../design/14-validation-architecture.md)
+- v4 ARCHITECTURE-v3.md Section 9.4
+- v4 PR #227
+
+---
+
 ## Template
 
 ```markdown

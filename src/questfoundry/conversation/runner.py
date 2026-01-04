@@ -7,11 +7,11 @@ conversational refinement before structured output.
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation.state import ConversationState
+from questfoundry.validation.feedback import ValidationFeedback
 
 # Default configuration values
 DEFAULT_MAX_TURNS = 10
@@ -45,11 +45,13 @@ class ValidationResult:
         valid: Whether validation passed.
         error: Error message if validation failed.
         data: Validated/transformed data if validation passed.
+        feedback: Optional structured feedback for LLM self-correction.
     """
 
     valid: bool
     error: str | None = None
     data: dict[str, Any] | None = None
+    feedback: ValidationFeedback | None = field(default=None)
 
 
 class ConversationRunner:
@@ -206,6 +208,9 @@ class ConversationRunner:
     ) -> dict[str, Any]:
         """Handle finalization tool call with validation retry.
 
+        Uses the validate-with-feedback pattern (ADR-007) for LLM self-correction.
+        Feedback is action-first with clear recovery directives.
+
         Args:
             tool_call: The finalization tool call.
             state: Current conversation state.
@@ -225,38 +230,23 @@ class ConversationRunner:
             if validator is not None:
                 result = validator(data)
                 if not result.valid:
-                    # Validate-with-feedback pattern: structured error response
-                    # Lets LLM understand exactly what failed and how to fix it
-                    missing_fields: list[str] = []
-                    invalid_fields: list[dict[str, Any]] = []
+                    # Use structured feedback if provided, otherwise build from error string
+                    if result.feedback is not None:
+                        feedback = result.feedback
+                    else:
+                        # Build feedback from error string (backward compatibility)
+                        errors = []
+                        if result.error:
+                            # Parse "Validation errors: field1: msg; field2: msg" format
+                            error_text = result.error.replace("Validation errors: ", "")
+                            errors = [e.strip() for e in error_text.split(";") if e.strip()]
 
-                    # Parse validation errors into structured format
-                    if result.error:
-                        for err in result.error.replace("Validation errors: ", "").split("; "):
-                            if ": " in err:
-                                field, issue = err.split(": ", 1)
-                                if "required" in issue.lower() or "missing" in issue.lower():
-                                    missing_fields.append(field)
-                                else:
-                                    invalid_fields.append(
-                                        {
-                                            "field": field,
-                                            "provided": data.get(field.split(".")[0]),
-                                            "issue": issue,
-                                        }
-                                    )
+                        feedback = ValidationFeedback.from_error_strings(
+                            errors=errors,
+                            provided_fields=set(data.keys()),
+                        )
 
-                    feedback = {
-                        "success": False,
-                        "error": "Validation failed for submitted artifact",
-                        "error_count": len(result.error.split(";")) if result.error else 1,
-                        "invalid_fields": invalid_fields,
-                        "missing_fields": missing_fields,
-                        "submitted_data": data,
-                        "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
-                    }
-
-                    state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
+                    state.add_tool_result(tool_call.id, feedback.to_json())
 
                     # Request retry from LLM
                     response = await self._provider.complete(
