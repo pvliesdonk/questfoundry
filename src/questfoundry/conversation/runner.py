@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation.state import ConversationState
 
+# Default configuration values
+DEFAULT_MAX_TURNS = 10
+DEFAULT_VALIDATION_RETRIES = 3
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
@@ -79,8 +83,8 @@ class ConversationRunner:
         provider: LLMProvider,
         tools: list[Tool],
         finalization_tool: str,
-        max_turns: int = 10,
-        validation_retries: int = 3,
+        max_turns: int = DEFAULT_MAX_TURNS,
+        validation_retries: int = DEFAULT_VALIDATION_RETRIES,
     ) -> None:
         """Initialize the conversation runner.
 
@@ -135,6 +139,13 @@ class ConversationRunner:
             state.llm_calls += 1
             state.tokens_used += response.tokens_used
 
+            # Add assistant message BEFORE processing tool calls
+            # This preserves any explanatory text the LLM provides alongside tool calls
+            if response.content:
+                state.add_message({"role": "assistant", "content": response.content})
+                if on_assistant_message is not None:
+                    on_assistant_message(response.content)
+
             # Handle tool calls
             if response.has_tool_calls:
                 result = await self._handle_tool_calls(
@@ -145,12 +156,6 @@ class ConversationRunner:
                 if result is not None:
                     # Finalization tool was called and validated
                     return result, state
-
-            # Add assistant message if there's content
-            if response.content:
-                state.add_message({"role": "assistant", "content": response.content})
-                if on_assistant_message is not None:
-                    on_assistant_message(response.content)
 
             # Check if we should get user input
             if user_input_fn is not None:
@@ -307,5 +312,7 @@ class ConversationRunner:
 
         try:
             return tool.execute(tool_call.arguments)
+        except (KeyboardInterrupt, SystemExit):
+            raise  # Don't catch system signals
         except Exception as e:
             return f"Error executing {tool_call.name}: {e}"
