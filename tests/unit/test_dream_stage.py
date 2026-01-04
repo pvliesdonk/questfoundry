@@ -383,3 +383,114 @@ def test_is_yaml_line_detection() -> None:
     # Non-YAML lines
     assert stage._is_yaml_line("Just plain text") is False
     assert stage._is_yaml_line("No colon here") is False
+
+
+# --- Validation Tests ---
+
+
+def test_validate_dream_returns_structured_errors() -> None:
+    """_validate_dream returns structured errors list, not just error string."""
+    stage = DreamStage()
+
+    # Missing required fields
+    result = stage._validate_dream({})
+
+    assert not result.valid
+    assert result.errors is not None
+    assert len(result.errors) > 0
+
+    # Check errors have field, issue, and provided
+    for error in result.errors:
+        assert hasattr(error, "field")
+        assert hasattr(error, "issue")
+        assert hasattr(error, "provided")
+
+
+def test_validate_dream_returns_expected_fields() -> None:
+    """_validate_dream returns expected_fields for LLM guidance."""
+    stage = DreamStage()
+
+    result = stage._validate_dream({})
+
+    assert not result.valid
+    assert result.expected_fields is not None
+
+    # Should include required DreamArtifact fields
+    assert "genre" in result.expected_fields
+    assert "tone" in result.expected_fields
+    assert "audience" in result.expected_fields
+    assert "themes" in result.expected_fields
+
+
+def test_validate_dream_includes_provided_values() -> None:
+    """_validate_dream includes provided values in error details."""
+    stage = DreamStage()
+
+    # Invalid empty genre
+    result = stage._validate_dream(
+        {
+            "genre": "",
+            "tone": ["epic"],
+            "audience": "adult",
+            "themes": ["heroism"],
+        }
+    )
+
+    assert not result.valid
+    assert result.errors is not None
+
+    genre_errors = [e for e in result.errors if e.field == "genre"]
+    assert len(genre_errors) == 1
+    assert genre_errors[0].provided == ""
+
+
+def test_validate_dream_handles_nested_errors() -> None:
+    """_validate_dream handles nested scope field errors."""
+    stage = DreamStage()
+
+    result = stage._validate_dream(
+        {
+            "genre": "fantasy",
+            "tone": ["epic"],
+            "audience": "adult",
+            "themes": ["heroism"],
+            "scope": {"target_word_count": 100},  # Below minimum, missing estimated_passages
+        }
+    )
+
+    assert not result.valid
+    assert result.errors is not None
+
+    # Should have nested field paths
+    fields = {e.field for e in result.errors}
+    has_nested = any("scope." in f for f in fields)
+    assert has_nested, f"Expected nested scope errors, got: {fields}"
+
+
+def test_validate_dream_valid_data_returns_no_errors() -> None:
+    """_validate_dream returns no errors for valid data."""
+    stage = DreamStage()
+
+    result = stage._validate_dream(
+        {
+            "genre": "fantasy",
+            "tone": ["epic", "adventurous"],
+            "audience": "adult",
+            "themes": ["heroism", "friendship"],
+        }
+    )
+
+    assert result.valid
+    assert result.errors is None
+    assert result.data is not None
+
+
+def test_validate_dream_preserves_legacy_error_string() -> None:
+    """_validate_dream provides legacy error string for backwards compatibility."""
+    stage = DreamStage()
+
+    result = stage._validate_dream({})
+
+    assert not result.valid
+    assert result.error is not None
+    assert "Validation errors:" in result.error

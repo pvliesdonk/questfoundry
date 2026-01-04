@@ -15,6 +15,7 @@ from questfoundry.artifacts.validator import (
     ArtifactValidationError,
     ArtifactValidator,
     SchemaNotFoundError,
+    pydantic_errors_to_details,
 )
 from questfoundry.artifacts.writer import ArtifactWriteError, ArtifactWriter
 
@@ -31,4 +32,5 @@ __all__ = [
     "DreamArtifact",
     "SchemaNotFoundError",
     "Scope",
+    "pydantic_errors_to_details",
 ]

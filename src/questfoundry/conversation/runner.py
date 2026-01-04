@@ -62,12 +62,14 @@ class ValidationResult:
         error: Error message if validation failed (for display/logging).
         errors: Structured list of validation errors (preferred over error string).
         data: Validated/transformed data if validation passed.
+        expected_fields: List of valid field names (for LLM guidance on retry).
     """
 
     valid: bool
     error: str | None = None
     errors: list[ValidationErrorDetail] | None = None
     data: dict[str, Any] | None = None
+    expected_fields: list[str] | None = None
 
 
 class ConversationRunner:
@@ -293,7 +295,7 @@ class ConversationRunner:
                         if result.errors
                         else (len(result.error.split(";")) if result.error else 1)
                     )
-                    feedback = {
+                    feedback: dict[str, Any] = {
                         "success": False,
                         "error": "Validation failed for submitted artifact",
                         "error_count": error_count,
@@ -302,6 +304,10 @@ class ConversationRunner:
                         "submitted_data": data,
                         "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
                     }
+
+                    # Include expected fields if provided by validator
+                    if result.expected_fields:
+                        feedback["expected_fields"] = result.expected_fields
 
                     # Check if we've exhausted retries BEFORE making another LLM call
                     retries += 1
