@@ -271,36 +271,51 @@ Be creative but grounded. Make choices that serve the story."""
     def _validate_dream(self, data: dict[str, Any]) -> ValidationResult:
         """Validate dream artifact data using Pydantic model.
 
-        Uses the DreamArtifact model for full validation, providing
-        detailed error messages for the LLM to correct.
+        Uses the DreamArtifact model for full validation with action-first
+        feedback for LLM self-correction (ADR-007).
 
         Args:
             data: Artifact data to validate.
 
         Returns:
-            ValidationResult with valid=True if data passes validation.
+            ValidationResult with valid=True if data passes validation,
+            or structured feedback for correction.
         """
         from pydantic import ValidationError
 
         from questfoundry.artifacts.models import DreamArtifact
+        from questfoundry.validation import ValidationFeedback
+
+        # Required fields for dream artifact
+        required_fields = {"type", "version", "genre", "tone", "audience", "themes"}
 
         try:
             # Validate using Pydantic model
             validated = DreamArtifact.model_validate(data)
             return ValidationResult(valid=True, data=validated.model_dump())
         except ValidationError as e:
-            # Format errors for LLM feedback
-            errors = []
+            # Build structured feedback with fuzzy field matching
+            feedback = ValidationFeedback.from_pydantic_errors(
+                errors=e.errors(),
+                provided_fields=set(data.keys()),
+                required_fields=required_fields,
+                artifact_type="dream",
+            )
+
+            # Also include error string for backward compatibility
+            error_strs = []
             for error in e.errors():
                 loc = ".".join(str(part) for part in error["loc"])
                 msg = error["msg"]
                 if loc:
-                    errors.append(f"{loc}: {msg}")
+                    error_strs.append(f"{loc}: {msg}")
                 else:
-                    errors.append(msg)
+                    error_strs.append(msg)
+
             return ValidationResult(
                 valid=False,
-                error=f"Validation errors: {'; '.join(errors)}",
+                error=f"Validation errors: {'; '.join(error_strs)}",
+                feedback=feedback,
             )
 
     def _parse_response(self, content: str) -> dict[str, Any]:

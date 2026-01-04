@@ -54,6 +54,13 @@ DRESS stage (art direction) is deferred for later implementation.
 - **Tests first** where practical
 - Keep functions focused and small
 
+### Bug Fixing
+
+- **Never immediately start fixing bugs** - always discuss your approach first
+- Explain your understanding of the problem and proposed solution
+- Wait for confirmation before implementing the fix
+- This prevents wasted effort on incorrect assumptions
+
 ### Git Workflow
 
 - **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base
