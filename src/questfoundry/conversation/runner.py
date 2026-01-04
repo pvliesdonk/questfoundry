@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation.state import ConversationState
 
+# Default configuration values
+DEFAULT_MAX_TURNS = 10
+DEFAULT_VALIDATION_RETRIES = 3
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
@@ -79,8 +83,8 @@ class ConversationRunner:
         provider: LLMProvider,
         tools: list[Tool],
         finalization_tool: str,
-        max_turns: int = 10,
-        validation_retries: int = 3,
+        max_turns: int = DEFAULT_MAX_TURNS,
+        validation_retries: int = DEFAULT_VALIDATION_RETRIES,
     ) -> None:
         """Initialize the conversation runner.
 
@@ -103,6 +107,7 @@ class ConversationRunner:
         initial_messages: list[Message],
         user_input_fn: Callable[[], Awaitable[str | None]] | None = None,
         validator: Callable[[dict[str, Any]], ValidationResult] | None = None,
+        on_assistant_message: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], ConversationState]:
         """Run the conversation until finalization.
 
@@ -112,6 +117,8 @@ class ConversationRunner:
                 returns None/empty, conversation continues without user input.
             validator: Optional function to validate finalization data.
                 Called with tool arguments, returns ValidationResult.
+            on_assistant_message: Optional callback for assistant messages.
+                Called with the message content for display purposes.
 
         Returns:
             Tuple of (artifact_data, conversation_state).
@@ -132,6 +139,13 @@ class ConversationRunner:
             state.llm_calls += 1
             state.tokens_used += response.tokens_used
 
+            # Add assistant message BEFORE processing tool calls
+            # This preserves any explanatory text the LLM provides alongside tool calls
+            if response.content:
+                state.add_message({"role": "assistant", "content": response.content})
+                if on_assistant_message is not None:
+                    on_assistant_message(response.content)
+
             # Handle tool calls
             if response.has_tool_calls:
                 result = await self._handle_tool_calls(
@@ -142,10 +156,6 @@ class ConversationRunner:
                 if result is not None:
                     # Finalization tool was called and validated
                     return result, state
-
-            # Add assistant message if there's content
-            if response.content:
-                state.add_message({"role": "assistant", "content": response.content})
 
             # Check if we should get user input
             if user_input_fn is not None:
@@ -255,13 +265,24 @@ class ConversationRunner:
                     state.tokens_used += response.tokens_used
 
                     # Extract new tool call
+                    found_new_call = False
                     if response.has_tool_calls and response.tool_calls:
                         for tc in response.tool_calls:
                             if tc.name == self._finalization_tool:
                                 data = tc.arguments
                                 tool_call = tc
+                                found_new_call = True
                                 break
+
                     retries += 1
+                    if not found_new_call:
+                        # LLM didn't provide expected tool call, count as failed attempt
+                        state.add_message(
+                            {
+                                "role": "assistant",
+                                "content": response.content or "(no tool call provided)",
+                            }
+                        )
                     continue
                 else:
                     # Use validated/transformed data if provided
@@ -291,5 +312,7 @@ class ConversationRunner:
 
         try:
             return tool.execute(tool_call.arguments)
+        except (KeyboardInterrupt, SystemExit):
+            raise  # Don't catch system signals
         except Exception as e:
             return f"Error executing {tool_call.name}: {e}"
