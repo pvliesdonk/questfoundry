@@ -25,7 +25,7 @@ QuestFoundry prompts follow the **Discuss -> Freeze -> Serialize** pattern:
 
 - `prompts/templates/dream.yaml` - DREAM stage prompt
 - `schemas/dream.schema.json` - JSON Schema for validation
-- `src/questfoundry/artifacts/models.py` - Pydantic models
+- `src/questfoundry/artifacts/generated.py` - Generated Pydantic models (from schema)
 - `src/questfoundry/tools/finalization.py` - Tool definitions
 
 ## Prompt Engineering Patterns

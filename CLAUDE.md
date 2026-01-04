@@ -54,6 +54,20 @@ DRESS stage (art direction) is deferred for later implementation.
 - **Tests first** where practical
 - Keep functions focused and small
 
+### Schema Workflow
+
+Artifact models are generated from JSON schemas (schema-first approach):
+
+```bash
+# After modifying schemas/*.schema.json:
+uv run python scripts/generate_models.py
+git add schemas/ src/questfoundry/artifacts/generated.py
+```
+
+**Never edit `generated.py` directly** - it will be overwritten. CI will fail if the generated file doesn't match the schemas.
+
+See [docs/architecture/schema-first-models.md](docs/architecture/schema-first-models.md) for details.
+
 ### Pre-Implementation Analysis
 
 **Before writing non-trivial code, think about what can go wrong.**
