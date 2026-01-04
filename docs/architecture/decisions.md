@@ -121,6 +121,35 @@ Original vision included DRESS stage for art direction/image prompts.
 
 ---
 
+## ADR-006: Schema-First Model Generation
+
+**Date**: 2026-01-04
+**Status**: Accepted
+
+### Context
+Artifact models (DreamArtifact, Scope, etc.) must stay synchronized with JSON schemas used
+for external validation. Hand-maintaining both creates drift risk.
+
+### Decision
+Use **schema-first generation**: JSON schemas in `schemas/` are the source of truth,
+and Pydantic models are generated from them via `scripts/generate_models.py`.
+
+### Rationale
+- Single source of truth (no schema/model drift)
+- External tool compatibility (any JSON Schema validator works)
+- Human-readable documentation of data formats
+- CI enforces consistency via drift detection
+- Eliminates class of bugs from manual sync errors
+
+### Consequences
+- Developers edit schemas, not models directly
+- Generated file must be committed (not gitignored)
+- CI fails if generated.py doesn't match schemas
+- Pre-commit hook regenerates on schema changes
+- models.py will be deprecated and removed
+
+---
+
 ## Template
 
 ```markdown

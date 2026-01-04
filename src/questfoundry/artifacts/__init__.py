@@ -1,6 +1,6 @@
 """Artifact reading, writing, and validation."""
 
-from questfoundry.artifacts.models import (
+from questfoundry.artifacts.generated import (
     ArtifactType,
     ContentNotes,
     DreamArtifact,
