@@ -265,12 +265,21 @@ class ConversationRunner:
                     invalid_fields: list[dict[str, Any]] = []
 
                     # Use structured errors if available (preferred)
-                    # Pydantic error types for missing fields: "missing", "value_error.missing"
+                    # Known Pydantic v2 error types for missing fields.
+                    # See: https://docs.pydantic.dev/latest/errors/validation_errors/
                     missing_error_types = {"missing", "value_error.missing"}
                     if result.errors:
                         for err in result.errors:
-                            # Use error_type for reliable categorization (not string matching)
+                            # Primary: use error_type for reliable categorization
+                            # Fallback: string match on issue for unknown/future error types
                             if err.error_type in missing_error_types:
+                                is_missing = True
+                            else:
+                                # Defensive fallback for unknown error types
+                                issue_lower = err.issue.lower()
+                                is_missing = "required" in issue_lower or "missing" in issue_lower
+
+                            if is_missing:
                                 missing_fields.append(err.field)
                             else:
                                 invalid_fields.append(

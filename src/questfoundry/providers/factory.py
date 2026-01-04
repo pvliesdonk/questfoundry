@@ -84,7 +84,7 @@ def _create_openai(model: str, **kwargs: Any) -> LangChainProvider:
 
     chat_model = ChatOpenAI(
         model=model,
-        api_key=api_key,  # type: ignore[arg-type]
+        api_key=api_key,
         temperature=kwargs.get("temperature", 0.7),
     )
 
@@ -108,9 +108,9 @@ def _create_anthropic(model: str, **kwargs: Any) -> LangChainProvider:
             "API key required. Set ANTHROPIC_API_KEY environment variable.",
         )
 
-    chat_model = ChatAnthropic(  # type: ignore[call-arg]
+    chat_model = ChatAnthropic(
         model=model,
-        api_key=api_key,  # type: ignore[arg-type]
+        api_key=api_key,
         temperature=kwargs.get("temperature", 0.7),
     )
 
