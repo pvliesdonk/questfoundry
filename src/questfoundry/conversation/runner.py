@@ -46,11 +46,14 @@ class ValidationErrorDetail:
         field: The field path that failed validation (e.g., "genre", "scope.target_word_count").
         issue: Description of what went wrong.
         provided: The value that was provided (if any).
+        error_type: Pydantic error type code (e.g., "missing", "string_too_short").
+            Used for reliable categorization instead of string matching on issue text.
     """
 
     field: str
     issue: str
     provided: Any = None
+    error_type: str | None = None
 
 
 @dataclass
@@ -62,12 +65,14 @@ class ValidationResult:
         error: Error message if validation failed (for display/logging).
         errors: Structured list of validation errors (preferred over error string).
         data: Validated/transformed data if validation passed.
+        expected_fields: List of valid field names (for LLM guidance on retry).
     """
 
     valid: bool
     error: str | None = None
     errors: list[ValidationErrorDetail] | None = None
     data: dict[str, Any] | None = None
+    expected_fields: list[str] | None = None
 
 
 class ConversationRunner:
@@ -260,9 +265,21 @@ class ConversationRunner:
                     invalid_fields: list[dict[str, Any]] = []
 
                     # Use structured errors if available (preferred)
+                    # Known Pydantic v2 error types for missing fields.
+                    # See: https://docs.pydantic.dev/latest/errors/validation_errors/
+                    missing_error_types = {"missing", "value_error.missing"}
                     if result.errors:
                         for err in result.errors:
-                            if "required" in err.issue.lower() or "missing" in err.issue.lower():
+                            # Primary: use error_type for reliable categorization
+                            # Fallback: string match on issue for unknown/future error types
+                            if err.error_type in missing_error_types:
+                                is_missing = True
+                            else:
+                                # Defensive fallback for unknown error types
+                                issue_lower = err.issue.lower()
+                                is_missing = "required" in issue_lower or "missing" in issue_lower
+
+                            if is_missing:
                                 missing_fields.append(err.field)
                             else:
                                 invalid_fields.append(
@@ -293,7 +310,7 @@ class ConversationRunner:
                         if result.errors
                         else (len(result.error.split(";")) if result.error else 1)
                     )
-                    feedback = {
+                    feedback: dict[str, Any] = {
                         "success": False,
                         "error": "Validation failed for submitted artifact",
                         "error_count": error_count,
@@ -302,6 +319,10 @@ class ConversationRunner:
                         "submitted_data": data,
                         "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
                     }
+
+                    # Include expected fields if provided by validator
+                    if result.expected_fields:
+                        feedback["expected_fields"] = result.expected_fields
 
                     # Check if we've exhausted retries BEFORE making another LLM call
                     retries += 1

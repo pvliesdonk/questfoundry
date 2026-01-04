@@ -108,8 +108,8 @@ def _create_anthropic(model: str, **kwargs: Any) -> LangChainProvider:
             "API key required. Set ANTHROPIC_API_KEY environment variable.",
         )
 
-    chat_model = ChatAnthropic(  # type: ignore[call-arg]
-        model=model,
+    chat_model = ChatAnthropic(
+        model=model,  # type: ignore[call-arg]
         api_key=api_key,  # type: ignore[arg-type]
         temperature=kwargs.get("temperature", 0.7),
     )

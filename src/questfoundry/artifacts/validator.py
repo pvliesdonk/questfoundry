@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jsonschema
 from pydantic import BaseModel, ValidationError
 
-from questfoundry.artifacts.models import DreamArtifact
+from questfoundry.artifacts import DreamArtifact
+
+if TYPE_CHECKING:
+    from pydantic_core import ErrorDetails
+
+    from questfoundry.conversation import ValidationErrorDetail
 
 
 class SchemaNotFoundError(Exception):
@@ -197,3 +202,125 @@ class ArtifactValidator:
                 return False
 
         return True
+
+
+def _get_nested_value(data: dict[str, Any], path: tuple[str | int, ...]) -> Any:
+    """Get a value from nested data using a path tuple.
+
+    Traverses the data structure following the path. Returns None if any
+    key is missing or if a None value is encountered mid-path.
+
+    Note:
+        This function cannot distinguish between a missing key and an
+        explicitly provided None value - both return None. For LLM
+        feedback purposes, this is acceptable since both cases indicate
+        "no valid value was provided".
+
+    Args:
+        data: The data dictionary to traverse.
+        path: Tuple of keys/indices from Pydantic error location.
+
+    Returns:
+        The value at the path, or None if path doesn't exist or
+        contains None values.
+
+    Example:
+        >>> _get_nested_value({"scope": {"count": 5}}, ("scope", "count"))
+        5
+        >>> _get_nested_value({"items": ["a", "b"]}, ("items", 1))
+        'b'
+        >>> _get_nested_value({"x": None}, ("x", "y"))
+        None
+    """
+    current: Any = data
+    for key in path:
+        if current is None:
+            return None
+        if isinstance(key, int):
+            # Traverse into list by index
+            if isinstance(current, list) and key < len(current):
+                current = current[key]
+            else:
+                return None
+        elif isinstance(current, dict):
+            current = current.get(key)
+        else:
+            return None
+    return current
+
+
+def _path_to_field_name(path: tuple[str | int, ...]) -> str:
+    """Convert Pydantic error path to field name string.
+
+    Strips list indices to produce cleaner field names for LLM feedback.
+    When multiple items in a list have errors, they will all reference
+    the parent field name (e.g., "themes") with different `provided` values,
+    rather than showing indices like "themes.0", "themes.1".
+
+    This design choice prioritizes LLM comprehension - the model should
+    focus on fixing the field content, not navigating array indices.
+
+    Args:
+        path: Tuple of keys/indices from Pydantic error location.
+
+    Returns:
+        Dot-separated field path string, or "(root)" for empty paths.
+
+    Example:
+        >>> _path_to_field_name(("scope", "target_word_count"))
+        'scope.target_word_count'
+        >>> _path_to_field_name(("themes", 0))
+        'themes'
+        >>> _path_to_field_name(("items", 2, "name"))
+        'items.name'
+        >>> _path_to_field_name(())
+        '(root)'
+    """
+    # Filter out integer indices for cleaner field names
+    str_parts = [str(p) for p in path if not isinstance(p, int)]
+    return ".".join(str_parts) if str_parts else "(root)"
+
+
+def pydantic_errors_to_details(
+    errors: list[ErrorDetails],
+    data: dict[str, Any],
+) -> list[ValidationErrorDetail]:
+    """Convert Pydantic ValidationError details to structured ValidationErrorDetail list.
+
+    Args:
+        errors: List of error dicts from ValidationError.errors().
+        data: The original data that was validated (for extracting provided values).
+
+    Returns:
+        List of ValidationErrorDetail with field, issue, provided value, and error_type.
+
+    Example:
+        >>> from pydantic import ValidationError
+        >>> try:
+        ...     DreamArtifact.model_validate({"genre": ""})
+        ... except ValidationError as e:
+        ...     details = pydantic_errors_to_details(e.errors(), {"genre": ""})
+        ...     print(details[0].field, details[0].error_type)
+        genre string_too_short
+    """
+    from questfoundry.conversation import ValidationErrorDetail
+
+    result: list[ValidationErrorDetail] = []
+
+    for error in errors:
+        path = error["loc"]
+        field = _path_to_field_name(path)
+        issue = error["msg"]
+        provided = _get_nested_value(data, path)
+        error_type = error.get("type")  # Pydantic error type code
+
+        result.append(
+            ValidationErrorDetail(
+                field=field,
+                issue=issue,
+                provided=provided,
+                error_type=error_type,
+            )
+        )
+
+    return result

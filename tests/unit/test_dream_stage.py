@@ -383,3 +383,131 @@ def test_is_yaml_line_detection() -> None:
     # Non-YAML lines
     assert stage._is_yaml_line("Just plain text") is False
     assert stage._is_yaml_line("No colon here") is False
+
+
+# --- Validation Tests ---
+
+
+def test_validate_dream_returns_structured_errors() -> None:
+    """_validate_dream returns structured errors list, not just error string."""
+    stage = DreamStage()
+
+    # Missing required fields
+    result = stage._validate_dream({})
+
+    assert not result.valid
+    assert result.errors is not None
+    assert len(result.errors) > 0
+
+    # Check errors have field, issue, and provided
+    for error in result.errors:
+        assert hasattr(error, "field")
+        assert hasattr(error, "issue")
+        assert hasattr(error, "provided")
+
+
+def test_validate_dream_returns_expected_fields() -> None:
+    """_validate_dream returns expected_fields matching DreamArtifact.model_fields."""
+    from questfoundry.artifacts import DreamArtifact
+
+    stage = DreamStage()
+
+    result = stage._validate_dream({})
+
+    assert not result.valid
+    assert result.expected_fields is not None
+
+    # expected_fields should match all DreamArtifact model fields exactly
+    model_fields = set(DreamArtifact.model_fields.keys())
+    returned_fields = set(result.expected_fields)
+    assert returned_fields == model_fields, (
+        f"expected_fields mismatch: "
+        f"missing={model_fields - returned_fields}, "
+        f"extra={returned_fields - model_fields}"
+    )
+
+
+def test_validate_dream_includes_provided_values() -> None:
+    """_validate_dream includes provided values in error details."""
+    stage = DreamStage()
+
+    # Invalid empty genre
+    result = stage._validate_dream(
+        {
+            "genre": "",
+            "tone": ["epic"],
+            "audience": "adult",
+            "themes": ["heroism"],
+        }
+    )
+
+    assert not result.valid
+    assert result.errors is not None
+
+    genre_errors = [e for e in result.errors if e.field == "genre"]
+    assert len(genre_errors) == 1
+    assert genre_errors[0].provided == ""
+
+
+def test_validate_dream_handles_nested_errors() -> None:
+    """_validate_dream handles nested scope field errors."""
+    stage = DreamStage()
+
+    result = stage._validate_dream(
+        {
+            "genre": "fantasy",
+            "tone": ["epic"],
+            "audience": "adult",
+            "themes": ["heroism"],
+            "scope": {"target_word_count": 100},  # Below minimum (1000), missing estimated_passages
+        }
+    )
+
+    assert not result.valid
+    assert result.errors is not None
+
+    # Should have nested field paths for specific scope errors
+    fields = {e.field for e in result.errors}
+
+    # target_word_count=100 is below minimum of 1000
+    assert "scope.target_word_count" in fields, (
+        f"Expected scope.target_word_count error, got: {fields}"
+    )
+
+    # estimated_passages is required when scope is provided
+    assert "scope.estimated_passages" in fields, (
+        f"Expected scope.estimated_passages error, got: {fields}"
+    )
+
+    # Verify provided values are captured correctly
+    word_count_error = next(e for e in result.errors if e.field == "scope.target_word_count")
+    assert word_count_error.provided == 100
+
+
+def test_validate_dream_valid_data_returns_no_errors() -> None:
+    """_validate_dream returns no errors for valid data."""
+    stage = DreamStage()
+
+    result = stage._validate_dream(
+        {
+            "genre": "fantasy",
+            "tone": ["epic", "adventurous"],
+            "audience": "adult",
+            "themes": ["heroism", "friendship"],
+        }
+    )
+
+    assert result.valid
+    assert result.errors is None
+    assert result.data is not None
+
+
+def test_validate_dream_preserves_legacy_error_string() -> None:
+    """_validate_dream provides legacy error string for backwards compatibility."""
+    stage = DreamStage()
+
+    result = stage._validate_dream({})
+
+    assert not result.valid
+    assert result.error is not None
+    assert "Validation errors:" in result.error

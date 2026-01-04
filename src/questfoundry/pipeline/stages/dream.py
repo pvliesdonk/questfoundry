@@ -208,11 +208,14 @@ class DreamStage:
         if not result.valid:
             raise DreamParseError(f"Validation failed: {result.error}", str(artifact_data))
 
-        # Add required fields
-        artifact_data["type"] = "dream"
-        artifact_data["version"] = artifact_data.get("version", 1)
+        # Use validated data (may have defaults/transformations applied)
+        validated_data = result.data if result.data is not None else artifact_data
 
-        return artifact_data, 1, response.tokens_used
+        # Add required fields
+        validated_data["type"] = "dream"
+        validated_data["version"] = validated_data.get("version", 1)
+
+        return validated_data, 1, response.tokens_used
 
     def _build_direct_user_message(self, user_prompt: str) -> str:
         """Build user message for direct mode with YAML format spec.
@@ -259,36 +262,39 @@ Be creative but grounded. Make choices that serve the story."""
     def _validate_dream(self, data: dict[str, Any]) -> ValidationResult:
         """Validate dream artifact data using Pydantic model.
 
-        Uses the DreamArtifact model for full validation, providing
-        detailed error messages for the LLM to correct.
+        Uses the DreamArtifact model for full validation, returning
+        structured error details for the LLM to correct.
 
         Args:
             data: Artifact data to validate.
 
         Returns:
-            ValidationResult with valid=True if data passes validation.
+            ValidationResult with valid=True if data passes validation,
+            or valid=False with structured errors list and expected_fields.
         """
         from pydantic import ValidationError
 
-        from questfoundry.artifacts.models import DreamArtifact
+        from questfoundry.artifacts import DreamArtifact, pydantic_errors_to_details
+
+        # Get expected field names from model for LLM guidance
+        expected_fields = list(DreamArtifact.model_fields.keys())
 
         try:
             # Validate using Pydantic model
             validated = DreamArtifact.model_validate(data)
             return ValidationResult(valid=True, data=validated.model_dump())
         except ValidationError as e:
-            # Format errors for LLM feedback
-            errors = []
-            for error in e.errors():
-                loc = ".".join(str(part) for part in error["loc"])
-                msg = error["msg"]
-                if loc:
-                    errors.append(f"{loc}: {msg}")
-                else:
-                    errors.append(msg)
+            # Convert to structured error details
+            error_details = pydantic_errors_to_details(e.errors(), data)
+
+            # Also provide legacy error string for backwards compatibility
+            error_strings = [f"{err.field}: {err.issue}" for err in error_details]
+
             return ValidationResult(
                 valid=False,
-                error=f"Validation errors: {'; '.join(errors)}",
+                error=f"Validation errors: {'; '.join(error_strings)}",
+                errors=error_details,
+                expected_fields=expected_fields,
             )
 
     def _parse_response(self, content: str) -> dict[str, Any]:

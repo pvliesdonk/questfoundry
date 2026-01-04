@@ -567,3 +567,214 @@ def test_conversation_error_without_state() -> None:
 
     assert str(error) == "Something failed"
     assert error.state is None
+
+
+# --- expected_fields in Feedback Tests ---
+
+
+def test_validation_result_expected_fields() -> None:
+    """ValidationResult supports expected_fields attribute."""
+    result = ValidationResult(
+        valid=False,
+        error="Missing fields",
+        expected_fields=["name", "age", "email"],
+    )
+
+    assert result.expected_fields == ["name", "age", "email"]
+
+
+def test_validation_result_expected_fields_default() -> None:
+    """ValidationResult defaults expected_fields to None."""
+    result = ValidationResult(valid=True)
+
+    assert result.expected_fields is None
+
+
+@pytest.mark.asyncio
+async def test_runner_feedback_includes_expected_fields() -> None:
+    """Runner includes expected_fields in validation feedback when provided."""
+    import json
+
+    # First attempt fails with expected_fields, second succeeds
+    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            return ValidationResult(
+                valid=False,
+                errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
+                expected_fields=["value", "description", "priority"],
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Find the tool result message with feedback
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    assert len(tool_results) >= 1
+
+    # Parse the feedback JSON
+    feedback_msg = tool_results[0]["content"]
+    feedback = json.loads(feedback_msg)
+
+    assert "expected_fields" in feedback
+    assert feedback["expected_fields"] == ["value", "description", "priority"]
+
+
+@pytest.mark.asyncio
+async def test_runner_categorizes_unknown_error_type_via_string_fallback() -> None:
+    """Runner uses string matching fallback for unknown error types."""
+    import json
+
+    # Simulate an unknown/future Pydantic error type that contains "required" in message
+    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            # Unknown error type but "required" in issue text
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    ValidationErrorDetail(
+                        field="value",
+                        issue="Field is required",
+                        provided=None,
+                        error_type="unknown_future_type",  # Unknown to our set
+                    ),
+                    ValidationErrorDetail(
+                        field="count",
+                        issue="Must be positive",
+                        provided=-1,
+                        error_type="greater_than",  # Known invalid type
+                    ),
+                ],
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Find the tool result message with feedback
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    assert len(tool_results) >= 1
+
+    # Parse the feedback JSON
+    feedback_msg = tool_results[0]["content"]
+    feedback = json.loads(feedback_msg)
+
+    # "value" should be in missing_fields (fallback to string "required")
+    assert "value" in feedback["missing_fields"], (
+        "Unknown error type with 'required' in issue should be categorized as missing"
+    )
+    # "count" should be in invalid_fields (no "required"/"missing" in issue)
+    assert any(f["field"] == "count" for f in feedback["invalid_fields"]), (
+        "Error without 'required'/'missing' in issue should be categorized as invalid"
+    )
+
+
+@pytest.mark.asyncio
+async def test_runner_feedback_omits_expected_fields_when_none() -> None:
+    """Runner omits expected_fields from feedback when validator doesn't provide it."""
+    import json
+
+    # First attempt fails without expected_fields, second succeeds
+    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            return ValidationResult(
+                valid=False,
+                errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
+                # No expected_fields
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Find the tool result message with feedback
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    assert len(tool_results) >= 1
+
+    # Parse the feedback JSON
+    feedback_msg = tool_results[0]["content"]
+    feedback = json.loads(feedback_msg)
+
+    # expected_fields should not be present when not provided
+    assert "expected_fields" not in feedback
