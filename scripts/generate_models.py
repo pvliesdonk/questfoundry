@@ -65,6 +65,18 @@ def safe_field_name(name: str) -> tuple[str, str | None]:
     return name, None
 
 
+def snake_to_pascal(name: str) -> str:
+    """Convert snake_case to PascalCase for class naming.
+
+    Args:
+        name: A snake_case string (e.g., "content_notes").
+
+    Returns:
+        PascalCase string (e.g., "ContentNotes").
+    """
+    return "".join(word.capitalize() for word in name.split("_"))
+
+
 def escape_description(desc: str) -> str:
     """Escape special characters in description strings for Python code.
 
@@ -180,7 +192,18 @@ def schema_to_python_type(
     # Handle array
     if prop_type == "array":
         items = prop.get("items", {})
-        item_type = items.get("type", "Any")
+        item_type = items.get("type")
+        if not item_type:
+            raise ValueError(
+                f"Array field '{prop_name}' is missing 'items.type'. "
+                "All array fields must specify the type of their items."
+            )
+
+        # Map JSON Schema types to Python types for array items
+        json_to_python_type = {
+            "string": "str",
+            "integer": "int",
+        }
 
         # Check if items have minLength constraint
         if item_type == "string":
@@ -189,8 +212,13 @@ def schema_to_python_type(
                 item_type_anno = f"Annotated[str, StringConstraints(min_length={item_min_length})]"
             else:
                 item_type_anno = "str"
+        elif item_type in json_to_python_type:
+            item_type_anno = json_to_python_type[item_type]
         else:
-            item_type_anno = item_type
+            raise ValueError(
+                f"Unsupported array item type '{item_type}' for field '{prop_name}'. "
+                f"Supported types: {set(json_to_python_type.keys())}"
+            )
 
         field_args = []
         if description:
@@ -209,7 +237,7 @@ def schema_to_python_type(
     # Handle nested object (will be a reference to another class)
     if prop_type == "object":
         # Generate class name from property name
-        class_name = "".join(word.capitalize() for word in prop_name.split("_"))
+        class_name = snake_to_pascal(prop_name)
 
         is_required = prop_name in parent_required
         if not is_required:
@@ -249,7 +277,7 @@ def generate_nested_class(
     Returns:
         Python class definition as string.
     """
-    class_name = "".join(word.capitalize() for word in prop_name.split("_"))
+    class_name = snake_to_pascal(prop_name)
     description = prop_schema.get("description", f"{class_name} model.")
     properties = prop_schema.get("properties", {})
     required = set(prop_schema.get("required", []))
@@ -257,6 +285,12 @@ def generate_nested_class(
     lines = [f"class {class_name}(BaseModel):"]
     lines.append(f'    """{description}"""')
     lines.append("")
+
+    # Handle empty properties - need explicit pass for valid Python
+    if not properties:
+        lines.append("    pass")
+        lines.append("")
+        return "\n".join(lines)
 
     # Sort properties for deterministic output
     for field_name in sorted(properties.keys()):
@@ -302,6 +336,12 @@ def generate_artifact_class(
     lines = [f"class {class_name}(BaseModel):"]
     lines.append(f'    """{title} - {description}"""')
     lines.append("")
+
+    # Handle empty properties - need explicit pass for valid Python
+    if not properties:
+        lines.append("    pass")
+        lines.append("")
+        return "\n".join(lines), nested_classes
 
     # Sort properties for deterministic output
     for field_name in sorted(properties.keys()):

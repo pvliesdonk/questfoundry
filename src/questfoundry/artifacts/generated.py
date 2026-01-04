@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 
 class ContentNotes(BaseModel):
-    """ContentNotes model."""
+    """Content advisory notes for inclusions and exclusions"""
 
     excludes: list[Annotated[str, StringConstraints(min_length=1)]] = Field(
         default_factory=list, description="Content excluded"
@@ -45,7 +45,9 @@ class DreamArtifact(BaseModel):
     audience: str = Field(
         description="Target audience (e.g., adult, young adult, all ages, mature)", min_length=1
     )
-    content_notes: ContentNotes | None = Field(default=None)
+    content_notes: ContentNotes | None = Field(
+        default=None, description="Content advisory notes for inclusions and exclusions"
+    )
     genre: str = Field(description="Primary genre", min_length=1)
     scope: Scope | None = Field(default=None)
     style_notes: str | None = Field(default=None, description="Style guidance", min_length=1)

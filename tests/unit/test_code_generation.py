@@ -577,3 +577,280 @@ class TestEscapeDescription:
         assert "\\t" in content
         # The quotes should be present (either escaped or in single-quoted string)
         assert "quotes" in content
+
+
+class TestGeneratorArrayValidation:
+    """Tests for array field validation in generator."""
+
+    def test_array_without_items_type_fails(self, tmp_path: Path) -> None:
+        """Array fields missing items.type should raise an error."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["tags"],
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "description": "Tags without type",
+                    # Missing "items" entirely
+                },
+            },
+        }
+        schema_path = schema_dir / "noitems.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 1, "Generator should fail on missing items.type"
+        assert "items.type" in result.stderr
+        assert "tags" in result.stderr
+
+    def test_array_with_empty_items_fails(self, tmp_path: Path) -> None:
+        """Array fields with empty items object should raise an error."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["tags"],
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": {},  # Empty items - no type specified
+                    "description": "Tags with empty items",
+                },
+            },
+        }
+        schema_path = schema_dir / "emptyitems.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 1, "Generator should fail on empty items"
+        assert "items.type" in result.stderr
+
+
+class TestGeneratorEmptyProperties:
+    """Tests for empty properties handling in generator."""
+
+    def test_empty_properties_generates_valid_class(self, tmp_path: Path) -> None:
+        """Schema with empty properties should generate valid Python class with pass."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Empty Artifact",
+            "description": "An artifact with no properties",
+            "type": "object",
+            "properties": {},  # Empty properties
+        }
+        schema_path = schema_dir / "empty.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Should have pass statement for empty class body
+        assert "pass" in content
+        # Verify it's valid Python by trying to import it
+        assert "class EmptyArtifact" in content
+
+    def test_nested_empty_properties_generates_valid_class(self, tmp_path: Path) -> None:
+        """Nested object with empty properties should generate valid Python class."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Parent Artifact",
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "metadata": {
+                    "type": "object",
+                    "description": "Empty metadata object",
+                    "properties": {},  # Empty nested properties
+                },
+            },
+        }
+        schema_path = schema_dir / "nestedempty.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Nested empty class should have pass
+        assert "class Metadata" in content
+        assert "pass" in content
+
+
+class TestSnakeToPascal:
+    """Tests for snake_to_pascal helper function."""
+
+    def test_simple_conversion(self) -> None:
+        """Simple snake_case should convert to PascalCase."""
+        from scripts.generate_models import snake_to_pascal
+
+        assert snake_to_pascal("content_notes") == "ContentNotes"
+        assert snake_to_pascal("target_word_count") == "TargetWordCount"
+
+    def test_single_word(self) -> None:
+        """Single word should capitalize first letter."""
+        from scripts.generate_models import snake_to_pascal
+
+        assert snake_to_pascal("scope") == "Scope"
+        assert snake_to_pascal("metadata") == "Metadata"
+
+    def test_multiple_underscores(self) -> None:
+        """Multiple underscores should work correctly."""
+        from scripts.generate_models import snake_to_pascal
+
+        assert snake_to_pascal("very_long_field_name") == "VeryLongFieldName"
+
+
+class TestGeneratorArrayItemTypes:
+    """Tests for array item type handling in generator."""
+
+    def test_integer_array_items_generate_list_int(self, tmp_path: Path) -> None:
+        """Array with integer items should generate list[int], not list[integer]."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["scores"],
+            "properties": {
+                "scores": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "List of scores",
+                },
+            },
+        }
+        schema_path = schema_dir / "intarray.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Should generate list[int], not list[integer]
+        assert "list[int]" in content
+        assert "list[integer]" not in content
+
+    def test_unsupported_array_item_type_fails(self, tmp_path: Path) -> None:
+        """Array with unsupported item type should fail."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["flags"],
+            "properties": {
+                "flags": {
+                    "type": "array",
+                    "items": {"type": "boolean"},  # boolean not supported in array items
+                    "description": "List of flags",
+                },
+            },
+        }
+        schema_path = schema_dir / "boolarray.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 1, "Generator should fail on unsupported array item type"
+        assert "Unsupported array item type" in result.stderr
+        assert "boolean" in result.stderr

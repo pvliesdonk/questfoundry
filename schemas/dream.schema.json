@@ -83,6 +83,7 @@
     },
     "content_notes": {
       "type": "object",
+      "description": "Content advisory notes for inclusions and exclusions",
       "properties": {
         "includes": {
           "type": "array",
