@@ -407,7 +407,9 @@ def test_validate_dream_returns_structured_errors() -> None:
 
 
 def test_validate_dream_returns_expected_fields() -> None:
-    """_validate_dream returns expected_fields for LLM guidance."""
+    """_validate_dream returns expected_fields matching DreamArtifact.model_fields."""
+    from questfoundry.artifacts import DreamArtifact
+
     stage = DreamStage()
 
     result = stage._validate_dream({})
@@ -415,11 +417,14 @@ def test_validate_dream_returns_expected_fields() -> None:
     assert not result.valid
     assert result.expected_fields is not None
 
-    # Should include required DreamArtifact fields
-    assert "genre" in result.expected_fields
-    assert "tone" in result.expected_fields
-    assert "audience" in result.expected_fields
-    assert "themes" in result.expected_fields
+    # expected_fields should match all DreamArtifact model fields exactly
+    model_fields = set(DreamArtifact.model_fields.keys())
+    returned_fields = set(result.expected_fields)
+    assert returned_fields == model_fields, (
+        f"expected_fields mismatch: "
+        f"missing={model_fields - returned_fields}, "
+        f"extra={returned_fields - model_fields}"
+    )
 
 
 def test_validate_dream_includes_provided_values() -> None:
@@ -465,10 +470,14 @@ def test_validate_dream_handles_nested_errors() -> None:
     fields = {e.field for e in result.errors}
 
     # target_word_count=100 is below minimum of 1000
-    assert "scope.target_word_count" in fields, f"Expected scope.target_word_count error, got: {fields}"
+    assert (
+        "scope.target_word_count" in fields
+    ), f"Expected scope.target_word_count error, got: {fields}"
 
     # estimated_passages is required when scope is provided
-    assert "scope.estimated_passages" in fields, f"Expected scope.estimated_passages error, got: {fields}"
+    assert (
+        "scope.estimated_passages" in fields
+    ), f"Expected scope.estimated_passages error, got: {fields}"
 
     # Verify provided values are captured correctly
     word_count_error = next(e for e in result.errors if e.field == "scope.target_word_count")

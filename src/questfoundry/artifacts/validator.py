@@ -292,7 +292,7 @@ def pydantic_errors_to_details(
         data: The original data that was validated (for extracting provided values).
 
     Returns:
-        List of ValidationErrorDetail with field, issue, and provided value.
+        List of ValidationErrorDetail with field, issue, provided value, and error_type.
 
     Example:
         >>> from pydantic import ValidationError
@@ -300,8 +300,8 @@ def pydantic_errors_to_details(
         ...     DreamArtifact.model_validate({"genre": ""})
         ... except ValidationError as e:
         ...     details = pydantic_errors_to_details(e.errors(), {"genre": ""})
-        ...     print(details[0].field, details[0].provided)
-        genre
+        ...     print(details[0].field, details[0].error_type)
+        genre string_too_short
     """
     from questfoundry.conversation import ValidationErrorDetail
 
@@ -312,7 +312,15 @@ def pydantic_errors_to_details(
         field = _path_to_field_name(path)
         issue = error["msg"]
         provided = _get_nested_value(data, path)
+        error_type = error.get("type")  # Pydantic error type code
 
-        result.append(ValidationErrorDetail(field=field, issue=issue, provided=provided))
+        result.append(
+            ValidationErrorDetail(
+                field=field,
+                issue=issue,
+                provided=provided,
+                error_type=error_type,
+            )
+        )
 
     return result

@@ -208,11 +208,14 @@ class DreamStage:
         if not result.valid:
             raise DreamParseError(f"Validation failed: {result.error}", str(artifact_data))
 
-        # Add required fields
-        artifact_data["type"] = "dream"
-        artifact_data["version"] = artifact_data.get("version", 1)
+        # Use validated data (may have defaults/transformations applied)
+        validated_data = result.data if result.data is not None else artifact_data
 
-        return artifact_data, 1, response.tokens_used
+        # Add required fields
+        validated_data["type"] = "dream"
+        validated_data["version"] = validated_data.get("version", 1)
+
+        return validated_data, 1, response.tokens_used
 
     def _build_direct_user_message(self, user_prompt: str) -> str:
         """Build user message for direct mode with YAML format spec.

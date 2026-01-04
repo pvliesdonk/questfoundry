@@ -46,11 +46,14 @@ class ValidationErrorDetail:
         field: The field path that failed validation (e.g., "genre", "scope.target_word_count").
         issue: Description of what went wrong.
         provided: The value that was provided (if any).
+        error_type: Pydantic error type code (e.g., "missing", "string_too_short").
+            Used for reliable categorization instead of string matching on issue text.
     """
 
     field: str
     issue: str
     provided: Any = None
+    error_type: str | None = None
 
 
 @dataclass
@@ -262,9 +265,12 @@ class ConversationRunner:
                     invalid_fields: list[dict[str, Any]] = []
 
                     # Use structured errors if available (preferred)
+                    # Pydantic error types for missing fields: "missing", "value_error.missing"
+                    missing_error_types = {"missing", "value_error.missing"}
                     if result.errors:
                         for err in result.errors:
-                            if "required" in err.issue.lower() or "missing" in err.issue.lower():
+                            # Use error_type for reliable categorization (not string matching)
+                            if err.error_type in missing_error_types:
                                 missing_fields.append(err.field)
                             else:
                                 invalid_fields.append(

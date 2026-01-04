@@ -106,7 +106,7 @@ class TestPydanticErrorsToDetails:
     """Tests for pydantic_errors_to_details function."""
 
     def test_missing_required_field(self) -> None:
-        """Missing required field produces correct error detail."""
+        """Missing required field produces correct error detail with error_type."""
         data = {"age": 25}
         try:
             SampleModel.model_validate(data)
@@ -116,8 +116,9 @@ class TestPydanticErrorsToDetails:
 
         assert len(details) == 1
         assert details[0].field == "name"
-        assert "required" in details[0].issue.lower() or "missing" in details[0].issue.lower()
         assert details[0].provided is None
+        # Verify error_type is captured for reliable categorization
+        assert details[0].error_type == "missing"
 
     def test_invalid_value(self) -> None:
         """Invalid value produces correct error detail with provided value."""
@@ -133,7 +134,7 @@ class TestPydanticErrorsToDetails:
         assert details[0].provided == ""
 
     def test_constraint_violation(self) -> None:
-        """Constraint violation includes provided value."""
+        """Constraint violation includes provided value and error_type."""
         data = {"name": "Test", "age": -5}
         try:
             SampleModel.model_validate(data)
@@ -144,6 +145,8 @@ class TestPydanticErrorsToDetails:
         assert len(details) == 1
         assert details[0].field == "age"
         assert details[0].provided == -5
+        # Constraint violations have specific error types (not "missing")
+        assert details[0].error_type == "greater_than_equal"
 
     def test_multiple_errors(self) -> None:
         """Multiple errors produce multiple details."""
@@ -235,7 +238,7 @@ class TestDreamArtifactErrors:
         assert "scope.target_word_count" in fields or "scope.estimated_passages" in fields
 
     def test_dream_list_item_error(self) -> None:
-        """List item validation errors reference parent field."""
+        """List item validation errors reference parent field without indices."""
         from questfoundry.artifacts import DreamArtifact
 
         data = {
@@ -250,5 +253,15 @@ class TestDreamArtifactErrors:
         except ValidationError as e:
             details = pydantic_errors_to_details(e.errors(), data)
 
-        # Should reference "tone" without index
-        assert any(d.field == "tone" for d in details)
+        # Get all errors related to "tone"
+        tone_errors = [d for d in details if "tone" in d.field]
+        assert len(tone_errors) >= 1, "Expected at least one tone error"
+
+        # Verify indices are stripped (field should be exactly "tone", not "tone.1")
+        for err in tone_errors:
+            assert (
+                err.field == "tone"
+            ), f"Expected 'tone' but got '{err.field}' - indices should be stripped"
+
+        # Verify the provided value is captured (the empty string at index 1)
+        assert any(err.provided == "" for err in tone_errors)
