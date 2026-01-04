@@ -6,6 +6,8 @@ Run after modifying any schema in schemas/*.schema.json.
 
 Usage:
     uv run python scripts/generate_models.py
+    uv run python scripts/generate_models.py --schemas-dir /path/to/schemas
+    uv run python scripts/generate_models.py --output-file /path/to/generated.py
 
 The generated file will be written to:
     src/questfoundry/artifacts/generated.py
@@ -17,15 +19,16 @@ Exit codes:
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-# Output file location
-GENERATED_FILE = Path(__file__).parent.parent / "src/questfoundry/artifacts/generated.py"
-SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
+# Default paths (relative to script location)
+DEFAULT_OUTPUT = Path(__file__).parent.parent / "src/questfoundry/artifacts/generated.py"
+DEFAULT_SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 
 # Header for generated file
 GENERATED_HEADER = '''\
@@ -43,10 +46,19 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
-# Non-empty string type for list items
-NonEmptyStr = Annotated[str, StringConstraints(min_length=1)]
-
 '''
+
+
+def escape_description(desc: str) -> str:
+    """Escape special characters in description strings for Python code.
+
+    Args:
+        desc: The description string from the schema.
+
+    Returns:
+        Escaped string safe for use in generated Python code.
+    """
+    return desc.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def schema_to_python_type(
@@ -65,7 +77,7 @@ def schema_to_python_type(
         Tuple of (type_annotation, field_definition).
     """
     prop_type = prop.get("type")
-    description = prop.get("description", "")
+    description = escape_description(prop.get("description", ""))
 
     # Handle const (Literal type)
     if "const" in prop:
@@ -118,10 +130,14 @@ def schema_to_python_type(
         item_type = items.get("type", "Any")
 
         # Check if items have minLength constraint
-        if item_type == "string" and items.get("minLength"):
-            item_type_anno = "NonEmptyStr"
+        if item_type == "string":
+            item_min_length = items.get("minLength")
+            if item_min_length:
+                item_type_anno = f"Annotated[str, StringConstraints(min_length={item_min_length})]"
+            else:
+                item_type_anno = "str"
         else:
-            item_type_anno = "str" if item_type == "string" else item_type
+            item_type_anno = item_type
 
         field_args = []
         if description:
@@ -159,8 +175,12 @@ def schema_to_python_type(
         field_def = f"Field({', '.join(field_args)})" if field_args else "..."
         return type_anno, field_def
 
-    # Fallback
-    return "Any", "..."
+    # Unsupported type - raise explicit error
+    supported_types = {"integer", "string", "array", "object"}
+    raise ValueError(
+        f"Unsupported JSON Schema type '{prop_type}' for field '{prop_name}'. "
+        f"Supported types: {supported_types}"
+    )
 
 
 def generate_nested_class(
@@ -296,16 +316,45 @@ def format_with_ruff(file_path: Path) -> bool:
         return True
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed arguments namespace.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate Pydantic models from JSON Schema files.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--schemas-dir",
+        type=Path,
+        default=DEFAULT_SCHEMAS_DIR,
+        help=f"Directory containing *.schema.json files (default: {DEFAULT_SCHEMAS_DIR})",
+    )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help=f"Output file path (default: {DEFAULT_OUTPUT})",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
     """Generate models from all schema files.
 
     Returns:
         Exit code (0 for success, 1 for failure).
     """
+    args = parse_args()
+    schemas_dir: Path = args.schemas_dir
+    output_file: Path = args.output_file
+
     # Find all schema files
-    schema_files = sorted(SCHEMAS_DIR.glob("*.schema.json"))
+    schema_files = sorted(schemas_dir.glob("*.schema.json"))
     if not schema_files:
-        print(f"No schema files found in {SCHEMAS_DIR}", file=sys.stderr)
+        print(f"No schema files found in {schemas_dir}", file=sys.stderr)
         return 1
 
     print(f"Found {len(schema_files)} schema file(s)")
@@ -321,7 +370,7 @@ def main() -> int:
             all_code.append(code)
             artifact_type = schema_path.stem.replace(".schema", "")
             artifact_types.append(f"{artifact_type.capitalize()}Artifact")
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
             print(f"Error processing {schema_path}: {e}", file=sys.stderr)
             return 1
 
@@ -333,12 +382,12 @@ def main() -> int:
 
     # Write generated file
     generated_code = "\n".join(all_code)
-    GENERATED_FILE.parent.mkdir(parents=True, exist_ok=True)
-    GENERATED_FILE.write_text(generated_code)
-    print(f"Generated {GENERATED_FILE}")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(generated_code)
+    print(f"Generated {output_file}")
 
     # Format with ruff
-    if not format_with_ruff(GENERATED_FILE):
+    if not format_with_ruff(output_file):
         print("Warning: ruff formatting failed", file=sys.stderr)
         return 1
 

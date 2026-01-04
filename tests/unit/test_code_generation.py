@@ -285,16 +285,59 @@ class TestGeneratorErrorHandling:
         schema_dir.mkdir()
         schema_path = schema_dir / "bad.schema.json"
         schema_path.write_text("{invalid json")
+        output_file = tmp_path / "generated.py"
 
-        # Run generator with custom schemas dir would require modifying the script
-        # For now, we just verify the script handles errors
-        # This is a smoke test that the generator exists and is executable
         result = subprocess.run(
-            [sys.executable, "scripts/generate_models.py"],
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
             capture_output=True,
             text=True,
             check=False,
             cwd=Path(__file__).parent.parent.parent,
         )
-        # Should succeed with valid schemas in real location
-        assert result.returncode == 0
+
+        assert result.returncode == 1, "Script should fail on invalid JSON"
+        assert "Error processing" in result.stderr
+        assert "bad.schema.json" in result.stderr
+
+    def test_generator_fails_on_unsupported_type(self, tmp_path: Path) -> None:
+        """Generator should fail on unsupported JSON Schema types."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["enabled"],
+            "properties": {
+                "enabled": {"type": "boolean", "description": "Flag"},  # Unsupported
+            },
+        }
+        schema_path = schema_dir / "test.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 1, "Script should fail on unsupported type"
+        assert "Unsupported JSON Schema type" in result.stderr
+        assert "boolean" in result.stderr

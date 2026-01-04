@@ -12,15 +12,16 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
-# Non-empty string type for list items
-NonEmptyStr = Annotated[str, StringConstraints(min_length=1)]
-
 
 class ContentNotes(BaseModel):
     """ContentNotes model."""
 
-    excludes: list[NonEmptyStr] = Field(default_factory=list, description="Content excluded")
-    includes: list[NonEmptyStr] = Field(default_factory=list, description="Content included")
+    excludes: list[Annotated[str, StringConstraints(min_length=1)]] = Field(
+        default_factory=list, description="Content excluded"
+    )
+    includes: list[Annotated[str, StringConstraints(min_length=1)]] = Field(
+        default_factory=list, description="Content included"
+    )
 
 
 class Scope(BaseModel):
@@ -51,8 +52,12 @@ class DreamArtifact(BaseModel):
     subgenre: str | None = Field(
         default=None, description="Optional genre refinement", min_length=1
     )
-    themes: list[NonEmptyStr] = Field(description="Thematic elements", min_length=1)
-    tone: list[NonEmptyStr] = Field(description="Tone descriptors", min_length=1)
+    themes: list[Annotated[str, StringConstraints(min_length=1)]] = Field(
+        description="Thematic elements", min_length=1
+    )
+    tone: list[Annotated[str, StringConstraints(min_length=1)]] = Field(
+        description="Tone descriptors", min_length=1
+    )
     type: Literal["dream"] = "dream"
     version: int = Field(default=1, description="Schema version number", ge=1)
 
