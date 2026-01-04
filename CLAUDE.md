@@ -57,8 +57,6 @@ DRESS stage (art direction) is deferred for later implementation.
 ### Git Workflow
 
 - **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base
-- **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
-- **Small, atomic commits** - one logical change per commit; never mix formatting with logic
 - **Branch per feature/issue** - create from `origin/main` (not local main)
 - **Document in issues and PRs** - link to related issues
 
@@ -142,10 +140,11 @@ For PRs > 300 lines, add a **Review Guide** section with suggested file/commit o
 
 ### Commit Discipline
 
-- Keep commits logically grouped - one concern per commit
+- **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- **Commit message format**: `type(scope): description`
+- **Small, atomic commits** - one logical change per commit
 - Never mix formatting/refactoring with behavior changes
 - If running a formatter, isolate it in its own commit (or separate PR for large reformats)
-- Commit message format: `type(scope): description`
 
 ### Stop-and-Split Protocol
 
@@ -154,14 +153,17 @@ If estimated diff will exceed the target size:
 1. **Stop** - Do not proceed with a single large PR
 2. **Plan** - Write a slicing plan listing PR#1, PR#2, PR#3… with goals and file lists
 3. **Implement PR#1 only** - Complete it fully with tests
-4. **Open PR#1 and pause** - Wait for merge before continuing with PR#2
+4. **Choose your workflow**:
+   - **Sequential** (simpler): Wait for PR#1 to merge, then start PR#2 from fresh main
+   - **Stacked PRs** (parallel): Create PR#2 based on PR#1 branch, but be prepared to rebase when PR#1 changes
+
+Sequential avoids cascading rebases when review feedback changes PR#1. Use stacked PRs when changes are straightforward and unlikely to need significant rework.
 
 ### No Scope Creep
 
 - If you discover additional work during implementation, do NOT include it
-- Create a follow-up issue or PR plan
 - Only include changes necessary for the PR's stated goal
-- Leave TODOs only if they reference a created issue
+- **Never leave review suggestions dangling** - if a reviewer suggests follow-up work ("you could also...", "consider adding..."), create a GitHub issue immediately and link it in your response
 
 ### Documentation
 
