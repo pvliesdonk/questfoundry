@@ -71,9 +71,7 @@ class LangChainProvider:
         lc_model: Any = self._model
         if tools:
             lc_tools = [self._to_langchain_tool(t) for t in tools]
-            lc_model = lc_model.bind_tools(
-                lc_tools, tool_choice=self._map_tool_choice(tool_choice)
-            )
+            lc_model = lc_model.bind_tools(lc_tools, tool_choice=self._map_tool_choice(tool_choice))
 
         try:
             # Call the model
@@ -89,14 +87,18 @@ class LangChainProvider:
         # Extract tool calls
         tool_calls: list[ToolCall] | None = None
         if hasattr(response, "tool_calls") and response.tool_calls:
-            tool_calls = [
-                ToolCall(
-                    id=str(tc.get("id") or f"call_{i}"),
-                    name=str(tc.get("name") or ""),
-                    arguments=tc.get("args") or {},
+            tool_calls = []
+            for i, tc in enumerate(response.tool_calls):
+                name = tc.get("name")
+                if not name:
+                    raise ProviderError("langchain", f"Received tool call without a name: {tc}")
+                tool_calls.append(
+                    ToolCall(
+                        id=str(tc.get("id") or f"call_{i}"),
+                        name=name,
+                        arguments=tc.get("args") or {},
+                    )
                 )
-                for i, tc in enumerate(response.tool_calls)
-            ]
 
         # Determine finish reason
         finish_reason = "unknown"
@@ -157,8 +159,10 @@ class LangChainProvider:
         elif role == "assistant":
             return AIMessage(content=content)
         elif role == "tool":
-            # Tool result message - needs tool_call_id
-            tool_call_id = msg.get("tool_call_id", "")
+            # Tool result message - requires tool_call_id
+            tool_call_id = msg.get("tool_call_id")
+            if not tool_call_id:
+                raise ValueError("Message with role 'tool' must have a 'tool_call_id'")
             return ToolMessage(content=content, tool_call_id=tool_call_id)
         else:
             raise ValueError(f"Unknown role: {role}")
