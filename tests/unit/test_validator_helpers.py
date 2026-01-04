@@ -259,9 +259,9 @@ class TestDreamArtifactErrors:
 
         # Verify indices are stripped (field should be exactly "tone", not "tone.1")
         for err in tone_errors:
-            assert (
-                err.field == "tone"
-            ), f"Expected 'tone' but got '{err.field}' - indices should be stripped"
+            assert err.field == "tone", (
+                f"Expected 'tone' but got '{err.field}' - indices should be stripped"
+            )
 
         # Verify the provided value is captured (the empty string at index 1)
         assert any(err.provided == "" for err in tone_errors)

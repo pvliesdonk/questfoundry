@@ -470,14 +470,14 @@ def test_validate_dream_handles_nested_errors() -> None:
     fields = {e.field for e in result.errors}
 
     # target_word_count=100 is below minimum of 1000
-    assert (
-        "scope.target_word_count" in fields
-    ), f"Expected scope.target_word_count error, got: {fields}"
+    assert "scope.target_word_count" in fields, (
+        f"Expected scope.target_word_count error, got: {fields}"
+    )
 
     # estimated_passages is required when scope is provided
-    assert (
-        "scope.estimated_passages" in fields
-    ), f"Expected scope.estimated_passages error, got: {fields}"
+    assert "scope.estimated_passages" in fields, (
+        f"Expected scope.estimated_passages error, got: {fields}"
+    )
 
     # Verify provided values are captured correctly
     word_count_error = next(e for e in result.errors if e.field == "scope.target_word_count")
