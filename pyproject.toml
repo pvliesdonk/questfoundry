@@ -63,6 +63,7 @@ dev = [
     "ruff>=0.6",
     "pre-commit>=3.8",
     "types-jsonschema>=4.0",
+    "datamodel-code-generator>=0.26",  # JSON Schema → Pydantic generator
 ]
 viz = [
     "networkx>=3.0",
