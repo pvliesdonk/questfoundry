@@ -57,12 +57,42 @@ DRESS stage (art direction) is deferred for later implementation.
 ### Git Workflow
 
 - **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base
-- **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
-- **Small, atomic commits** - one logical change per commit
 - **Branch per feature/issue** - create from `origin/main` (not local main)
 - **Document in issues and PRs** - link to related issues
 
-### Pull Request Process
+### Pull Request Size Limits
+
+**Treat reviewer cognitive load as a primary constraint.**
+
+- **Target**: 150–400 net lines changed per PR
+- **Hard limit**: Do not exceed 800 net lines or ~20 files without explicit instruction
+- **If you exceed the target**: STOP and split into multiple PRs
+
+When a PR grows too large, proactively offer to split it before continuing.
+
+### PR Splitting Strategy
+
+When splitting is needed, use this order (each PR should be mergeable independently):
+
+1. **Mechanical-only PR** - Renames, file moves, formatting, dependency bumps. NO behavior changes.
+2. **Contract/protocol PR** - Interfaces, types, schemas, tool definitions, minimal scaffolding. Include contract tests.
+3. **Runner/plumbing PR** - Wiring and orchestration. Include integration tests.
+4. **Feature/stage PR(s)** - Actual feature implementation in slices. Each PR = one coherent capability.
+5. **Cleanup PR** - Remove dead code, tighten types, refactor, docs. Keep separate.
+
+### Stacked PRs
+
+Stacked PRs are preferred when changes are dependent:
+
+```
+main ← proto-pr ← runner-pr ← stage1-pr ← stage2-pr
+```
+
+- Open each PR against the previous branch in the stack
+- Merge order is bottom-up
+- After merging a base PR, retarget the next PR to main and rebase
+
+### Pull Request Requirements
 
 PRs must meet ALL of these criteria before merging:
 
@@ -72,6 +102,68 @@ PRs must meet ALL of these criteria before merging:
 4. **Branch must be up to date** - rebase on main if needed
 
 Never force-merge a PR with failing CI or unresolved reviews.
+
+### PR Description Template
+
+Every PR description MUST include:
+
+```markdown
+## Problem
+1–3 sentences describing why this change is needed.
+
+## Changes
+- Bullet list of what changed
+
+## Not Included / Future PRs
+- What is explicitly out of scope
+- Link to follow-up issues if created
+
+## Test Plan
+- Commands run and results
+- Coverage of new code
+
+## Risk / Rollback
+- Compatibility notes
+- Feature flags if applicable
+```
+
+For PRs > 300 lines, add a **Review Guide** section with suggested file/commit order.
+
+### Review Handling
+
+**Take ALL review comments seriously:**
+
+- Address every comment before requesting re-review
+- If you disagree, explain your reasoning - don't ignore
+- **Never defer work without creating an issue** - if something is out of scope, create a GitHub issue and link it
+- When a reviewer finds issues, fix them in the same PR before merging
+
+### Commit Discipline
+
+- **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- **Commit message format**: `type(scope): description`
+- **Small, atomic commits** - one logical change per commit
+- Never mix formatting/refactoring with behavior changes
+- If running a formatter, isolate it in its own commit (or separate PR for large reformats)
+
+### Stop-and-Split Protocol
+
+If estimated diff will exceed the target size:
+
+1. **Stop** - Do not proceed with a single large PR
+2. **Plan** - Write a slicing plan listing PR#1, PR#2, PR#3… with goals and file lists
+3. **Implement PR#1 only** - Complete it fully with tests
+4. **Choose your workflow**:
+   - **Sequential** (simpler): Wait for PR#1 to merge, then start PR#2 from fresh main
+   - **Stacked PRs** (parallel): Create PR#2 based on PR#1 branch, but be prepared to rebase when PR#1 changes
+
+Sequential avoids cascading rebases when review feedback changes PR#1. Use stacked PRs when changes are straightforward and unlikely to need significant rework.
+
+### No Scope Creep
+
+- If you discover additional work during implementation, do NOT include it
+- Only include changes necessary for the PR's stated goal
+- **Never leave review suggestions dangling** - if a reviewer suggests follow-up work ("you could also...", "consider adding..."), create a GitHub issue immediately and link it in your response
 
 ### Documentation
 
