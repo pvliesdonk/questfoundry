@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation.state import ConversationState
+from questfoundry.tools import Tool
 
 # Default configuration values
 DEFAULT_MAX_TURNS = 10
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from questfoundry.providers.base import LLMProvider, Message
-    from questfoundry.tools import Tool, ToolCall
+    from questfoundry.tools import ToolCall
 
 
 class ConversationError(Exception):
@@ -111,7 +112,18 @@ class ConversationRunner:
             finalization_tool: Name of the tool that ends the conversation.
             max_turns: Maximum turns before timeout (default 10).
             validation_retries: Max validation retries (default 3).
+
+        Raises:
+            TypeError: If any tool doesn't implement the Tool protocol.
         """
+        # Validate all tools implement the Tool protocol
+        for tool in tools:
+            if not isinstance(tool, Tool):
+                raise TypeError(
+                    f"Tool {tool!r} doesn't implement Tool protocol "
+                    f"(missing 'definition' property or 'execute' method)"
+                )
+
         self._provider = provider
         self._tools = {t.definition.name: t for t in tools}
         self._tool_definitions = [t.definition for t in tools]
@@ -291,6 +303,14 @@ class ConversationRunner:
                         "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
                     }
 
+                    # Check if we've exhausted retries BEFORE making another LLM call
+                    retries += 1
+                    if retries >= self._validation_retries:
+                        raise ConversationError(
+                            f"Validation failed after {self._validation_retries} retries",
+                            state,
+                        )
+
                     state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
 
                     # Request retry from LLM
@@ -312,7 +332,6 @@ class ConversationRunner:
                                 found_new_call = True
                                 break
 
-                    retries += 1
                     if not found_new_call:
                         # LLM didn't provide expected tool call - fail fast
                         # Continuing would revalidate same stale data (infinite loop)

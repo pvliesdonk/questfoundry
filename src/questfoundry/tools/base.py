@@ -9,7 +9,7 @@ This module defines the core abstractions for tool calling:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
@@ -61,11 +61,14 @@ class ToolCall:
     arguments: dict[str, Any]
 
 
+@runtime_checkable
 class Tool(Protocol):
     """Protocol for executable tools.
 
     Tools must provide a definition (for LLM binding) and an
     execute method (for handling invocations).
+
+    This protocol is runtime-checkable, allowing isinstance() checks.
 
     Example:
         >>> class SearchCorpusTool:
