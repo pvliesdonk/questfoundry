@@ -4,17 +4,15 @@ The DREAM stage establishes the creative vision for the story,
 generating genre, tone, themes, and style direction.
 
 Supports two execution modes:
-- Interactive (default when TTY): Conversational refinement with user before finalization
-- Direct: Single LLM call with tool-gated output (for testing/automation/pipes)
+- Interactive: Conversational refinement with user before finalization
+- Direct: Single LLM call with tool-gated output (for testing/automation)
 
-Interactive mode is automatically enabled when running in a TTY. Use
-`interactive=False` in context to force direct mode.
+The caller (CLI) determines the mode via the `interactive` context flag.
 """
 
 from __future__ import annotations
 
 import re
-import sys
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -27,15 +25,6 @@ if TYPE_CHECKING:
     from questfoundry.providers import LLMProvider
     from questfoundry.providers.base import Message
     from questfoundry.tools import Tool
-
-
-def _is_interactive_tty() -> bool:
-    """Check if stdin/stdout are connected to a TTY.
-
-    Returns:
-        True if running interactively in a terminal.
-    """
-    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 class DreamParseError(Exception):
@@ -73,8 +62,7 @@ class DreamStage:
         Args:
             context: Context with keys:
                 - user_prompt: The user's story idea (required)
-                - interactive: Enable conversation mode. If not set, auto-detects
-                  based on TTY (True if running in terminal, False if piped).
+                - interactive: Enable conversation mode (default: False)
                 - user_input_fn: Async function to get user input (optional)
                 - research_tools: Additional tools for context (optional)
             provider: LLM provider for completions.
@@ -87,8 +75,8 @@ class DreamStage:
             DreamParseError: If response cannot be parsed (legacy mode only).
             ConversationError: If conversation fails (interactive mode).
         """
-        # Determine interactive mode: explicit setting > TTY detection
-        interactive = context["interactive"] if "interactive" in context else _is_interactive_tty()
+        # Determine interactive mode from context (CLI handles TTY detection)
+        interactive = context.get("interactive", False)
 
         if interactive:
             return await self._execute_interactive(context, provider, compiler)
@@ -202,17 +190,17 @@ class DreamStage:
             tool_choice="submit_dream",
         )
 
-        # Check for tool call response
+        # Extract artifact data from tool call or fall back to YAML parsing
+        artifact_data = None
         if response.has_tool_calls and response.tool_calls:
+            # Prefer the finalization tool call if present
             for tc in response.tool_calls:
                 if tc.name == "submit_dream":
                     artifact_data = tc.arguments
                     break
-            else:
-                # No submit_dream call, fall back to YAML parsing
-                artifact_data = self._parse_response(response.content)
-        else:
-            # No tool calls, fall back to YAML parsing (legacy compatibility)
+
+        # Fallback to YAML parsing for legacy providers or if tool call was missed
+        if artifact_data is None:
             artifact_data = self._parse_response(response.content)
 
         # Validate

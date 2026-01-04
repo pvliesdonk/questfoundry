@@ -230,7 +230,7 @@ def dream(
             console.print()
             try:
                 # Use run_in_executor for blocking input
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 user_input = await loop.run_in_executor(
                     None, lambda: console.input("[bold cyan]You:[/bold cyan] ")
                 )
