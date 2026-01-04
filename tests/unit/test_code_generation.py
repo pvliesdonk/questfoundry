@@ -770,6 +770,49 @@ class TestSnakeToPascal:
         assert snake_to_pascal("very_long_field_name") == "VeryLongFieldName"
 
 
+class TestArtifactTypeNaming:
+    """Tests for artifact type class naming."""
+
+    def test_multi_word_artifact_type_uses_pascal_case(self, tmp_path: Path) -> None:
+        """Multi-word artifact types should generate PascalCase class names."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Brain Storm Artifact",
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string", "minLength": 1},
+            },
+        }
+        # Use underscore in filename to test snake_to_pascal
+        schema_path = schema_dir / "brain_storm.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Should be BrainStormArtifact, not Brain_stormArtifact
+        assert "class BrainStormArtifact" in content
+        assert "Brain_storm" not in content
+
+
 class TestGeneratorArrayItemTypes:
     """Tests for array item type handling in generator."""
 

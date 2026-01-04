@@ -330,7 +330,7 @@ def generate_artifact_class(
     properties = schema.get("properties", {})
     required = set(schema.get("required", []))
 
-    class_name = f"{artifact_type.capitalize()}Artifact"
+    class_name = f"{snake_to_pascal(artifact_type)}Artifact"
     nested_classes: list[str] = []
 
     lines = [f"class {class_name}(BaseModel):"]
@@ -482,7 +482,7 @@ def main() -> int:
             code = generate_from_schema(schema_path)
             all_code.append(code)
             artifact_type = schema_path.stem.replace(".schema", "")
-            artifact_types.append(f"{artifact_type.capitalize()}Artifact")
+            artifact_types.append(f"{snake_to_pascal(artifact_type)}Artifact")
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             print(f"Error processing {schema_path}: {e}", file=sys.stderr)
             return 1
