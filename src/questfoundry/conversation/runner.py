@@ -282,9 +282,7 @@ class ConversationRunner:
                         # LLM didn't provide expected tool call - fail fast
                         # Continuing would revalidate same stale data (infinite loop)
                         if response.content:
-                            state.add_message(
-                                {"role": "assistant", "content": response.content}
-                            )
+                            state.add_message({"role": "assistant", "content": response.content})
                         raise ConversationError(
                             f"LLM failed to call {self._finalization_tool} on retry {retries}",
                             state,
