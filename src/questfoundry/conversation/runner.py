@@ -227,15 +227,8 @@ class ConversationRunner:
                 if not result.valid:
                     # Validate-with-feedback pattern: structured error response
                     # Lets LLM understand exactly what failed and how to fix it
-                    feedback = {
-                        "success": False,
-                        "error": "Validation failed for submitted artifact",
-                        "error_count": len(result.error.split(";")) if result.error else 1,
-                        "invalid_fields": [],
-                        "missing_fields": [],
-                        "submitted_data": data,
-                        "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
-                    }
+                    missing_fields: list[str] = []
+                    invalid_fields: list[dict[str, Any]] = []
 
                     # Parse validation errors into structured format
                     if result.error:
@@ -243,15 +236,25 @@ class ConversationRunner:
                             if ": " in err:
                                 field, issue = err.split(": ", 1)
                                 if "required" in issue.lower() or "missing" in issue.lower():
-                                    feedback["missing_fields"].append(field)
+                                    missing_fields.append(field)
                                 else:
-                                    feedback["invalid_fields"].append(
+                                    invalid_fields.append(
                                         {
                                             "field": field,
                                             "provided": data.get(field.split(".")[0]),
                                             "issue": issue,
                                         }
                                     )
+
+                    feedback = {
+                        "success": False,
+                        "error": "Validation failed for submitted artifact",
+                        "error_count": len(result.error.split(";")) if result.error else 1,
+                        "invalid_fields": invalid_fields,
+                        "missing_fields": missing_fields,
+                        "submitted_data": data,
+                        "hint": f"Call {self._finalization_tool}() again with corrected data. Fix only the errors listed.",
+                    }
 
                     state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
 
@@ -276,12 +279,15 @@ class ConversationRunner:
 
                     retries += 1
                     if not found_new_call:
-                        # LLM didn't provide expected tool call, count as failed attempt
-                        state.add_message(
-                            {
-                                "role": "assistant",
-                                "content": response.content or "(no tool call provided)",
-                            }
+                        # LLM didn't provide expected tool call - fail fast
+                        # Continuing would revalidate same stale data (infinite loop)
+                        if response.content:
+                            state.add_message(
+                                {"role": "assistant", "content": response.content}
+                            )
+                        raise ConversationError(
+                            f"LLM failed to call {self._finalization_tool} on retry {retries}",
+                            state,
                         )
                     continue
                 else:
