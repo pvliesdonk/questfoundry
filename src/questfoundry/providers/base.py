@@ -9,7 +9,14 @@ if TYPE_CHECKING:
     from questfoundry.tools import ToolCall, ToolDefinition
 
 
-class Message(TypedDict, total=False):
+class _MessageRequired(TypedDict):
+    """Required fields for all messages."""
+
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+
+
+class Message(_MessageRequired, total=False):
     """A single message in a conversation.
 
     Supports regular messages (system/user/assistant) and tool result
@@ -22,8 +29,6 @@ class Message(TypedDict, total=False):
         tool_call_id: ID of the tool call this message responds to (tool role only).
     """
 
-    role: Literal["system", "user", "assistant", "tool"]
-    content: str
     tool_call_id: str  # Required for role="tool"
 
 
