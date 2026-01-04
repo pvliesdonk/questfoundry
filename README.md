@@ -35,6 +35,10 @@ See [docs/design/](docs/design/) for the complete v5 architecture specification.
 DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
 ```
 
+## Development
+
+QuestFoundry uses a **schema-first** approach: JSON schemas define artifact structure, and Pydantic models are generated from them. See [docs/architecture/schema-first-models.md](docs/architecture/schema-first-models.md) for the workflow.
+
 ## License
 
 TBD
