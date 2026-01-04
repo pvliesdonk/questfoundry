@@ -18,28 +18,41 @@ QuestFoundry CLI uses:
 ```python
 # src/questfoundry/cli.py
 import typer
+from pathlib import Path
+from typing import Annotated
 from rich.console import Console
 
 app = typer.Typer(name="qf", help="QuestFoundry - Interactive Fiction Generator")
 console = Console()
 
 @app.command()
-def init(name: str = typer.Argument(...)):
+def init(
+    name: Annotated[str, typer.Argument(help="Project name")],
+    path: Annotated[Path, typer.Option("--path", "-p", help="Parent directory")] = Path(),
+) -> None:
     """Create a new QuestFoundry project."""
     pass
 
 @app.command()
-def dream(project: Path, prompt: str = typer.Option(None)):
+def dream(
+    prompt: Annotated[str | None, typer.Argument(help="Story idea")] = None,
+    project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
+    provider: Annotated[str | None, typer.Option("--provider", help="LLM provider")] = None,
+) -> None:
     """Run the DREAM stage."""
     pass
 
 @app.command()
-def status(project: Path):
+def status(
+    project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
+) -> None:
     """Show pipeline status."""
     pass
 
 @app.command()
-def doctor():
+def doctor(
+    project: Annotated[Path | None, typer.Option("--project", "-p")] = None,
+) -> None:
     """Check configuration and provider connectivity."""
     pass
 ```
@@ -55,8 +68,9 @@ with Progress(
     SpinnerColumn(),
     TextColumn("[progress.description]{task.description}"),
     console=console,
+    transient=True,  # Remove spinner after completion
 ) as progress:
-    task = progress.add_task("Running DREAM stage...", total=None)
+    progress.add_task("Running DREAM stage...", total=None)
     result = await stage.execute(...)
 ```
 

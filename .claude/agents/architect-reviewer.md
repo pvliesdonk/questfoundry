@@ -37,6 +37,9 @@ class LLMProvider(Protocol):
     async def complete(
         self,
         messages: list[Message],
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
         tools: list[ToolDefinition] | None = None,
         tool_choice: str | None = None,
     ) -> LLMResponse: ...

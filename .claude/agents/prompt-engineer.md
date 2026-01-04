@@ -51,8 +51,8 @@ Prefer:
 
 ## Debugging LLM Output
 
-1. Enable logging: `qf --log -vvv dream`
-2. Check `{project}/logs/llm_calls.jsonl`
+1. Enable logging: `qf --log -vvv dream "Your story idea" --project myproject`
+2. Check `myproject/logs/llm_calls.jsonl`
 3. Analyze raw response vs expected format
 4. Adjust prompt or parsing logic
 
