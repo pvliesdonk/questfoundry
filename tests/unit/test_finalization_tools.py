@@ -10,7 +10,6 @@ from questfoundry.tools.finalization import (
     get_finalization_tool,
 )
 
-
 # --- SubmitDreamTool Tests ---
 
 

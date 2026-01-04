@@ -15,8 +15,7 @@ from questfoundry.conversation import (
     ValidationResult,
 )
 from questfoundry.providers.base import LLMResponse
-from questfoundry.tools import Tool, ToolCall, ToolDefinition
-
+from questfoundry.tools import ToolCall, ToolDefinition
 
 # --- Test Fixtures ---
 
@@ -267,7 +266,7 @@ async def test_runner_with_validation_success() -> None:
         finalization_tool="submit_test",
     )
 
-    result, state = await runner.run(
+    result, _state = await runner.run(
         initial_messages=[{"role": "user", "content": "Start"}],
         validator=validator,
     )
@@ -340,7 +339,7 @@ async def test_runner_validation_exhausts_retries() -> None:
     # Always return failing response
     provider = create_mock_provider([response, response, response, response])
 
-    def validator(data: dict[str, Any]) -> ValidationResult:
+    def validator(_data: dict[str, Any]) -> ValidationResult:
         return ValidationResult(
             valid=False,
             errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
@@ -380,7 +379,7 @@ async def test_runner_max_turns_exceeded() -> None:
         max_turns=3,
     )
 
-    with pytest.raises(ConversationError, match="Maximum turns.*exceeded"):
+    with pytest.raises(ConversationError, match=r"Maximum turns.*exceeded"):
         await runner.run(
             initial_messages=[{"role": "user", "content": "Start"}],
         )
@@ -407,7 +406,7 @@ async def test_runner_llm_fails_to_call_tool() -> None:
     )
     provider = create_mock_provider([first_response, second_response])
 
-    def validator(data: dict[str, Any]) -> ValidationResult:
+    def validator(_data: dict[str, Any]) -> ValidationResult:
         return ValidationResult(
             valid=False,
             errors=[ValidationErrorDetail(field="value", issue="error", provided="")],
@@ -419,7 +418,7 @@ async def test_runner_llm_fails_to_call_tool() -> None:
         finalization_tool="submit_test",
     )
 
-    with pytest.raises(ConversationError, match="LLM failed to call"):
+    with pytest.raises(ConversationError, match=r"LLM failed to call"):
         await runner.run(
             initial_messages=[{"role": "user", "content": "Start"}],
             validator=validator,
@@ -508,7 +507,7 @@ async def test_runner_tool_execution_error() -> None:
         def definition(self) -> ToolDefinition:
             return ToolDefinition(name="failing", description="Fails", parameters={})
 
-        def execute(self, arguments: dict[str, Any]) -> str:
+        def execute(self, _arguments: dict[str, Any]) -> str:
             raise RuntimeError("Tool crashed")
 
     failing_call = ToolCall(id="call_1", name="failing", arguments={})
