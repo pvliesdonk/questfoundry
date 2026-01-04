@@ -19,6 +19,9 @@ repos:
           - rich
           - ruamel.yaml
           - jsonschema
+          - langchain-core
+          - langchain-openai
+          - langchain-anthropic
         args: [--ignore-missing-imports]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
