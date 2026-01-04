@@ -54,6 +54,60 @@ DRESS stage (art direction) is deferred for later implementation.
 - **Tests first** where practical
 - Keep functions focused and small
 
+### Pre-Implementation Analysis
+
+**Before writing non-trivial code, think about what can go wrong.**
+
+Rushing to "done" instead of "correct" causes multiple review cycles. A 30-minute upfront analysis prevents hours of back-and-forth with reviewers.
+
+#### 1. List Edge Cases First
+
+Before implementing, enumerate:
+- **Empty inputs** - empty strings, empty lists, empty dicts, None
+- **Missing fields** - what if optional fields are absent? what if required fields are missing?
+- **Invalid types** - wrong type passed, type not in supported set
+- **Special characters** - quotes, newlines, tabs, unicode in string inputs
+- **Name collisions** - what if two inputs produce the same output name?
+- **Error paths** - what happens when external calls fail?
+
+#### 2. Write Edge Case Tests First
+
+If you'd written `test_empty_properties` before implementing, you'd catch the bug before review. For each edge case identified, write a test that exercises it.
+
+#### 3. Trace Every Code Path
+
+Especially defaults and fallbacks. Ask:
+- "What happens if X is missing?"
+- "What does this return when Y is None?"
+- "Is this silent fallback hiding a bug?"
+
+**Silent fallbacks are bugs, not features.** Code like `items.get("type", "Any")` silently produces invalid output. Prefer explicit errors: raise `ValueError` with a helpful message.
+
+#### 4. Apply DRY During Writing
+
+Notice patterns as you write, not when a reviewer points them out. If you copy-paste code and change one thing, extract a helper function immediately.
+
+#### 5. Inspect Actual Output
+
+Don't just run tests—actually read the generated/output files. Tests verify behavior you thought of; inspection catches behavior you didn't.
+
+```bash
+# After running a generator, read what it produced
+cat src/questfoundry/artifacts/generated.py
+
+# After a complex operation, verify the result manually
+git diff --stat
+```
+
+#### 6. Think Like a Reviewer
+
+Before pushing, ask:
+- "What would a careful reviewer find wrong with this?"
+- "What questions would they ask?"
+- "What edge cases would they test?"
+
+If you can anticipate the feedback, fix it before pushing.
+
 ### Git Workflow
 
 - **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base

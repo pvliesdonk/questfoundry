@@ -13,6 +13,7 @@
     "version": {
       "type": "integer",
       "minimum": 1,
+      "default": 1,
       "description": "Schema version number"
     },
     "genre": {
@@ -70,6 +71,7 @@
         "branching_depth": {
           "type": "string",
           "minLength": 1,
+          "default": "moderate",
           "description": "Branching complexity (e.g., light, moderate, heavy, extensive)"
         },
         "estimated_playtime_minutes": {
@@ -81,6 +83,7 @@
     },
     "content_notes": {
       "type": "object",
+      "description": "Content advisory notes for inclusions and exclusions",
       "properties": {
         "includes": {
           "type": "array",

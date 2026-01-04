@@ -30,6 +30,20 @@ jobs:
       - name: Run ruff format check
         run: uv run ruff format --check src/ tests/
 
+      - name: Check generated code is up-to-date
+        run: |
+          uv run python scripts/generate_models.py
+          if ! git diff --quiet src/questfoundry/artifacts/generated.py; then
+            echo "::error::Generated models are out of sync with schemas"
+            echo ""
+            echo "=== Diff ==="
+            git diff src/questfoundry/artifacts/generated.py
+            echo "============"
+            echo ""
+            echo "Run 'uv run python scripts/generate_models.py' and commit the result"
+            exit 1
+          fi
+
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
