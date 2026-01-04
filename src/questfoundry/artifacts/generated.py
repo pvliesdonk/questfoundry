@@ -27,8 +27,8 @@ class ContentNotes(BaseModel):
 class Scope(BaseModel):
     """Scope model."""
 
-    branching_depth: str | None = Field(
-        default=None,
+    branching_depth: str = Field(
+        default="moderate",
         description="Branching complexity (e.g., light, moderate, heavy, extensive)",
         min_length=1,
     )

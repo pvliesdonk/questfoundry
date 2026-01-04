@@ -145,7 +145,7 @@ and Pydantic models are generated from them via `scripts/generate_models.py`.
 - Developers edit schemas, not models directly
 - Generated file must be committed (not gitignored)
 - CI fails if generated.py doesn't match schemas
-- Pre-commit hook regenerates on schema changes
+- Developers run `uv run python scripts/generate_models.py` after schema changes
 - models.py will be deprecated and removed
 
 ---

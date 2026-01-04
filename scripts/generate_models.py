@@ -61,6 +61,27 @@ def escape_description(desc: str) -> str:
     return desc.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
+def format_default_value(value: Any) -> str:
+    """Format a JSON Schema default value as Python code.
+
+    Args:
+        value: The default value from the schema.
+
+    Returns:
+        Python code representation of the value.
+    """
+    if isinstance(value, str):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    elif isinstance(value, bool):
+        return "True" if value else "False"
+    elif value is None:
+        return "None"
+    else:
+        # int, float, etc.
+        return str(value)
+
+
 def schema_to_python_type(
     prop: dict[str, Any],
     prop_name: str,
@@ -92,16 +113,19 @@ def schema_to_python_type(
         if "minimum" in prop:
             field_args.append(f"ge={prop['minimum']}")
 
-        # Check if field has a default
         is_required = prop_name in parent_required
-        if not is_required:
+        has_default = "default" in prop
+
+        if has_default:
+            # Use schema-specified default
+            default_val = format_default_value(prop["default"])
+            field_args.insert(0, f"default={default_val}")
+            type_anno = "int"
+        elif not is_required:
             type_anno = "int | None"
             field_args.insert(0, "default=None")
         else:
             type_anno = "int"
-            # Version field gets default=1
-            if prop_name == "version":
-                field_args.insert(0, "default=1")
 
         field_def = f"Field({', '.join(field_args)})" if field_args else "..."
         return type_anno, field_def
@@ -115,7 +139,13 @@ def schema_to_python_type(
             field_args.append(f"min_length={prop['minLength']}")
 
         is_required = prop_name in parent_required
-        if not is_required:
+        has_default = "default" in prop
+
+        if has_default:
+            default_val = format_default_value(prop["default"])
+            field_args.insert(0, f"default={default_val}")
+            type_anno = "str"
+        elif not is_required:
             type_anno = "str | None"
             field_args.insert(0, "default=None")
         else:

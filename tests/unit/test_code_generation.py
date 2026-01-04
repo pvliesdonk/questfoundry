@@ -341,3 +341,91 @@ class TestGeneratorErrorHandling:
         assert result.returncode == 1, "Script should fail on unsupported type"
         assert "Unsupported JSON Schema type" in result.stderr
         assert "boolean" in result.stderr
+
+
+class TestGeneratorHandlesDefaultValues:
+    """Tests for default value handling in generator."""
+
+    def test_integer_default_from_schema(self) -> None:
+        """Integer fields with default should use that default."""
+        from questfoundry.artifacts.generated import DreamArtifact
+
+        artifact = DreamArtifact(
+            genre="mystery",
+            tone=["dark"],
+            audience="adult",
+            themes=["betrayal"],
+        )
+        # version should default to 1 per schema
+        assert artifact.version == 1
+
+    def test_string_default_from_schema(self) -> None:
+        """String fields with default should use that default."""
+        from questfoundry.artifacts.generated import Scope
+
+        scope = Scope(
+            target_word_count=10000,
+            estimated_passages=20,
+        )
+        # branching_depth should default to "moderate" per schema
+        assert scope.branching_depth == "moderate"
+
+    def test_default_values_are_overridable(self) -> None:
+        """Default values should be overridable by explicit values."""
+        from questfoundry.artifacts.generated import DreamArtifact, Scope
+
+        artifact = DreamArtifact(
+            genre="mystery",
+            tone=["dark"],
+            audience="adult",
+            themes=["betrayal"],
+            version=2,
+        )
+        assert artifact.version == 2
+
+        scope = Scope(
+            target_word_count=10000,
+            estimated_passages=20,
+            branching_depth="heavy",
+        )
+        assert scope.branching_depth == "heavy"
+
+    def test_generator_produces_correct_default_syntax(self, tmp_path: Path) -> None:
+        """Generator should produce correct Python default syntax."""
+        schema_dir = tmp_path / "schemas"
+        schema_dir.mkdir()
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "count": {"type": "integer", "default": 42},
+                "label": {"type": "string", "default": "default_label"},
+            },
+        }
+        schema_path = schema_dir / "defaults.schema.json"
+        schema_path.write_text(json.dumps(schema))
+        output_file = tmp_path / "generated.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(schema_dir),
+                "--output-file",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        content = output_file.read_text()
+        # Check that defaults are generated correctly
+        assert "default=42" in content
+        assert 'default="default_label"' in content
