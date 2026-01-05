@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.tools.base import Tool, ToolDefinition
@@ -32,6 +33,9 @@ logger = logging.getLogger(__name__)
 
 # Maximum tokens (approx chars / 4) for tool output
 MAX_OUTPUT_CHARS = 4000  # ~1000 tokens
+
+# Cache embeddings in user's cache directory
+EMBEDDINGS_CACHE_DIR = Path.home() / ".cache" / "questfoundry" / "corpus-embeddings"
 
 
 class CorpusNotAvailableError(Exception):
@@ -53,10 +57,14 @@ def _corpus_available() -> bool:
 
 @lru_cache(maxsize=1)
 def _get_corpus() -> Corpus:
-    """Get singleton corpus instance.
+    """Get singleton corpus instance with semantic search enabled.
+
+    Configures the corpus with an embedding provider for semantic search.
+    Embeddings are cached in ~/.cache/questfoundry/corpus-embeddings/.
+    If embeddings don't exist, they are built on first use.
 
     Returns:
-        Corpus instance (lazily initialized).
+        Corpus instance with semantic search enabled.
 
     Raises:
         CorpusNotAvailableError: If ifcraftcorpus not installed.
@@ -65,8 +73,32 @@ def _get_corpus() -> Corpus:
         raise CorpusNotAvailableError()
 
     from ifcraftcorpus import Corpus
+    from ifcraftcorpus.providers import get_embedding_provider
 
-    return Corpus()
+    # Get embedding provider (uses OpenAI or Ollama based on env vars)
+    try:
+        provider = get_embedding_provider()
+    except Exception as e:
+        logger.warning("Could not get embedding provider: %s. Using keyword search only.", e)
+        return Corpus()
+
+    # Create corpus with embeddings support
+    EMBEDDINGS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    corpus = Corpus(
+        embeddings_path=EMBEDDINGS_CACHE_DIR,
+        embedding_provider=provider,
+    )
+
+    # Build embeddings if not already built
+    if not corpus.has_semantic_search:
+        logger.info("Building corpus embeddings (one-time operation)...")
+        try:
+            count = corpus.build_embeddings()
+            logger.info("Built embeddings for %d documents", count)
+        except Exception as e:
+            logger.warning("Failed to build embeddings: %s. Using keyword search.", e)
+
+    return corpus
 
 
 class SearchCorpusTool:
@@ -129,7 +161,7 @@ class SearchCorpusTool:
             )
 
         try:
-            results = corpus.search(query, cluster=cluster, limit=limit)
+            results = corpus.search(query, cluster=cluster, limit=limit, mode="hybrid")
         except Exception as e:
             logger.warning("Corpus search failed: %s", e)
             return json.dumps(

@@ -56,11 +56,11 @@ tracing = [
     "langsmith>=0.2",
 ]
 research = [
-    "ifcraftcorpus @ git+https://github.com/pvliesdonk/if-craft-corpus.git",
+    "ifcraftcorpus[embeddings-api]",
     "pvl-webtools @ git+https://github.com/pvliesdonk/pvl-webtools.git",
 ]
 research-corpus = [
-    "ifcraftcorpus @ git+https://github.com/pvliesdonk/if-craft-corpus.git",
+    "ifcraftcorpus[embeddings-api]",
 ]
 research-web = [
     "pvl-webtools @ git+https://github.com/pvliesdonk/pvl-webtools.git",
