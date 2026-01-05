@@ -7,11 +7,17 @@ This module provides LangChain-compatible tools for web research:
 Requires:
     - SEARXNG_URL environment variable for web search
     - pvl-webtools package: uv add pvl-webtools
+
+All tools return structured JSON following ADR-008:
+- result: semantic status (success, no_results, error)
+- data/content: the actual result data
+- action: guidance on what to do next (never instructs looping)
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from typing import Any
@@ -95,13 +101,25 @@ class WebSearchTool:
             arguments: query (required), max_results (optional), recency (optional)
 
         Returns:
-            Formatted search results or error message.
+            Structured JSON response following ADR-008.
         """
         if not _web_tools_available():
-            return "Error: pvl-webtools not installed. Install with: uv add pvl-webtools"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": "pvl-webtools not installed",
+                    "action": "Web search unavailable. Proceed with your own knowledge.",
+                }
+            )
 
         if not _searxng_configured():
-            return "Error: SEARXNG_URL not configured. Set environment variable for web search."
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": "SEARXNG_URL not configured",
+                    "action": "Web search unavailable. Proceed with your own knowledge.",
+                }
+            )
 
         query = arguments["query"]
         max_results = arguments.get("max_results", 5)
@@ -129,10 +147,22 @@ class WebSearchTool:
                 results = asyncio.run(web_search(query, max_results=max_results, recency=recency))
         except Exception as e:
             logger.warning("Web search failed: %s", e)
-            return f"Search failed: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": f"Search failed: {e}",
+                    "action": "Web search failed. Proceed with your own knowledge.",
+                }
+            )
 
         if not results:
-            return f"No results found for '{query}'."
+            return json.dumps(
+                {
+                    "result": "no_results",
+                    "query": query,
+                    "action": "No web results found. Proceed with your own knowledge.",
+                }
+            )
 
         # Format results with output size tracking
         formatted = []
@@ -151,7 +181,15 @@ class WebSearchTool:
             formatted.append(entry)
             total_chars += len(entry)
 
-        return "\n\n---\n\n".join(formatted)
+        return json.dumps(
+            {
+                "result": "success",
+                "query": query,
+                "count": len(results),
+                "content": "\n\n---\n\n".join(formatted),
+                "action": "Use this information to inform your creative decisions.",
+            }
+        )
 
 
 class WebFetchTool:
@@ -194,10 +232,16 @@ class WebFetchTool:
             arguments: url (required), extract_mode (optional)
 
         Returns:
-            Extracted content or error message.
+            Structured JSON response following ADR-008.
         """
         if not _web_tools_available():
-            return "Error: pvl-webtools not installed. Install with: uv add pvl-webtools"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": "pvl-webtools not installed",
+                    "action": "Web fetch unavailable. Proceed with your own knowledge.",
+                }
+            )
 
         url = arguments["url"]
         extract_mode = arguments.get("extract_mode", "markdown")
@@ -224,7 +268,14 @@ class WebFetchTool:
                 result = asyncio.run(web_fetch(url, extract_mode=extract_mode))
         except Exception as e:
             logger.warning("Web fetch failed for %s: %s", url, e)
-            return f"Fetch failed: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "url": url,
+                    "error": f"Fetch failed: {e}",
+                    "action": "Could not fetch URL. Proceed with your own knowledge.",
+                }
+            )
 
         content = result.content
 
@@ -232,7 +283,15 @@ class WebFetchTool:
         if len(content) > MAX_OUTPUT_CHARS:
             content = content[:MAX_OUTPUT_CHARS] + "\n\n*...content truncated*"
 
-        return f"**Source:** {result.url}\n**Mode:** {result.extract_mode}\n\n{content}"
+        return json.dumps(
+            {
+                "result": "success",
+                "url": result.url,
+                "extract_mode": result.extract_mode,
+                "content": content,
+                "action": "Use this information to inform your creative decisions.",
+            }
+        )
 
 
 def get_web_tools(require_searxng: bool = True) -> list[Tool]:

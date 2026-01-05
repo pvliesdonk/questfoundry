@@ -136,7 +136,9 @@ class TestSearchCorpusTool:
         mock_corpus.search.assert_called_once_with("mystery", cluster="genre-conventions", limit=3)
 
     def test_execute_no_results(self) -> None:
-        """Should return helpful message when no results found."""
+        """Should return structured JSON with no_results status (ADR-008)."""
+        import json
+
         from questfoundry.tools.research.corpus_tools import _get_corpus
 
         _get_corpus.cache_clear()
@@ -160,8 +162,12 @@ class TestSearchCorpusTool:
             _get_corpus.cache_clear()
             result = tool.execute({"query": "xyz123"})
 
-        assert "no craft guidance found" in result.lower()
-        assert "xyz123" in result
+        # ADR-008: Structured JSON response
+        data = json.loads(result)
+        assert data["result"] == "no_results"
+        assert data["query"] == "xyz123"
+        assert "action" in data
+        assert "proceed" in data["action"].lower()
 
 
 class TestGetDocumentTool:

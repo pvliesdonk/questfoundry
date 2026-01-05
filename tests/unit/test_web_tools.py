@@ -114,7 +114,9 @@ class TestWebSearchTool:
         assert "comprehensive guide" in result
 
     def test_execute_no_results(self) -> None:
-        """Should return helpful message when no results found."""
+        """Should return structured JSON with no_results status (ADR-008)."""
+        import json
+
         tool = WebSearchTool()
 
         # Create mock pvlwebtools module
@@ -135,7 +137,12 @@ class TestWebSearchTool:
         ):
             result = tool.execute({"query": "xyz123unique"})
 
-        assert "no results" in result.lower()
+        # ADR-008: Structured JSON response
+        data = json.loads(result)
+        assert data["result"] == "no_results"
+        assert data["query"] == "xyz123unique"
+        assert "action" in data
+        assert "proceed" in data["action"].lower()
 
     def test_execute_handles_exception(self) -> None:
         """Should return error message when search fails."""

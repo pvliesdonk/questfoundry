@@ -9,10 +9,16 @@ Tools:
     ListClustersTool: Discover available topic clusters
 
 The corpus is a singleton to avoid repeated index building.
+
+All tools return structured JSON following ADR-008:
+- result: semantic status (success, no_results, error)
+- data/content: the actual result data
+- action: guidance on what to do next (never instructs looping)
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
@@ -105,7 +111,7 @@ class SearchCorpusTool:
             arguments: query (required), cluster (optional), limit (optional)
 
         Returns:
-            Formatted markdown results or error message.
+            Structured JSON response following ADR-008.
         """
         query = arguments["query"]
         cluster = arguments.get("cluster")
@@ -114,18 +120,37 @@ class SearchCorpusTool:
         try:
             corpus = _get_corpus()
         except CorpusNotAvailableError as e:
-            return f"Error: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": str(e),
+                    "action": "Corpus unavailable. Proceed with your own creative knowledge.",
+                }
+            )
 
         try:
             results = corpus.search(query, cluster=cluster, limit=limit)
         except Exception as e:
             logger.warning("Corpus search failed: %s", e)
-            return f"Search failed: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": f"Search failed: {e}",
+                    "action": "Search unavailable. Proceed with your own creative knowledge.",
+                }
+            )
 
         if not results:
-            return f"No craft guidance found for '{query}'. Try broader terms."
+            return json.dumps(
+                {
+                    "result": "no_results",
+                    "query": query,
+                    "cluster": cluster,
+                    "action": "No matching craft guidance found. Proceed with your creative instincts.",
+                }
+            )
 
-        # Format results as markdown
+        # Format results as markdown content
         formatted = []
         total_chars = 0
 
@@ -156,7 +181,16 @@ class SearchCorpusTool:
             formatted.append(entry)
             total_chars += len(entry)
 
-        return "\n---\n".join(formatted)
+        return json.dumps(
+            {
+                "result": "success",
+                "query": query,
+                "cluster": cluster,
+                "count": len(results),
+                "content": "\n---\n".join(formatted),
+                "action": "Use this craft guidance to inform your creative decisions.",
+            }
+        )
 
 
 class GetDocumentTool:
@@ -191,23 +225,41 @@ class GetDocumentTool:
             arguments: name (required)
 
         Returns:
-            Formatted document or error message.
+            Structured JSON response following ADR-008.
         """
         name = arguments["name"]
 
         try:
             corpus = _get_corpus()
         except CorpusNotAvailableError as e:
-            return f"Error: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": str(e),
+                    "action": "Corpus unavailable. Proceed with your own creative knowledge.",
+                }
+            )
 
         try:
             doc = corpus.get_document(name)
         except Exception as e:
             logger.warning("Document retrieval failed: %s", e)
-            return f"Failed to get document: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": f"Failed to get document: {e}",
+                    "action": "Document retrieval failed. Proceed with available information.",
+                }
+            )
 
         if not doc:
-            return f"Document '{name}' not found. Use list_clusters to see available topics."
+            return json.dumps(
+                {
+                    "result": "no_results",
+                    "document": name,
+                    "action": "Document not found. Use list_clusters to discover available topics, or proceed with your creative instincts.",
+                }
+            )
 
         # Format document
         title = doc.get("title", name)
@@ -218,7 +270,16 @@ class GetDocumentTool:
         if len(content) > MAX_OUTPUT_CHARS:
             content = content[:MAX_OUTPUT_CHARS] + "\n\n*...content truncated*"
 
-        return f"# {title}\n*Cluster: {cluster}*\n\n{content}"
+        return json.dumps(
+            {
+                "result": "success",
+                "document": name,
+                "title": title,
+                "cluster": cluster,
+                "content": f"# {title}\n*Cluster: {cluster}*\n\n{content}",
+                "action": "Use this craft guidance to inform your creative decisions.",
+            }
+        )
 
 
 class ListClustersTool:
@@ -247,21 +308,38 @@ class ListClustersTool:
             arguments: Not used.
 
         Returns:
-            Formatted list of clusters.
+            Structured JSON response following ADR-008.
         """
         try:
             corpus = _get_corpus()
         except CorpusNotAvailableError as e:
-            return f"Error: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": str(e),
+                    "action": "Corpus unavailable. Proceed with your own creative knowledge.",
+                }
+            )
 
         try:
             clusters = corpus.list_clusters()
         except Exception as e:
             logger.warning("Cluster listing failed: %s", e)
-            return f"Failed to list clusters: {e}"
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": f"Failed to list clusters: {e}",
+                    "action": "Cluster listing failed. Proceed with available information.",
+                }
+            )
 
         if not clusters:
-            return "No clusters available."
+            return json.dumps(
+                {
+                    "result": "no_results",
+                    "action": "No clusters available in corpus. Proceed with your creative instincts.",
+                }
+            )
 
         # Format as bullet list with descriptions
         cluster_descriptions = {
@@ -285,7 +363,14 @@ class ListClustersTool:
             else:
                 formatted.append(f"- **{cluster}**")
 
-        return "\n".join(formatted)
+        return json.dumps(
+            {
+                "result": "success",
+                "clusters": clusters,
+                "content": "\n".join(formatted),
+                "action": "Use search_corpus with a cluster filter for targeted results.",
+            }
+        )
 
 
 def get_corpus_tools() -> list[Tool]:
