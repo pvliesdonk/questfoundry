@@ -31,6 +31,40 @@ class GateConfig:
 
 
 @dataclass
+class ResearchToolsConfig:
+    """Configuration for research tools.
+
+    Controls which research tools are available to pipeline stages.
+    Tools can be enabled/disabled independently.
+
+    Attributes:
+        corpus: Enable IF Craft Corpus tools (search, get_document, list_clusters).
+        web_search: Enable web search tool (requires SEARXNG_URL).
+        web_fetch: Enable web fetch tool.
+    """
+
+    corpus: bool = True
+    web_search: bool = True
+    web_fetch: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ResearchToolsConfig:
+        """Create config from dictionary.
+
+        Args:
+            data: Dictionary with corpus, web_search, web_fetch bool fields.
+
+        Returns:
+            ResearchToolsConfig instance.
+        """
+        return cls(
+            corpus=data.get("corpus", True),
+            web_search=data.get("web_search", True),
+            web_fetch=data.get("web_fetch", True),
+        )
+
+
+@dataclass
 class ProjectConfig:
     """Configuration for a QuestFoundry project."""
 
@@ -39,6 +73,7 @@ class ProjectConfig:
     provider: ProviderConfig = field(default_factory=ProviderConfig)
     stages: list[str] = field(default_factory=lambda: list(DEFAULT_STAGES))
     gates: list[GateConfig] = field(default_factory=list)
+    research_tools: ResearchToolsConfig = field(default_factory=ResearchToolsConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectConfig:
@@ -71,12 +106,17 @@ class ProjectConfig:
             for stage, value in gates_data.items()
         ]
 
+        # Parse research tools config
+        research_tools_data = data.get("research_tools", {})
+        research_tools = ResearchToolsConfig.from_dict(research_tools_data)
+
         return cls(
             name=data.get("name", "unnamed"),
             version=data.get("version", 1),
             provider=provider,
             stages=stages,
             gates=gates,
+            research_tools=research_tools,
         )
 
 
