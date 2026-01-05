@@ -40,20 +40,20 @@ SUBMIT_DREAM_PARAMS: dict[str, Any] = {
             "properties": {
                 "branching_depth": {
                     "description": "Branching complexity (e.g., light, moderate, heavy, extensive)",
-                    "type": "string",
+                    "type": ["string", "null"],
                 },
                 "estimated_passages": {"description": "Target scene count", "type": "integer"},
                 "estimated_playtime_minutes": {
                     "description": "Target reading time",
-                    "type": "integer",
+                    "type": ["integer", "null"],
                 },
                 "target_word_count": {"description": "Approximate final length", "type": "integer"},
             },
             "required": ["estimated_passages", "target_word_count"],
             "type": "object",
         },
-        "style_notes": {"description": "Style guidance", "type": "string"},
-        "subgenre": {"description": "Optional genre refinement", "type": "string"},
+        "style_notes": {"description": "Style guidance", "type": ["string", "null"]},
+        "subgenre": {"description": "Optional genre refinement", "type": ["string", "null"]},
         "themes": {
             "description": "Thematic elements",
             "items": {"type": "string"},
