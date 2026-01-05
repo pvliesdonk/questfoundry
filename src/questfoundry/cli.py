@@ -35,9 +35,13 @@ app = typer.Typer(
 )
 console = Console()
 
+# Default directory for projects
+DEFAULT_PROJECTS_DIR = Path("projects")
+
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
 _log_enabled: bool = False
+_projects_dir: Path = DEFAULT_PROJECTS_DIR
 
 
 @app.callback()
@@ -58,11 +62,21 @@ def main(
             help="Enable file logging to {project}/logs/ (debug.jsonl, llm_calls.jsonl).",
         ),
     ] = False,
+    projects_dir: Annotated[
+        Path,
+        typer.Option(
+            "--projects-dir",
+            "-d",
+            help="Base directory for projects (default: ./projects).",
+            envvar="QF_PROJECTS_DIR",
+        ),
+    ] = DEFAULT_PROJECTS_DIR,
 ) -> None:
     """QuestFoundry: Pipeline-driven interactive fiction generation."""
-    global _verbose, _log_enabled
+    global _verbose, _log_enabled, _projects_dir
     _verbose = verbose
     _log_enabled = log
+    _projects_dir = projects_dir
 
     # Configure console logging (file logging configured later when project is known)
     configure_logging(verbosity=verbose)
@@ -77,6 +91,37 @@ def _configure_project_logging(project_path: Path) -> None:
     if _log_enabled:
         configure_logging(verbosity=_verbose, log_to_file=True, project_path=project_path)
         atexit.register(close_file_logging)
+
+
+def _resolve_project_path(project: Path | None) -> Path:
+    """Resolve project path from argument.
+
+    Resolution order:
+    1. If project is None, use current directory
+    2. If project exists as given, use it
+    3. If project is a name (no path separators), look in _projects_dir
+
+    Args:
+        project: Project path or name from CLI argument.
+
+    Returns:
+        Resolved project path.
+    """
+    if project is None:
+        return Path()
+
+    # If path exists as given, use it
+    if project.exists():
+        return project
+
+    # If it's a simple name (no path sep), try in projects dir
+    if "/" not in str(project) and "\\" not in str(project):
+        projects_path = _projects_dir / project
+        if projects_path.exists():
+            return projects_path
+
+    # Return as-is (will fail in _require_project with helpful error)
+    return project
 
 
 def _require_project(project_path: Path) -> None:
@@ -126,8 +171,13 @@ def version() -> None:
 def init(
     name: Annotated[str, typer.Argument(help="Project name")],
     path: Annotated[
-        Path, typer.Option("--path", "-p", help="Parent directory for the project")
-    ] = Path(),
+        Path | None,
+        typer.Option(
+            "--path",
+            "-p",
+            help="Parent directory for the project (default: --projects-dir).",
+        ),
+    ] = None,
 ) -> None:
     """Initialize a new story project.
 
@@ -139,8 +189,12 @@ def init(
 
     from questfoundry.pipeline.config import create_default_config
 
+    # Use global projects dir if no path specified
+    parent_dir = path if path is not None else _projects_dir
+    parent_dir.mkdir(parents=True, exist_ok=True)
+
     # Create project directory
-    project_path = path / name
+    project_path = parent_dir / name
     if project_path.exists():
         console.print(f"[red]Error:[/red] Directory '{project_path}' already exists")
         raise typer.Exit(1)
@@ -181,7 +235,14 @@ def init(
 @app.command()
 def dream(
     prompt: Annotated[str | None, typer.Argument(help="Story idea or concept")] = None,
-    project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
     provider: Annotated[
         str | None,
         typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
@@ -204,21 +265,27 @@ def dream(
     terminal is a TTY. Use --interactive/-i to force interactive mode,
     or --no-interactive/-I to force direct mode.
     """
-    _require_project(project)
-    _configure_project_logging(project)
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
 
     # Get logger after logging is fully configured
     log = get_logger(__name__)
 
-    # Get prompt interactively if not provided
+    # Determine interactive mode: explicit flag > TTY detection
+    use_interactive = interactive if interactive is not None else _is_interactive_tty()
+
+    # Handle prompt: if not provided, interactive mode uses default, otherwise prompt
     if prompt is None:
-        prompt = typer.prompt("Enter your story idea")
+        if use_interactive:
+            # In interactive mode, start with a guiding prompt that invites conversation
+            prompt = "I'd like to create a new interactive fiction story. Please help me develop the creative vision."
+        else:
+            # Non-interactive requires explicit prompt
+            prompt = typer.prompt("Enter your story idea")
 
     log.info("stage_start", stage="dream")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
-
-    # Determine interactive mode: explicit flag > TTY detection
-    use_interactive = interactive if interactive is not None else _is_interactive_tty()
 
     # Build context
     context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
@@ -251,7 +318,7 @@ def dream(
 
     async def _run_dream() -> StageResult:
         """Run DREAM stage and close orchestrator."""
-        orchestrator = _get_orchestrator(project, provider_override=provider)
+        orchestrator = _get_orchestrator(project_path, provider_override=provider)
         log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
         try:
             return await orchestrator.run_stage("dream", context)
@@ -300,7 +367,7 @@ def dream(
     console.print(f"  Duration: {result.duration_seconds:.1f}s")
 
     if _log_enabled:
-        console.print(f"  Logs: [dim]{project / 'logs'}[/dim]")
+        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
 
     # Show preview of artifact
     if result.artifact_path and result.artifact_path.exists():
@@ -329,12 +396,20 @@ def dream(
 
 @app.command()
 def status(
-    project: Annotated[Path, typer.Option("--project", "-p", help="Project directory")] = Path(),
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
 ) -> None:
     """Show pipeline status for current project."""
-    _require_project(project)
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
 
-    orchestrator = _get_orchestrator(project)
+    orchestrator = _get_orchestrator(project_path)
     pipeline_status = orchestrator.get_status()
 
     # Create status table
@@ -363,7 +438,11 @@ def status(
 def doctor(
     project: Annotated[
         Path | None,
-        typer.Option("--project", "-p", help="Project directory (optional)"),
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
     ] = None,
 ) -> None:
     """Check configuration and provider connectivity.
@@ -383,7 +462,7 @@ def doctor(
     all_ok &= asyncio.run(_check_providers())
 
     # Check project (if specified or current dir has project.yaml)
-    project_path = project or Path()
+    project_path = _resolve_project_path(project)
     if (project_path / "project.yaml").exists():
         all_ok &= _check_project(project_path)
 
