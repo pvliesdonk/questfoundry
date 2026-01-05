@@ -281,14 +281,16 @@ def dream(
     # Determine interactive mode: explicit flag > TTY detection
     use_interactive = interactive if interactive is not None else _is_interactive_tty()
 
-    # Handle prompt: if not provided, interactive mode uses default, otherwise prompt
+    # Handle prompt: if not provided, interactive mode uses default, non-interactive fails
     if prompt is None:
         if use_interactive:
             # In interactive mode, start with a guiding prompt that invites conversation
             prompt = DEFAULT_INTERACTIVE_DREAM_PROMPT
         else:
-            # Non-interactive requires explicit prompt
-            prompt = typer.prompt("Enter your story idea")
+            # Non-interactive requires explicit prompt (fail fast, don't hang in CI/CD)
+            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
+            console.print("Provide a prompt argument or use --interactive/-i flag.")
+            raise typer.Exit(1)
 
     log.info("stage_start", stage="dream")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
