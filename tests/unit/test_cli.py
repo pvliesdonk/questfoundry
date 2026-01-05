@@ -217,48 +217,22 @@ def test_dream_failed_stage(tmp_path: Path) -> None:
     assert "LLM connection failed" in result.stdout
 
 
-def test_dream_prompts_for_input(tmp_path: Path) -> None:
-    """Test qf dream prompts for input when not provided."""
-    from questfoundry.pipeline import StageResult
-
+def test_dream_no_prompt_noninteractive_fails_fast(tmp_path: Path) -> None:
+    """Test qf dream fails fast when no prompt in non-interactive mode."""
     # Create project
     runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
     project_path = tmp_path / "test"
 
-    mock_result = StageResult(
-        stage="dream",
-        status="completed",
-        artifact_path=project_path / "artifacts" / "dream.yaml",
-        llm_calls=1,
-        tokens_used=100,
-        duration_seconds=0.5,
+    # Run without prompt in non-interactive mode (no TTY in test runner)
+    result = runner.invoke(
+        app,
+        ["dream", "--project", str(project_path)],
     )
 
-    # Create minimal artifact
-    import yaml
-
-    with (project_path / "artifacts" / "dream.yaml").open("w") as f:
-        yaml.safe_dump({"type": "dream", "genre": "test"}, f)
-
-    with patch("questfoundry.cli._get_orchestrator") as mock_get:
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
-        mock_orchestrator.close = AsyncMock()
-        mock_get.return_value = mock_orchestrator
-
-        # Simulate user input
-        result = runner.invoke(
-            app,
-            ["dream", "--project", str(project_path)],
-            input="A mystery story\n",
-        )
-
-    assert result.exit_code == 0
-    # Verify the stage was called with the user's input
-    mock_orchestrator.run_stage.assert_called_once()
-    call_args = mock_orchestrator.run_stage.call_args
-    assert call_args[0][0] == "dream"
-    assert call_args[0][1]["user_prompt"] == "A mystery story"
+    # Should fail fast with helpful error, not hang waiting for input
+    assert result.exit_code == 1
+    assert "Prompt required in non-interactive mode" in result.stdout
+    assert "--interactive" in result.stdout or "-i" in result.stdout
 
 
 # --- Verbosity and Log Flag Tests ---
