@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from questfoundry.tools.base import Tool, ToolDefinition
+from questfoundry.tools.generated import SUBMIT_DREAM_PARAMS
 
 
 class SubmitDreamTool:
@@ -26,85 +27,20 @@ class SubmitDreamTool:
 
     @property
     def definition(self) -> ToolDefinition:
-        """Return the tool definition for LLM binding."""
+        """Return the tool definition for LLM binding.
+
+        Uses generated schema from schemas/dream.schema.json to ensure
+        the tool definition stays in sync with artifact validation.
+        """
         return ToolDefinition(
             name="submit_dream",
             description=(
                 "Submit the finalized creative vision. Call this when you have "
                 "discussed and refined the story concept with the user and are "
-                "ready to lock in the creative direction."
+                "ready to lock in the creative direction. "
+                "IMPORTANT: You must include type='dream' and version=1."
             ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "genre": {
-                        "type": "string",
-                        "description": "Primary genre (e.g., 'fantasy', 'mystery', 'sci-fi', 'horror')",
-                    },
-                    "subgenre": {
-                        "type": "string",
-                        "description": "Optional genre refinement (e.g., 'urban fantasy', 'cozy mystery')",
-                    },
-                    "tone": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Tone descriptors (e.g., ['dark', 'suspenseful', 'romantic'])",
-                    },
-                    "audience": {
-                        "type": "string",
-                        "description": "Target audience: 'all ages', 'young adult', 'adult', or 'mature'",
-                    },
-                    "themes": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Core thematic elements (e.g., ['redemption', 'found family'])",
-                    },
-                    "style_notes": {
-                        "type": "string",
-                        "description": "Prose style guidance (e.g., 'flowery and descriptive' or 'terse and punchy')",
-                    },
-                    "scope": {
-                        "type": "object",
-                        "description": "Story scope parameters",
-                        "required": ["target_word_count", "estimated_passages"],
-                        "properties": {
-                            "target_word_count": {
-                                "type": "integer",
-                                "description": "Approximate total word count (e.g., 15000)",
-                            },
-                            "estimated_passages": {
-                                "type": "integer",
-                                "description": "Target number of scenes/passages (e.g., 25)",
-                            },
-                            "branching_depth": {
-                                "type": "string",
-                                "description": "Branching complexity: 'light', 'moderate', 'heavy', 'extensive'",
-                            },
-                            "estimated_playtime_minutes": {
-                                "type": "integer",
-                                "description": "Target reading/play time in minutes",
-                            },
-                        },
-                    },
-                    "content_notes": {
-                        "type": "object",
-                        "description": "Content guidance",
-                        "properties": {
-                            "includes": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "Content to include (e.g., ['mild violence', 'romance'])",
-                            },
-                            "excludes": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "Content to avoid (e.g., ['graphic violence', 'explicit content'])",
-                            },
-                        },
-                    },
-                },
-                "required": ["genre", "tone", "audience", "themes"],
-            },
+            parameters=SUBMIT_DREAM_PARAMS,
         )
 
     def execute(self, arguments: dict[str, Any]) -> str:  # noqa: ARG002
