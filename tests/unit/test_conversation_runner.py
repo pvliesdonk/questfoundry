@@ -620,7 +620,7 @@ async def test_runner_feedback_includes_expected_fields() -> None:
             return ValidationResult(
                 valid=False,
                 errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
-                expected_fields=["value", "description", "priority"],
+                expected_fields={"value", "description", "priority"},
             )
         return ValidationResult(valid=True, data=data)
 
@@ -639,12 +639,15 @@ async def test_runner_feedback_includes_expected_fields() -> None:
     tool_results = [m for m in state.messages if m.get("role") == "tool"]
     assert len(tool_results) >= 1
 
-    # Parse the feedback JSON
+    # Parse the feedback JSON (ADR-007 structure)
     feedback_msg = tool_results[0]["content"]
     feedback = json.loads(feedback_msg)
 
-    assert "expected_fields" in feedback
-    assert feedback["expected_fields"] == ["value", "description", "priority"]
+    # New structure has result enum instead of success boolean
+    assert feedback["result"] == "validation_failed"
+    # Issues are categorized under issues.invalid/missing/unknown
+    assert "issues" in feedback
+    assert "invalid" in feedback["issues"]
 
 
 @pytest.mark.asyncio
@@ -709,27 +712,32 @@ async def test_runner_categorizes_unknown_error_type_via_string_fallback() -> No
     tool_results = [m for m in state.messages if m.get("role") == "tool"]
     assert len(tool_results) >= 1
 
-    # Parse the feedback JSON
+    # Parse the feedback JSON (ADR-007 structure)
     feedback_msg = tool_results[0]["content"]
     feedback = json.loads(feedback_msg)
 
-    # "value" should be in missing_fields (fallback to string "required")
-    assert "value" in feedback["missing_fields"], (
+    # New structure: issues.missing is a list of {field, requirement} dicts
+    # "value" should be in missing (fallback to string "required")
+    missing_fields = [f["field"] for f in feedback["issues"]["missing"]]
+    assert "value" in missing_fields, (
         "Unknown error type with 'required' in issue should be categorized as missing"
     )
-    # "count" should be in invalid_fields (no "required"/"missing" in issue)
-    assert any(f["field"] == "count" for f in feedback["invalid_fields"]), (
+    # "count" should be in invalid (no "required"/"missing" in issue)
+    invalid_fields = [f["field"] for f in feedback["issues"]["invalid"]]
+    assert "count" in invalid_fields, (
         "Error without 'required'/'missing' in issue should be categorized as invalid"
     )
 
 
 @pytest.mark.asyncio
-async def test_runner_feedback_omits_expected_fields_when_none() -> None:
-    """Runner omits expected_fields from feedback when validator doesn't provide it."""
+async def test_runner_feedback_has_empty_unknown_when_no_expected_fields() -> None:
+    """Runner returns empty unknown list when validator doesn't provide expected_fields."""
     import json
 
     # First attempt fails without expected_fields, second succeeds
-    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    first_call = ToolCall(
+        id="call_1", name="submit_test", arguments={"value": "", "extra_field": "bad"}
+    )
     second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
 
     first_response = LLMResponse(
@@ -753,7 +761,7 @@ async def test_runner_feedback_omits_expected_fields_when_none() -> None:
             return ValidationResult(
                 valid=False,
                 errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
-                # No expected_fields
+                # No expected_fields - can't detect unknown fields
             )
         return ValidationResult(valid=True, data=data)
 
@@ -772,9 +780,195 @@ async def test_runner_feedback_omits_expected_fields_when_none() -> None:
     tool_results = [m for m in state.messages if m.get("role") == "tool"]
     assert len(tool_results) >= 1
 
-    # Parse the feedback JSON
+    # Parse the feedback JSON (ADR-007 structure)
     feedback_msg = tool_results[0]["content"]
     feedback = json.loads(feedback_msg)
 
-    # expected_fields should not be present when not provided
-    assert "expected_fields" not in feedback
+    # Without expected_fields, unknown list should be empty
+    # (can't detect unknown fields without knowing what's expected)
+    assert feedback["issues"]["unknown"] == []
+
+
+@pytest.mark.asyncio
+async def test_runner_detects_unknown_fields() -> None:
+    """Runner detects unknown fields when expected_fields is provided."""
+    import json
+
+    # Submit data with fields not in expected_fields
+    first_call = ToolCall(
+        id="call_1",
+        name="submit_test",
+        arguments={"value": "", "passages": 10, "word_count": 5000},
+    )
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            return ValidationResult(
+                valid=False,
+                errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
+                # Expected fields include nested paths
+                expected_fields={
+                    "value",
+                    "scope",
+                    "scope.estimated_passages",
+                    "scope.target_word_count",
+                },
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Parse the feedback JSON
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    feedback = json.loads(tool_results[0]["content"])
+
+    # "passages" and "word_count" are not in expected_fields, should be unknown
+    assert "passages" in feedback["issues"]["unknown"]
+    assert "word_count" in feedback["issues"]["unknown"]
+    # "value" is expected, should not be in unknown
+    assert "value" not in feedback["issues"]["unknown"]
+
+
+@pytest.mark.asyncio
+async def test_runner_feedback_includes_requirement_text() -> None:
+    """Runner includes requirement text from ValidationErrorDetail."""
+    import json
+
+    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    ValidationErrorDetail(
+                        field="value",
+                        issue="String should have at least 1 character",
+                        provided="",
+                        error_type="string_too_short",
+                        requirement="non-empty string",
+                    )
+                ],
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Parse the feedback JSON
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    feedback = json.loads(tool_results[0]["content"])
+
+    # Check that requirement is included in invalid field
+    assert len(feedback["issues"]["invalid"]) == 1
+    assert feedback["issues"]["invalid"][0]["requirement"] == "non-empty string"
+
+
+@pytest.mark.asyncio
+async def test_runner_feedback_action_mentions_unknown_fields() -> None:
+    """Runner action text mentions unknown fields to help LLM identify typos."""
+    import json
+
+    first_call = ToolCall(
+        id="call_1",
+        name="submit_test",
+        arguments={"value": "", "typo_field": "oops"},
+    )
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    ValidationErrorDetail(field="value", issue="required", error_type="missing")
+                ],
+                expected_fields={"value", "other_field"},
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Parse the feedback JSON
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    feedback = json.loads(tool_results[0]["content"])
+
+    # Action should mention the unknown field as a potential typo
+    assert "typo_field" in feedback["action"]
+    assert "typo" in feedback["action"].lower()

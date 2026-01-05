@@ -274,10 +274,14 @@ Be creative but grounded. Make choices that serve the story."""
         """
         from pydantic import ValidationError
 
-        from questfoundry.artifacts import DreamArtifact, pydantic_errors_to_details
+        from questfoundry.artifacts import (
+            DreamArtifact,
+            get_all_field_paths,
+            pydantic_errors_to_details,
+        )
 
-        # Get expected field names from model for LLM guidance
-        expected_fields = list(DreamArtifact.model_fields.keys())
+        # Get all expected field paths (including nested) for unknown field detection
+        expected_fields = get_all_field_paths(DreamArtifact)
 
         try:
             # Validate using Pydantic model
