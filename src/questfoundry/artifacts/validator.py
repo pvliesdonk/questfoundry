@@ -17,6 +17,45 @@ if TYPE_CHECKING:
     from questfoundry.conversation import ValidationErrorDetail
 
 
+def strip_null_values(data: dict[str, Any]) -> dict[str, Any]:
+    """Recursively strip null values from a dictionary.
+
+    LLMs often send explicit null for optional fields. Since optional fields
+    (not in `required`) are semantically "may be absent", we treat null as
+    absent by stripping it before validation.
+
+    This is NOT the same as nullable types (`["integer", "null"]`), which
+    explicitly allow null as a valid value.
+
+    Note:
+        The input dict is not mutated. A new dict is returned with nulls stripped.
+        Empty dicts are preserved to let schema validation handle required fields.
+        Lists are recursively processed to strip nulls from nested dicts.
+
+    Args:
+        data: Dictionary potentially containing null values.
+
+    Returns:
+        New dictionary with null values removed at all levels.
+    """
+
+    def _strip(item: Any) -> Any:
+        """Recursively strip nulls from any item (dict, list, or scalar)."""
+        if isinstance(item, dict):
+            result: dict[str, Any] = {}
+            for key, value in item.items():
+                if value is None:
+                    continue  # Strip null values
+                result[key] = _strip(value)
+            return result
+        if isinstance(item, list):
+            return [_strip(i) for i in item]
+        return item
+
+    stripped = _strip(data)
+    return stripped if isinstance(stripped, dict) else {}
+
+
 class SchemaNotFoundError(Exception):
     """Raised when a JSON schema file doesn't exist."""
 
@@ -148,6 +187,10 @@ class ArtifactValidator:
     ) -> list[str]:
         """Validate artifact data using both JSON Schema and Pydantic.
 
+        Note:
+            The input data dict is not mutated. Null values are stripped from
+            a copy before validation (LLMs send null for optional fields).
+
         Args:
             data: The artifact data to validate.
             stage_name: Name of the stage.
@@ -159,6 +202,10 @@ class ArtifactValidator:
         Raises:
             ArtifactValidationError: If raise_on_error is True and validation fails.
         """
+        # Strip null values before validation - LLMs send null for optional fields
+        # but optional (absent) is different from nullable (explicit null allowed)
+        data = strip_null_values(data)
+
         errors: list[str] = []
 
         # Validate with JSON Schema
@@ -184,6 +231,9 @@ class ArtifactValidator:
         Returns:
             True if the artifact is valid.
         """
+        # Strip null values before validation
+        data = strip_null_values(data)
+
         # Validate with JSON Schema first
         try:
             schema = self._load_schema(stage_name)

@@ -972,3 +972,59 @@ async def test_runner_feedback_action_mentions_unknown_fields() -> None:
     # Action should mention the unknown field as a potential typo
     assert "typo_field" in feedback["action"]
     assert "typo" in feedback["action"].lower()
+
+
+@pytest.mark.asyncio
+async def test_runner_feedback_includes_schema_on_validation_retry() -> None:
+    """Feedback includes tool schema to help small models that ignore tool definitions."""
+    import json
+
+    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+
+    first_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[first_call],
+    )
+    second_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=50,
+        finish_reason="tool_calls",
+        tool_calls=[second_call],
+    )
+    provider = create_mock_provider([first_response, second_response])
+
+    def validator(data: dict[str, Any]) -> ValidationResult:
+        if data.get("value") == "":
+            return ValidationResult(
+                valid=False,
+                errors=[
+                    ValidationErrorDetail(field="value", issue="required", error_type="missing")
+                ],
+            )
+        return ValidationResult(valid=True, data=data)
+
+    runner = ConversationRunner(
+        provider=provider,
+        tools=[FinalizationTool()],
+        finalization_tool="submit_test",
+    )
+
+    _result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        validator=validator,
+    )
+
+    # Parse the feedback JSON
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    feedback = json.loads(tool_results[0]["content"])
+
+    # Feedback should include the schema
+    assert "schema" in feedback
+    assert feedback["schema"]["type"] == "object"
+    assert "properties" in feedback["schema"]
+    assert "value" in feedback["schema"]["properties"]

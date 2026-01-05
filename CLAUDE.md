@@ -54,17 +54,38 @@ DRESS stage (art direction) is deferred for later implementation.
 - **Tests first** where practical
 - Keep functions focused and small
 
-### Schema Workflow
+### Schema Workflow (CRITICAL: Source of Truth)
 
-Artifact models are generated from JSON schemas (schema-first approach):
+**The JSON Schema is the SINGLE SOURCE OF TRUTH for artifact structure.**
+
+```
+schemas/*.schema.json  ←  SOURCE OF TRUTH (edit this)
+        ↓
+   generate_models.py
+        ↓
+   ┌────────────────────────────────────────────┐
+   │  src/questfoundry/artifacts/generated.py   │  ← Pydantic models
+   │  src/questfoundry/tools/generated.py       │  ← Tool schemas for LLM
+   └────────────────────────────────────────────┘
+```
+
+**NEVER work backwards.** If the Pydantic model or tool schema seems wrong:
+1. Check if the JSON Schema needs updating
+2. Update the schema FIRST
+3. Regenerate
+
+**Optional vs Nullable (semantic distinction):**
+- **Optional** (not in `required`): field may be absent → Pydantic defaults to `None`
+- **Nullable** (`["integer", "null"]`): field explicitly accepts `null` as a value
+- LLMs often send `null` for optional fields; use `strip_null_values()` before validation to treat `null` as absent
 
 ```bash
 # After modifying schemas/*.schema.json:
 uv run python scripts/generate_models.py
-git add schemas/ src/questfoundry/artifacts/generated.py
+git add schemas/ src/questfoundry/artifacts/generated.py src/questfoundry/tools/generated.py
 ```
 
-**Never edit `generated.py` directly** - it will be overwritten. CI will fail if the generated file doesn't match the schemas.
+**Never edit `generated.py` files directly** - they will be overwritten. CI will fail if generated files don't match schemas.
 
 See [docs/architecture/schema-first-models.md](docs/architecture/schema-first-models.md) for details.
 
