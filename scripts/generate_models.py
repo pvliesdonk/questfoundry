@@ -410,14 +410,21 @@ def generate_from_schema(schema_path: Path) -> str:
     return "\n".join(code_parts)
 
 
-def property_to_tool_schema(prop: dict[str, Any]) -> dict[str, Any]:
+def property_to_tool_schema(
+    prop: dict[str, Any],
+    is_required: bool = True,
+) -> dict[str, Any]:
     """Convert a JSON Schema property to tool parameter format.
 
     Strips validation constraints (minLength, minimum, etc.) that LLMs don't need,
     but preserves type, description, and structure.
 
+    Non-required fields are made nullable (type becomes [type, "null"]) to match
+    the Pydantic model behavior where optional fields default to None.
+
     Args:
         prop: The property schema from JSON Schema.
+        is_required: Whether this field is in the parent's required array.
 
     Returns:
         Simplified property schema for tool parameters.
@@ -427,9 +434,14 @@ def property_to_tool_schema(prop: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
 
     # Determine type (explicit, inferred from const, or inferred from enum)
-    type_val: str | None = None
+    type_val: str | list[str] | None = None
     if "type" in prop:
-        type_val = prop["type"]
+        base_type = prop["type"]
+        # Make non-required fields nullable to match Pydantic (int | None = None)
+        if not is_required and base_type in ("integer", "string", "boolean", "number"):
+            type_val = [base_type, "null"]
+        else:
+            type_val = base_type
     elif "const" in prop:
         const_val = prop["const"]
         # Check bool before int since bool is subclass of int in Python
@@ -468,8 +480,10 @@ def property_to_tool_schema(prop: dict[str, Any]) -> dict[str, Any]:
 
     # Handle nested objects - recurse into properties (sorted for determinism)
     if type_val == "object" and "properties" in prop:
+        nested_required = set(prop.get("required", []))
         result["properties"] = {
-            name: property_to_tool_schema(p) for name, p in sorted(prop["properties"].items())
+            name: property_to_tool_schema(p, is_required=name in nested_required)
+            for name, p in sorted(prop["properties"].items())
         }
         if "required" in prop:
             result["required"] = sorted(prop["required"])
@@ -483,6 +497,8 @@ def schema_to_tool_params(schema: dict[str, Any]) -> dict[str, Any]:
     Strips JSON Schema metadata ($schema, $id, title) and validation constraints,
     keeping only what LLMs need: type, properties, required, description.
 
+    Non-required fields are made nullable to match Pydantic model behavior.
+
     Args:
         schema: The full JSON Schema.
 
@@ -491,10 +507,13 @@ def schema_to_tool_params(schema: dict[str, Any]) -> dict[str, Any]:
     """
     result: dict[str, Any] = {"type": "object"}
 
+    # Get required fields to determine nullability
+    required_fields = set(schema.get("required", []))
+
     # Sort properties for deterministic output
     if "properties" in schema:
         result["properties"] = {
-            name: property_to_tool_schema(prop)
+            name: property_to_tool_schema(prop, is_required=name in required_fields)
             for name, prop in sorted(schema["properties"].items())
         }
 
