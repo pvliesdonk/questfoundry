@@ -295,6 +295,7 @@ class TestGeneratorErrorHandling:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -331,6 +332,7 @@ class TestGeneratorErrorHandling:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -417,6 +419,7 @@ class TestGeneratorHandlesDefaultValues:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -472,6 +475,7 @@ class TestGeneratorHandlesConstValues:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -515,6 +519,7 @@ class TestGeneratorHandlesPythonKeywords:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -563,6 +568,7 @@ class TestEscapeDescription:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -611,6 +617,7 @@ class TestGeneratorArrayValidation:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -651,6 +658,7 @@ class TestGeneratorArrayValidation:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -688,6 +696,7 @@ class TestGeneratorEmptyProperties:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -732,6 +741,7 @@ class TestGeneratorEmptyProperties:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -799,6 +809,7 @@ class TestArtifactTypeNaming:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -845,6 +856,7 @@ class TestGeneratorArrayItemTypes:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -887,6 +899,7 @@ class TestGeneratorArrayItemTypes:
                 str(schema_dir),
                 "--output-file",
                 str(output_file),
+                "--no-tools",
             ],
             capture_output=True,
             text=True,
@@ -897,3 +910,175 @@ class TestGeneratorArrayItemTypes:
         assert result.returncode == 1, "Generator should fail on unsupported array item type"
         assert "Unsupported array item type" in result.stderr
         assert "boolean" in result.stderr
+
+
+class TestToolSchemaGeneration:
+    """Tests for tool parameter schema generation."""
+
+    def test_property_to_tool_schema_preserves_type(self) -> None:
+        """Property type should be preserved."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {"type": "string", "description": "A name"}
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "string"
+        assert result["description"] == "A name"
+
+    def test_property_to_tool_schema_strips_constraints(self) -> None:
+        """Validation constraints should be stripped for LLM."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 1000,
+            "description": "Word count",
+        }
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "integer"
+        assert result["description"] == "Word count"
+        # Constraints stripped
+        assert "minimum" not in result
+        assert "maximum" not in result
+
+    def test_property_to_tool_schema_handles_const(self) -> None:
+        """Const values should be preserved."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {"type": "string", "const": "dream", "description": "Artifact type"}
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "string"
+        assert result["const"] == "dream"
+
+    def test_property_to_tool_schema_handles_nested_object(self) -> None:
+        """Nested objects should be recursively processed."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer", "minimum": 5},
+            },
+            "required": ["count"],
+        }
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "object"
+        assert "count" in result["properties"]
+        assert result["properties"]["count"]["type"] == "integer"
+        # Nested minimum stripped
+        assert "minimum" not in result["properties"]["count"]
+        assert result["required"] == ["count"]
+
+    def test_property_to_tool_schema_handles_array(self) -> None:
+        """Arrays should preserve items but strip item constraints."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "minItems": 1,
+        }
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "array"
+        assert result["items"]["type"] == "string"
+        # Constraints stripped
+        assert "minLength" not in result["items"]
+        assert "minItems" not in result
+
+    def test_schema_to_tool_params_includes_required_fields(self) -> None:
+        """Top-level required fields should be preserved."""
+        from scripts.generate_models import schema_to_tool_params
+
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Test",
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+                "type": {"const": "test"},
+                "name": {"type": "string"},
+            },
+        }
+        result = schema_to_tool_params(schema)
+        assert result["type"] == "object"
+        assert result["required"] == ["name", "type"]
+        assert "type" in result["properties"]
+        assert "name" in result["properties"]
+
+    def test_schema_to_tool_params_strips_metadata(self) -> None:
+        """JSON Schema metadata should be stripped."""
+        from scripts.generate_models import schema_to_tool_params
+
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "$id": "https://example.com/test.json",
+            "title": "Test Schema",
+            "description": "A test",
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+        }
+        result = schema_to_tool_params(schema)
+        assert "$schema" not in result
+        assert "$id" not in result
+        assert "title" not in result
+        # Top-level description is also stripped (not useful for tool params)
+        assert "description" not in result
+
+    def test_generated_tool_schema_includes_type_and_version(
+        self, dream_schema: dict[str, Any]
+    ) -> None:
+        """Generated tool schema should include type and version fields."""
+        from scripts.generate_models import schema_to_tool_params
+
+        result = schema_to_tool_params(dream_schema)
+        assert "type" in result["properties"]
+        assert "version" in result["properties"]
+        assert result["properties"]["type"]["const"] == "dream"
+        assert "type" in result["required"]
+        assert "version" in result["required"]
+
+    def test_tool_schema_generation_creates_file(self, simple_schema: Path, tmp_path: Path) -> None:
+        """Generator should create tools/generated.py."""
+        output_file = tmp_path / "models.py"
+        tools_output_file = tmp_path / "tools.py"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_models.py",
+                "--schemas-dir",
+                str(simple_schema / "schemas"),
+                "--output-file",
+                str(output_file),
+                "--tools-output-file",
+                str(tools_output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).parent.parent.parent,
+        )
+
+        assert result.returncode == 0, f"Generator failed: {result.stderr}"
+        assert tools_output_file.exists()
+        content = tools_output_file.read_text()
+        assert "SUBMIT_TEST_PARAMS" in content
+        assert "dict[str, Any]" in content
+
+    def test_generated_tool_schema_is_importable(self) -> None:
+        """Generated tool schema should be importable."""
+        from questfoundry.tools.generated import SUBMIT_DREAM_PARAMS
+
+        assert isinstance(SUBMIT_DREAM_PARAMS, dict)
+        assert SUBMIT_DREAM_PARAMS["type"] == "object"
+        assert "properties" in SUBMIT_DREAM_PARAMS
+        assert "required" in SUBMIT_DREAM_PARAMS
+
+    def test_finalization_tool_uses_generated_schema(self) -> None:
+        """SubmitDreamTool should use the generated schema."""
+        from questfoundry.tools.finalization import SubmitDreamTool
+        from questfoundry.tools.generated import SUBMIT_DREAM_PARAMS
+
+        tool = SubmitDreamTool()
+        definition = tool.definition
+        assert definition.parameters is SUBMIT_DREAM_PARAMS
