@@ -186,10 +186,12 @@ The tool schema matches the artifact schema, ensuring structured output.
 ### Direct Mode (Non-TTY or `--no-interactive`)
 
 1. LLM receives system prompt with direct generation instructions
-2. Single LLM call with `tool_choice="submit_dream"`
-3. Falls back to YAML parsing for legacy providers
-4. Validation with error on failure
+2. Same conversation loop as interactive, but `max_turns=1` and no user input
+3. Research tools available, finalization tool for completion
+4. Validation with retry on failure
 5. Artifact written
+
+Both modes use the same `ConversationRunner` with identical 3-phase flow (discuss with research tools → summarize → serialize with finalization tool). The only differences are turn limits and whether user input is collected.
 
 ## Prompt Architecture
 
@@ -263,7 +265,7 @@ result = await orchestrator.run_stage("dream", {
 
 ### Adding Research Tools
 
-Research tools can be injected into the conversation:
+Research tools are loaded by the orchestrator and available during discussion:
 
 ```python
 context = {
@@ -272,7 +274,10 @@ context = {
 }
 ```
 
-These are available alongside the finalization tool during conversation.
+Research tools and finalization tools are **not** available simultaneously. The 3-phase pattern uses different tool sets per phase:
+- **Discuss phase**: Research tools only
+- **Summarize phase**: No tools
+- **Serialize phase**: Finalization tool only
 
 ### Adding New Stages
 

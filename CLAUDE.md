@@ -25,7 +25,7 @@ DRESS stage (art direction) is deferred for later implementation.
 ### Key Design Principles
 
 1. **No Persistent Agent State** - Each stage starts fresh; context from artifacts
-2. **One LLM Call Per Stage** - Predictable, bounded calls
+2. **Bounded Stage Execution** - Each stage follows 3-phase pattern: discuss → summarize → serialize
 3. **Human Gates Between Stages** - Review and approval checkpoints
 4. **Prompts as Visible Artifacts** - All prompts in `/prompts/`, not in code
 5. **No Backflow** - Later stages cannot modify earlier artifacts
