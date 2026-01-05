@@ -263,8 +263,9 @@ class ConversationRunner:
                 result = validator(data)
                 if not result.valid:
                     # Build structured feedback per ADR-007
+                    # Include schema to help small models that ignore tool definitions
                     feedback = self._build_validation_feedback(
-                        data, result, self._finalization_tool
+                        data, result, self._finalization_tool, include_schema=True
                     )
 
                     # Check if we've exhausted retries BEFORE making another LLM call
@@ -349,6 +350,7 @@ class ConversationRunner:
         data: dict[str, Any],
         result: ValidationResult,
         tool_name: str,
+        include_schema: bool = False,
     ) -> dict[str, Any]:
         """Build structured validation feedback per ADR-007.
 
@@ -357,11 +359,14 @@ class ConversationRunner:
         - Categorized issues (invalid/missing/unknown)
         - Field-specific requirements
         - Action instruction last (recency effect)
+        - Optionally includes schema for serialize phase (small models)
 
         Args:
             data: The submitted data that failed validation.
             result: ValidationResult with structured errors.
             tool_name: Name of the finalization tool for action text.
+            include_schema: If True, include full schema in feedback for
+                models that struggle with tool definition attention.
 
         Returns:
             Structured feedback dict ready for JSON serialization.
@@ -413,7 +418,7 @@ class ConversationRunner:
             if len(unknown_fields) > 3:
                 unknown_list += f" and {len(unknown_fields) - 3} more"
             action_parts.append(
-                f"Unknown fields {unknown_list} may be typos - check tool definition for correct names."
+                f"Unknown fields {unknown_list} may be typos - use EXACT field names from schema below."
             )
 
         # Build feedback structure (ordered per ADR-007: result → issues → action)
@@ -427,6 +432,12 @@ class ConversationRunner:
             "issue_count": issue_count,
             "action": " ".join(action_parts),
         }
+
+        # Include schema for serialize phase - helps small models that ignore tool definitions
+        if include_schema:
+            tool_def = next((t for t in self._tool_definitions if t.name == tool_name), None)
+            if tool_def:
+                feedback["schema"] = tool_def.parameters
 
         return feedback
 
