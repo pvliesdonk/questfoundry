@@ -452,15 +452,18 @@ class ConversationRunner:
         if expected_fields is None:
             return []
 
+        # Pre-compute parent prefixes for O(1) lookup instead of O(m) per field
+        parent_prefixes = {ef.rsplit(".", 1)[0] for ef in expected_fields if "." in ef}
+
         unknown: list[str] = []
 
         for key, value in data.items():
-            field_path = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
+            field_path = f"{prefix}.{key}" if prefix else key
 
             # Check if this exact path or a parent path is expected
             # e.g., "scope" is expected if "scope.target_word_count" is in expected_fields
             path_is_expected = field_path in expected_fields
-            is_parent_of_expected = any(ef.startswith(f"{field_path}.") for ef in expected_fields)
+            is_parent_of_expected = field_path in parent_prefixes
 
             if not path_is_expected and not is_parent_of_expected:
                 unknown.append(field_path)

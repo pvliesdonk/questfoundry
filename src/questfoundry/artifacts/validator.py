@@ -403,13 +403,22 @@ def get_all_field_paths(model_cls: type[BaseModel], prefix: str = "") -> set[str
             # PEP 604 union syntax: X | None
             args = annotation.__args__
 
-        # Recurse into nested Pydantic models
-        for arg in args:
-            if isinstance(arg, type) and issubclass(arg, BaseModel):
-                paths.update(get_all_field_paths(arg, field_path))
-
-        # Direct Pydantic model (not wrapped in Optional/Union)
-        if not args and isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            paths.update(get_all_field_paths(annotation, field_path))
+        # Recurse into nested Pydantic models (mutually exclusive paths)
+        if args:
+            for arg in args:
+                # Guard against TypeError from issubclass with special types
+                try:
+                    if isinstance(arg, type) and issubclass(arg, BaseModel):
+                        paths.update(get_all_field_paths(arg, field_path))
+                except TypeError:
+                    # Not a valid class type (e.g., special form), skip
+                    pass
+        elif isinstance(annotation, type):
+            # Direct Pydantic model (not wrapped in Optional/Union)
+            try:
+                if issubclass(annotation, BaseModel):
+                    paths.update(get_all_field_paths(annotation, field_path))
+            except TypeError:
+                pass
 
     return paths
