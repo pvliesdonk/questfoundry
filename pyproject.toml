@@ -55,6 +55,16 @@ all-providers = [
 tracing = [
     "langsmith>=0.2",
 ]
+research = [
+    "ifcraftcorpus @ git+https://github.com/pvliesdonk/if-craft-corpus.git",
+    "pvl-webtools @ git+https://github.com/pvliesdonk/pvl-webtools.git",
+]
+research-corpus = [
+    "ifcraftcorpus @ git+https://github.com/pvliesdonk/if-craft-corpus.git",
+]
+research-web = [
+    "pvl-webtools @ git+https://github.com/pvliesdonk/pvl-webtools.git",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
@@ -81,6 +91,9 @@ Issues = "https://github.com/pvliesdonk/questfoundry/issues"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/questfoundry"]
@@ -134,6 +147,8 @@ module = [
     "langchain_ollama.*",
     "langchain_openai.*",
     "langchain_anthropic.*",
+    "ifcraftcorpus.*",
+    "pvlwebtools.*",
 ]
 ignore_missing_imports = true
 

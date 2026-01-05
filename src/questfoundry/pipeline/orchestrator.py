@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -17,6 +18,9 @@ from questfoundry.providers import LoggingProvider
 
 if TYPE_CHECKING:
     from questfoundry.providers import LLMProvider
+    from questfoundry.tools import Tool
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -165,6 +169,57 @@ class PipelineOrchestrator:
         self._provider = create_provider(provider_name, model)
         return self._provider
 
+    def _get_research_tools(self) -> list[Tool]:
+        """Get research tools based on project configuration.
+
+        Returns tools that are:
+        1. Enabled in project.yaml research_tools config
+        2. Have their dependencies available
+
+        Returns:
+            List of available research tools.
+        """
+        tools: list[Tool] = []
+        config = self.config.research_tools
+
+        # Get corpus tools if enabled
+        if config.corpus:
+            try:
+                from questfoundry.tools.research import get_corpus_tools
+
+                corpus_tools = get_corpus_tools()
+                if corpus_tools:
+                    logger.debug("Loaded %d corpus tools", len(corpus_tools))
+                    tools.extend(corpus_tools)
+                else:
+                    logger.info("IF Craft Corpus not installed, corpus tools disabled")
+            except ImportError:
+                logger.info("IF Craft Corpus not installed, corpus tools disabled")
+
+        # Get web tools if enabled
+        if config.web_search or config.web_fetch:
+            try:
+                from questfoundry.tools.research import get_web_tools
+
+                # Only require SEARXNG if web_search is enabled
+                web_tools = get_web_tools(require_searxng=config.web_search)
+                if web_tools:
+                    # Filter based on config
+                    filtered = []
+                    for tool in web_tools:
+                        tool_name = tool.definition.name
+                        if (tool_name == "web_search" and config.web_search) or (
+                            tool_name == "web_fetch" and config.web_fetch
+                        ):
+                            filtered.append(tool)
+                    if filtered:
+                        logger.debug("Loaded %d web tools", len(filtered))
+                        tools.extend(filtered)
+            except ImportError:
+                logger.info("pvl-webtools not installed, web tools disabled")
+
+        return tools
+
     def _get_stage_implementation(self, stage_name: str) -> Any:
         """Get the stage implementation.
 
@@ -214,6 +269,11 @@ class PipelineOrchestrator:
 
             # Create prompt compiler
             compiler = PromptCompiler(self._prompts_path)
+
+            # Get research tools
+            research_tools = self._get_research_tools()
+            if research_tools:
+                context["research_tools"] = research_tools
 
             # Execute stage
             artifact_data, llm_calls, tokens_used = await stage.execute(
