@@ -45,15 +45,21 @@ class TestStripNullValues:
         result = strip_null_values(data)
         assert result == {"scope": {"target_word_count": 5000}}
 
-    def test_removes_empty_nested_dicts(self) -> None:
-        """Nested dicts that become empty after null stripping are removed."""
+    def test_preserves_empty_nested_dicts(self) -> None:
+        """Empty nested dicts are preserved for schema validation to handle."""
         data = {
             "genre": "fantasy",
             "scope": {"optional_field": None},
         }
         result = strip_null_values(data)
-        assert result == {"genre": "fantasy"}
-        assert "scope" not in result
+        # Empty dicts preserved - let schema validation report "missing required field"
+        assert result == {"genre": "fantasy", "scope": {}}
+
+    def test_strips_nulls_in_list_items(self) -> None:
+        """Nulls in dicts inside lists are stripped."""
+        data = {"items": [{"name": "A", "value": None}, {"name": "B", "value": 5}]}
+        result = strip_null_values(data)
+        assert result == {"items": [{"name": "A"}, {"name": "B", "value": 5}]}
 
     def test_preserves_empty_lists(self) -> None:
         """Empty lists are preserved (not considered null)."""
