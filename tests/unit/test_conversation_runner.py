@@ -1,4 +1,4 @@
-"""Tests for ConversationRunner and related types."""
+"""Tests for ConversationRunner 3-phase pattern."""
 
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ from questfoundry.tools import ToolCall, ToolDefinition
 # --- Test Fixtures ---
 
 
-class MockTool:
-    """A simple mock tool for testing."""
+class MockResearchTool:
+    """A simple mock research tool for testing."""
 
-    def __init__(self, name: str = "mock_tool", result: str = "Mock result") -> None:
+    def __init__(self, name: str = "research_tool", result: str = "Research result") -> None:
         self._name = name
         self._result = result
 
@@ -31,7 +31,7 @@ class MockTool:
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name=self._name,
-            description="A mock tool for testing",
+            description="A mock research tool for testing",
             parameters={"type": "object", "properties": {}},
         )
 
@@ -39,7 +39,7 @@ class MockTool:
         return self._result
 
 
-class FinalizationTool:
+class MockFinalizationTool:
     """A mock finalization tool for testing."""
 
     @property
@@ -70,14 +70,21 @@ def create_mock_provider(responses: list[LLMResponse]) -> Mock:
 
 
 def test_conversation_state_init() -> None:
-    """ConversationState initializes with given messages."""
+    """ConversationState initializes with given messages and phase."""
     messages = [{"role": "system", "content": "Hello"}]
-    state = ConversationState(messages=messages)
+    state = ConversationState(messages=messages, phase="discuss")
 
     assert state.messages == messages
     assert state.turn_count == 0
     assert state.tokens_used == 0
     assert state.llm_calls == 0
+    assert state.phase == "discuss"
+
+
+def test_conversation_state_default_phase() -> None:
+    """ConversationState defaults to 'discuss' phase."""
+    state = ConversationState(messages=[])
+    assert state.phase == "discuss"
 
 
 def test_conversation_state_add_message() -> None:
@@ -157,21 +164,21 @@ def test_validation_error_detail_default_provided() -> None:
 # --- ConversationRunner Initialization Tests ---
 
 
-def test_runner_init_validates_tools() -> None:
-    """ConversationRunner validates tools implement Tool protocol."""
+def test_runner_init_validates_finalization_tool() -> None:
+    """ConversationRunner validates finalization_tool implements Tool protocol."""
     provider = create_mock_provider([])
 
-    # Valid tool should work
+    # Valid finalization tool should work
     runner = ConversationRunner(
         provider=provider,
-        tools=[MockTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
     )
-    assert runner._finalization_tool == "submit_test"
+    assert runner._finalization_tool_name == "submit_test"
 
 
-def test_runner_init_rejects_invalid_tool() -> None:
-    """ConversationRunner rejects tools that don't implement protocol."""
+def test_runner_init_rejects_invalid_finalization_tool() -> None:
+    """ConversationRunner rejects finalization_tool that doesn't implement protocol."""
     provider = create_mock_provider([])
 
     class InvalidTool:
@@ -180,122 +187,468 @@ def test_runner_init_rejects_invalid_tool() -> None:
     with pytest.raises(TypeError, match="doesn't implement Tool protocol"):
         ConversationRunner(
             provider=provider,
-            tools=[InvalidTool()],  # type: ignore[list-item]
-            finalization_tool="submit_test",
+            research_tools=[],
+            finalization_tool=InvalidTool(),  # type: ignore[arg-type]
+        )
+
+
+def test_runner_init_validates_research_tools() -> None:
+    """ConversationRunner validates research tools implement Tool protocol."""
+    provider = create_mock_provider([])
+
+    class InvalidTool:
+        pass
+
+    with pytest.raises(TypeError, match="doesn't implement Tool protocol"):
+        ConversationRunner(
+            provider=provider,
+            research_tools=[InvalidTool()],  # type: ignore[list-item]
+            finalization_tool=MockFinalizationTool(),
         )
 
 
 def test_runner_init_default_config() -> None:
-    """ConversationRunner uses default max_turns and validation_retries."""
+    """ConversationRunner uses default max_discuss_turns and validation_retries."""
     provider = create_mock_provider([])
     runner = ConversationRunner(
         provider=provider,
-        tools=[MockTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
     )
 
-    assert runner._max_turns == 10
+    assert runner._max_discuss_turns == 10
     assert runner._validation_retries == 3
 
 
 def test_runner_init_custom_config() -> None:
-    """ConversationRunner accepts custom max_turns and validation_retries."""
+    """ConversationRunner accepts custom max_discuss_turns and validation_retries."""
     provider = create_mock_provider([])
     runner = ConversationRunner(
         provider=provider,
-        tools=[MockTool()],
-        finalization_tool="submit_test",
-        max_turns=5,
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=5,
         validation_retries=2,
     )
 
-    assert runner._max_turns == 5
+    assert runner._max_discuss_turns == 5
     assert runner._validation_retries == 2
 
 
-# --- ConversationRunner.run() Tests ---
+# --- 3-Phase Pattern Tests ---
 
 
 @pytest.mark.asyncio
-async def test_runner_simple_finalization() -> None:
-    """Runner completes when finalization tool is called with valid data."""
-    tool_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "test"})
-    response = LLMResponse(
-        content="Here's my submission",
+async def test_runner_complete_3phase_flow() -> None:
+    """Runner executes all 3 phases: Discuss → Summarize → Serialize."""
+    # Phase 1: Discuss - LLM responds, no tool calls
+    discuss_response = LLMResponse(
+        content="I understand your story idea.",
         model="test",
-        tokens_used=100,
-        finish_reason="tool_calls",
-        tool_calls=[tool_call],
+        tokens_used=50,
+        finish_reason="stop",
+        tool_calls=None,
     )
-    provider = create_mock_provider([response])
+    # Phase 2: Summarize - LLM generates summary
+    summarize_response = LLMResponse(
+        content="Summary: A fantasy story about heroism.",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+        tool_calls=None,
+    )
+    # Phase 3: Serialize - LLM calls finalization tool
+    finalize_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "done"})
+    serialize_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,  # Direct mode
     )
 
     result, state = await runner.run(
         initial_messages=[{"role": "user", "content": "Start"}],
     )
 
-    assert result == {"value": "test"}
-    assert state.llm_calls == 1
-    assert state.tokens_used == 100
+    assert result == {"value": "done"}
+    assert state.llm_calls == 3  # Discuss + Summarize + Serialize
+    assert state.phase == "serialize"
 
 
 @pytest.mark.asyncio
-async def test_runner_with_validation_success() -> None:
-    """Runner validates finalization data when validator provided."""
-    tool_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "test"})
-    response = LLMResponse(
+async def test_runner_discuss_phase_with_research_tool() -> None:
+    """Discuss phase executes research tools and continues conversation."""
+    # Discuss: LLM calls research tool
+    research_call = ToolCall(id="call_1", name="research", arguments={"query": "fantasy"})
+    discuss_response1 = LLMResponse(
+        content="Let me research that.",
+        model="test",
+        tokens_used=20,
+        finish_reason="tool_calls",
+        tool_calls=[research_call],
+    )
+    # Discuss: LLM responds after research (max_turns=1 reached)
+    discuss_response2 = LLMResponse(
+        content="Based on research...",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+        tool_calls=None,
+    )
+    # Summarize
+    summarize_response = LLMResponse(
+        content="Summary from research.",
+        model="test",
+        tokens_used=20,
+        finish_reason="stop",
+    )
+    # Serialize
+    finalize_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "researched"})
+    serialize_response = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
-        tool_calls=[tool_call],
+        tool_calls=[finalize_call],
     )
-    provider = create_mock_provider([response])
+    provider = create_mock_provider(
+        [discuss_response1, discuss_response2, summarize_response, serialize_response]
+    )
+
+    research_tool = MockResearchTool(name="research", result="Fantasy genre info")
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[research_tool],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
+    )
+
+    result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+    )
+
+    assert result == {"value": "researched"}
+    # Check research tool was executed
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    assert any("Fantasy genre info" in m.get("content", "") for m in tool_results)
+
+
+@pytest.mark.asyncio
+async def test_runner_discuss_phase_ready_to_summarize_tool() -> None:
+    """LLM calling ready_to_summarize() triggers transition to Summarize phase."""
+    # Discuss: LLM calls ready_to_summarize
+    ready_call = ToolCall(id="call_1", name="ready_to_summarize", arguments={})
+    discuss_response = LLMResponse(
+        content="I'm ready to summarize.",
+        model="test",
+        tokens_used=20,
+        finish_reason="tool_calls",
+        tool_calls=[ready_call],
+    )
+    # Summarize
+    summarize_response = LLMResponse(
+        content="Summary of discussion.",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+    )
+    # Serialize
+    finalize_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "via_ready"})
+    serialize_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=10,  # Many turns available
+    )
+
+    result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+    )
+
+    assert result == {"value": "via_ready"}
+    # Should have transitioned early, not used all turns
+    assert state.turn_count < 10
+
+
+@pytest.mark.asyncio
+async def test_runner_discuss_phase_user_done_signal() -> None:
+    """User typing /done triggers transition to Summarize phase."""
+    # Discuss: LLM responds
+    discuss_response = LLMResponse(
+        content="What else would you like?",
+        model="test",
+        tokens_used=20,
+        finish_reason="stop",
+        tool_calls=None,
+    )
+    # Summarize
+    summarize_response = LLMResponse(
+        content="Summary.",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+    )
+    # Serialize
+    finalize_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "user_done"})
+    serialize_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
+
+    # User input function that returns /done
+    async def user_input():
+        return "/done"
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=10,
+    )
+
+    result, _state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+        user_input_fn=user_input,
+    )
+
+    assert result == {"value": "user_done"}
+
+
+@pytest.mark.asyncio
+async def test_runner_discuss_phase_rejects_finalization_tool() -> None:
+    """Finalization tool called in Discuss phase is rejected with error message."""
+    # Discuss: LLM incorrectly calls finalization tool
+    wrong_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "too_early"})
+    discuss_response1 = LLMResponse(
+        content="Let me submit directly.",
+        model="test",
+        tokens_used=20,
+        finish_reason="tool_calls",
+        tool_calls=[wrong_call],
+    )
+    # Discuss continues (max turns reached)
+    discuss_response2 = LLMResponse(
+        content="Okay, understood.",
+        model="test",
+        tokens_used=15,
+        finish_reason="stop",
+        tool_calls=None,
+    )
+    # Summarize
+    summarize_response = LLMResponse(
+        content="Summary.",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+    )
+    # Serialize - now finalization is allowed
+    finalize_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "correct"})
+    serialize_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider(
+        [discuss_response1, discuss_response2, summarize_response, serialize_response]
+    )
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
+    )
+
+    result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+    )
+
+    assert result == {"value": "correct"}
+    # Check error was returned for premature finalization
+    tool_results = [m for m in state.messages if m.get("role") == "tool"]
+    assert any("Cannot call finalization tool" in m.get("content", "") for m in tool_results)
+
+
+@pytest.mark.asyncio
+async def test_runner_summarize_phase_no_tools() -> None:
+    """Summarize phase has no tools available."""
+    # Discuss
+    discuss_response = LLMResponse(
+        content="Discussion done.",
+        model="test",
+        tokens_used=20,
+        finish_reason="stop",
+    )
+    # Summarize - just text, no tools
+    summarize_response = LLMResponse(
+        content="Here is my summary of our discussion.",
+        model="test",
+        tokens_used=50,
+        finish_reason="stop",
+    )
+    # Serialize
+    finalize_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "done"})
+    serialize_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[MockResearchTool()],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
+    )
+
+    result, state = await runner.run(
+        initial_messages=[{"role": "user", "content": "Start"}],
+    )
+
+    assert result == {"value": "done"}
+    # Summarize phase should have added the summary to messages
+    assert any("summary" in m.get("content", "").lower() for m in state.messages)
+
+
+@pytest.mark.asyncio
+async def test_runner_serialize_phase_no_tool_call_fails() -> None:
+    """Serialize phase without tool call raises ConversationError."""
+    # Discuss
+    discuss_response = LLMResponse(
+        content="Done.",
+        model="test",
+        tokens_used=10,
+        finish_reason="stop",
+    )
+    # Summarize
+    summarize_response = LLMResponse(
+        content="Summary.",
+        model="test",
+        tokens_used=20,
+        finish_reason="stop",
+    )
+    # Serialize - no tool call!
+    serialize_response = LLMResponse(
+        content="I can't call the tool.",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+        tool_calls=None,
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
+    )
+
+    with pytest.raises(ConversationError, match=r"did not return.*tool call"):
+        await runner.run(
+            initial_messages=[{"role": "user", "content": "Start"}],
+        )
+
+
+# --- Validation Tests ---
+
+
+@pytest.mark.asyncio
+async def test_runner_serialize_validation_success() -> None:
+    """Serialize phase validates data when validator provided."""
+    # Discuss
+    discuss_response = LLMResponse(content="D", model="test", tokens_used=10, finish_reason="stop")
+    # Summarize
+    summarize_response = LLMResponse(
+        content="S", model="test", tokens_used=10, finish_reason="stop"
+    )
+    # Serialize
+    finalize_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "valid"})
+    serialize_response = LLMResponse(
+        content="",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
 
     def validator(data: dict[str, Any]) -> ValidationResult:
         return ValidationResult(valid=True, data=data)
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
     )
 
-    result, _state = await runner.run(
+    result, _ = await runner.run(
         initial_messages=[{"role": "user", "content": "Start"}],
         validator=validator,
     )
 
-    assert result == {"value": "test"}
+    assert result == {"value": "valid"}
 
 
 @pytest.mark.asyncio
-async def test_runner_validation_retry_success() -> None:
-    """Runner retries validation when it fails, then succeeds."""
-    # First attempt fails, second succeeds
+async def test_runner_serialize_validation_retry_success() -> None:
+    """Serialize phase retries on validation failure."""
+    # Discuss
+    discuss_response = LLMResponse(content="D", model="test", tokens_used=10, finish_reason="stop")
+    # Summarize
+    summarize_response = LLMResponse(
+        content="S", model="test", tokens_used=10, finish_reason="stop"
+    )
+    # Serialize - first attempt fails
     first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
-    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
+    serialize_response1 = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
         tool_calls=[first_call],
     )
-    second_response = LLMResponse(
+    # Serialize - second attempt succeeds
+    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
+    serialize_response2 = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
         tool_calls=[second_call],
     )
-    provider = create_mock_provider([first_response, second_response])
+    provider = create_mock_provider(
+        [discuss_response, summarize_response, serialize_response1, serialize_response2]
+    )
 
     call_count = 0
 
@@ -311,8 +664,9 @@ async def test_runner_validation_retry_success() -> None:
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
     )
 
     result, state = await runner.run(
@@ -322,33 +676,49 @@ async def test_runner_validation_retry_success() -> None:
 
     assert result == {"value": "fixed"}
     assert call_count == 2
-    assert state.llm_calls == 2
+    assert state.llm_calls == 4  # Discuss + Summarize + 2x Serialize
 
 
 @pytest.mark.asyncio
-async def test_runner_validation_exhausts_retries() -> None:
-    """Runner raises ConversationError after exhausting validation retries."""
-    tool_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
-    response = LLMResponse(
+async def test_runner_serialize_validation_exhausts_retries() -> None:
+    """Serialize phase raises error after exhausting validation retries."""
+    # Discuss
+    discuss_response = LLMResponse(content="D", model="test", tokens_used=10, finish_reason="stop")
+    # Summarize
+    summarize_response = LLMResponse(
+        content="S", model="test", tokens_used=10, finish_reason="stop"
+    )
+    # Serialize - always fails
+    bad_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
+    serialize_response = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
-        tool_calls=[tool_call],
+        tool_calls=[bad_call],
     )
-    # Always return failing response
-    provider = create_mock_provider([response, response, response, response])
+    provider = create_mock_provider(
+        [
+            discuss_response,
+            summarize_response,
+            serialize_response,
+            serialize_response,
+            serialize_response,
+            serialize_response,
+        ]
+    )
 
     def validator(_data: dict[str, Any]) -> ValidationResult:
         return ValidationResult(
             valid=False,
-            errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
+            errors=[ValidationErrorDetail(field="value", issue="error", provided="")],
         )
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
         validation_retries=2,
     )
 
@@ -359,125 +729,33 @@ async def test_runner_validation_exhausts_retries() -> None:
         )
 
 
-@pytest.mark.asyncio
-async def test_runner_max_turns_exceeded() -> None:
-    """Runner raises ConversationError when max turns exceeded."""
-    # Response without tool calls - conversation continues
-    response = LLMResponse(
-        content="Let me think...",
-        model="test",
-        tokens_used=20,
-        finish_reason="stop",
-        tool_calls=None,
-    )
-    provider = create_mock_provider([response] * 5)
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
-        max_turns=3,
-    )
-
-    with pytest.raises(ConversationError, match=r"Maximum turns.*exceeded"):
-        await runner.run(
-            initial_messages=[{"role": "user", "content": "Start"}],
-        )
-
-
-@pytest.mark.asyncio
-async def test_runner_llm_fails_to_call_tool() -> None:
-    """Runner raises ConversationError when LLM doesn't call finalization on retry."""
-    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
-    first_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[first_call],
-    )
-    # Second response has no tool calls
-    second_response = LLMResponse(
-        content="I can't do that",
-        model="test",
-        tokens_used=30,
-        finish_reason="stop",
-        tool_calls=None,
-    )
-    provider = create_mock_provider([first_response, second_response])
-
-    def validator(_data: dict[str, Any]) -> ValidationResult:
-        return ValidationResult(
-            valid=False,
-            errors=[ValidationErrorDetail(field="value", issue="error", provided="")],
-        )
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
-    )
-
-    with pytest.raises(ConversationError, match=r"LLM failed to call"):
-        await runner.run(
-            initial_messages=[{"role": "user", "content": "Start"}],
-            validator=validator,
-        )
-
-
-@pytest.mark.asyncio
-async def test_runner_executes_research_tool() -> None:
-    """Runner executes non-finalization tools and continues."""
-    research_call = ToolCall(id="call_1", name="research", arguments={"query": "test"})
-    finalization_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "done"})
-
-    first_response = LLMResponse(
-        content="Let me research",
-        model="test",
-        tokens_used=30,
-        finish_reason="tool_calls",
-        tool_calls=[research_call],
-    )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=40,
-        finish_reason="tool_calls",
-        tool_calls=[finalization_call],
-    )
-    provider = create_mock_provider([first_response, second_response])
-
-    research_tool = MockTool(name="research", result="Research results")
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[research_tool, FinalizationTool()],
-        finalization_tool="submit_test",
-    )
-
-    result, state = await runner.run(
-        initial_messages=[{"role": "user", "content": "Start"}],
-    )
-
-    assert result == {"value": "done"}
-    assert state.llm_calls == 2
-    # Check research tool result was added
-    tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    assert len(tool_results) >= 1
+# --- Callback Tests ---
 
 
 @pytest.mark.asyncio
 async def test_runner_calls_on_assistant_message() -> None:
-    """Runner calls on_assistant_message callback with content."""
-    tool_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "test"})
-    response = LLMResponse(
-        content="Here's my response",
+    """Runner calls on_assistant_message callback for each phase."""
+    discuss_response = LLMResponse(
+        content="Discuss content",
         model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[tool_call],
+        tokens_used=20,
+        finish_reason="stop",
     )
-    provider = create_mock_provider([response])
+    summarize_response = LLMResponse(
+        content="Summary content",
+        model="test",
+        tokens_used=30,
+        finish_reason="stop",
+    )
+    finalize_call = ToolCall(id="call_1", name="submit_test", arguments={"value": "done"})
+    serialize_response = LLMResponse(
+        content="Serialize content",
+        model="test",
+        tokens_used=40,
+        finish_reason="tool_calls",
+        tool_calls=[finalize_call],
+    )
+    provider = create_mock_provider([discuss_response, summarize_response, serialize_response])
 
     messages_received: list[str] = []
 
@@ -486,8 +764,9 @@ async def test_runner_calls_on_assistant_message() -> None:
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
     )
 
     await runner.run(
@@ -495,12 +774,36 @@ async def test_runner_calls_on_assistant_message() -> None:
         on_assistant_message=on_message,
     )
 
-    assert "Here's my response" in messages_received
+    assert "Discuss content" in messages_received
+    assert "Summary content" in messages_received
+
+
+# --- Error Handling Tests ---
+
+
+@pytest.mark.asyncio
+async def test_runner_summarize_empty_content_fails() -> None:
+    """Summarize phase fails if LLM returns empty content."""
+    discuss_response = LLMResponse(content="D", model="test", tokens_used=10, finish_reason="stop")
+    summarize_response = LLMResponse(content="", model="test", tokens_used=10, finish_reason="stop")
+    provider = create_mock_provider([discuss_response, summarize_response])
+
+    runner = ConversationRunner(
+        provider=provider,
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
+    )
+
+    with pytest.raises(ConversationError, match="Summarize phase produced no content"):
+        await runner.run(
+            initial_messages=[{"role": "user", "content": "Start"}],
+        )
 
 
 @pytest.mark.asyncio
 async def test_runner_tool_execution_error() -> None:
-    """Runner handles tool execution errors gracefully."""
+    """Runner handles research tool execution errors gracefully."""
 
     class FailingTool:
         @property
@@ -511,28 +814,39 @@ async def test_runner_tool_execution_error() -> None:
             raise RuntimeError("Tool crashed")
 
     failing_call = ToolCall(id="call_1", name="failing", arguments={})
-    finalization_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "done"})
-
-    first_response = LLMResponse(
+    discuss_response1 = LLMResponse(
         content="",
         model="test",
-        tokens_used=30,
+        tokens_used=10,
         finish_reason="tool_calls",
         tool_calls=[failing_call],
     )
-    second_response = LLMResponse(
+    discuss_response2 = LLMResponse(
+        content="Recovered",
+        model="test",
+        tokens_used=15,
+        finish_reason="stop",
+    )
+    summarize_response = LLMResponse(
+        content="S", model="test", tokens_used=10, finish_reason="stop"
+    )
+    finalize_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "done"})
+    serialize_response = LLMResponse(
         content="",
         model="test",
         tokens_used=40,
         finish_reason="tool_calls",
-        tool_calls=[finalization_call],
+        tool_calls=[finalize_call],
     )
-    provider = create_mock_provider([first_response, second_response])
+    provider = create_mock_provider(
+        [discuss_response1, discuss_response2, summarize_response, serialize_response]
+    )
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FailingTool(), FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[FailingTool()],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
     )
 
     result, state = await runner.run(
@@ -569,138 +883,53 @@ def test_conversation_error_without_state() -> None:
     assert error.state is None
 
 
-# --- expected_fields in Feedback Tests ---
-
-
-def test_validation_result_expected_fields() -> None:
-    """ValidationResult supports expected_fields attribute."""
-    result = ValidationResult(
-        valid=False,
-        error="Missing fields",
-        expected_fields=["name", "age", "email"],
-    )
-
-    assert result.expected_fields == ["name", "age", "email"]
-
-
-def test_validation_result_expected_fields_default() -> None:
-    """ValidationResult defaults expected_fields to None."""
-    result = ValidationResult(valid=True)
-
-    assert result.expected_fields is None
+# --- Validation Feedback Tests ---
 
 
 @pytest.mark.asyncio
-async def test_runner_feedback_includes_expected_fields() -> None:
-    """Runner includes expected_fields in validation feedback when provided."""
+async def test_runner_feedback_includes_schema() -> None:
+    """Feedback includes tool schema to help small models."""
     import json
 
-    # First attempt fails with expected_fields, second succeeds
+    discuss_response = LLMResponse(content="D", model="test", tokens_used=10, finish_reason="stop")
+    summarize_response = LLMResponse(
+        content="S", model="test", tokens_used=10, finish_reason="stop"
+    )
     first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
-    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
+    serialize_response1 = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
         tool_calls=[first_call],
     )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[second_call],
-    )
-    provider = create_mock_provider([first_response, second_response])
-
-    def validator(data: dict[str, Any]) -> ValidationResult:
-        if data.get("value") == "":
-            return ValidationResult(
-                valid=False,
-                errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
-                expected_fields={"value", "description", "priority"},
-            )
-        return ValidationResult(valid=True, data=data)
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
-    )
-
-    _result, state = await runner.run(
-        initial_messages=[{"role": "user", "content": "Start"}],
-        validator=validator,
-    )
-
-    # Find the tool result message with feedback
-    tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    assert len(tool_results) >= 1
-
-    # Parse the feedback JSON (ADR-007 structure)
-    feedback_msg = tool_results[0]["content"]
-    feedback = json.loads(feedback_msg)
-
-    # New structure has result enum instead of success boolean
-    assert feedback["result"] == "validation_failed"
-    # Issues are categorized under issues.invalid/missing/unknown
-    assert "issues" in feedback
-    assert "invalid" in feedback["issues"]
-
-
-@pytest.mark.asyncio
-async def test_runner_categorizes_unknown_error_type_via_string_fallback() -> None:
-    """Runner uses string matching fallback for unknown error types."""
-    import json
-
-    # Simulate an unknown/future Pydantic error type that contains "required" in message
-    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
     second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
+    serialize_response2 = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[first_call],
-    )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
         tool_calls=[second_call],
     )
-    provider = create_mock_provider([first_response, second_response])
+    provider = create_mock_provider(
+        [discuss_response, summarize_response, serialize_response1, serialize_response2]
+    )
 
     def validator(data: dict[str, Any]) -> ValidationResult:
         if data.get("value") == "":
-            # Unknown error type but "required" in issue text
             return ValidationResult(
                 valid=False,
                 errors=[
-                    ValidationErrorDetail(
-                        field="value",
-                        issue="Field is required",
-                        provided=None,
-                        error_type="unknown_future_type",  # Unknown to our set
-                    ),
-                    ValidationErrorDetail(
-                        field="count",
-                        issue="Must be positive",
-                        provided=-1,
-                        error_type="greater_than",  # Known invalid type
-                    ),
+                    ValidationErrorDetail(field="value", issue="required", error_type="missing")
                 ],
             )
         return ValidationResult(valid=True, data=data)
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
     )
 
     _result, state = await runner.run(
@@ -708,240 +937,47 @@ async def test_runner_categorizes_unknown_error_type_via_string_fallback() -> No
         validator=validator,
     )
 
-    # Find the tool result message with feedback
+    # Find validation feedback
     tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    assert len(tool_results) >= 1
+    # Filter to only JSON feedback (not confirmation messages)
+    feedback_msgs = [m for m in tool_results if m.get("content", "").startswith("{")]
+    assert len(feedback_msgs) >= 1
 
-    # Parse the feedback JSON (ADR-007 structure)
-    feedback_msg = tool_results[0]["content"]
-    feedback = json.loads(feedback_msg)
-
-    # New structure: issues.missing is a list of {field, requirement} dicts
-    # "value" should be in missing (fallback to string "required")
-    missing_fields = [f["field"] for f in feedback["issues"]["missing"]]
-    assert "value" in missing_fields, (
-        "Unknown error type with 'required' in issue should be categorized as missing"
-    )
-    # "count" should be in invalid (no "required"/"missing" in issue)
-    invalid_fields = [f["field"] for f in feedback["issues"]["invalid"]]
-    assert "count" in invalid_fields, (
-        "Error without 'required'/'missing' in issue should be categorized as invalid"
-    )
-
-
-@pytest.mark.asyncio
-async def test_runner_feedback_has_empty_unknown_when_no_expected_fields() -> None:
-    """Runner returns empty unknown list when validator doesn't provide expected_fields."""
-    import json
-
-    # First attempt fails without expected_fields, second succeeds
-    first_call = ToolCall(
-        id="call_1", name="submit_test", arguments={"value": "", "extra_field": "bad"}
-    )
-    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[first_call],
-    )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[second_call],
-    )
-    provider = create_mock_provider([first_response, second_response])
-
-    def validator(data: dict[str, Any]) -> ValidationResult:
-        if data.get("value") == "":
-            return ValidationResult(
-                valid=False,
-                errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
-                # No expected_fields - can't detect unknown fields
-            )
-        return ValidationResult(valid=True, data=data)
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
-    )
-
-    _result, state = await runner.run(
-        initial_messages=[{"role": "user", "content": "Start"}],
-        validator=validator,
-    )
-
-    # Find the tool result message with feedback
-    tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    assert len(tool_results) >= 1
-
-    # Parse the feedback JSON (ADR-007 structure)
-    feedback_msg = tool_results[0]["content"]
-    feedback = json.loads(feedback_msg)
-
-    # Without expected_fields, unknown list should be empty
-    # (can't detect unknown fields without knowing what's expected)
-    assert feedback["issues"]["unknown"] == []
+    feedback = json.loads(feedback_msgs[0]["content"])
+    assert "schema" in feedback
+    assert feedback["schema"]["type"] == "object"
 
 
 @pytest.mark.asyncio
 async def test_runner_detects_unknown_fields() -> None:
-    """Runner detects unknown fields when expected_fields is provided."""
+    """Runner detects fields not in expected_fields."""
     import json
 
-    # Submit data with fields not in expected_fields
+    discuss_response = LLMResponse(content="D", model="test", tokens_used=10, finish_reason="stop")
+    summarize_response = LLMResponse(
+        content="S", model="test", tokens_used=10, finish_reason="stop"
+    )
     first_call = ToolCall(
-        id="call_1",
-        name="submit_test",
-        arguments={"value": "", "passages": 10, "word_count": 5000},
+        id="call_1", name="submit_test", arguments={"value": "", "typo_field": "oops"}
     )
-    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
+    serialize_response1 = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
         tool_calls=[first_call],
     )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[second_call],
-    )
-    provider = create_mock_provider([first_response, second_response])
-
-    def validator(data: dict[str, Any]) -> ValidationResult:
-        if data.get("value") == "":
-            return ValidationResult(
-                valid=False,
-                errors=[ValidationErrorDetail(field="value", issue="cannot be empty", provided="")],
-                # Expected fields include nested paths
-                expected_fields={
-                    "value",
-                    "scope",
-                    "scope.estimated_passages",
-                    "scope.target_word_count",
-                },
-            )
-        return ValidationResult(valid=True, data=data)
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
-    )
-
-    _result, state = await runner.run(
-        initial_messages=[{"role": "user", "content": "Start"}],
-        validator=validator,
-    )
-
-    # Parse the feedback JSON
-    tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    feedback = json.loads(tool_results[0]["content"])
-
-    # "passages" and "word_count" are not in expected_fields, should be unknown
-    assert "passages" in feedback["issues"]["unknown"]
-    assert "word_count" in feedback["issues"]["unknown"]
-    # "value" is expected, should not be in unknown
-    assert "value" not in feedback["issues"]["unknown"]
-
-
-@pytest.mark.asyncio
-async def test_runner_feedback_includes_requirement_text() -> None:
-    """Runner includes requirement text from ValidationErrorDetail."""
-    import json
-
-    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
     second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
+    serialize_response2 = LLMResponse(
         content="",
         model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[first_call],
-    )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
+        tokens_used=40,
         finish_reason="tool_calls",
         tool_calls=[second_call],
     )
-    provider = create_mock_provider([first_response, second_response])
-
-    def validator(data: dict[str, Any]) -> ValidationResult:
-        if data.get("value") == "":
-            return ValidationResult(
-                valid=False,
-                errors=[
-                    ValidationErrorDetail(
-                        field="value",
-                        issue="String should have at least 1 character",
-                        provided="",
-                        error_type="string_too_short",
-                        requirement="non-empty string",
-                    )
-                ],
-            )
-        return ValidationResult(valid=True, data=data)
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+    provider = create_mock_provider(
+        [discuss_response, summarize_response, serialize_response1, serialize_response2]
     )
-
-    _result, state = await runner.run(
-        initial_messages=[{"role": "user", "content": "Start"}],
-        validator=validator,
-    )
-
-    # Parse the feedback JSON
-    tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    feedback = json.loads(tool_results[0]["content"])
-
-    # Check that requirement is included in invalid field
-    assert len(feedback["issues"]["invalid"]) == 1
-    assert feedback["issues"]["invalid"][0]["requirement"] == "non-empty string"
-
-
-@pytest.mark.asyncio
-async def test_runner_feedback_action_mentions_unknown_fields() -> None:
-    """Runner action text mentions unknown fields to help LLM identify typos."""
-    import json
-
-    first_call = ToolCall(
-        id="call_1",
-        name="submit_test",
-        arguments={"value": "", "typo_field": "oops"},
-    )
-    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[first_call],
-    )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[second_call],
-    )
-    provider = create_mock_provider([first_response, second_response])
 
     def validator(data: dict[str, Any]) -> ValidationResult:
         if data.get("value") == "":
@@ -950,14 +986,15 @@ async def test_runner_feedback_action_mentions_unknown_fields() -> None:
                 errors=[
                     ValidationErrorDetail(field="value", issue="required", error_type="missing")
                 ],
-                expected_fields={"value", "other_field"},
+                expected_fields={"value"},
             )
         return ValidationResult(valid=True, data=data)
 
     runner = ConversationRunner(
         provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
+        research_tools=[],
+        finalization_tool=MockFinalizationTool(),
+        max_discuss_turns=1,
     )
 
     _result, state = await runner.run(
@@ -965,66 +1002,10 @@ async def test_runner_feedback_action_mentions_unknown_fields() -> None:
         validator=validator,
     )
 
-    # Parse the feedback JSON
+    # Find validation feedback
     tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    feedback = json.loads(tool_results[0]["content"])
+    feedback_msgs = [m for m in tool_results if m.get("content", "").startswith("{")]
+    feedback = json.loads(feedback_msgs[0]["content"])
 
-    # Action should mention the unknown field as a potential typo
-    assert "typo_field" in feedback["action"]
-    assert "typo" in feedback["action"].lower()
-
-
-@pytest.mark.asyncio
-async def test_runner_feedback_includes_schema_on_validation_retry() -> None:
-    """Feedback includes tool schema to help small models that ignore tool definitions."""
-    import json
-
-    first_call = ToolCall(id="call_1", name="submit_test", arguments={"value": ""})
-    second_call = ToolCall(id="call_2", name="submit_test", arguments={"value": "fixed"})
-
-    first_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[first_call],
-    )
-    second_response = LLMResponse(
-        content="",
-        model="test",
-        tokens_used=50,
-        finish_reason="tool_calls",
-        tool_calls=[second_call],
-    )
-    provider = create_mock_provider([first_response, second_response])
-
-    def validator(data: dict[str, Any]) -> ValidationResult:
-        if data.get("value") == "":
-            return ValidationResult(
-                valid=False,
-                errors=[
-                    ValidationErrorDetail(field="value", issue="required", error_type="missing")
-                ],
-            )
-        return ValidationResult(valid=True, data=data)
-
-    runner = ConversationRunner(
-        provider=provider,
-        tools=[FinalizationTool()],
-        finalization_tool="submit_test",
-    )
-
-    _result, state = await runner.run(
-        initial_messages=[{"role": "user", "content": "Start"}],
-        validator=validator,
-    )
-
-    # Parse the feedback JSON
-    tool_results = [m for m in state.messages if m.get("role") == "tool"]
-    feedback = json.loads(tool_results[0]["content"])
-
-    # Feedback should include the schema
-    assert "schema" in feedback
-    assert feedback["schema"]["type"] == "object"
-    assert "properties" in feedback["schema"]
-    assert "value" in feedback["schema"]["properties"]
+    # typo_field should be detected as unknown
+    assert "typo_field" in feedback["issues"]["unknown"]

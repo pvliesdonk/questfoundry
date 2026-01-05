@@ -1,8 +1,8 @@
 """Conversation runner for interactive stages.
 
 This module provides the ConversationRunner class that manages
-multi-turn LLM interactions with tool calling support, enabling
-conversational refinement before structured output.
+multi-turn LLM interactions with the 3-phase pattern:
+Discuss → Summarize → Serialize.
 """
 
 from __future__ import annotations
@@ -12,11 +12,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation.state import ConversationState
-from questfoundry.tools import Tool
+from questfoundry.tools import ReadyToSummarizeTool, Tool
 
 # Default configuration values
-DEFAULT_MAX_TURNS = 10
+DEFAULT_MAX_DISCUSS_TURNS = 10
+DEFAULT_MAX_TOOL_CALLS = 50  # Prevent infinite tool call loops in discuss phase
 DEFAULT_VALIDATION_RETRIES = 3
+USER_DONE_SIGNAL = "/done"
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -79,23 +81,28 @@ class ValidationResult:
 
 
 class ConversationRunner:
-    """Manages multi-turn LLM conversations with tool calling.
+    """Manages multi-turn LLM conversations with the 3-phase pattern.
 
-    The runner implements the Discuss → Freeze → Serialize pattern:
-    1. Conversation phase: LLM discusses with user, uses research tools
-    2. Finalization: LLM calls finalization tool with structured data
-    3. Validation: Data is validated with optional retry loop
+    The runner implements the Discuss → Summarize → Serialize pattern:
 
-    Attributes:
-        finalization_tool: Name of the tool that signals completion.
-        max_turns: Maximum conversation turns before timeout.
-        validation_retries: Maximum validation retry attempts.
+    1. **Discuss phase**: LLM discusses with user using research tools.
+       Ends when user types /done, LLM calls ready_to_summarize(), or max turns.
+
+    2. **Summarize phase**: LLM generates a summary with no tools.
+       Distills the conversation into key decisions.
+
+    3. **Serialize phase**: LLM calls finalization tool with structured data.
+       Validation with retry loop; fails explicitly if no tool call.
+
+    Both direct and interactive modes use this same code path:
+    - Direct mode: max_discuss_turns=1, user_input_fn=None
+    - Interactive mode: max_discuss_turns=10, user_input_fn provided
 
     Example:
         >>> runner = ConversationRunner(
         ...     provider=provider,
-        ...     tools=[SubmitDreamTool(), SearchCorpusTool()],
-        ...     finalization_tool="submit_dream",
+        ...     research_tools=[SearchCorpusTool()],
+        ...     finalization_tool=SubmitDreamTool(),
         ... )
         >>> artifact, state = await runner.run(
         ...     initial_messages=[system_msg, user_msg],
@@ -107,243 +114,363 @@ class ConversationRunner:
     def __init__(
         self,
         provider: LLMProvider,
-        tools: list[Tool],
-        finalization_tool: str,
-        max_turns: int = DEFAULT_MAX_TURNS,
+        research_tools: list[Tool],
+        finalization_tool: Tool,
+        max_discuss_turns: int = DEFAULT_MAX_DISCUSS_TURNS,
         validation_retries: int = DEFAULT_VALIDATION_RETRIES,
     ) -> None:
         """Initialize the conversation runner.
 
         Args:
             provider: LLM provider for completions.
-            tools: List of tools available during conversation.
-            finalization_tool: Name of the tool that ends the conversation.
-            max_turns: Maximum turns before timeout (default 10).
-            validation_retries: Max validation retries (default 3).
+            research_tools: Tools available during Discuss phase only.
+            finalization_tool: Tool available during Serialize phase only.
+            max_discuss_turns: Max turns in Discuss phase (1 for direct mode).
+            validation_retries: Max validation retries in Serialize phase.
 
         Raises:
-            TypeError: If any tool doesn't implement the Tool protocol.
+            TypeError: If finalization_tool doesn't implement the Tool protocol.
         """
-        # Validate all tools implement the Tool protocol
-        for tool in tools:
+        # Validate finalization tool implements Tool protocol
+        if not isinstance(finalization_tool, Tool):
+            raise TypeError(
+                f"finalization_tool {finalization_tool!r} doesn't implement Tool protocol"
+            )
+
+        # Validate research tools
+        for tool in research_tools:
             if not isinstance(tool, Tool):
-                raise TypeError(
-                    f"Tool {tool!r} doesn't implement Tool protocol "
-                    f"(missing 'definition' property or 'execute' method)"
-                )
+                raise TypeError(f"Research tool {tool!r} doesn't implement Tool protocol")
 
         self._provider = provider
-        self._tools = {t.definition.name: t for t in tools}
-        self._tool_definitions = [t.definition for t in tools]
+        self._research_tools = research_tools
         self._finalization_tool = finalization_tool
-        self._max_turns = max_turns
+        self._max_discuss_turns = max_discuss_turns
         self._validation_retries = validation_retries
+
+        # Build tool lookup maps for each phase
+        self._ready_tool = ReadyToSummarizeTool()
+        self._discuss_tools = {t.definition.name: t for t in research_tools}
+        self._discuss_tools[self._ready_tool.definition.name] = self._ready_tool
+        self._discuss_tool_defs = [t.definition for t in research_tools] + [
+            self._ready_tool.definition
+        ]
+
+        self._finalization_tool_name = finalization_tool.definition.name
+        self._finalization_tool_def = finalization_tool.definition
 
     async def run(
         self,
         initial_messages: list[Message],
         user_input_fn: Callable[[], Awaitable[str | None]] | None = None,
         validator: Callable[[dict[str, Any]], ValidationResult] | None = None,
+        summary_prompt: str | None = None,
         on_assistant_message: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], ConversationState]:
-        """Run the conversation until finalization.
+        """Run the 3-phase conversation.
 
         Args:
             initial_messages: Starting messages (typically system + user).
-            user_input_fn: Async function to get user input. If None or
-                returns None/empty, conversation continues without user input.
+            user_input_fn: Async function to get user input. If None,
+                runs in direct mode (no user interaction in Discuss).
             validator: Optional function to validate finalization data.
-                Called with tool arguments, returns ValidationResult.
+            summary_prompt: Optional guidance for the Summarize phase.
             on_assistant_message: Optional callback for assistant messages.
-                Called with the message content for display purposes.
 
         Returns:
             Tuple of (artifact_data, conversation_state).
 
         Raises:
-            ConversationError: If max turns exceeded or validation fails
-                after all retries.
+            ConversationError: If any phase fails.
         """
-        state = ConversationState(messages=list(initial_messages))
+        state = ConversationState(messages=list(initial_messages), phase="discuss")
 
-        while state.turn_count < self._max_turns:
-            # Call LLM with tools
+        # Phase 1: Discuss
+        await self._discuss_phase(state, user_input_fn, on_assistant_message)
+
+        # Phase 2: Summarize
+        state.phase = "summarize"
+        summary = await self._summarize_phase(state, summary_prompt, on_assistant_message)
+
+        # Phase 3: Serialize
+        state.phase = "serialize"
+        artifact = await self._serialize_phase(state, summary, validator, on_assistant_message)
+
+        return artifact, state
+
+    async def _discuss_phase(
+        self,
+        state: ConversationState,
+        user_input_fn: Callable[[], Awaitable[str | None]] | None,
+        on_assistant_message: Callable[[str], None] | None,
+    ) -> None:
+        """Run the Discuss phase with research tools only.
+
+        Exit conditions:
+        - User types /done
+        - LLM calls ready_to_summarize()
+        - max_discuss_turns reached (auto-transition)
+        - max_tool_calls reached (prevents infinite loops)
+
+        Args:
+            state: Conversation state to update.
+            user_input_fn: Function to get user input, or None for direct mode.
+            on_assistant_message: Callback for assistant messages.
+        """
+        tool_call_count = 0
+
+        while state.turn_count < self._max_discuss_turns:
+            # Call LLM with research tools only
             response = await self._provider.complete(
                 messages=state.messages,
-                tools=self._tool_definitions,
+                tools=self._discuss_tool_defs if self._discuss_tool_defs else None,
                 tool_choice="auto",
             )
             state.llm_calls += 1
             state.tokens_used += response.tokens_used
 
-            # Add assistant message BEFORE processing tool calls
-            # This preserves any explanatory text the LLM provides alongside tool calls
+            # Add assistant message
             if response.content:
                 state.add_message({"role": "assistant", "content": response.content})
                 if on_assistant_message is not None:
                     on_assistant_message(response.content)
 
             # Handle tool calls
-            if response.has_tool_calls:
-                result = await self._handle_tool_calls(
-                    response.tool_calls or [],
-                    state,
-                    validator,
-                )
-                if result is not None:
-                    # Finalization tool was called and validated
-                    return result, state
+            if response.has_tool_calls and response.tool_calls:
+                tool_call_count += len(response.tool_calls)
 
-            # Check if we should get user input
+                # Check tool call limit to prevent infinite loops
+                if tool_call_count > DEFAULT_MAX_TOOL_CALLS:
+                    raise ConversationError(
+                        f"Exceeded maximum tool calls ({DEFAULT_MAX_TOOL_CALLS}) in discuss phase. "
+                        "This may indicate the LLM is stuck in a tool call loop.",
+                        state,
+                    )
+
+                ready_to_proceed = await self._handle_discuss_tools(response.tool_calls, state)
+                if ready_to_proceed:
+                    return  # LLM signaled ready to summarize
+                # Tool was executed - loop back to see LLM response to tool result
+                # without incrementing turn count (tool calls don't count as turns)
+                continue
+
+            # Get user input (if interactive)
             if user_input_fn is not None:
                 user_input = await user_input_fn()
                 if user_input:
+                    # Check for /done signal
+                    if user_input.strip().lower() == USER_DONE_SIGNAL:
+                        return  # User signaled ready to summarize
                     state.add_message({"role": "user", "content": user_input})
 
             state.turn_count += 1
 
-        raise ConversationError(
-            f"Maximum turns ({self._max_turns}) exceeded without finalization",
-            state,
-        )
+        # Max turns reached - auto-transition to summarize
 
-    async def _handle_tool_calls(
+    async def _handle_discuss_tools(
         self,
         tool_calls: list[ToolCall],
         state: ConversationState,
-        validator: Callable[[dict[str, Any]], ValidationResult] | None,
-    ) -> dict[str, Any] | None:
-        """Process tool calls from LLM response.
+    ) -> bool:
+        """Process tool calls during Discuss phase.
+
+        Only allows research tools and ready_to_summarize.
+        Rejects finalization tool calls (must be in Serialize phase).
 
         Args:
-            tool_calls: List of tool calls from LLM.
-            state: Current conversation state.
-            validator: Optional validator for finalization tool.
+            tool_calls: Tool calls from LLM response.
+            state: Conversation state to update.
 
         Returns:
-            Finalization data if finalization tool was called successfully,
-            None otherwise.
+            True if ready_to_summarize was called, False otherwise.
         """
         for tc in tool_calls:
-            if tc.name == self._finalization_tool:
-                # Handle finalization with validation
-                return await self._handle_finalization(tc, state, validator)
-            else:
-                # Execute research tool
-                result = self._execute_tool(tc)
+            # Check for ready_to_summarize signal
+            if tc.name == "ready_to_summarize":
+                result = self._ready_tool.execute(tc.arguments)
                 state.add_tool_result(tc.id, result)
+                return True
 
-        return None
+            # Reject finalization tool in discuss phase
+            if tc.name == self._finalization_tool_name:
+                state.add_tool_result(
+                    tc.id,
+                    json.dumps(
+                        {
+                            "error": "Cannot call finalization tool during discussion phase. "
+                            "Use ready_to_summarize() when done discussing, then the "
+                            "finalization tool will be available in the serialize phase."
+                        }
+                    ),
+                )
+                continue
 
-    async def _handle_finalization(
+            # Execute research tool
+            tool = self._discuss_tools.get(tc.name)
+            if tool is None:
+                state.add_tool_result(
+                    tc.id,
+                    json.dumps({"error": f"Unknown tool '{tc.name}'"}),
+                )
+                continue
+
+            try:
+                result = tool.execute(tc.arguments)
+                state.add_tool_result(tc.id, result)
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except Exception as e:
+                state.add_tool_result(
+                    tc.id,
+                    json.dumps({"error": f"Error executing {tc.name}: {e}"}),
+                )
+
+        return False
+
+    async def _summarize_phase(
         self,
-        tool_call: ToolCall,
         state: ConversationState,
-        validator: Callable[[dict[str, Any]], ValidationResult] | None,
-    ) -> dict[str, Any]:
-        """Handle finalization tool call with validation retry.
+        summary_prompt: str | None,
+        on_assistant_message: Callable[[str], None] | None,
+    ) -> str:
+        """Run the Summarize phase with no tools.
+
+        Generates a summary of the discussion for the Serialize phase.
 
         Args:
-            tool_call: The finalization tool call.
-            state: Current conversation state.
-            validator: Optional validator function.
+            state: Conversation state to update.
+            summary_prompt: Optional guidance for summarization.
+            on_assistant_message: Callback for assistant messages.
+
+        Returns:
+            The generated summary text.
+
+        Raises:
+            ConversationError: If summarization fails.
+        """
+        # Build summarize prompt
+        if summary_prompt:
+            summarize_instruction = summary_prompt
+        else:
+            summarize_instruction = (
+                "Summarize the key decisions and creative direction from our discussion. "
+                "Be concise but capture the essential elements that should inform the final output."
+            )
+
+        state.add_message({"role": "user", "content": summarize_instruction})
+
+        # Call LLM with no tools
+        response = await self._provider.complete(
+            messages=state.messages,
+            tools=None,
+            tool_choice=None,
+        )
+        state.llm_calls += 1
+        state.tokens_used += response.tokens_used
+
+        if not response.content:
+            raise ConversationError(
+                "Summarize phase produced no content",
+                state,
+            )
+
+        state.add_message({"role": "assistant", "content": response.content})
+        if on_assistant_message is not None:
+            on_assistant_message(response.content)
+
+        return response.content
+
+    async def _serialize_phase(
+        self,
+        state: ConversationState,
+        summary: str,  # noqa: ARG002 - summary already in messages, param kept for API clarity
+        validator: Callable[[dict[str, Any]], ValidationResult] | None,
+        on_assistant_message: Callable[[str], None] | None,
+    ) -> dict[str, Any]:
+        """Run the Serialize phase with finalization tool only.
+
+        Converts the summary to structured output via tool call.
+        Includes validation retry loop.
+
+        Args:
+            state: Conversation state to update.
+            summary: Summary from previous phase.
+            validator: Optional validation function.
+            on_assistant_message: Callback for assistant messages.
 
         Returns:
             Validated artifact data.
 
         Raises:
-            ConversationError: If validation fails after all retries.
+            ConversationError: If serialization or validation fails.
         """
-        data = tool_call.arguments
-        retries = 0
+        # Build serialize instruction
+        serialize_instruction = (
+            f"Based on the summary above, call {self._finalization_tool_name}() "
+            f"with the complete structured data."
+        )
+        state.add_message({"role": "user", "content": serialize_instruction})
 
-        while retries < self._validation_retries:
+        max_attempts = self._validation_retries + 1
+        for attempt in range(max_attempts):
+            # Call LLM with finalization tool only, forced
+            response = await self._provider.complete(
+                messages=state.messages,
+                tools=[self._finalization_tool_def],
+                tool_choice=self._finalization_tool_name,
+            )
+            state.llm_calls += 1
+            state.tokens_used += response.tokens_used
+
+            # Add any assistant content
+            if response.content:
+                state.add_message({"role": "assistant", "content": response.content})
+                if on_assistant_message is not None:
+                    on_assistant_message(response.content)
+
+            # Extract tool call
+            tool_call = None
+            if response.has_tool_calls and response.tool_calls:
+                for tc in response.tool_calls:
+                    if tc.name == self._finalization_tool_name:
+                        tool_call = tc
+                        break
+
+            # No tool call = explicit failure (no YAML fallback)
+            if tool_call is None:
+                raise ConversationError(
+                    f"Provider did not return {self._finalization_tool_name} tool call. "
+                    "Ensure you are using a tool-capable provider/model.",
+                    state,
+                )
+
+            data = tool_call.arguments
+
             # Validate if validator provided
-            if validator is not None:
-                result = validator(data)
-                if not result.valid:
-                    # Build structured feedback per ADR-007
-                    # Include schema to help small models that ignore tool definitions
-                    feedback = self._build_validation_feedback(
-                        data, result, self._finalization_tool, include_schema=True
-                    )
+            validation_result = validator(data) if validator else ValidationResult(valid=True)
 
-                    # Check if we've exhausted retries BEFORE making another LLM call
-                    retries += 1
-                    if retries >= self._validation_retries:
-                        raise ConversationError(
-                            f"Validation failed after {self._validation_retries} retries",
-                            state,
-                        )
+            if validation_result.valid:
+                # Use validated/transformed data if provided
+                validated_data = (
+                    validation_result.data if validation_result.data is not None else data
+                )
+                # Validation passed - confirm and return
+                result_message = self._finalization_tool.execute(validated_data)
+                state.add_tool_result(tool_call.id, result_message)
+                return validated_data
 
-                    state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
-
-                    # Request retry from LLM
-                    response = await self._provider.complete(
-                        messages=state.messages,
-                        tools=self._tool_definitions,
-                        tool_choice=self._finalization_tool,  # Force retry of same tool
-                    )
-                    state.llm_calls += 1
-                    state.tokens_used += response.tokens_used
-
-                    # Extract new tool call
-                    found_new_call = False
-                    if response.has_tool_calls and response.tool_calls:
-                        for tc in response.tool_calls:
-                            if tc.name == self._finalization_tool:
-                                data = tc.arguments
-                                tool_call = tc
-                                found_new_call = True
-                                break
-
-                    if not found_new_call:
-                        # LLM didn't provide expected tool call - fail fast
-                        # Continuing would revalidate same stale data (infinite loop)
-                        if response.content:
-                            state.add_message({"role": "assistant", "content": response.content})
-                        raise ConversationError(
-                            f"LLM failed to call {self._finalization_tool} on retry {retries}",
-                            state,
-                        )
-                    continue
-                else:
-                    # Use validated/transformed data if provided
-                    data = result.data if result.data is not None else data
-
-            # Validation passed or no validator - call tool.execute() for confirmation
-            tool = self._tools.get(self._finalization_tool)
-            if tool is not None:
-                result_message = tool.execute(data)
-            else:
-                result_message = "Artifact submitted successfully."
-            state.add_tool_result(tool_call.id, result_message)
-            return data
+            # Validation failed - retry if attempts remain
+            if attempt < max_attempts - 1:
+                feedback = self._build_validation_feedback(
+                    data, validation_result, self._finalization_tool_name, include_schema=True
+                )
+                state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
+            # else: last attempt failed, will raise after loop
 
         raise ConversationError(
             f"Validation failed after {self._validation_retries} retries",
             state,
         )
-
-    def _execute_tool(self, tool_call: ToolCall) -> str:
-        """Execute a non-finalization tool.
-
-        Args:
-            tool_call: The tool call to execute.
-
-        Returns:
-            Tool execution result as string.
-        """
-        tool = self._tools.get(tool_call.name)
-        if tool is None:
-            return f"Error: Unknown tool '{tool_call.name}'"
-
-        try:
-            return tool.execute(tool_call.arguments)
-        except (KeyboardInterrupt, SystemExit):
-            raise  # Don't catch system signals
-        except Exception as e:
-            return f"Error executing {tool_call.name}: {e}"
 
     def _build_validation_feedback(
         self,
@@ -365,8 +492,7 @@ class ConversationRunner:
             data: The submitted data that failed validation.
             result: ValidationResult with structured errors.
             tool_name: Name of the finalization tool for action text.
-            include_schema: If True, include full schema in feedback for
-                models that struggle with tool definition attention.
+            include_schema: If True, include full schema in feedback.
 
         Returns:
             Structured feedback dict ready for JSON serialization.
@@ -433,11 +559,9 @@ class ConversationRunner:
             "action": " ".join(action_parts),
         }
 
-        # Include schema for serialize phase - helps small models that ignore tool definitions
+        # Include schema for serialize phase - helps small models
         if include_schema:
-            tool_def = next((t for t in self._tool_definitions if t.name == tool_name), None)
-            if tool_def:
-                feedback["schema"] = tool_def.parameters
+            feedback["schema"] = self._finalization_tool_def.parameters
 
         return feedback
 
@@ -454,7 +578,7 @@ class ConversationRunner:
 
         Args:
             data: Submitted data to check.
-            expected_fields: Set of valid field paths (e.g., {"genre", "scope.target_word_count"}).
+            expected_fields: Set of valid field paths.
             prefix: Current field path prefix for recursion.
 
         Returns:
@@ -463,7 +587,7 @@ class ConversationRunner:
         if expected_fields is None:
             return []
 
-        # Pre-compute parent prefixes for O(1) lookup instead of O(m) per field
+        # Pre-compute parent prefixes for O(1) lookup
         parent_prefixes = {ef.rsplit(".", 1)[0] for ef in expected_fields if "." in ef}
 
         unknown: list[str] = []
@@ -472,7 +596,6 @@ class ConversationRunner:
             field_path = f"{prefix}.{key}" if prefix else key
 
             # Check if this exact path or a parent path is expected
-            # e.g., "scope" is expected if "scope.target_word_count" is in expected_fields
             path_is_expected = field_path in expected_fields
             is_parent_of_expected = field_path in parent_prefixes
 

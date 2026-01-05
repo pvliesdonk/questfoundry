@@ -4,15 +4,52 @@ This document describes the architecture for interactive stage execution in Ques
 
 ## Overview
 
-Interactive mode enables multi-turn LLM conversations during stage execution. Instead of a single LLM call producing the final artifact, the LLM engages with the user to discuss and refine the creative vision before calling a finalization tool.
+Interactive mode enables multi-turn LLM conversations during stage execution. Instead of a single LLM call producing the final artifact, the LLM engages with the user to discuss and refine the creative vision before producing structured output.
 
 ### Key Design Decisions
 
-1. **Single Codepath**: Interactive mode is a flag, not separate implementation
-2. **Tool-Gated Finalization**: LLM signals completion by calling a stage-specific tool
-3. **Sandwich Pattern**: Critical instructions appear at prompt start AND end
-4. **TTY Auto-Detection**: Mode defaults based on terminal interactivity
-5. **Validation-Retry Loop**: Failed validation triggers compact feedback for retry
+1. **Unified 3-Phase Pattern**: Both interactive and direct modes use the same code path (Discuss → Summarize → Serialize)
+2. **Tool Gating Per Phase**: Different tools available at each phase
+3. **Explicit Phase Transitions**: User `/done` or LLM `ready_to_summarize()` tool
+4. **Sandwich Pattern**: Critical instructions appear at prompt start AND end
+5. **TTY Auto-Detection**: Mode defaults based on terminal interactivity
+6. **Validation-Retry Loop**: Failed validation triggers compact feedback for retry
+7. **No YAML Fallback**: Tool calling is required; explicit failure if provider skips tool
+
+## The 3-Phase Pattern
+
+Both interactive and direct modes use the same 3-phase pattern, differing only in configuration:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                           3-Phase Pattern                                 │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌─────────┐        ┌───────────┐        ┌───────────┐                 │
+│   │ DISCUSS │   →    │ SUMMARIZE │   →    │ SERIALIZE │                 │
+│   └────┬────┘        └─────┬─────┘        └─────┬─────┘                 │
+│        │                   │                    │                        │
+│   Research tools      No tools            Finalization tool              │
+│   User input          Generate summary    tool_choice=required           │
+│   ready_to_summarize  Auto-proceed        Validation retry               │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### Phase Details
+
+| Phase | Tools Available | Exit Condition | Purpose |
+|-------|-----------------|----------------|---------|
+| **Discuss** | Research + `ready_to_summarize` | User `/done`, LLM calls `ready_to_summarize()`, or max turns | Gather information, discuss with user |
+| **Summarize** | None | Auto-proceed after summary | Generate compact summary of discussion |
+| **Serialize** | Finalization tool only | Valid artifact | Convert summary to structured output |
+
+### Mode Configuration
+
+| Mode | max_discuss_turns | user_input_fn | Behavior |
+|------|-------------------|---------------|----------|
+| **Direct** | 1 | None | Single discuss turn, then auto-proceed |
+| **Interactive** | 10 (default) | Provided | Multi-turn discussion with user |
 
 ## Architecture Components
 
@@ -66,61 +103,101 @@ class LLMResponse:
 
 ### ConversationRunner (`src/questfoundry/conversation/runner.py`)
 
-The `ConversationRunner` manages the multi-turn conversation loop:
+The `ConversationRunner` manages the 3-phase conversation:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    ConversationRunner                        │
 ├─────────────────────────────────────────────────────────────┤
 │ provider: LLMProvider                                        │
-│ tools: list[Tool]                                           │
-│ finalization_tool: str          (e.g., "submit_dream")      │
-│ max_turns: int                  (default: 10)               │
-│ validation_retries: int         (default: 3)                │
+│ research_tools: list[Tool]        (Discuss phase only)      │
+│ finalization_tool: Tool           (Serialize phase only)    │
+│ max_discuss_turns: int            (1 for direct, 10 for     │
+│                                    interactive)             │
+│ validation_retries: int           (default: 3)              │
 ├─────────────────────────────────────────────────────────────┤
-│ run(initial_messages, user_input_fn, validator)             │
+│ run(initial_messages, user_input_fn, validator,             │
+│     summary_prompt, on_assistant_message)                   │
 │   → (artifact_data, ConversationState)                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Conversation Flow:**
+**3-Phase Conversation Flow:**
 
 ```
-┌─────────────┐     ┌───────────────┐     ┌──────────────┐
-│   System    │ →   │     User      │ →   │     LLM      │
-│   Prompt    │     │   Message     │     │   Response   │
-└─────────────┘     └───────────────┘     └──────┬───────┘
-                                                  │
-                    ┌─────────────────────────────┘
-                    │
-                    ▼
-        ┌───────────────────────┐
-        │  Tool Call Present?   │
-        └───────────┬───────────┘
-                    │
-         ┌──────────┴──────────┐
-         │                     │
-    finalization           research
-         │                     │
-         ▼                     ▼
-┌─────────────────┐  ┌─────────────────┐
-│   Validate      │  │  Execute Tool   │
-│   Artifact      │  │  Add Result to  │
-└────────┬────────┘  │  Messages       │
-         │           └─────────────────┘
-         │                     │
-    ┌────┴────┐               │
-    │         │               │
-  valid    invalid            │
-    │         │               │
-    ▼         ▼               ▼
- RETURN    RETRY        CONTINUE
-           (max 3)      CONVERSATION
+                    ┌─────────────────────────────────────────────┐
+                    │              DISCUSS PHASE                   │
+                    │                                              │
+                    │   Tools: research_tools + ready_to_summarize │
+                    │                                              │
+┌─────────────┐     │     ┌───────────────┐     ┌──────────────┐  │
+│   System    │ →   │     │     User      │ ↔   │     LLM      │  │
+│   Prompt    │     │     │   (optional)  │     │   Response   │  │
+└─────────────┘     │     └───────────────┘     └──────┬───────┘  │
+                    │                                   │          │
+                    │         ┌─────────────────────────┘          │
+                    │         │                                    │
+                    │         ▼                                    │
+                    │  ┌─────────────────────┐                     │
+                    │  │ Check Exit Condition │                    │
+                    │  └──────────┬──────────┘                     │
+                    │             │                                │
+                    │   ┌─────────┼─────────┬──────────────┐      │
+                    │   │         │         │              │      │
+                    │ /done  ready_to_    max       research      │
+                    │         summarize  turns       tool         │
+                    │   │         │         │              │      │
+                    │   ▼         ▼         ▼              ▼      │
+                    │  EXIT     EXIT      EXIT        EXECUTE     │
+                    │                                 & CONTINUE  │
+                    └─────────────────────────────────────────────┘
+                                        │
+                                        ▼
+                    ┌─────────────────────────────────────────────┐
+                    │             SUMMARIZE PHASE                  │
+                    │                                              │
+                    │   Tools: None                                │
+                    │                                              │
+                    │   ┌──────────────────────────────────────┐  │
+                    │   │ Generate summary from discussion      │  │
+                    │   │ (No user interaction, no tools)       │  │
+                    │   └──────────────────────────────────────┘  │
+                    │                                              │
+                    └─────────────────────────────────────────────┘
+                                        │
+                                        ▼
+                    ┌─────────────────────────────────────────────┐
+                    │             SERIALIZE PHASE                  │
+                    │                                              │
+                    │   Tools: finalization_tool only             │
+                    │   tool_choice: required                      │
+                    │                                              │
+                    │   ┌──────────────────────────────────────┐  │
+                    │   │ Convert summary to structured output  │  │
+                    │   │ using finalization tool               │  │
+                    │   └──────────────────────┬───────────────┘  │
+                    │                          │                   │
+                    │               ┌──────────┴──────────┐       │
+                    │               │                     │       │
+                    │             valid              invalid      │
+                    │               │                     │       │
+                    │               ▼                     ▼       │
+                    │            RETURN             RETRY         │
+                    │                              (max 3)        │
+                    └─────────────────────────────────────────────┘
 ```
+
+### Phase Transition Signals
+
+**User Signal**: `/done` typed as user input transitions from Discuss to Summarize.
+
+**LLM Signal**: `ready_to_summarize()` tool call transitions from Discuss to Summarize.
+
+Both signals are equivalent and can be used interchangeably.
 
 ### Validation Feedback Format (ADR-007)
 
-When validation fails, structured feedback is sent to the LLM for retry:
+When validation fails in the Serialize phase, structured feedback is sent to the LLM for retry:
 
 ```json
 {
@@ -161,9 +238,15 @@ When validation fails, structured feedback is sent to the LLM for retry:
 - Each field error includes specific `requirement` text
 - `unknown` fields help detect wrong field names without fuzzy matching
 
-### Finalization Tools (`src/questfoundry/tools/finalization.py`)
+### Tools (`src/questfoundry/tools/finalization.py`)
 
-Each stage has a dedicated finalization tool:
+**Signal Tool:**
+
+| Tool | Purpose |
+|------|---------|
+| `ready_to_summarize` | LLM signals discussion is complete |
+
+**Finalization Tools:**
 
 | Stage | Tool Name | Purpose |
 |-------|-----------|---------|
@@ -178,18 +261,30 @@ The tool schema matches the artifact schema, ensuring structured output.
 ### Interactive Mode (Default with TTY)
 
 1. LLM receives system prompt with discussion instructions
-2. Conversation loop: LLM ↔ User (via `user_input_fn`)
-3. LLM calls finalization tool when ready
-4. Validation with retry on failure
+2. **Discuss Phase**: Conversation loop with research tools available
+   - LLM ↔ User (via `user_input_fn`)
+   - Research tools can be called
+   - Exit on user `/done`, LLM `ready_to_summarize()`, or max turns
+3. **Summarize Phase**: LLM generates summary (no tools, no user input)
+4. **Serialize Phase**: LLM calls finalization tool
+   - `tool_choice="required"` forces tool call
+   - Validation with retry on failure
 5. Artifact written
 
 ### Direct Mode (Non-TTY or `--no-interactive`)
 
 1. LLM receives system prompt with direct generation instructions
-2. Single LLM call with `tool_choice="submit_dream"`
-3. Falls back to YAML parsing for legacy providers
-4. Validation with error on failure
+2. **Discuss Phase**: Single LLM turn (max_discuss_turns=1)
+   - No user input
+   - Research tools still available
+   - Auto-exit after 1 turn
+3. **Summarize Phase**: LLM generates summary (no tools)
+4. **Serialize Phase**: LLM calls finalization tool
+   - `tool_choice="required"` forces tool call
+   - Validation with error on failure
 5. Artifact written
+
+**Note**: There is no YAML fallback. If the provider fails to call the finalization tool, a `ConversationError` is raised.
 
 ## Prompt Architecture
 
@@ -216,11 +311,11 @@ system: |
 The stage provides mode-specific content via template variables:
 
 **Interactive Mode:**
-- `mode_instructions`: Engage in conversation, ask clarifying questions
-- `mode_reminder`: Only call submit_dream when vision is refined
+- `mode_instructions`: Engage in conversation, ask clarifying questions, mention `ready_to_summarize()` tool
+- `mode_reminder`: Discuss the vision with the user first, call `ready_to_summarize()` when ready
 
 **Direct Mode:**
-- `mode_instructions`: Generate directly, call submit_dream
+- `mode_instructions`: Generate directly, consider key elements
 - `mode_reminder`: (empty)
 
 ## Usage
@@ -272,7 +367,7 @@ context = {
 }
 ```
 
-These are available alongside the finalization tool during conversation.
+These are available during the Discuss phase only.
 
 ### Adding New Stages
 
@@ -283,7 +378,7 @@ These are available alongside the finalization tool during conversation.
 
 ## Testing
 
-- **Unit tests**: Mock provider, verify tool call handling
+- **Unit tests**: Mock provider, verify phase transitions and tool gating
 - **Integration tests**: Full stage execution with both modes
 - **E2E tests**: Real LLM calls (optional, marked slow)
 

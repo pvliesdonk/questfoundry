@@ -203,6 +203,68 @@ Key design choices:
 
 ---
 
+## ADR-008: Structured Tool Response Format
+
+**Date**: 2026-01-05
+**Status**: Accepted
+
+### Context
+Tool responses influence LLM behavior. Plain text messages like "No results found. Try broader terms."
+can cause infinite loops - the LLM dutifully follows the advice to "try broader terms" repeatedly.
+
+In a test run, `search_corpus` returned "No craft guidance found... Try broader terms" 18 times,
+causing the LLM to keep searching instead of proceeding with available knowledge.
+
+### Decision
+All tool responses MUST use **structured JSON** with semantic status and actionable guidance:
+
+**Success response:**
+```json
+{
+  "result": "success",
+  "data": { ... },
+  "action": "Use this information to inform your creative decisions."
+}
+```
+
+**No results response:**
+```json
+{
+  "result": "no_results",
+  "query": "cosmic horror sentient environment",
+  "action": "No matching guidance found. Proceed with your creative instincts."
+}
+```
+
+**Error response:**
+```json
+{
+  "result": "error",
+  "error": "Connection timeout",
+  "action": "Tool unavailable. Continue without this information."
+}
+```
+
+Key principles:
+1. **Semantic `result` field** - machine-readable status (success, no_results, error, rate_limited)
+2. **Never instruct looping** - "Try again" or "Try broader terms" causes infinite loops
+3. **`action` guides forward** - tell LLM what to do next, favor proceeding over retrying
+4. **Include context** - echo back query/parameters so LLM knows what was attempted
+
+### Rationale
+- Prevents tool call loops from ambiguous feedback
+- LLMs can parse structured JSON for decision-making
+- Consistent format across all tools
+- `action` field leverages recency effect for instruction following
+
+### Consequences
+- All tools must return JSON, not plain text
+- "No results" is a valid outcome, not an error requiring retry
+- Research tools should guide toward proceeding, not more searching
+- Validation tools (ADR-007) are a specific case of this general pattern
+
+---
+
 ## Template
 
 ```markdown

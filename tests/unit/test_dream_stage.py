@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from questfoundry.pipeline.stages import DreamParseError, DreamStage, get_stage
-from questfoundry.providers.base import LLMResponse
+from questfoundry.conversation import ConversationState
+from questfoundry.pipeline.stages import DreamStage, get_stage
 
 # --- Stage Registration Tests ---
 
@@ -25,364 +25,284 @@ def test_dream_stage_name() -> None:
     assert stage.name == "dream"
 
 
-# --- Response Parsing Tests ---
+# --- Prompt Building Tests ---
 
 
-def test_parse_raw_yaml() -> None:
-    """Parse raw YAML response."""
+def test_build_prompt_context_direct_mode() -> None:
+    """_build_prompt_context includes correct instructions for direct mode."""
     stage = DreamStage()
-    content = """type: dream
-version: 1
-genre: fantasy
-tone:
-  - epic
-  - adventurous
-audience: adult
-themes:
-  - heroism
-  - sacrifice
-"""
-    result = stage._parse_response(content)
 
-    assert result["type"] == "dream"
-    assert result["genre"] == "fantasy"
-    assert result["tone"] == ["epic", "adventurous"]
-    assert result["themes"] == ["heroism", "sacrifice"]
+    context = stage._build_prompt_context("test prompt", [], interactive=False)
+
+    assert "mode_instructions" in context
+    assert "mode_reminder" in context
+    assert "user_message" in context
+    assert "test prompt" in context["user_message"]
+    # Direct mode has no reminder
+    assert context["mode_reminder"] == ""
+    # Direct mode instructions don't mention discussion
+    assert "discussion" not in context["mode_instructions"].lower()
 
 
-def test_parse_yaml_with_fences() -> None:
-    """Parse YAML wrapped in markdown fences."""
+def test_build_prompt_context_interactive_mode() -> None:
+    """_build_prompt_context includes correct instructions for interactive mode."""
     stage = DreamStage()
-    content = """Here's the creative vision for your story:
 
-```yaml
-type: dream
-version: 1
-genre: mystery
-subgenre: noir
-tone:
-  - dark
-  - atmospheric
-audience: adult
-themes:
-  - betrayal
-  - redemption
-```
+    context = stage._build_prompt_context("test prompt", [], interactive=True)
 
-This establishes a classic noir atmosphere.
-"""
-    result = stage._parse_response(content)
-
-    assert result["genre"] == "mystery"
-    assert result["subgenre"] == "noir"
-    assert result["tone"] == ["dark", "atmospheric"]
+    assert "mode_instructions" in context
+    assert "mode_reminder" in context
+    # Interactive mode mentions discussion
+    assert "discussion" in context["mode_instructions"].lower()
+    assert "ready_to_summarize()" in context["mode_instructions"]
+    # Interactive mode has a reminder
+    assert context["mode_reminder"] != ""
 
 
-def test_parse_yaml_fences_no_lang() -> None:
-    """Parse YAML in fences without language specifier."""
+def test_build_prompt_context_with_research_tools() -> None:
+    """_build_prompt_context includes research tools section when tools provided."""
     stage = DreamStage()
-    content = """```
-genre: sci-fi
-tone:
-  - philosophical
-audience: adult
-themes:
-  - identity
-```"""
-    result = stage._parse_response(content)
 
-    assert result["genre"] == "sci-fi"
-    assert result["themes"] == ["identity"]
+    # Create mock research tool
+    mock_tool = MagicMock()
+    mock_tool.definition.name = "web_search"
+    mock_tool.definition.description = "Search the web for information"
+
+    context = stage._build_prompt_context("test prompt", [mock_tool], interactive=True)
+
+    assert "web_search" in context["mode_instructions"]
+    assert "Search the web" in context["mode_instructions"]
 
 
-def test_parse_yaml_with_leading_text() -> None:
-    """Parse YAML with leading non-YAML text."""
+def test_build_research_tools_section_empty() -> None:
+    """_build_research_tools_section returns empty string when no tools."""
     stage = DreamStage()
-    content = """I'll create a creative vision based on your noir detective story idea.
 
-genre: mystery
-subgenre: noir
-tone:
-  - gritty
-  - cynical
-audience: adult
-themes:
-  - corruption
-  - justice
-style_notes: Focus on atmospheric descriptions and morally gray characters.
-"""
-    result = stage._parse_response(content)
+    result = stage._build_research_tools_section([])
 
-    assert result["genre"] == "mystery"
-    assert result["subgenre"] == "noir"
-    assert "style_notes" in result
+    assert result == ""
 
 
-def test_parse_invalid_yaml_raises() -> None:
-    """Invalid YAML raises DreamParseError."""
+def test_build_research_tools_section_with_tools() -> None:
+    """_build_research_tools_section formats tool descriptions."""
     stage = DreamStage()
-    # Use truly invalid YAML syntax with mapping in sequence context
-    content = """```yaml
-genre: fantasy
-tone: [
-  - epic
-  unclosed bracket
-```"""
-    with pytest.raises(DreamParseError) as exc_info:
-        stage._parse_response(content)
 
-    assert "YAML parse error" in str(exc_info.value)
-    assert exc_info.value.raw_content == content
+    mock_tool1 = MagicMock()
+    mock_tool1.definition.name = "search"
+    mock_tool1.definition.description = "Search for info"
+
+    mock_tool2 = MagicMock()
+    mock_tool2.definition.name = "lookup"
+    mock_tool2.definition.description = "Look up data"
+
+    result = stage._build_research_tools_section([mock_tool1, mock_tool2])
+
+    assert "search: Search for info" in result
+    assert "lookup: Look up data" in result
 
 
-def test_parse_no_yaml_raises() -> None:
-    """No YAML content raises DreamParseError."""
+def test_get_summary_prompt() -> None:
+    """_get_summary_prompt returns valid summary guidance."""
     stage = DreamStage()
-    content = "This is just plain text with no YAML structure at all."
 
-    with pytest.raises(DreamParseError) as exc_info:
-        stage._parse_response(content)
+    prompt = stage._get_summary_prompt()
 
-    assert "No valid YAML found" in str(exc_info.value)
-
-
-def test_parse_yaml_not_dict_raises() -> None:
-    """YAML that isn't a dict raises DreamParseError."""
-    stage = DreamStage()
-    content = """```yaml
-- item1
-- item2
-- item3
-```"""
-    with pytest.raises(DreamParseError) as exc_info:
-        stage._parse_response(content)
-
-    assert "Expected YAML dict" in str(exc_info.value)
-
-
-def test_parse_yml_fence() -> None:
-    """Parse YAML with 'yml' fence specifier."""
-    stage = DreamStage()
-    content = """```yml
-genre: romance
-tone:
-  - heartwarming
-audience: adult
-themes:
-  - love
-```"""
-    result = stage._parse_response(content)
-
-    assert result["genre"] == "romance"
+    assert "Genre" in prompt
+    assert "Tone" in prompt
+    assert "themes" in prompt.lower()
 
 
 # --- Execute Tests ---
 
 
 @pytest.mark.asyncio
-async def test_execute_with_mock_provider() -> None:
-    """Execute DREAM stage with mocked LLM provider (direct mode)."""
+async def test_execute_direct_mode() -> None:
+    """Execute DREAM stage in direct mode (non-interactive)."""
     stage = DreamStage()
 
-    # Mock provider
-    mock_provider = MagicMock()
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content="""```yaml
-genre: fantasy
-subgenre: epic
-tone:
-  - adventurous
-  - dramatic
-audience: adult
-themes:
-  - destiny
-  - friendship
-style_notes: Focus on world-building and character growth.
-```""",
-            model="test-model",
-            tokens_used=500,
-            finish_reason="stop",
-        )
-    )
+    # Mock the ConversationRunner
+    mock_artifact = {
+        "genre": "fantasy",
+        "subgenre": "epic",
+        "tone": ["adventurous", "dramatic"],
+        "audience": "adult",
+        "themes": ["destiny", "friendship"],
+    }
+    mock_state = ConversationState(llm_calls=3, tokens_used=1500)
 
-    # Mock compiler
-    mock_compiler = MagicMock()
-    mock_prompt = MagicMock()
-    mock_prompt.system = "You are a creative director."
-    mock_prompt.user = "Create a vision for: epic quest"
-    mock_compiler.compile.return_value = mock_prompt
+    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
+        mock_runner_instance = MagicMock()
+        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
+        MockRunner.return_value = mock_runner_instance
 
-    # Execute in direct mode (non-interactive)
-    context = {"user_prompt": "An epic quest to save the world", "interactive": False}
-    artifact, llm_calls, tokens = await stage.execute(context, mock_provider, mock_compiler)
+        # Mock compiler
+        mock_compiler = MagicMock()
+        mock_prompt = MagicMock()
+        mock_prompt.system = "You are a creative director."
+        mock_prompt.user = "Create a vision for: epic quest"
+        mock_compiler.compile.return_value = mock_prompt
 
-    assert artifact["type"] == "dream"
-    assert artifact["version"] == 1
-    assert artifact["genre"] == "fantasy"
-    assert artifact["subgenre"] == "epic"
-    assert llm_calls == 1
-    assert tokens == 500
+        # Mock provider
+        mock_provider = MagicMock()
 
-    # Verify provider was called correctly
-    mock_provider.complete.assert_called_once()
-    call_args = mock_provider.complete.call_args
-    # Can be positional or keyword arg
-    messages = call_args.args[0] if call_args.args else call_args.kwargs.get("messages", [])
-    assert len(messages) == 2
-    assert messages[0]["role"] == "system"
-    assert messages[1]["role"] == "user"
+        # Execute
+        context = {"user_prompt": "An epic quest", "interactive": False}
+        artifact, llm_calls, tokens = await stage.execute(context, mock_provider, mock_compiler)
+
+        # Verify result
+        assert artifact["type"] == "dream"
+        assert artifact["version"] == 1
+        assert artifact["genre"] == "fantasy"
+        assert llm_calls == 3
+        assert tokens == 1500
+
+        # Verify ConversationRunner was configured for direct mode
+        MockRunner.assert_called_once()
+        call_kwargs = MockRunner.call_args.kwargs
+        assert call_kwargs["max_discuss_turns"] == 1  # Direct mode = 1 turn
+
+        # Verify run was called with no user_input_fn
+        mock_runner_instance.run.assert_called_once()
+        run_kwargs = mock_runner_instance.run.call_args.kwargs
+        assert run_kwargs["user_input_fn"] is None
 
 
 @pytest.mark.asyncio
-async def test_execute_preserves_version() -> None:
-    """Execute preserves version from LLM response (direct mode)."""
+async def test_execute_interactive_mode() -> None:
+    """Execute DREAM stage in interactive mode."""
     stage = DreamStage()
 
-    mock_provider = MagicMock()
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content="""type: dream
-version: 2
-genre: horror
-tone:
-  - terrifying
-audience: adult
-themes:
-  - fear
-""",
-            model="test",
-            tokens_used=100,
-            finish_reason="stop",
-        )
-    )
+    mock_artifact = {
+        "genre": "mystery",
+        "tone": ["suspenseful"],
+        "audience": "adult",
+        "themes": ["betrayal"],
+    }
+    mock_state = ConversationState(llm_calls=5, tokens_used=2500)
 
-    mock_compiler = MagicMock()
-    mock_prompt = MagicMock()
-    mock_prompt.system = "system"
-    mock_prompt.user = "user"
-    mock_compiler.compile.return_value = mock_prompt
+    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
+        mock_runner_instance = MagicMock()
+        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
+        MockRunner.return_value = mock_runner_instance
 
-    artifact, _, _ = await stage.execute({"interactive": False}, mock_provider, mock_compiler)
+        mock_compiler = MagicMock()
+        mock_prompt = MagicMock()
+        mock_prompt.system = "system"
+        mock_prompt.user = "user"
+        mock_compiler.compile.return_value = mock_prompt
 
-    assert artifact["version"] == 2
+        mock_provider = MagicMock()
+        mock_user_input_fn = AsyncMock(return_value="user response")
+
+        context = {
+            "user_prompt": "A mystery story",
+            "interactive": True,
+            "user_input_fn": mock_user_input_fn,
+            "max_turns": 15,
+        }
+        _artifact, _llm_calls, _tokens = await stage.execute(context, mock_provider, mock_compiler)
+
+        # Verify ConversationRunner configured for interactive mode
+        call_kwargs = MockRunner.call_args.kwargs
+        assert call_kwargs["max_discuss_turns"] == 15  # From context
+
+        # Verify user_input_fn was passed
+        run_kwargs = mock_runner_instance.run.call_args.kwargs
+        assert run_kwargs["user_input_fn"] is mock_user_input_fn
 
 
 @pytest.mark.asyncio
-async def test_execute_empty_context() -> None:
-    """Execute with empty context uses empty user_prompt (direct mode)."""
+async def test_execute_preserves_version_from_artifact() -> None:
+    """Execute preserves version if provided in artifact."""
     stage = DreamStage()
 
-    mock_provider = MagicMock()
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content="genre: general\ntone:\n  - neutral\naudience: all_ages\nthemes:\n  - life",
-            model="test",
-            tokens_used=50,
-            finish_reason="stop",
-        )
-    )
+    mock_artifact = {
+        "genre": "horror",
+        "tone": ["terrifying"],
+        "audience": "adult",
+        "themes": ["fear"],
+        "version": 2,  # Version from LLM
+    }
+    mock_state = ConversationState(llm_calls=3, tokens_used=1000)
 
-    mock_compiler = MagicMock()
-    mock_prompt = MagicMock()
-    mock_prompt.system = "system"
-    mock_prompt.user = "user"
-    mock_compiler.compile.return_value = mock_prompt
+    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
+        mock_runner_instance = MagicMock()
+        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
+        MockRunner.return_value = mock_runner_instance
 
-    artifact, _, _ = await stage.execute({"interactive": False}, mock_provider, mock_compiler)
+        mock_compiler = MagicMock()
+        mock_prompt = MagicMock()
+        mock_prompt.system = "system"
+        mock_prompt.user = "user"
+        mock_compiler.compile.return_value = mock_prompt
 
-    # Compiler should be called with mode-specific context
-    mock_compiler.compile.assert_called_once()
-    call_args = mock_compiler.compile.call_args
-    assert call_args.args[0] == "dream"
-    context = call_args.args[1]
-    assert "mode_instructions" in context
-    assert "mode_reminder" in context
-    assert "user_message" in context
-    assert artifact["genre"] == "general"
+        artifact, _, _ = await stage.execute({"interactive": False}, MagicMock(), mock_compiler)
+
+        assert artifact["version"] == 2
 
 
 @pytest.mark.asyncio
-async def test_execute_parse_error_propagates() -> None:
-    """Execute propagates parse errors from LLM response (direct mode)."""
+async def test_execute_passes_research_tools() -> None:
+    """Execute passes research tools to ConversationRunner."""
     stage = DreamStage()
 
-    mock_provider = MagicMock()
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content="I cannot generate that content.",
-            model="test",
-            tokens_used=10,
-            finish_reason="stop",
-        )
-    )
+    mock_artifact = {"genre": "sci-fi", "tone": ["epic"], "audience": "adult", "themes": ["space"]}
+    mock_state = ConversationState(llm_calls=3, tokens_used=1000)
 
-    mock_compiler = MagicMock()
-    mock_prompt = MagicMock()
-    mock_prompt.system = "system"
-    mock_prompt.user = "user"
-    mock_compiler.compile.return_value = mock_prompt
+    mock_research_tool = MagicMock()
 
-    with pytest.raises(DreamParseError):
-        await stage.execute({"interactive": False}, mock_provider, mock_compiler)
+    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
+        mock_runner_instance = MagicMock()
+        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
+        MockRunner.return_value = mock_runner_instance
 
+        mock_compiler = MagicMock()
+        mock_prompt = MagicMock()
+        mock_prompt.system = "system"
+        mock_prompt.user = "user"
+        mock_compiler.compile.return_value = mock_prompt
 
-# --- Edge Cases ---
+        context = {
+            "interactive": False,
+            "research_tools": [mock_research_tool],
+        }
+        await stage.execute(context, MagicMock(), mock_compiler)
 
-
-def test_parse_yaml_with_comments() -> None:
-    """Parse YAML that includes comments."""
-    stage = DreamStage()
-    content = """# Creative vision
-genre: thriller  # Fast-paced
-tone:
-  - suspenseful
-  - tense
-audience: adult
-themes:
-  - survival
-"""
-    result = stage._parse_response(content)
-
-    assert result["genre"] == "thriller"
-    assert result["tone"] == ["suspenseful", "tense"]
+        # Verify research tools were passed to ConversationRunner
+        call_kwargs = MockRunner.call_args.kwargs
+        assert call_kwargs["research_tools"] == [mock_research_tool]
 
 
-def test_parse_yaml_multiline_strings() -> None:
-    """Parse YAML with multiline string values in fenced block."""
-    stage = DreamStage()
-    # Use fenced block for reliable multiline parsing
-    content = """```yaml
-genre: literary
-tone:
-  - contemplative
-audience: adult
-themes:
-  - memory
-style_notes: |
-  Focus on introspective narration.
-  Use stream of consciousness techniques.
-  Pay attention to sensory details.
-```"""
-    result = stage._parse_response(content)
-
-    assert "Focus on introspective" in result["style_notes"]
-    assert "sensory details" in result["style_notes"]
-
-
-def test_is_yaml_line_detection() -> None:
-    """Test YAML line detection helper."""
+@pytest.mark.asyncio
+async def test_execute_passes_on_assistant_message_callback() -> None:
+    """Execute passes on_assistant_message callback to runner."""
     stage = DreamStage()
 
-    # YAML-like lines
-    assert stage._is_yaml_line("key: value") is True
-    assert stage._is_yaml_line("- list item") is True
-    assert stage._is_yaml_line("  indented: content") is True
-    assert stage._is_yaml_line("\tcontinuation") is True
+    mock_artifact = {"genre": "romance", "tone": ["sweet"], "audience": "adult", "themes": ["love"]}
+    mock_state = ConversationState(llm_calls=3, tokens_used=1000)
 
-    # Non-YAML lines
-    assert stage._is_yaml_line("Just plain text") is False
-    assert stage._is_yaml_line("No colon here") is False
+    mock_callback = MagicMock()
+
+    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
+        mock_runner_instance = MagicMock()
+        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
+        MockRunner.return_value = mock_runner_instance
+
+        mock_compiler = MagicMock()
+        mock_prompt = MagicMock()
+        mock_prompt.system = "system"
+        mock_prompt.user = "user"
+        mock_compiler.compile.return_value = mock_prompt
+
+        context = {
+            "interactive": True,
+            "on_assistant_message": mock_callback,
+        }
+        await stage.execute(context, MagicMock(), mock_compiler)
+
+        # Verify callback was passed
+        run_kwargs = mock_runner_instance.run.call_args.kwargs
+        assert run_kwargs["on_assistant_message"] is mock_callback
 
 
 # --- Validation Tests ---

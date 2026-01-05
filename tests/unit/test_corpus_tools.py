@@ -89,12 +89,17 @@ class TestSearchCorpusTool:
         mock_corpus = MagicMock()
         mock_corpus.search.return_value = mock_results
 
-        # Create mock ifcraftcorpus module
+        # Create mock ifcraftcorpus module and providers submodule
+        mock_providers = MagicMock()
+        mock_providers.get_embedding_provider.return_value = MagicMock()
         mock_module = MagicMock()
         mock_module.Corpus.return_value = mock_corpus
 
         with (
-            patch.dict(sys.modules, {"ifcraftcorpus": mock_module}),
+            patch.dict(
+                sys.modules,
+                {"ifcraftcorpus": mock_module, "ifcraftcorpus.providers": mock_providers},
+            ),
             patch(
                 "questfoundry.tools.research.corpus_tools._corpus_available",
                 return_value=True,
@@ -106,7 +111,7 @@ class TestSearchCorpusTool:
         assert "dialogue_craft" in result
         assert "0.85" in result
         assert "subtext" in result.lower()
-        mock_corpus.search.assert_called_once_with("dialogue", cluster=None, limit=5)
+        mock_corpus.search.assert_called_once_with("dialogue", cluster=None, limit=5, mode="hybrid")
 
     def test_execute_with_cluster_filter(self) -> None:
         """Should pass cluster filter to search."""
@@ -119,12 +124,17 @@ class TestSearchCorpusTool:
         mock_corpus = MagicMock()
         mock_corpus.search.return_value = []
 
-        # Create mock ifcraftcorpus module
+        # Create mock ifcraftcorpus module and providers submodule
+        mock_providers = MagicMock()
+        mock_providers.get_embedding_provider.return_value = MagicMock()
         mock_module = MagicMock()
         mock_module.Corpus.return_value = mock_corpus
 
         with (
-            patch.dict(sys.modules, {"ifcraftcorpus": mock_module}),
+            patch.dict(
+                sys.modules,
+                {"ifcraftcorpus": mock_module, "ifcraftcorpus.providers": mock_providers},
+            ),
             patch(
                 "questfoundry.tools.research.corpus_tools._corpus_available",
                 return_value=True,
@@ -133,10 +143,14 @@ class TestSearchCorpusTool:
             _get_corpus.cache_clear()
             tool.execute({"query": "mystery", "cluster": "genre-conventions", "limit": 3})
 
-        mock_corpus.search.assert_called_once_with("mystery", cluster="genre-conventions", limit=3)
+        mock_corpus.search.assert_called_once_with(
+            "mystery", cluster="genre-conventions", limit=3, mode="hybrid"
+        )
 
     def test_execute_no_results(self) -> None:
-        """Should return helpful message when no results found."""
+        """Should return structured JSON with no_results status (ADR-008)."""
+        import json
+
         from questfoundry.tools.research.corpus_tools import _get_corpus
 
         _get_corpus.cache_clear()
@@ -146,12 +160,17 @@ class TestSearchCorpusTool:
         mock_corpus = MagicMock()
         mock_corpus.search.return_value = []
 
-        # Create mock ifcraftcorpus module
+        # Create mock ifcraftcorpus module and providers submodule
+        mock_providers = MagicMock()
+        mock_providers.get_embedding_provider.return_value = MagicMock()
         mock_module = MagicMock()
         mock_module.Corpus.return_value = mock_corpus
 
         with (
-            patch.dict(sys.modules, {"ifcraftcorpus": mock_module}),
+            patch.dict(
+                sys.modules,
+                {"ifcraftcorpus": mock_module, "ifcraftcorpus.providers": mock_providers},
+            ),
             patch(
                 "questfoundry.tools.research.corpus_tools._corpus_available",
                 return_value=True,
@@ -160,8 +179,12 @@ class TestSearchCorpusTool:
             _get_corpus.cache_clear()
             result = tool.execute({"query": "xyz123"})
 
-        assert "no craft guidance found" in result.lower()
-        assert "xyz123" in result
+        # ADR-008: Structured JSON response
+        data = json.loads(result)
+        assert data["result"] == "no_results"
+        assert data["query"] == "xyz123"
+        assert "action" in data
+        assert "proceed" in data["action"].lower()
 
 
 class TestGetDocumentTool:
