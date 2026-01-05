@@ -422,68 +422,57 @@ def property_to_tool_schema(prop: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Simplified property schema for tool parameters.
     """
+    # Build result in consistent key order: type, const, enum, description, items, properties, required
+    # This ensures deterministic output regardless of which code paths execute
     result: dict[str, Any] = {}
 
-    # Handle const values (e.g., type: "dream")
-    if "const" in prop:
+    # Determine type (explicit, inferred from const, or inferred from enum)
+    type_val: str | None = None
+    if "type" in prop:
+        type_val = prop["type"]
+    elif "const" in prop:
         const_val = prop["const"]
-        result["const"] = const_val
-        # Infer type from const value, or use explicit type if provided
-        if "type" in prop:
-            result["type"] = prop["type"]
-        elif isinstance(const_val, bool):
-            # Check bool before int since bool is subclass of int in Python
-            result["type"] = "boolean"
+        # Check bool before int since bool is subclass of int in Python
+        if isinstance(const_val, bool):
+            type_val = "boolean"
         elif isinstance(const_val, int):
-            result["type"] = "integer"
+            type_val = "integer"
         elif isinstance(const_val, float):
-            result["type"] = "number"
+            type_val = "number"
         elif isinstance(const_val, str):
-            result["type"] = "string"
-        # For other types (null, arrays, objects), omit type - LLM can infer from const
-        if "description" in prop:
-            result["description"] = prop["description"]
-        return result
+            type_val = "string"
+    elif prop.get("enum"):
+        first_val = prop["enum"][0]
+        if isinstance(first_val, bool):
+            type_val = "boolean"
+        elif isinstance(first_val, int):
+            type_val = "integer"
+        elif isinstance(first_val, float):
+            type_val = "number"
+        elif isinstance(first_val, str):
+            type_val = "string"
 
-    # Handle enum values (e.g., status: ["active", "inactive"])
+    # Build result in canonical order
+    if type_val is not None:
+        result["type"] = type_val
+    if "const" in prop:
+        result["const"] = prop["const"]
     if "enum" in prop:
         result["enum"] = prop["enum"]
-        # Infer type from first enum value if type not provided
-        if "type" in prop:
-            result["type"] = prop["type"]
-        elif prop["enum"]:
-            first_val = prop["enum"][0]
-            if isinstance(first_val, bool):
-                result["type"] = "boolean"
-            elif isinstance(first_val, int):
-                result["type"] = "integer"
-            elif isinstance(first_val, float):
-                result["type"] = "number"
-            elif isinstance(first_val, str):
-                result["type"] = "string"
-        if "description" in prop:
-            result["description"] = prop["description"]
-        return result
-
-    # Copy type
-    if "type" in prop:
-        result["type"] = prop["type"]
-
-    # Copy description
     if "description" in prop:
         result["description"] = prop["description"]
 
     # Handle arrays - recurse into items
-    if prop.get("type") == "array" and "items" in prop:
+    if type_val == "array" and "items" in prop:
         result["items"] = property_to_tool_schema(prop["items"])
 
-    # Handle nested objects - recurse into properties
-    if prop.get("type") == "object" and "properties" in prop:
+    # Handle nested objects - recurse into properties (sorted for determinism)
+    if type_val == "object" and "properties" in prop:
         result["properties"] = {
-            name: property_to_tool_schema(p) for name, p in prop["properties"].items()
+            name: property_to_tool_schema(p) for name, p in sorted(prop["properties"].items())
         }
         if "required" in prop:
-            result["required"] = prop["required"]
+            result["required"] = sorted(prop["required"])
 
     return result
 
@@ -502,13 +491,16 @@ def schema_to_tool_params(schema: dict[str, Any]) -> dict[str, Any]:
     """
     result: dict[str, Any] = {"type": "object"}
 
+    # Sort properties for deterministic output
     if "properties" in schema:
         result["properties"] = {
-            name: property_to_tool_schema(prop) for name, prop in schema["properties"].items()
+            name: property_to_tool_schema(prop)
+            for name, prop in sorted(schema["properties"].items())
         }
 
+    # Sort required for deterministic output
     if "required" in schema:
-        result["required"] = schema["required"]
+        result["required"] = sorted(schema["required"])
 
     return result
 
@@ -531,8 +523,8 @@ def generate_tool_schema_code(schema_path: Path) -> tuple[str, str]:
 
     tool_params = schema_to_tool_params(schema)
 
-    # Format as Python dict literal
-    code = f"{var_name}: dict[str, Any] = {json.dumps(tool_params, indent=4)}"
+    # Format as Python dict literal (sort_keys for deterministic output)
+    code = f"{var_name}: dict[str, Any] = {json.dumps(tool_params, indent=4, sort_keys=True)}"
 
     return var_name, code
 

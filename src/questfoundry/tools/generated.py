@@ -14,55 +14,55 @@ from __future__ import annotations
 from typing import Any
 
 SUBMIT_DREAM_PARAMS: dict[str, Any] = {
-    "type": "object",
     "properties": {
-        "type": {"const": "dream", "type": "string", "description": "Artifact type identifier"},
-        "version": {"type": "integer", "description": "Schema version number"},
-        "genre": {"type": "string", "description": "Primary genre"},
-        "subgenre": {"type": "string", "description": "Optional genre refinement"},
-        "tone": {"type": "array", "description": "Tone descriptors", "items": {"type": "string"}},
         "audience": {
-            "type": "string",
             "description": "Target audience (e.g., adult, young adult, all ages, mature)",
-        },
-        "themes": {
-            "type": "array",
-            "description": "Thematic elements",
-            "items": {"type": "string"},
-        },
-        "style_notes": {"type": "string", "description": "Style guidance"},
-        "scope": {
-            "type": "object",
-            "properties": {
-                "target_word_count": {"type": "integer", "description": "Approximate final length"},
-                "estimated_passages": {"type": "integer", "description": "Target scene count"},
-                "branching_depth": {
-                    "type": "string",
-                    "description": "Branching complexity (e.g., light, moderate, heavy, extensive)",
-                },
-                "estimated_playtime_minutes": {
-                    "type": "integer",
-                    "description": "Target reading time",
-                },
-            },
-            "required": ["target_word_count", "estimated_passages"],
+            "type": "string",
         },
         "content_notes": {
-            "type": "object",
             "description": "Content advisory notes for inclusions and exclusions",
             "properties": {
-                "includes": {
-                    "type": "array",
-                    "description": "Content included",
-                    "items": {"type": "string"},
-                },
                 "excludes": {
-                    "type": "array",
                     "description": "Content excluded",
                     "items": {"type": "string"},
+                    "type": "array",
+                },
+                "includes": {
+                    "description": "Content included",
+                    "items": {"type": "string"},
+                    "type": "array",
                 },
             },
+            "type": "object",
         },
+        "genre": {"description": "Primary genre", "type": "string"},
+        "scope": {
+            "properties": {
+                "branching_depth": {
+                    "description": "Branching complexity (e.g., light, moderate, heavy, extensive)",
+                    "type": "string",
+                },
+                "estimated_passages": {"description": "Target scene count", "type": "integer"},
+                "estimated_playtime_minutes": {
+                    "description": "Target reading time",
+                    "type": "integer",
+                },
+                "target_word_count": {"description": "Approximate final length", "type": "integer"},
+            },
+            "required": ["estimated_passages", "target_word_count"],
+            "type": "object",
+        },
+        "style_notes": {"description": "Style guidance", "type": "string"},
+        "subgenre": {"description": "Optional genre refinement", "type": "string"},
+        "themes": {
+            "description": "Thematic elements",
+            "items": {"type": "string"},
+            "type": "array",
+        },
+        "tone": {"description": "Tone descriptors", "items": {"type": "string"}, "type": "array"},
+        "type": {"const": "dream", "description": "Artifact type identifier", "type": "string"},
+        "version": {"description": "Schema version number", "type": "integer"},
     },
-    "required": ["type", "version", "genre", "tone", "audience", "themes"],
+    "required": ["audience", "genre", "themes", "tone", "type", "version"],
+    "type": "object",
 }
