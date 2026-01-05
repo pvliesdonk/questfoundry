@@ -16,7 +16,7 @@ from typing import Any
 SUBMIT_DREAM_PARAMS: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "type": {"type": "string", "const": "dream", "description": "Artifact type identifier"},
+        "type": {"const": "dream", "type": "string", "description": "Artifact type identifier"},
         "version": {"type": "integer", "description": "Schema version number"},
         "genre": {"type": "string", "description": "Primary genre"},
         "subgenre": {"type": "string", "description": "Optional genre refinement"},
