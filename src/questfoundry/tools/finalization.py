@@ -58,6 +58,39 @@ class SubmitDreamTool:
         return "Creative vision submitted for validation."
 
 
+class ReadyToSummarizeTool:
+    """Signal tool for LLM to indicate discussion is complete.
+
+    When called during the Discuss phase, signals that the LLM believes
+    the conversation has reached a good stopping point and is ready
+    to move to the Summarize phase.
+
+    This is a no-op tool - it doesn't perform any action, just signals
+    intent to transition phases.
+    """
+
+    @property
+    def definition(self) -> ToolDefinition:
+        """Return the tool definition for LLM binding."""
+        return ToolDefinition(
+            name="ready_to_summarize",
+            description=(
+                "Signal that the discussion is complete and you are ready to "
+                "summarize the creative direction. Call this when you have "
+                "gathered enough information to proceed with summarizing."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+    def execute(self, arguments: dict[str, Any]) -> str:  # noqa: ARG002
+        """Execute the signal tool.
+
+        Returns:
+            JSON confirmation of the transition signal.
+        """
+        return '{"result": "proceed"}'
+
+
 class SubmitBrainstormTool:
     """Tool for finalizing BRAINSTORM stage output.
 

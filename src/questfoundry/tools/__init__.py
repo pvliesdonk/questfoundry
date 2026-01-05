@@ -7,12 +7,14 @@ and research tools for context retrieval.
 
 from questfoundry.tools.base import Tool, ToolCall, ToolDefinition
 from questfoundry.tools.finalization import (
+    ReadyToSummarizeTool,
     SubmitBrainstormTool,
     SubmitDreamTool,
     get_finalization_tool,
 )
 
 __all__ = [
+    "ReadyToSummarizeTool",
     "SubmitBrainstormTool",
     "SubmitDreamTool",
     "Tool",
