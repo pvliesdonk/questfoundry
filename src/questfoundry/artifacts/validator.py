@@ -17,6 +17,35 @@ if TYPE_CHECKING:
     from questfoundry.conversation import ValidationErrorDetail
 
 
+def strip_null_values(data: dict[str, Any]) -> dict[str, Any]:
+    """Recursively strip null values from a dictionary.
+
+    LLMs often send explicit null for optional fields. Since optional fields
+    (not in `required`) are semantically "may be absent", we treat null as
+    absent by stripping it before validation.
+
+    This is NOT the same as nullable types (`["integer", "null"]`), which
+    explicitly allow null as a valid value.
+
+    Args:
+        data: Dictionary potentially containing null values.
+
+    Returns:
+        New dictionary with null values removed at all levels.
+    """
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if value is None:
+            continue  # Strip null values
+        elif isinstance(value, dict):
+            stripped = strip_null_values(value)
+            if stripped:  # Only include non-empty dicts
+                result[key] = stripped
+        else:
+            result[key] = value
+    return result
+
+
 class SchemaNotFoundError(Exception):
     """Raised when a JSON schema file doesn't exist."""
 
@@ -159,6 +188,10 @@ class ArtifactValidator:
         Raises:
             ArtifactValidationError: If raise_on_error is True and validation fails.
         """
+        # Strip null values before validation - LLMs send null for optional fields
+        # but optional (absent) is different from nullable (explicit null allowed)
+        data = strip_null_values(data)
+
         errors: list[str] = []
 
         # Validate with JSON Schema
@@ -184,6 +217,9 @@ class ArtifactValidator:
         Returns:
             True if the artifact is valid.
         """
+        # Strip null values before validation
+        data = strip_null_values(data)
+
         # Validate with JSON Schema first
         try:
             schema = self._load_schema(stage_name)

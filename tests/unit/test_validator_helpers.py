@@ -11,8 +11,86 @@ from questfoundry.artifacts.validator import (
     _path_to_field_name,
     get_all_field_paths,
     pydantic_errors_to_details,
+    strip_null_values,
 )
 from questfoundry.conversation import ValidationErrorDetail
+
+# --- strip_null_values Tests ---
+
+
+class TestStripNullValues:
+    """Tests for strip_null_values function."""
+
+    def test_strips_top_level_nulls(self) -> None:
+        """Null values at top level are removed."""
+        data = {"genre": "fantasy", "subgenre": None, "audience": "adult"}
+        result = strip_null_values(data)
+        assert result == {"genre": "fantasy", "audience": "adult"}
+        assert "subgenre" not in result
+
+    def test_preserves_non_null_values(self) -> None:
+        """Non-null values are preserved."""
+        data = {"genre": "fantasy", "age": 0, "active": False, "items": []}
+        result = strip_null_values(data)
+        assert result == data
+
+    def test_strips_nested_nulls(self) -> None:
+        """Null values in nested dicts are removed."""
+        data = {
+            "scope": {
+                "target_word_count": 5000,
+                "estimated_playtime_minutes": None,
+            }
+        }
+        result = strip_null_values(data)
+        assert result == {"scope": {"target_word_count": 5000}}
+
+    def test_removes_empty_nested_dicts(self) -> None:
+        """Nested dicts that become empty after null stripping are removed."""
+        data = {
+            "genre": "fantasy",
+            "scope": {"optional_field": None},
+        }
+        result = strip_null_values(data)
+        assert result == {"genre": "fantasy"}
+        assert "scope" not in result
+
+    def test_preserves_empty_lists(self) -> None:
+        """Empty lists are preserved (not considered null)."""
+        data = {"themes": [], "genre": "fantasy"}
+        result = strip_null_values(data)
+        assert result == {"themes": [], "genre": "fantasy"}
+
+    def test_preserves_zero_and_false(self) -> None:
+        """Zero and False are preserved (falsy but not null)."""
+        data = {"count": 0, "active": False, "name": ""}
+        result = strip_null_values(data)
+        assert result == {"count": 0, "active": False, "name": ""}
+
+    def test_deeply_nested_nulls(self) -> None:
+        """Nulls in deeply nested structures are stripped."""
+        data = {
+            "level1": {
+                "level2": {
+                    "keep": "value",
+                    "strip": None,
+                }
+            }
+        }
+        result = strip_null_values(data)
+        assert result == {"level1": {"level2": {"keep": "value"}}}
+
+    def test_all_nulls_returns_empty(self) -> None:
+        """Dict with only null values returns empty dict."""
+        data = {"a": None, "b": None}
+        result = strip_null_values(data)
+        assert result == {}
+
+    def test_empty_dict_returns_empty(self) -> None:
+        """Empty input returns empty output."""
+        result = strip_null_values({})
+        assert result == {}
+
 
 # --- Helper Function Tests ---
 
