@@ -38,6 +38,12 @@ console = Console()
 # Default directory for projects
 DEFAULT_PROJECTS_DIR = Path("projects")
 
+# Default prompt for interactive mode when no prompt is provided
+DEFAULT_INTERACTIVE_DREAM_PROMPT = (
+    "I'd like to create a new interactive fiction story. "
+    "Please help me develop the creative vision."
+)
+
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
 _log_enabled: bool = False
@@ -115,7 +121,7 @@ def _resolve_project_path(project: Path | None) -> Path:
         return project
 
     # If it's a simple name (no path sep), try in projects dir
-    if "/" not in str(project) and "\\" not in str(project):
+    if len(project.parts) == 1:
         projects_path = _projects_dir / project
         if projects_path.exists():
             return projects_path
@@ -279,7 +285,7 @@ def dream(
     if prompt is None:
         if use_interactive:
             # In interactive mode, start with a guiding prompt that invites conversation
-            prompt = "I'd like to create a new interactive fiction story. Please help me develop the creative vision."
+            prompt = DEFAULT_INTERACTIVE_DREAM_PROMPT
         else:
             # Non-interactive requires explicit prompt
             prompt = typer.prompt("Enter your story idea")

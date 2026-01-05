@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from typer.testing import CliRunner
 
 from questfoundry import __version__
-from questfoundry.cli import app
+from questfoundry.cli import (
+    DEFAULT_INTERACTIVE_DREAM_PROMPT,
+    _resolve_project_path,
+    app,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -369,3 +373,109 @@ def test_doctor_exit_code_on_failure() -> None:
 
     # No providers configured should result in failure
     assert result.exit_code == 1
+
+
+# --- _resolve_project_path Tests ---
+
+
+def test_resolve_project_path_none_returns_cwd() -> None:
+    """Test _resolve_project_path returns current dir when project is None."""
+    from pathlib import Path
+
+    result = _resolve_project_path(None)
+    assert result == Path()
+
+
+def test_resolve_project_path_existing_path_returns_as_is(tmp_path: Path) -> None:
+    """Test _resolve_project_path returns existing path unchanged."""
+
+    # Create a project structure
+    project = tmp_path / "my_project"
+    project.mkdir()
+    (project / "project.yaml").touch()
+
+    result = _resolve_project_path(project)
+    assert result == project
+
+
+def test_resolve_project_path_simple_name_looks_in_projects_dir(tmp_path: Path) -> None:
+    """Test _resolve_project_path checks projects dir for simple names."""
+    from pathlib import Path
+
+    import questfoundry.cli as cli_module
+
+    # Create projects directory and a project in it
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir()
+    project = projects_dir / "my_story"
+    project.mkdir()
+    (project / "project.yaml").touch()
+
+    # Patch _projects_dir to point to our test directory
+    original_projects_dir = cli_module._projects_dir
+    try:
+        cli_module._projects_dir = projects_dir
+
+        # Simple name should resolve to projects_dir/name
+        result = _resolve_project_path(Path("my_story"))
+        assert result == project
+    finally:
+        cli_module._projects_dir = original_projects_dir
+
+
+def test_resolve_project_path_simple_name_nonexistent_returns_as_is(
+    tmp_path: Path,
+) -> None:
+    """Test _resolve_project_path returns simple name as-is if not in projects dir."""
+    from pathlib import Path
+
+    import questfoundry.cli as cli_module
+
+    # Create empty projects directory
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir()
+
+    original_projects_dir = cli_module._projects_dir
+    try:
+        cli_module._projects_dir = projects_dir
+
+        # Non-existent simple name returns as-is
+        result = _resolve_project_path(Path("nonexistent"))
+        assert result == Path("nonexistent")
+    finally:
+        cli_module._projects_dir = original_projects_dir
+
+
+def test_resolve_project_path_with_separator_not_checked_in_projects_dir(
+    tmp_path: Path,
+) -> None:
+    """Test _resolve_project_path skips projects dir check for paths with separators."""
+    from pathlib import Path
+
+    import questfoundry.cli as cli_module
+
+    # Create projects directory with a matching structure
+    projects_dir = tmp_path / "projects"
+    projects_dir.mkdir()
+    nested = projects_dir / "foo" / "bar"
+    nested.mkdir(parents=True)
+
+    original_projects_dir = cli_module._projects_dir
+    try:
+        cli_module._projects_dir = projects_dir
+
+        # Path with separator is returned as-is (not looked up in projects dir)
+        result = _resolve_project_path(Path("foo/bar"))
+        assert result == Path("foo/bar")
+    finally:
+        cli_module._projects_dir = original_projects_dir
+
+
+# --- Default Prompt Constant Tests ---
+
+
+def test_default_interactive_dream_prompt_constant() -> None:
+    """Test DEFAULT_INTERACTIVE_DREAM_PROMPT is defined and non-empty."""
+    assert DEFAULT_INTERACTIVE_DREAM_PROMPT
+    assert "interactive fiction" in DEFAULT_INTERACTIVE_DREAM_PROMPT.lower()
+    assert "creative vision" in DEFAULT_INTERACTIVE_DREAM_PROMPT.lower()
