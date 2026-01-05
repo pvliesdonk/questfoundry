@@ -281,6 +281,50 @@ def _path_to_field_name(path: tuple[str | int, ...]) -> str:
     return ".".join(str_parts) if str_parts else "(root)"
 
 
+def _generate_requirement_text(error: ErrorDetails) -> str:
+    """Generate human-readable requirement text from Pydantic error.
+
+    Maps Pydantic error types to actionable requirement descriptions.
+
+    Args:
+        error: Pydantic error dict with type, msg, and optional ctx.
+
+    Returns:
+        Human-readable requirement string for the LLM.
+    """
+    error_type = error.get("type", "")
+    ctx = error.get("ctx", {})
+
+    # Map common Pydantic error types to requirement text
+    type_to_requirement: dict[str, str] = {
+        "missing": "required field",
+        "value_error.missing": "required field",
+        "string_too_short": f"string with at least {ctx.get('min_length', 1)} character(s)",
+        "string_too_long": f"string with at most {ctx.get('max_length', '?')} characters",
+        "string_type": "must be a string",
+        "int_type": "must be an integer",
+        "int_parsing": "must be an integer",
+        "float_type": "must be a number",
+        "bool_type": "must be a boolean",
+        "list_type": "must be an array",
+        "dict_type": "must be an object",
+        "too_short": f"array with at least {ctx.get('min_length', 1)} item(s)",
+        "too_long": f"array with at most {ctx.get('max_length', '?')} items",
+        "greater_than_equal": f"integer >= {ctx.get('ge', '?')}",
+        "greater_than": f"integer > {ctx.get('gt', '?')}",
+        "less_than_equal": f"integer <= {ctx.get('le', '?')}",
+        "less_than": f"integer < {ctx.get('lt', '?')}",
+        "literal_error": f"must be one of: {ctx.get('expected', '?')}",
+        "enum": f"must be one of: {ctx.get('expected', '?')}",
+    }
+
+    if error_type in type_to_requirement:
+        return type_to_requirement[error_type]
+
+    # Fallback: use the error message itself
+    return error.get("msg", "see tool definition")
+
+
 def pydantic_errors_to_details(
     errors: list[ErrorDetails],
     data: dict[str, Any],
@@ -292,7 +336,8 @@ def pydantic_errors_to_details(
         data: The original data that was validated (for extracting provided values).
 
     Returns:
-        List of ValidationErrorDetail with field, issue, provided value, and error_type.
+        List of ValidationErrorDetail with field, issue, provided value, error_type,
+        and human-readable requirement.
 
     Example:
         >>> from pydantic import ValidationError
@@ -312,7 +357,8 @@ def pydantic_errors_to_details(
         field = _path_to_field_name(path)
         issue = error["msg"]
         provided = _get_nested_value(data, path)
-        error_type = error.get("type")  # Pydantic error type code
+        error_type = error.get("type")
+        requirement = _generate_requirement_text(error)
 
         result.append(
             ValidationErrorDetail(
@@ -320,7 +366,50 @@ def pydantic_errors_to_details(
                 issue=issue,
                 provided=provided,
                 error_type=error_type,
+                requirement=requirement,
             )
         )
 
     return result
+
+
+def get_all_field_paths(model_cls: type[BaseModel], prefix: str = "") -> set[str]:
+    """Get all field paths from a Pydantic model, including nested fields.
+
+    Args:
+        model_cls: Pydantic model class to introspect.
+        prefix: Current path prefix for recursion.
+
+    Returns:
+        Set of all field paths (e.g., {"genre", "scope", "scope.target_word_count"}).
+    """
+    import types
+
+    paths: set[str] = set()
+
+    for field_name, field_info in model_cls.model_fields.items():
+        field_path = f"{prefix}.{field_name}" if prefix else field_name
+        paths.add(field_path)
+
+        # Check if field type is a nested Pydantic model
+        annotation = field_info.annotation
+
+        # Get type arguments from union types (both Optional[X] and X | None)
+        args: tuple[type, ...] = ()
+        if hasattr(annotation, "__origin__"):
+            # typing.Optional, typing.Union, etc.
+            args = getattr(annotation, "__args__", ())
+        elif isinstance(annotation, types.UnionType):
+            # PEP 604 union syntax: X | None
+            args = annotation.__args__
+
+        # Recurse into nested Pydantic models
+        for arg in args:
+            if isinstance(arg, type) and issubclass(arg, BaseModel):
+                paths.update(get_all_field_paths(arg, field_path))
+
+        # Direct Pydantic model (not wrapped in Optional/Union)
+        if not args and isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            paths.update(get_all_field_paths(annotation, field_path))
+
+    return paths

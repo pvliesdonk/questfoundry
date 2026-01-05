@@ -6,8 +6,10 @@ import pytest
 from pydantic import BaseModel, Field, ValidationError
 
 from questfoundry.artifacts.validator import (
+    _generate_requirement_text,
     _get_nested_value,
     _path_to_field_name,
+    get_all_field_paths,
     pydantic_errors_to_details,
 )
 from questfoundry.conversation import ValidationErrorDetail
@@ -265,3 +267,185 @@ class TestDreamArtifactErrors:
 
         # Verify the provided value is captured (the empty string at index 1)
         assert any(err.provided == "" for err in tone_errors)
+
+
+# --- _generate_requirement_text Tests ---
+
+
+class TestGenerateRequirementText:
+    """Tests for _generate_requirement_text helper."""
+
+    def test_missing_error(self) -> None:
+        """Missing field error produces 'required field' requirement."""
+        error = {"type": "missing", "msg": "Field required", "loc": ("name",)}
+        assert _generate_requirement_text(error) == "required field"
+
+    def test_string_too_short(self) -> None:
+        """String too short error includes min_length."""
+        error = {
+            "type": "string_too_short",
+            "msg": "String should have at least 1 character",
+            "loc": ("name",),
+            "ctx": {"min_length": 1},
+        }
+        assert _generate_requirement_text(error) == "string with at least 1 character(s)"
+
+    def test_string_too_short_custom_min(self) -> None:
+        """String too short with custom min_length."""
+        error = {
+            "type": "string_too_short",
+            "msg": "String should have at least 5 characters",
+            "loc": ("name",),
+            "ctx": {"min_length": 5},
+        }
+        assert _generate_requirement_text(error) == "string with at least 5 character(s)"
+
+    def test_greater_than_equal(self) -> None:
+        """Greater than or equal constraint."""
+        error = {
+            "type": "greater_than_equal",
+            "msg": "Input should be greater than or equal to 1000",
+            "loc": ("count",),
+            "ctx": {"ge": 1000},
+        }
+        assert _generate_requirement_text(error) == "integer >= 1000"
+
+    def test_less_than_equal(self) -> None:
+        """Less than or equal constraint."""
+        error = {
+            "type": "less_than_equal",
+            "msg": "Input should be less than or equal to 100",
+            "loc": ("count",),
+            "ctx": {"le": 100},
+        }
+        assert _generate_requirement_text(error) == "integer <= 100"
+
+    def test_list_too_short(self) -> None:
+        """List too short error."""
+        error = {
+            "type": "too_short",
+            "msg": "List should have at least 1 item",
+            "loc": ("items",),
+            "ctx": {"min_length": 1},
+        }
+        assert _generate_requirement_text(error) == "array with at least 1 item(s)"
+
+    def test_type_errors(self) -> None:
+        """Type mismatch errors."""
+        assert _generate_requirement_text({"type": "string_type", "msg": "x"}) == "must be a string"
+        assert _generate_requirement_text({"type": "int_type", "msg": "x"}) == "must be an integer"
+        assert _generate_requirement_text({"type": "list_type", "msg": "x"}) == "must be an array"
+        assert _generate_requirement_text({"type": "dict_type", "msg": "x"}) == "must be an object"
+
+    def test_fallback_to_message(self) -> None:
+        """Unknown error type falls back to error message."""
+        error = {"type": "unknown_type", "msg": "Some custom error message", "loc": ("x",)}
+        assert _generate_requirement_text(error) == "Some custom error message"
+
+    def test_fallback_when_no_message(self) -> None:
+        """Falls back to 'see tool definition' when no message."""
+        error = {"type": "unknown_type", "loc": ("x",)}
+        assert _generate_requirement_text(error) == "see tool definition"
+
+
+# --- get_all_field_paths Tests ---
+
+
+class TestGetAllFieldPaths:
+    """Tests for get_all_field_paths function."""
+
+    def test_simple_model(self) -> None:
+        """Simple model with flat fields."""
+        paths = get_all_field_paths(SampleModel)
+        assert paths == {"name", "age", "tags"}
+
+    def test_nested_model(self) -> None:
+        """Nested model includes parent and nested paths."""
+        paths = get_all_field_paths(NestedModel)
+        # Should include: meta, meta.name, meta.age, meta.tags
+        assert "meta" in paths
+        assert "meta.name" in paths
+        assert "meta.age" in paths
+        assert "meta.tags" in paths
+
+    def test_returns_set(self) -> None:
+        """Returns a set, not a list."""
+        paths = get_all_field_paths(SampleModel)
+        assert isinstance(paths, set)
+
+    def test_dream_artifact_fields(self) -> None:
+        """DreamArtifact includes expected fields."""
+        from questfoundry.artifacts import DreamArtifact
+
+        paths = get_all_field_paths(DreamArtifact)
+
+        # Top-level required fields
+        assert "genre" in paths
+        assert "tone" in paths
+        assert "audience" in paths
+        assert "themes" in paths
+
+        # Optional fields
+        assert "subgenre" in paths
+        assert "style_notes" in paths
+        assert "scope" in paths
+        assert "content_notes" in paths
+
+        # Nested scope fields
+        assert "scope.target_word_count" in paths
+        assert "scope.estimated_passages" in paths
+        assert "scope.branching_depth" in paths
+
+        # Nested content_notes fields
+        assert "content_notes.includes" in paths
+        assert "content_notes.excludes" in paths
+
+    def test_with_prefix(self) -> None:
+        """Prefix is applied to all paths."""
+        paths = get_all_field_paths(SampleModel, prefix="nested")
+        assert "nested.name" in paths
+        assert "nested.age" in paths
+        assert "nested.tags" in paths
+
+
+# --- pydantic_errors_to_details requirement field Tests ---
+
+
+class TestPydanticErrorsRequirement:
+    """Tests that pydantic_errors_to_details includes requirement field."""
+
+    def test_missing_field_has_requirement(self) -> None:
+        """Missing field error includes requirement text."""
+        data = {"age": 25}
+        try:
+            SampleModel.model_validate(data)
+            pytest.fail("Expected ValidationError")
+        except ValidationError as e:
+            details = pydantic_errors_to_details(e.errors(), data)
+
+        assert len(details) == 1
+        assert details[0].requirement == "required field"
+
+    def test_constraint_has_requirement(self) -> None:
+        """Constraint violation includes requirement text."""
+        data = {"name": "Test", "age": -5}
+        try:
+            SampleModel.model_validate(data)
+            pytest.fail("Expected ValidationError")
+        except ValidationError as e:
+            details = pydantic_errors_to_details(e.errors(), data)
+
+        assert len(details) == 1
+        assert details[0].requirement == "integer >= 0"
+
+    def test_string_too_short_has_requirement(self) -> None:
+        """String too short includes min_length in requirement."""
+        data = {"name": "", "age": 25}
+        try:
+            SampleModel.model_validate(data)
+            pytest.fail("Expected ValidationError")
+        except ValidationError as e:
+            details = pydantic_errors_to_details(e.errors(), data)
+
+        assert len(details) == 1
+        assert details[0].requirement == "string with at least 1 character(s)"

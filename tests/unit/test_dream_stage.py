@@ -407,8 +407,8 @@ def test_validate_dream_returns_structured_errors() -> None:
 
 
 def test_validate_dream_returns_expected_fields() -> None:
-    """_validate_dream returns expected_fields matching DreamArtifact.model_fields."""
-    from questfoundry.artifacts import DreamArtifact
+    """_validate_dream returns expected_fields including nested paths."""
+    from questfoundry.artifacts import DreamArtifact, get_all_field_paths
 
     stage = DreamStage()
 
@@ -417,14 +417,18 @@ def test_validate_dream_returns_expected_fields() -> None:
     assert not result.valid
     assert result.expected_fields is not None
 
-    # expected_fields should match all DreamArtifact model fields exactly
-    model_fields = set(DreamArtifact.model_fields.keys())
+    # expected_fields should include all paths including nested (scope.target_word_count, etc.)
+    expected_paths = get_all_field_paths(DreamArtifact)
     returned_fields = set(result.expected_fields)
-    assert returned_fields == model_fields, (
+    assert returned_fields == expected_paths, (
         f"expected_fields mismatch: "
-        f"missing={model_fields - returned_fields}, "
-        f"extra={returned_fields - model_fields}"
+        f"missing={expected_paths - returned_fields}, "
+        f"extra={returned_fields - expected_paths}"
     )
+
+    # Verify nested paths are included (key feature for unknown field detection)
+    assert "scope.target_word_count" in returned_fields
+    assert "content_notes.includes" in returned_fields
 
 
 def test_validate_dream_includes_provided_values() -> None:

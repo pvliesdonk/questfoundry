@@ -150,6 +150,59 @@ and Pydantic models are generated from them via `scripts/generate_models.py`.
 
 ---
 
+## ADR-007: Tool Validation Feedback Format
+
+**Date**: 2026-01-05
+**Status**: Accepted
+
+### Context
+When tool validation fails during interactive stages, the LLM needs structured feedback
+to understand what went wrong and how to fix it. The feedback format must work across
+all LLM providers (Ollama, OpenAI, Anthropic) and optimize for LLM comprehension.
+
+Research across provider APIs showed:
+- Ollama/OpenAI: Errors passed as content string in `role: "tool"` message
+- Anthropic: Optional `is_error` boolean, but content string is primary mechanism
+- Common pattern: Structured JSON in content field
+
+### Decision
+Use a **semantic, structured feedback format** in tool result content:
+
+```json
+{
+  "result": "validation_failed",
+  "issues": {
+    "invalid": [{"field": "...", "provided": "...", "problem": "...", "requirement": "..."}],
+    "missing": [{"field": "...", "requirement": "..."}],
+    "unknown": ["field1", "field2"]
+  },
+  "issue_count": 3,
+  "action": "Call submit_dream() with corrected data..."
+}
+```
+
+Key design choices:
+1. **Semantic `result` enum** over boolean `success` (extensible, unambiguous)
+2. **No full schema** in feedback (already in tool definition, wastes tokens)
+3. **Field-specific `requirement`** instead of flat expected_fields list
+4. **`unknown` fields** to detect wrong field names without fuzzy matching
+5. **`action` last** in structure (recency effect for LLM instruction following)
+
+### Rationale
+- Provider-agnostic (works with all LLM backends)
+- Token-efficient (no schema duplication in retry loops)
+- Actionable (tells LLM exactly what to fix)
+- Extensible (`result` can add `tool_error`, `rate_limited`, etc.)
+- Based on prompt engineering research (primacy/recency effects)
+
+### Consequences
+- Feedback structure is consistent across all stages
+- `expected_fields` list replaced by targeted `requirement` per field
+- Unknown field detection helps identify wrong field names
+- May need to update existing tests expecting old format
+
+---
+
 ## Template
 
 ```markdown

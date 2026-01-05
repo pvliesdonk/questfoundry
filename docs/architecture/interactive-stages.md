@@ -118,6 +118,49 @@ The `ConversationRunner` manages the multi-turn conversation loop:
            (max 3)      CONVERSATION
 ```
 
+### Validation Feedback Format (ADR-007)
+
+When validation fails, structured feedback is sent to the LLM for retry:
+
+```json
+{
+  "result": "validation_failed",
+
+  "issues": {
+    "invalid": [
+      {
+        "field": "audience",
+        "provided": "",
+        "problem": "empty string not allowed",
+        "requirement": "non-empty string, e.g. 'adult', 'young adult'"
+      }
+    ],
+    "missing": [
+      {
+        "field": "scope.target_word_count",
+        "requirement": "integer >= 1000"
+      }
+    ],
+    "unknown": ["passages", "word_count"]
+  },
+
+  "issue_count": 4,
+
+  "action": "Call submit_dream() with corrected data. Unknown fields may be typos."
+}
+```
+
+**Field ordering** is based on prompt engineering principles (primacy/recency effects):
+1. `result` first (immediate orientation)
+2. `issues` in middle (diagnosis)
+3. `action` last (LLM weights final content for instructions)
+
+**Key design choices:**
+- `result` uses semantic enum (`accepted`, `validation_failed`, `tool_error`)
+- No full schema included (already in tool definition)
+- Each field error includes specific `requirement` text
+- `unknown` fields help detect wrong field names without fuzzy matching
+
 ### Finalization Tools (`src/questfoundry/tools/finalization.py`)
 
 Each stage has a dedicated finalization tool:
