@@ -426,8 +426,41 @@ def property_to_tool_schema(prop: dict[str, Any]) -> dict[str, Any]:
 
     # Handle const values (e.g., type: "dream")
     if "const" in prop:
-        result["type"] = "string"
-        result["const"] = prop["const"]
+        const_val = prop["const"]
+        result["const"] = const_val
+        # Infer type from const value, or use explicit type if provided
+        if "type" in prop:
+            result["type"] = prop["type"]
+        elif isinstance(const_val, bool):
+            # Check bool before int since bool is subclass of int in Python
+            result["type"] = "boolean"
+        elif isinstance(const_val, int):
+            result["type"] = "integer"
+        elif isinstance(const_val, float):
+            result["type"] = "number"
+        elif isinstance(const_val, str):
+            result["type"] = "string"
+        # For other types (null, arrays, objects), omit type - LLM can infer from const
+        if "description" in prop:
+            result["description"] = prop["description"]
+        return result
+
+    # Handle enum values (e.g., status: ["active", "inactive"])
+    if "enum" in prop:
+        result["enum"] = prop["enum"]
+        # Infer type from first enum value if type not provided
+        if "type" in prop:
+            result["type"] = prop["type"]
+        elif prop["enum"]:
+            first_val = prop["enum"][0]
+            if isinstance(first_val, bool):
+                result["type"] = "boolean"
+            elif isinstance(first_val, int):
+                result["type"] = "integer"
+            elif isinstance(first_val, float):
+                result["type"] = "number"
+            elif isinstance(first_val, str):
+                result["type"] = "string"
         if "description" in prop:
             result["description"] = prop["description"]
         return result
@@ -605,7 +638,6 @@ def main() -> int:
 
     # Generate tool schemas (only if not skipped)
     tools_code = [TOOLS_GENERATED_HEADER] if generate_tools else []
-    tool_var_names: list[str] = []
 
     for schema_path in schema_files:
         print(f"  Processing {schema_path.name}...")
@@ -618,10 +650,9 @@ def main() -> int:
 
             # Generate tool schema (only if not skipped)
             if generate_tools:
-                var_name, tool_code = generate_tool_schema_code(schema_path)
+                _var_name, tool_code = generate_tool_schema_code(schema_path)
                 tools_code.append(tool_code)
                 tools_code.append("")
-                tool_var_names.append(var_name)
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             print(f"Error processing {schema_path}: {e}", file=sys.stderr)

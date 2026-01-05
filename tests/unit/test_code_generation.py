@@ -950,6 +950,44 @@ class TestToolSchemaGeneration:
         assert result["type"] == "string"
         assert result["const"] == "dream"
 
+    def test_property_to_tool_schema_handles_integer_const(self) -> None:
+        """Integer const values should infer integer type."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {"const": 1, "description": "Version number"}
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "integer"
+        assert result["const"] == 1
+        assert result["description"] == "Version number"
+
+    def test_property_to_tool_schema_handles_boolean_const(self) -> None:
+        """Boolean const values should infer boolean type (not integer)."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {"const": True}
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "boolean"
+        assert result["const"] is True
+
+    def test_property_to_tool_schema_handles_enum_without_type(self) -> None:
+        """Enum properties without explicit type should infer from values."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {"enum": ["active", "inactive"], "description": "Status"}
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "string"
+        assert result["enum"] == ["active", "inactive"]
+        assert result["description"] == "Status"
+
+    def test_property_to_tool_schema_handles_integer_enum(self) -> None:
+        """Integer enum should infer integer type."""
+        from scripts.generate_models import property_to_tool_schema
+
+        prop = {"enum": [1, 2, 3]}
+        result = property_to_tool_schema(prop)
+        assert result["type"] == "integer"
+        assert result["enum"] == [1, 2, 3]
+
     def test_property_to_tool_schema_handles_nested_object(self) -> None:
         """Nested objects should be recursively processed."""
         from scripts.generate_models import property_to_tool_schema
