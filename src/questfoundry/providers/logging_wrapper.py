@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.observability import LLMLogger
@@ -99,6 +99,14 @@ class LoggingProvider:
 
         duration = time.perf_counter() - start_time
 
+        # Serialize tool calls for logging
+        tool_calls_data: list[dict[str, Any]] | None = None
+        if response.tool_calls:
+            tool_calls_data = [
+                {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                for tc in response.tool_calls
+            ]
+
         # Log successful call (including tool calls if present)
         entry = self._logger.create_entry(
             stage=self._stage,
@@ -110,6 +118,7 @@ class LoggingProvider:
             duration_seconds=duration,
             temperature=temperature,
             max_tokens=max_tokens,
+            tool_calls=tool_calls_data,
         )
         self._logger.log(entry)
 

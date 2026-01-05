@@ -99,6 +99,9 @@ class DreamStage:
         on_assistant_message = context.get("on_assistant_message")
         research_tools: list[Tool] = context.get("research_tools") or []
 
+        # Build research tools section if any are available
+        research_tools_section = self._build_research_tools_section(research_tools)
+
         # Build prompt context for interactive mode (sandwich pattern)
         prompt_context = {
             "mode_instructions": (
@@ -108,6 +111,7 @@ class DreamStage:
                 "- The target audience and themes\n"
                 "- Any content to include or avoid\n"
                 "- The desired scope and complexity\n\n"
+                f"{research_tools_section}"
                 "When the user is satisfied with the direction, call submit_dream() with the "
                 "finalized artifact data."
             ),
@@ -216,6 +220,36 @@ class DreamStage:
         validated_data["version"] = validated_data.get("version", 1)
 
         return validated_data, 1, response.tokens_used
+
+    def _build_research_tools_section(self, tools: list[Tool]) -> str:
+        """Build prompt section describing available research tools.
+
+        Args:
+            tools: List of research tools (excludes finalization tools).
+
+        Returns:
+            Formatted string describing tools, or empty string if none.
+        """
+        # Filter to research tools only (exclude finalization tools like submit_dream)
+        finalization_tools = {"submit_dream", "submit_brainstorm"}
+        research = [t for t in tools if t.definition.name not in finalization_tools]
+
+        if not research:
+            return ""
+
+        # Build tool descriptions
+        tool_lines = []
+        for tool in research:
+            defn = tool.definition
+            tool_lines.append(f"- {defn.name}: {defn.description}")
+
+        return (
+            "You also have research tools available to gather information:\n"
+            + "\n".join(tool_lines)
+            + "\n\n"
+            "Use these tools to research genre conventions, writing craft, or current trends "
+            "that might inform the creative vision.\n\n"
+        )
 
     def _build_direct_user_message(self, user_prompt: str) -> str:
         """Build user message for direct mode with YAML format spec.

@@ -36,8 +36,9 @@ class LLMLogEntry:
     finish_reason: str
     duration_seconds: float
 
-    # Optional metadata
+    # Optional fields
     error: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -88,6 +89,7 @@ class LLMLogger:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         error: str | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
         **metadata: Any,
     ) -> LLMLogEntry:
         """Create a log entry with current timestamp.
@@ -103,6 +105,7 @@ class LLMLogger:
             temperature: Sampling temperature.
             max_tokens: Maximum tokens allowed.
             error: Error message if call failed.
+            tool_calls: List of tool calls from response (if any).
             **metadata: Additional metadata.
 
         Returns:
@@ -120,6 +123,7 @@ class LLMLogger:
             finish_reason=finish_reason,
             duration_seconds=duration_seconds,
             error=error,
+            tool_calls=tool_calls,
             metadata=dict(metadata),
         )
 
