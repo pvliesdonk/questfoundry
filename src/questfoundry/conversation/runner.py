@@ -16,6 +16,7 @@ from questfoundry.tools import ReadyToSummarizeTool, Tool
 
 # Default configuration values
 DEFAULT_MAX_DISCUSS_TURNS = 10
+DEFAULT_MAX_TOOL_CALLS = 50  # Prevent infinite tool call loops in discuss phase
 DEFAULT_VALIDATION_RETRIES = 3
 USER_DONE_SIGNAL = "/done"
 
@@ -209,12 +210,15 @@ class ConversationRunner:
         - User types /done
         - LLM calls ready_to_summarize()
         - max_discuss_turns reached (auto-transition)
+        - max_tool_calls reached (prevents infinite loops)
 
         Args:
             state: Conversation state to update.
             user_input_fn: Function to get user input, or None for direct mode.
             on_assistant_message: Callback for assistant messages.
         """
+        tool_call_count = 0
+
         while state.turn_count < self._max_discuss_turns:
             # Call LLM with research tools only
             response = await self._provider.complete(
@@ -233,6 +237,16 @@ class ConversationRunner:
 
             # Handle tool calls
             if response.has_tool_calls and response.tool_calls:
+                tool_call_count += len(response.tool_calls)
+
+                # Check tool call limit to prevent infinite loops
+                if tool_call_count > DEFAULT_MAX_TOOL_CALLS:
+                    raise ConversationError(
+                        f"Exceeded maximum tool calls ({DEFAULT_MAX_TOOL_CALLS}) in discuss phase. "
+                        "This may indicate the LLM is stuck in a tool call loop.",
+                        state,
+                    )
+
                 ready_to_proceed = await self._handle_discuss_tools(response.tool_calls, state)
                 if ready_to_proceed:
                     return  # LLM signaled ready to summarize
@@ -294,7 +308,10 @@ class ConversationRunner:
             # Execute research tool
             tool = self._discuss_tools.get(tc.name)
             if tool is None:
-                state.add_tool_result(tc.id, f"Error: Unknown tool '{tc.name}'")
+                state.add_tool_result(
+                    tc.id,
+                    json.dumps({"error": f"Unknown tool '{tc.name}'"}),
+                )
                 continue
 
             try:
@@ -303,7 +320,10 @@ class ConversationRunner:
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception as e:
-                state.add_tool_result(tc.id, f"Error executing {tc.name}: {e}")
+                state.add_tool_result(
+                    tc.id,
+                    json.dumps({"error": f"Error executing {tc.name}: {e}"}),
+                )
 
         return False
 
@@ -391,8 +411,8 @@ class ConversationRunner:
         )
         state.add_message({"role": "user", "content": serialize_instruction})
 
-        retries = 0
-        while retries <= self._validation_retries:
+        max_attempts = self._validation_retries + 1
+        for attempt in range(max_attempts):
             # Call LLM with finalization tool only, forced
             response = await self._provider.complete(
                 messages=state.messages,
@@ -427,32 +447,26 @@ class ConversationRunner:
             data = tool_call.arguments
 
             # Validate if validator provided
-            if validator is not None:
-                result = validator(data)
-                if not result.valid:
-                    retries += 1
-                    if retries > self._validation_retries:
-                        raise ConversationError(
-                            f"Validation failed after {self._validation_retries} retries",
-                            state,
-                        )
+            validation_result = validator(data) if validator else ValidationResult(valid=True)
 
-                    # Build feedback and retry
-                    feedback = self._build_validation_feedback(
-                        data, result, self._finalization_tool_name, include_schema=True
-                    )
-                    state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
-                    continue
-
+            if validation_result.valid:
                 # Use validated/transformed data if provided
-                data = result.data if result.data is not None else data
+                validated_data = (
+                    validation_result.data if validation_result.data is not None else data
+                )
+                # Validation passed - confirm and return
+                result_message = self._finalization_tool.execute(validated_data)
+                state.add_tool_result(tool_call.id, result_message)
+                return validated_data
 
-            # Validation passed - confirm and return
-            result_message = self._finalization_tool.execute(data)
-            state.add_tool_result(tool_call.id, result_message)
-            return data
+            # Validation failed - retry if attempts remain
+            if attempt < max_attempts - 1:
+                feedback = self._build_validation_feedback(
+                    data, validation_result, self._finalization_tool_name, include_schema=True
+                )
+                state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
+            # else: last attempt failed, will raise after loop
 
-        # Should not reach here, but just in case
         raise ConversationError(
             f"Validation failed after {self._validation_retries} retries",
             state,
