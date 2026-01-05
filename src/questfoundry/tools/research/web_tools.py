@@ -111,13 +111,22 @@ class WebSearchTool:
             from pvlwebtools import web_search
 
             # Run async function in sync context
-            results = asyncio.run(
-                web_search(
-                    query,
-                    max_results=max_results,
-                    recency=recency,
-                )
-            )
+            # Try to get running loop first (if called from async context),
+            # otherwise create a new one
+            try:
+                asyncio.get_running_loop()
+                # We're in an async context - run in thread to avoid blocking
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        web_search(query, max_results=max_results, recency=recency),
+                    )
+                    results = future.result()
+            except RuntimeError:
+                # No running loop - safe to use asyncio.run()
+                results = asyncio.run(web_search(query, max_results=max_results, recency=recency))
         except Exception as e:
             logger.warning("Web search failed: %s", e)
             return f"Search failed: {e}"
@@ -125,13 +134,22 @@ class WebSearchTool:
         if not results:
             return f"No results found for '{query}'."
 
-        # Format results
+        # Format results with output size tracking
         formatted = []
+        total_chars = 0
+
         for r in results:
             entry = f"**{r.title}**\n{r.url}\n{r.snippet}"
             if hasattr(r, "published_date") and r.published_date:
                 entry += f"\n*Published: {r.published_date}*"
+
+            # Check total output size
+            if total_chars + len(entry) > MAX_OUTPUT_CHARS:
+                formatted.append("\n*...additional results truncated*")
+                break
+
             formatted.append(entry)
+            total_chars += len(entry)
 
         return "\n\n---\n\n".join(formatted)
 
@@ -188,12 +206,22 @@ class WebFetchTool:
             from pvlwebtools import web_fetch
 
             # Run async function in sync context
-            result = asyncio.run(
-                web_fetch(
-                    url,
-                    extract_mode=extract_mode,
-                )
-            )
+            # Try to get running loop first (if called from async context),
+            # otherwise create a new one
+            try:
+                asyncio.get_running_loop()
+                # We're in an async context - run in thread to avoid blocking
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        web_fetch(url, extract_mode=extract_mode),
+                    )
+                    result = future.result()
+            except RuntimeError:
+                # No running loop - safe to use asyncio.run()
+                result = asyncio.run(web_fetch(url, extract_mode=extract_mode))
         except Exception as e:
             logger.warning("Web fetch failed for %s: %s", url, e)
             return f"Fetch failed: {e}"

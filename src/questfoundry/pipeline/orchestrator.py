@@ -184,39 +184,36 @@ class PipelineOrchestrator:
 
         # Get corpus tools if enabled
         if config.corpus:
-            try:
-                from questfoundry.tools.research import get_corpus_tools
+            from questfoundry.tools.research import get_corpus_tools
 
-                corpus_tools = get_corpus_tools()
-                if corpus_tools:
-                    logger.debug("Loaded %d corpus tools", len(corpus_tools))
-                    tools.extend(corpus_tools)
-                else:
-                    logger.info("IF Craft Corpus not installed, corpus tools disabled")
-            except ImportError:
-                logger.info("IF Craft Corpus not installed, corpus tools disabled")
+            corpus_tools = get_corpus_tools()
+            if corpus_tools:
+                logger.debug("Loaded %d corpus tools", len(corpus_tools))
+                tools.extend(corpus_tools)
+            else:
+                # Log at warning since user explicitly enabled but deps unavailable
+                logger.warning("IF Craft Corpus not installed, corpus tools disabled")
 
         # Get web tools if enabled
         if config.web_search or config.web_fetch:
-            try:
-                from questfoundry.tools.research import get_web_tools
+            from questfoundry.tools.research import get_web_tools
 
-                # Only require SEARXNG if web_search is enabled
-                web_tools = get_web_tools(require_searxng=config.web_search)
-                if web_tools:
-                    # Filter based on config
-                    filtered = []
-                    for tool in web_tools:
-                        tool_name = tool.definition.name
-                        if (tool_name == "web_search" and config.web_search) or (
-                            tool_name == "web_fetch" and config.web_fetch
-                        ):
-                            filtered.append(tool)
-                    if filtered:
-                        logger.debug("Loaded %d web tools", len(filtered))
-                        tools.extend(filtered)
-            except ImportError:
-                logger.info("pvl-webtools not installed, web tools disabled")
+            # Only require SEARXNG if web_search is enabled
+            web_tools = get_web_tools(require_searxng=config.web_search)
+            if web_tools:
+                # Filter based on config
+                filtered = [
+                    tool
+                    for tool in web_tools
+                    if (tool.definition.name == "web_search" and config.web_search)
+                    or (tool.definition.name == "web_fetch" and config.web_fetch)
+                ]
+                if filtered:
+                    logger.debug("Loaded %d web tools", len(filtered))
+                    tools.extend(filtered)
+            else:
+                # Log at warning since user explicitly enabled but deps unavailable
+                logger.warning("pvl-webtools not installed, web tools disabled")
 
         return tools
 
