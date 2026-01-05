@@ -37,10 +37,17 @@ class ResearchToolsConfig:
     Controls which research tools are available to pipeline stages.
     Tools can be enabled/disabled independently.
 
+    Note:
+        Setting a tool to True means "enabled if available". The tool will
+        only be loaded if its dependencies are installed. If the dependency
+        is missing, a warning is logged but execution continues without
+        the tool. This allows graceful degradation when optional packages
+        are not installed.
+
     Attributes:
-        corpus: Enable IF Craft Corpus tools (search, get_document, list_clusters).
-        web_search: Enable web search tool (requires SEARXNG_URL).
-        web_fetch: Enable web fetch tool.
+        corpus: Enable IF Craft Corpus tools if ifcraftcorpus is installed.
+        web_search: Enable web search tool if pvl-webtools is installed and SEARXNG_URL set.
+        web_fetch: Enable web fetch tool if pvl-webtools is installed.
     """
 
     corpus: bool = True
