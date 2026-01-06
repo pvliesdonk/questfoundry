@@ -192,11 +192,10 @@ class ConversationRunner:
             "conversation_start",
             interactive=interactive,
             max_discuss_turns=self._max_discuss_turns,
-            research_tools=len(self._research_tools),
         )
 
         # Phase 1: Discuss
-        log.debug("phase_start", phase="discuss")
+        log.debug("phase_start", phase="discuss", research_tools=len(self._research_tools))
         await self._discuss_phase(state, user_input_fn, on_assistant_message)
         log.debug(
             "phase_complete",
@@ -257,7 +256,6 @@ class ConversationRunner:
                 "llm_response",
                 phase="discuss",
                 turn=state.turn_count,
-                has_content=bool(response.content),
                 tool_calls=len(response.tool_calls) if response.tool_calls else 0,
                 tokens=response.tokens_used,
             )
@@ -375,7 +373,7 @@ class ConversationRunner:
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception as e:
-                log.warning("tool_call_error", tool=tc.name, error=str(e))
+                log.warning("tool_call_error", tool=tc.name, error=str(e), exc_info=True)
                 state.add_tool_result(
                     tc.id,
                     json.dumps({"error": f"Error executing {tc.name}: {e}"}),

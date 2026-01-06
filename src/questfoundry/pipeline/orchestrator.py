@@ -196,6 +196,7 @@ class PipelineOrchestrator:
                     "research_tools_unavailable",
                     tool_type="corpus",
                     reason="ifcraftcorpus not installed",
+                    package="ifcraftcorpus",
                 )
 
         # Get web tools if enabled
@@ -221,6 +222,7 @@ class PipelineOrchestrator:
                     "research_tools_unavailable",
                     tool_type="web",
                     reason="pvl-webtools not installed",
+                    package="pvl-webtools",
                 )
 
         return tools
@@ -345,7 +347,13 @@ class PipelineOrchestrator:
             raise
         except Exception as e:
             duration = time.perf_counter() - start_time
-            log.error("stage_failed", stage=stage_name, error=str(e), duration=f"{duration:.2f}s")
+            log.error(
+                "stage_failed",
+                stage=stage_name,
+                error=str(e),
+                duration=f"{duration:.2f}s",
+                exc_info=True,
+            )
             return StageResult(
                 stage=stage_name,
                 status="failed",

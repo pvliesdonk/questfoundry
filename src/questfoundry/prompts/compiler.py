@@ -188,7 +188,7 @@ class PromptCompiler:
         try:
             template = self._loader.load(template_name)
         except TemplateNotFoundError as e:
-            log.warning("template_not_found", template=template_name)
+            log.error("template_not_found", template=template_name)
             raise PromptCompileError(template_name, str(e)) from e
 
         # Substitute variables
