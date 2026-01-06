@@ -169,6 +169,8 @@ class ConversationRunner:
         validator: Callable[[dict[str, Any]], ValidationResult] | None = None,
         summary_prompt: str | None = None,
         on_assistant_message: Callable[[str], None] | None = None,
+        on_llm_start: Callable[[str], None] | None = None,
+        on_llm_end: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], ConversationState]:
         """Run the 3-phase conversation.
 
@@ -196,7 +198,13 @@ class ConversationRunner:
 
         # Phase 1: Discuss
         log.debug("phase_start", phase="discuss", research_tools=len(self._research_tools))
-        await self._discuss_phase(state, user_input_fn, on_assistant_message)
+        await self._discuss_phase(
+            state,
+            user_input_fn,
+            on_assistant_message,
+            on_llm_start,
+            on_llm_end,
+        )
         log.debug(
             "phase_complete",
             phase="discuss",
@@ -207,13 +215,26 @@ class ConversationRunner:
         # Phase 2: Summarize
         state.phase = "summarize"
         log.debug("phase_start", phase="summarize")
-        summary = await self._summarize_phase(state, summary_prompt, on_assistant_message)
+        summary = await self._summarize_phase(
+            state,
+            summary_prompt,
+            on_assistant_message,
+            on_llm_start,
+            on_llm_end,
+        )
         log.debug("phase_complete", phase="summarize", summary_length=len(summary))
 
         # Phase 3: Serialize
         state.phase = "serialize"
         log.debug("phase_start", phase="serialize")
-        artifact = await self._serialize_phase(state, summary, validator, on_assistant_message)
+        artifact = await self._serialize_phase(
+            state,
+            summary,
+            validator,
+            on_assistant_message,
+            on_llm_start,
+            on_llm_end,
+        )
         log.info(
             "conversation_complete",
             total_llm_calls=state.llm_calls,
@@ -227,6 +248,8 @@ class ConversationRunner:
         state: ConversationState,
         user_input_fn: Callable[[], Awaitable[str | None]] | None,
         on_assistant_message: Callable[[str], None] | None,
+        on_llm_start: Callable[[str], None] | None,
+        on_llm_end: Callable[[str], None] | None,
     ) -> None:
         """Run the Discuss phase with research tools only.
 
@@ -245,11 +268,15 @@ class ConversationRunner:
 
         while state.turn_count < self._max_discuss_turns:
             # Call LLM with research tools only
+            if on_llm_start is not None:
+                on_llm_start(state.phase)
             response = await self._provider.complete(
                 messages=state.messages,
                 tools=self._discuss_tool_defs if self._discuss_tool_defs else None,
                 tool_choice="auto",
             )
+            if on_llm_end is not None:
+                on_llm_end(state.phase)
             state.llm_calls += 1
             state.tokens_used += response.tokens_used
             log.debug(
@@ -386,6 +413,8 @@ class ConversationRunner:
         state: ConversationState,
         summary_prompt: str | None,
         on_assistant_message: Callable[[str], None] | None,
+        on_llm_start: Callable[[str], None] | None,
+        on_llm_end: Callable[[str], None] | None,
     ) -> str:
         """Run the Summarize phase with no tools.
 
@@ -414,11 +443,15 @@ class ConversationRunner:
         state.add_message({"role": "user", "content": summarize_instruction})
 
         # Call LLM with no tools
+        if on_llm_start is not None:
+            on_llm_start(state.phase)
         response = await self._provider.complete(
             messages=state.messages,
             tools=None,
             tool_choice=None,
         )
+        if on_llm_end is not None:
+            on_llm_end(state.phase)
         state.llm_calls += 1
         state.tokens_used += response.tokens_used
 
@@ -440,6 +473,8 @@ class ConversationRunner:
         summary: str,  # noqa: ARG002 - summary already in messages, param kept for API clarity
         validator: Callable[[dict[str, Any]], ValidationResult] | None,
         on_assistant_message: Callable[[str], None] | None,
+        on_llm_start: Callable[[str], None] | None,
+        on_llm_end: Callable[[str], None] | None,
     ) -> dict[str, Any]:
         """Run the Serialize phase with finalization tool only.
 
@@ -470,11 +505,15 @@ class ConversationRunner:
             log.debug("serialize_attempt", attempt=attempt + 1, max_attempts=max_attempts)
 
             # Call LLM with finalization tool only, forced
+            if on_llm_start is not None:
+                on_llm_start(state.phase)
             response = await self._provider.complete(
                 messages=state.messages,
                 tools=[self._finalization_tool_def],
                 tool_choice=self._finalization_tool_name,
             )
+            if on_llm_end is not None:
+                on_llm_end(state.phase)
             state.llm_calls += 1
             state.tokens_used += response.tokens_used
 
@@ -533,6 +572,17 @@ class ConversationRunner:
                     data, validation_result, self._finalization_tool_name, include_schema=True
                 )
                 state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
+                # Reinforce instructions for the next attempt so the model
+                # knows to call the finalization tool again with corrected data.
+                state.add_message(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Validation failed. Review the feedback above and call "
+                            f"{self._finalization_tool_name}() again with corrected data."
+                        ),
+                    }
+                )
             # else: last attempt failed, will raise after loop
 
         log.warning(
