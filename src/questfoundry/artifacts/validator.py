@@ -10,6 +10,9 @@ import jsonschema
 from pydantic import BaseModel, ValidationError
 
 from questfoundry.artifacts import DreamArtifact
+from questfoundry.observability.logging import get_logger
+
+log = get_logger(__name__)
 
 if TYPE_CHECKING:
     from pydantic_core import ErrorDetails
@@ -214,8 +217,12 @@ class ArtifactValidator:
         # Validate with Pydantic model
         errors.extend(self.validate_with_model(data, stage_name))
 
-        if errors and raise_on_error:
-            raise ArtifactValidationError(stage_name, errors)
+        if errors:
+            log.debug("artifact_validation_failed", stage=stage_name, error_count=len(errors))
+            if raise_on_error:
+                raise ArtifactValidationError(stage_name, errors)
+        else:
+            log.debug("artifact_validation_passed", stage=stage_name)
 
         return errors
 

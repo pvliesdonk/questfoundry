@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003 - used at runtime
 from typing import Any
 
+from questfoundry.observability.logging import get_logger
 from questfoundry.prompts.loader import PromptLoader, TemplateNotFoundError
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -185,6 +188,7 @@ class PromptCompiler:
         try:
             template = self._loader.load(template_name)
         except TemplateNotFoundError as e:
+            log.warning("template_not_found", template=template_name)
             raise PromptCompileError(template_name, str(e)) from e
 
         # Substitute variables
@@ -196,7 +200,20 @@ class PromptCompiler:
 
         # Check budget
         if token_count > self.token_budget:
+            log.warning(
+                "prompt_budget_exceeded",
+                template=template_name,
+                tokens=token_count,
+                budget=self.token_budget,
+            )
             raise BudgetExceededError(token_count, self.token_budget, template_name)
+
+        log.debug(
+            "prompt_compiled",
+            template=template_name,
+            tokens=token_count,
+            components=len(template.components),
+        )
 
         return CompiledPrompt(
             system=system,
