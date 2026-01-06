@@ -41,17 +41,23 @@ questfoundry/
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Project skeleton | Done | pyproject.toml, directories, basic CLI |
-| CLI entry point | Minimal | `qf version`, `qf status` stub |
+| CLI entry point | Done | `qf version`, `qf status`, `qf dream` |
+| DREAM stage | Done | Three-phase pattern (Discuss → Summarize → Serialize) |
+| ConversationRunner | Done | Orchestrates three-phase flow with tool support |
+| Prompt compiler | Done | Template-based variable substitution |
+| Provider interface | Done | LangChainProvider adapter, Ollama and OpenAI support |
+| Validation & repair | Done | Structured error feedback, max 3 retries |
 
-### In Progress (Slice 1)
+### In Progress (Later Slices)
 
 | Component | Status | Issue |
 |-----------|--------|-------|
-| Pipeline orchestrator | Planned | TBD |
-| DREAM stage | Planned | TBD |
-| Prompt compiler (basic) | Planned | TBD |
-| DREAM artifact schema | Planned | TBD |
-| Ollama provider | Planned | TBD |
+| Pipeline orchestrator | Design | Multi-stage execution, human gates |
+| BRAINSTORM stage | Design | Characters, settings, story hooks |
+| SEED stage | Design | Protagonist, setting, tension |
+| GROW stage | Design | Six-layer branching structure |
+| FILL stage | Planned | Scene prose generation |
+| SHIP stage | Planned | Export formats (Twee, HTML, JSON) |
 
 ### Planned (Future Slices)
 
@@ -91,6 +97,14 @@ questfoundry/
 ## Key Design Decisions
 
 See [decisions.md](./decisions.md) for Architecture Decision Records.
+
+## Implementation Details
+
+For detailed information on specific components:
+
+- **DREAM Pipeline**: See [langchain-dream-pipeline.md](./langchain-dream-pipeline.md) - Three-phase pattern, provider strategies, validation flow
+- **Schema Generation**: See [schema-first-models.md](./schema-first-models.md) - Source-of-truth workflow
+- **Interactive Stages**: See [interactive-stages.md](./interactive-stages.md) - Multi-turn dialogue patterns
 
 ---
 

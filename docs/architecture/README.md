@@ -10,6 +10,9 @@ For **design specifications**, see [../design/](../design/).
 |----------|-------------|
 | [overview.md](./overview.md) | High-level architecture overview |
 | [decisions.md](./decisions.md) | Architecture Decision Records (ADRs) |
+| [langchain-dream-pipeline.md](./langchain-dream-pipeline.md) | DREAM stage implementation (three-phase pattern, provider strategies) |
+| [schema-first-models.md](./schema-first-models.md) | Source-of-truth schema workflow and model generation |
+| [interactive-stages.md](./interactive-stages.md) | Multi-turn dialogue patterns and interaction design |
 
 ## Design vs Architecture
 

@@ -265,6 +265,50 @@ Key principles:
 
 ---
 
+## ADR-009: LangChain-Native DREAM Pipeline
+
+**Date**: 2026-01-06
+**Status**: Accepted
+
+### Context
+
+The custom `ConversationRunner` re-implemented agent loop patterns that LangChain provides natively through `langchain.agents`. This caused:
+- Maintenance overhead for a reimplemented control flow
+- Provider-specific bugs (e.g., tool calling format inconsistencies)
+- Difficulty supporting new providers (each needs custom logic)
+- Divergence between our agent patterns and LangChain ecosystem best practices
+
+### Decision
+
+Replace custom agent infrastructure with **LangChain-native patterns**:
+
+1. **Discuss phase**: Use `langchain.agents.create_agent` for autonomous exploration with tools
+2. **Prompt management**: Use `ChatPromptTemplate` from `langchain_core.prompts` instead of custom compiler
+3. **Structured output**: Use `with_structured_output()` with provider-specific strategies:
+   - Ollama: `ToolStrategy` (more reliable for qwen3:8b)
+   - OpenAI: `ProviderStrategy` (native JSON mode)
+4. **Provider abstraction**: Keep `LLMProvider` protocol as a thin adapter layer over LangChain chat models
+5. **Unified orchestration**: `ConversationRunner` wraps three-phase pattern (Discuss → Summarize → Serialize) without reimplementing the agent loop
+
+### Rationale
+
+- **Leverage ecosystem**: LangChain is the standard for agent patterns in Python; use its primitives
+- **Reduce maintenance**: Remove 500+ lines of custom agent loop code
+- **Improve reliability**: Use battle-tested tool calling and structured output handling
+- **Better provider portability**: LangChain's abstractions handle provider differences
+- **Preserve our patterns**: Keep `LLMProvider` protocol and validation/repair loops that are QuestFoundry-specific
+- **Incremental adoption**: Don't require full LangGraph (agents are sufficient for DREAM); can migrate to LangGraph later if needed
+
+### Consequences
+
+- **Dependency on LangChain ecosystem**: New dependency on `langchain_core`, `langchain_community` (already in use)
+- **Simplified codebase**: Remove `agents/` submodule; DREAM uses agents library instead
+- **Provider-agnostic tool calling**: Tool handling delegated to LangChain (handles Ollama, OpenAI, Anthropic differences)
+- **ChatPromptTemplate adoption**: Update prompt compiler integration to work with LangChain templates if needed
+- **Testing changes**: Agent tests simplified; focus on orchestration (ConversationRunner) rather than agent loop details
+
+---
+
 ## Template
 
 ```markdown

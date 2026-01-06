@@ -36,13 +36,14 @@ DRESS stage (art direction) is deferred for later implementation.
 - **typer + rich** for CLI
 - **ruamel.yaml** for YAML with comment preservation
 - **pydantic** for data validation
-- **litellm** or direct clients for LLM integration
+- **LangChain** for LLM providers and agent patterns (stages use `langchain.agents`, `ChatPromptTemplate`)
 - **pytest** with 70% coverage target
 - **Async throughout** for LLM calls
 
 ### LLM Providers
 - Primary: **Ollama** (qwen3:8b) at `http://athena.int.liesdonk.nl:11434`
 - Secondary: **OpenAI** (API key in .env)
+- Provider interface via `LangChainProvider` adapter (supports any LangChain chat model)
 
 ## Development Guidelines
 
@@ -499,6 +500,120 @@ Since artifacts will be interpreted by other LLMs (not programmatic code), prefe
 
 This allows LLM-generated variations like "adults" or "extensive" to pass validation
 while still providing guidance through examples in the prompt template.
+
+## DREAM Stage Implementation
+
+The DREAM stage is the reference implementation for new stages. Key patterns:
+
+### Three-Phase Pattern
+
+All stages use the same **Discuss → Summarize → Serialize** pattern:
+
+1. **Discuss**: Explore/refine via dialogue and research tools (using `langchain.agents`)
+2. **Summarize**: Distill into concise narrative (direct model call)
+3. **Serialize**: Convert to validated YAML (structured output via `with_structured_output()`)
+
+The `ConversationRunner` orchestrates all three phases and handles:
+- Tool execution and result collection
+- Validation and repair loops (max 3 retries)
+- Message history management
+- Token counting and logging
+
+### Provider Strategies for Structured Output
+
+When serializing structured output (phase 3), strategy depends on provider:
+
+```python
+# Ollama: Use ToolStrategy (more reliable for qwen3:8b)
+from langchain_core.pydantic_v1 import BaseModel
+model_with_tools = model.with_structured_output(
+    schema=DreamArtifact,
+    method="tool",  # Force tool-based schema
+)
+
+# OpenAI: Use ProviderStrategy (native JSON mode)
+model_with_json = model.with_structured_output(
+    schema=DreamArtifact,
+    method="json_mode",  # Use native JSON schema support
+)
+```
+
+**Why two strategies?**
+- Ollama's JSON mode is inconsistent; tool-based forcing is more reliable
+- OpenAI's JSON mode is native and faster; tool overhead is unnecessary
+
+### Prompt Management
+
+**Old approach** (custom compiler):
+- Template variables: `{{ user_prompt }}`, `{{ research_tools }}`
+- Custom YAML/JSON extraction logic
+- Prompt compilation tied to Python code
+
+**New approach** (ChatPromptTemplate):
+- LangChain's `ChatPromptTemplate` for variable injection
+- Template stored externally (prompts/templates/dream.md)
+- Separated from serialization logic
+
+When building prompts for stages:
+1. Create `prompts/templates/stagename.md` with template text
+2. Use `ChatPromptTemplate.from_template()` to load and parameterize
+3. Pass variables dict to template compilation
+4. Never hardcode prompts in Python—always externalize
+
+### Tool Response Format
+
+All tool results must return structured JSON (per ADR-008):
+
+```python
+# Success
+{
+    "result": "success",
+    "data": { ... },
+    "action": "Use this information to inform decisions."
+}
+
+# No results
+{
+    "result": "no_results",
+    "query": "...",
+    "action": "No matching guidance found. Proceed with your instincts."
+}
+
+# Error
+{
+    "result": "error",
+    "error": "Connection timeout",
+    "action": "Tool unavailable. Continue without this information."
+}
+```
+
+This prevents infinite loops where LLM follows "try again" instructions repeatedly.
+
+### Validation & Repair Loop
+
+When structured output validation fails:
+
+```python
+def _validate_dream(self, data: dict[str, Any]) -> ValidationResult:
+    """Validate using Pydantic model.
+
+    Returns structured errors that guide LLM correction.
+    """
+    try:
+        DreamArtifact.model_validate(data)
+        return ValidationResult(valid=True, data=...)
+    except ValidationError as e:
+        # Convert to structured errors (field, issue, requirement)
+        return ValidationResult(
+            valid=False,
+            errors=pydantic_errors_to_details(e.errors()),
+            expected_fields=get_all_field_paths(DreamArtifact),
+        )
+```
+
+The error format tells LLM exactly what's wrong and what to fix, enabling recovery in 1-2 retries.
+
+---
 
 ## Related Resources
 
