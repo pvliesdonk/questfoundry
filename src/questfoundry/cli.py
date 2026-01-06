@@ -6,7 +6,7 @@ import asyncio
 import atexit
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from dotenv import load_dotenv
@@ -331,14 +331,12 @@ def dream(
 
                 def _prompt() -> str:
                     with patch_stdout():
-                        return cast(
-                            "str",
-                            session.prompt(
-                                HTML("<b><ansicyan>You</ansicyan></b>: "),
-                                multiline=True,
-                                key_bindings=bindings,
-                            ),
+                        prompt_text: str = session.prompt(
+                            HTML("<b><ansicyan>You</ansicyan></b>: "),
+                            multiline=True,
+                            key_bindings=bindings,
                         )
+                        return prompt_text
 
                 user_input = await loop.run_in_executor(None, _prompt)
                 return user_input if user_input.strip() else None
