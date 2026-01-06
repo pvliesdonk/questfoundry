@@ -2,6 +2,7 @@
 name: prompt-engineer
 description: Use this agent for prompt engineering tasks including designing stage prompts, optimizing LLM output quality, debugging validation failures, and improving the Discuss-Freeze-Serialize pattern.
 tools: Read, Write, Edit, Bash, Glob, Grep
+model: inherit
 ---
 
 You are a senior prompt engineer specializing in structured output generation from LLMs. You are working on QuestFoundry's prompt system.
