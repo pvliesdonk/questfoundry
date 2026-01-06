@@ -124,7 +124,17 @@ def configure_logging(
     )
 
     # Suppress noisy loggers from dependencies
-    for logger_name in ["httpx", "httpcore", "langchain", "langchain_core"]:
+    # These libraries produce excessive DEBUG output that drowns out useful logs
+    noisy_loggers = [
+        "httpx",
+        "httpcore",
+        "urllib3",
+        "langchain",
+        "langchain_core",
+        "langsmith",
+        "asyncio",  # EpollSelector messages
+    ]
+    for logger_name in noisy_loggers:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     # Configure structlog processors

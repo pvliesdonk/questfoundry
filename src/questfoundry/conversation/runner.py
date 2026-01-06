@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation.state import ConversationState
+from questfoundry.observability.logging import get_logger
 from questfoundry.tools import ReadyToSummarizeTool, Tool
+
+log = get_logger(__name__)
 
 # Default configuration values
 DEFAULT_MAX_DISCUSS_TURNS = 10
@@ -184,17 +187,38 @@ class ConversationRunner:
             ConversationError: If any phase fails.
         """
         state = ConversationState(messages=list(initial_messages), phase="discuss")
+        interactive = user_input_fn is not None
+        log.info(
+            "conversation_start",
+            interactive=interactive,
+            max_discuss_turns=self._max_discuss_turns,
+        )
 
         # Phase 1: Discuss
+        log.debug("phase_start", phase="discuss", research_tools=len(self._research_tools))
         await self._discuss_phase(state, user_input_fn, on_assistant_message)
+        log.debug(
+            "phase_complete",
+            phase="discuss",
+            turns=state.turn_count,
+            llm_calls=state.llm_calls,
+        )
 
         # Phase 2: Summarize
         state.phase = "summarize"
+        log.debug("phase_start", phase="summarize")
         summary = await self._summarize_phase(state, summary_prompt, on_assistant_message)
+        log.debug("phase_complete", phase="summarize", summary_length=len(summary))
 
         # Phase 3: Serialize
         state.phase = "serialize"
+        log.debug("phase_start", phase="serialize")
         artifact = await self._serialize_phase(state, summary, validator, on_assistant_message)
+        log.info(
+            "conversation_complete",
+            total_llm_calls=state.llm_calls,
+            total_tokens=state.tokens_used,
+        )
 
         return artifact, state
 
@@ -228,6 +252,13 @@ class ConversationRunner:
             )
             state.llm_calls += 1
             state.tokens_used += response.tokens_used
+            log.debug(
+                "llm_response",
+                phase="discuss",
+                turn=state.turn_count,
+                tool_calls=len(response.tool_calls) if response.tool_calls else 0,
+                tokens=response.tokens_used,
+            )
 
             # Add assistant message
             if response.content:
@@ -241,6 +272,11 @@ class ConversationRunner:
 
                 # Check tool call limit to prevent infinite loops
                 if tool_call_count > DEFAULT_MAX_TOOL_CALLS:
+                    log.warning(
+                        "tool_call_limit_exceeded",
+                        limit=DEFAULT_MAX_TOOL_CALLS,
+                        count=tool_call_count,
+                    )
                     raise ConversationError(
                         f"Exceeded maximum tool calls ({DEFAULT_MAX_TOOL_CALLS}) in discuss phase. "
                         "This may indicate the LLM is stuck in a tool call loop.",
@@ -249,6 +285,7 @@ class ConversationRunner:
 
                 ready_to_proceed = await self._handle_discuss_tools(response.tool_calls, state)
                 if ready_to_proceed:
+                    log.debug("discuss_exit", reason="ready_to_summarize")
                     return  # LLM signaled ready to summarize
                 # Tool was executed - loop back to see LLM response to tool result
                 # without incrementing turn count (tool calls don't count as turns)
@@ -260,12 +297,15 @@ class ConversationRunner:
                 if user_input:
                     # Check for /done signal
                     if user_input.strip().lower() == USER_DONE_SIGNAL:
+                        log.debug("discuss_exit", reason="user_done")
                         return  # User signaled ready to summarize
                     state.add_message({"role": "user", "content": user_input})
+                    log.debug("user_input_received", length=len(user_input))
 
             state.turn_count += 1
 
         # Max turns reached - auto-transition to summarize
+        log.debug("discuss_exit", reason="max_turns", turns=state.turn_count)
 
     async def _handle_discuss_tools(
         self,
@@ -287,12 +327,18 @@ class ConversationRunner:
         for tc in tool_calls:
             # Check for ready_to_summarize signal
             if tc.name == "ready_to_summarize":
+                log.debug("tool_call", tool="ready_to_summarize", action="signal")
                 result = self._ready_tool.execute(tc.arguments)
                 state.add_tool_result(tc.id, result)
                 return True
 
             # Reject finalization tool in discuss phase
             if tc.name == self._finalization_tool_name:
+                log.debug(
+                    "tool_call_rejected",
+                    tool=tc.name,
+                    reason="finalization_in_discuss",
+                )
                 state.add_tool_result(
                     tc.id,
                     json.dumps(
@@ -308,6 +354,7 @@ class ConversationRunner:
             # Execute research tool
             tool = self._discuss_tools.get(tc.name)
             if tool is None:
+                log.warning("tool_call_unknown", tool=tc.name)
                 state.add_tool_result(
                     tc.id,
                     json.dumps({"error": f"Unknown tool '{tc.name}'"}),
@@ -315,11 +362,18 @@ class ConversationRunner:
                 continue
 
             try:
+                log.debug("tool_call_start", tool=tc.name)
                 result = tool.execute(tc.arguments)
                 state.add_tool_result(tc.id, result)
+                log.debug(
+                    "tool_call_complete",
+                    tool=tc.name,
+                    result_length=len(result) if result else 0,
+                )
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception as e:
+                log.warning("tool_call_error", tool=tc.name, error=str(e), exc_info=True)
                 state.add_tool_result(
                     tc.id,
                     json.dumps({"error": f"Error executing {tc.name}: {e}"}),
@@ -413,6 +467,8 @@ class ConversationRunner:
 
         max_attempts = self._validation_retries + 1
         for attempt in range(max_attempts):
+            log.debug("serialize_attempt", attempt=attempt + 1, max_attempts=max_attempts)
+
             # Call LLM with finalization tool only, forced
             response = await self._provider.complete(
                 messages=state.messages,
@@ -438,6 +494,10 @@ class ConversationRunner:
 
             # No tool call = explicit failure (no YAML fallback)
             if tool_call is None:
+                log.error(
+                    "serialize_no_tool_call",
+                    expected_tool=self._finalization_tool_name,
+                )
                 raise ConversationError(
                     f"Provider did not return {self._finalization_tool_name} tool call. "
                     "Ensure you are using a tool-capable provider/model.",
@@ -457,9 +517,17 @@ class ConversationRunner:
                 # Validation passed - confirm and return
                 result_message = self._finalization_tool.execute(validated_data)
                 state.add_tool_result(tool_call.id, result_message)
+                log.debug("serialize_validation_passed", attempt=attempt + 1)
                 return validated_data
 
             # Validation failed - retry if attempts remain
+            error_count = len(validation_result.errors) if validation_result.errors else 0
+            log.debug(
+                "serialize_validation_failed",
+                attempt=attempt + 1,
+                error_count=error_count,
+                retries_remaining=max_attempts - attempt - 1,
+            )
             if attempt < max_attempts - 1:
                 feedback = self._build_validation_feedback(
                     data, validation_result, self._finalization_tool_name, include_schema=True
@@ -467,6 +535,10 @@ class ConversationRunner:
                 state.add_tool_result(tool_call.id, json.dumps(feedback, indent=2))
             # else: last attempt failed, will raise after loop
 
+        log.warning(
+            "serialize_validation_exhausted",
+            retries=self._validation_retries,
+        )
         raise ConversationError(
             f"Validation failed after {self._validation_retries} retries",
             state,

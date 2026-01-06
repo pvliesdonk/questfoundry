@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
+from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.prompts import PromptCompiler
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from questfoundry.providers import LLMProvider
     from questfoundry.tools import Tool
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 @dataclass
@@ -188,11 +188,16 @@ class PipelineOrchestrator:
 
             corpus_tools = get_corpus_tools()
             if corpus_tools:
-                logger.debug("Loaded %d corpus tools", len(corpus_tools))
+                log.debug("research_tools_loaded", tool_type="corpus", count=len(corpus_tools))
                 tools.extend(corpus_tools)
             else:
                 # Log at warning since user explicitly enabled but deps unavailable
-                logger.warning("IF Craft Corpus not installed, corpus tools disabled")
+                log.warning(
+                    "research_tools_unavailable",
+                    tool_type="corpus",
+                    reason="ifcraftcorpus not installed",
+                    package="ifcraftcorpus",
+                )
 
         # Get web tools if enabled
         if config.web_search or config.web_fetch:
@@ -209,11 +214,16 @@ class PipelineOrchestrator:
                     or (tool.definition.name == "web_fetch" and config.web_fetch)
                 ]
                 if filtered:
-                    logger.debug("Loaded %d web tools", len(filtered))
+                    log.debug("research_tools_loaded", tool_type="web", count=len(filtered))
                     tools.extend(filtered)
             else:
                 # Log at warning since user explicitly enabled but deps unavailable
-                logger.warning("pvl-webtools not installed, web tools disabled")
+                log.warning(
+                    "research_tools_unavailable",
+                    tool_type="web",
+                    reason="pvl-webtools not installed",
+                    package="pvl-webtools",
+                )
 
         return tools
 
@@ -254,6 +264,7 @@ class PipelineOrchestrator:
         start_time = time.perf_counter()
         context = context or {}
         errors: list[str] = []
+        log.info("stage_start", stage=stage_name)
 
         try:
             # Get stage implementation
@@ -263,6 +274,7 @@ class PipelineOrchestrator:
             provider = self._get_provider()
             if self._enable_llm_logging:
                 provider = LoggingProvider(provider, self._llm_logger, stage_name)
+                log.debug("llm_logging_enabled", stage=stage_name)
 
             # Create prompt compiler
             compiler = PromptCompiler(self._prompts_path)
@@ -271,8 +283,14 @@ class PipelineOrchestrator:
             research_tools = self._get_research_tools()
             if research_tools:
                 context["research_tools"] = research_tools
+                log.debug(
+                    "research_tools_configured",
+                    stage=stage_name,
+                    tool_names=[t.definition.name for t in research_tools],
+                )
 
             # Execute stage
+            log.debug("stage_execute", stage=stage_name)
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 context=context,
                 provider=provider,
@@ -282,12 +300,18 @@ class PipelineOrchestrator:
             # Validate artifact
             validation_errors = self._validator.validate(artifact_data, stage_name)
             if validation_errors:
+                log.warning(
+                    "artifact_validation_failed",
+                    stage=stage_name,
+                    error_count=len(validation_errors),
+                )
                 errors.extend(validation_errors)
 
             # Only write artifact if validation passed
             artifact_path: Path | None = None
             if not validation_errors:
                 artifact_path = self._writer.write(artifact_data, stage_name)
+                log.debug("artifact_written", stage=stage_name, path=str(artifact_path))
 
             # Calculate duration
             duration = time.perf_counter() - start_time
@@ -306,6 +330,16 @@ class PipelineOrchestrator:
             gate_decision = await self._gate.on_stage_complete(stage_name, result)
             if gate_decision == "reject":
                 result.status = "pending_review"
+                log.info("gate_rejected", stage=stage_name)
+
+            log.info(
+                "stage_complete",
+                stage=stage_name,
+                status=result.status,
+                llm_calls=llm_calls,
+                tokens=tokens_used,
+                duration=f"{duration:.2f}s",
+            )
 
             return result
 
@@ -313,6 +347,13 @@ class PipelineOrchestrator:
             raise
         except Exception as e:
             duration = time.perf_counter() - start_time
+            log.error(
+                "stage_failed",
+                stage=stage_name,
+                error=str(e),
+                duration=f"{duration:.2f}s",
+                exc_info=True,
+            )
             return StageResult(
                 stage=stage_name,
                 status="failed",

@@ -54,6 +54,41 @@ DRESS stage (art direction) is deferred for later implementation.
 - **Tests first** where practical
 - Keep functions focused and small
 
+### Logging
+
+Use **structlog** via `get_logger()` for all application logging:
+
+```python
+from questfoundry.observability.logging import get_logger
+
+log = get_logger(__name__)
+
+# Structured event logging (preferred)
+log.info("stage_complete", stage="dream", tokens=1234, duration="5.2s")
+log.debug("tool_call_start", tool="search_corpus", query="mystery")
+log.warning("validation_failed", field="genre", error="empty string")
+log.error("provider_error", provider="ollama", message=str(e))
+```
+
+**Log Levels:**
+- `INFO`: High-level flow events visible at default verbosity (stage start/complete, conversation phases)
+- `DEBUG`: Detailed events for troubleshooting (tool calls, validation details, LLM responses)
+- `WARNING`: Recoverable issues (missing optional config, fallbacks activated)
+- `ERROR`: Failures that stop execution (provider errors, validation exhausted)
+
+**Event Naming:**
+- Use `snake_case` event names as the first argument
+- Add structured key=value context, not string interpolation
+- Good: `log.info("stage_complete", stage="dream", tokens=1234)`
+- Bad: `log.info(f"Stage dream completed with {tokens} tokens")`
+
+**What to Log:**
+- Phase/stage transitions (INFO)
+- Tool calls and results (DEBUG)
+- Validation attempts and failures (DEBUG/WARNING)
+- LLM call counts and token usage (INFO at completion)
+- Errors with context for debugging (ERROR/WARNING)
+
 ### Schema Workflow (CRITICAL: Source of Truth)
 
 **The JSON Schema is the SINGLE SOURCE OF TRUTH for artifact structure.**

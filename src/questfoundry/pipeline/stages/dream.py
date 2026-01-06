@@ -15,7 +15,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.conversation import ConversationRunner, ValidationResult
+from questfoundry.observability.logging import get_logger
 from questfoundry.tools import SubmitDreamTool
+
+log = get_logger(__name__)
 
 if TYPE_CHECKING:
     from questfoundry.prompts import PromptCompiler
@@ -76,11 +79,19 @@ class DreamStage:
         on_assistant_message = context.get("on_assistant_message")
         research_tools: list[Tool] = context.get("research_tools") or []
 
+        log.debug(
+            "dream_execute_start",
+            interactive=interactive,
+            prompt_length=len(user_prompt),
+            research_tools=len(research_tools),
+        )
+
         # Build prompt context
         prompt_context = self._build_prompt_context(user_prompt, research_tools, interactive)
 
         # Compile prompt
         prompt = compiler.compile("dream", prompt_context)
+        log.debug("prompt_compiled", template="dream")
 
         # Build initial messages
         initial_messages: list[Message] = [

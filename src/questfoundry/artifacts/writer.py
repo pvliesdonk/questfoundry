@@ -8,6 +8,10 @@ from typing import Any
 from pydantic import BaseModel
 from ruamel.yaml import YAML
 
+from questfoundry.observability.logging import get_logger
+
+log = get_logger(__name__)
+
 
 class ArtifactWriteError(Exception):
     """Raised when an artifact file can't be written."""
@@ -77,8 +81,10 @@ class ArtifactWriter:
             with path.open("w", encoding="utf-8") as f:
                 self._yaml.dump(data, f)
 
+            log.debug("artifact_written", stage=stage_name, path=str(path))
             return path
         except Exception as e:
+            log.error("artifact_write_error", stage=stage_name, path=str(path), error=str(e))
             if isinstance(e, ArtifactWriteError):
                 raise
             raise ArtifactWriteError(stage_name, path, str(e)) from e
