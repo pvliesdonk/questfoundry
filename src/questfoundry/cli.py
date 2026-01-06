@@ -6,11 +6,17 @@ import asyncio
 import atexit
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 import typer
 from dotenv import load_dotenv
+from prompt_toolkit import PromptSession
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
@@ -26,6 +32,8 @@ def _is_interactive_tty() -> bool:
 load_dotenv()
 
 if TYPE_CHECKING:
+    from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+
     from questfoundry.pipeline import PipelineOrchestrator, StageResult
 
 app = typer.Typer(
@@ -300,27 +308,68 @@ def dream(
     if use_interactive:
         log.debug("interactive_mode", mode="enabled")
 
+        session: PromptSession[str] = PromptSession(multiline=True)
+        bindings = KeyBindings()
+
+        def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+            """Enter submits the current buffer."""
+            event.current_buffer.validate_and_handle()
+
+        bindings.add("enter")(_submit)
+
+        def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+            """Ctrl+Enter (Ctrl+J) inserts a newline."""
+            event.current_buffer.insert_text("\n")
+
+        bindings.add("c-j")(_insert_newline)
+
         async def _async_user_input() -> str | None:
-            """Get user input asynchronously."""
+            """Get user input asynchronously with prompt_toolkit."""
             console.print()
             try:
-                # Use run_in_executor for blocking input
                 loop = asyncio.get_running_loop()
-                user_input = await loop.run_in_executor(
-                    None, lambda: console.input("[bold cyan]You:[/bold cyan] ")
-                )
+
+                def _prompt() -> str:
+                    with patch_stdout():
+                        return cast(
+                            "str",
+                            session.prompt(
+                                HTML("<b><ansicyan>You</ansicyan></b>: "),
+                                multiline=True,
+                                key_bindings=bindings,
+                            ),
+                        )
+
+                user_input = await loop.run_in_executor(None, _prompt)
                 return user_input if user_input.strip() else None
             except (EOFError, KeyboardInterrupt):
                 return None
 
         def _display_assistant_message(content: str) -> None:
-            """Display assistant message with formatting."""
+            """Display assistant message with richer formatting."""
             console.print()
-            console.print("[bold green]Assistant:[/bold green]")
-            console.print(content)
+            renderable = Markdown(content)
+            panel = Panel.fit(
+                renderable,
+                title="Assistant",
+                title_align="left",
+                border_style="green",
+            )
+            console.print(panel)
 
         context["user_input_fn"] = _async_user_input
         context["on_assistant_message"] = _display_assistant_message
+
+        thinking_indicator = "[dim]••• thinking •••[/dim]"
+
+        def _on_llm_start(_: str) -> None:
+            console.print(thinking_indicator, end="\r")
+
+        def _on_llm_end(_: str) -> None:
+            console.print(" " * len("••• thinking •••"), end="\r")
+
+        context["on_llm_start"] = _on_llm_start
+        context["on_llm_end"] = _on_llm_end
     else:
         log.debug("interactive_mode", mode="disabled")
 

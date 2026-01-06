@@ -78,6 +78,8 @@ class DreamStage:
         user_input_fn = context.get("user_input_fn")
         on_assistant_message = context.get("on_assistant_message")
         research_tools: list[Tool] = context.get("research_tools") or []
+        on_llm_start = context.get("on_llm_start")
+        on_llm_end = context.get("on_llm_end")
 
         log.debug(
             "dream_execute_start",
@@ -117,6 +119,8 @@ class DreamStage:
             validator=self._validate_dream,
             summary_prompt=self._get_summary_prompt(),
             on_assistant_message=on_assistant_message,
+            on_llm_start=on_llm_start,
+            on_llm_end=on_llm_end,
         )
 
         # Add required fields
