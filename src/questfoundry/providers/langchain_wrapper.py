@@ -144,8 +144,8 @@ class LangChainProvider:
         elif tool_choice == "none":
             return "none"
         else:
-            # Specific tool name - format for forced function call
-            return {"type": "function", "function": {"name": tool_choice}}
+            # Specific tool name - LangChain/Ollama prefer the simple string name
+            return tool_choice
 
     def _to_langchain_message(self, msg: Message) -> Any:
         """Convert our Message to LangChain message."""
