@@ -1,7 +1,7 @@
 # LangChain DREAM Pipeline Architecture
 
 **Last Updated**: 2026-01-06
-**Status**: Implemented
+**Status**: Designed (Implementation in progress - PR2-PR9)
 
 ---
 
@@ -170,25 +170,29 @@ Uses `ChatPromptTemplate` from `langchain_core.prompts`:
 
 ### Tool-Based Finalization
 
-The `SubmitDreamTool` is a Pydantic model that:
-- Defines the JSON schema for the DreamArtifact
-- Forces structured output through the tool mechanism
-- Prevents hallucinated or incomplete artifacts
+The `SubmitDreamTool` is a `Tool` class that uses the `DreamArtifact` Pydantic model to define its argument schema. This ensures that:
+- The JSON schema for the artifact is communicated to the LLM
+- The LLM is forced to use structured output via the tool-calling mechanism
+- Hallucinated or incomplete artifacts are prevented
 
 ```python
-class SubmitDreamTool:
-    """Tool that captures complete dream artifact."""
+from questfoundry.tools import Tool, ToolDefinition
 
-    # Schema matches DreamArtifact pydantic model
-    genre: str
-    tone: str
-    themes: list[str]
-    audience: str
-    scope: str
-    # ... other fields
+class SubmitDreamTool(Tool):
+    """Tool that captures the complete dream artifact."""
+
+    @property
+    def definition(self) -> ToolDefinition:
+        # The parameters for this tool are generated from the
+        # DreamArtifact schema to ensure they are always in sync.
+        return ToolDefinition(
+            name="submit_dream",
+            description="Submit the finalized creative vision.",
+            parameters=...  # Generated from dream.schema.json
+        )
 ```
 
-When LLM calls this tool, its arguments are extracted and validated.
+When the LLM calls this tool, its arguments are extracted and validated against the schema.
 
 ---
 
@@ -420,7 +424,7 @@ When enabled (via CLI `--log` or env `LANGSMITH_TRACING=true`):
 
 ## References
 
-- **Discuss Phase**: Uses `langchain.agents` (agentless initially, can upgrade)
+- **Discuss Phase**: Uses a standard LangChain agent (`langchain.agents.create_agent`), which can be upgraded to a more complex agentic system (e.g., LangGraph) later
 - **Summarize Phase**: Direct model call via `LangChainProvider.complete()`
 - **Serialize Phase**: `with_structured_output()` + validation/repair loop
 - **Provider Interface**: Protocol-based, implementation-agnostic

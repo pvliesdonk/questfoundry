@@ -503,7 +503,7 @@ while still providing guidance through examples in the prompt template.
 
 ## DREAM Stage Implementation
 
-The DREAM stage is the reference implementation for new stages. Key patterns:
+The DREAM stage is the reference implementation for new stages (see [ADR-009](docs/architecture/decisions.md#adr-009-langchain-agents-for-dream-stage)). Key patterns:
 
 ### Three-Phase Pattern
 
@@ -525,7 +525,6 @@ When serializing structured output (phase 3), strategy depends on provider:
 
 ```python
 # Ollama: Use ToolStrategy (more reliable for qwen3:8b)
-from langchain_core.pydantic_v1 import BaseModel
 model_with_tools = model.with_structured_output(
     schema=DreamArtifact,
     method="tool",  # Force tool-based schema
@@ -544,12 +543,7 @@ model_with_json = model.with_structured_output(
 
 ### Prompt Management
 
-**Old approach** (custom compiler):
-- Template variables: `{{ user_prompt }}`, `{{ research_tools }}`
-- Custom YAML/JSON extraction logic
-- Prompt compilation tied to Python code
-
-**New approach** (ChatPromptTemplate):
+Using `ChatPromptTemplate`:
 - LangChain's `ChatPromptTemplate` for variable injection
 - Template stored externally (prompts/templates/dream.md)
 - Separated from serialization logic

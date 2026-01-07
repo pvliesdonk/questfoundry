@@ -304,7 +304,7 @@ Replace custom agent infrastructure with **LangChain-native patterns**:
 - **Dependency on LangChain ecosystem**: New dependency on `langchain_core`, `langchain_community` (already in use)
 - **Simplified codebase**: Remove `agents/` submodule; DREAM uses agents library instead
 - **Provider-agnostic tool calling**: Tool handling delegated to LangChain (handles Ollama, OpenAI, Anthropic differences)
-- **ChatPromptTemplate adoption**: Update prompt compiler integration to work with LangChain templates if needed
+- **ChatPromptTemplate adoption**: The custom prompt compiler will be replaced or adapted to use `ChatPromptTemplate` for managing prompts
 - **Testing changes**: Agent tests simplified; focus on orchestration (ConversationRunner) rather than agent loop details
 
 ---

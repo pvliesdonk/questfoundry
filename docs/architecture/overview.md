@@ -36,17 +36,19 @@ questfoundry/
 
 ## Component Status
 
+> **Note**: Status reflects the target state after the current PR stack (PR1-PR9) is complete. See individual PRs for implementation progress.
+
 ### Implemented
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Project skeleton | Done | pyproject.toml, directories, basic CLI |
 | CLI entry point | Done | `qf version`, `qf status`, `qf dream` |
-| DREAM stage | Done | Three-phase pattern (Discuss → Summarize → Serialize) |
-| ConversationRunner | Done | Orchestrates three-phase flow with tool support |
+| DREAM stage | Designed | Three-phase pattern (Discuss → Summarize → Serialize) |
+| ConversationRunner | Designed | Orchestrates three-phase flow with tool support |
 | Prompt compiler | Done | Template-based variable substitution |
 | Provider interface | Done | LangChainProvider adapter, Ollama and OpenAI support |
-| Validation & repair | Done | Structured error feedback, max 3 retries |
+| Validation & repair | Designed | Structured error feedback, max 3 retries |
 
 ### In Progress (Later Slices)
 
