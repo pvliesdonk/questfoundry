@@ -12,6 +12,16 @@ from questfoundry.tools.finalization import (
     SubmitDreamTool,
     get_finalization_tool,
 )
+from questfoundry.tools.langchain_tools import (
+    get_all_research_tools,
+    get_corpus_tools,
+    get_document,
+    get_web_tools,
+    list_clusters,
+    search_corpus,
+    web_fetch,
+    web_search,
+)
 
 __all__ = [
     "ReadyToSummarizeTool",
@@ -20,5 +30,13 @@ __all__ = [
     "Tool",
     "ToolCall",
     "ToolDefinition",
+    "get_all_research_tools",
+    "get_corpus_tools",
+    "get_document",
     "get_finalization_tool",
+    "get_web_tools",
+    "list_clusters",
+    "search_corpus",
+    "web_fetch",
+    "web_search",
 ]
