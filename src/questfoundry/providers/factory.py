@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.observability.logging import get_logger
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.langchain_wrapper import LangChainProvider
+from questfoundry.providers.structured_output import (
+    StructuredOutputStrategy,
+    with_structured_output,
+)
+
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
+    from pydantic import BaseModel
 
 log = get_logger(__name__)
 
@@ -128,3 +136,155 @@ def _create_anthropic(model: str, **kwargs: Any) -> LangChainProvider:
     )
 
     return LangChainProvider(chat_model, model)
+
+
+def create_model_for_structured_output(
+    provider_name: str,
+    model_name: str | None = None,
+    schema: type[BaseModel] | None = None,
+    strategy: StructuredOutputStrategy | None = None,
+    **kwargs: Any,
+) -> BaseChatModel | Any:
+    """Create a chat model configured for structured output.
+
+    This is a convenience function for creating a model that enforces
+    structured output according to a Pydantic schema. It wraps the base
+    model with LangChain's structured output support.
+
+    Args:
+        provider_name: Provider (ollama, openai, anthropic).
+        model_name: Model name. Uses provider default if None.
+        schema: Pydantic schema for structured output validation.
+        strategy: Output strategy (auto-selected if None).
+        **kwargs: Additional model kwargs (temperature, api_key, host, etc.).
+
+    Returns:
+        Configured BaseChatModel with structured output support.
+
+    Raises:
+        ProviderError: If provider is unavailable or misconfigured.
+        ValueError: If schema is required but not provided.
+
+    Example:
+        ```python
+        from pydantic import BaseModel
+
+        class StoryOutline(BaseModel):
+            title: str
+            genre: str
+            plot_points: list[str]
+
+        model = create_model_for_structured_output(
+            "ollama",
+            model_name="qwen3:8b",
+            schema=StoryOutline,
+        )
+        ```
+    """
+    provider_name_lower = provider_name.lower()
+
+    # Get base model based on provider
+    if provider_name_lower == "ollama":
+        base_model = _create_ollama_base_model(model_name or "qwen3:8b", **kwargs)
+    elif provider_name_lower == "openai":
+        base_model = _create_openai_base_model(model_name or "gpt-4o-mini", **kwargs)
+    elif provider_name_lower == "anthropic":
+        base_model = _create_anthropic_base_model(model_name or "claude-3-5-sonnet", **kwargs)
+    else:
+        log.error("provider_unknown", provider=provider_name_lower)
+        raise ProviderError(provider_name_lower, f"Unknown provider: {provider_name_lower}")
+
+    # Apply structured output if schema provided
+    if schema is not None:
+        base_model = with_structured_output(  # type: ignore[assignment]
+            base_model,
+            schema,
+            strategy=strategy,
+            provider_name=provider_name_lower,
+        )
+
+    log.info(
+        "model_created_structured",
+        provider=provider_name_lower,
+        model=model_name,
+        has_schema=schema is not None,
+    )
+    return base_model
+
+
+def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
+    """Create base Ollama chat model (unstructured)."""
+    try:
+        from langchain_ollama import ChatOllama
+    except ImportError as e:
+        log.error("provider_import_error", provider="ollama", package="langchain-ollama")
+        raise ProviderError(
+            "ollama",
+            "langchain-ollama not installed. Run: uv add langchain-ollama",
+        ) from e
+
+    host = kwargs.get("host") or os.getenv("OLLAMA_HOST")
+    if not host:
+        log.error("provider_config_error", provider="ollama", missing="OLLAMA_HOST")
+        raise ProviderError(
+            "ollama",
+            "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
+        )
+
+    return ChatOllama(  # type: ignore[no-any-return]
+        model=model,
+        base_url=host,
+        temperature=kwargs.get("temperature", 0.7),
+    )
+
+
+def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
+    """Create base OpenAI chat model (unstructured)."""
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError as e:
+        log.error("provider_import_error", provider="openai", package="langchain-openai")
+        raise ProviderError(
+            "openai",
+            "langchain-openai not installed. Run: uv add langchain-openai",
+        ) from e
+
+    api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        log.error("provider_config_error", provider="openai", missing="OPENAI_API_KEY")
+        raise ProviderError(
+            "openai",
+            "API key required. Set OPENAI_API_KEY environment variable.",
+        )
+
+    return ChatOpenAI(
+        model=model,
+        api_key=api_key,  # type: ignore[arg-type]
+        temperature=kwargs.get("temperature", 0.7),
+    )
+
+
+def _create_anthropic_base_model(model: str, **kwargs: Any) -> BaseChatModel:
+    """Create base Anthropic chat model (unstructured)."""
+    try:
+        from langchain_anthropic import ChatAnthropic
+    except ImportError as e:
+        log.error("provider_import_error", provider="anthropic", package="langchain-anthropic")
+        raise ProviderError(
+            "anthropic",
+            "langchain-anthropic not installed. Run: uv add langchain-anthropic",
+        ) from e
+
+    api_key = kwargs.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        log.error("provider_config_error", provider="anthropic", missing="ANTHROPIC_API_KEY")
+        raise ProviderError(
+            "anthropic",
+            "API key required. Set ANTHROPIC_API_KEY environment variable.",
+        )
+
+    return ChatAnthropic(
+        model=model,  # type: ignore[call-arg]
+        api_key=api_key,  # type: ignore[arg-type]
+        temperature=kwargs.get("temperature", 0.7),
+    )
