@@ -11,15 +11,29 @@ All tools return JSON strings following ADR-008:
 
 Usage:
     from questfoundry.tools.langchain_tools import get_all_research_tools
-    from langchain.agents import create_react_agent
+    from langchain.agents import create_agent  # LangChain v1.0+
 
     tools = get_all_research_tools()
-    agent = create_react_agent(llm, tools, prompt)
+    agent = create_agent(model, tools=tools, prompt=prompt)
 """
 
 from __future__ import annotations
 
 from langchain_core.tools import BaseTool, tool
+
+from questfoundry.tools.research.corpus_tools import (
+    GetDocumentTool,
+    ListClustersTool,
+    SearchCorpusTool,
+)
+from questfoundry.tools.research.web_tools import WebFetchTool, WebSearchTool
+
+# Module-level tool instances (reused across invocations)
+_search_corpus_tool = SearchCorpusTool()
+_get_document_tool = GetDocumentTool()
+_list_clusters_tool = ListClustersTool()
+_web_search_tool = WebSearchTool()
+_web_fetch_tool = WebFetchTool()
 
 
 @tool
@@ -43,13 +57,8 @@ def search_corpus(query: str, cluster: str | None = None, limit: int = 5) -> str
         - {"result": "no_results", "query": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    from questfoundry.tools.research.corpus_tools import SearchCorpusTool
-
-    tool_instance = SearchCorpusTool()
-    arguments = {"query": query, "limit": limit}
-    if cluster is not None:
-        arguments["cluster"] = cluster
-    return tool_instance.execute(arguments)
+    arguments = {"query": query, "limit": limit, "cluster": cluster}
+    return _search_corpus_tool.execute(arguments)
 
 
 @tool
@@ -69,10 +78,7 @@ def get_document(name: str) -> str:
         - {"result": "no_results", "document": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    from questfoundry.tools.research.corpus_tools import GetDocumentTool
-
-    tool_instance = GetDocumentTool()
-    return tool_instance.execute({"name": name})
+    return _get_document_tool.execute({"name": name})
 
 
 @tool
@@ -87,10 +93,7 @@ def list_clusters() -> str:
         - {"result": "success", "clusters": [...], "content": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    from questfoundry.tools.research.corpus_tools import ListClustersTool
-
-    tool_instance = ListClustersTool()
-    return tool_instance.execute({})
+    return _list_clusters_tool.execute({})
 
 
 @tool
@@ -113,10 +116,9 @@ def web_search(query: str, max_results: int = 5, recency: str = "all_time") -> s
         - {"result": "no_results", "query": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    from questfoundry.tools.research.web_tools import WebSearchTool
-
-    tool_instance = WebSearchTool()
-    return tool_instance.execute({"query": query, "max_results": max_results, "recency": recency})
+    return _web_search_tool.execute(
+        {"query": query, "max_results": max_results, "recency": recency}
+    )
 
 
 @tool
@@ -135,10 +137,7 @@ def web_fetch(url: str, extract_mode: str = "markdown") -> str:
         - {"result": "success", "content": "...", "url": "...", "action": "..."}
         - {"result": "error", "url": "...", "error": "...", "action": "..."}
     """
-    from questfoundry.tools.research.web_tools import WebFetchTool
-
-    tool_instance = WebFetchTool()
-    return tool_instance.execute({"url": url, "extract_mode": extract_mode})
+    return _web_fetch_tool.execute({"url": url, "extract_mode": extract_mode})
 
 
 def get_all_research_tools() -> list[BaseTool]:
@@ -153,7 +152,7 @@ def get_all_research_tools() -> list[BaseTool]:
 
     Example:
         >>> tools = get_all_research_tools()
-        >>> agent = create_react_agent(llm, tools, prompt)
+        >>> agent = create_agent(model, tools=tools, prompt=prompt)
     """
     return [search_corpus, get_document, list_clusters, web_search, web_fetch]
 

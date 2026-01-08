@@ -83,56 +83,49 @@ class TestToolCollections:
 class TestSearchCorpusExecution:
     """Test search_corpus tool execution."""
 
-    @patch("questfoundry.tools.research.corpus_tools.SearchCorpusTool")
-    def test_search_corpus_delegates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
+    def test_search_corpus_delegates(self, mock_tool: MagicMock) -> None:
         """search_corpus should delegate to SearchCorpusTool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {"result": "success", "content": "test content", "action": "use this"}
         )
-        mock_class.return_value = mock_instance
 
         result = search_corpus.invoke({"query": "test", "limit": 3})
 
-        mock_instance.execute.assert_called_once_with({"query": "test", "limit": 3})
+        mock_tool.execute.assert_called_once_with({"query": "test", "limit": 3, "cluster": None})
         assert "success" in result
         assert "test content" in result
 
-    @patch("questfoundry.tools.research.corpus_tools.SearchCorpusTool")
-    def test_search_corpus_with_cluster(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
+    def test_search_corpus_with_cluster(self, mock_tool: MagicMock) -> None:
         """search_corpus should pass cluster parameter."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps({"result": "success"})
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = json.dumps({"result": "success"})
 
         search_corpus.invoke({"query": "mystery", "cluster": "genre-conventions", "limit": 5})
 
-        call_args = mock_instance.execute.call_args[0][0]
+        call_args = mock_tool.execute.call_args[0][0]
         assert call_args["query"] == "mystery"
         assert call_args["cluster"] == "genre-conventions"
         assert call_args["limit"] == 5
 
-    @patch("questfoundry.tools.research.corpus_tools.SearchCorpusTool")
-    def test_search_corpus_default_limit(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
+    def test_search_corpus_default_limit(self, mock_tool: MagicMock) -> None:
         """search_corpus should use default limit of 5."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps({"result": "success"})
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = json.dumps({"result": "success"})
 
         search_corpus.invoke({"query": "test"})
 
-        call_args = mock_instance.execute.call_args[0][0]
+        call_args = mock_tool.execute.call_args[0][0]
         assert call_args["limit"] == 5
 
 
 class TestGetDocumentExecution:
     """Test get_document tool execution."""
 
-    @patch("questfoundry.tools.research.corpus_tools.GetDocumentTool")
-    def test_get_document_delegates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._get_document_tool")
+    def test_get_document_delegates(self, mock_tool: MagicMock) -> None:
         """get_document should delegate to GetDocumentTool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {
                 "result": "success",
                 "title": "Test Doc",
@@ -140,11 +133,10 @@ class TestGetDocumentExecution:
                 "action": "use this",
             }
         )
-        mock_class.return_value = mock_instance
 
         result = get_document.invoke({"name": "test_doc"})
 
-        mock_instance.execute.assert_called_once_with({"name": "test_doc"})
+        mock_tool.execute.assert_called_once_with({"name": "test_doc"})
         assert "success" in result
         assert "Test Doc" in result
 
@@ -152,11 +144,10 @@ class TestGetDocumentExecution:
 class TestListClustersExecution:
     """Test list_clusters tool execution."""
 
-    @patch("questfoundry.tools.research.corpus_tools.ListClustersTool")
-    def test_list_clusters_delegates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._list_clusters_tool")
+    def test_list_clusters_delegates(self, mock_tool: MagicMock) -> None:
         """list_clusters should delegate to ListClustersTool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {
                 "result": "success",
                 "clusters": ["genre-conventions", "narrative-structure"],
@@ -164,11 +155,10 @@ class TestListClustersExecution:
                 "action": "use search_corpus",
             }
         )
-        mock_class.return_value = mock_instance
 
         result = list_clusters.invoke({})
 
-        mock_instance.execute.assert_called_once_with({})
+        mock_tool.execute.assert_called_once_with({})
         assert "success" in result
         assert "genre-conventions" in result
 
@@ -176,44 +166,38 @@ class TestListClustersExecution:
 class TestWebSearchExecution:
     """Test web_search tool execution."""
 
-    @patch("questfoundry.tools.research.web_tools.WebSearchTool")
-    def test_web_search_delegates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_search_tool")
+    def test_web_search_delegates(self, mock_tool: MagicMock) -> None:
         """web_search should delegate to WebSearchTool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {"result": "success", "content": "search results", "action": "use this"}
         )
-        mock_class.return_value = mock_instance
 
         result = web_search.invoke({"query": "test search", "max_results": 3})
 
-        mock_instance.execute.assert_called_once_with(
+        mock_tool.execute.assert_called_once_with(
             {"query": "test search", "max_results": 3, "recency": "all_time"}
         )
         assert "success" in result
 
-    @patch("questfoundry.tools.research.web_tools.WebSearchTool")
-    def test_web_search_with_recency(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_search_tool")
+    def test_web_search_with_recency(self, mock_tool: MagicMock) -> None:
         """web_search should pass recency parameter."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps({"result": "success"})
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = json.dumps({"result": "success"})
 
         web_search.invoke({"query": "recent news", "max_results": 5, "recency": "week"})
 
-        call_args = mock_instance.execute.call_args[0][0]
+        call_args = mock_tool.execute.call_args[0][0]
         assert call_args["recency"] == "week"
 
-    @patch("questfoundry.tools.research.web_tools.WebSearchTool")
-    def test_web_search_defaults(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_search_tool")
+    def test_web_search_defaults(self, mock_tool: MagicMock) -> None:
         """web_search should use default values."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps({"result": "success"})
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = json.dumps({"result": "success"})
 
         web_search.invoke({"query": "test"})
 
-        call_args = mock_instance.execute.call_args[0][0]
+        call_args = mock_tool.execute.call_args[0][0]
         assert call_args["max_results"] == 5
         assert call_args["recency"] == "all_time"
 
@@ -221,11 +205,10 @@ class TestWebSearchExecution:
 class TestWebFetchExecution:
     """Test web_fetch tool execution."""
 
-    @patch("questfoundry.tools.research.web_tools.WebFetchTool")
-    def test_web_fetch_delegates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_fetch_tool")
+    def test_web_fetch_delegates(self, mock_tool: MagicMock) -> None:
         """web_fetch should delegate to WebFetchTool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {
                 "result": "success",
                 "url": "https://example.com",
@@ -233,78 +216,65 @@ class TestWebFetchExecution:
                 "action": "use this",
             }
         )
-        mock_class.return_value = mock_instance
 
         result = web_fetch.invoke({"url": "https://example.com"})
 
-        mock_instance.execute.assert_called_once_with(
+        mock_tool.execute.assert_called_once_with(
             {"url": "https://example.com", "extract_mode": "markdown"}
         )
         assert "success" in result
         assert "page content" in result
 
-    @patch("questfoundry.tools.research.web_tools.WebFetchTool")
-    def test_web_fetch_with_extract_mode(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_fetch_tool")
+    def test_web_fetch_with_extract_mode(self, mock_tool: MagicMock) -> None:
         """web_fetch should pass extract_mode parameter."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps({"result": "success"})
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = json.dumps({"result": "success"})
 
         web_fetch.invoke({"url": "https://example.com", "extract_mode": "article"})
 
-        call_args = mock_instance.execute.call_args[0][0]
+        call_args = mock_tool.execute.call_args[0][0]
         assert call_args["extract_mode"] == "article"
 
 
 class TestToolReturnTypes:
     """Test that all tools return strings (required for LangChain)."""
 
-    @patch("questfoundry.tools.research.corpus_tools.SearchCorpusTool")
-    def test_search_corpus_returns_string(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
+    def test_search_corpus_returns_string(self, mock_tool: MagicMock) -> None:
         """search_corpus must return a string."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = '{"result": "success"}'
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = '{"result": "success"}'
 
         result = search_corpus.invoke({"query": "test"})
         assert isinstance(result, str)
 
-    @patch("questfoundry.tools.research.corpus_tools.GetDocumentTool")
-    def test_get_document_returns_string(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._get_document_tool")
+    def test_get_document_returns_string(self, mock_tool: MagicMock) -> None:
         """get_document must return a string."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = '{"result": "success"}'
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = '{"result": "success"}'
 
         result = get_document.invoke({"name": "test"})
         assert isinstance(result, str)
 
-    @patch("questfoundry.tools.research.corpus_tools.ListClustersTool")
-    def test_list_clusters_returns_string(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._list_clusters_tool")
+    def test_list_clusters_returns_string(self, mock_tool: MagicMock) -> None:
         """list_clusters must return a string."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = '{"result": "success"}'
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = '{"result": "success"}'
 
         result = list_clusters.invoke({})
         assert isinstance(result, str)
 
-    @patch("questfoundry.tools.research.web_tools.WebSearchTool")
-    def test_web_search_returns_string(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_search_tool")
+    def test_web_search_returns_string(self, mock_tool: MagicMock) -> None:
         """web_search must return a string."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = '{"result": "success"}'
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = '{"result": "success"}'
 
         result = web_search.invoke({"query": "test"})
         assert isinstance(result, str)
 
-    @patch("questfoundry.tools.research.web_tools.WebFetchTool")
-    def test_web_fetch_returns_string(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_fetch_tool")
+    def test_web_fetch_returns_string(self, mock_tool: MagicMock) -> None:
         """web_fetch must return a string."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = '{"result": "success"}'
-        mock_class.return_value = mock_instance
+        mock_tool.execute.return_value = '{"result": "success"}'
 
         result = web_fetch.invoke({"url": "https://example.com"})
         assert isinstance(result, str)
@@ -313,14 +283,12 @@ class TestToolReturnTypes:
 class TestErrorHandling:
     """Test that tools handle errors gracefully."""
 
-    @patch("questfoundry.tools.research.corpus_tools.SearchCorpusTool")
-    def test_search_corpus_error_propagates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
+    def test_search_corpus_error_propagates(self, mock_tool: MagicMock) -> None:
         """search_corpus should return error JSON from underlying tool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {"result": "error", "error": "Corpus not available", "action": "proceed"}
         )
-        mock_class.return_value = mock_instance
 
         result = search_corpus.invoke({"query": "test"})
 
@@ -328,14 +296,12 @@ class TestErrorHandling:
         assert data["result"] == "error"
         assert "error" in data
 
-    @patch("questfoundry.tools.research.web_tools.WebSearchTool")
-    def test_web_search_error_propagates(self, mock_class: MagicMock) -> None:
+    @patch("questfoundry.tools.langchain_tools._web_search_tool")
+    def test_web_search_error_propagates(self, mock_tool: MagicMock) -> None:
         """web_search should return error JSON from underlying tool."""
-        mock_instance = MagicMock()
-        mock_instance.execute.return_value = json.dumps(
+        mock_tool.execute.return_value = json.dumps(
             {"result": "error", "error": "SEARXNG_URL not configured", "action": "proceed"}
         )
-        mock_class.return_value = mock_instance
 
         result = web_search.invoke({"query": "test"})
 
