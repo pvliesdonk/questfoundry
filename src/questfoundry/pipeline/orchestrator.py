@@ -6,19 +6,17 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
-from questfoundry.prompts import PromptCompiler
-from questfoundry.providers import LoggingProvider
 
 if TYPE_CHECKING:
-    from questfoundry.providers import LLMProvider
-    from questfoundry.tools import Tool
+    from pathlib import Path
+
+    from langchain_core.language_models import BaseChatModel
 
 log = get_logger(__name__)
 
@@ -121,22 +119,18 @@ class PipelineOrchestrator:
         self._reader = ArtifactReader(project_path)
         self._writer = ArtifactWriter(project_path)
         self._validator = ArtifactValidator()
-        # Look for prompts in project first, then package
-        self._prompts_path = project_path / "prompts"
-        if not self._prompts_path.exists():
-            # Fall back to package prompts
-            self._prompts_path = Path(__file__).parent.parent.parent.parent / "prompts"
 
-        # Provider will be lazily initialized
-        self._provider: LLMProvider | None = None
+        # Chat model will be lazily initialized
+        self._chat_model: BaseChatModel | None = None
+        self._provider_name: str | None = None
 
         # LLM logger (enabled via --log flag)
         from questfoundry.observability import LLMLogger
 
         self._llm_logger = LLMLogger(project_path, enabled=enable_llm_logging)
 
-    def _get_provider(self) -> LLMProvider:
-        """Get or create the LLM provider.
+    def _get_chat_model(self) -> BaseChatModel:
+        """Get or create the LangChain chat model.
 
         Provider resolution order (highest priority first):
         1. CLI --provider flag (provider_override)
@@ -145,10 +139,10 @@ class PipelineOrchestrator:
         4. Default: ollama/qwen3:8b
 
         Returns:
-            Configured LLM provider.
+            Configured BaseChatModel.
         """
-        if self._provider is not None:
-            return self._provider
+        if self._chat_model is not None:
+            return self._chat_model
 
         # Determine provider string from override, env, or config
         provider_string = (
@@ -163,69 +157,29 @@ class PipelineOrchestrator:
             provider_name = provider_string
             model = self.config.provider.model
 
+        self._provider_name = provider_name
+
         # Use LangChain factory
-        from questfoundry.providers.factory import create_provider
+        from questfoundry.providers.factory import create_chat_model
 
-        self._provider = create_provider(provider_name, model)
-        return self._provider
+        # If logging enabled, configure LangChain callbacks
+        callbacks = None
+        if self._enable_llm_logging:
+            from questfoundry.observability.langchain_callbacks import (
+                create_logging_callbacks,
+            )
 
-    def _get_research_tools(self) -> list[Tool]:
-        """Get research tools based on project configuration.
+            callbacks = create_logging_callbacks(self._llm_logger)
 
-        Returns tools that are:
-        1. Enabled in project.yaml research_tools config
-        2. Have their dependencies available
+        chat_model = create_chat_model(provider_name, model)
 
-        Returns:
-            List of available research tools.
-        """
-        tools: list[Tool] = []
-        config = self.config.research_tools
+        # Add callbacks to the model if enabled
+        if callbacks:
+            # with_config returns Runnable but is still usable as chat model
+            chat_model = chat_model.with_config(callbacks=callbacks)  # type: ignore[assignment]
 
-        # Get corpus tools if enabled
-        if config.corpus:
-            from questfoundry.tools.research import get_corpus_tools
-
-            corpus_tools = get_corpus_tools()
-            if corpus_tools:
-                log.debug("research_tools_loaded", tool_type="corpus", count=len(corpus_tools))
-                tools.extend(corpus_tools)
-            else:
-                # Log at warning since user explicitly enabled but deps unavailable
-                log.warning(
-                    "research_tools_unavailable",
-                    tool_type="corpus",
-                    reason="ifcraftcorpus not installed",
-                    package="ifcraftcorpus",
-                )
-
-        # Get web tools if enabled
-        if config.web_search or config.web_fetch:
-            from questfoundry.tools.research import get_web_tools
-
-            # Only require SEARXNG if web_search is enabled
-            web_tools = get_web_tools(require_searxng=config.web_search)
-            if web_tools:
-                # Filter based on config
-                filtered = [
-                    tool
-                    for tool in web_tools
-                    if (tool.definition.name == "web_search" and config.web_search)
-                    or (tool.definition.name == "web_fetch" and config.web_fetch)
-                ]
-                if filtered:
-                    log.debug("research_tools_loaded", tool_type="web", count=len(filtered))
-                    tools.extend(filtered)
-            else:
-                # Log at warning since user explicitly enabled but deps unavailable
-                log.warning(
-                    "research_tools_unavailable",
-                    tool_type="web",
-                    reason="pvl-webtools not installed",
-                    package="pvl-webtools",
-                )
-
-        return tools
+        self._chat_model = chat_model
+        return self._chat_model
 
     def _get_stage_implementation(self, stage_name: str) -> Any:
         """Get the stage implementation.
@@ -256,7 +210,7 @@ class PipelineOrchestrator:
 
         Args:
             stage_name: Name of the stage to execute.
-            context: Additional context for the stage.
+            context: Additional context for the stage. Must contain "user_prompt" key.
 
         Returns:
             StageResult with execution details.
@@ -270,31 +224,22 @@ class PipelineOrchestrator:
             # Get stage implementation
             stage = self._get_stage_implementation(stage_name)
 
-            # Get provider (with logging wrapper if enabled)
-            provider = self._get_provider()
+            # Extract user_prompt from context
+            user_prompt = context.get("user_prompt", "")
+            if not user_prompt:
+                raise PipelineError(stage_name, "user_prompt required in context")
+
+            # Get chat model (with LangChain callbacks for logging if enabled)
+            model = self._get_chat_model()
             if self._enable_llm_logging:
-                provider = LoggingProvider(provider, self._llm_logger, stage_name)
                 log.debug("llm_logging_enabled", stage=stage_name)
 
-            # Create prompt compiler
-            compiler = PromptCompiler(self._prompts_path)
-
-            # Get research tools
-            research_tools = self._get_research_tools()
-            if research_tools:
-                context["research_tools"] = research_tools
-                log.debug(
-                    "research_tools_configured",
-                    stage=stage_name,
-                    tool_names=[t.definition.name for t in research_tools],
-                )
-
-            # Execute stage
+            # Execute stage with new LangChain-native protocol
             log.debug("stage_execute", stage=stage_name)
             artifact_data, llm_calls, tokens_used = await stage.execute(
-                context=context,
-                provider=provider,
-                compiler=compiler,
+                model=model,
+                user_prompt=user_prompt,
+                provider_name=self._provider_name,
             )
 
             # Validate artifact
@@ -396,9 +341,12 @@ class PipelineOrchestrator:
 
     async def close(self) -> None:
         """Close the orchestrator and release resources."""
-        if self._provider is not None:
-            # Providers with async close
-            if hasattr(self._provider, "close"):
-                close_method = self._provider.close
-                await close_method()
-            self._provider = None
+        if self._chat_model is not None:
+            # Some chat models may have async close methods
+            if hasattr(self._chat_model, "close"):
+                close_method = self._chat_model.close
+                if callable(close_method):
+                    result = close_method()
+                    if hasattr(result, "__await__"):
+                        await result
+            self._chat_model = None
