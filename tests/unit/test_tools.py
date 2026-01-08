@@ -1,13 +1,10 @@
-"""Tests for tool protocol and finalization tools."""
+"""Tests for tool protocol and base types."""
 
 from __future__ import annotations
 
 from questfoundry.tools import (
-    SubmitBrainstormTool,
-    SubmitDreamTool,
     ToolCall,
     ToolDefinition,
-    get_finalization_tool,
 )
 
 # --- ToolDefinition Tests ---
@@ -56,126 +53,6 @@ def test_tool_call_empty_arguments() -> None:
     assert call.arguments == {}
 
 
-# --- SubmitDreamTool Tests ---
-
-
-def test_submit_dream_tool_definition() -> None:
-    """SubmitDreamTool has correct definition."""
-    tool = SubmitDreamTool()
-    definition = tool.definition
-
-    assert definition.name == "submit_dream"
-    assert "creative vision" in definition.description.lower()
-    assert definition.parameters["type"] == "object"
-
-    # Check required fields
-    required = definition.parameters.get("required", [])
-    assert "genre" in required
-    assert "tone" in required
-    assert "audience" in required
-    assert "themes" in required
-
-
-def test_submit_dream_tool_properties() -> None:
-    """SubmitDreamTool has expected properties in schema."""
-    tool = SubmitDreamTool()
-    properties = tool.definition.parameters["properties"]
-
-    # Core fields
-    assert "genre" in properties
-    assert "subgenre" in properties
-    assert "tone" in properties
-    assert "audience" in properties
-    assert "themes" in properties
-    assert "style_notes" in properties
-
-    # Nested objects
-    assert "scope" in properties
-    assert "content_notes" in properties
-
-
-def test_submit_dream_tool_execute() -> None:
-    """SubmitDreamTool.execute returns confirmation message."""
-    tool = SubmitDreamTool()
-    result = tool.execute({"genre": "fantasy", "tone": ["epic"]})
-
-    assert isinstance(result, str)
-    assert "validation" in result.lower() or "submitted" in result.lower()
-
-
-# --- SubmitBrainstormTool Tests ---
-
-
-def test_submit_brainstorm_tool_definition() -> None:
-    """SubmitBrainstormTool has correct definition."""
-    tool = SubmitBrainstormTool()
-    definition = tool.definition
-
-    assert definition.name == "submit_brainstorm"
-    assert "brainstorm" in definition.description.lower()
-
-    # Check required fields
-    required = definition.parameters.get("required", [])
-    assert "characters" in required
-    assert "plot_hooks" in required
-
-
-def test_submit_brainstorm_tool_properties() -> None:
-    """SubmitBrainstormTool has expected properties."""
-    tool = SubmitBrainstormTool()
-    properties = tool.definition.parameters["properties"]
-
-    assert "characters" in properties
-    assert "settings" in properties
-    assert "plot_hooks" in properties
-    assert "conflicts" in properties
-    assert "notes" in properties
-
-
-def test_submit_brainstorm_tool_execute() -> None:
-    """SubmitBrainstormTool.execute returns confirmation message."""
-    tool = SubmitBrainstormTool()
-    result = tool.execute({"characters": [], "plot_hooks": []})
-
-    assert isinstance(result, str)
-
-
-# --- get_finalization_tool Tests ---
-
-
-def test_get_finalization_tool_dream() -> None:
-    """get_finalization_tool returns SubmitDreamTool for 'dream'."""
-    tool = get_finalization_tool("dream")
-
-    assert tool is not None
-    assert isinstance(tool, SubmitDreamTool)
-    assert tool.definition.name == "submit_dream"
-
-
-def test_get_finalization_tool_brainstorm() -> None:
-    """get_finalization_tool returns SubmitBrainstormTool for 'brainstorm'."""
-    tool = get_finalization_tool("brainstorm")
-
-    assert tool is not None
-    assert isinstance(tool, SubmitBrainstormTool)
-    assert tool.definition.name == "submit_brainstorm"
-
-
-def test_get_finalization_tool_unknown() -> None:
-    """get_finalization_tool returns None for unknown stage."""
-    tool = get_finalization_tool("unknown_stage")
-
-    assert tool is None
-
-
-def test_get_finalization_tool_case_sensitive() -> None:
-    """get_finalization_tool is case-sensitive."""
-    # Uppercase should not match
-    tool = get_finalization_tool("DREAM")
-
-    assert tool is None
-
-
 # --- Tool Protocol Tests ---
 
 
@@ -209,10 +86,13 @@ def test_tool_protocol_implementation() -> None:
     assert "test" in result
 
 
-def test_tool_definition_as_dict() -> None:
-    """ToolDefinition can be converted to dict for LangChain."""
-    tool = SubmitDreamTool()
-    definition = tool.definition
+def test_tool_definition_has_required_attributes() -> None:
+    """ToolDefinition has attributes needed for LangChain."""
+    definition = ToolDefinition(
+        name="test",
+        description="Test tool",
+        parameters={"type": "object", "properties": {"x": {"type": "string"}}},
+    )
 
     # These fields are needed for LangChain tool binding
     assert hasattr(definition, "name")

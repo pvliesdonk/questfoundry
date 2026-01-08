@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage
 
-from questfoundry.conversation import ConversationState
+from questfoundry.artifacts import DreamArtifact
 from questfoundry.pipeline.stages import DreamStage, get_stage
 
 # --- Stage Registration Tests ---
@@ -25,413 +26,289 @@ def test_dream_stage_name() -> None:
     assert stage.name == "dream"
 
 
-# --- Prompt Building Tests ---
-
-
-def test_build_prompt_context_direct_mode() -> None:
-    """_build_prompt_context includes correct instructions for direct mode."""
-    stage = DreamStage()
-
-    context = stage._build_prompt_context("test prompt", [], interactive=False)
-
-    assert "mode_instructions" in context
-    assert "mode_reminder" in context
-    assert "user_message" in context
-    assert "test prompt" in context["user_message"]
-    # Direct mode has no reminder
-    assert context["mode_reminder"] == ""
-    # Direct mode instructions don't mention discussion
-    assert "discussion" not in context["mode_instructions"].lower()
-
-
-def test_build_prompt_context_interactive_mode() -> None:
-    """_build_prompt_context includes correct instructions for interactive mode."""
-    stage = DreamStage()
-
-    context = stage._build_prompt_context("test prompt", [], interactive=True)
-
-    assert "mode_instructions" in context
-    assert "mode_reminder" in context
-    # Interactive mode mentions discussion
-    assert "discussion" in context["mode_instructions"].lower()
-    assert "ready_to_summarize()" in context["mode_instructions"]
-    # Interactive mode has a reminder
-    assert context["mode_reminder"] != ""
-
-
-def test_build_prompt_context_with_research_tools() -> None:
-    """_build_prompt_context includes research tools section when tools provided."""
-    stage = DreamStage()
-
-    # Create mock research tool
-    mock_tool = MagicMock()
-    mock_tool.definition.name = "web_search"
-    mock_tool.definition.description = "Search the web for information"
-
-    context = stage._build_prompt_context("test prompt", [mock_tool], interactive=True)
-
-    assert "web_search" in context["mode_instructions"]
-    assert "Search the web" in context["mode_instructions"]
-
-
-def test_build_research_tools_section_empty() -> None:
-    """_build_research_tools_section returns empty string when no tools."""
-    stage = DreamStage()
-
-    result = stage._build_research_tools_section([])
-
-    assert result == ""
-
-
-def test_build_research_tools_section_with_tools() -> None:
-    """_build_research_tools_section formats tool descriptions."""
-    stage = DreamStage()
-
-    mock_tool1 = MagicMock()
-    mock_tool1.definition.name = "search"
-    mock_tool1.definition.description = "Search for info"
-
-    mock_tool2 = MagicMock()
-    mock_tool2.definition.name = "lookup"
-    mock_tool2.definition.description = "Look up data"
-
-    result = stage._build_research_tools_section([mock_tool1, mock_tool2])
-
-    assert "search: Search for info" in result
-    assert "lookup: Look up data" in result
-
-
-def test_get_summary_prompt() -> None:
-    """_get_summary_prompt returns valid summary guidance."""
-    stage = DreamStage()
-
-    prompt = stage._get_summary_prompt()
-
-    assert "Genre" in prompt
-    assert "Tone" in prompt
-    assert "themes" in prompt.lower()
-
-
 # --- Execute Tests ---
 
 
 @pytest.mark.asyncio
-async def test_execute_direct_mode() -> None:
-    """Execute DREAM stage in direct mode (non-interactive)."""
+async def test_execute_calls_all_three_phases() -> None:
+    """Execute calls discuss, summarize, and serialize phases."""
     stage = DreamStage()
 
-    # Mock the ConversationRunner
-    mock_artifact = {
-        "genre": "fantasy",
-        "subgenre": "epic",
-        "tone": ["adventurous", "dramatic"],
-        "audience": "adult",
-        "themes": ["destiny", "friendship"],
-    }
-    mock_state = ConversationState(llm_calls=3, tokens_used=1500)
+    mock_model = MagicMock()
 
-    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
-        MockRunner.return_value = mock_runner_instance
-
-        # Mock compiler
-        mock_compiler = MagicMock()
-        mock_prompt = MagicMock()
-        mock_prompt.system = "You are a creative director."
-        mock_prompt.user = "Create a vision for: epic quest"
-        mock_compiler.compile.return_value = mock_prompt
-
-        # Mock provider
-        mock_provider = MagicMock()
+    # Mock the three phases
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        # Configure mocks
+        mock_tools.return_value = []
+        mock_discuss.return_value = (
+            [HumanMessage(content="hi"), AIMessage(content="hello")],
+            2,  # llm_calls
+            500,  # tokens
+        )
+        mock_summarize.return_value = ("Brief summary", 100)
+        mock_artifact = DreamArtifact(
+            genre="fantasy",
+            tone=["epic"],
+            audience="adult",
+            themes=["heroism"],
+        )
+        mock_serialize.return_value = (mock_artifact, 200)
 
         # Execute
-        context = {"user_prompt": "An epic quest", "interactive": False}
-        artifact, llm_calls, tokens = await stage.execute(context, mock_provider, mock_compiler)
+        artifact, llm_calls, tokens = await stage.execute(
+            model=mock_model,
+            user_prompt="An epic quest",
+        )
+
+        # Verify all phases were called
+        mock_discuss.assert_called_once()
+        mock_summarize.assert_called_once()
+        mock_serialize.assert_called_once()
 
         # Verify result
-        assert artifact["type"] == "dream"
-        assert artifact["version"] == 1
         assert artifact["genre"] == "fantasy"
-        assert llm_calls == 3
-        assert tokens == 1500
-
-        # Verify ConversationRunner was configured for direct mode
-        MockRunner.assert_called_once()
-        call_kwargs = MockRunner.call_args.kwargs
-        assert call_kwargs["max_discuss_turns"] == 1  # Direct mode = 1 turn
-
-        # Verify run was called with no user_input_fn
-        mock_runner_instance.run.assert_called_once()
-        run_kwargs = mock_runner_instance.run.call_args.kwargs
-        assert run_kwargs["user_input_fn"] is None
+        assert artifact["tone"] == ["epic"]
+        assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
+        assert tokens == 800  # 500 + 100 + 200
 
 
 @pytest.mark.asyncio
-async def test_execute_interactive_mode() -> None:
-    """Execute DREAM stage in interactive mode."""
+async def test_execute_passes_model_to_all_phases() -> None:
+    """Execute passes the same model to all phases."""
     stage = DreamStage()
 
-    mock_artifact = {
-        "genre": "mystery",
-        "tone": ["suspenseful"],
-        "audience": "adult",
-        "themes": ["betrayal"],
-    }
-    mock_state = ConversationState(llm_calls=5, tokens_used=2500)
+    mock_model = MagicMock()
 
-    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
-        MockRunner.return_value = mock_runner_instance
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="mystery",
+            tone=["dark"],
+            audience="adult",
+            themes=["justice"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-        mock_compiler = MagicMock()
-        mock_prompt = MagicMock()
-        mock_prompt.system = "system"
-        mock_prompt.user = "user"
-        mock_compiler.compile.return_value = mock_prompt
+        await stage.execute(model=mock_model, user_prompt="A mystery")
 
-        mock_provider = MagicMock()
-        mock_user_input_fn = AsyncMock(return_value="user response")
-
-        context = {
-            "user_prompt": "A mystery story",
-            "interactive": True,
-            "user_input_fn": mock_user_input_fn,
-            "max_turns": 15,
-        }
-        _artifact, _llm_calls, _tokens = await stage.execute(context, mock_provider, mock_compiler)
-
-        # Verify ConversationRunner configured for interactive mode
-        call_kwargs = MockRunner.call_args.kwargs
-        assert call_kwargs["max_discuss_turns"] == 15  # From context
-
-        # Verify user_input_fn was passed
-        run_kwargs = mock_runner_instance.run.call_args.kwargs
-        assert run_kwargs["user_input_fn"] is mock_user_input_fn
+        # Verify model was passed to all phases
+        assert mock_discuss.call_args.kwargs["model"] is mock_model
+        assert mock_summarize.call_args.kwargs["model"] is mock_model
+        assert mock_serialize.call_args.kwargs["model"] is mock_model
 
 
 @pytest.mark.asyncio
-async def test_execute_preserves_version_from_artifact() -> None:
-    """Execute preserves version if provided in artifact."""
+async def test_execute_passes_user_prompt_to_discuss() -> None:
+    """Execute passes user_prompt to the discuss phase."""
     stage = DreamStage()
 
-    mock_artifact = {
-        "genre": "horror",
-        "tone": ["terrifying"],
-        "audience": "adult",
-        "themes": ["fear"],
-        "version": 2,  # Version from LLM
-    }
-    mock_state = ConversationState(llm_calls=3, tokens_used=1000)
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="sci-fi",
+            tone=["epic"],
+            audience="adult",
+            themes=["exploration"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
-        MockRunner.return_value = mock_runner_instance
+        await stage.execute(model=MagicMock(), user_prompt="A space adventure")
 
-        mock_compiler = MagicMock()
-        mock_prompt = MagicMock()
-        mock_prompt.system = "system"
-        mock_prompt.user = "user"
-        mock_compiler.compile.return_value = mock_prompt
-
-        artifact, _, _ = await stage.execute({"interactive": False}, MagicMock(), mock_compiler)
-
-        assert artifact["version"] == 2
+        assert mock_discuss.call_args.kwargs["user_prompt"] == "A space adventure"
 
 
 @pytest.mark.asyncio
-async def test_execute_passes_research_tools() -> None:
-    """Execute passes research tools to ConversationRunner."""
+async def test_execute_passes_messages_to_summarize() -> None:
+    """Execute passes discuss messages to summarize phase."""
     stage = DreamStage()
 
-    mock_artifact = {"genre": "sci-fi", "tone": ["epic"], "audience": "adult", "themes": ["space"]}
-    mock_state = ConversationState(llm_calls=3, tokens_used=1000)
+    discuss_messages = [
+        HumanMessage(content="I want fantasy"),
+        AIMessage(content="Great choice!"),
+    ]
 
-    mock_research_tool = MagicMock()
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = (discuss_messages, 2, 200)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="fantasy",
+            tone=["epic"],
+            audience="adult",
+            themes=["magic"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
-        MockRunner.return_value = mock_runner_instance
+        await stage.execute(model=MagicMock(), user_prompt="test")
 
-        mock_compiler = MagicMock()
-        mock_prompt = MagicMock()
-        mock_prompt.system = "system"
-        mock_prompt.user = "user"
-        mock_compiler.compile.return_value = mock_prompt
-
-        context = {
-            "interactive": False,
-            "research_tools": [mock_research_tool],
-        }
-        await stage.execute(context, MagicMock(), mock_compiler)
-
-        # Verify research tools were passed to ConversationRunner
-        call_kwargs = MockRunner.call_args.kwargs
-        assert call_kwargs["research_tools"] == [mock_research_tool]
+        assert mock_summarize.call_args.kwargs["messages"] == discuss_messages
 
 
 @pytest.mark.asyncio
-async def test_execute_passes_on_assistant_message_callback() -> None:
-    """Execute passes on_assistant_message callback to runner."""
+async def test_execute_passes_brief_to_serialize() -> None:
+    """Execute passes summary brief to serialize phase."""
     stage = DreamStage()
 
-    mock_artifact = {"genre": "romance", "tone": ["sweet"], "audience": "adult", "themes": ["love"]}
-    mock_state = ConversationState(llm_calls=3, tokens_used=1000)
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Detailed brief about fantasy story", 75)
+        mock_artifact = DreamArtifact(
+            genre="fantasy",
+            tone=["epic"],
+            audience="adult",
+            themes=["adventure"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    mock_callback = MagicMock()
+        await stage.execute(model=MagicMock(), user_prompt="test")
 
-    with patch("questfoundry.pipeline.stages.dream.ConversationRunner") as MockRunner:
-        mock_runner_instance = MagicMock()
-        mock_runner_instance.run = AsyncMock(return_value=(mock_artifact, mock_state))
-        MockRunner.return_value = mock_runner_instance
-
-        mock_compiler = MagicMock()
-        mock_prompt = MagicMock()
-        mock_prompt.system = "system"
-        mock_prompt.user = "user"
-        mock_compiler.compile.return_value = mock_prompt
-
-        context = {
-            "interactive": True,
-            "on_assistant_message": mock_callback,
-        }
-        await stage.execute(context, MagicMock(), mock_compiler)
-
-        # Verify callback was passed
-        run_kwargs = mock_runner_instance.run.call_args.kwargs
-        assert run_kwargs["on_assistant_message"] is mock_callback
+        assert mock_serialize.call_args.kwargs["brief"] == "Detailed brief about fantasy story"
 
 
-# --- Validation Tests ---
-
-
-def test_validate_dream_returns_structured_errors() -> None:
-    """_validate_dream returns structured errors list, not just error string."""
+@pytest.mark.asyncio
+async def test_execute_passes_provider_name_to_serialize() -> None:
+    """Execute passes provider_name for structured output strategy."""
     stage = DreamStage()
 
-    # Missing required fields
-    result = stage._validate_dream({})
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="horror",
+            tone=["dark"],
+            audience="adult",
+            themes=["fear"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    assert not result.valid
-    assert result.errors is not None
-    assert len(result.errors) > 0
+        await stage.execute(
+            model=MagicMock(),
+            user_prompt="test",
+            provider_name="ollama",
+        )
 
-    # Check errors have field, issue, and provided
-    for error in result.errors:
-        assert hasattr(error, "field")
-        assert hasattr(error, "issue")
-        assert hasattr(error, "provided")
+        assert mock_serialize.call_args.kwargs["provider_name"] == "ollama"
 
 
-def test_validate_dream_returns_expected_fields() -> None:
-    """_validate_dream returns expected_fields including nested paths."""
-    from questfoundry.artifacts import DreamArtifact, get_all_field_paths
-
+@pytest.mark.asyncio
+async def test_execute_passes_dream_artifact_schema() -> None:
+    """Execute passes DreamArtifact schema to serialize."""
     stage = DreamStage()
 
-    result = stage._validate_dream({})
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="romance",
+            tone=["sweet"],
+            audience="adult",
+            themes=["love"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    assert not result.valid
-    assert result.expected_fields is not None
+        await stage.execute(model=MagicMock(), user_prompt="test")
 
-    # expected_fields should include all paths including nested (scope.target_word_count, etc.)
-    expected_paths = get_all_field_paths(DreamArtifact)
-    returned_fields = set(result.expected_fields)
-    assert returned_fields == expected_paths, (
-        f"expected_fields mismatch: "
-        f"missing={expected_paths - returned_fields}, "
-        f"extra={returned_fields - expected_paths}"
-    )
-
-    # Verify nested paths are included (key feature for unknown field detection)
-    assert "scope.target_word_count" in returned_fields
-    assert "content_notes.includes" in returned_fields
+        assert mock_serialize.call_args.kwargs["schema"] is DreamArtifact
 
 
-def test_validate_dream_includes_provided_values() -> None:
-    """_validate_dream includes provided values in error details."""
+@pytest.mark.asyncio
+async def test_execute_returns_artifact_as_dict() -> None:
+    """Execute returns artifact as dictionary, not Pydantic model."""
     stage = DreamStage()
 
-    # Invalid empty genre
-    result = stage._validate_dream(
-        {
-            "genre": "",
-            "tone": ["epic"],
-            "audience": "adult",
-            "themes": ["heroism"],
-        }
-    )
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="thriller",
+            subgenre="psychological",
+            tone=["tense", "dark"],
+            audience="adult",
+            themes=["paranoia"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    assert not result.valid
-    assert result.errors is not None
+        artifact, _, _ = await stage.execute(model=MagicMock(), user_prompt="test")
 
-    genre_errors = [e for e in result.errors if e.field == "genre"]
-    assert len(genre_errors) == 1
-    assert genre_errors[0].provided == ""
+        assert isinstance(artifact, dict)
+        assert artifact["genre"] == "thriller"
+        assert artifact["subgenre"] == "psychological"
+        assert artifact["tone"] == ["tense", "dark"]
 
 
-def test_validate_dream_handles_nested_errors() -> None:
-    """_validate_dream handles nested scope field errors."""
+@pytest.mark.asyncio
+async def test_execute_uses_research_tools() -> None:
+    """Execute gets and uses research tools from langchain_tools."""
     stage = DreamStage()
 
-    result = stage._validate_dream(
-        {
-            "genre": "fantasy",
-            "tone": ["epic"],
-            "audience": "adult",
-            "themes": ["heroism"],
-            "scope": {"target_word_count": 100},  # Below minimum (1000), missing estimated_passages
-        }
-    )
+    mock_tools = [MagicMock(), MagicMock()]
 
-    assert not result.valid
-    assert result.errors is not None
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_get_tools,
+    ):
+        mock_get_tools.return_value = mock_tools
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_artifact = DreamArtifact(
+            genre="mystery",
+            tone=["suspenseful"],
+            audience="adult",
+            themes=["secrets"],
+        )
+        mock_serialize.return_value = (mock_artifact, 100)
 
-    # Should have nested field paths for specific scope errors
-    fields = {e.field for e in result.errors}
+        await stage.execute(model=MagicMock(), user_prompt="test")
 
-    # target_word_count=100 is below minimum of 1000
-    assert "scope.target_word_count" in fields, (
-        f"Expected scope.target_word_count error, got: {fields}"
-    )
-
-    # estimated_passages is required when scope is provided
-    assert "scope.estimated_passages" in fields, (
-        f"Expected scope.estimated_passages error, got: {fields}"
-    )
-
-    # Verify provided values are captured correctly
-    word_count_error = next(e for e in result.errors if e.field == "scope.target_word_count")
-    assert word_count_error.provided == 100
-
-
-def test_validate_dream_valid_data_returns_no_errors() -> None:
-    """_validate_dream returns no errors for valid data."""
-    stage = DreamStage()
-
-    result = stage._validate_dream(
-        {
-            "genre": "fantasy",
-            "tone": ["epic", "adventurous"],
-            "audience": "adult",
-            "themes": ["heroism", "friendship"],
-        }
-    )
-
-    assert result.valid
-    assert result.errors is None
-    assert result.data is not None
-
-
-def test_validate_dream_preserves_legacy_error_string() -> None:
-    """_validate_dream provides legacy error string for backwards compatibility."""
-    stage = DreamStage()
-
-    result = stage._validate_dream({})
-
-    assert not result.valid
-    assert result.error is not None
-    assert "Validation errors:" in result.error
+        mock_get_tools.assert_called_once()
+        assert mock_discuss.call_args.kwargs["tools"] == mock_tools

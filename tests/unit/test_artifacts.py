@@ -526,29 +526,3 @@ def test_optional_scope_is_none_by_default() -> None:
         # scope not provided
     )
     assert artifact.scope is None
-
-
-def test_tool_schema_matches_json_schema_scope_required(
-    dream_json_schema: dict[str, Any],
-) -> None:
-    """Verify SubmitDreamTool schema matches JSON schema for scope requirements.
-
-    The tool definition and JSON schema should have identical required fields
-    for the scope object to ensure consistent validation.
-    """
-    from questfoundry.tools.finalization import SubmitDreamTool
-
-    # Get JSON schema scope requirements
-    json_scope_required = set(
-        dream_json_schema.get("properties", {}).get("scope", {}).get("required", [])
-    )
-
-    # Get tool schema scope requirements
-    tool = SubmitDreamTool()
-    tool_scope = tool.definition.parameters.get("properties", {}).get("scope", {})
-    tool_scope_required = set(tool_scope.get("required", []))
-
-    assert json_scope_required == tool_scope_required, (
-        f"Tool scope.required {tool_scope_required} doesn't match "
-        f"JSON schema scope.required {json_scope_required}"
-    )
