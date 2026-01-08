@@ -60,7 +60,7 @@ async def summarize_discussion(
     response = await summarize_model.ainvoke(summarize_messages)
 
     # Extract the summary text
-    summary = response.content if isinstance(response.content, str) else str(response.content)
+    summary = str(response.content)
 
     # Extract token usage
     tokens = 0

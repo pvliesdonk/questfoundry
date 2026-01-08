@@ -75,10 +75,25 @@ class TestSummarizeDiscussion:
         mock_model.bind.assert_called_once_with(temperature=0.3)
 
     @pytest.mark.asyncio
-    async def test_summarize_fallback_when_bind_fails(self) -> None:
+    async def test_summarize_fallback_when_bind_raises_attribute_error(self) -> None:
         """summarize_discussion should fallback when bind not supported."""
         mock_model = MagicMock()
         mock_model.bind.side_effect = AttributeError("no bind")
+        mock_response = AIMessage(content="Summary")
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        messages = [HumanMessage(content="Test")]
+
+        summary, _tokens = await summarize_discussion(mock_model, messages)
+
+        assert summary == "Summary"
+        mock_model.ainvoke.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_summarize_fallback_when_bind_raises_type_error(self) -> None:
+        """summarize_discussion should fallback when bind raises TypeError."""
+        mock_model = MagicMock()
+        mock_model.bind.side_effect = TypeError("bad args")
         mock_response = AIMessage(content="Summary")
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
