@@ -14,15 +14,9 @@ from questfoundry.agents.prompts import get_discuss_prompt
 class TestGetDiscussPrompt:
     """Test prompt template creation."""
 
-    def test_prompt_includes_user_prompt(self) -> None:
-        """Prompt should contain the user's story idea."""
-        prompt = get_discuss_prompt(user_prompt="A mystery in space")
-
-        assert "A mystery in space" in prompt
-
     def test_prompt_includes_core_discussion_topics(self) -> None:
         """Prompt should include key discussion areas."""
-        prompt = get_discuss_prompt(user_prompt="Test")
+        prompt = get_discuss_prompt()
 
         assert "Genre and tone" in prompt
         assert "Themes and motifs" in prompt
@@ -31,10 +25,7 @@ class TestGetDiscussPrompt:
 
     def test_prompt_includes_tools_section_when_available(self) -> None:
         """Prompt should list research tools when available."""
-        prompt = get_discuss_prompt(
-            user_prompt="Test",
-            research_tools_available=True,
-        )
+        prompt = get_discuss_prompt(research_tools_available=True)
 
         assert "search_corpus" in prompt
         assert "web_search" in prompt
@@ -42,20 +33,27 @@ class TestGetDiscussPrompt:
 
     def test_prompt_excludes_tools_section_when_unavailable(self) -> None:
         """Prompt should not list research tools when unavailable."""
-        prompt = get_discuss_prompt(
-            user_prompt="Test",
-            research_tools_available=False,
-        )
+        prompt = get_discuss_prompt(research_tools_available=False)
 
         assert "search_corpus" not in prompt
         assert "Research Tools Available" not in prompt
 
     def test_prompt_includes_guidelines(self) -> None:
         """Prompt should include interaction guidelines."""
-        prompt = get_discuss_prompt(user_prompt="Test")
+        prompt = get_discuss_prompt()
 
         assert "clarifying questions" in prompt
         assert "conversational" in prompt
+
+    def test_prompt_loads_from_template(self) -> None:
+        """Prompt should load from external template file."""
+        # If template loading fails, get_discuss_prompt would raise
+        # TemplateNotFoundError - this tests the integration works
+        prompt = get_discuss_prompt()
+
+        # Verify it returns a non-empty string
+        assert isinstance(prompt, str)
+        assert len(prompt) > 100  # Should have substantial content
 
 
 class TestCreateDiscussAgent:
@@ -67,7 +65,7 @@ class TestCreateDiscussAgent:
         mock_model = MagicMock()
         mock_tools = [MagicMock(), MagicMock()]
 
-        create_discuss_agent(mock_model, mock_tools, "Test prompt")
+        create_discuss_agent(mock_model, mock_tools)
 
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
@@ -79,7 +77,7 @@ class TestCreateDiscussAgent:
         """Agent should be created with tools=None when no tools provided."""
         mock_model = MagicMock()
 
-        create_discuss_agent(mock_model, [], "Test prompt")
+        create_discuss_agent(mock_model, [])
 
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
@@ -87,14 +85,16 @@ class TestCreateDiscussAgent:
 
     @patch("langchain.agents.create_agent")
     def test_creates_agent_with_system_prompt(self, mock_create: MagicMock) -> None:
-        """Agent should receive a system prompt containing user's idea."""
+        """Agent should receive a system prompt with discussion guidelines."""
         mock_model = MagicMock()
 
-        create_discuss_agent(mock_model, [], "A cozy mystery story")
+        create_discuss_agent(mock_model, [])
 
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
-        assert "A cozy mystery story" in call_kwargs["system_prompt"]
+        # System prompt should contain discussion guidelines, not user prompt
+        assert "creative collaborator" in call_kwargs["system_prompt"]
+        assert "Genre and tone" in call_kwargs["system_prompt"]
 
 
 class TestRunDiscussPhase:
@@ -249,3 +249,48 @@ class TestRunDiscussPhase:
         )
 
         assert len(messages) == 0
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_run_discuss_phase_handles_null_token_values(
+        self, mock_create: MagicMock
+    ) -> None:
+        """run_discuss_phase should handle token_usage with None values."""
+        ai_msg = AIMessage(content="Response")
+        ai_msg.response_metadata = {"token_usage": {"total_tokens": None}}
+
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {"messages": [ai_msg]}
+        mock_create.return_value = mock_agent
+
+        _messages, calls, tokens = await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Test",
+        )
+
+        # Should handle None gracefully, counting the call but treating None as 0
+        assert calls == 1
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_run_discuss_phase_handles_usage_metadata_key(
+        self, mock_create: MagicMock
+    ) -> None:
+        """run_discuss_phase should extract tokens from usage_metadata key."""
+        ai_msg = AIMessage(content="Response")
+        ai_msg.response_metadata = {"usage_metadata": {"total_tokens": 200}}
+
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {"messages": [ai_msg]}
+        mock_create.return_value = mock_agent
+
+        _messages, calls, tokens = await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Test",
+        )
+
+        assert calls == 1
+        assert tokens == 200

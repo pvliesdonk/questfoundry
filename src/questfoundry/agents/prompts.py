@@ -2,54 +2,68 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
+from jinja2 import Template
+
+from questfoundry.prompts.loader import PromptLoader
+
+
+def _get_prompts_path() -> Path:
+    """Get the prompts directory path.
+
+    Returns prompts from package first, then falls back to project root.
+    """
+    # Package prompts directory (installed)
+    pkg_path = Path(__file__).parent.parent.parent.parent / "prompts"
+    if pkg_path.exists():
+        return pkg_path
+
+    # Project root fallback (development)
+    return Path.cwd() / "prompts"
+
 
 def get_discuss_prompt(
-    user_prompt: str,
     research_tools_available: bool = True,
 ) -> str:
     """Build the Discuss phase prompt as a system message string.
 
-    The LangChain create_agent() expects a string or SystemMessage for system_prompt.
-    The user_prompt is embedded directly in the system message to provide context.
+    Loads the prompt template from prompts/templates/discuss.yaml and
+    renders it with the provided context.
+
+    The user_prompt is NOT included in the system message - it's passed
+    separately as the initial HumanMessage to avoid duplication.
 
     Args:
-        user_prompt: The user's initial story idea
         research_tools_available: Whether research tools are available
 
     Returns:
         System prompt string for the Discuss agent
     """
-    system_template = f"""You are a creative collaborator helping to develop an interactive fiction concept.
+    loader = PromptLoader(_get_prompts_path())
+    template = loader.load("discuss")
 
-## Your Goal
-Help the user explore and refine their story idea for interactive fiction. Discuss:
-- Genre and tone
-- Themes and motifs
-- Target audience
-- Scope and complexity
-- Style notes
-
-## Guidelines
-- Ask clarifying questions to understand the vision
-- Suggest possibilities but respect the user's preferences
-- Be conversational and supportive
-- Focus on creative exploration, not implementation details
-
-## User's Initial Idea
-{user_prompt}
-"""
-
+    # Build the research tools section if tools are available
+    research_section = ""
     if research_tools_available:
-        system_template += """
-## Research Tools Available
-You have access to research tools to find relevant examples and techniques:
-- search_corpus: Search IF Craft Corpus for techniques and examples
-- get_document: Retrieve full documents from the corpus
-- list_clusters: Discover available topic clusters
-- web_search: Search the web for information
-- web_fetch: Fetch content from URLs
+        # Load the research tools section from the template
+        raw_data = _load_raw_template("discuss")
+        research_section = raw_data.get("research_tools_section", "")
 
-Use these tools when helpful, but don't overuse them - focus on the creative discussion.
-"""
+    # Render the system template with Jinja2
+    jinja_template = Template(template.system)
+    return str(jinja_template.render(research_tools_section=research_section))
 
-    return system_template
+
+def _load_raw_template(template_name: str) -> dict[str, Any]:
+    """Load raw template data without parsing into PromptTemplate.
+
+    This is needed to access fields not in the PromptTemplate dataclass.
+    """
+    from ruamel.yaml import YAML
+
+    path = _get_prompts_path() / "templates" / f"{template_name}.yaml"
+    yaml = YAML()
+    with path.open("r", encoding="utf-8") as f:
+        return dict(yaml.load(f))
