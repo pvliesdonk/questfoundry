@@ -175,7 +175,9 @@ class PipelineOrchestrator:
 
         # Add callbacks to the model if enabled
         if callbacks:
-            # with_config returns Runnable but is still usable as chat model
+            # with_config returns RunnableBinding which wraps the chat model.
+            # It preserves all BaseChatModel functionality (invoke, ainvoke, etc.)
+            # but static type is Runnable. Runtime behavior is correct.
             chat_model = chat_model.with_config(callbacks=callbacks)  # type: ignore[assignment]
 
         self._chat_model = chat_model
@@ -227,7 +229,11 @@ class PipelineOrchestrator:
             # Extract user_prompt from context
             user_prompt = context.get("user_prompt", "")
             if not user_prompt:
-                raise PipelineError(stage_name, "user_prompt required in context")
+                raise PipelineError(
+                    stage_name,
+                    "user_prompt is required in context dict. "
+                    "Pass context={'user_prompt': 'your prompt here'} to run_stage()",
+                )
 
             # Get chat model (with LangChain callbacks for logging if enabled)
             model = self._get_chat_model()
@@ -239,7 +245,7 @@ class PipelineOrchestrator:
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 model=model,
                 user_prompt=user_prompt,
-                provider_name=self._provider_name,
+                provider_name=self._provider_name or "unknown",
             )
 
             # Validate artifact

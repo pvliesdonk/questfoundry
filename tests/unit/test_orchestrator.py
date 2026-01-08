@@ -326,8 +326,8 @@ async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_close(tmp_path: Path) -> None:
-    """Orchestrator closes chat model on close."""
+async def test_orchestrator_close_sync(tmp_path: Path) -> None:
+    """Orchestrator closes chat model with sync close method."""
     orchestrator = PipelineOrchestrator(tmp_path)
     # Inject mock chat model directly
     mock_model = MagicMock()
@@ -339,3 +339,19 @@ async def test_orchestrator_close(tmp_path: Path) -> None:
 
     assert orchestrator._chat_model is None
     mock_model.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_close_async(tmp_path: Path) -> None:
+    """Orchestrator closes chat model with async close method."""
+    orchestrator = PipelineOrchestrator(tmp_path)
+    # Inject mock chat model with async close
+    mock_model = MagicMock()
+    mock_model.close = AsyncMock(return_value=None)  # Async close
+    orchestrator._chat_model = mock_model
+
+    # Close orchestrator
+    await orchestrator.close()
+
+    assert orchestrator._chat_model is None
+    mock_model.close.assert_awaited_once()

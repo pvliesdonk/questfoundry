@@ -8,6 +8,7 @@ including JSONL logging for LLM calls.
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -81,10 +82,11 @@ class LLMLoggingCallback(BaseCallbackHandler):
                     }
                 )
 
-        # Store pending call
+        # Store pending call with start time for duration tracking
         self._pending_calls[run_id] = {
             "model": model_name,
             "messages": flat_messages,
+            "start_time": perf_counter(),
         }
 
         log.debug(
@@ -115,11 +117,17 @@ class LLMLoggingCallback(BaseCallbackHandler):
         # Get pending call info
         call_info = self._pending_calls.pop(run_id, {})
 
+        # Calculate duration if start_time was recorded
+        duration_seconds = 0.0
+        if "start_time" in call_info:
+            duration_seconds = perf_counter() - call_info["start_time"]
+
         # Extract response content
         content = ""
         tool_calls: list[dict[str, Any]] = []
 
-        if response.generations:
+        # Check both levels of generations list before indexing
+        if response.generations and response.generations[0]:
             gen = response.generations[0][0]  # First generation, first batch
             content = gen.text if hasattr(gen, "text") else str(gen)
 
@@ -136,26 +144,42 @@ class LLMLoggingCallback(BaseCallbackHandler):
                         for tc in msg.tool_calls
                     ]
 
-        # Extract token usage
+        # Extract token usage with warning on missing
         total_tokens = 0
-
         llm_output = response.llm_output or {}
+
         if "token_usage" in llm_output:
             usage = llm_output["token_usage"]
-            total_tokens = usage.get("total_tokens", 0) or 0
+            tokens = usage.get("total_tokens")
+            if tokens is None:
+                log.warning(
+                    "token_count_missing",
+                    run_id=str(run_id),
+                    usage_structure=str(usage),
+                )
+            else:
+                total_tokens = tokens
         elif "usage_metadata" in llm_output:
             usage = llm_output["usage_metadata"]
-            total_tokens = usage.get("total_tokens", 0) or 0
+            tokens = usage.get("total_tokens")
+            if tokens is None:
+                log.warning(
+                    "token_count_missing",
+                    run_id=str(run_id),
+                    usage_structure=str(usage),
+                )
+            else:
+                total_tokens = tokens
 
         # Write to logger
         entry = self._llm_logger.create_entry(
-            stage="",  # Stage not available in callback context
+            stage="",  # Stage not available in callback context (would require tags)
             model=call_info.get("model", "unknown"),
             messages=call_info.get("messages", []),
             content=content,
             tokens_used=total_tokens,
             finish_reason="stop",  # Default, can be extracted from response metadata
-            duration_seconds=0.0,  # Duration not tracked in callback
+            duration_seconds=duration_seconds,
             tool_calls=tool_calls if tool_calls else None,
         )
         self._llm_logger.log(entry)
