@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, TypeVar
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -128,6 +129,15 @@ async def serialize_to_artifact(
                 result_type=type(result).__name__,
             )
 
+            # Add error feedback for retry
+            if attempt < max_retries:
+                messages.append(
+                    HumanMessage(
+                        content=f"Unexpected result type: {type(result).__name__}. "
+                        "Please output valid JSON matching the schema."
+                    )
+                )
+
         except ValidationError as e:
             last_errors = _format_validation_errors(e)
             log.debug(
@@ -140,6 +150,9 @@ async def serialize_to_artifact(
             if attempt < max_retries:
                 error_feedback = _build_error_feedback(last_errors)
                 messages.append(HumanMessage(content=error_feedback))
+
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            raise
 
         except Exception as e:
             last_errors = [str(e)]
@@ -185,9 +198,11 @@ def _extract_tokens(result: object) -> int:
 
     metadata = getattr(result, "response_metadata", None) or {}
     if "token_usage" in metadata:
-        return metadata["token_usage"].get("total_tokens") or 0
+        token_count = metadata["token_usage"].get("total_tokens")
+        return token_count if token_count is not None else 0
     if "usage_metadata" in metadata:
-        return metadata["usage_metadata"].get("total_tokens") or 0
+        token_count = metadata["usage_metadata"].get("total_tokens")
+        return token_count if token_count is not None else 0
     return 0
 
 

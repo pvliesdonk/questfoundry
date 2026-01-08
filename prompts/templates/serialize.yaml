@@ -9,7 +9,7 @@ system: |
 
   ## Guidelines
   - Extract ALL information from the brief - do not invent new details
-  - If a field is required and not mentioned in the brief, make a reasonable inference
+  - If a field is required and not mentioned in the brief, use a minimal/neutral value appropriate for the type (e.g., short placeholder text, 1 for integers)
   - If a field is optional and not mentioned, omit it
   - Use the exact field names and types specified
   - For arrays, include at least one item for required fields
