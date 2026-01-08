@@ -15,6 +15,7 @@ from questfoundry.providers.structured_output import (
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+    from langchain_core.runnables import Runnable
     from pydantic import BaseModel
 
 log = get_logger(__name__)
@@ -56,85 +57,19 @@ def create_provider(
 
 def _create_ollama(model: str, **kwargs: Any) -> LangChainProvider:
     """Create Ollama provider."""
-    try:
-        from langchain_ollama import ChatOllama
-    except ImportError as e:
-        log.error("provider_import_error", provider="ollama", package="langchain-ollama")
-        raise ProviderError(
-            "ollama",
-            "langchain-ollama not installed. Run: uv add langchain-ollama",
-        ) from e
-
-    host = kwargs.get("host") or os.getenv("OLLAMA_HOST")
-    if not host:
-        log.error("provider_config_error", provider="ollama", missing="OLLAMA_HOST")
-        raise ProviderError(
-            "ollama",
-            "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
-        )
-
-    chat_model = ChatOllama(
-        model=model,
-        base_url=host,
-        temperature=kwargs.get("temperature", 0.7),
-    )
-
+    chat_model = _create_ollama_base_model(model, **kwargs)
     return LangChainProvider(chat_model, model)
 
 
 def _create_openai(model: str, **kwargs: Any) -> LangChainProvider:
     """Create OpenAI provider."""
-    try:
-        from langchain_openai import ChatOpenAI
-    except ImportError as e:
-        log.error("provider_import_error", provider="openai", package="langchain-openai")
-        raise ProviderError(
-            "openai",
-            "langchain-openai not installed. Run: uv add langchain-openai",
-        ) from e
-
-    api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        log.error("provider_config_error", provider="openai", missing="OPENAI_API_KEY")
-        raise ProviderError(
-            "openai",
-            "API key required. Set OPENAI_API_KEY environment variable.",
-        )
-
-    chat_model = ChatOpenAI(
-        model=model,
-        api_key=api_key,  # type: ignore[arg-type]
-        temperature=kwargs.get("temperature", 0.7),
-    )
-
+    chat_model = _create_openai_base_model(model, **kwargs)
     return LangChainProvider(chat_model, model)
 
 
 def _create_anthropic(model: str, **kwargs: Any) -> LangChainProvider:
     """Create Anthropic provider."""
-    try:
-        from langchain_anthropic import ChatAnthropic
-    except ImportError as e:
-        log.error("provider_import_error", provider="anthropic", package="langchain-anthropic")
-        raise ProviderError(
-            "anthropic",
-            "langchain-anthropic not installed. Run: uv add langchain-anthropic",
-        ) from e
-
-    api_key = kwargs.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        log.error("provider_config_error", provider="anthropic", missing="ANTHROPIC_API_KEY")
-        raise ProviderError(
-            "anthropic",
-            "API key required. Set ANTHROPIC_API_KEY environment variable.",
-        )
-
-    chat_model = ChatAnthropic(
-        model=model,  # type: ignore[call-arg]
-        api_key=api_key,  # type: ignore[arg-type]
-        temperature=kwargs.get("temperature", 0.7),
-    )
-
+    chat_model = _create_anthropic_base_model(model, **kwargs)
     return LangChainProvider(chat_model, model)
 
 
@@ -144,7 +79,7 @@ def create_model_for_structured_output(
     schema: type[BaseModel] | None = None,
     strategy: StructuredOutputStrategy | None = None,
     **kwargs: Any,
-) -> BaseChatModel | Any:
+) -> BaseChatModel | Runnable[Any, Any]:
     """Create a chat model configured for structured output.
 
     This is a convenience function for creating a model that enforces
@@ -154,16 +89,17 @@ def create_model_for_structured_output(
     Args:
         provider_name: Provider (ollama, openai, anthropic).
         model_name: Model name. Uses provider default if None.
-        schema: Pydantic schema for structured output validation.
+        schema: Pydantic schema for structured output validation. If None,
+            returns an unstructured BaseChatModel.
         strategy: Output strategy (auto-selected if None).
         **kwargs: Additional model kwargs (temperature, api_key, host, etc.).
 
     Returns:
-        Configured BaseChatModel with structured output support.
+        BaseChatModel if no schema provided, or Runnable with structured output
+        if schema is provided.
 
     Raises:
         ProviderError: If provider is unavailable or misconfigured.
-        ValueError: If schema is required but not provided.
 
     Example:
         ```python

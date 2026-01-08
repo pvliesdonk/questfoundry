@@ -75,8 +75,9 @@ def with_structured_output(
     Returns:
         Model configured for structured output with the specified schema.
 
-    Raises:
-        ValueError: If strategy is AUTO but provider_name is not provided.
+    Note:
+        If strategy is AUTO and provider_name is not provided, defaults to TOOL
+        strategy as the safest option.
     """
     if strategy is None or strategy == StructuredOutputStrategy.AUTO:
         if not provider_name:
