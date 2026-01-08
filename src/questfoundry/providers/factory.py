@@ -21,12 +21,52 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def create_chat_model(
+    provider_name: str,
+    model: str,
+    **kwargs: Any,
+) -> BaseChatModel:
+    """Create a LangChain BaseChatModel directly.
+
+    This is the preferred way to get a chat model for use with LangChain agents
+    and the new stage protocol.
+
+    Args:
+        provider_name: Provider identifier (ollama, openai, anthropic).
+        model: Model name/identifier.
+        **kwargs: Additional provider-specific options.
+
+    Returns:
+        Configured BaseChatModel.
+
+    Raises:
+        ProviderError: If provider unavailable or misconfigured.
+    """
+    provider_name_lower = provider_name.lower()
+
+    if provider_name_lower == "ollama":
+        chat_model = _create_ollama_base_model(model, **kwargs)
+    elif provider_name_lower == "openai":
+        chat_model = _create_openai_base_model(model, **kwargs)
+    elif provider_name_lower == "anthropic":
+        chat_model = _create_anthropic_base_model(model, **kwargs)
+    else:
+        log.error("provider_unknown", provider=provider_name_lower)
+        raise ProviderError(provider_name_lower, f"Unknown provider: {provider_name_lower}")
+
+    log.info("chat_model_created", provider=provider_name_lower, model=model)
+    return chat_model
+
+
 def create_provider(
     provider_name: str,
     model: str,
     **kwargs: Any,
 ) -> LangChainProvider:
-    """Create a LangChain-backed provider.
+    """Create a LangChain-backed provider (legacy wrapper).
+
+    NOTE: Prefer create_chat_model() for new code using the LangChain-native
+    stage protocol. This function is retained for backwards compatibility.
 
     Args:
         provider_name: Provider identifier (ollama, openai, anthropic).
