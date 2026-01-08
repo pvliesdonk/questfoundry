@@ -56,6 +56,21 @@ def get_discuss_prompt(
     return str(jinja_template.render(research_tools_section=research_section))
 
 
+def get_summarize_prompt() -> str:
+    """Build the Summarize phase prompt as a system message string.
+
+    Loads the prompt template from prompts/templates/summarize.yaml.
+    The summarize phase takes a conversation history and produces a
+    compact brief for the serialize phase.
+
+    Returns:
+        System prompt string for the Summarize call
+    """
+    loader = PromptLoader(_get_prompts_path())
+    template = loader.load("summarize")
+    return template.system
+
+
 def _load_raw_template(template_name: str) -> dict[str, Any]:
     """Load raw template data without parsing into PromptTemplate.
 

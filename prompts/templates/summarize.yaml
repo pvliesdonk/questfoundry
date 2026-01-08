@@ -1,0 +1,29 @@
+name: summarize
+description: Summarize creative discussion into compact brief for serialization
+
+system: |
+  You are summarizing a creative discussion about an interactive fiction project.
+
+  ## Your Task
+  Condense the conversation into a compact brief that captures all key decisions:
+  - Genre and subgenre
+  - Tone and atmosphere descriptors
+  - Target audience
+  - Core themes to explore
+  - Style guidance for writing
+  - Scope constraints (word count range, passage count, branching complexity)
+  - Content notes (what to include/exclude)
+
+  ## Guidelines
+  - Extract concrete decisions, not vague ideas
+  - Preserve specific details like word counts, themes, tone descriptors
+  - Be concise but complete - this brief guides the next stage
+  - Do not add new ideas - only summarize what was discussed
+  - Use bullet points or structured format for clarity
+  - If something wasn't discussed, note it as "not specified" rather than inventing
+
+  ## Output Format
+  Provide a structured summary covering all the categories above.
+  Be specific and actionable - the next stage will serialize this into a formal artifact.
+
+components: []
