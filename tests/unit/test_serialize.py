@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, RootModel, ValidationError, field_validator
 
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.agents.serialize import (
@@ -15,6 +15,7 @@ from questfoundry.agents.serialize import (
     _format_validation_errors,
     serialize_to_artifact,
 )
+from questfoundry.providers.structured_output import StructuredOutputStrategy
 
 
 class SimpleSchema(BaseModel):
@@ -139,8 +140,6 @@ class TestSerializeToArtifact:
     @pytest.mark.asyncio
     async def test_serialize_extracts_tokens_from_response(self) -> None:
         """serialize_to_artifact should call _extract_tokens on response."""
-        from unittest.mock import patch
-
         mock_model = MagicMock()
         mock_model.with_structured_output.return_value.ainvoke = AsyncMock(
             return_value={"title": "Test", "count": 5}
@@ -162,8 +161,6 @@ class TestSerializeToArtifact:
     @pytest.mark.asyncio
     async def test_serialize_accumulates_tokens_on_retry(self) -> None:
         """serialize_to_artifact should accumulate tokens across retries."""
-        from unittest.mock import patch
-
         mock_model = MagicMock()
         mock_invoke = AsyncMock(
             side_effect=[
@@ -225,8 +222,6 @@ class TestSerializeToArtifact:
     @pytest.mark.asyncio
     async def test_serialize_passes_strategy_to_structured_output(self) -> None:
         """serialize_to_artifact should pass strategy parameter."""
-        from questfoundry.providers.structured_output import StructuredOutputStrategy
-
         mock_model = MagicMock()
         mock_model.with_structured_output.return_value.ainvoke = AsyncMock(
             return_value=SimpleSchema(title="Test", count=1)
@@ -241,6 +236,45 @@ class TestSerializeToArtifact:
         )
 
         mock_model.with_structured_output.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_serialize_calls_with_structured_output(self) -> None:
+        """serialize_to_artifact should call with_structured_output on model."""
+        mock_model = MagicMock()
+        mock_model.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value=SimpleSchema(title="Test", count=1)
+        )
+
+        await serialize_to_artifact(
+            mock_model,
+            "A test brief",
+            SimpleSchema,
+        )
+
+        # Verify with_structured_output was called
+        mock_model.with_structured_output.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_serialize_retries_on_unexpected_type(self) -> None:
+        """serialize_to_artifact should retry when model returns unexpected type."""
+        mock_model = MagicMock()
+        mock_invoke = AsyncMock(
+            side_effect=[
+                "unexpected string",  # First attempt: unexpected type
+                SimpleSchema(title="Valid", count=1),  # Second attempt: valid
+            ]
+        )
+        mock_model.with_structured_output.return_value.ainvoke = mock_invoke
+
+        artifact, _tokens = await serialize_to_artifact(
+            mock_model,
+            "A test brief",
+            SimpleSchema,
+            max_retries=2,
+        )
+
+        assert artifact.title == "Valid"
+        assert mock_invoke.call_count == 2
 
 
 class TestHelperFunctions:
@@ -287,18 +321,22 @@ class TestHelperFunctions:
     def test_format_validation_errors_without_location(self) -> None:
         """_format_validation_errors should handle errors without location."""
 
-        class RootValidated(BaseModel):
-            value: int
-
-            def __init__(self, **data: object) -> None:
-                super().__init__(**data)
+        class ListCannotBeEmpty(RootModel[list[int]]):
+            @field_validator("root")
+            @classmethod
+            def check_not_empty(cls, v: list[int]) -> list[int]:
+                if not v:
+                    raise ValueError("List cannot be empty")
+                return v
 
         try:
-            RootValidated(value="not_an_int")  # type: ignore[arg-type]
+            ListCannotBeEmpty.model_validate([])
         except ValidationError as e:
             errors = _format_validation_errors(e)
 
-        assert len(errors) >= 1
+        # Root-level error should not have a field location prefix
+        assert len(errors) == 1
+        assert "List cannot be empty" in errors[0]
 
     def test_build_error_feedback_formats_errors(self) -> None:
         """_build_error_feedback should format errors for model."""
