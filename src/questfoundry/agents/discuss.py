@@ -19,7 +19,6 @@ log = get_logger(__name__)
 def create_discuss_agent(
     model: BaseChatModel,
     tools: list[BaseTool],
-    user_prompt: str,
 ) -> Any:  # Returns CompiledStateGraph but avoid import issues
     """Create a Discuss phase agent.
 
@@ -29,23 +28,24 @@ def create_discuss_agent(
     Args:
         model: Chat model to use
         tools: Research tools available to the agent
-        user_prompt: User's initial story idea
 
     Returns:
         Compiled agent graph ready for invocation
     """
     from langchain.agents import create_agent
 
+    # Use consistent logic for checking if tools are available
+    has_tools = bool(tools)
+
     system_prompt = get_discuss_prompt(
-        user_prompt=user_prompt,
-        research_tools_available=len(tools) > 0,
+        research_tools_available=has_tools,
     )
 
-    log.info("discuss_agent_created", tool_count=len(tools))
+    log.info("discuss_agent_created", tool_count=len(tools) if tools else 0)
 
     return create_agent(
         model=model,
-        tools=tools if tools else None,
+        tools=tools if has_tools else None,
         system_prompt=system_prompt,
     )
 
@@ -70,7 +70,7 @@ async def run_discuss_phase(
     Returns:
         Tuple of (messages, llm_call_count, total_tokens)
     """
-    agent = create_discuss_agent(model, tools, user_prompt)
+    agent = create_discuss_agent(model, tools)
 
     log.info("discuss_phase_started", user_prompt_length=len(user_prompt))
 
@@ -93,12 +93,13 @@ async def run_discuss_phase(
             metadata = msg.response_metadata or {}
             if "token_usage" in metadata:
                 usage = metadata["token_usage"]
-                total_tokens += usage.get("total_tokens", 0)
+                # Use `or 0` to handle None values safely
+                total_tokens += usage.get("total_tokens") or 0
                 llm_calls += 1
             # Some providers use different metadata keys
             elif "usage_metadata" in metadata:
                 usage = metadata["usage_metadata"]
-                total_tokens += usage.get("total_tokens", 0)
+                total_tokens += usage.get("total_tokens") or 0
                 llm_calls += 1
 
     log.info(
