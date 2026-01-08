@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
+from questfoundry.artifacts import ValidationErrorDetail
 from questfoundry.artifacts.validator import (
     _generate_requirement_text,
     _get_nested_value,
@@ -13,7 +14,6 @@ from questfoundry.artifacts.validator import (
     pydantic_errors_to_details,
     strip_null_values,
 )
-from questfoundry.conversation import ValidationErrorDetail
 
 # --- strip_null_values Tests ---
 
