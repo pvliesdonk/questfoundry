@@ -80,6 +80,7 @@ class TestLLMLoggingCallback:
         callback._pending_calls[run_id] = {
             "model": "gpt-4",
             "messages": [{"role": "human", "content": "Hello"}],
+            "start_time": 0.0,
         }
 
         # Create mock response
@@ -102,12 +103,15 @@ class TestLLMLoggingCallback:
         assert "gpt-4" in content
         assert "Response text" in content
 
-    def test_on_llm_end_extracts_tool_calls(self, callback: LLMLoggingCallback) -> None:
+    def test_on_llm_end_extracts_tool_calls(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
         """on_llm_end extracts tool calls from response."""
         run_id = uuid4()
         callback._pending_calls[run_id] = {
             "model": "gpt-4",
             "messages": [],
+            "start_time": 0.0,
         }
 
         # Create mock response with tool calls
@@ -122,8 +126,13 @@ class TestLLMLoggingCallback:
         mock_response.generations = [[mock_gen]]
         mock_response.llm_output = {}
 
-        # Should not raise
         callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        # Verify tool calls were logged
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        content = log_file.read_text()
+        assert "search" in content
+        assert "call_123" in content
 
     def test_on_llm_end_extracts_usage_metadata(
         self, callback: LLMLoggingCallback, tmp_path: Path
@@ -133,6 +142,7 @@ class TestLLMLoggingCallback:
         callback._pending_calls[run_id] = {
             "model": "claude-3",
             "messages": [],
+            "start_time": 0.0,
         }
 
         mock_gen = MagicMock()
@@ -165,12 +175,74 @@ class TestLLMLoggingCallback:
         # Should not raise even with no pending call
         callback.on_llm_end(response=mock_response, run_id=run_id)
 
+    def test_on_llm_end_handles_empty_generations(self, callback: LLMLoggingCallback) -> None:
+        """on_llm_end handles empty generations list gracefully."""
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4",
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        mock_response = MagicMock()
+        mock_response.generations = []  # Empty outer list
+        mock_response.llm_output = {}
+
+        # Should not raise
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+    def test_on_llm_end_handles_empty_inner_generations(self, callback: LLMLoggingCallback) -> None:
+        """on_llm_end handles empty inner generations list gracefully."""
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4",
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        mock_response = MagicMock()
+        mock_response.generations = [[]]  # Empty inner list
+        mock_response.llm_output = {}
+
+        # Should not raise
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+    def test_on_llm_end_tracks_duration(self, callback: LLMLoggingCallback, tmp_path: Path) -> None:
+        """on_llm_end calculates duration from start_time."""
+        import json
+        from time import perf_counter
+
+        run_id = uuid4()
+        start = perf_counter()
+
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4",
+            "messages": [],
+            "start_time": start,
+        }
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        # Verify duration was logged
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        content = log_file.read_text()
+        entry = json.loads(content.strip())
+        assert entry["duration_seconds"] >= 0.0
+
     def test_on_llm_error_cleans_pending_call(self, callback: LLMLoggingCallback) -> None:
         """on_llm_error removes pending call."""
         run_id = uuid4()
         callback._pending_calls[run_id] = {
             "model": "gpt-4",
             "messages": [],
+            "start_time": 0.0,
         }
 
         callback.on_llm_error(
