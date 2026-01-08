@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.observability.logging import get_logger
 from questfoundry.providers.base import ProviderError
-from questfoundry.providers.langchain_wrapper import LangChainProvider
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     with_structured_output,
@@ -21,12 +20,15 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-def create_provider(
+def create_chat_model(
     provider_name: str,
     model: str,
     **kwargs: Any,
-) -> LangChainProvider:
-    """Create a LangChain-backed provider.
+) -> BaseChatModel:
+    """Create a LangChain BaseChatModel directly.
+
+    This is the primary way to get a chat model for use with LangChain agents
+    and the stage protocol.
 
     Args:
         provider_name: Provider identifier (ollama, openai, anthropic).
@@ -34,43 +36,25 @@ def create_provider(
         **kwargs: Additional provider-specific options.
 
     Returns:
-        Configured LangChainProvider.
+        Configured BaseChatModel.
 
     Raises:
         ProviderError: If provider unavailable or misconfigured.
     """
-    provider_name = provider_name.lower()
+    provider_name_lower = provider_name.lower()
 
-    if provider_name == "ollama":
-        provider = _create_ollama(model, **kwargs)
-    elif provider_name == "openai":
-        provider = _create_openai(model, **kwargs)
-    elif provider_name == "anthropic":
-        provider = _create_anthropic(model, **kwargs)
+    if provider_name_lower == "ollama":
+        chat_model = _create_ollama_base_model(model, **kwargs)
+    elif provider_name_lower == "openai":
+        chat_model = _create_openai_base_model(model, **kwargs)
+    elif provider_name_lower == "anthropic":
+        chat_model = _create_anthropic_base_model(model, **kwargs)
     else:
-        log.error("provider_unknown", provider=provider_name)
-        raise ProviderError(provider_name, f"Unknown provider: {provider_name}")
+        log.error("provider_unknown", provider=provider_name_lower)
+        raise ProviderError(provider_name_lower, f"Unknown provider: {provider_name_lower}")
 
-    log.info("provider_created", provider=provider_name, model=model)
-    return provider
-
-
-def _create_ollama(model: str, **kwargs: Any) -> LangChainProvider:
-    """Create Ollama provider."""
-    chat_model = _create_ollama_base_model(model, **kwargs)
-    return LangChainProvider(chat_model, model)
-
-
-def _create_openai(model: str, **kwargs: Any) -> LangChainProvider:
-    """Create OpenAI provider."""
-    chat_model = _create_openai_base_model(model, **kwargs)
-    return LangChainProvider(chat_model, model)
-
-
-def _create_anthropic(model: str, **kwargs: Any) -> LangChainProvider:
-    """Create Anthropic provider."""
-    chat_model = _create_anthropic_base_model(model, **kwargs)
-    return LangChainProvider(chat_model, model)
+    log.info("chat_model_created", provider=provider_name_lower, model=model)
+    return chat_model
 
 
 def create_model_for_structured_output(
