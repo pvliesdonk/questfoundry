@@ -14,10 +14,12 @@ Known limitations:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path  # noqa: TC003 - Used at runtime in fixtures
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from tests.integration.conftest import requires_any_provider, requires_ollama, requires_openai
 
@@ -288,8 +290,6 @@ class TestOrchestratorIntegration:
             assert log_file.exists()
 
             # Should have logged entries
-            import json
-
             content = log_file.read_text()
             lines = [line for line in content.strip().split("\n") if line]
             assert len(lines) >= 1
@@ -328,8 +328,6 @@ class TestOrchestratorIntegration:
             assert artifact_path.exists()
 
             # Load and validate the artifact
-            import yaml
-
             with artifact_path.open() as f:
                 artifact_data = yaml.safe_load(f)
 
