@@ -46,8 +46,9 @@ class TestSummarizeDiscussion:
         """summarize_discussion should return summary text and token count."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary of discussion")
-        mock_response.response_metadata = {"token_usage": {"total_tokens": 100}}
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        # Token usage via usage_metadata attribute (Ollama-style)
+        mock_response.usage_metadata = {"total_tokens": 100}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [
             HumanMessage(content="I want to write a mystery"),
@@ -60,48 +61,17 @@ class TestSummarizeDiscussion:
         assert tokens == 100
 
     @pytest.mark.asyncio
-    async def test_summarize_uses_lower_temperature(self) -> None:
-        """summarize_discussion should bind model with lower temperature."""
+    async def test_summarize_uses_model_directly(self) -> None:
+        """summarize_discussion should use model directly without bind."""
         mock_model = MagicMock()
-        mock_bound = MagicMock()
         mock_response = AIMessage(content="Summary")
-        mock_bound.ainvoke = AsyncMock(return_value=mock_response)
-        mock_model.bind.return_value = mock_bound
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [HumanMessage(content="Test")]
 
         await summarize_discussion(mock_model, messages)
 
-        mock_model.bind.assert_called_once_with(temperature=0.3)
-
-    @pytest.mark.asyncio
-    async def test_summarize_fallback_when_bind_raises_attribute_error(self) -> None:
-        """summarize_discussion should fallback when bind not supported."""
-        mock_model = MagicMock()
-        mock_model.bind.side_effect = AttributeError("no bind")
-        mock_response = AIMessage(content="Summary")
-        mock_model.ainvoke = AsyncMock(return_value=mock_response)
-
-        messages = [HumanMessage(content="Test")]
-
-        summary, _tokens = await summarize_discussion(mock_model, messages)
-
-        assert summary == "Summary"
-        mock_model.ainvoke.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_summarize_fallback_when_bind_raises_type_error(self) -> None:
-        """summarize_discussion should fallback when bind raises TypeError."""
-        mock_model = MagicMock()
-        mock_model.bind.side_effect = TypeError("bad args")
-        mock_response = AIMessage(content="Summary")
-        mock_model.ainvoke = AsyncMock(return_value=mock_response)
-
-        messages = [HumanMessage(content="Test")]
-
-        summary, _tokens = await summarize_discussion(mock_model, messages)
-
-        assert summary == "Summary"
+        # Should call ainvoke directly on model, not via bind
         mock_model.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio
@@ -109,7 +79,7 @@ class TestSummarizeDiscussion:
         """summarize_discussion should include formatted conversation."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [
             HumanMessage(content="User message"),
@@ -119,7 +89,7 @@ class TestSummarizeDiscussion:
         await summarize_discussion(mock_model, messages)
 
         # Check the call to ainvoke included the conversation
-        call_args = mock_model.bind.return_value.ainvoke.call_args
+        call_args = mock_model.ainvoke.call_args
         invoke_messages = call_args[0][0]
 
         # Should have system message and human message with conversation
@@ -134,8 +104,8 @@ class TestSummarizeDiscussion:
         """summarize_discussion should handle responses without metadata."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
-        # No response_metadata
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        # No usage_metadata or response_metadata
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [HumanMessage(content="Test")]
 
@@ -149,8 +119,8 @@ class TestSummarizeDiscussion:
         """summarize_discussion should handle None token values."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
-        mock_response.response_metadata = {"token_usage": {"total_tokens": None}}
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        mock_response.usage_metadata = {"total_tokens": None}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [HumanMessage(content="Test")]
 
@@ -160,12 +130,13 @@ class TestSummarizeDiscussion:
         assert tokens == 0
 
     @pytest.mark.asyncio
-    async def test_summarize_handles_usage_metadata_key(self) -> None:
-        """summarize_discussion should extract tokens from usage_metadata."""
+    async def test_summarize_handles_usage_metadata_attribute(self) -> None:
+        """summarize_discussion should extract tokens from usage_metadata attribute."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
-        mock_response.response_metadata = {"usage_metadata": {"total_tokens": 200}}
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        # Ollama-style: usage_metadata as attribute on AIMessage
+        mock_response.usage_metadata = {"total_tokens": 200}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [HumanMessage(content="Test")]
 
@@ -174,11 +145,42 @@ class TestSummarizeDiscussion:
         assert tokens == 200
 
     @pytest.mark.asyncio
+    async def test_summarize_handles_openai_response_metadata(self) -> None:
+        """summarize_discussion should extract tokens from response_metadata."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="Summary")
+        # OpenAI-style: token_usage in response_metadata
+        mock_response.response_metadata = {"token_usage": {"total_tokens": 150}}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        messages = [HumanMessage(content="Test")]
+
+        _summary, tokens = await summarize_discussion(mock_model, messages)
+
+        assert tokens == 150
+
+    @pytest.mark.asyncio
+    async def test_summarize_prefers_usage_metadata_over_response_metadata(self) -> None:
+        """summarize_discussion should prefer usage_metadata attribute."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="Summary")
+        # Both present - should prefer usage_metadata
+        mock_response.usage_metadata = {"total_tokens": 100}
+        mock_response.response_metadata = {"token_usage": {"total_tokens": 200}}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        messages = [HumanMessage(content="Test")]
+
+        _summary, tokens = await summarize_discussion(mock_model, messages)
+
+        assert tokens == 100  # From usage_metadata, not response_metadata
+
+    @pytest.mark.asyncio
     async def test_summarize_handles_empty_messages(self) -> None:
         """summarize_discussion should handle empty message list."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Nothing to summarize")
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         summary, _tokens = await summarize_discussion(mock_model, [])
 
@@ -189,7 +191,7 @@ class TestSummarizeDiscussion:
         """summarize_discussion should handle non-string response content."""
         mock_model = MagicMock()
         mock_response = AIMessage(content=["list", "content"])  # type: ignore[arg-type]
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [HumanMessage(content="Test")]
 
@@ -203,7 +205,7 @@ class TestSummarizeDiscussion:
         """summarize_discussion should format different message types."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
-        mock_model.bind.return_value.ainvoke = AsyncMock(return_value=mock_response)
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [
             SystemMessage(content="System context"),
@@ -213,7 +215,7 @@ class TestSummarizeDiscussion:
 
         await summarize_discussion(mock_model, messages)
 
-        call_args = mock_model.bind.return_value.ainvoke.call_args
+        call_args = mock_model.ainvoke.call_args
         invoke_messages = call_args[0][0]
         conversation_text = invoke_messages[1].content
 

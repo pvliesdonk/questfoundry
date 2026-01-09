@@ -280,29 +280,44 @@ class TestSerializeToArtifact:
 class TestHelperFunctions:
     """Test helper functions."""
 
-    def test_extract_tokens_from_token_usage(self) -> None:
-        """_extract_tokens should extract from token_usage key."""
+    def test_extract_tokens_from_usage_metadata_attribute(self) -> None:
+        """_extract_tokens should extract from usage_metadata attribute (Ollama)."""
         mock_result = MagicMock()
+        mock_result.usage_metadata = {"total_tokens": 200}
+
+        assert _extract_tokens(mock_result) == 200
+
+    def test_extract_tokens_from_response_metadata_token_usage(self) -> None:
+        """_extract_tokens should extract from response_metadata (OpenAI)."""
+        mock_result = MagicMock(spec=["response_metadata"])
         mock_result.response_metadata = {"token_usage": {"total_tokens": 100}}
 
         assert _extract_tokens(mock_result) == 100
 
-    def test_extract_tokens_from_usage_metadata(self) -> None:
-        """_extract_tokens should extract from usage_metadata key."""
+    def test_extract_tokens_prefers_usage_metadata_over_response_metadata(self) -> None:
+        """_extract_tokens should prefer usage_metadata attribute."""
         mock_result = MagicMock()
-        mock_result.response_metadata = {"usage_metadata": {"total_tokens": 200}}
+        mock_result.usage_metadata = {"total_tokens": 150}
+        mock_result.response_metadata = {"token_usage": {"total_tokens": 200}}
 
-        assert _extract_tokens(mock_result) == 200
+        assert _extract_tokens(mock_result) == 150  # From usage_metadata
 
     def test_extract_tokens_returns_zero_when_no_metadata(self) -> None:
         """_extract_tokens should return 0 when no metadata."""
-        mock_result = MagicMock(spec=[])  # No response_metadata attribute
+        mock_result = MagicMock(spec=[])  # No attributes
 
         assert _extract_tokens(mock_result) == 0
 
-    def test_extract_tokens_handles_none_total_tokens(self) -> None:
-        """_extract_tokens should handle None total_tokens."""
-        mock_result = MagicMock()
+    def test_extract_tokens_handles_none_total_tokens_in_usage_metadata(self) -> None:
+        """_extract_tokens should handle None total_tokens in usage_metadata."""
+        mock_result = MagicMock(spec=["usage_metadata"])
+        mock_result.usage_metadata = {"total_tokens": None}
+
+        assert _extract_tokens(mock_result) == 0
+
+    def test_extract_tokens_handles_none_total_tokens_in_response_metadata(self) -> None:
+        """_extract_tokens should handle None total_tokens in response_metadata."""
+        mock_result = MagicMock(spec=["response_metadata"])
         mock_result.response_metadata = {"token_usage": {"total_tokens": None}}
 
         assert _extract_tokens(mock_result) == 0
