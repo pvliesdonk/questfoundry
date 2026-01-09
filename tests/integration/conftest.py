@@ -11,6 +11,10 @@ from pathlib import Path  # noqa: TC003 - Used at runtime in integration_project
 from typing import TYPE_CHECKING
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env file at import time so provider availability checks work
+load_dotenv()
 
 if TYPE_CHECKING:
     from collections.abc import Generator

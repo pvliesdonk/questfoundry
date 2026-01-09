@@ -78,7 +78,9 @@ def test_init_existing_directory_fails(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init", "existing", "--path", str(tmp_path)])
 
     assert result.exit_code == 1
-    assert "already exists" in result.stdout
+    # Check for both words (may be split across lines due to terminal wrapping)
+    assert "already" in result.stdout
+    assert "exists" in result.stdout
 
 
 # --- Status Command Tests ---
