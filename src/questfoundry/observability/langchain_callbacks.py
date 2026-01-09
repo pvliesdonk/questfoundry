@@ -127,7 +127,11 @@ class LLMLoggingCallback(BaseCallbackHandler):
         tool_calls: list[dict[str, Any]] = []
 
         # Check both levels of generations list before indexing
-        if response.generations and response.generations[0]:
+        if (
+            response.generations
+            and len(response.generations) > 0
+            and len(response.generations[0]) > 0
+        ):
             gen = response.generations[0][0]  # First generation, first batch
             content = gen.text if hasattr(gen, "text") else str(gen)
 

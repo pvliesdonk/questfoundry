@@ -33,7 +33,7 @@ def _ollama_available() -> bool:
 
         response = httpx.get(f"{host}/api/tags", timeout=5.0)
         return response.status_code == 200
-    except Exception:
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError, OSError):
         return False
 
 
