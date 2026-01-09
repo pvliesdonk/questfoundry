@@ -244,23 +244,23 @@ class TestOrchestratorIntegration:
             integration_project,
             provider_override="ollama/qwen3:8b",
         )
+        try:
+            result = await orchestrator.run_stage(
+                "dream",
+                context={"user_prompt": simple_story_prompt},
+            )
 
-        result = await orchestrator.run_stage(
-            "dream",
-            context={"user_prompt": simple_story_prompt},
-        )
+            # Should complete successfully
+            assert result.status == "completed"
+            assert result.llm_calls >= 2
+            assert result.tokens_used > 0
+            assert result.duration_seconds > 0
 
-        # Should complete successfully
-        assert result.status == "completed"
-        assert result.llm_calls >= 2
-        assert result.tokens_used > 0
-        assert result.duration_seconds > 0
-
-        # Artifact should be written
-        assert result.artifact_path is not None
-        assert result.artifact_path.exists()
-
-        await orchestrator.close()
+            # Artifact should be written
+            assert result.artifact_path is not None
+            assert result.artifact_path.exists()
+        finally:
+            await orchestrator.close()
 
     @pytest.mark.asyncio
     @requires_ollama
@@ -277,30 +277,30 @@ class TestOrchestratorIntegration:
             provider_override="ollama/qwen3:8b",
             enable_llm_logging=True,
         )
+        try:
+            await orchestrator.run_stage(
+                "dream",
+                context={"user_prompt": simple_story_prompt},
+            )
 
-        await orchestrator.run_stage(
-            "dream",
-            context={"user_prompt": simple_story_prompt},
-        )
+            # Check that log file was created
+            log_file = integration_project / "logs" / "llm_calls.jsonl"
+            assert log_file.exists()
 
-        # Check that log file was created
-        log_file = integration_project / "logs" / "llm_calls.jsonl"
-        assert log_file.exists()
+            # Should have logged entries
+            import json
 
-        # Should have logged entries
-        import json
+            content = log_file.read_text()
+            lines = [line for line in content.strip().split("\n") if line]
+            assert len(lines) >= 1
 
-        content = log_file.read_text()
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) >= 1
-
-        # Each line should be valid JSON
-        for line in lines:
-            entry = json.loads(line)
-            assert "model" in entry
-            assert "content" in entry
-
-        await orchestrator.close()
+            # Each line should be valid JSON
+            for line in lines:
+                entry = json.loads(line)
+                assert "model" in entry
+                assert "content" in entry
+        finally:
+            await orchestrator.close()
 
     @pytest.mark.asyncio
     @requires_ollama
@@ -317,26 +317,26 @@ class TestOrchestratorIntegration:
             integration_project,
             provider_override="ollama/qwen3:8b",
         )
+        try:
+            _result = await orchestrator.run_stage(
+                "dream",
+                context={"user_prompt": simple_story_prompt},
+            )
 
-        _result = await orchestrator.run_stage(
-            "dream",
-            context={"user_prompt": simple_story_prompt},
-        )
+            # Verify artifact file
+            artifact_path = integration_project / "artifacts" / "dream.yaml"
+            assert artifact_path.exists()
 
-        # Verify artifact file
-        artifact_path = integration_project / "artifacts" / "dream.yaml"
-        assert artifact_path.exists()
+            # Load and validate the artifact
+            import yaml
 
-        # Load and validate the artifact
-        import yaml
+            with artifact_path.open() as f:
+                artifact_data = yaml.safe_load(f)
 
-        with artifact_path.open() as f:
-            artifact_data = yaml.safe_load(f)
-
-        artifact = DreamArtifact.model_validate(artifact_data)
-        assert artifact.type == "dream"
-
-        await orchestrator.close()
+            artifact = DreamArtifact.model_validate(artifact_data)
+            assert artifact.type == "dream"
+        finally:
+            await orchestrator.close()
 
 
 @requires_any_provider
