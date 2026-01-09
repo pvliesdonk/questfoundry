@@ -503,7 +503,7 @@ while still providing guidance through examples in the prompt template.
 
 ## DREAM Stage Implementation
 
-The DREAM stage is the reference implementation for new stages (see [ADR-009](docs/architecture/decisions.md#adr-009-langchain-agents-for-dream-stage)). Key patterns:
+The DREAM stage is the reference implementation for new stages (see [ADR-009](docs/architecture/decisions.md#adr-009-langchain-native-dream-pipeline)). Key patterns:
 
 ### Three-Phase Pattern
 
