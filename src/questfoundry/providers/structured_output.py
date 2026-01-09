@@ -18,8 +18,8 @@ class StructuredOutputStrategy(str, Enum):
     """Strategy for structured output generation.
 
     Attributes:
-        TOOL: Use tool calling to force schema adherence.
-        JSON_MODE: Use provider's native JSON mode.
+        TOOL: Use tool/function calling to force schema adherence.
+        JSON_MODE: Use provider's native JSON schema support.
         AUTO: Auto-select based on provider capabilities.
     """
 
@@ -86,5 +86,5 @@ def with_structured_output(
         else:
             strategy = get_default_strategy(provider_name)
 
-    method = "function_calling" if strategy == StructuredOutputStrategy.TOOL else "json_mode"
+    method = "function_calling" if strategy == StructuredOutputStrategy.TOOL else "json_schema"
     return model.with_structured_output(schema, method=method)

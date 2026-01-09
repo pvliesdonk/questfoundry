@@ -84,7 +84,7 @@ class TestWithStructuredOutput:
         assert result is mock_model
 
     def test_with_structured_output_json_mode_strategy(self) -> None:
-        """Should call with_structured_output with json_mode method."""
+        """Should call with_structured_output with json_schema method."""
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
@@ -96,7 +96,7 @@ class TestWithStructuredOutput:
 
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
-            method="json_mode",
+            method="json_schema",
         )
         assert result is mock_model
 
@@ -127,7 +127,7 @@ class TestWithStructuredOutput:
         )
         mock_model.with_structured_output.assert_called_with(
             SampleSchema,
-            method="json_mode",
+            method="json_schema",
         )
 
     def test_with_structured_output_none_strategy_defaults_to_tool(self) -> None:
@@ -159,8 +159,8 @@ class TestWithStructuredOutput:
             provider_name="anthropic",
         )
 
-        # Anthropic defaults to JSON_MODE
+        # Anthropic defaults to JSON_MODE (which uses json_schema method)
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
-            method="json_mode",
+            method="json_schema",
         )
