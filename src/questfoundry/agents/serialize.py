@@ -187,22 +187,32 @@ async def serialize_to_artifact(
 def _extract_tokens(result: object) -> int:
     """Extract token usage from response metadata.
 
+    LangChain tracks token usage in different places:
+    - OpenAI: response_metadata["token_usage"]
+    - Ollama: usage_metadata attribute on AIMessage
+
     Args:
         result: Response from model invocation.
 
     Returns:
         Total tokens used, or 0 if not available.
     """
-    if not hasattr(result, "response_metadata"):
-        return 0
+    # First check usage_metadata attribute (Ollama, newer providers)
+    if hasattr(result, "usage_metadata"):
+        usage = getattr(result, "usage_metadata", None)
+        if usage:
+            token_count = usage.get("total_tokens")
+            if token_count is not None:
+                return int(token_count)
 
-    metadata = getattr(result, "response_metadata", None) or {}
-    if "token_usage" in metadata:
-        token_count = metadata["token_usage"].get("total_tokens")
-        return token_count if token_count is not None else 0
-    if "usage_metadata" in metadata:
-        token_count = metadata["usage_metadata"].get("total_tokens")
-        return token_count if token_count is not None else 0
+    # Then check response_metadata (OpenAI)
+    if hasattr(result, "response_metadata"):
+        metadata = getattr(result, "response_metadata", None) or {}
+        if "token_usage" in metadata:
+            token_count = metadata["token_usage"].get("total_tokens")
+            if token_count is not None:
+                return int(token_count)
+
     return 0
 
 
