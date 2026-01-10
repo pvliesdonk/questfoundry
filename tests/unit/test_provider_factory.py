@@ -5,9 +5,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 
 from questfoundry.providers.base import ProviderError
-from questfoundry.providers.factory import create_provider
+from questfoundry.providers.factory import create_model_for_structured_output, create_provider
+from questfoundry.providers.structured_output import StructuredOutputStrategy
 
 
 def test_create_unknown_provider() -> None:
@@ -214,3 +216,157 @@ def test_provider_custom_temperature() -> None:
 
     call_kwargs = mock_chat.call_args[1]
     assert call_kwargs["temperature"] == 0.5
+
+
+# Tests for create_model_for_structured_output
+
+
+class SampleSchema(BaseModel):
+    """Sample schema for structured output tests."""
+
+    title: str
+    count: int
+
+
+def test_create_model_structured_ollama_with_schema() -> None:
+    """Factory creates Ollama model with structured output."""
+    mock_chat = MagicMock()
+    mock_structured = MagicMock()
+    mock_chat.with_structured_output.return_value = mock_structured
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat),
+    ):
+        result = create_model_for_structured_output(
+            "ollama",
+            model_name="qwen3:8b",
+            schema=SampleSchema,
+        )
+
+    assert result is mock_structured
+    mock_chat.with_structured_output.assert_called_once()
+    call_args = mock_chat.with_structured_output.call_args
+    assert call_args[0][0] is SampleSchema
+    assert call_args[1]["method"] == "function_calling"  # Tool strategy for Ollama
+
+
+def test_create_model_structured_openai_with_schema() -> None:
+    """Factory creates OpenAI model with structured output."""
+    mock_chat = MagicMock()
+    mock_structured = MagicMock()
+    mock_chat.with_structured_output.return_value = mock_structured
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat),
+    ):
+        result = create_model_for_structured_output(
+            "openai",
+            model_name="gpt-4o",
+            schema=SampleSchema,
+        )
+
+    assert result is mock_structured
+    mock_chat.with_structured_output.assert_called_once()
+    call_args = mock_chat.with_structured_output.call_args
+    assert call_args[1]["method"] == "json_mode"  # JSON mode for OpenAI
+
+
+def test_create_model_structured_without_schema() -> None:
+    """Factory returns base model when no schema provided."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat),
+    ):
+        result = create_model_for_structured_output(
+            "ollama",
+            model_name="qwen3:8b",
+            schema=None,
+        )
+
+    assert result is mock_chat
+    mock_chat.with_structured_output.assert_not_called()
+
+
+def test_create_model_structured_explicit_strategy() -> None:
+    """Factory uses explicit strategy over auto-detect."""
+    mock_chat = MagicMock()
+    mock_structured = MagicMock()
+    mock_chat.with_structured_output.return_value = mock_structured
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat),
+    ):
+        # Force tool strategy on OpenAI (normally would use JSON mode)
+        result = create_model_for_structured_output(
+            "openai",
+            model_name="gpt-4o",
+            schema=SampleSchema,
+            strategy=StructuredOutputStrategy.TOOL,
+        )
+
+    assert result is mock_structured
+    call_args = mock_chat.with_structured_output.call_args
+    assert call_args[1]["method"] == "function_calling"
+
+
+def test_create_model_structured_default_model_ollama() -> None:
+    """Factory uses default model name for Ollama when not provided."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+    ):
+        create_model_for_structured_output("ollama")
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["model"] == "qwen3:8b"
+
+
+def test_create_model_structured_default_model_openai() -> None:
+    """Factory uses default model name for OpenAI when not provided."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_model_for_structured_output("openai")
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["model"] == "gpt-4o-mini"
+
+
+def test_create_model_structured_default_model_anthropic() -> None:
+    """Factory uses default model name for Anthropic when not provided."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}),
+        patch("langchain_anthropic.ChatAnthropic", return_value=mock_chat) as mock_class,
+    ):
+        create_model_for_structured_output("anthropic")
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["model"] == "claude-3-5-sonnet"
+
+
+def test_create_model_structured_unknown_provider() -> None:
+    """Factory raises error for unknown provider."""
+    with pytest.raises(ProviderError) as exc_info:
+        create_model_for_structured_output("unknown", model_name="model")
+
+    assert "Unknown provider" in str(exc_info.value)
+
+
+def test_create_model_structured_missing_config() -> None:
+    """Factory raises error when provider config is missing."""
+    with patch.dict("os.environ", {}, clear=True), pytest.raises(ProviderError) as exc_info:
+        create_model_for_structured_output("ollama", model_name="model")
+
+    assert "OLLAMA_HOST not configured" in str(exc_info.value)
