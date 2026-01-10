@@ -17,7 +17,7 @@ system: |
   - Suggest possibilities but respect the user's preferences
   - Be conversational and supportive
   - Focus on creative exploration, not implementation details
-  {{ research_tools_section }}
+  {research_tools_section}
 
 research_tools_section: |
   ## Research Tools Available
