@@ -95,13 +95,15 @@ async def run_discuss_phase(
             llm_calls += 1
             # First check usage_metadata attribute (Ollama, newer providers)
             if hasattr(msg, "usage_metadata") and msg.usage_metadata:
-                total_tokens += msg.usage_metadata.get("total_tokens") or 0
+                tokens = msg.usage_metadata.get("total_tokens")
+                total_tokens += tokens if tokens is not None else 0
             # Then check response_metadata (OpenAI)
             elif hasattr(msg, "response_metadata") and msg.response_metadata:
                 metadata = msg.response_metadata
                 if "token_usage" in metadata:
                     usage = metadata["token_usage"]
-                    total_tokens += usage.get("total_tokens") or 0
+                    tokens = usage.get("total_tokens")
+                    total_tokens += tokens if tokens is not None else 0
 
     log.info(
         "discuss_phase_completed",
