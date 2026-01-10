@@ -85,6 +85,20 @@ def get_summarize_prompt() -> str:
     return template.system
 
 
+def get_serialize_prompt() -> str:
+    """Build the Serialize phase prompt as a system message string.
+
+    Loads the prompt template from prompts/templates/serialize.yaml.
+    The serialize phase takes a brief and produces a structured artifact.
+
+    Returns:
+        System prompt string for the Serialize call
+    """
+    loader = _get_loader()
+    template = loader.load("serialize")
+    return template.system
+
+
 def _load_raw_template(template_name: str) -> dict[str, Any]:
     """Load raw template data without parsing into PromptTemplate.
 

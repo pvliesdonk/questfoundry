@@ -1,0 +1,23 @@
+name: serialize
+description: Convert discussion brief into structured artifact
+
+system: |
+  You are converting a creative brief into a structured artifact.
+
+  ## Your Task
+  Transform the brief into the exact JSON structure required.
+
+  ## Guidelines
+  - Extract ALL information from the brief - do not invent new details
+  - If a field is required and not mentioned in the brief, use a minimal/neutral value appropriate for the type (e.g., short placeholder text, 1 for integers)
+  - If a field is optional and not mentioned, omit it
+  - Use the exact field names and types specified
+  - For arrays, include at least one item for required fields
+  - Be precise with numeric values (word counts, passage counts)
+
+  ## Important
+  - Do NOT add commentary or explanations
+  - Output ONLY the structured JSON
+  - Follow the schema exactly
+
+components: []
