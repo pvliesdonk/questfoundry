@@ -9,6 +9,9 @@ from jinja2 import Template
 
 from questfoundry.prompts.loader import PromptLoader
 
+# Module-level loader for caching efficiency
+_prompt_loader: PromptLoader | None = None
+
 
 def _get_prompts_path() -> Path:
     """Get the prompts directory path.
@@ -22,6 +25,17 @@ def _get_prompts_path() -> Path:
 
     # Project root fallback (development)
     return Path.cwd() / "prompts"
+
+
+def _get_loader() -> PromptLoader:
+    """Get or create the module-level PromptLoader.
+
+    Uses lazy initialization to allow path detection at first use.
+    """
+    global _prompt_loader
+    if _prompt_loader is None:
+        _prompt_loader = PromptLoader(_get_prompts_path())
+    return _prompt_loader
 
 
 def get_discuss_prompt(
@@ -41,7 +55,7 @@ def get_discuss_prompt(
     Returns:
         System prompt string for the Discuss agent
     """
-    loader = PromptLoader(_get_prompts_path())
+    loader = _get_loader()
     template = loader.load("discuss")
 
     # Build the research tools section if tools are available
@@ -54,6 +68,21 @@ def get_discuss_prompt(
     # Render the system template with Jinja2
     jinja_template = Template(template.system)
     return str(jinja_template.render(research_tools_section=research_section))
+
+
+def get_summarize_prompt() -> str:
+    """Build the Summarize phase prompt as a system message string.
+
+    Loads the prompt template from prompts/templates/summarize.yaml.
+    The summarize phase takes a conversation history and produces a
+    compact brief for the serialize phase.
+
+    Returns:
+        System prompt string for the Summarize call
+    """
+    loader = _get_loader()
+    template = loader.load("summarize")
+    return template.system
 
 
 def _load_raw_template(template_name: str) -> dict[str, Any]:
