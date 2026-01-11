@@ -1111,12 +1111,3 @@ class TestToolSchemaGeneration:
         assert SUBMIT_DREAM_PARAMS["type"] == "object"
         assert "properties" in SUBMIT_DREAM_PARAMS
         assert "required" in SUBMIT_DREAM_PARAMS
-
-    def test_finalization_tool_uses_generated_schema(self) -> None:
-        """SubmitDreamTool should use the generated schema."""
-        from questfoundry.tools.finalization import SubmitDreamTool
-        from questfoundry.tools.generated import SUBMIT_DREAM_PARAMS
-
-        tool = SubmitDreamTool()
-        definition = tool.definition
-        assert definition.parameters is SUBMIT_DREAM_PARAMS

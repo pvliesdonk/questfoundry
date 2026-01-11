@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,7 +18,26 @@ log = get_logger(__name__)
 if TYPE_CHECKING:
     from pydantic_core import ErrorDetails
 
-    from questfoundry.conversation import ValidationErrorDetail
+
+@dataclass
+class ValidationErrorDetail:
+    """Details of a single validation error.
+
+    Attributes:
+        field: The field path that failed validation (e.g., "genre", "scope.target_word_count").
+        issue: Description of what went wrong (used as "problem" in feedback).
+        provided: The value that was provided (if any).
+        error_type: Pydantic error type code (e.g., "missing", "string_too_short").
+            Used for reliable categorization instead of string matching on issue text.
+        requirement: Human-readable description of what the field requires.
+            Derived from error type and schema constraints.
+    """
+
+    field: str
+    issue: str
+    provided: Any = None
+    error_type: str | None = None
+    requirement: str | None = None
 
 
 def strip_null_values(data: dict[str, Any]) -> dict[str, Any]:
@@ -405,8 +425,6 @@ def pydantic_errors_to_details(
         ...     print(details[0].field, details[0].error_type)
         genre string_too_short
     """
-    from questfoundry.conversation import ValidationErrorDetail
-
     result: list[ValidationErrorDetail] = []
 
     for error in errors:
