@@ -5,27 +5,32 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from questfoundry.prompts import PromptCompiler
-    from questfoundry.providers import LLMProvider
+    from langchain_core.language_models import BaseChatModel
 
 
 class Stage(Protocol):
-    """Protocol for pipeline stage implementations."""
+    """Protocol for pipeline stage implementations.
+
+    Stages use the LangChain-native 3-phase pattern:
+    - Discuss: Explore with research tools
+    - Summarize: Condense discussion into brief
+    - Serialize: Convert brief to structured artifact
+    """
 
     name: str
 
     async def execute(
         self,
-        context: dict[str, Any],
-        provider: LLMProvider,
-        compiler: PromptCompiler,
+        model: BaseChatModel,
+        user_prompt: str,
+        provider_name: str | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the stage.
 
         Args:
-            context: Context dictionary with user inputs and prior artifacts.
-            provider: LLM provider for completions.
-            compiler: Prompt compiler for template assembly.
+            model: LangChain chat model for all phases.
+            user_prompt: The user's creative input.
+            provider_name: Provider name for structured output strategy.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
