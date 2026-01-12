@@ -213,7 +213,7 @@ async def test_orchestrator_run_stage_not_found(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_stage_with_mock(tmp_path: Path, mock_provider: MagicMock) -> None:
+async def test_orchestrator_run_stage_with_mock(tmp_path: Path) -> None:
     """Orchestrator executes stage with mocked components."""
     # Register a mock stage
     mock_stage = MagicMock()
@@ -228,11 +228,13 @@ async def test_orchestrator_run_stage_with_mock(tmp_path: Path, mock_provider: M
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(tmp_path)
-    # Inject mock provider directly
-    orchestrator._provider = mock_provider
+    # Inject mock chat model directly
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
 
-    # Run stage
-    result = await orchestrator.run_stage("mock", {"test": "context"})
+    # Run stage with user_prompt
+    result = await orchestrator.run_stage("mock", {"user_prompt": "test prompt"})
 
     assert result.stage == "mock"
     assert result.llm_calls == 1
@@ -242,7 +244,7 @@ async def test_orchestrator_run_stage_with_mock(tmp_path: Path, mock_provider: M
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_stage_with_errors(tmp_path: Path, mock_provider: MagicMock) -> None:
+async def test_orchestrator_run_stage_with_errors(tmp_path: Path) -> None:
     """Orchestrator handles stage execution errors."""
     # Register a stage that raises an error
     mock_stage = MagicMock()
@@ -251,10 +253,12 @@ async def test_orchestrator_run_stage_with_errors(tmp_path: Path, mock_provider:
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(tmp_path)
-    # Inject mock provider directly
-    orchestrator._provider = mock_provider
+    # Inject mock chat model directly
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
 
-    result = await orchestrator.run_stage("failing")
+    result = await orchestrator.run_stage("failing", {"user_prompt": "test prompt"})
 
     assert result.stage == "failing"
     assert result.status == "failed"
@@ -291,7 +295,7 @@ pipeline:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_gate_rejection(tmp_path: Path, mock_provider: MagicMock) -> None:
+async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
     """Orchestrator respects gate rejection."""
     # Register mock stage
     mock_stage = MagicMock()
@@ -311,23 +315,43 @@ async def test_orchestrator_gate_rejection(tmp_path: Path, mock_provider: MagicM
             return "reject"
 
     orchestrator = PipelineOrchestrator(tmp_path, gate=RejectGate())
-    # Inject mock provider directly
-    orchestrator._provider = mock_provider
+    # Inject mock chat model directly
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
 
-    result = await orchestrator.run_stage("gated")
+    result = await orchestrator.run_stage("gated", {"user_prompt": "test prompt"})
 
     assert result.status == "pending_review"
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_close(tmp_path: Path, mock_provider: MagicMock) -> None:
-    """Orchestrator closes provider on close."""
+async def test_orchestrator_close_sync(tmp_path: Path) -> None:
+    """Orchestrator closes chat model with sync close method."""
     orchestrator = PipelineOrchestrator(tmp_path)
-    # Inject mock provider directly
-    orchestrator._provider = mock_provider
+    # Inject mock chat model directly
+    mock_model = MagicMock()
+    mock_model.close = MagicMock(return_value=None)  # Sync close
+    orchestrator._chat_model = mock_model
 
     # Close orchestrator
     await orchestrator.close()
 
-    assert orchestrator._provider is None
-    mock_provider.close.assert_awaited_once()
+    assert orchestrator._chat_model is None
+    mock_model.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_close_async(tmp_path: Path) -> None:
+    """Orchestrator closes chat model with async close method."""
+    orchestrator = PipelineOrchestrator(tmp_path)
+    # Inject mock chat model with async close
+    mock_model = MagicMock()
+    mock_model.close = AsyncMock(return_value=None)  # Async close
+    orchestrator._chat_model = mock_model
+
+    # Close orchestrator
+    await orchestrator.close()
+
+    assert orchestrator._chat_model is None
+    mock_model.close.assert_awaited_once()
