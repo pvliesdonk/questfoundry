@@ -242,10 +242,23 @@ class PipelineOrchestrator:
 
             # Execute stage with new LangChain-native protocol
             log.debug("stage_execute", stage=stage_name)
+
+            # Extract interactive mode callbacks from context
+            interactive = bool(context.get("interactive", False))
+            user_input_fn = context.get("user_input_fn")
+            on_assistant_message = context.get("on_assistant_message")
+            on_llm_start = context.get("on_llm_start")
+            on_llm_end = context.get("on_llm_end")
+
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 model=model,
                 user_prompt=user_prompt,
                 provider_name=self._provider_name or "unknown",
+                interactive=interactive,
+                user_input_fn=user_input_fn,
+                on_assistant_message=on_assistant_message,
+                on_llm_start=on_llm_start,
+                on_llm_end=on_llm_end,
             )
 
             # Validate artifact

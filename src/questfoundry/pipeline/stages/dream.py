@@ -25,6 +25,12 @@ log = get_logger(__name__)
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from questfoundry.agents.discuss import (
+        AssistantMessageFn,
+        LLMCallbackFn,
+        UserInputFn,
+    )
+
 
 class DreamStage:
     """DREAM stage - establish creative vision.
@@ -48,6 +54,12 @@ class DreamStage:
         model: BaseChatModel,
         user_prompt: str,
         provider_name: str | None = None,
+        *,
+        interactive: bool = False,
+        user_input_fn: UserInputFn | None = None,
+        on_assistant_message: AssistantMessageFn | None = None,
+        on_llm_start: LLMCallbackFn | None = None,
+        on_llm_end: LLMCallbackFn | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 
@@ -55,6 +67,11 @@ class DreamStage:
             model: LangChain chat model for all phases.
             user_prompt: The user's story idea.
             provider_name: Provider name for structured output strategy selection.
+            interactive: Enable interactive multi-turn discussion mode.
+            user_input_fn: Async function to get user input (for interactive mode).
+            on_assistant_message: Callback when assistant responds.
+            on_llm_start: Callback when LLM call starts.
+            on_llm_end: Callback when LLM call ends.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -65,6 +82,7 @@ class DreamStage:
         log.info(
             "dream_stage_started",
             prompt_length=len(user_prompt),
+            interactive=interactive,
         )
 
         total_llm_calls = 0
@@ -79,6 +97,11 @@ class DreamStage:
             model=model,
             tools=tools,
             user_prompt=user_prompt,
+            interactive=interactive,
+            user_input_fn=user_input_fn,
+            on_assistant_message=on_assistant_message,
+            on_llm_start=on_llm_start,
+            on_llm_end=on_llm_end,
         )
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
