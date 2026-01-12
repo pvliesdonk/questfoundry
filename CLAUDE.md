@@ -389,10 +389,10 @@ questfoundry/
 - BRAINSTORM and SEED stages
 
 ### Slice 3: Full GROW
-- Six-layer GROW decomposition
-- Sequential branch generation
-- Topology validation
-- State management (codewords, stats)
+- 11-phase GROW algorithm
+- Thread-agnostic assessment, knot detection
+- Arc enumeration and validation
+- State derivation (codewords, overlays)
 
 ### Slice 4: FILL and SHIP
 - Prose generation
@@ -416,11 +416,10 @@ qf status                     # Show pipeline state
 
 ## Key Files to Reference
 
-- `docs/design/00-vision.md` - Overall vision and philosophy
-- `docs/design/01-pipeline-architecture.md` - Pipeline details
-- `docs/design/03-grow-stage-specification.md` - GROW complexity
-- `docs/design/05-prompt-compiler.md` - Prompt assembly system
-- `docs/design/02-artifact-schemas.md` - YAML artifact formats
+- `docs/design/00-spec.md` - Unified v5 specification (vision, pipeline, schemas)
+- `docs/design/procedures/` - Stage algorithm specifications
+- `docs/design/01-prompt-compiler.md` - Prompt assembly system
+- `docs/design/07-getting-started.md` - Implementation slices
 
 ## Anti-Patterns to Avoid
 
