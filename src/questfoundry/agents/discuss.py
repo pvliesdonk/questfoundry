@@ -17,8 +17,11 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 # Type aliases for callbacks
+#: Async function to get user input; returns None or empty string to exit
 UserInputFn = Callable[[], Awaitable[str | None]]
+#: Callback when assistant responds; receives the response content
 AssistantMessageFn = Callable[[str], None]
+#: Callback for LLM start/end events; receives the phase name (e.g., "discuss")
 LLMCallbackFn = Callable[[str], None]
 
 
@@ -175,7 +178,8 @@ async def run_discuss_phase(
             break
 
         # Interactive mode: get next user input
-        user_input = await user_input_fn()  # type: ignore[misc]
+        assert user_input_fn is not None  # Validated at line 112
+        user_input = await user_input_fn()
 
         # Check for exit conditions
         if user_input is None or user_input.strip() == "":
