@@ -386,6 +386,7 @@ def dream(
         # Interactive mode: no spinner, direct output
         console.print("[dim]Starting interactive DREAM stage...[/dim]")
         console.print("[dim]The AI will discuss your story idea with you.[/dim]")
+        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
         console.print()
         result = asyncio.run(_run_dream())
     else:
