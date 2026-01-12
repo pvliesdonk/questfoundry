@@ -16,11 +16,6 @@ from questfoundry.agents import (
     serialize_to_artifact,
     summarize_discussion,
 )
-from questfoundry.agents.discuss import (
-    AssistantMessageFn,
-    LLMCallbackFn,
-    UserInputFn,
-)
 from questfoundry.artifacts import DreamArtifact
 from questfoundry.observability.logging import get_logger
 from questfoundry.tools.langchain_tools import get_all_research_tools
@@ -29,6 +24,12 @@ log = get_logger(__name__)
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+
+    from questfoundry.agents.discuss import (
+        AssistantMessageFn,
+        LLMCallbackFn,
+        UserInputFn,
+    )
 
 
 class DreamStage:
