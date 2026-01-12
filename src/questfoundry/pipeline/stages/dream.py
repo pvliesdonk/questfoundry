@@ -16,6 +16,11 @@ from questfoundry.agents import (
     serialize_to_artifact,
     summarize_discussion,
 )
+from questfoundry.agents.discuss import (
+    AssistantMessageFn,
+    LLMCallbackFn,
+    UserInputFn,
+)
 from questfoundry.artifacts import DreamArtifact
 from questfoundry.observability.logging import get_logger
 from questfoundry.tools.langchain_tools import get_all_research_tools
@@ -50,10 +55,10 @@ class DreamStage:
         provider_name: str | None = None,
         *,
         interactive: bool = False,
-        user_input_fn: Any | None = None,
-        on_assistant_message: Any | None = None,
-        on_llm_start: Any | None = None,
-        on_llm_end: Any | None = None,
+        user_input_fn: UserInputFn | None = None,
+        on_assistant_message: AssistantMessageFn | None = None,
+        on_llm_start: LLMCallbackFn | None = None,
+        on_llm_end: LLMCallbackFn | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 

@@ -106,10 +106,18 @@ async def run_discuss_phase(
     # Initial message from user
     current_messages: list[BaseMessage] = [HumanMessage(content=user_prompt)]
 
+    # Validate interactive mode requirements upfront
+    if interactive and user_input_fn is None:
+        log.error("interactive_mode_no_input_fn", stage="discuss")
+        raise ValueError(
+            "interactive=True requires user_input_fn callback. "
+            "Pass user_input_fn parameter or set interactive=False."
+        )
+
     while True:
         # Signal LLM start
         if on_llm_start:
-            on_llm_start("")
+            on_llm_start("discuss")
 
         # Run agent for this turn
         result = await agent.ainvoke(
@@ -119,13 +127,28 @@ async def run_discuss_phase(
 
         # Signal LLM end
         if on_llm_end:
-            on_llm_end("")
+            on_llm_end("discuss")
 
-        turn_messages: list[BaseMessage] = result.get("messages", [])
+        # The agent returns the full conversation history.
+        # We need to process only the messages added in this turn.
+        full_history: list[BaseMessage] = result.get("messages", [])
 
-        # Extract metrics and find the last assistant message
+        # Determine new messages: check if agent returned full history including our input,
+        # or just the response. Real agents include input; test mocks may not.
+        if (
+            len(full_history) > len(current_messages)
+            and len(current_messages) > 0
+            and full_history[0].content == current_messages[0].content
+        ):
+            # Agent returned full history - slice off our input to get new messages
+            new_messages = full_history[len(current_messages) :]
+        else:
+            # Agent returned only responses (or test mock) - treat all as new
+            new_messages = full_history
+
+        # Extract metrics and find the last assistant message from new messages only
         last_ai_content = ""
-        for msg in turn_messages:
+        for msg in new_messages:
             if isinstance(msg, AIMessage):
                 total_llm_calls += 1
                 last_ai_content = str(msg.content)
@@ -140,8 +163,8 @@ async def run_discuss_phase(
                         tokens = usage.get("total_tokens")
                         total_tokens += tokens if tokens is not None else 0
 
-        # Store messages
-        all_messages.extend(turn_messages)
+        # Update message history for the next turn
+        all_messages = full_history
 
         # Display assistant response
         if on_assistant_message and last_ai_content:
@@ -152,11 +175,7 @@ async def run_discuss_phase(
             break
 
         # Interactive mode: get next user input
-        if user_input_fn is None:
-            log.warning("interactive_mode_no_input_fn")
-            break
-
-        user_input = await user_input_fn()
+        user_input = await user_input_fn()  # type: ignore[misc]
 
         # Check for exit conditions
         if user_input is None or user_input.strip() == "":
