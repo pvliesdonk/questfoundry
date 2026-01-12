@@ -1,11 +1,15 @@
-"""Prompt templates for agents."""
+"""Prompt templates for agents.
+
+Uses LangChain's ChatPromptTemplate for variable injection, with templates
+stored externally in YAML files under prompts/templates/.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Template
+from langchain_core.prompts import ChatPromptTemplate
 
 from questfoundry.prompts.loader import PromptLoader
 
@@ -44,7 +48,7 @@ def get_discuss_prompt(
     """Build the Discuss phase prompt as a system message string.
 
     Loads the prompt template from prompts/templates/discuss.yaml and
-    renders it with the provided context.
+    renders it with the provided context using ChatPromptTemplate.
 
     The user_prompt is NOT included in the system message - it's passed
     separately as the initial HumanMessage to avoid duplication.
@@ -55,19 +59,18 @@ def get_discuss_prompt(
     Returns:
         System prompt string for the Discuss agent
     """
-    loader = _get_loader()
-    template = loader.load("discuss")
+    # Load raw data once to avoid double file read
+    raw_data = _load_raw_template("discuss")
 
     # Build the research tools section if tools are available
     research_section = ""
     if research_tools_available:
-        # Load the research tools section from the template
-        raw_data = _load_raw_template("discuss")
         research_section = raw_data.get("research_tools_section", "")
 
-    # Render the system template with Jinja2
-    jinja_template = Template(template.system)
-    return str(jinja_template.render(research_tools_section=research_section))
+    # Render the system template with ChatPromptTemplate
+    system_template = raw_data.get("system", "")
+    prompt = ChatPromptTemplate.from_template(system_template)
+    return prompt.format(research_tools_section=research_section)
 
 
 def get_summarize_prompt() -> str:
