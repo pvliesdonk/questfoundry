@@ -194,7 +194,7 @@ class TestRunDiscussPhase:
     @pytest.mark.asyncio
     @patch("questfoundry.agents.discuss.create_discuss_agent")
     async def test_run_discuss_phase_handles_missing_metadata(self, mock_create: MagicMock) -> None:
-        """run_discuss_phase should handle AIMessages without response_metadata."""
+        """run_discuss_phase should handle AIMessages without usage metadata."""
         mock_agent = AsyncMock()
         mock_agent.ainvoke.return_value = {
             "messages": [
@@ -210,8 +210,8 @@ class TestRunDiscussPhase:
             user_prompt="Test",
         )
 
-        # Should not raise, just return zero counts
-        assert calls == 0
+        # Should count the AIMessage but return zero tokens
+        assert calls == 1
         assert tokens == 0
 
     @pytest.mark.asyncio
@@ -275,12 +275,12 @@ class TestRunDiscussPhase:
 
     @pytest.mark.asyncio
     @patch("questfoundry.agents.discuss.create_discuss_agent")
-    async def test_run_discuss_phase_handles_usage_metadata_key(
+    async def test_run_discuss_phase_handles_usage_metadata_attribute(
         self, mock_create: MagicMock
     ) -> None:
-        """run_discuss_phase should extract tokens from usage_metadata key."""
+        """run_discuss_phase should extract tokens from usage_metadata attribute (Ollama)."""
         ai_msg = AIMessage(content="Response")
-        ai_msg.response_metadata = {"usage_metadata": {"total_tokens": 200}}
+        ai_msg.usage_metadata = {"total_tokens": 200}
 
         mock_agent = AsyncMock()
         mock_agent.ainvoke.return_value = {"messages": [ai_msg]}

@@ -49,27 +49,29 @@ async def summarize_discussion(
         ),
     ]
 
-    # Use lower temperature for summarization - we want consistent, focused output
-    # Clone the model with lower temperature if supported
-    try:
-        summarize_model = model.bind(temperature=0.3)
-    except (AttributeError, TypeError):
-        # Fallback if model doesn't support bind
-        summarize_model = model
-
-    response = await summarize_model.ainvoke(summarize_messages)
+    # Note: We use the model as configured rather than trying to override temperature
+    # at runtime. The bind(temperature=X) approach is not compatible with all providers
+    # (e.g., langchain-ollama doesn't support runtime temperature in chat()).
+    # The model's default temperature (0.7) works fine for summarization.
+    response = await model.ainvoke(summarize_messages)
 
     # Extract the summary text
     summary = str(response.content)
 
     # Extract token usage
+    # LangChain tracks token usage in different places:
+    # - OpenAI: response_metadata["token_usage"]
+    # - Ollama: usage_metadata attribute on AIMessage
     tokens = 0
-    if isinstance(response, AIMessage) and hasattr(response, "response_metadata"):
-        metadata = response.response_metadata or {}
-        if "token_usage" in metadata:
-            tokens = metadata["token_usage"].get("total_tokens") or 0
-        elif "usage_metadata" in metadata:
-            tokens = metadata["usage_metadata"].get("total_tokens") or 0
+    if isinstance(response, AIMessage):
+        # First check usage_metadata attribute (Ollama, newer providers)
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            tokens = response.usage_metadata.get("total_tokens") or 0
+        # Then check response_metadata (OpenAI)
+        elif hasattr(response, "response_metadata") and response.response_metadata:
+            metadata = response.response_metadata
+            if "token_usage" in metadata:
+                tokens = metadata["token_usage"].get("total_tokens") or 0
 
     log.info("summarize_completed", summary_length=len(summary), tokens=tokens)
 

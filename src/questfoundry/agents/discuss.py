@@ -85,22 +85,23 @@ async def run_discuss_phase(
     messages: list[BaseMessage] = result.get("messages", [])
 
     # Extract metrics from response metadata
-    # LangChain tracks these in AIMessage.response_metadata
+    # LangChain tracks token usage in different places:
+    # - OpenAI: response_metadata["token_usage"]
+    # - Ollama: usage_metadata attribute on AIMessage
     llm_calls = 0
     total_tokens = 0
     for msg in messages:
-        if isinstance(msg, AIMessage) and hasattr(msg, "response_metadata"):
-            metadata = msg.response_metadata or {}
-            if "token_usage" in metadata:
-                usage = metadata["token_usage"]
-                # Use `or 0` to handle None values safely
-                total_tokens += usage.get("total_tokens") or 0
-                llm_calls += 1
-            # Some providers use different metadata keys
-            elif "usage_metadata" in metadata:
-                usage = metadata["usage_metadata"]
-                total_tokens += usage.get("total_tokens") or 0
-                llm_calls += 1
+        if isinstance(msg, AIMessage):
+            llm_calls += 1
+            # First check usage_metadata attribute (Ollama, newer providers)
+            if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                total_tokens += msg.usage_metadata.get("total_tokens") or 0
+            # Then check response_metadata (OpenAI)
+            elif hasattr(msg, "response_metadata") and msg.response_metadata:
+                metadata = msg.response_metadata
+                if "token_usage" in metadata:
+                    usage = metadata["token_usage"]
+                    total_tokens += usage.get("total_tokens") or 0
 
     log.info(
         "discuss_phase_completed",
