@@ -54,7 +54,7 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → DRESS → SHIP
 | BRAINSTORM | Entities, tensions, alternatives | LLM-heavy (discuss → summarize → serialize) |
 | SEED | Triage: curate entities, promote tensions to threads | Human-heavy |
 | GROW | Mutate graph until complete: knots, weaving, passages | Layered, human gates |
-| FILL | Generate prose for passages | LLM, parallelizable |
+| FILL | Generate prose for passages | LLM, sequential |
 | DRESS | Illustrations, codex | LLM, optional |
 | SHIP | Export to ink/Twee/epub | Deterministic, no LLM |
 
@@ -174,7 +174,7 @@ State marker. Universal mechanism for both plot progression and player choice.
 ```yaml
 codeword:
   id: string
-  type: granted | derived
+  type: granted  # 'derived' deferred to future version
   tracks: consequence_id | null    # what narrative consequence this represents
   condition: string | null         # for derived: e.g., "gold > 50"
 ```
