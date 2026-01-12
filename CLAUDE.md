@@ -217,6 +217,29 @@ main ← proto-pr ← runner-pr ← stage1-pr ← stage2-pr
 - Merge order is bottom-up
 - After merging a base PR, retarget the next PR to main and rebase
 
+**WARNING: Stacked PRs and Squash Merging Don't Mix**
+
+Squash merging creates a new commit with a different hash than the original commits. When you squash-merge PR#1, subsequent PRs in the stack still contain PR#1's original commits, causing conflicts when rebasing:
+
+```
+# After squash-merging PR#1:
+main: ... → X (squashed PR#1)
+PR#2 branch: ... → A → B → C → D  (A,B from PR#1, C,D unique to PR#2)
+                    ↑
+                    These conflict with X (same content, different hash)
+```
+
+**Solutions (choose one):**
+
+1. **Use regular merge commits** (not squash) - preserves commit ancestry, avoids conflicts
+2. **Cherry-pick unique commits** - after merging PR#1, cherry-pick only PR#2's unique commits onto main:
+   ```bash
+   git checkout origin/main -b pr2-rebased
+   git cherry-pick <commit-C> <commit-D>  # Only PR#2's unique commits
+   git push --force-with-lease origin pr2-rebased:pr2-branch
+   ```
+3. **Merge sequentially with manual rebase** - more work, but maintains squash history
+
 ### Pull Request Requirements
 
 PRs must meet ALL of these criteria before merging:
