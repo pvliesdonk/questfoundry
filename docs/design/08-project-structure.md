@@ -1,7 +1,7 @@
 # Project Structure
 
-**Version**: 1.0.0
-**Last Updated**: 2026-01-01
+**Version**: 1.1.0
+**Last Updated**: 2026-01-12
 **Status**: Canonical
 
 ---
@@ -400,6 +400,6 @@ asyncio_mode = "auto"
 
 ## See Also
 
-- [11-proposed-dependencies.md](./11-proposed-dependencies.md) — Dependencies
-- [12-getting-started.md](./12-getting-started.md) — Implementation order
-- [01-pipeline-architecture.md](./01-pipeline-architecture.md) — Pipeline design
+- [00-spec.md](./00-spec.md) — Unified v5 specification
+- [06-proposed-dependencies.md](./06-proposed-dependencies.md) — Dependencies
+- [07-getting-started.md](./07-getting-started.md) — Implementation order
