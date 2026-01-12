@@ -1,7 +1,7 @@
 # Getting Started
 
-**Version**: 1.0.0
-**Last Updated**: 2026-01-01
+**Version**: 1.1.0
+**Last Updated**: 2026-01-12
 **Status**: Canonical
 
 ---
@@ -16,9 +16,9 @@ This guide describes the recommended implementation order for a v5 cleanroom bui
 
 Before starting:
 
-1. Read [00-vision.md](./00-vision.md) — Understand what v5 is
-2. Read [01-pipeline-architecture.md](./01-pipeline-architecture.md) — Understand the flow
-3. Set up development environment (see [11-proposed-dependencies.md](./11-proposed-dependencies.md))
+1. Read [00-spec.md](./00-spec.md) — Understand the v5 specification
+2. Read [procedures/](./procedures/) — Understand stage algorithms
+3. Set up development environment (see [06-proposed-dependencies.md](./06-proposed-dependencies.md))
 
 ---
 
@@ -109,19 +109,25 @@ qf seed
 qf review seed        # Required gate
 ```
 
-### Slice 3: Full GROW Decomposition
+### Slice 3: Full GROW
 
-**Goal**: Complete GROW stage with all six layers.
+**Goal**: Complete GROW stage with all 11 phases.
 
 **Deliverables**:
-- [ ] SPINE layer
-- [ ] ANCHORS layer (with state definitions)
-- [ ] FRACTURES layer
-- [ ] BRANCHES layer (sequential generation)
-- [ ] CONNECTIONS layer (topology validation)
-- [ ] BRIEFS layer
-- [ ] HARVEST checkpoint support
-- [ ] Layer-specific commands (`qf grow --layer spine`)
+- [ ] Phase 1: Beat graph import (deterministic)
+- [ ] Phase 2: Thread-agnostic assessment (LLM + human gate)
+- [ ] Phase 3: Knot detection (LLM + human gate)
+- [ ] Phase 4a-c: Gap detection and scene-type tagging (LLM + human gates)
+- [ ] Phase 5: Arc enumeration (deterministic + spine selection)
+- [ ] Phase 6: Divergence point identification (deterministic)
+- [ ] Phase 7: Convergence identification (deterministic + human gate)
+- [ ] Phase 8a-c: Passage and state derivation (LLM + human gates)
+- [ ] Phase 9: Choice derivation (LLM for labels)
+- [ ] Phase 10: Validation
+- [ ] Phase 11: Pruning (deterministic)
+- [ ] Phase-specific commands (`qf grow --phase 2`)
+
+See [procedures/grow.md](./procedures/grow.md) for phase details.
 
 **What to Add**:
 
@@ -131,36 +137,37 @@ src/questfoundry/
 │   └── stages/
 │       └── grow/
 │           ├── __init__.py
-│           ├── spine.py
-│           ├── anchors.py
-│           ├── fractures.py
-│           ├── branches.py
-│           ├── connections.py
-│           └── briefs.py
+│           ├── beat_import.py      # Phase 1
+│           ├── thread_agnostic.py  # Phase 2
+│           ├── knots.py            # Phase 3
+│           ├── gaps.py             # Phase 4a-c
+│           ├── arcs.py             # Phase 5-6
+│           ├── convergence.py      # Phase 7
+│           ├── derivation.py       # Phase 8-9
+│           ├── validation.py       # Phase 10
+│           └── pruning.py          # Phase 11
 ├── validation/
 │   ├── __init__.py
 │   ├── topology.py        # Graph validation
 │   └── state.py           # State consistency
 ├── prompts/
 │   └── templates/
-│       ├── grow_spine.yaml
-│       ├── grow_anchors.yaml
-│       ├── grow_fractures.yaml
-│       ├── grow_branch.yaml
-│       └── grow_brief.yaml
+│       ├── grow_thread_agnostic.yaml
+│       ├── grow_knots.yaml
+│       ├── grow_gaps.yaml
+│       └── grow_choice_labels.yaml
 └── artifacts/
     └── schemas/
-        ├── grow_spine.schema.json
-        ├── grow_anchors.schema.json
-        └── ...
+        └── grow.schema.json
 ```
 
 **Test**:
 ```bash
-qf grow --layer spine
-qf grow --layer anchors
-qf review grow.anchors  # Required gate
-qf grow  # Complete remaining layers
+qf grow --phase 2       # Thread-agnostic assessment
+qf review grow.agnostic # Human gate
+qf grow --phase 3       # Knot detection
+qf review grow.knots    # Human gate
+qf grow                 # Complete remaining phases
 qf validate --pre-gate  # Check topology
 ```
 
@@ -169,12 +176,21 @@ qf validate --pre-gate  # Check topology
 **Goal**: Complete pipeline from DREAM to playable output.
 
 **Deliverables**:
-- [ ] FILL stage (scene prose generation)
+- [ ] FILL stage with 5 phases:
+  - Phase 0: Voice determination (LLM + human gate)
+  - Phase 1: Sequential prose generation (LLM)
+  - Phase 2: Review (human or LLM-assisted)
+  - Phase 3: Revision (LLM)
+  - Phase 4: Optional second cycle
 - [ ] SHIP stage (export to formats)
 - [ ] Twee export
 - [ ] HTML export
 - [ ] Full-gate validation
 - [ ] Quality bars integration
+
+See [procedures/fill.md](./procedures/fill.md) for FILL phase details.
+
+> **Note**: DRESS stage (art direction) is deferred for future implementation.
 
 **What to Add**:
 
@@ -182,7 +198,12 @@ qf validate --pre-gate  # Check topology
 src/questfoundry/
 ├── pipeline/
 │   └── stages/
-│       ├── fill.py
+│       ├── fill/
+│       │   ├── __init__.py
+│       │   ├── voice.py         # Phase 0
+│       │   ├── generation.py    # Phase 1
+│       │   ├── review.py        # Phase 2
+│       │   └── revision.py      # Phase 3-4
 │       └── ship/
 │           ├── __init__.py
 │           ├── twee.py
@@ -193,13 +214,16 @@ src/questfoundry/
 │   └── full_gate.py
 └── artifacts/
     └── schemas/
-        ├── scene.schema.json
+        ├── fill.schema.json
         └── manifest.schema.json
 ```
 
 **Test**:
 ```bash
-qf fill
+qf fill --phase 0     # Voice determination
+qf review fill.voice  # Human gate
+qf fill               # Complete prose generation
+qf review fill        # Review cycle
 qf validate --full-gate
 qf ship --format twee
 # Open my_story/exports/story.tw in Twine
@@ -362,6 +386,7 @@ Once the core pipeline works:
 
 ## See Also
 
-- [01-pipeline-architecture.md](./01-pipeline-architecture.md) — Pipeline design
-- [11-proposed-dependencies.md](./11-proposed-dependencies.md) — Setup
-- [13-project-structure.md](./13-project-structure.md) — Where code goes
+- [00-spec.md](./00-spec.md) — Unified v5 specification
+- [procedures/](./procedures/) — Stage algorithm details
+- [06-proposed-dependencies.md](./06-proposed-dependencies.md) — Setup
+- [08-project-structure.md](./08-project-structure.md) — Where code goes

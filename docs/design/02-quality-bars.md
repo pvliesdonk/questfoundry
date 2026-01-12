@@ -2,7 +2,11 @@
 
 **Version**: 1.0.0
 **Last Updated**: 2026-01-01
-**Status**: Canonical
+**Status**: Needs Review
+
+> **Note**: This document needs review and update to align with the v5 specification.
+> Some concepts (stage names, validation timing) may have changed. See `00-spec.md`
+> for the authoritative specification and `procedures/` for stage details.
 
 ---
 
