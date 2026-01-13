@@ -267,6 +267,7 @@ class PipelineOrchestrator:
                 on_assistant_message=on_assistant_message,
                 on_llm_start=on_llm_start,
                 on_llm_end=on_llm_end,
+                project_path=self.project_path,
             )
 
             # Validate artifact

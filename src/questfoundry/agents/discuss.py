@@ -29,6 +29,7 @@ LLMCallbackFn = Callable[[str], None]
 def create_discuss_agent(
     model: BaseChatModel,
     tools: list[BaseTool],
+    system_prompt: str | None = None,
 ) -> Any:  # Returns CompiledStateGraph but avoid import issues
     """Create a Discuss phase agent.
 
@@ -38,6 +39,8 @@ def create_discuss_agent(
     Args:
         model: Chat model to use
         tools: Research tools available to the agent
+        system_prompt: Optional custom system prompt. If not provided,
+            uses the default DREAM discuss prompt.
 
     Returns:
         Compiled agent graph ready for invocation
@@ -47,9 +50,11 @@ def create_discuss_agent(
     # Use consistent logic for checking if tools are available
     has_tools = bool(tools)
 
-    system_prompt = get_discuss_prompt(
-        research_tools_available=has_tools,
-    )
+    # Use custom prompt if provided, otherwise use default
+    if system_prompt is None:
+        system_prompt = get_discuss_prompt(
+            research_tools_available=has_tools,
+        )
 
     log.info("discuss_agent_created", tool_count=len(tools) if tools else 0)
 
@@ -72,6 +77,8 @@ async def run_discuss_phase(
     on_assistant_message: AssistantMessageFn | None = None,
     on_llm_start: LLMCallbackFn | None = None,
     on_llm_end: LLMCallbackFn | None = None,
+    system_prompt: str | None = None,
+    stage_name: str = "dream",
 ) -> tuple[list[BaseMessage], int, int]:
     """Run the Discuss phase to completion.
 
@@ -91,11 +98,13 @@ async def run_discuss_phase(
         on_assistant_message: Callback when assistant responds
         on_llm_start: Callback when LLM call starts
         on_llm_end: Callback when LLM call ends
+        system_prompt: Optional custom system prompt for the agent
+        stage_name: Stage name for logging/tagging (default "dream")
 
     Returns:
         Tuple of (messages, llm_call_count, total_tokens)
     """
-    agent = create_discuss_agent(model, tools)
+    agent = create_discuss_agent(model, tools, system_prompt)
 
     log.info(
         "discuss_phase_started",
@@ -127,8 +136,8 @@ async def run_discuss_phase(
         # Run agent for this turn with tracing metadata
         config = build_runnable_config(
             run_name="Discuss Agent Turn",
-            tags=["dream", "discuss", "agent"],
-            metadata={"stage": "dream", "phase": "discuss"},
+            tags=[stage_name, "discuss", "agent"],
+            metadata={"stage": stage_name, "phase": "discuss"},
             recursion_limit=max_iterations,
         )
         result = await agent.ainvoke(

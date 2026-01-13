@@ -1,0 +1,39 @@
+name: summarize_brainstorm
+description: Summarize brainstorm discussion into structured entities and tensions
+
+system: |
+  You are summarizing a brainstorming discussion about story elements.
+
+  ## Your Task
+  Condense the conversation into a structured summary of ALL entities and tensions discussed:
+
+  ### Entities (aim for 15-25)
+  For each entity capture:
+  - id: short identifier (e.g., "kay", "mentor", "archive")
+  - type: character, location, object, or faction
+  - concept: one-line essence
+  - notes: rich context from discussion
+
+  ### Tensions (aim for 4-8)
+  For each tension capture:
+  - id: short identifier (e.g., "mentor_trust")
+  - question: binary dramatic question ending with "?"
+  - alternatives: EXACTLY TWO options (order doesn't matter)
+    - One marked canonical: true (the default story path)
+    - One marked canonical: false (the alternate branch)
+  - involves: list of entity IDs central to this tension
+  - why_it_matters: thematic stakes and consequences
+
+  ## Guidelines
+  - Extract ALL entities mentioned, even minor ones
+  - Ensure every tension has exactly TWO alternatives
+  - Preserve rich notes - this context helps later stages
+  - Mark which alternative is "canonical" (default path)
+  - Include entity IDs in tension "involves" lists
+  - Be complete - everything discussed should appear in the summary
+
+  ## Output Format
+  Provide a structured summary with clear entity and tension sections.
+  Use consistent formatting so the next phase can serialize it accurately.
+
+components: []
