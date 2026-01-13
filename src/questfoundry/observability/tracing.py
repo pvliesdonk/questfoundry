@@ -9,10 +9,16 @@ Usage:
 
     @traceable(name="My Function", tags=["my-tag"])
     async def my_function():
-        # Add dynamic metadata
+        # Add dynamic metadata inside the decorated function
         if rt := get_current_run_tree():
             rt.metadata["key"] = "value"
         ...
+
+Note:
+    The @traceable decorator only supports async functions. Sync functions
+    will raise a TypeError at runtime. The decorator automatically injects
+    pipeline_run_id into metadata; add other dynamic metadata inside the
+    function using get_current_run_tree().
 """
 
 from __future__ import annotations
@@ -50,6 +56,21 @@ _pipeline_run_id: ContextVar[str | None] = ContextVar("pipeline_run_id", default
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def _prepare_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """Create a copy of metadata and inject the pipeline run ID.
+
+    Args:
+        metadata: Optional metadata dict to copy.
+
+    Returns:
+        New dict with pipeline_run_id added if available.
+    """
+    meta = dict(metadata) if metadata else {}
+    if run_id := get_pipeline_run_id():
+        meta["pipeline_run_id"] = run_id
+    return meta
 
 
 def generate_run_id() -> str:
@@ -107,19 +128,24 @@ def traceable(
     tags: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> Callable[[Callable[P, Coroutine[Any, Any, R]]], Callable[P, Coroutine[Any, Any, R]]]:
-    """Conditional traceable decorator.
+    """Conditional traceable decorator for async functions.
 
     If langsmith is installed and LANGSMITH_TRACING=true, decorates the
     function with @ls.traceable. Otherwise, returns the function unchanged.
 
     This decorator automatically adds the pipeline run ID to metadata
-    if one is set in the current context.
+    if one is set in the current context. For other dynamic metadata,
+    use get_current_run_tree() inside the decorated function.
+
+    Note:
+        Only async functions are supported. Decorating a sync function
+        will raise a TypeError at runtime.
 
     Args:
         name: Name for the trace span. Defaults to function name.
         run_type: Type of run (chain, llm, tool, etc.). Defaults to "chain".
-        tags: List of tags to attach to the trace.
-        metadata: Dict of metadata key-value pairs.
+        tags: List of tags to attach to the trace (copied to avoid mutation).
+        metadata: Dict of static metadata key-value pairs (copied to avoid mutation).
 
     Returns:
         Decorated function (with tracing if available) or original function.
@@ -127,10 +153,15 @@ def traceable(
     Example:
         @traceable(name="DREAM Stage", run_type="chain", tags=["stage:dream"])
         async def execute(self, model, user_prompt):
+            # Static metadata is passed to decorator
+            # Dynamic metadata is added inside the function:
+            if rt := get_current_run_tree():
+                rt.metadata["provider"] = model.provider_name
             ...
     """
-    effective_tags = tags or []
-    effective_metadata = metadata or {}
+    # Copy mutable arguments to prevent accidental modification
+    effective_tags = list(tags) if tags else []
+    effective_metadata = dict(metadata) if metadata else {}
 
     def decorator(
         func: Callable[P, Coroutine[Any, Any, R]],
@@ -154,8 +185,14 @@ def traceable(
 
         # Apply the langsmith traceable decorator
         # Note: ls_traceable expects run_type as first positional or keyword arg
-        # Type ignore needed: langsmith returns SupportsLangsmithExtra which is
-        # compatible with Callable at runtime but mypy can't verify this
+        #
+        # Type ignore rationale:
+        # - langsmith.traceable() returns SupportsLangsmithExtra[P, Coroutine[...]]
+        # - This is a Protocol that supports __call__ with the same signature
+        # - At runtime, the decorated function is callable with the original signature
+        # - mypy cannot verify this because SupportsLangsmithExtra is not a subtype
+        #   of Callable in the type system, even though it's compatible at runtime
+        # - See: https://docs.smith.langchain.com/reference/python/run_helpers
         traced_wrapper: Callable[P, Coroutine[Any, Any, R]] = ls_traceable(
             run_type,
             name=name or func.__name__,
@@ -194,13 +231,8 @@ def trace_context(
         with trace_context("Serialize Attempt", metadata={"attempt": 1}):
             result = await model.ainvoke(messages)
     """
-    effective_tags = tags or []
-    effective_metadata = dict(metadata) if metadata else {}
-
-    # Add pipeline run ID to metadata
-    run_id = get_pipeline_run_id()
-    if run_id:
-        effective_metadata["pipeline_run_id"] = run_id
+    effective_tags = list(tags) if tags else []
+    effective_metadata = _prepare_metadata(metadata)
 
     if LANGSMITH_AVAILABLE and langsmith is not None:
         return langsmith.trace(
@@ -253,15 +285,12 @@ def build_runnable_config(
     if run_name:
         config["run_name"] = run_name
 
-    # Build tags list
+    # Build tags list (copy to avoid mutation)
     if tags:
         config["tags"] = list(tags)
 
     # Build metadata dict with pipeline run ID
-    meta = dict(metadata) if metadata else {}
-    run_id = get_pipeline_run_id()
-    if run_id:
-        meta["pipeline_run_id"] = run_id
+    meta = _prepare_metadata(metadata)
     if meta:
         config["metadata"] = meta
 
