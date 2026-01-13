@@ -323,7 +323,7 @@ def dream(
             raise typer.Exit(1)
 
     log.info("stage_start", stage="dream")
-    log.debug("user_prompt", prompt=prompt)
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
     # Build context
     context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
@@ -526,7 +526,7 @@ def brainstorm(
             prompt = DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT
 
     log.info("stage_start", stage="brainstorm")
-    log.debug("user_prompt", prompt=prompt)
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
     # Build context
     context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
@@ -743,7 +743,7 @@ def seed(
             prompt = DEFAULT_NONINTERACTIVE_SEED_PROMPT
 
     log.info("stage_start", stage="seed")
-    log.debug("user_prompt", prompt=prompt)
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
 
     # Build context
     context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
