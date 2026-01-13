@@ -10,7 +10,32 @@ from questfoundry.graph.mutations import (
     apply_dream_mutations,
     apply_mutations,
     apply_seed_mutations,
+    has_mutation_handler,
 )
+
+
+class TestHasMutationHandler:
+    """Test the mutation handler check function."""
+
+    def test_returns_true_for_dream(self) -> None:
+        """Dream stage has a mutation handler."""
+        assert has_mutation_handler("dream") is True
+
+    def test_returns_true_for_brainstorm(self) -> None:
+        """Brainstorm stage has a mutation handler."""
+        assert has_mutation_handler("brainstorm") is True
+
+    def test_returns_true_for_seed(self) -> None:
+        """Seed stage has a mutation handler."""
+        assert has_mutation_handler("seed") is True
+
+    def test_returns_false_for_unknown_stage(self) -> None:
+        """Unknown stages don't have mutation handlers."""
+        assert has_mutation_handler("grow") is False
+        assert has_mutation_handler("fill") is False
+        assert has_mutation_handler("ship") is False
+        assert has_mutation_handler("mock") is False
+        assert has_mutation_handler("nonexistent") is False
 
 
 class TestApplyMutations:

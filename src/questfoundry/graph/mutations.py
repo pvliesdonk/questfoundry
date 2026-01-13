@@ -39,6 +39,25 @@ def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
     return item[field]
 
 
+# Registry of stages with mutation handlers
+_MUTATION_STAGES = frozenset({"dream", "brainstorm", "seed"})
+
+
+def has_mutation_handler(stage: str) -> bool:
+    """Check if a stage has a mutation handler.
+
+    Use this to determine whether to call apply_mutations() for a stage.
+    This is the single source of truth for which stages support graph mutations.
+
+    Args:
+        stage: Stage name to check.
+
+    Returns:
+        True if the stage has a mutation handler, False otherwise.
+    """
+    return stage in _MUTATION_STAGES
+
+
 def apply_mutations(graph: Graph, stage: str, output: dict[str, Any]) -> None:
     """Apply stage output as graph mutations.
 
