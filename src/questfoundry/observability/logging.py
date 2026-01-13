@@ -125,17 +125,22 @@ def configure_logging(
 
     # Suppress noisy loggers from dependencies
     # These libraries produce excessive DEBUG output that drowns out useful logs
+    # At high verbosity (-vvv), allow LangSmith INFO to see tracing activity
     noisy_loggers = [
         "httpx",
         "httpcore",
         "urllib3",
         "langchain",
         "langchain_core",
-        "langsmith",
         "asyncio",  # EpollSelector messages
     ]
     for logger_name in noisy_loggers:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    # LangSmith gets special treatment: INFO at verbosity 3+, WARNING otherwise
+    # This allows seeing tracing activity when debugging without drowning in logs
+    langsmith_level = logging.INFO if verbosity >= 3 else logging.WARNING
+    logging.getLogger("langsmith").setLevel(langsmith_level)
 
     # Configure structlog processors
     shared_processors: list[Processor] = [

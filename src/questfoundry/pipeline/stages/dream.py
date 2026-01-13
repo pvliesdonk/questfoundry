@@ -18,6 +18,7 @@ from questfoundry.agents import (
 )
 from questfoundry.artifacts import DreamArtifact
 from questfoundry.observability.logging import get_logger
+from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import get_all_research_tools
 
 log = get_logger(__name__)
@@ -49,6 +50,7 @@ class DreamStage:
 
     name = "dream"
 
+    @traceable(name="DREAM Stage", run_type="chain", tags=["stage:dream"])
     async def execute(
         self,
         model: BaseChatModel,
@@ -79,6 +81,12 @@ class DreamStage:
         Raises:
             SerializationError: If serialization fails after all retries.
         """
+        # Add dynamic metadata to the trace
+        if rt := get_current_run_tree():
+            rt.metadata["provider"] = provider_name
+            rt.metadata["prompt_length"] = len(user_prompt)
+            rt.metadata["interactive"] = interactive
+
         log.info(
             "dream_stage_started",
             prompt_length=len(user_prompt),

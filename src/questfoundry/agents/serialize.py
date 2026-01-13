@@ -11,6 +11,11 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.observability.logging import get_logger
+from questfoundry.observability.tracing import (
+    build_runnable_config,
+    trace_context,
+    traceable,
+)
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     with_structured_output,
@@ -38,6 +43,7 @@ class SerializationError(Exception):
         super().__init__(message)
 
 
+@traceable(name="Serialize Phase", run_type="chain", tags=["phase:serialize"])
 async def serialize_to_artifact(
     model: BaseChatModel,
     brief: str,
@@ -92,84 +98,108 @@ async def serialize_to_artifact(
     for attempt in range(1, max_retries + 1):
         log.debug("serialize_attempt", attempt=attempt, max_retries=max_retries)
 
-        try:
-            # Invoke structured output
-            result = await structured_model.ainvoke(messages)
-
-            # Extract token usage from response if available
-            tokens = _extract_tokens(result)
-            total_tokens += tokens
-
-            # If result is already a Pydantic model, validate succeeded
-            if isinstance(result, schema):
-                log.info(
-                    "serialize_completed",
-                    attempt=attempt,
-                    tokens=total_tokens,
+        # Wrap each attempt in a trace context for visibility into retries
+        with trace_context(
+            name=f"Serialize Attempt {attempt}",
+            run_type="llm",
+            tags=["dream", "serialize", "attempt"],
+            metadata={
+                "stage": "dream",
+                "phase": "serialize",
+                "attempt": attempt,
+                "max_retries": max_retries,
+                "schema": schema.__name__,
+            },
+        ):
+            try:
+                # Build config for structured output invocation
+                config = build_runnable_config(
+                    run_name=f"Structured Output Attempt {attempt}",
+                    tags=["dream", "serialize", "structured_output"],
+                    metadata={
+                        "stage": "dream",
+                        "phase": "serialize",
+                        "attempt": attempt,
+                    },
                 )
-                return result, total_tokens
 
-            # If result is a dict, validate and convert
-            if isinstance(result, dict):
-                # Strip null values (LLMs often send null for optional fields)
-                cleaned = strip_null_values(result)
-                artifact = schema.model_validate(cleaned)
-                log.info(
-                    "serialize_completed",
-                    attempt=attempt,
-                    tokens=total_tokens,
-                )
-                return artifact, total_tokens
+                # Invoke structured output
+                result = await structured_model.ainvoke(messages, config=config)
 
-            # Unexpected result type
-            last_errors = [f"Unexpected result type: {type(result).__name__}"]
-            log.warning(
-                "serialize_unexpected_type",
-                attempt=attempt,
-                result_type=type(result).__name__,
-            )
+                # Extract token usage from response if available
+                tokens = _extract_tokens(result)
+                total_tokens += tokens
 
-            # Add error feedback for retry
-            if attempt < max_retries:
-                messages.append(
-                    HumanMessage(
-                        content=f"Unexpected result type: {type(result).__name__}. "
-                        "Please output valid JSON matching the schema."
+                # If result is already a Pydantic model, validate succeeded
+                if isinstance(result, schema):
+                    log.info(
+                        "serialize_completed",
+                        attempt=attempt,
+                        tokens=total_tokens,
                     )
-                )
+                    return result, total_tokens
 
-        except ValidationError as e:
-            last_errors = _format_validation_errors(e)
-            log.debug(
-                "serialize_validation_failed",
-                attempt=attempt,
-                error_count=len(last_errors),
-            )
-
-            # Add error feedback for retry
-            if attempt < max_retries:
-                error_feedback = _build_error_feedback(last_errors)
-                messages.append(HumanMessage(content=error_feedback))
-
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            raise
-
-        except Exception as e:
-            last_errors = [str(e)]
-            log.warning(
-                "serialize_error",
-                attempt=attempt,
-                error=str(e),
-            )
-
-            # Add error feedback for retry
-            if attempt < max_retries:
-                messages.append(
-                    HumanMessage(
-                        content=f"The previous attempt failed with an error: {e}\n\n"
-                        "Please try again, ensuring you output valid JSON matching the schema."
+                # If result is a dict, validate and convert
+                if isinstance(result, dict):
+                    # Strip null values (LLMs often send null for optional fields)
+                    cleaned = strip_null_values(result)
+                    artifact = schema.model_validate(cleaned)
+                    log.info(
+                        "serialize_completed",
+                        attempt=attempt,
+                        tokens=total_tokens,
                     )
+                    return artifact, total_tokens
+
+                # Unexpected result type
+                last_errors = [f"Unexpected result type: {type(result).__name__}"]
+                log.warning(
+                    "serialize_unexpected_type",
+                    attempt=attempt,
+                    result_type=type(result).__name__,
                 )
+
+                # Add error feedback for retry
+                if attempt < max_retries:
+                    messages.append(
+                        HumanMessage(
+                            content=f"Unexpected result type: {type(result).__name__}. "
+                            "Please output valid JSON matching the schema."
+                        )
+                    )
+
+            except ValidationError as e:
+                last_errors = _format_validation_errors(e)
+                log.debug(
+                    "serialize_validation_failed",
+                    attempt=attempt,
+                    error_count=len(last_errors),
+                )
+
+                # Add error feedback for retry
+                if attempt < max_retries:
+                    error_feedback = _build_error_feedback(last_errors)
+                    messages.append(HumanMessage(content=error_feedback))
+
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                raise
+
+            except Exception as e:
+                last_errors = [str(e)]
+                log.warning(
+                    "serialize_error",
+                    attempt=attempt,
+                    error=str(e),
+                )
+
+                # Add error feedback for retry
+                if attempt < max_retries:
+                    messages.append(
+                        HumanMessage(
+                            content=f"The previous attempt failed with an error: {e}\n\n"
+                            "Please try again, ensuring you output valid JSON matching the schema."
+                        )
+                    )
 
     # All retries exhausted
     log.error(

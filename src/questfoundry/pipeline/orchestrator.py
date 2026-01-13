@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
 from questfoundry.observability.logging import get_logger
+from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 
@@ -32,6 +33,7 @@ class StageResult:
     tokens_used: int = 0
     errors: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
+    run_id: str | None = None  # LangSmith trace correlation ID
 
 
 @dataclass
@@ -217,10 +219,15 @@ class PipelineOrchestrator:
         Returns:
             StageResult with execution details.
         """
+        # Generate and set run ID for trace correlation
+        # All LangSmith traces within this stage will include this ID in metadata
+        run_id = generate_run_id()
+        set_pipeline_run_id(run_id)
+
         start_time = time.perf_counter()
         context = context or {}
         errors: list[str] = []
-        log.info("stage_start", stage=stage_name)
+        log.info("stage_start", stage=stage_name, run_id=run_id)
 
         try:
             # Get stage implementation
@@ -288,6 +295,7 @@ class PipelineOrchestrator:
                 tokens_used=tokens_used,
                 errors=errors,
                 duration_seconds=duration,
+                run_id=run_id,
             )
 
             # Call gate hook
@@ -323,6 +331,7 @@ class PipelineOrchestrator:
                 status="failed",
                 errors=[str(e)],
                 duration_seconds=duration,
+                run_id=run_id,
             )
 
     def get_status(self) -> PipelineStatus:
