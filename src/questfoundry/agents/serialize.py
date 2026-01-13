@@ -174,6 +174,7 @@ async def serialize_to_artifact(
                     "serialize_validation_failed",
                     attempt=attempt,
                     error_count=len(last_errors),
+                    errors=last_errors,
                 )
 
                 # Add error feedback for retry

@@ -9,7 +9,11 @@ from typer.testing import CliRunner
 
 from questfoundry import __version__
 from questfoundry.cli import (
+    DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT,
     DEFAULT_INTERACTIVE_DREAM_PROMPT,
+    DEFAULT_INTERACTIVE_SEED_PROMPT,
+    DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
+    DEFAULT_NONINTERACTIVE_SEED_PROMPT,
     _resolve_project_path,
     app,
 )
@@ -455,3 +459,115 @@ def test_default_interactive_dream_prompt_constant() -> None:
     assert DEFAULT_INTERACTIVE_DREAM_PROMPT
     assert "interactive fiction" in DEFAULT_INTERACTIVE_DREAM_PROMPT.lower()
     assert "creative vision" in DEFAULT_INTERACTIVE_DREAM_PROMPT.lower()
+
+
+def test_default_interactive_brainstorm_prompt_constant() -> None:
+    """Test DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT is defined and non-empty."""
+    assert DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT
+    assert "brainstorm" in DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT.lower()
+
+
+def test_default_interactive_seed_prompt_constant() -> None:
+    """Test DEFAULT_INTERACTIVE_SEED_PROMPT is defined and non-empty."""
+    assert DEFAULT_INTERACTIVE_SEED_PROMPT
+    # SEED stage triages brainstorm into structure
+    assert "triage" in DEFAULT_INTERACTIVE_SEED_PROMPT.lower()
+
+
+def test_default_noninteractive_brainstorm_prompt_constant() -> None:
+    """Test DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT is defined and non-empty."""
+    assert DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT
+    # Should reference entities/tensions from DREAM stage
+    assert (
+        "entities" in DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT.lower()
+        or "tensions" in DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT.lower()
+    )
+
+
+def test_default_noninteractive_seed_prompt_constant() -> None:
+    """Test DEFAULT_NONINTERACTIVE_SEED_PROMPT is defined and non-empty."""
+    assert DEFAULT_NONINTERACTIVE_SEED_PROMPT
+    # Should reference triaging brainstorm into structure
+    assert (
+        "triage" in DEFAULT_NONINTERACTIVE_SEED_PROMPT.lower()
+        or "structure" in DEFAULT_NONINTERACTIVE_SEED_PROMPT.lower()
+    )
+
+
+# --- Non-Interactive Mode with Default Prompts ---
+
+
+def test_brainstorm_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
+    """Test qf brainstorm uses default prompt in non-interactive mode."""
+    from questfoundry.pipeline import StageResult
+
+    # Create project
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Mock successful result
+    mock_result = StageResult(
+        stage="brainstorm",
+        status="completed",
+        artifact_path=project_path / "graph.json",
+        llm_calls=2,
+        tokens_used=300,
+    )
+
+    # Mock _get_orchestrator to capture the context
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            ["brainstorm", "--project", str(project_path)],
+        )
+
+        # Should succeed (not exit 1 with "Prompt required" error)
+        assert result.exit_code == 0
+        # run_stage should have been called with default prompt in context
+        mock_orchestrator.run_stage.assert_called_once()
+        call_args = mock_orchestrator.run_stage.call_args
+        context = call_args[0][1]  # Second positional arg is context
+        assert context["user_prompt"] == DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT
+
+
+def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
+    """Test qf seed uses default prompt in non-interactive mode."""
+    from questfoundry.pipeline import StageResult
+
+    # Create project
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Mock successful result
+    mock_result = StageResult(
+        stage="seed",
+        status="completed",
+        artifact_path=project_path / "graph.json",
+        llm_calls=2,
+        tokens_used=400,
+    )
+
+    # Mock _get_orchestrator to capture the context
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            ["seed", "--project", str(project_path)],
+        )
+
+        # Should succeed (not exit 1 with "Prompt required" error)
+        assert result.exit_code == 0
+        # run_stage should have been called with default prompt in context
+        mock_orchestrator.run_stage.assert_called_once()
+        call_args = mock_orchestrator.run_stage.call_args
+        context = call_args[0][1]  # Second positional arg is context
+        assert context["user_prompt"] == DEFAULT_NONINTERACTIVE_SEED_PROMPT
