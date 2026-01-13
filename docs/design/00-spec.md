@@ -1270,6 +1270,7 @@ When users run `qf review`:
 
 | Node | Persistent | Created in | Required for SHIP |
 |------|------------|------------|-------------------|
+| Vision | Yes | DREAM | Yes |
 | Passage | Yes | GROW | Yes (with prose) |
 | Entity | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Codeword | Yes | GROW | Yes |
@@ -1289,6 +1290,9 @@ When users run `qf review`:
 | Appears | Yes | GROW | Yes |
 | Involves | Yes | GROW | Yes |
 | Depicts | Yes | DRESS | Yes |
+| has_alternative | No | BRAINSTORM | No |
+| explores | No | SEED | No |
+| has_consequence | No | SEED | No |
 | belongs_to | No | SEED/GROW | No |
 | requires (beat) | No | SEED/GROW | No |
 | grants (beat) | No | GROW | No |
