@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
+from questfoundry.graph import Graph, apply_mutations, save_snapshot
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
@@ -281,8 +282,18 @@ class PipelineOrchestrator:
             # Only write artifact if validation passed
             artifact_path: Path | None = None
             if not validation_errors:
+                # Write to legacy artifact file (for human review)
                 artifact_path = self._writer.write(artifact_data, stage_name)
                 log.debug("artifact_written", stage=stage_name, path=str(artifact_path))
+
+                # Apply mutations to unified graph (only for stages with mutation handlers)
+                if stage_name in ("dream", "brainstorm", "seed"):
+                    graph = Graph.load(self.project_path)
+                    save_snapshot(graph, self.project_path, stage_name)
+                    apply_mutations(graph, stage_name, artifact_data)
+                    graph.set_last_stage(stage_name)
+                    graph.save(self.project_path / "graph.json")
+                    log.debug("graph_updated", stage=stage_name)
 
             # Calculate duration
             duration = time.perf_counter() - start_time
@@ -337,16 +348,23 @@ class PipelineOrchestrator:
     def get_status(self) -> PipelineStatus:
         """Get the current pipeline status.
 
+        Reads from both graph.json (preferred) and legacy artifact files
+        for backwards compatibility.
+
         Returns:
             PipelineStatus with stage information.
         """
         stages: dict[str, StageInfo] = {}
 
+        # Load graph for metadata (may not exist for legacy projects)
+        graph = Graph.load(self.project_path)
+        graph_last_stage = graph.get_last_stage()
+
         for stage_name in self.config.stages:
             stage_artifact_path = self.project_path / "artifacts" / f"{stage_name}.yaml"
 
             if stage_artifact_path.exists():
-                # Get last modified time
+                # Get last modified time from artifact file
                 mtime = stage_artifact_path.stat().st_mtime
                 last_run: datetime | None = datetime.fromtimestamp(mtime)
                 status: Literal["pending", "completed", "failed"] = "completed"
@@ -361,6 +379,10 @@ class PipelineOrchestrator:
                 artifact_path=info_artifact_path,
                 last_run=last_run,
             )
+
+        # Log graph status for debugging
+        if graph_last_stage:
+            log.debug("graph_status", last_stage=graph_last_stage)
 
         return PipelineStatus(
             project_name=self.config.name,
