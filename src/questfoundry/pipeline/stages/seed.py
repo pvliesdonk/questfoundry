@@ -80,11 +80,8 @@ def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph)
     # Get alternatives from graph edges
     alt_edges = graph.get_edges(from_id=tension_id, edge_type="has_alternative")
     for edge in alt_edges:
-        alt_id = edge.get("to")
-        if alt_id:
-            alt_node = graph.get_node(alt_id)
-            if alt_node:
-                result += _format_alternative(alt_node) + "\n"
+        if (alt_id := edge.get("to")) and (alt_node := graph.get_node(alt_id)):
+            result += _format_alternative(alt_node) + "\n"
 
     return result
 

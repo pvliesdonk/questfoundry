@@ -39,6 +39,18 @@ def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
     return item[field]
 
 
+def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
+    """Remove None values from a dictionary for cleaner storage.
+
+    Args:
+        data: Dictionary to clean.
+
+    Returns:
+        New dictionary with None values removed.
+    """
+    return {k: v for k, v in data.items() if v is not None}
+
+
 # Registry of stages with mutation handlers
 _MUTATION_STAGES = frozenset({"dream", "brainstorm", "seed"})
 
@@ -108,7 +120,7 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
     }
 
     # Remove None values for cleaner storage
-    vision_data = {k: v for k, v in vision_data.items() if v is not None}
+    vision_data = _clean_dict(vision_data)
 
     graph.set_node("vision", vision_data)
 
@@ -137,7 +149,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "disposition": "proposed",  # All entities start as proposed
         }
         # Remove None values
-        node_data = {k: v for k, v in node_data.items() if v is not None}
+        node_data = _clean_dict(node_data)
         graph.add_node(entity_id, node_data)
 
     # Add tensions with alternatives
@@ -151,7 +163,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "involves": tension.get("involves", []),
             "why_it_matters": tension.get("why_it_matters"),
         }
-        tension_data = {k: v for k, v in tension_data.items() if v is not None}
+        tension_data = _clean_dict(tension_data)
         graph.add_node(tension_id, tension_data)
 
         # Create alternative nodes and edges
@@ -166,7 +178,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "description": alt.get("description"),
                 "canonical": alt.get("canonical", False),
             }
-            alt_data = {k: v for k, v in alt_data.items() if v is not None}
+            alt_data = _clean_dict(alt_data)
             graph.add_node(alt_id, alt_data)
             graph.add_edge("has_alternative", tension_id, alt_id)
 
@@ -207,23 +219,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 },
             )
 
-    # Create consequences
-    for i, consequence in enumerate(output.get("consequences", [])):
-        consequence_id = _require_field(consequence, "id", f"Consequence at index {i}")
-        consequence_data = {
-            "type": "consequence",
-            "thread_id": consequence.get("thread_id"),
-            "description": consequence.get("description"),
-            "ripples": consequence.get("ripples", []),
-        }
-        consequence_data = {k: v for k, v in consequence_data.items() if v is not None}
-        graph.add_node(consequence_id, consequence_data)
-
-        # Link consequence to its thread
-        if "thread_id" in consequence:
-            graph.add_edge("has_consequence", consequence["thread_id"], consequence_id)
-
-    # Create threads from explored tensions
+    # Create threads from explored tensions (must be created before consequences)
     for i, thread in enumerate(output.get("threads", [])):
         thread_id = _require_field(thread, "id", f"Thread at index {i}")
         thread_data = {
@@ -236,7 +232,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "description": thread.get("description"),
             "consequences": thread.get("consequences", []),
         }
-        thread_data = {k: v for k, v in thread_data.items() if v is not None}
+        thread_data = _clean_dict(thread_data)
         graph.add_node(thread_id, thread_data)
 
         # Link thread to the alternative it explores
@@ -247,6 +243,22 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             if tension_id:
                 full_alt_id = f"{tension_id}::{alt_local_id}"
                 graph.add_edge("explores", thread_id, full_alt_id)
+
+    # Create consequences (after threads so edges can be created)
+    for i, consequence in enumerate(output.get("consequences", [])):
+        consequence_id = _require_field(consequence, "id", f"Consequence at index {i}")
+        consequence_data = {
+            "type": "consequence",
+            "thread_id": consequence.get("thread_id"),
+            "description": consequence.get("description"),
+            "ripples": consequence.get("ripples", []),
+        }
+        consequence_data = _clean_dict(consequence_data)
+        graph.add_node(consequence_id, consequence_data)
+
+        # Link consequence to its thread (thread must exist)
+        if "thread_id" in consequence and graph.has_node(consequence["thread_id"]):
+            graph.add_edge("has_consequence", consequence["thread_id"], consequence_id)
 
     # Create initial beats
     for i, beat in enumerate(output.get("initial_beats", [])):
@@ -259,7 +271,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "location": beat.get("location"),
             "location_alternatives": beat.get("location_alternatives", []),
         }
-        beat_data = {k: v for k, v in beat_data.items() if v is not None}
+        beat_data = _clean_dict(beat_data)
         graph.add_node(beat_id, beat_data)
 
         # Link beat to threads it belongs to
