@@ -469,12 +469,12 @@ arc:
 
 ### Persistent Edges (survive to export)
 
-| Edge | From → To | Properties | Purpose |
-|------|-----------|------------|---------|
-| **Choice** | passage → passage | label, requires[], grants[], modifies{} | Player navigation |
-| **Appears** | entity → passage | role | Entity present in scene |
-| **Involves** | relationship → passage | — | Relationship active in scene |
-| **Depicts** | illustration → passage | — | Art shown with passage |
+| Edge | From → To | Properties | Created In | Purpose |
+|------|-----------|------------|------------|---------|
+| **Choice** | passage → passage | label, requires[], grants[], modifies{} | GROW | Player navigation |
+| **Appears** | entity → passage | role | GROW | Entity present in scene |
+| **Involves** | relationship → passage | — | GROW | Relationship active in scene |
+| **Depicts** | illustration → passage | — | DRESS | Art shown with passage |
 
 **Choice properties:**
 ```yaml
@@ -486,15 +486,19 @@ choice:
     state_key: delta
 ```
 
-### Working Edges (consumed by GROW)
+### Working Edges (consumed by GROW, not exported)
 
-| Edge | From → To | Purpose |
-|------|-----------|---------|
-| **belongs_to** | beat → thread | Beat serves this thread |
-| **requires** | beat → beat | Ordering constraint |
-| **grants** | beat → codeword | Beat completion grants codeword |
-| **weaves** | arc → thread | Arc uses this thread |
-| **from_beat** | passage → beat | Traceability |
+| Edge | From → To | Created In | Purpose |
+|------|-----------|------------|---------|
+| **belongs_to** | beat → thread | SEED | Beat serves this thread |
+| **involves** | tension → entity | BRAINSTORM | Tension involves these entities |
+| **has_alternative** | tension → alternative | BRAINSTORM | Tension's possible answers |
+| **explores** | thread → alternative | SEED | Thread explores this alternative |
+| **has_consequence** | thread → consequence | SEED | Thread's narrative consequences |
+| **requires** | beat → beat | SEED, GROW | Ordering constraint |
+| **grants** | beat → codeword | GROW | Beat completion grants codeword |
+| **weaves** | arc → thread | GROW | Arc uses this thread |
+| **from_beat** | passage → beat | GROW | Traceability |
 
 ---
 
