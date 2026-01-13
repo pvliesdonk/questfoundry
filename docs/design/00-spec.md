@@ -160,6 +160,28 @@ This provides stage-level rollback without complex event sourcing.
 
 ## Node Types
 
+### Metadata Node
+
+#### Vision
+
+Creative direction established in DREAM. Not a graph node in the traditional sense—more like graph-level configuration.
+
+```yaml
+vision:
+  genre: string
+  tone: string[]
+  themes: string[]
+  audience: string
+  scope:
+    length: micro | short | medium | long
+    branches: minimal | moderate | extensive
+  content_notes: string[]
+```
+
+**Lifecycle:** Created in DREAM, read by all subsequent stages for context. Not exported.
+
+---
+
 ### Persistent Nodes (survive to export)
 
 #### Passage
@@ -175,6 +197,8 @@ passage:
 ```
 
 A passage is complete when `prose` exists.
+
+**Lifecycle:** Created in GROW (1:1 from beats), prose added in FILL. Exported.
 
 **Structural properties (derived):**
 - Start passage: no incoming choice edges
@@ -195,6 +219,8 @@ entity:
       details:
         key: value
 ```
+
+**Lifecycle:** Created in BRAINSTORM, curated in SEED, details added in FILL. Exported.
 
 **Creation constraint:** Entities can only be created in BRAINSTORM or SEED. Neither GROW nor FILL can create Entity nodes. Minor characters that appear in a single scene are prose detail, not entities.
 
@@ -237,6 +263,8 @@ codeword:
   condition: string | null         # for derived: e.g., "gold > 50"
 ```
 
+**Lifecycle:** Created in GROW (derived from beat grants and choice edges). Exported.
+
 The `tracks` field links a codeword to its originating consequence from SEED. This makes codewords traceable to their narrative purpose. When GROW creates `mentor_protector_committed`, it links back to the `mentor_ally` consequence.
 
 #### Relationship
@@ -257,9 +285,11 @@ relationship:
         key: value
 ```
 
+**Lifecycle:** Created in BRAINSTORM or SEED, updated in FILL. Exported.
+
 #### Illustration
 
-Art asset with caption. Created in DRESS.
+Art asset with caption.
 
 ```yaml
 illustration:
@@ -268,9 +298,11 @@ illustration:
   caption: string
 ```
 
+**Lifecycle:** Created in DRESS. Exported.
+
 ---
 
-### Creative Nodes (created in BRAINSTORM/SEED)
+### Creative Nodes (created in BRAINSTORM, refined in SEED)
 
 #### Tension
 
@@ -289,7 +321,11 @@ tension:
       canonical: false          # alternate arc if explored
   involves: entity_id[]
   why_it_matters: string        # thematic stakes
+  # Added by SEED:
+  explored: alternative_id[]    # which alternatives become threads
 ```
+
+**Lifecycle:** Created in BRAINSTORM, exploration decisions added in SEED. Not exported.
 
 **Binary constraint:** Exactly two alternatives per tension. This keeps contrasts crisp.
 
@@ -333,7 +369,9 @@ consequence:
     # - "Reveals family connection"
 ```
 
-Consequences are declared in SEED when threads are created. GROW creates codewords to track when consequences become active, and creates entity overlays to implement consequence effects.
+**Lifecycle:** Created in SEED when threads are created. Not exported.
+
+GROW creates codewords to track when consequences become active, and creates entity overlays to implement consequence effects.
 
 #### Plot Thread
 
@@ -350,6 +388,8 @@ thread:
   description: string
   consequences: consequence_id[]    # narrative meaning of this path
 ```
+
+**Lifecycle:** Created in SEED. Not exported. (THREAD FREEZE: no new threads after SEED)
 
 **Tier:**
 - **Major:** Defines the story. Must interweave with other major threads.
@@ -378,6 +418,8 @@ beat:
   location: entity_id | null              # primary location (assigned in SEED)
   location_alternatives: entity_id[]      # other valid locations (enables knot flexibility)
 ```
+
+**Lifecycle:** Initial beats created in SEED, mutated and new beats added in GROW. Not exported.
 
 **Location flexibility:** Beats can specify alternative locations where the same dramatic action could occur. If Beat A (at Market) and Beat B (at Docks) both have `location_alternatives` including each other's location, GROW can merge them by choosing a shared setting. This enables knot formation without constraining BRAINSTORM's creative freedom.
 
@@ -418,6 +460,8 @@ arc:
   diverges_at: beat_id | null
   converges_at: beat_id | null
 ```
+
+**Lifecycle:** Created in GROW during arc enumeration. Not exported.
 
 ---
 
