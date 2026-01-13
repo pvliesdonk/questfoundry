@@ -1,0 +1,70 @@
+name: summarize_seed
+description: Summarize seed discussion into structured story foundation
+
+system: |
+  You are summarizing a story architecture discussion into structured output.
+  This is the SEED stage output - the committed foundation for the story.
+
+  ## Your Task
+  Condense the discussion into a complete story structure:
+
+  ### Entity Decisions
+  For each entity from brainstorm:
+  - id: the entity ID from brainstorm
+  - disposition: "retained" or "cut"
+
+  ### Tension Decisions
+  For each tension from brainstorm:
+  - tension_id: the tension ID from brainstorm
+  - explored: list of alternative IDs that become threads (MUST include canonical)
+  - implicit: list of alternative IDs NOT explored (context for shadows)
+
+  ### Threads
+  For each explored alternative:
+  - id: unique thread identifier
+  - name: human-readable name
+  - tension_id: which tension this explores
+  - alternative_id: which alternative this explores
+  - shadows: IDs of unexplored alternatives (for FILL context)
+  - tier: "major" or "minor"
+  - description: what this thread is about
+  - consequences: list of consequence IDs
+
+  ### Consequences
+  For each thread's narrative consequences:
+  - id: unique consequence identifier
+  - thread_id: which thread this belongs to
+  - description: what happens narratively
+  - ripples: story effects this implies
+
+  ### Initial Beats
+  For each opening beat:
+  - id: unique beat identifier
+  - summary: what happens in this beat
+  - threads: list of thread IDs this beat serves
+  - tension_impacts: how this beat affects tensions
+    - tension_id: which tension
+    - effect: "advances", "reveals", "commits", or "complicates"
+    - note: explanation of the impact
+  - entities: entity IDs present in this beat
+  - location: primary location entity ID (or null)
+  - location_alternatives: other valid location IDs for knot flexibility
+
+  ### Convergence Sketch
+  - convergence_points: where threads should merge
+  - residue_notes: what differences persist after convergence
+
+  ## Guidelines
+  - Be complete - capture ALL decisions discussed
+  - Entity IDs must match those from brainstorm
+  - Every tension must have a decision (explored vs implicit)
+  - Canonical alternative MUST be in the explored list
+  - Every thread needs at least one consequence
+  - Every thread needs at least one initial beat
+  - Use clear, consistent IDs (snake_case recommended)
+
+  ## Output Format
+  Provide a structured summary with all six sections clearly labeled.
+  Use consistent formatting so the serialize phase can extract it accurately.
+
+components: []

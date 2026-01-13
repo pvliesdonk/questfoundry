@@ -175,11 +175,11 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     """Apply SEED stage output to graph.
 
     Updates entity dispositions, creates threads from explored tensions,
-    and creates initial beats.
+    creates consequences, and creates initial beats.
 
     Args:
         graph: Graph to mutate.
-        output: SEED stage output (entities, threads, beats).
+        output: SEED stage output (SeedOutput fields).
 
     Raises:
         MutationError: If required 'id' fields are missing.
@@ -193,12 +193,46 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 {"disposition": entity_decision.get("disposition", "retained")},
             )
 
+    # Update tension exploration decisions
+    for i, tension_decision in enumerate(output.get("tensions", [])):
+        tension_id = _require_field(
+            tension_decision, "tension_id", f"Tension decision at index {i}"
+        )
+        if graph.has_node(tension_id):
+            graph.update_node(
+                tension_id,
+                {
+                    "explored": tension_decision.get("explored", []),
+                    "implicit": tension_decision.get("implicit", []),
+                },
+            )
+
+    # Create consequences
+    for i, consequence in enumerate(output.get("consequences", [])):
+        consequence_id = _require_field(consequence, "id", f"Consequence at index {i}")
+        consequence_data = {
+            "type": "consequence",
+            "thread_id": consequence.get("thread_id"),
+            "description": consequence.get("description"),
+            "ripples": consequence.get("ripples", []),
+        }
+        consequence_data = {k: v for k, v in consequence_data.items() if v is not None}
+        graph.add_node(consequence_id, consequence_data)
+
+        # Link consequence to its thread
+        if "thread_id" in consequence:
+            graph.add_edge("has_consequence", consequence["thread_id"], consequence_id)
+
     # Create threads from explored tensions
     for i, thread in enumerate(output.get("threads", [])):
         thread_id = _require_field(thread, "id", f"Thread at index {i}")
         thread_data = {
             "type": "thread",
             "name": thread.get("name"),
+            "tension_id": thread.get("tension_id"),
+            "alternative_id": thread.get("alternative_id"),
+            "shadows": thread.get("shadows", []),
+            "tier": thread.get("tier"),
             "description": thread.get("description"),
             "consequences": thread.get("consequences", []),
         }
@@ -207,17 +241,23 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
         # Link thread to the alternative it explores
         if "alternative_id" in thread:
-            graph.add_edge("explores", thread_id, thread["alternative_id"])
+            # Alternative IDs in graph use tension_id::alt_id format
+            tension_id = thread.get("tension_id")
+            alt_local_id = thread["alternative_id"]
+            if tension_id:
+                full_alt_id = f"{tension_id}::{alt_local_id}"
+                graph.add_edge("explores", thread_id, full_alt_id)
 
     # Create initial beats
-    for i, beat in enumerate(output.get("beats", [])):
+    for i, beat in enumerate(output.get("initial_beats", [])):
         beat_id = _require_field(beat, "id", f"Beat at index {i}")
         beat_data = {
             "type": "beat",
-            "name": beat.get("name"),
-            "description": beat.get("description"),
-            "beat_type": beat.get("beat_type"),
+            "summary": beat.get("summary"),
             "tension_impacts": beat.get("tension_impacts", []),
+            "entities": beat.get("entities", []),
+            "location": beat.get("location"),
+            "location_alternatives": beat.get("location_alternatives", []),
         }
         beat_data = {k: v for k, v in beat_data.items() if v is not None}
         graph.add_node(beat_id, beat_data)
@@ -225,3 +265,15 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Link beat to threads it belongs to
         for thread_id in beat.get("threads", []):
             graph.add_edge("belongs_to", beat_id, thread_id)
+
+    # Store convergence sketch as metadata
+    if "convergence_sketch" in output:
+        sketch = output["convergence_sketch"]
+        graph.set_node(
+            "convergence_sketch",
+            {
+                "type": "convergence_sketch",
+                "convergence_points": sketch.get("convergence_points", []),
+                "residue_notes": sketch.get("residue_notes", []),
+            },
+        )

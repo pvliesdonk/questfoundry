@@ -57,6 +57,12 @@ DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT = (
     "Help me develop characters, locations, and dramatic tensions."
 )
 
+DEFAULT_INTERACTIVE_SEED_PROMPT = (
+    "Let's triage this brainstorm into a committed story structure. "
+    "Help me decide which entities to keep, which tensions to explore, "
+    "and what the initial beats should be."
+)
+
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
 _log_enabled: bool = False
@@ -669,6 +675,223 @@ def brainstorm(
             console.print(f"    ... and {len(tensions) - 3} more")
 
     console.print()
+    console.print("Run: [cyan]qf seed[/cyan] to triage into story structure")
+
+
+@app.command()
+def seed(
+    prompt: Annotated[str | None, typer.Argument(help="Guidance for seeding")] = None,
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+    ] = None,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
+        ),
+    ] = None,
+) -> None:
+    """Run SEED stage - triage brainstorm into story structure.
+
+    Takes the entities and tensions from BRAINSTORM and transforms
+    them into committed structure: curated entities, threads with
+    consequences, and initial beats.
+
+    CRITICAL: After SEED, no new threads can be created (THREAD FREEZE).
+
+    Requires BRAINSTORM stage to have completed first.
+
+    By default, interactive mode is auto-detected based on whether the
+    terminal is a TTY. Use --interactive/-i to force interactive mode,
+    or --no-interactive/-I to force direct mode.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    # Get logger after logging is fully configured
+    log = get_logger(__name__)
+
+    # Determine interactive mode: explicit flag > TTY detection
+    use_interactive = interactive if interactive is not None else _is_interactive_tty()
+
+    # Handle prompt: if not provided, interactive mode uses default, non-interactive fails
+    if prompt is None:
+        if use_interactive:
+            prompt = DEFAULT_INTERACTIVE_SEED_PROMPT
+        else:
+            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
+            console.print("Provide a prompt argument or use --interactive/-i flag.")
+            raise typer.Exit(1)
+
+    log.info("stage_start", stage="seed")
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
+
+    # Build context
+    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
+    if use_interactive:
+        log.debug("interactive_mode", mode="enabled")
+
+        session: PromptSession[str] = PromptSession(multiline=True)
+        bindings = KeyBindings()
+
+        def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+            """Enter submits the current buffer."""
+            event.current_buffer.validate_and_handle()
+
+        bindings.add("enter")(_submit)
+
+        def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+            """Ctrl+Enter (Ctrl+J) inserts a newline."""
+            event.current_buffer.insert_text("\n")
+
+        bindings.add("c-j")(_insert_newline)
+
+        async def _async_user_input() -> str | None:
+            """Get user input asynchronously with prompt_toolkit."""
+            console.print()
+            try:
+                loop = asyncio.get_running_loop()
+
+                def _prompt() -> str:
+                    with patch_stdout():
+                        prompt_text: str = session.prompt(
+                            HTML("<b><ansicyan>You</ansicyan></b>: "),
+                            multiline=True,
+                            key_bindings=bindings,
+                        )
+                        return prompt_text
+
+                user_input = await loop.run_in_executor(None, _prompt)
+                return user_input if user_input.strip() else None
+            except (EOFError, KeyboardInterrupt):
+                return None
+
+        def _display_assistant_message(content: str) -> None:
+            """Display assistant message with richer formatting."""
+            console.print()
+            renderable = Markdown(content)
+            panel = Panel.fit(
+                renderable,
+                title="Assistant",
+                title_align="left",
+                border_style="green",
+            )
+            console.print(panel)
+
+        context["user_input_fn"] = _async_user_input
+        context["on_assistant_message"] = _display_assistant_message
+
+        thinking_indicator = "[dim]••• thinking •••[/dim]"
+
+        def _on_llm_start(_: str) -> None:
+            console.print(thinking_indicator, end="\r")
+
+        def _on_llm_end(_: str) -> None:
+            console.print(" " * len("••• thinking •••"), end="\r")
+
+        context["on_llm_start"] = _on_llm_start
+        context["on_llm_end"] = _on_llm_end
+    else:
+        log.debug("interactive_mode", mode="disabled")
+
+    async def _run_seed() -> StageResult:
+        """Run SEED stage and close orchestrator."""
+        orchestrator = _get_orchestrator(project_path, provider_override=provider)
+        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
+        try:
+            return await orchestrator.run_stage("seed", context)
+        finally:
+            await orchestrator.close()
+
+    console.print()
+
+    if use_interactive:
+        # Interactive mode: no spinner, direct output
+        console.print("[dim]Starting interactive SEED stage...[/dim]")
+        console.print("[dim]The AI will help triage brainstorm into story structure.[/dim]")
+        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
+        console.print()
+        result = asyncio.run(_run_seed())
+    else:
+        # Non-interactive: use progress spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task("Running SEED stage...", total=None)
+            result = asyncio.run(_run_seed())
+
+    if result.status == "failed":
+        log.error("stage_failed", stage="seed", errors=result.errors)
+        console.print()
+        console.print("[red]✗[/red] SEED stage failed")
+        for error in result.errors:
+            console.print(f"  [red]•[/red] {error}")
+        raise typer.Exit(1)
+
+    log.info(
+        "stage_complete",
+        stage="seed",
+        tokens=result.tokens_used,
+        duration=result.duration_seconds,
+    )
+
+    # Display success
+    console.print()
+    console.print("[green]✓[/green] SEED stage completed")
+    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
+    console.print(f"  Tokens: {result.tokens_used:,}")
+    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+
+    if _log_enabled:
+        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
+
+    # Show preview of artifact
+    if result.artifact_path and result.artifact_path.exists():
+        from ruamel.yaml import YAML
+
+        yaml_reader = YAML()
+        with result.artifact_path.open() as f:
+            artifact = yaml_reader.load(f)
+
+        console.print()
+
+        entities = artifact.get("entities", [])
+        threads = artifact.get("threads", [])
+        beats = artifact.get("initial_beats", [])
+
+        # Count retained vs cut entities
+        retained = sum(1 for e in entities if e.get("disposition") == "retained")
+        cut = sum(1 for e in entities if e.get("disposition") == "cut")
+
+        console.print(f"  Entities: [bold]{retained}[/bold] retained, [dim]{cut}[/dim] cut")
+
+        console.print(f"  Threads: [bold]{len(threads)}[/bold]")
+        for thread in threads[:3]:
+            tier = thread.get("tier", "?")
+            tier_style = "bold green" if tier == "major" else "dim"
+            console.print(f"    • [{tier_style}]{tier}[/{tier_style}] {thread.get('name', '?')}")
+        if len(threads) > 3:
+            console.print(f"    ... and {len(threads) - 3} more")
+
+        console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
+
+    console.print()
+    console.print("[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED.")
     console.print("Run: [cyan]qf status[/cyan] to see pipeline state")
 
 

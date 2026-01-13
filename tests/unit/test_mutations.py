@@ -310,7 +310,7 @@ class TestSeedMutations:
         output = {
             "entities": [{"disposition": "retained"}],  # Missing id
             "threads": [],
-            "beats": [],
+            "initial_beats": [],
         }
 
         with pytest.raises(
@@ -324,7 +324,7 @@ class TestSeedMutations:
         output = {
             "entities": [],
             "threads": [{"name": "Test Thread"}],  # Missing id
-            "beats": [],
+            "initial_beats": [],
         }
 
         with pytest.raises(MutationError, match="Thread at index 0 missing required 'id' field"):
@@ -336,7 +336,7 @@ class TestSeedMutations:
         output = {
             "entities": [],
             "threads": [],
-            "beats": [{"name": "Test Beat"}],  # Missing id
+            "initial_beats": [{"summary": "Test Beat"}],  # Missing id
         }
 
         with pytest.raises(MutationError, match="Beat at index 0 missing required 'id' field"):
@@ -357,7 +357,7 @@ class TestSeedMutations:
                 {"id": "extra", "disposition": "cut"},
             ],
             "threads": [],
-            "beats": [],
+            "initial_beats": [],
         }
 
         apply_seed_mutations(graph, output)
@@ -378,12 +378,13 @@ class TestSeedMutations:
                 {
                     "id": "thread_mentor_trust",
                     "name": "Mentor Trust Arc",
+                    "tension_id": "mentor_trust",
+                    "alternative_id": "protector",  # Local ID, not full path
                     "description": "Exploring mentor relationship",
-                    "alternative_id": "mentor_trust::protector",
-                    "consequences": [{"event": "Mentor saves Kay", "impact": "Trust grows"}],
+                    "consequences": ["consequence_trust"],
                 }
             ],
-            "beats": [],
+            "initial_beats": [],
         }
 
         apply_seed_mutations(graph, output)
@@ -393,7 +394,7 @@ class TestSeedMutations:
         assert thread["type"] == "thread"
         assert thread["name"] == "Mentor Trust Arc"
 
-        # Check explores edge
+        # Check explores edge - links to full alternative ID
         edges = graph.get_edges(from_id="thread_mentor_trust", edge_type="explores")
         assert len(edges) == 1
         assert edges[0]["to"] == "mentor_trust::protector"
@@ -407,14 +408,16 @@ class TestSeedMutations:
         output = {
             "entities": [],
             "threads": [],
-            "beats": [
+            "initial_beats": [
                 {
                     "id": "opening_001",
-                    "name": "First Meeting",
-                    "description": "Kay meets the mentor",
-                    "beat_type": "scene",
+                    "summary": "Kay meets the mentor for the first time",
                     "threads": ["thread_mentor_trust"],
-                    "tension_impacts": [{"tension_id": "mentor_trust", "effect": "advances"}],
+                    "tension_impacts": [
+                        {"tension_id": "mentor_trust", "effect": "advances", "note": "Trust begins"}
+                    ],
+                    "entities": ["kay", "mentor"],
+                    "location": "archive",
                 }
             ],
         }
@@ -424,8 +427,8 @@ class TestSeedMutations:
         beat = graph.get_node("opening_001")
         assert beat is not None
         assert beat["type"] == "beat"
-        assert beat["name"] == "First Meeting"
-        assert beat["beat_type"] == "scene"
+        assert beat["summary"] == "Kay meets the mentor for the first time"
+        assert beat["location"] == "archive"
 
         # Check belongs_to edge
         edges = graph.get_edges(from_id="opening_001", edge_type="belongs_to")
@@ -444,7 +447,7 @@ class TestSeedMutations:
                 {"id": "missing", "disposition": "retained"},  # Doesn't exist
             ],
             "threads": [],
-            "beats": [],
+            "initial_beats": [],
         }
 
         # Should not raise, just skip missing
@@ -456,7 +459,7 @@ class TestSeedMutations:
     def test_handles_empty_seed(self) -> None:
         """Handles empty seed output."""
         graph = Graph.empty()
-        output = {"entities": [], "threads": [], "beats": []}
+        output = {"entities": [], "threads": [], "initial_beats": []}
 
         apply_seed_mutations(graph, output)
         # No errors, no changes
@@ -519,13 +522,15 @@ class TestMutationIntegration:
                 {
                     "id": "thread_mentor",
                     "name": "Mentor Arc",
-                    "alternative_id": "mentor_trust::protector",
+                    "tension_id": "mentor_trust",
+                    "alternative_id": "protector",  # Local ID
+                    "description": "The mentor relationship thread",
                 }
             ],
-            "beats": [
+            "initial_beats": [
                 {
                     "id": "opening",
-                    "name": "Meeting",
+                    "summary": "Kay meets the mentor",
                     "threads": ["thread_mentor"],
                 }
             ],
