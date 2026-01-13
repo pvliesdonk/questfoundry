@@ -1277,6 +1277,7 @@ When users run `qf review`:
 | Relationship | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Illustration | Yes | DRESS | Yes |
 | Tension | No | BRAINSTORM | No |
+| Alternative | No | BRAINSTORM | No |
 | Consequence | No | SEED | No |
 | Plot Thread | No | SEED | No |
 | Beat | No | SEED/GROW | No |
