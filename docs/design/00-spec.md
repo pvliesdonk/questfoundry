@@ -87,20 +87,100 @@ This keeps human cognitive load manageable while preserving authorial control.
 
 ## Graph Ontology
 
-There is **one graph**. Different stages read and write different parts of it.
+### The Unified Graph
 
-| Stage | Operations |
-|-------|------------|
-| DREAM/BRAINSTORM | Create tensions (with alternatives), entities |
-| SEED | Curate entities, promote alternatives → threads, create initial beats |
-| GROW | Mutate until complete: knots, weaving, passages, pruning |
-| FILL | Add prose, refine entity details |
-| DRESS | Add illustrations, codex |
-| SHIP | Export to ink/Twee/epub — reads only persistent nodes |
+There is **one graph**. The story is the graph. Stages are **graph mutations**.
+
+This is not a pipeline of files where each stage produces a new artifact. Rather:
+- All story data lives in a single graph structure
+- Each stage reads relevant parts of the graph and writes updates
+- The runtime maintains graph consistency
+- Storage format is an implementation detail (JSON, YAML, SQLite—doesn't matter)
+
+**Why this matters:**
+- No data duplication between "artifacts"
+- Clear ownership: each node type has a creating stage
+- Validation operates on the whole graph
+- Human review shows what changed, not complete file contents
+
+### Stage Operations
+
+| Stage | Creates | Modifies | Reads |
+|-------|---------|----------|-------|
+| DREAM | Vision metadata | — | — |
+| BRAINSTORM | Entity, Tension, Alternative | — | Vision |
+| SEED | Thread, Consequence, Beat | Entity (curate), Tension (explore) | Entity, Tension |
+| GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, knot) | Thread, Beat, Entity |
+| FILL | — | Passage (prose), Entity (details) | Passage, Entity, Thread |
+| DRESS | Illustration, Codex | — | Passage, Entity |
+| SHIP | — (export only) | — | Persistent nodes |
+
+### LLM Output vs Graph Storage
+
+Stages use LLMs to produce structured output. This output is **not** the graph format—it's stage-specific data that the runtime interprets and applies as graph mutations.
+
+```
+LLM Output (stage-specific)
+    ↓ validate
+    ↓ interpret
+Runtime applies mutations
+    ↓
+Graph (unified storage)
+```
+
+**Example:** SEED produces entity decisions, thread definitions, and initial beats. The runtime:
+1. Validates the output structure
+2. Updates existing entity nodes (marking dispositions)
+3. Creates new thread, consequence, and beat nodes
+4. Creates edges between nodes
+5. Validates graph consistency
+6. Persists to storage
+
+The LLM doesn't need to know the graph storage format. It produces what makes sense for its task.
+
+### Graph Storage
+
+Storage is a runtime implementation detail. The graph can be stored as:
+- Single JSON file (simple, atomic)
+- Partitioned files (organized by concern)
+- Database (for complex queries)
+
+**What the spec defines:** Node types, edge types, constraints, lifecycle.
+**What the runtime decides:** Storage format, serialization, caching.
+
+For human review, the runtime exports readable views (YAML, Markdown) on demand.
+
+### Rollback and Snapshots
+
+Before each stage executes, the runtime snapshots the current graph state. If a stage fails or is rejected at human review, the graph restores to the pre-stage snapshot.
+
+This provides stage-level rollback without complex event sourcing.
 
 ---
 
 ## Node Types
+
+### Metadata Node
+
+#### Vision
+
+Creative direction established in DREAM. Not a graph node in the traditional sense—more like graph-level configuration.
+
+```yaml
+vision:
+  genre: string
+  tone: string[]
+  themes: string[]
+  audience: string
+  scope:
+    length: micro | short | medium | long
+    branches: minimal | moderate | extensive
+  content_notes: string[]
+```
+
+**Lifecycle:** Created in DREAM, read by all subsequent stages for context. Not exported.
+
+---
 
 ### Persistent Nodes (survive to export)
 
@@ -117,6 +197,8 @@ passage:
 ```
 
 A passage is complete when `prose` exists.
+
+**Lifecycle:** Created in GROW (1:1 from beats), prose added in FILL. Exported.
 
 **Structural properties (derived):**
 - Start passage: no incoming choice edges
@@ -137,6 +219,8 @@ entity:
       details:
         key: value
 ```
+
+**Lifecycle:** Created in BRAINSTORM, curated in SEED, details added in FILL. Exported.
 
 **Creation constraint:** Entities can only be created in BRAINSTORM or SEED. Neither GROW nor FILL can create Entity nodes. Minor characters that appear in a single scene are prose detail, not entities.
 
@@ -179,6 +263,8 @@ codeword:
   condition: string | null         # for derived: e.g., "gold > 50"
 ```
 
+**Lifecycle:** Created in GROW (derived from beat grants and choice edges). Exported.
+
 The `tracks` field links a codeword to its originating consequence from SEED. This makes codewords traceable to their narrative purpose. When GROW creates `mentor_protector_committed`, it links back to the `mentor_ally` consequence.
 
 #### Relationship
@@ -199,9 +285,11 @@ relationship:
         key: value
 ```
 
+**Lifecycle:** Created in BRAINSTORM or SEED, updated in FILL. Exported.
+
 #### Illustration
 
-Art asset with caption. Created in DRESS.
+Art asset with caption.
 
 ```yaml
 illustration:
@@ -210,9 +298,25 @@ illustration:
   caption: string
 ```
 
+**Lifecycle:** Created in DRESS. Exported.
+
+#### Codex
+
+Player-facing encyclopedia entries for entities. Provides in-world information without spoilers.
+
+```yaml
+codex_entry:
+  id: string
+  entity_id: string               # which entity this describes
+  visible_when: codeword[]        # player must have these to see entry
+  content: string                 # player-safe, no spoilers
+```
+
+**Lifecycle:** Created in DRESS. Exported.
+
 ---
 
-### Creative Nodes (created in BRAINSTORM/SEED)
+### Creative Nodes (created in BRAINSTORM, refined in SEED)
 
 #### Tension
 
@@ -231,7 +335,11 @@ tension:
       canonical: false          # alternate arc if explored
   involves: entity_id[]
   why_it_matters: string        # thematic stakes
+  # Added by SEED:
+  explored: alternative_id[]    # which alternatives become threads
 ```
+
+**Lifecycle:** Created in BRAINSTORM, exploration decisions added in SEED. Not exported.
 
 **Binary constraint:** Exactly two alternatives per tension. This keeps contrasts crisp.
 
@@ -257,6 +365,20 @@ This yields four combinations (benevolent+capable, benevolent+flawed, etc.) whil
 
 **Key insight:** "Mentor is a protector" is flat. "Mentor is a protector (not the manipulator they could have been)" has tension—even if we never write the manipulator thread.
 
+#### Alternative
+
+One possible answer to a Tension's question. Extracted as separate nodes in the graph to enable thread/alternative relationships.
+
+```yaml
+alternative:
+  id: string
+  description: string             # "Mentor is genuine protector"
+  canonical: bool                 # true = used for spine arc
+  tension_id: string              # parent tension
+```
+
+**Lifecycle:** Created in BRAINSTORM as part of tension generation. Not exported.
+
 ---
 
 ### Working Nodes (consumed by GROW, ignored by SHIP)
@@ -275,7 +397,9 @@ consequence:
     # - "Reveals family connection"
 ```
 
-Consequences are declared in SEED when threads are created. GROW creates codewords to track when consequences become active, and creates entity overlays to implement consequence effects.
+**Lifecycle:** Created in SEED when threads are created. Not exported.
+
+GROW creates codewords to track when consequences become active, and creates entity overlays to implement consequence effects.
 
 #### Plot Thread
 
@@ -292,6 +416,8 @@ thread:
   description: string
   consequences: consequence_id[]    # narrative meaning of this path
 ```
+
+**Lifecycle:** Created in SEED. Not exported. (THREAD FREEZE: no new threads after SEED)
 
 **Tier:**
 - **Major:** Defines the story. Must interweave with other major threads.
@@ -320,6 +446,8 @@ beat:
   location: entity_id | null              # primary location (assigned in SEED)
   location_alternatives: entity_id[]      # other valid locations (enables knot flexibility)
 ```
+
+**Lifecycle:** Initial beats created in SEED, mutated and new beats added in GROW. Not exported.
 
 **Location flexibility:** Beats can specify alternative locations where the same dramatic action could occur. If Beat A (at Market) and Beat B (at Docks) both have `location_alternatives` including each other's location, GROW can merge them by choosing a shared setting. This enables knot formation without constraining BRAINSTORM's creative freedom.
 
@@ -361,18 +489,23 @@ arc:
   converges_at: beat_id | null
 ```
 
+**Lifecycle:** Created in GROW during arc enumeration. Not exported.
+
 ---
 
 ## Edge Types
 
+> **Naming Convention:** Persistent edges use PascalCase (Choice, Appears) as they appear
+> in exports. Working edges use snake_case (belongs_to, has_alternative) as they're internal only.
+
 ### Persistent Edges (survive to export)
 
-| Edge | From → To | Properties | Purpose |
-|------|-----------|------------|---------|
-| **Choice** | passage → passage | label, requires[], grants[], modifies{} | Player navigation |
-| **Appears** | entity → passage | role | Entity present in scene |
-| **Involves** | relationship → passage | — | Relationship active in scene |
-| **Depicts** | illustration → passage | — | Art shown with passage |
+| Edge | From → To | Properties | Created In | Purpose |
+|------|-----------|------------|------------|---------|
+| **Choice** | passage → passage | label, requires[], grants[], modifies{} | GROW | Player navigation |
+| **Appears** | entity → passage | role | GROW | Entity present in scene |
+| **Involves** | relationship → passage | — | GROW | Relationship active in scene |
+| **Depicts** | illustration → passage | — | DRESS | Art shown with passage |
 
 **Choice properties:**
 ```yaml
@@ -384,15 +517,19 @@ choice:
     state_key: delta
 ```
 
-### Working Edges (consumed by GROW)
+### Working Edges (consumed by GROW, not exported)
 
-| Edge | From → To | Purpose |
-|------|-----------|---------|
-| **belongs_to** | beat → thread | Beat serves this thread |
-| **requires** | beat → beat | Ordering constraint |
-| **grants** | beat → codeword | Beat completion grants codeword |
-| **weaves** | arc → thread | Arc uses this thread |
-| **from_beat** | passage → beat | Traceability |
+| Edge | From → To | Created In | Purpose |
+|------|-----------|------------|---------|
+| **belongs_to** | beat → thread | SEED | Beat serves this thread |
+| **involves** | tension → entity | BRAINSTORM | Tension involves these entities |
+| **has_alternative** | tension → alternative | BRAINSTORM | Tension's possible answers |
+| **explores** | thread → alternative | SEED | Thread explores this alternative |
+| **has_consequence** | thread → consequence | SEED | Thread's narrative consequences |
+| **requires** | beat → beat | SEED, GROW | Ordering constraint |
+| **grants** | beat → codeword | GROW | Beat completion grants codeword |
+| **weaves** | arc → thread | GROW | Arc uses this thread |
+| **from_beat** | passage → beat | GROW | Traceability |
 
 ---
 
@@ -427,6 +564,10 @@ Example: `mentor_trusted` (from alignment tension) and `mentor_ill` (from health
 ---
 
 ## Stage Specifications
+
+> **Note on Output Schemas:** The YAML schemas shown below represent **LLM output format**,
+> not storage format. The runtime interprets these and applies graph mutations accordingly.
+> See "LLM Output vs Graph Storage" in the Graph Ontology section.
 
 ### Stage 1: DREAM
 
@@ -629,11 +770,11 @@ Every choice has a diegetic label.
 
 #### Phase 0: Voice Determination
 
-Before prose generation, establish the voice document. This synthesizes DREAM's high-level vision with GROW's structural artifacts into concrete stylistic guidance.
+Before prose generation, establish the voice document. This synthesizes DREAM's high-level vision with GROW's structural data into concrete stylistic guidance.
 
 **Input:**
-- DREAM vision (genre, tone, themes)
-- GROW artifacts (arc structures, beat summaries, scene types)
+- Vision node (genre, tone, themes)
+- GROW-created nodes (arcs, beats with scene_type, passages with summaries)
 
 **Voice document schema:**
 ```yaml
@@ -895,7 +1036,7 @@ Do not allow "keep generating until good." Quality comes from good prompts and h
 
 ### ❌ Backflow
 
-Do not allow later stages to modify earlier artifacts. If GROW reveals a problem with SEED, the human must manually revise SEED and regenerate.
+Do not allow later stages to modify nodes they don't own. Each node type has a creating stage (see Stage Operations table). If GROW reveals a problem with SEED's threads, the human must manually revert to pre-GROW snapshot and revise SEED.
 
 ### ❌ Hidden Prompts
 
@@ -1085,33 +1226,72 @@ Ugly but explicit. Avoids scope creep into state machine complexity.
 
 ## File Structure
 
+The project uses a **unified graph** stored as JSON, with snapshots for rollback
+and optional human-readable exports.
+
 ```
 /project
-  /artifacts
-    01-dream.yaml
-    02-brainstorm.yaml
-    03-seed.yaml
-    04-grow/
-      beats.yaml
-      arcs.yaml
-      passages.yaml
-      codewords.yaml
-    05-fill/
-      passage_*.yaml
-    06-dress/
-      illustrations.yaml
-      codex.yaml
-    07-output.ink
-  /prompts
+  graph.json              # The unified story graph (single source of truth)
+  /snapshots              # Pre-stage snapshots for rollback
+    pre-dream.json
+    pre-brainstorm.json
+    pre-seed.json
+    pre-grow.json
+    pre-fill.json
+    pre-dress.json
+  /exports                # Human-readable views (generated on demand)
+    graph.yaml            # Full graph in YAML for review
+    graph.md              # Markdown summary for reading
+    story.ink             # Playable output
+    story.html            # Standalone HTML
+  /prompts                # Prompt templates (see 01-prompt-compiler.md)
     /components
       /schemas
       /constraints
       /style
       /instructions
     /templates
-  /validators
   /config
+    project.yaml          # Project configuration
 ```
+
+### Graph File Format
+
+The `graph.json` file contains:
+
+```json
+{
+  "version": "5.0",
+  "meta": {
+    "last_stage": "seed",
+    "last_modified": "2026-01-13T10:30:00Z"
+  },
+  "nodes": {
+    "vision": { "type": "vision", ... },
+    "protag_001": { "type": "entity", ... },
+    "opening_001": { "type": "passage", ... }
+  },
+  "edges": [
+    { "type": "choice", "from": "opening_001", "to": "fork_001", ... }
+  ]
+}
+```
+
+### Snapshot Strategy
+
+Before each stage runs:
+1. Copy current `graph.json` to `snapshots/pre-{stage}.json`
+2. Run stage (graph modified in memory)
+3. Write updated `graph.json` on success
+4. If stage fails, graph.json unchanged (snapshot available for manual recovery)
+
+### Human Review
+
+When users run `qf review`:
+1. Generate `exports/graph.yaml` from current graph
+2. Generate `exports/graph.md` with readable summary
+3. User reviews in their preferred format
+4. Changes made via CLI commands, not direct file editing
 
 ---
 
@@ -1121,12 +1301,15 @@ Ugly but explicit. Avoids scope creep into state machine complexity.
 
 | Node | Persistent | Created in | Required for SHIP |
 |------|------------|------------|-------------------|
+| Vision | Yes | DREAM | No (context only) |
 | Passage | Yes | GROW | Yes (with prose) |
 | Entity | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Codeword | Yes | GROW | Yes |
 | Relationship | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Illustration | Yes | DRESS | Yes |
+| Codex | Yes | DRESS | Yes |
 | Tension | No | BRAINSTORM | No |
+| Alternative | No | BRAINSTORM | No |
 | Consequence | No | SEED | No |
 | Plot Thread | No | SEED | No |
 | Beat | No | SEED/GROW | No |
@@ -1140,6 +1323,10 @@ Ugly but explicit. Avoids scope creep into state machine complexity.
 | Appears | Yes | GROW | Yes |
 | Involves | Yes | GROW | Yes |
 | Depicts | Yes | DRESS | Yes |
+| involves (tension) | No | BRAINSTORM | No |
+| has_alternative | No | BRAINSTORM | No |
+| explores | No | SEED | No |
+| has_consequence | No | SEED | No |
 | belongs_to | No | SEED/GROW | No |
 | requires (beat) | No | SEED/GROW | No |
 | grants (beat) | No | GROW | No |
