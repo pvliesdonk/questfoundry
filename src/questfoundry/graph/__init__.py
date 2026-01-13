@@ -14,6 +14,7 @@ from questfoundry.graph.mutations import (
     apply_dream_mutations,
     apply_mutations,
     apply_seed_mutations,
+    has_mutation_handler,
 )
 from questfoundry.graph.snapshots import (
     list_snapshots,
@@ -28,6 +29,7 @@ __all__ = [
     "apply_dream_mutations",
     "apply_mutations",
     "apply_seed_mutations",
+    "has_mutation_handler",
     "list_snapshots",
     "rollback_to_snapshot",
     "save_snapshot",

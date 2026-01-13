@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
-from questfoundry.graph import Graph, apply_mutations, save_snapshot
+from questfoundry.graph import Graph, apply_mutations, has_mutation_handler, save_snapshot
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
@@ -287,13 +287,18 @@ class PipelineOrchestrator:
                 log.debug("artifact_written", stage=stage_name, path=str(artifact_path))
 
                 # Apply mutations to unified graph (only for stages with mutation handlers)
-                if stage_name in ("dream", "brainstorm", "seed"):
-                    graph = Graph.load(self.project_path)
-                    save_snapshot(graph, self.project_path, stage_name)
-                    apply_mutations(graph, stage_name, artifact_data)
-                    graph.set_last_stage(stage_name)
-                    graph.save(self.project_path / "graph.json")
-                    log.debug("graph_updated", stage=stage_name)
+                if has_mutation_handler(stage_name):
+                    try:
+                        graph = Graph.load(self.project_path)
+                        # Pre-stage snapshot enables rollback if mutations fail or stage is rejected
+                        save_snapshot(graph, self.project_path, stage_name)
+                        apply_mutations(graph, stage_name, artifact_data)
+                        graph.set_last_stage(stage_name)
+                        graph.save(self.project_path / "graph.json")
+                        log.debug("graph_updated", stage=stage_name)
+                    except Exception as e:
+                        # Graph operations are non-critical - artifact was written successfully
+                        log.warning("graph_update_failed", stage=stage_name, error=str(e))
 
             # Calculate duration
             duration = time.perf_counter() - start_time
@@ -348,17 +353,21 @@ class PipelineOrchestrator:
     def get_status(self) -> PipelineStatus:
         """Get the current pipeline status.
 
-        Reads from both graph.json (preferred) and legacy artifact files
-        for backwards compatibility.
+        Stage completion is determined by artifact file existence.
+        Also loads graph.json metadata for debugging if available.
 
         Returns:
             PipelineStatus with stage information.
         """
         stages: dict[str, StageInfo] = {}
 
-        # Load graph for metadata (may not exist for legacy projects)
-        graph = Graph.load(self.project_path)
-        graph_last_stage = graph.get_last_stage()
+        # Load graph for metadata logging (may not exist or be corrupted)
+        graph_last_stage: str | None = None
+        try:
+            graph = Graph.load(self.project_path)
+            graph_last_stage = graph.get_last_stage()
+        except Exception as e:
+            log.warning("graph_load_failed_in_status", error=str(e))
 
         for stage_name in self.config.stages:
             stage_artifact_path = self.project_path / "artifacts" / f"{stage_name}.yaml"
