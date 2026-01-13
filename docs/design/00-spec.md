@@ -1276,6 +1276,7 @@ When users run `qf review`:
 | Codeword | Yes | GROW | Yes |
 | Relationship | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Illustration | Yes | DRESS | Yes |
+| Codex | Yes | DRESS | Yes |
 | Tension | No | BRAINSTORM | No |
 | Alternative | No | BRAINSTORM | No |
 | Consequence | No | SEED | No |
