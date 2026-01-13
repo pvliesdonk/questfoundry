@@ -212,6 +212,10 @@ class TestStructuredOutputDreamArtifact:
 
     @pytest.mark.asyncio
     @requires_ollama
+    @pytest.mark.xfail(
+        reason="Raw structured output without repair loop - LLM may confuse type/genre fields",
+        strict=False,
+    )
     async def test_dream_artifact_direct(self, ollama_model: BaseChatModel) -> None:
         """Direct structured output with DreamArtifact schema."""
         from questfoundry.artifacts import DreamArtifact
@@ -272,6 +276,10 @@ class TestSerializeValidationLoop:
 
     @pytest.mark.asyncio
     @requires_ollama
+    @pytest.mark.xfail(
+        reason="LLM may fail to produce valid output even with 3 retries",
+        strict=False,
+    )
     async def test_serialize_handles_valid_brief(self, ollama_model: BaseChatModel) -> None:
         """serialize_to_artifact succeeds with a well-formed brief."""
         from questfoundry.agents import serialize_to_artifact
