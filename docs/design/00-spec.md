@@ -735,11 +735,11 @@ Every choice has a diegetic label.
 
 #### Phase 0: Voice Determination
 
-Before prose generation, establish the voice document. This synthesizes DREAM's high-level vision with GROW's structural artifacts into concrete stylistic guidance.
+Before prose generation, establish the voice document. This synthesizes DREAM's high-level vision with GROW's structural data into concrete stylistic guidance.
 
 **Input:**
-- DREAM vision (genre, tone, themes)
-- GROW artifacts (arc structures, beat summaries, scene types)
+- Vision node (genre, tone, themes)
+- GROW-created nodes (arcs, beats with scene_type, passages with summaries)
 
 **Voice document schema:**
 ```yaml
@@ -1001,7 +1001,7 @@ Do not allow "keep generating until good." Quality comes from good prompts and h
 
 ### ❌ Backflow
 
-Do not allow later stages to modify earlier artifacts. If GROW reveals a problem with SEED, the human must manually revise SEED and regenerate.
+Do not allow later stages to modify nodes they don't own. Each node type has a creating stage (see Stage Operations table). If GROW reveals a problem with SEED's threads, the human must manually revert to pre-GROW snapshot and revise SEED.
 
 ### ❌ Hidden Prompts
 
