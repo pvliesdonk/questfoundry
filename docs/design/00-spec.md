@@ -1292,6 +1292,7 @@ When users run `qf review`:
 | Appears | Yes | GROW | Yes |
 | Involves | Yes | GROW | Yes |
 | Depicts | Yes | DRESS | Yes |
+| involves (tension) | No | BRAINSTORM | No |
 | has_alternative | No | BRAINSTORM | No |
 | explores | No | SEED | No |
 | has_consequence | No | SEED | No |
