@@ -534,6 +534,10 @@ Example: `mentor_trusted` (from alignment tension) and `mentor_ill` (from health
 
 ## Stage Specifications
 
+> **Note on Output Schemas:** The YAML schemas shown below represent **LLM output format**,
+> not storage format. The runtime interprets these and applies graph mutations accordingly.
+> See "LLM Output vs Graph Storage" in the Graph Ontology section.
+
 ### Stage 1: DREAM
 
 **Purpose:** Riff on genre, tone, themes, constraints.
