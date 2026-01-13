@@ -1191,33 +1191,72 @@ Ugly but explicit. Avoids scope creep into state machine complexity.
 
 ## File Structure
 
+The project uses a **unified graph** stored as JSON, with snapshots for rollback
+and optional human-readable exports.
+
 ```
 /project
-  /artifacts
-    01-dream.yaml
-    02-brainstorm.yaml
-    03-seed.yaml
-    04-grow/
-      beats.yaml
-      arcs.yaml
-      passages.yaml
-      codewords.yaml
-    05-fill/
-      passage_*.yaml
-    06-dress/
-      illustrations.yaml
-      codex.yaml
-    07-output.ink
-  /prompts
+  graph.json              # The unified story graph (single source of truth)
+  /snapshots              # Pre-stage snapshots for rollback
+    pre-dream.json
+    pre-brainstorm.json
+    pre-seed.json
+    pre-grow.json
+    pre-fill.json
+    pre-dress.json
+  /exports                # Human-readable views (generated on demand)
+    graph.yaml            # Full graph in YAML for review
+    graph.md              # Markdown summary for reading
+    story.ink             # Playable output
+    story.html            # Standalone HTML
+  /prompts                # Prompt templates (see 01-prompt-compiler.md)
     /components
       /schemas
       /constraints
       /style
       /instructions
     /templates
-  /validators
   /config
+    project.yaml          # Project configuration
 ```
+
+### Graph File Format
+
+The `graph.json` file contains:
+
+```json
+{
+  "version": "5.0",
+  "meta": {
+    "last_stage": "seed",
+    "last_modified": "2026-01-13T10:30:00Z"
+  },
+  "nodes": {
+    "vision": { "type": "vision", ... },
+    "protag_001": { "type": "entity", ... },
+    "opening_001": { "type": "passage", ... }
+  },
+  "edges": [
+    { "type": "choice", "from": "opening_001", "to": "fork_001", ... }
+  ]
+}
+```
+
+### Snapshot Strategy
+
+Before each stage runs:
+1. Copy current `graph.json` to `snapshots/pre-{stage}.json`
+2. Run stage (graph modified in memory)
+3. Write updated `graph.json` on success
+4. If stage fails, graph.json unchanged (snapshot available for manual recovery)
+
+### Human Review
+
+When users run `qf review`:
+1. Generate `exports/graph.yaml` from current graph
+2. Generate `exports/graph.md` with readable summary
+3. User reviews in their preferred format
+4. Changes made via CLI commands, not direct file editing
 
 ---
 
