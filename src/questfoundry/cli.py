@@ -57,10 +57,21 @@ DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT = (
     "Help me develop characters, locations, and dramatic tensions."
 )
 
+DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT = (
+    "Generate characters, locations, objects, factions, and dramatic tensions "
+    "based on the creative vision from the DREAM stage."
+)
+
 DEFAULT_INTERACTIVE_SEED_PROMPT = (
     "Let's triage this brainstorm into a committed story structure. "
     "Help me decide which entities to keep, which tensions to explore, "
     "and what the initial beats should be."
+)
+
+DEFAULT_NONINTERACTIVE_SEED_PROMPT = (
+    "Triage the brainstorm into committed story structure: curate entities, "
+    "decide which tensions to explore as threads, create initial beats, "
+    "and sketch convergence points."
 )
 
 # Global state for logging flags (set by callback, used by commands)
@@ -507,14 +518,12 @@ def brainstorm(
     # Determine interactive mode: explicit flag > TTY detection
     use_interactive = interactive if interactive is not None else _is_interactive_tty()
 
-    # Handle prompt: if not provided, interactive mode uses default, non-interactive fails
+    # Handle prompt: if not provided, use appropriate default for mode
     if prompt is None:
         if use_interactive:
             prompt = DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT
         else:
-            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
-            console.print("Provide a prompt argument or use --interactive/-i flag.")
-            raise typer.Exit(1)
+            prompt = DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT
 
     log.info("stage_start", stage="brainstorm")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
@@ -726,14 +735,12 @@ def seed(
     # Determine interactive mode: explicit flag > TTY detection
     use_interactive = interactive if interactive is not None else _is_interactive_tty()
 
-    # Handle prompt: if not provided, interactive mode uses default, non-interactive fails
+    # Handle prompt: if not provided, use appropriate default for mode
     if prompt is None:
         if use_interactive:
             prompt = DEFAULT_INTERACTIVE_SEED_PROMPT
         else:
-            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
-            console.print("Provide a prompt argument or use --interactive/-i flag.")
-            raise typer.Exit(1)
+            prompt = DEFAULT_NONINTERACTIVE_SEED_PROMPT
 
     log.info("stage_start", stage="seed")
     log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
