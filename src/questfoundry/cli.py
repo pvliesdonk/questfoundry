@@ -52,6 +52,11 @@ DEFAULT_INTERACTIVE_DREAM_PROMPT = (
     "Please help me develop the creative vision."
 )
 
+DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT = (
+    "Let's brainstorm story elements based on the creative vision. "
+    "Help me develop characters, locations, and dramatic tensions."
+)
+
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
 _log_enabled: bool = False
@@ -445,6 +450,223 @@ def dream(
 
         if themes := artifact.get("themes"):
             console.print(f"  Themes: {', '.join(themes)}")
+
+    console.print()
+    console.print("Run: [cyan]qf status[/cyan] to see pipeline state")
+
+
+@app.command()
+def brainstorm(
+    prompt: Annotated[str | None, typer.Argument(help="Guidance for brainstorming")] = None,
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+    ] = None,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
+        ),
+    ] = None,
+) -> None:
+    """Run BRAINSTORM stage - generate entities and tensions.
+
+    Takes the creative vision from DREAM and generates raw creative
+    material: characters, locations, objects, factions, and dramatic
+    tensions (binary questions with two alternatives each).
+
+    Requires DREAM stage to have completed first.
+
+    By default, interactive mode is auto-detected based on whether the
+    terminal is a TTY. Use --interactive/-i to force interactive mode,
+    or --no-interactive/-I to force direct mode.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    # Get logger after logging is fully configured
+    log = get_logger(__name__)
+
+    # Determine interactive mode: explicit flag > TTY detection
+    use_interactive = interactive if interactive is not None else _is_interactive_tty()
+
+    # Handle prompt: if not provided, interactive mode uses default, non-interactive fails
+    if prompt is None:
+        if use_interactive:
+            prompt = DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT
+        else:
+            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
+            console.print("Provide a prompt argument or use --interactive/-i flag.")
+            raise typer.Exit(1)
+
+    log.info("stage_start", stage="brainstorm")
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
+
+    # Build context
+    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
+    if use_interactive:
+        log.debug("interactive_mode", mode="enabled")
+
+        session: PromptSession[str] = PromptSession(multiline=True)
+        bindings = KeyBindings()
+
+        def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+            """Enter submits the current buffer."""
+            event.current_buffer.validate_and_handle()
+
+        bindings.add("enter")(_submit)
+
+        def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+            """Ctrl+Enter (Ctrl+J) inserts a newline."""
+            event.current_buffer.insert_text("\n")
+
+        bindings.add("c-j")(_insert_newline)
+
+        async def _async_user_input() -> str | None:
+            """Get user input asynchronously with prompt_toolkit."""
+            console.print()
+            try:
+                loop = asyncio.get_running_loop()
+
+                def _prompt() -> str:
+                    with patch_stdout():
+                        prompt_text: str = session.prompt(
+                            HTML("<b><ansicyan>You</ansicyan></b>: "),
+                            multiline=True,
+                            key_bindings=bindings,
+                        )
+                        return prompt_text
+
+                user_input = await loop.run_in_executor(None, _prompt)
+                return user_input if user_input.strip() else None
+            except (EOFError, KeyboardInterrupt):
+                return None
+
+        def _display_assistant_message(content: str) -> None:
+            """Display assistant message with richer formatting."""
+            console.print()
+            renderable = Markdown(content)
+            panel = Panel.fit(
+                renderable,
+                title="Assistant",
+                title_align="left",
+                border_style="green",
+            )
+            console.print(panel)
+
+        context["user_input_fn"] = _async_user_input
+        context["on_assistant_message"] = _display_assistant_message
+
+        thinking_indicator = "[dim]••• thinking •••[/dim]"
+
+        def _on_llm_start(_: str) -> None:
+            console.print(thinking_indicator, end="\r")
+
+        def _on_llm_end(_: str) -> None:
+            console.print(" " * len("••• thinking •••"), end="\r")
+
+        context["on_llm_start"] = _on_llm_start
+        context["on_llm_end"] = _on_llm_end
+    else:
+        log.debug("interactive_mode", mode="disabled")
+
+    async def _run_brainstorm() -> StageResult:
+        """Run BRAINSTORM stage and close orchestrator."""
+        orchestrator = _get_orchestrator(project_path, provider_override=provider)
+        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
+        try:
+            return await orchestrator.run_stage("brainstorm", context)
+        finally:
+            await orchestrator.close()
+
+    console.print()
+
+    if use_interactive:
+        # Interactive mode: no spinner, direct output
+        console.print("[dim]Starting interactive BRAINSTORM stage...[/dim]")
+        console.print("[dim]The AI will help brainstorm story elements with you.[/dim]")
+        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
+        console.print()
+        result = asyncio.run(_run_brainstorm())
+    else:
+        # Non-interactive: use progress spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task("Running BRAINSTORM stage...", total=None)
+            result = asyncio.run(_run_brainstorm())
+
+    if result.status == "failed":
+        log.error("stage_failed", stage="brainstorm", errors=result.errors)
+        console.print()
+        console.print("[red]✗[/red] BRAINSTORM stage failed")
+        for error in result.errors:
+            console.print(f"  [red]•[/red] {error}")
+        raise typer.Exit(1)
+
+    log.info(
+        "stage_complete",
+        stage="brainstorm",
+        tokens=result.tokens_used,
+        duration=result.duration_seconds,
+    )
+
+    # Display success
+    console.print()
+    console.print("[green]✓[/green] BRAINSTORM stage completed")
+    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
+    console.print(f"  Tokens: {result.tokens_used:,}")
+    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+
+    if _log_enabled:
+        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
+
+    # Show preview of artifact
+    if result.artifact_path and result.artifact_path.exists():
+        from ruamel.yaml import YAML
+
+        yaml_reader = YAML()
+        with result.artifact_path.open() as f:
+            artifact = yaml_reader.load(f)
+
+        console.print()
+
+        entities = artifact.get("entities", [])
+        tensions = artifact.get("tensions", [])
+
+        console.print(f"  Entities: [bold]{len(entities)}[/bold]")
+
+        # Group entities by type
+        entity_types: dict[str, list[str]] = {}
+        for entity in entities:
+            etype = entity.get("type", "unknown")
+            entity_types.setdefault(etype, []).append(entity.get("id", "?"))
+
+        for etype, ids in entity_types.items():
+            ids_display = ", ".join(ids[:5])
+            if len(ids) > 5:
+                ids_display += f", +{len(ids) - 5} more"
+            console.print(f"    {etype}: {ids_display}")
+
+        console.print(f"  Tensions: [bold]{len(tensions)}[/bold]")
+        for tension in tensions[:3]:
+            console.print(f"    • {tension.get('question', '?')}")
+        if len(tensions) > 3:
+            console.print(f"    ... and {len(tensions) - 3} more")
 
     console.print()
     console.print("Run: [cyan]qf status[/cyan] to see pipeline state")

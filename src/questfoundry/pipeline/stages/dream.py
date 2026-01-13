@@ -24,6 +24,8 @@ from questfoundry.tools.langchain_tools import get_all_research_tools
 log = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.agents.discuss import (
@@ -62,6 +64,7 @@ class DreamStage:
         on_assistant_message: AssistantMessageFn | None = None,
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
+        project_path: Path | None = None,  # noqa: ARG002 - API consistency
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 
@@ -74,6 +77,7 @@ class DreamStage:
             on_assistant_message: Callback when assistant responds.
             on_llm_start: Callback when LLM call starts.
             on_llm_end: Callback when LLM call ends.
+            project_path: Path to project directory (unused by DREAM, for API consistency).
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).

@@ -113,3 +113,43 @@ def _load_raw_template(template_name: str) -> dict[str, Any]:
     yaml = YAML()
     with path.open("r", encoding="utf-8") as f:
         return dict(yaml.load(f))
+
+
+def get_brainstorm_discuss_prompt(
+    vision_context: str,
+    research_tools_available: bool = True,
+) -> str:
+    """Build the BRAINSTORM discuss prompt with vision context.
+
+    Args:
+        vision_context: Formatted vision from DREAM stage.
+        research_tools_available: Whether research tools are available.
+
+    Returns:
+        System prompt string for the BRAINSTORM discuss agent.
+    """
+    raw_data = _load_raw_template("discuss_brainstorm")
+
+    # Build research tools section
+    research_section = ""
+    if research_tools_available:
+        research_section = raw_data.get("research_tools_section", "")
+
+    # Render the system template
+    system_template = raw_data.get("system", "")
+    prompt = ChatPromptTemplate.from_template(system_template)
+    return prompt.format(
+        vision_context=vision_context,
+        research_tools_section=research_section,
+    )
+
+
+def get_brainstorm_summarize_prompt() -> str:
+    """Build the BRAINSTORM summarize prompt.
+
+    Returns:
+        System prompt string for the BRAINSTORM summarize call.
+    """
+    loader = _get_loader()
+    template = loader.load("summarize_brainstorm")
+    return template.system

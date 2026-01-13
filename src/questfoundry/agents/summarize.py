@@ -20,6 +20,8 @@ log = get_logger(__name__)
 async def summarize_discussion(
     model: BaseChatModel,
     messages: list[BaseMessage],
+    system_prompt: str | None = None,
+    stage_name: str = "dream",
 ) -> tuple[str, int]:
     """Summarize a discussion into a compact brief.
 
@@ -32,13 +34,18 @@ async def summarize_discussion(
     Args:
         model: Chat model to use (will be invoked with low temperature)
         messages: Conversation history from Discuss phase
+        system_prompt: Optional custom system prompt. If not provided,
+            uses the default summarize prompt.
+        stage_name: Stage name for logging/tagging (default "dream")
 
     Returns:
         Tuple of (summary_text, tokens_used)
     """
-    log.info("summarize_started", message_count=len(messages))
+    log.info("summarize_started", message_count=len(messages), stage=stage_name)
 
-    system_prompt = get_summarize_prompt()
+    # Use custom prompt if provided, otherwise use default
+    if system_prompt is None:
+        system_prompt = get_summarize_prompt()
 
     # Build the messages for the summarize call
     # We include the system prompt, then the conversation as context,
@@ -54,8 +61,8 @@ async def summarize_discussion(
     # Build tracing config for the LLM call
     config = build_runnable_config(
         run_name="Summarize LLM Call",
-        tags=["dream", "summarize", "llm"],
-        metadata={"stage": "dream", "phase": "summarize", "message_count": len(messages)},
+        tags=[stage_name, "summarize", "llm"],
+        metadata={"stage": stage_name, "phase": "summarize", "message_count": len(messages)},
     )
 
     # Note: We use the model as configured rather than trying to override temperature
