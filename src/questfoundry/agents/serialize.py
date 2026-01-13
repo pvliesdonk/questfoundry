@@ -51,6 +51,7 @@ async def serialize_to_artifact(
     provider_name: str | None = None,
     strategy: StructuredOutputStrategy | None = None,
     max_retries: int = 3,
+    system_prompt: str | None = None,
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -65,6 +66,7 @@ async def serialize_to_artifact(
         provider_name: Provider name for strategy auto-detection.
         strategy: Output strategy (auto-selected if None).
         max_retries: Maximum total attempts (default 3).
+        system_prompt: Stage-specific serialize prompt. If None, uses generic prompt.
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -86,9 +88,10 @@ async def serialize_to_artifact(
         provider_name=provider_name,
     )
 
-    system_prompt = get_serialize_prompt()
+    # Use provided prompt or fall back to generic
+    serialize_prompt = system_prompt if system_prompt is not None else get_serialize_prompt()
     messages: list[BaseMessage] = [
-        SystemMessage(content=system_prompt),
+        SystemMessage(content=serialize_prompt),
         HumanMessage(content=f"Convert this brief into the required structure:\n\n{brief}"),
     ]
 

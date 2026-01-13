@@ -240,7 +240,9 @@ def test_create_model_structured_ollama_with_schema() -> None:
     mock_chat.with_structured_output.assert_called_once()
     call_args = mock_chat.with_structured_output.call_args
     assert call_args[0][0] is SampleSchema
-    assert call_args[1]["method"] == "function_calling"  # Tool strategy for Ollama
+    assert (
+        call_args[1]["method"] == "json_schema"
+    )  # JSON_MODE for Ollama (better for complex schemas)
 
 
 def test_create_model_structured_openai_with_schema() -> None:

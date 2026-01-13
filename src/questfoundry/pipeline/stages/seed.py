@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.agents import (
     get_seed_discuss_prompt,
+    get_seed_serialize_prompt,
     get_seed_summarize_prompt,
     run_discuss_phase,
     serialize_to_artifact,
@@ -48,32 +49,58 @@ class SeedStageError(Exception):
     pass
 
 
-def _format_entity(entity: dict[str, Any]) -> str:
-    """Format a single entity for display."""
+def _format_entity(entity_id: str, entity: dict[str, Any]) -> str:
+    """Format a single entity for display.
+
+    Uses raw_id (original LLM ID) for display, not the prefixed graph node ID.
+    """
+    # Use raw_id for display (what the LLM should reference)
+    display_id = entity.get("raw_id", entity_id)
     entity_type = entity.get("entity_type", entity.get("type", "unknown"))
     concept = entity.get("concept", "")
     notes = entity.get("notes", "")
 
-    result = f"- **{entity.get('id', 'unknown')}** ({entity_type}): {concept}"
+    result = f"- **{display_id}** ({entity_type}): {concept}"
     if notes:
         result += f"\n  Notes: {notes}"
     return result
 
 
 def _format_alternative(alt: dict[str, Any]) -> str:
-    """Format a single alternative for display."""
+    """Format a single alternative for display.
+
+    Uses raw_id for display (what the LLM should reference).
+    """
+    # Use raw_id for display
+    display_id = alt.get("raw_id", alt.get("id", "unknown"))
     canonical = " (canonical)" if alt.get("canonical") else ""
-    return f"  - {alt.get('id', 'unknown')}: {alt.get('description', '')}{canonical}"
+    return f"  - {display_id}: {alt.get('description', '')}{canonical}"
 
 
 def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph) -> str:
-    """Format a single tension for display."""
+    """Format a single tension for display.
+
+    Uses raw_id for display (what the LLM should reference).
+    """
+    # Use raw_id for display
+    display_id = tension_data.get("raw_id", tension_id)
     question = tension_data.get("question", "")
     involves = tension_data.get("involves", [])
     why_it_matters = tension_data.get("why_it_matters", "")
 
-    result = f"- **{tension_id}**: {question}\n"
-    result += f"  Involves: {', '.join(involves) if involves else 'none specified'}\n"
+    # Format involves list - extract raw IDs from prefixed references
+    involves_display = []
+    for ref in involves:
+        # References are prefixed like "entity::raw_id", extract raw_id part
+        if "::" in ref:
+            involves_display.append(ref.split("::")[-1])
+        else:
+            involves_display.append(ref)
+
+    result = f"- **{display_id}**: {question}\n"
+    result += (
+        f"  Involves: {', '.join(involves_display) if involves_display else 'none specified'}\n"
+    )
     result += f"  Stakes: {why_it_matters}\n"
     result += "  Alternatives:\n"
 
@@ -108,8 +135,7 @@ def _format_brainstorm_context(graph: Graph) -> str:
     if entities:
         parts.append("## Entities from BRAINSTORM")
         for entity_id, entity_data in entities:
-            entity_with_id = {"id": entity_id, **entity_data}
-            parts.append(_format_entity(entity_with_id))
+            parts.append(_format_entity(entity_id, entity_data))
         parts.append("")
 
     # Format tensions section
@@ -283,11 +309,13 @@ class SeedStage:
 
         # Phase 3: Serialize
         log.debug("seed_phase", phase="serialize")
+        serialize_prompt = get_seed_serialize_prompt()
         artifact, serialize_tokens = await serialize_to_artifact(
             model=model,
             brief=brief,
             schema=SeedOutput,
             provider_name=provider_name,
+            system_prompt=serialize_prompt,
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
