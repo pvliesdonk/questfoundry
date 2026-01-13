@@ -5,6 +5,8 @@ from questfoundry.agents.prompts import (
     get_brainstorm_discuss_prompt,
     get_brainstorm_summarize_prompt,
     get_discuss_prompt,
+    get_seed_discuss_prompt,
+    get_seed_summarize_prompt,
     get_serialize_prompt,
     get_summarize_prompt,
 )
@@ -17,6 +19,8 @@ __all__ = [
     "get_brainstorm_discuss_prompt",
     "get_brainstorm_summarize_prompt",
     "get_discuss_prompt",
+    "get_seed_discuss_prompt",
+    "get_seed_summarize_prompt",
     "get_serialize_prompt",
     "get_summarize_prompt",
     "run_discuss_phase",

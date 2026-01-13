@@ -157,3 +157,45 @@ def get_brainstorm_summarize_prompt() -> str:
     loader = _get_loader()
     template = loader.load("summarize_brainstorm")
     return template.system
+
+
+def get_seed_discuss_prompt(
+    brainstorm_context: str,
+    research_tools_available: bool = True,
+) -> str:
+    """Build the SEED discuss prompt with brainstorm context.
+
+    Uses _load_raw_template() to access the 'research_tools_section' field.
+
+    Args:
+        brainstorm_context: Formatted brainstorm output from BRAINSTORM stage.
+        research_tools_available: Whether research tools are available.
+
+    Returns:
+        System prompt string for the SEED discuss agent.
+    """
+    raw_data = _load_raw_template("discuss_seed")
+
+    # Build research tools section
+    research_section = ""
+    if research_tools_available:
+        research_section = raw_data.get("research_tools_section", "")
+
+    # Render the system template
+    system_template = raw_data.get("system", "")
+    prompt = ChatPromptTemplate.from_template(system_template)
+    return prompt.format(
+        brainstorm_context=brainstorm_context,
+        research_tools_section=research_section,
+    )
+
+
+def get_seed_summarize_prompt() -> str:
+    """Build the SEED summarize prompt.
+
+    Returns:
+        System prompt string for the SEED summarize call.
+    """
+    loader = _get_loader()
+    template = loader.load("summarize_seed")
+    return template.system
