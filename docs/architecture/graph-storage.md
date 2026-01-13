@@ -105,25 +105,26 @@ class Graph:
         graph_file = project_path / "graph.json"
         if not graph_file.exists():
             return cls.empty(project_path)
+        return cls.load_from_file(graph_file)
 
-        with graph_file.open() as f:
+    @classmethod
+    def load_from_file(cls, file_path: Path) -> "Graph":
+        """Load graph from a specific file (e.g., snapshot)."""
+        with file_path.open() as f:
             data = json.load(f)
-
         return cls.from_dict(data)
 ```
 
 ### Saving
 
 ```python
-def save(self, project_path: Path) -> None:
-    """Persist graph to storage."""
-    graph_file = project_path / "graph.json"
-
-    # Atomic write: write to temp file, then rename
-    temp_file = graph_file.with_suffix(".tmp")
-    with temp_file.open("w") as f:
-        json.dump(self.to_dict(), f, indent=2)
-    temp_file.rename(graph_file)
+class Graph:
+    def save(self, file_path: Path) -> None:
+        """Persist graph to a file (atomic write)."""
+        temp_file = file_path.with_suffix(".tmp")
+        with temp_file.open("w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        temp_file.rename(file_path)
 ```
 
 ### Mutation Pattern
@@ -132,7 +133,7 @@ Stages don't modify the graph directly. They produce structured output that
 the runtime interprets:
 
 ```python
-async def run_stage(stage: Stage, graph: Graph) -> Graph:
+async def run_stage(stage: Stage, graph: Graph, project_path: Path) -> Graph:
     # 1. Snapshot before modifications
     snapshot_path = project_path / "snapshots" / f"pre-{stage.name}.json"
     graph.save(snapshot_path)
@@ -150,7 +151,7 @@ async def run_stage(stage: Stage, graph: Graph) -> Graph:
     validate_graph(graph)
 
     # 6. Persist
-    graph.save(project_path)
+    graph.save(project_path / "graph.json")
 
     return graph
 ```
@@ -182,8 +183,8 @@ def rollback_to_stage(project_path: Path, stage_name: str) -> Graph:
     # Load snapshot
     graph = Graph.load_from_file(snapshot)
 
-    # Save as current
-    graph.save(project_path)
+    # Save as current graph
+    graph.save(project_path / "graph.json")
 
     return graph
 ```
@@ -312,7 +313,22 @@ def apply_mutations(graph: Graph, stage: str, output: dict) -> None:
                 graph.add_edge("has_alternative", tension["id"], alt_id)
 
     elif stage == "seed":
-        # ... seed mutations
+        # Update entity dispositions
+        for entity_decision in output["entities"]:
+            graph.update_node(entity_decision["id"], {
+                "disposition": entity_decision["disposition"]
+            })
+
+        # Create threads from explored tensions
+        for thread in output["threads"]:
+            graph.add_node(thread["id"], {"type": "thread", **thread})
+            graph.add_edge("explores", thread["id"], thread["alternative_id"])
+
+        # Create initial beats
+        for beat in output["beats"]:
+            graph.add_node(beat["id"], {"type": "beat", **beat})
+            for thread_id in beat.get("threads", []):
+                graph.add_edge("belongs_to", beat["id"], thread_id)
 ```
 
 ## Performance Considerations

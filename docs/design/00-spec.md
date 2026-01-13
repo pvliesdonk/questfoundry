@@ -300,6 +300,20 @@ illustration:
 
 **Lifecycle:** Created in DRESS. Exported.
 
+#### Codex
+
+Player-facing encyclopedia entries for entities. Provides in-world information without spoilers.
+
+```yaml
+codex_entry:
+  id: string
+  entity_id: string               # which entity this describes
+  visible_when: codeword[]        # player must have these to see entry
+  content: string                 # player-safe, no spoilers
+```
+
+**Lifecycle:** Created in DRESS. Exported.
+
 ---
 
 ### Creative Nodes (created in BRAINSTORM, refined in SEED)
@@ -350,6 +364,20 @@ tensions:
 This yields four combinations (benevolent+capable, benevolent+flawed, etc.) while each tension remains a clear binary contrast.
 
 **Key insight:** "Mentor is a protector" is flat. "Mentor is a protector (not the manipulator they could have been)" has tension—even if we never write the manipulator thread.
+
+#### Alternative
+
+One possible answer to a Tension's question. Extracted as separate nodes in the graph to enable thread/alternative relationships.
+
+```yaml
+alternative:
+  id: string
+  description: string             # "Mentor is genuine protector"
+  canonical: bool                 # true = used for spine arc
+  tension_id: string              # parent tension
+```
+
+**Lifecycle:** Created in BRAINSTORM as part of tension generation. Not exported.
 
 ---
 
@@ -466,6 +494,9 @@ arc:
 ---
 
 ## Edge Types
+
+> **Naming Convention:** Persistent edges use PascalCase (Choice, Appears) as they appear
+> in exports. Working edges use snake_case (belongs_to, has_alternative) as they're internal only.
 
 ### Persistent Edges (survive to export)
 
@@ -1270,7 +1301,7 @@ When users run `qf review`:
 
 | Node | Persistent | Created in | Required for SHIP |
 |------|------------|------------|-------------------|
-| Vision | Yes | DREAM | Yes |
+| Vision | Yes | DREAM | No (context only) |
 | Passage | Yes | GROW | Yes (with prose) |
 | Entity | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Codeword | Yes | GROW | Yes |
