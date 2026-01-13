@@ -121,6 +121,10 @@ def get_brainstorm_discuss_prompt(
 ) -> str:
     """Build the BRAINSTORM discuss prompt with vision context.
 
+    Uses _load_raw_template() instead of _get_loader() because we need access
+    to the 'research_tools_section' field which isn't in the PromptTemplate
+    dataclass. Summarize prompts use _get_loader() since they only need system.
+
     Args:
         vision_context: Formatted vision from DREAM stage.
         research_tools_available: Whether research tools are available.

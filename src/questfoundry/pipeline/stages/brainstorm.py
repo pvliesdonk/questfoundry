@@ -45,6 +45,11 @@ class BrainstormStageError(Exception):
     pass
 
 
+def _format_list_or_str(value: list[str] | str) -> str:
+    """Format a value that may be a list or string as comma-separated text."""
+    return ", ".join(value) if isinstance(value, list) else value
+
+
 def _format_vision_context(vision_node: dict[str, Any]) -> str:
     """Format vision node data as readable context for brainstorming.
 
@@ -64,16 +69,10 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
         parts.append(genre_line)
 
     if tone := vision_node.get("tone"):
-        if isinstance(tone, list):
-            parts.append(f"**Tone**: {', '.join(tone)}")
-        else:
-            parts.append(f"**Tone**: {tone}")
+        parts.append(f"**Tone**: {_format_list_or_str(tone)}")
 
     if themes := vision_node.get("themes"):
-        if isinstance(themes, list):
-            parts.append(f"**Themes**: {', '.join(themes)}")
-        else:
-            parts.append(f"**Themes**: {themes}")
+        parts.append(f"**Themes**: {_format_list_or_str(themes)}")
 
     if audience := vision_node.get("audience"):
         parts.append(f"**Audience**: {audience}")

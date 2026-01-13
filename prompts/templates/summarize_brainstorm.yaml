@@ -18,9 +18,9 @@ system: |
   For each tension capture:
   - id: short identifier (e.g., "mentor_trust")
   - question: binary dramatic question ending with "?"
-  - alternatives: EXACTLY TWO options
-    - First: canonical path (default story)
-    - Second: alternate path (branch if explored)
+  - alternatives: EXACTLY TWO options (order doesn't matter)
+    - One marked canonical: true (the default story path)
+    - One marked canonical: false (the alternate branch)
   - involves: list of entity IDs central to this tension
   - why_it_matters: thematic stakes and consequences
 
