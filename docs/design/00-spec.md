@@ -87,16 +87,74 @@ This keeps human cognitive load manageable while preserving authorial control.
 
 ## Graph Ontology
 
-There is **one graph**. Different stages read and write different parts of it.
+### The Unified Graph
 
-| Stage | Operations |
-|-------|------------|
-| DREAM/BRAINSTORM | Create tensions (with alternatives), entities |
-| SEED | Curate entities, promote alternatives → threads, create initial beats |
-| GROW | Mutate until complete: knots, weaving, passages, pruning |
-| FILL | Add prose, refine entity details |
-| DRESS | Add illustrations, codex |
-| SHIP | Export to ink/Twee/epub — reads only persistent nodes |
+There is **one graph**. The story is the graph. Stages are **graph mutations**.
+
+This is not a pipeline of files where each stage produces a new artifact. Rather:
+- All story data lives in a single graph structure
+- Each stage reads relevant parts of the graph and writes updates
+- The runtime maintains graph consistency
+- Storage format is an implementation detail (JSON, YAML, SQLite—doesn't matter)
+
+**Why this matters:**
+- No data duplication between "artifacts"
+- Clear ownership: each node type has a creating stage
+- Validation operates on the whole graph
+- Human review shows what changed, not complete file contents
+
+### Stage Operations
+
+| Stage | Creates | Modifies | Reads |
+|-------|---------|----------|-------|
+| DREAM | Vision metadata | — | — |
+| BRAINSTORM | Entity, Tension, Alternative | — | Vision |
+| SEED | Thread, Consequence, Beat | Entity (curate), Tension (explore) | Entity, Tension |
+| GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, knot) | Thread, Beat, Entity |
+| FILL | — | Passage (prose), Entity (details) | Passage, Entity, Thread |
+| DRESS | Illustration, Codex | — | Passage, Entity |
+| SHIP | — (export only) | — | Persistent nodes |
+
+### LLM Output vs Graph Storage
+
+Stages use LLMs to produce structured output. This output is **not** the graph format—it's stage-specific data that the runtime interprets and applies as graph mutations.
+
+```
+LLM Output (stage-specific)
+    ↓ validate
+    ↓ interpret
+Runtime applies mutations
+    ↓
+Graph (unified storage)
+```
+
+**Example:** SEED produces entity decisions, thread definitions, and initial beats. The runtime:
+1. Validates the output structure
+2. Updates existing entity nodes (marking dispositions)
+3. Creates new thread, consequence, and beat nodes
+4. Creates edges between nodes
+5. Validates graph consistency
+6. Persists to storage
+
+The LLM doesn't need to know the graph storage format. It produces what makes sense for its task.
+
+### Graph Storage
+
+Storage is a runtime implementation detail. The graph can be stored as:
+- Single JSON file (simple, atomic)
+- Partitioned files (organized by concern)
+- Database (for complex queries)
+
+**What the spec defines:** Node types, edge types, constraints, lifecycle.
+**What the runtime decides:** Storage format, serialization, caching.
+
+For human review, the runtime exports readable views (YAML, Markdown) on demand.
+
+### Rollback and Snapshots
+
+Before each stage executes, the runtime snapshots the current graph state. If a stage fails or is rejected at human review, the graph restores to the pre-stage snapshot.
+
+This provides stage-level rollback without complex event sourcing.
 
 ---
 
