@@ -8,7 +8,9 @@ See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
+import copy
 import json
+import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -112,7 +114,8 @@ class Graph:
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic write: write to temp file, then rename
-        temp_file = file_path.with_suffix(".tmp")
+        # Use PID-based suffix to avoid collisions with concurrent processes
+        temp_file = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
         try:
             with temp_file.open("w") as f:
                 json.dump(self._data, f, indent=2)
@@ -311,10 +314,12 @@ class Graph:
     def to_dict(self) -> dict[str, Any]:
         """Convert graph to dictionary.
 
+        Returns a deep copy to prevent external mutation of internal state.
+
         Returns:
-            Graph data as dict.
+            Graph data as dict (deep copy).
         """
-        return self._data
+        return copy.deepcopy(self._data)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Graph:

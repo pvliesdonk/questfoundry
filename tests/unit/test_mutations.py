@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from questfoundry.graph import Graph
+from questfoundry.graph import Graph, MutationError
 from questfoundry.graph.mutations import (
     apply_brainstorm_mutations,
     apply_dream_mutations,
@@ -140,6 +140,48 @@ class TestDreamMutations:
 class TestBrainstormMutations:
     """Test BRAINSTORM stage mutations."""
 
+    def test_entity_missing_id_raises(self) -> None:
+        """Raises MutationError when entity missing id."""
+        graph = Graph.empty()
+        output = {
+            "entities": [{"type": "character", "concept": "Test"}],  # Missing id
+            "tensions": [],
+        }
+
+        with pytest.raises(MutationError, match="Entity at index 0 missing required 'id' field"):
+            apply_brainstorm_mutations(graph, output)
+
+    def test_tension_missing_id_raises(self) -> None:
+        """Raises MutationError when tension missing id."""
+        graph = Graph.empty()
+        output = {
+            "entities": [],
+            "tensions": [{"question": "Test?", "alternatives": []}],  # Missing id
+        }
+
+        with pytest.raises(MutationError, match="Tension at index 0 missing required 'id' field"):
+            apply_brainstorm_mutations(graph, output)
+
+    def test_alternative_missing_id_raises(self) -> None:
+        """Raises MutationError when alternative missing id."""
+        graph = Graph.empty()
+        output = {
+            "entities": [],
+            "tensions": [
+                {
+                    "id": "tension_001",
+                    "question": "Test?",
+                    "alternatives": [{"description": "Option A", "canonical": True}],  # Missing id
+                }
+            ],
+        }
+
+        with pytest.raises(
+            MutationError,
+            match="Alternative at index 0 in tension 'tension_001' missing required 'id' field",
+        ):
+            apply_brainstorm_mutations(graph, output)
+
     def test_creates_entity_nodes(self) -> None:
         """Creates entity nodes from brainstorm output."""
         graph = Graph.empty()
@@ -211,12 +253,12 @@ class TestBrainstormMutations:
         assert tension["involves"] == ["kay", "mentor"]
 
         # Check alternative nodes
-        protector = graph.get_node("mentor_trust_protector")
+        protector = graph.get_node("mentor_trust::protector")
         assert protector is not None
         assert protector["type"] == "alternative"
         assert protector["canonical"] is True
 
-        manipulator = graph.get_node("mentor_trust_manipulator")
+        manipulator = graph.get_node("mentor_trust::manipulator")
         assert manipulator is not None
         assert manipulator["canonical"] is False
 
@@ -236,6 +278,44 @@ class TestBrainstormMutations:
 
 class TestSeedMutations:
     """Test SEED stage mutations."""
+
+    def test_entity_decision_missing_id_raises(self) -> None:
+        """Raises MutationError when entity decision missing id."""
+        graph = Graph.empty()
+        output = {
+            "entities": [{"disposition": "retained"}],  # Missing id
+            "threads": [],
+            "beats": [],
+        }
+
+        with pytest.raises(
+            MutationError, match="Entity decision at index 0 missing required 'id' field"
+        ):
+            apply_seed_mutations(graph, output)
+
+    def test_thread_missing_id_raises(self) -> None:
+        """Raises MutationError when thread missing id."""
+        graph = Graph.empty()
+        output = {
+            "entities": [],
+            "threads": [{"name": "Test Thread"}],  # Missing id
+            "beats": [],
+        }
+
+        with pytest.raises(MutationError, match="Thread at index 0 missing required 'id' field"):
+            apply_seed_mutations(graph, output)
+
+    def test_beat_missing_id_raises(self) -> None:
+        """Raises MutationError when beat missing id."""
+        graph = Graph.empty()
+        output = {
+            "entities": [],
+            "threads": [],
+            "beats": [{"name": "Test Beat"}],  # Missing id
+        }
+
+        with pytest.raises(MutationError, match="Beat at index 0 missing required 'id' field"):
+            apply_seed_mutations(graph, output)
 
     def test_updates_entity_dispositions(self) -> None:
         """Updates entity dispositions from seed output."""
@@ -265,7 +345,7 @@ class TestSeedMutations:
         """Creates thread nodes from seed output."""
         graph = Graph.empty()
         # Pre-populate alternative from brainstorm
-        graph.add_node("mentor_trust_protector", {"type": "alternative"})
+        graph.add_node("mentor_trust::protector", {"type": "alternative"})
 
         output = {
             "entities": [],
@@ -274,7 +354,7 @@ class TestSeedMutations:
                     "id": "thread_mentor_trust",
                     "name": "Mentor Trust Arc",
                     "description": "Exploring mentor relationship",
-                    "alternative_id": "mentor_trust_protector",
+                    "alternative_id": "mentor_trust::protector",
                     "consequences": [{"event": "Mentor saves Kay", "impact": "Trust grows"}],
                 }
             ],
@@ -291,7 +371,7 @@ class TestSeedMutations:
         # Check explores edge
         edges = graph.get_edges(from_id="thread_mentor_trust", edge_type="explores")
         assert len(edges) == 1
-        assert edges[0]["to"] == "mentor_trust_protector"
+        assert edges[0]["to"] == "mentor_trust::protector"
 
     def test_creates_beats(self) -> None:
         """Creates beat nodes from seed output."""
@@ -414,7 +494,7 @@ class TestMutationIntegration:
                 {
                     "id": "thread_mentor",
                     "name": "Mentor Arc",
-                    "alternative_id": "mentor_trust_protector",
+                    "alternative_id": "mentor_trust::protector",
                 }
             ],
             "beats": [
@@ -434,7 +514,7 @@ class TestMutationIntegration:
         assert graph.has_node("kay")
         assert graph.has_node("mentor")
         assert graph.has_node("mentor_trust")
-        assert graph.has_node("mentor_trust_protector")
+        assert graph.has_node("mentor_trust::protector")
         assert graph.has_node("thread_mentor")
         assert graph.has_node("opening")
 

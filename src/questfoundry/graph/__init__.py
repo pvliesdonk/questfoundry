@@ -9,6 +9,7 @@ See docs/architecture/graph-storage.md for architecture details.
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import (
+    MutationError,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
@@ -22,6 +23,7 @@ from questfoundry.graph.snapshots import (
 
 __all__ = [
     "Graph",
+    "MutationError",
     "apply_brainstorm_mutations",
     "apply_dream_mutations",
     "apply_mutations",

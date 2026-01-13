@@ -22,6 +22,11 @@ def save_snapshot(graph: Graph, project_path: Path, stage_name: str) -> Path:
     Creates a snapshot of the current graph state before a stage runs.
     This allows rolling back if the stage fails or is rejected.
 
+    Note:
+        Overwrites any existing snapshot for this stage. If you run the same
+        stage multiple times (e.g., after rollback and retry), only the most
+        recent snapshot is preserved.
+
     Args:
         graph: Current graph state.
         project_path: Path to project root directory.
@@ -111,6 +116,11 @@ def delete_snapshot(project_path: Path, stage_name: str) -> bool:
 def cleanup_old_snapshots(project_path: Path, keep_count: int = 3) -> list[str]:
     """Remove old snapshots, keeping only the most recent.
 
+    Note:
+        Not safe for concurrent snapshot creation. If another process creates
+        a snapshot between listing and deletion, more snapshots than intended
+        may remain or be deleted.
+
     Args:
         project_path: Path to project root directory.
         keep_count: Number of most recent snapshots to keep.
@@ -122,7 +132,7 @@ def cleanup_old_snapshots(project_path: Path, keep_count: int = 3) -> list[str]:
     if not snapshot_dir.exists():
         return []
 
-    # Get all snapshots sorted by modification time (oldest first)
+    # Note: Not safe for concurrent snapshot creation - count may be stale
     snapshot_files = sorted(
         snapshot_dir.glob("pre-*.json"),
         key=lambda p: p.stat().st_mtime,

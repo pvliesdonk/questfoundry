@@ -14,6 +14,31 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
 
+class MutationError(ValueError):
+    """Error during mutation application."""
+
+    pass
+
+
+def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
+    """Require a field exists in a dict, raising clear error if missing.
+
+    Args:
+        item: Dictionary to check.
+        field: Field name to require.
+        context: Description for error message (e.g., "entity", "tension").
+
+    Returns:
+        The field value.
+
+    Raises:
+        MutationError: If field is missing.
+    """
+    if field not in item:
+        raise MutationError(f"{context} missing required '{field}' field")
+    return item[field]
+
+
 def apply_mutations(graph: Graph, stage: str, output: dict[str, Any]) -> None:
     """Apply stage output as graph mutations.
 
@@ -26,6 +51,7 @@ def apply_mutations(graph: Graph, stage: str, output: dict[str, Any]) -> None:
 
     Raises:
         ValueError: If stage is unknown.
+        MutationError: If output is malformed.
     """
     mutation_funcs = {
         "dream": apply_dream_mutations,
@@ -77,10 +103,13 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
     Args:
         graph: Graph to mutate.
         output: BRAINSTORM stage output (entities, tensions).
+
+    Raises:
+        MutationError: If entities or tensions are missing required 'id' fields.
     """
     # Add entities
-    for entity in output.get("entities", []):
-        entity_id = entity["id"]
+    for i, entity in enumerate(output.get("entities", [])):
+        entity_id = _require_field(entity, "id", f"Entity at index {i}")
         node_data = {
             "type": "entity",
             "entity_type": entity.get("type"),  # character, location, object, faction
@@ -93,8 +122,8 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         graph.add_node(entity_id, node_data)
 
     # Add tensions with alternatives
-    for tension in output.get("tensions", []):
-        tension_id = tension["id"]
+    for i, tension in enumerate(output.get("tensions", [])):
+        tension_id = _require_field(tension, "id", f"Tension at index {i}")
 
         # Create tension node
         tension_data = {
@@ -107,8 +136,12 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         graph.add_node(tension_id, tension_data)
 
         # Create alternative nodes and edges
-        for alt in tension.get("alternatives", []):
-            alt_id = f"{tension_id}_{alt['id']}"
+        # Use '::' separator to avoid collisions (e.g., t1::a1 vs t1_a1)
+        for j, alt in enumerate(tension.get("alternatives", [])):
+            alt_local_id = _require_field(
+                alt, "id", f"Alternative at index {j} in tension '{tension_id}'"
+            )
+            alt_id = f"{tension_id}::{alt_local_id}"
             alt_data = {
                 "type": "alternative",
                 "description": alt.get("description"),
@@ -128,10 +161,13 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     Args:
         graph: Graph to mutate.
         output: SEED stage output (entities, threads, beats).
+
+    Raises:
+        MutationError: If required 'id' fields are missing.
     """
     # Update entity dispositions
-    for entity_decision in output.get("entities", []):
-        entity_id = entity_decision["id"]
+    for i, entity_decision in enumerate(output.get("entities", [])):
+        entity_id = _require_field(entity_decision, "id", f"Entity decision at index {i}")
         if graph.has_node(entity_id):
             graph.update_node(
                 entity_id,
@@ -139,8 +175,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             )
 
     # Create threads from explored tensions
-    for thread in output.get("threads", []):
-        thread_id = thread["id"]
+    for i, thread in enumerate(output.get("threads", [])):
+        thread_id = _require_field(thread, "id", f"Thread at index {i}")
         thread_data = {
             "type": "thread",
             "name": thread.get("name"),
@@ -155,8 +191,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             graph.add_edge("explores", thread_id, thread["alternative_id"])
 
     # Create initial beats
-    for beat in output.get("beats", []):
-        beat_id = beat["id"]
+    for i, beat in enumerate(output.get("beats", [])):
+        beat_id = _require_field(beat, "id", f"Beat at index {i}")
         beat_data = {
             "type": "beat",
             "name": beat.get("name"),
