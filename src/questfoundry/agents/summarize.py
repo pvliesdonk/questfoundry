@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 
 from questfoundry.agents.prompts import get_summarize_prompt
 from questfoundry.observability.logging import get_logger
+from questfoundry.observability.tracing import build_runnable_config, traceable
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+@traceable(name="Summarize Phase", run_type="chain", tags=["phase:summarize"])
 async def summarize_discussion(
     model: BaseChatModel,
     messages: list[BaseMessage],
@@ -49,11 +51,18 @@ async def summarize_discussion(
         ),
     ]
 
+    # Build tracing config for the LLM call
+    config = build_runnable_config(
+        run_name="Summarize LLM Call",
+        tags=["dream", "summarize", "llm"],
+        metadata={"stage": "dream", "phase": "summarize", "message_count": len(messages)},
+    )
+
     # Note: We use the model as configured rather than trying to override temperature
     # at runtime. The bind(temperature=X) approach is not compatible with all providers
     # (e.g., langchain-ollama doesn't support runtime temperature in chat()).
     # The model's default temperature (0.7) works fine for summarization.
-    response = await model.ainvoke(summarize_messages)
+    response = await model.ainvoke(summarize_messages, config=config)
 
     # Extract the summary text
     summary = str(response.content)

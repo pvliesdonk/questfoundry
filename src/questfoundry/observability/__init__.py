@@ -1,6 +1,6 @@
 """Observability module for QuestFoundry.
 
-Provides structured logging and LLM call tracking.
+Provides structured logging, LLM call tracking, and LangSmith tracing.
 """
 
 from questfoundry.observability.langchain_callbacks import (
@@ -14,14 +14,34 @@ from questfoundry.observability.logging import (
     get_logger,
     get_logs_dir,
 )
+from questfoundry.observability.tracing import (
+    LANGSMITH_AVAILABLE,
+    build_runnable_config,
+    generate_run_id,
+    get_current_run_tree,
+    get_pipeline_run_id,
+    is_tracing_enabled,
+    set_pipeline_run_id,
+    trace_context,
+    traceable,
+)
 
 __all__ = [
+    "LANGSMITH_AVAILABLE",
     "LLMLogEntry",
     "LLMLogger",
     "LLMLoggingCallback",
+    "build_runnable_config",
     "close_file_logging",
     "configure_logging",
     "create_logging_callbacks",
+    "generate_run_id",
+    "get_current_run_tree",
     "get_logger",
     "get_logs_dir",
+    "get_pipeline_run_id",
+    "is_tracing_enabled",
+    "set_pipeline_run_id",
+    "trace_context",
+    "traceable",
 ]

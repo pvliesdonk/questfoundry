@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from questfoundry.agents.prompts import get_discuss_prompt
 from questfoundry.observability.logging import get_logger
+from questfoundry.observability.tracing import build_runnable_config, traceable
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -59,6 +60,7 @@ def create_discuss_agent(
     )
 
 
+@traceable(name="Discuss Phase", run_type="chain", tags=["phase:discuss"])
 async def run_discuss_phase(
     model: BaseChatModel,
     tools: list[BaseTool],
@@ -122,10 +124,16 @@ async def run_discuss_phase(
         if on_llm_start:
             on_llm_start("discuss")
 
-        # Run agent for this turn
+        # Run agent for this turn with tracing metadata
+        config = build_runnable_config(
+            run_name="Discuss Agent Turn",
+            tags=["dream", "discuss", "agent"],
+            metadata={"stage": "dream", "phase": "discuss"},
+            recursion_limit=max_iterations,
+        )
         result = await agent.ainvoke(
             {"messages": current_messages},
-            config={"recursion_limit": max_iterations},
+            config=config,
         )
 
         # Signal LLM end

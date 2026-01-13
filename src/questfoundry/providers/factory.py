@@ -151,11 +151,13 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
         )
 
-    return ChatOllama(
+    # Cast needed: ChatOllama runtime type is BaseChatModel, but mypy can't verify
+    chat_model: BaseChatModel = ChatOllama(
         model=model,
         base_url=host,
         temperature=kwargs.get("temperature", 0.7),
     )
+    return chat_model
 
 
 def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
