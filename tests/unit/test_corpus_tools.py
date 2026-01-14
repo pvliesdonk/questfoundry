@@ -11,6 +11,7 @@ from questfoundry.tools.research.corpus_tools import (
     GetDocumentTool,
     ListClustersTool,
     SearchCorpusTool,
+    _clear_corpus_cache,
     get_corpus_tools,
 )
 
@@ -57,10 +58,8 @@ class TestSearchCorpusTool:
             "questfoundry.tools.research.corpus_tools._corpus_available",
             return_value=False,
         ):
-            # Clear the lru_cache
-            from questfoundry.tools.research.corpus_tools import _get_corpus
-
-            _get_corpus.cache_clear()
+            # Clear thread-local corpus cache
+            _clear_corpus_cache()
 
             result = tool.execute({"query": "test"})
 
@@ -68,9 +67,7 @@ class TestSearchCorpusTool:
 
     def test_execute_with_results(self) -> None:
         """Should return formatted results when search succeeds."""
-        from questfoundry.tools.research.corpus_tools import _get_corpus
-
-        _get_corpus.cache_clear()
+        _clear_corpus_cache()
 
         tool = SearchCorpusTool()
 
@@ -105,7 +102,7 @@ class TestSearchCorpusTool:
                 return_value=True,
             ),
         ):
-            _get_corpus.cache_clear()
+            _clear_corpus_cache()
             result = tool.execute({"query": "dialogue"})
 
         assert "dialogue_craft" in result
@@ -115,9 +112,7 @@ class TestSearchCorpusTool:
 
     def test_execute_with_cluster_filter(self) -> None:
         """Should pass cluster filter to search."""
-        from questfoundry.tools.research.corpus_tools import _get_corpus
-
-        _get_corpus.cache_clear()
+        _clear_corpus_cache()
 
         tool = SearchCorpusTool()
 
@@ -140,7 +135,7 @@ class TestSearchCorpusTool:
                 return_value=True,
             ),
         ):
-            _get_corpus.cache_clear()
+            _clear_corpus_cache()
             tool.execute({"query": "mystery", "cluster": "genre-conventions", "limit": 3})
 
         mock_corpus.search.assert_called_once_with(
@@ -151,9 +146,7 @@ class TestSearchCorpusTool:
         """Should return structured JSON with no_results status (ADR-008)."""
         import json
 
-        from questfoundry.tools.research.corpus_tools import _get_corpus
-
-        _get_corpus.cache_clear()
+        _clear_corpus_cache()
 
         tool = SearchCorpusTool()
 
@@ -176,7 +169,7 @@ class TestSearchCorpusTool:
                 return_value=True,
             ),
         ):
-            _get_corpus.cache_clear()
+            _clear_corpus_cache()
             result = tool.execute({"query": "xyz123"})
 
         # ADR-008: Structured JSON response
