@@ -18,6 +18,7 @@ from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
 log = get_logger(__name__)
@@ -131,7 +132,7 @@ class PipelineOrchestrator:
         from questfoundry.observability import LLMLogger
 
         self._llm_logger = LLMLogger(project_path, enabled=enable_llm_logging)
-        self._callbacks: list[Any] | None = None  # Set when model is created
+        self._callbacks: list[BaseCallbackHandler] | None = None  # Set when model is created
 
     def _get_chat_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model.
