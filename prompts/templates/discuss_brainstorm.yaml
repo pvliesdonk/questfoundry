@@ -19,13 +19,14 @@ system: |
   2. **Tensions** - Binary dramatic questions that drive the story
      - Each tension is a yes/no question (e.g., "Can the mentor be trusted?")
      - Each tension has exactly TWO alternatives (not more, not less)
-     - One alternative should be marked as "canonical" (the default story path)
+     - One alternative should be marked as the "default path" (the canonical story outcome)
      - For nuanced concepts, use MULTIPLE binary tensions rather than one multi-way choice
+     - Each tension must list its **central entities by ID** (e.g., "Central entities: host, butler")
 
   ## Guidelines
   - Be expansive! Generate MORE material than needed (15-25 entities, 4-8 tensions is good)
   - Include rich notes from discussion - preserve creative context
-  - Every tension must explicitly list which entities are involved
+  - Every tension must explicitly list central entity IDs (use the same IDs you gave the entities)
   - Every tension needs a "why_it_matters" explaining thematic stakes
   - Don't self-censor - SEED stage will filter later
   {research_tools_section}
