@@ -276,6 +276,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     5. Beat entity references exist
     6. Beat thread references exist (within SEED output)
     7. Consequence thread references exist (within SEED output)
+    8. Tension impacts reference valid tensions
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, tensions, alternatives).
@@ -296,23 +297,29 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     valid_tension_ids: set[str] = {n["raw_id"] for n in tension_nodes.values() if n.get("raw_id")}
 
     # Build alternative lookup: tension_raw_id -> set of alt_raw_ids
+    # Use O(edges) algorithm instead of O(tensions * edges)
     alt_by_tension: dict[str, set[str]] = {}
-    for tension_id, tension_data in tension_nodes.items():
-        raw_tension_id = tension_data.get("raw_id")
+    tension_id_to_raw: dict[str, str] = {
+        tid: tdata["raw_id"] for tid, tdata in tension_nodes.items() if tdata.get("raw_id")
+    }
+    for edge in graph.get_edges(edge_type="has_alternative"):
+        from_node_id = edge.get("from", "")
+        raw_tension_id = tension_id_to_raw.get(from_node_id)
         if not raw_tension_id:
             continue
-        alt_by_tension[raw_tension_id] = set()
-        # Find alternatives linked to this tension via edges
-        for edge in graph.get_edges():
-            if edge.get("type") == "has_alternative" and edge.get("from") == tension_id:
-                alt_node = graph.get_node(edge.get("to", ""))
-                if alt_node and alt_node.get("raw_id"):
-                    alt_by_tension[raw_tension_id].add(alt_node["raw_id"])
+        alt_node = graph.get_node(edge.get("to", ""))
+        if alt_node and alt_node.get("raw_id"):
+            alt_by_tension.setdefault(raw_tension_id, set()).add(alt_node["raw_id"])
 
     # Extract thread IDs from SEED output (for internal references)
     seed_thread_ids: set[str] = {
         t["thread_id"] for t in output.get("threads", []) if t.get("thread_id")
     }
+
+    # Pre-sort available IDs once (used in error messages)
+    sorted_entity_ids = sorted(valid_entity_ids)
+    sorted_tension_ids = sorted(valid_tension_ids)
+    sorted_thread_ids = sorted(seed_thread_ids)
 
     # 1. Validate entity decisions
     for i, decision in enumerate(output.get("entities", [])):
@@ -322,7 +329,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 SeedValidationError(
                     field_path=f"entities.{i}.entity_id",
                     issue=f"Entity '{entity_id}' not in BRAINSTORM",
-                    available=sorted(valid_entity_ids),
+                    available=sorted_entity_ids,
                     provided=entity_id,
                 )
             )
@@ -335,7 +342,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 SeedValidationError(
                     field_path=f"tensions.{i}.tension_id",
                     issue=f"Tension '{tension_id}' not in BRAINSTORM",
-                    available=sorted(valid_tension_ids),
+                    available=sorted_tension_ids,
                     provided=tension_id,
                 )
             )
@@ -350,12 +357,12 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 SeedValidationError(
                     field_path=f"threads.{i}.tension_id",
                     issue=f"Tension '{tension_id}' not in BRAINSTORM",
-                    available=sorted(valid_tension_ids),
+                    available=sorted_tension_ids,
                     provided=tension_id,
                 )
             )
-        elif tension_id and alt_id:
-            # Only check alternative if tension is valid
+        # Check alternative (report even if tension was also invalid, so LLM gets all feedback)
+        if tension_id and alt_id:
             valid_alts = alt_by_tension.get(tension_id, set())
             if alt_id not in valid_alts:
                 errors.append(
@@ -375,7 +382,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     SeedValidationError(
                         field_path=f"initial_beats.{i}.entities",
                         issue=f"Entity '{entity_id}' not in BRAINSTORM",
-                        available=sorted(valid_entity_ids),
+                        available=sorted_entity_ids,
                         provided=entity_id,
                     )
                 )
@@ -387,7 +394,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 SeedValidationError(
                     field_path=f"initial_beats.{i}.location",
                     issue=f"Location '{location}' not in BRAINSTORM entities",
-                    available=sorted(valid_entity_ids),
+                    available=sorted_entity_ids,
                     provided=location,
                 )
             )
@@ -399,7 +406,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     SeedValidationError(
                         field_path=f"initial_beats.{i}.location_alternatives",
                         issue=f"Location alternative '{loc_alt}' not in BRAINSTORM entities",
-                        available=sorted(valid_entity_ids),
+                        available=sorted_entity_ids,
                         provided=loc_alt,
                     )
                 )
@@ -412,7 +419,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     SeedValidationError(
                         field_path=f"initial_beats.{i}.threads",
                         issue=f"Thread '{thread_id}' not defined in SEED threads",
-                        available=sorted(seed_thread_ids),
+                        available=sorted_thread_ids,
                         provided=thread_id,
                     )
                 )
@@ -425,7 +432,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 SeedValidationError(
                     field_path=f"consequences.{i}.thread_id",
                     issue=f"Thread '{thread_id}' not defined in SEED threads",
-                    available=sorted(seed_thread_ids),
+                    available=sorted_thread_ids,
                     provided=thread_id,
                 )
             )
@@ -439,7 +446,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     SeedValidationError(
                         field_path=f"initial_beats.{i}.tension_impacts.{j}.tension_id",
                         issue=f"Tension '{tension_id}' not in BRAINSTORM",
-                        available=sorted(valid_tension_ids),
+                        available=sorted_tension_ids,
                         provided=tension_id,
                     )
                 )
