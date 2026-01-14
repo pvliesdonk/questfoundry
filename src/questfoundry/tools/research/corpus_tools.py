@@ -20,9 +20,9 @@ from __future__ import annotations
 
 import json
 import logging
-from functools import lru_cache
+import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from questfoundry.tools.base import Tool, ToolDefinition
 
@@ -55,11 +55,24 @@ def _corpus_available() -> bool:
         return False
 
 
-@lru_cache(maxsize=1)
-def _get_corpus() -> Corpus:
-    """Get singleton corpus instance with semantic search enabled.
+# Thread-local storage for corpus instances
+# Each thread gets its own Corpus with its own SQLite connection
+_thread_local = threading.local()
 
-    Configures the corpus with an embedding provider for semantic search.
+
+def _clear_corpus_cache() -> None:
+    """Clear thread-local corpus cache. Used for testing."""
+    if hasattr(_thread_local, "corpus"):
+        delattr(_thread_local, "corpus")
+
+
+def _get_corpus() -> Corpus:
+    """Get thread-local corpus instance with semantic search enabled.
+
+    Uses thread-local storage to ensure each thread has its own Corpus
+    instance with its own SQLite connection. This avoids SQLite's
+    "objects created in a thread can only be used in that same thread" error.
+
     Embeddings are cached in ~/.cache/questfoundry/corpus-embeddings/.
     If embeddings don't exist, they are built on first use.
 
@@ -69,6 +82,10 @@ def _get_corpus() -> Corpus:
     Raises:
         CorpusNotAvailableError: If ifcraftcorpus not installed.
     """
+    # Check if this thread already has a corpus instance
+    if hasattr(_thread_local, "corpus"):
+        return cast("Corpus", _thread_local.corpus)
+
     if not _corpus_available():
         raise CorpusNotAvailableError()
 
@@ -76,28 +93,33 @@ def _get_corpus() -> Corpus:
     from ifcraftcorpus.providers import get_embedding_provider
 
     # Get embedding provider (uses OpenAI or Ollama based on env vars)
+    provider = None
     try:
         provider = get_embedding_provider()
     except Exception as e:
         logger.warning("Could not get embedding provider: %s. Using keyword search only.", e)
-        return Corpus()
 
-    # Create corpus with embeddings support
-    EMBEDDINGS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    corpus = Corpus(
-        embeddings_path=EMBEDDINGS_CACHE_DIR,
-        embedding_provider=provider,
-    )
+    if provider:
+        # Create corpus with embeddings support
+        EMBEDDINGS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        corpus = Corpus(
+            embeddings_path=EMBEDDINGS_CACHE_DIR,
+            embedding_provider=provider,
+        )
 
-    # Build embeddings if not already built
-    if not corpus.has_semantic_search:
-        logger.info("Building corpus embeddings (one-time operation)...")
-        try:
-            count = corpus.build_embeddings()
-            logger.info("Built embeddings for %d documents", count)
-        except Exception as e:
-            logger.warning("Failed to build embeddings: %s. Using keyword search.", e)
+        # Build embeddings if not already built
+        if not corpus.has_semantic_search:
+            logger.info("Building corpus embeddings (one-time operation)...")
+            try:
+                count = corpus.build_embeddings()
+                logger.info("Built embeddings for %d documents", count)
+            except Exception as e:
+                logger.warning("Failed to build embeddings: %s. Using keyword search.", e)
+    else:
+        corpus = Corpus()
 
+    # Store in thread-local storage
+    _thread_local.corpus = corpus
     return corpus
 
 
