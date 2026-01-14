@@ -11,6 +11,7 @@ from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import build_runnable_config, traceable
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
 log = get_logger(__name__)
@@ -22,6 +23,7 @@ async def summarize_discussion(
     messages: list[BaseMessage],
     system_prompt: str | None = None,
     stage_name: str = "dream",
+    callbacks: list[BaseCallbackHandler] | None = None,
 ) -> tuple[str, int]:
     """Summarize a discussion into a compact brief.
 
@@ -37,6 +39,7 @@ async def summarize_discussion(
         system_prompt: Optional custom system prompt. If not provided,
             uses the default summarize prompt.
         stage_name: Stage name for logging/tagging (default "dream")
+        callbacks: LangChain callback handlers for logging LLM calls
 
     Returns:
         Tuple of (summary_text, tokens_used)
@@ -63,6 +66,7 @@ async def summarize_discussion(
         run_name="Summarize LLM Call",
         tags=[stage_name, "summarize", "llm"],
         metadata={"stage": stage_name, "phase": "summarize", "message_count": len(messages)},
+        callbacks=callbacks,
     )
 
     # Note: We use the model as configured rather than trying to override temperature

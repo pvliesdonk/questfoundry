@@ -12,6 +12,7 @@ from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import build_runnable_config, traceable
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
     from langchain_core.tools import BaseTool
 
@@ -79,6 +80,7 @@ async def run_discuss_phase(
     on_llm_end: LLMCallbackFn | None = None,
     system_prompt: str | None = None,
     stage_name: str = "dream",
+    callbacks: list[BaseCallbackHandler] | None = None,
 ) -> tuple[list[BaseMessage], int, int]:
     """Run the Discuss phase to completion.
 
@@ -100,6 +102,7 @@ async def run_discuss_phase(
         on_llm_end: Callback when LLM call ends
         system_prompt: Optional custom system prompt for the agent
         stage_name: Stage name for logging/tagging (default "dream")
+        callbacks: LangChain callback handlers for logging LLM calls
 
     Returns:
         Tuple of (messages, llm_call_count, total_tokens)
@@ -139,6 +142,7 @@ async def run_discuss_phase(
             tags=[stage_name, "discuss", "agent"],
             metadata={"stage": stage_name, "phase": "discuss"},
             recursion_limit=max_iterations,
+            callbacks=callbacks,
         )
         result = await agent.ainvoke(
             {"messages": current_messages},
