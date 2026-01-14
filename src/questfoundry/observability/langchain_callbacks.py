@@ -12,6 +12,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import ToolMessage
 
 from questfoundry.observability.logging import get_logger
 
@@ -276,8 +277,6 @@ class LLMLoggingCallback(BaseCallbackHandler):
             **kwargs: Additional arguments.
         """
         # Handle different output types - output may be ToolMessage, str, or other
-        from langchain_core.messages import ToolMessage
-
         if isinstance(output, ToolMessage):
             content = output.content
             output_len = len(content) if isinstance(content, str) else None
