@@ -23,14 +23,19 @@ class Entity(BaseModel):
     SEED will later decide which to retain, cut, or modify.
 
     Attributes:
-        id: Short identifier (e.g., "kay", "mentor", "archive").
-        type: Entity category.
+        entity_id: Short identifier (e.g., "kay", "mentor", "archive").
+        entity_category: Entity category (character, location, object, faction).
         concept: One-line essence capturing what makes it interesting.
         notes: Freeform context from discussion (rich detail allowed).
     """
 
-    id: str = Field(min_length=1, description="Short identifier for the entity")
-    type: EntityType = Field(description="Entity category")
+    entity_id: str = Field(
+        min_length=1,
+        description="Unique identifier for this entity (e.g., 'lady_beatrice', 'vane_manor')",
+    )
+    entity_category: EntityType = Field(
+        description="Entity category: character, location, object, or faction"
+    )
     concept: str = Field(min_length=1, description="One-line essence of the entity")
     notes: str | None = Field(default=None, description="Freeform notes from discussion")
 
@@ -38,19 +43,24 @@ class Entity(BaseModel):
 class Alternative(BaseModel):
     """One possible answer to a tension's binary question.
 
-    Each tension has exactly two alternatives. One is marked canonical
-    (the default story path), and one is the alternate (becomes a branch
-    only if explicitly explored in SEED).
+    Each tension has exactly two alternatives. One is marked as the default
+    path (spine), and one is the alternate (becomes a branch only if
+    explicitly explored in SEED).
 
     Attributes:
-        id: Short identifier (e.g., "mentor_protector").
+        alternative_id: Unique identifier for this alternative (e.g., "guilty", "framed").
         description: Full description of this answer/path.
-        canonical: True if this is the default story path.
+        is_default_path: True if this is the default story path (spine).
     """
 
-    id: str = Field(min_length=1, description="Short identifier for the alternative")
+    alternative_id: str = Field(
+        min_length=1,
+        description="Unique identifier for this alternative path (e.g., 'guilty', 'framed', 'betrayed')",
+    )
     description: str = Field(min_length=1, description="Full description of this path")
-    canonical: bool = Field(description="True if this is the default/spine path")
+    is_default_path: bool = Field(
+        description="True if this is the default story path (spine). Exactly one per tension."
+    )
 
 
 class Tension(BaseModel):
@@ -61,23 +71,26 @@ class Tension(BaseModel):
     multiple binary tensions instead of a single multi-way choice.
 
     Attributes:
-        id: Short identifier (e.g., "mentor_trust").
+        tension_id: Short identifier (e.g., "mentor_trust").
         question: The dramatic question (must end with "?").
         alternatives: Exactly two possible answers.
-        involves: Entity IDs central to this tension.
+        central_entity_ids: Entity IDs central to this tension.
         why_it_matters: Thematic stakes and consequences.
     """
 
-    id: str = Field(min_length=1, description="Short identifier for the tension")
+    tension_id: str = Field(
+        min_length=1,
+        description="Unique identifier for this tension (e.g., 'mentor_trust', 'murder_weapon')",
+    )
     question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
     alternatives: list[Alternative] = Field(
         min_length=2,
         max_length=2,
         description="Exactly two alternative answers",
     )
-    involves: list[str] = Field(
+    central_entity_ids: list[str] = Field(
         default_factory=list,
-        description="Entity IDs central to this tension",
+        description="Entity IDs central to this tension (references entity_id values)",
     )
     why_it_matters: str = Field(
         min_length=1,
@@ -85,11 +98,11 @@ class Tension(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_exactly_one_canonical(self) -> Tension:
-        """Ensure exactly one alternative is marked canonical."""
-        canonical_count = sum(1 for alt in self.alternatives if alt.canonical)
-        if canonical_count != 1:
-            msg = f"Tension '{self.id}' must have exactly one canonical alternative, found {canonical_count}"
+    def validate_exactly_one_default_path(self) -> Tension:
+        """Ensure exactly one alternative is marked as the default path."""
+        default_count = sum(1 for alt in self.alternatives if alt.is_default_path)
+        if default_count != 1:
+            msg = f"Tension '{self.tension_id}' must have exactly one default path alternative, found {default_count}"
             raise ValueError(msg)
         return self
 

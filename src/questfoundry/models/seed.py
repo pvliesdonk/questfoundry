@@ -29,11 +29,13 @@ class EntityDecision(BaseModel):
     ideas make it into the final story.
 
     Attributes:
-        id: Entity ID from BRAINSTORM.
+        entity_id: Entity ID from BRAINSTORM.
         disposition: Whether to keep (retained) or discard (cut).
     """
 
-    id: str = Field(min_length=1, description="Entity ID from BRAINSTORM")
+    entity_id: str = Field(
+        min_length=1, description="Entity ID from BRAINSTORM (references entity_id)"
+    )
     disposition: EntityDisposition = Field(
         default="retained",
         description="Whether to keep or discard the entity",
@@ -72,18 +74,20 @@ class Consequence(BaseModel):
     consequences become active.
 
     Attributes:
-        id: Unique identifier for the consequence.
+        consequence_id: Unique identifier for the consequence.
         thread_id: Thread this consequence belongs to.
         description: What happens narratively.
-        ripples: Story effects this implies.
+        narrative_effects: Story effects this implies.
     """
 
-    id: str = Field(min_length=1, description="Unique identifier")
-    thread_id: str = Field(min_length=1, description="Thread this belongs to")
+    consequence_id: str = Field(min_length=1, description="Unique identifier for this consequence")
+    thread_id: str = Field(
+        min_length=1, description="Thread this belongs to (references thread_id)"
+    )
     description: str = Field(min_length=1, description="Narrative meaning of this path")
-    ripples: list[str] = Field(
+    narrative_effects: list[str] = Field(
         default_factory=list,
-        description="Story effects this consequence implies",
+        description="Story effects this consequence implies (cascading impacts)",
     )
 
 
@@ -95,29 +99,35 @@ class Thread(BaseModel):
     not choosing the other).
 
     Attributes:
-        id: Unique identifier for the thread.
+        thread_id: Unique identifier for the thread.
         name: Human-readable name.
         tension_id: The tension this thread explores.
         alternative_id: The specific alternative this thread explores.
-        shadows: Unexplored alternatives (context for FILL).
-        tier: Major threads interweave; minor threads support.
+        unexplored_alternative_ids: IDs of unexplored alternatives (context for FILL).
+        thread_importance: Major threads interweave; minor threads support.
         description: What this thread is about.
-        consequences: IDs of consequences for this thread.
+        consequence_ids: IDs of consequences for this thread.
     """
 
-    id: str = Field(min_length=1, description="Unique identifier")
+    thread_id: str = Field(min_length=1, description="Unique identifier for this thread")
     name: str = Field(min_length=1, description="Human-readable name")
-    tension_id: str = Field(min_length=1, description="Tension this explores")
-    alternative_id: str = Field(min_length=1, description="Alternative this explores")
-    shadows: list[str] = Field(
-        default_factory=list,
-        description="Unexplored alternative IDs (context for FILL)",
+    tension_id: str = Field(
+        min_length=1, description="Tension this explores (references tension_id)"
     )
-    tier: ThreadTier = Field(description="Major or minor thread")
-    description: str = Field(min_length=1, description="What this thread is about")
-    consequences: list[str] = Field(
+    alternative_id: str = Field(
+        min_length=1, description="Alternative this explores (references alternative_id)"
+    )
+    unexplored_alternative_ids: list[str] = Field(
         default_factory=list,
-        description="Consequence IDs for this thread",
+        description="IDs of unexplored alternatives from same tension (context for FILL)",
+    )
+    thread_importance: ThreadTier = Field(
+        description="Thread importance: major (interweaves) or minor (supports)"
+    )
+    description: str = Field(min_length=1, description="What this thread is about")
+    consequence_ids: list[str] = Field(
+        default_factory=list,
+        description="Consequence IDs for this thread (references consequence_id)",
     )
 
 
@@ -154,7 +164,7 @@ class InitialBeat(BaseModel):
         location_alternatives: Other valid locations (enables knot flexibility).
     """
 
-    id: str = Field(min_length=1, description="Unique identifier")
+    beat_id: str = Field(min_length=1, description="Unique identifier for this beat")
     summary: str = Field(min_length=1, description="What happens in this beat")
     threads: list[str] = Field(
         min_length=1,

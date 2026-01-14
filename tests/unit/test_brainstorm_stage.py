@@ -92,16 +92,26 @@ async def test_execute_calls_all_three_phases() -> None:
         )
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = BrainstormOutput(
-            entities=[{"id": "hero", "type": "character", "concept": "A brave warrior"}],
+            entities=[
+                {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
+            ],
             tensions=[
                 {
-                    "id": "quest",
+                    "tension_id": "quest",
                     "question": "Will the hero succeed?",
                     "alternatives": [
-                        {"id": "success", "description": "Hero wins", "canonical": True},
-                        {"id": "failure", "description": "Hero fails", "canonical": False},
+                        {
+                            "alternative_id": "success",
+                            "description": "Hero wins",
+                            "is_default_path": True,
+                        },
+                        {
+                            "alternative_id": "failure",
+                            "description": "Hero fails",
+                            "is_default_path": False,
+                        },
                     ],
-                    "involves": ["hero"],
+                    "central_entity_ids": ["hero"],
                     "why_it_matters": "Core story tension",
                 }
             ],
@@ -263,16 +273,18 @@ async def test_execute_returns_artifact_as_dict() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = BrainstormOutput(
-            entities=[{"id": "kay", "type": "character", "concept": "Protagonist"}],
+            entities=[
+                {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"}
+            ],
             tensions=[
                 {
-                    "id": "trust",
+                    "tension_id": "trust",
                     "question": "Can Kay trust the mentor?",
                     "alternatives": [
-                        {"id": "yes", "description": "Trust", "canonical": True},
-                        {"id": "no", "description": "Betray", "canonical": False},
+                        {"alternative_id": "yes", "description": "Trust", "is_default_path": True},
+                        {"alternative_id": "no", "description": "Betray", "is_default_path": False},
                     ],
-                    "involves": ["kay"],
+                    "central_entity_ids": ["kay"],
                     "why_it_matters": "Theme of trust",
                 }
             ],
@@ -286,8 +298,8 @@ async def test_execute_returns_artifact_as_dict() -> None:
         )
 
         assert isinstance(artifact, dict)
-        assert artifact["entities"][0]["id"] == "kay"
-        assert artifact["tensions"][0]["id"] == "trust"
+        assert artifact["entities"][0]["entity_id"] == "kay"
+        assert artifact["tensions"][0]["tension_id"] == "trust"
 
 
 # --- Vision Context Formatting Tests ---
@@ -342,16 +354,26 @@ def test_format_vision_context_handles_empty() -> None:
 def test_brainstorm_output_model_validates() -> None:
     """BrainstormOutput model validates correctly."""
     output = BrainstormOutput(
-        entities=[{"id": "hero", "type": "character", "concept": "The protagonist"}],
+        entities=[
+            {"entity_id": "hero", "entity_category": "character", "concept": "The protagonist"}
+        ],
         tensions=[
             {
-                "id": "quest",
+                "tension_id": "quest",
                 "question": "Will the hero complete the quest?",
                 "alternatives": [
-                    {"id": "success", "description": "Quest complete", "canonical": True},
-                    {"id": "failure", "description": "Quest failed", "canonical": False},
+                    {
+                        "alternative_id": "success",
+                        "description": "Quest complete",
+                        "is_default_path": True,
+                    },
+                    {
+                        "alternative_id": "failure",
+                        "description": "Quest failed",
+                        "is_default_path": False,
+                    },
                 ],
-                "involves": ["hero"],
+                "central_entity_ids": ["hero"],
                 "why_it_matters": "Central narrative tension",
             }
         ],
@@ -359,8 +381,8 @@ def test_brainstorm_output_model_validates() -> None:
 
     assert len(output.entities) == 1
     assert len(output.tensions) == 1
-    assert output.entities[0].id == "hero"
-    assert output.tensions[0].id == "quest"
+    assert output.entities[0].entity_id == "hero"
+    assert output.tensions[0].tension_id == "quest"
 
 
 def test_tension_requires_two_alternatives() -> None:
@@ -371,41 +393,43 @@ def test_tension_requires_two_alternatives() -> None:
 
     with pytest.raises(ValidationError, match="List should have at least 2 items"):
         Tension(
-            id="test",
+            tension_id="test",
             question="Test?",
-            alternatives=[{"id": "one", "description": "Only one", "canonical": True}],
-            involves=[],
+            alternatives=[
+                {"alternative_id": "one", "description": "Only one", "is_default_path": True}
+            ],
+            central_entity_ids=[],
             why_it_matters="Test",
         )
 
 
 def test_tension_requires_one_canonical() -> None:
-    """Tension model requires exactly one canonical alternative."""
+    """Tension model requires exactly one default path alternative."""
     from pydantic import ValidationError
 
     from questfoundry.models.brainstorm import Tension
 
-    with pytest.raises(ValidationError, match=r"one.*canonical"):
+    with pytest.raises(ValidationError, match=r"one.*default path"):
         Tension(
-            id="test",
+            tension_id="test",
             question="Test?",
             alternatives=[
-                {"id": "one", "description": "First", "canonical": True},
-                {"id": "two", "description": "Second", "canonical": True},
+                {"alternative_id": "one", "description": "First", "is_default_path": True},
+                {"alternative_id": "two", "description": "Second", "is_default_path": True},
             ],
-            involves=[],
+            central_entity_ids=[],
             why_it_matters="Test",
         )
 
 
 def test_entity_types() -> None:
-    """Entity model accepts all valid types."""
+    """Entity model accepts all valid category types."""
     from questfoundry.models.brainstorm import Entity
 
-    for entity_type in ["character", "location", "object", "faction"]:
+    for entity_category in ["character", "location", "object", "faction"]:
         entity = Entity(
-            id="test",
-            type=entity_type,
+            entity_id="test",
+            entity_category=entity_category,
             concept="Test concept",
         )
-        assert entity.type == entity_type
+        assert entity.entity_category == entity_category

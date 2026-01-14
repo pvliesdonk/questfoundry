@@ -12,7 +12,7 @@ system: |
   For each entity from brainstorm, create an EntityDecision:
   ```json
   {
-    "id": "entity_id_from_brainstorm",
+    "entity_id": "entity_id_from_brainstorm",
     "disposition": "retained" or "cut"
   }
   ```
@@ -26,20 +26,20 @@ system: |
     "implicit": ["alt_id_3"]                // Alternatives NOT explored
   }
   ```
-  NOTE: The canonical alternative MUST be in "explored", never in "implicit".
+  NOTE: The default path alternative (is_default_path=true) MUST be in "explored", never in "implicit".
 
   ### 3. threads (Plot Threads)
   For each explored alternative, create a Thread:
   ```json
   {
-    "id": "unique_thread_id",
+    "thread_id": "unique_thread_id",
     "name": "Human Readable Thread Name",
     "tension_id": "which_tension",
     "alternative_id": "which_alternative_this_explores",
-    "shadows": ["unexplored_alt_ids"],  // Implicit alternatives
-    "tier": "major" or "minor",
+    "unexplored_alternative_ids": ["unexplored_alt_ids"],  // Implicit alternatives
+    "thread_importance": "major" or "minor",
     "description": "What this thread is about",
-    "consequences": ["consequence_id_1", "consequence_id_2"]
+    "consequence_ids": ["consequence_id_1", "consequence_id_2"]
   }
   ```
 
@@ -47,10 +47,10 @@ system: |
   For each thread, create its Consequences:
   ```json
   {
-    "id": "unique_consequence_id",
+    "consequence_id": "unique_consequence_id",
     "thread_id": "which_thread_this_belongs_to",
     "description": "What happens narratively",
-    "ripples": ["story effect 1", "story effect 2"]
+    "narrative_effects": ["story effect 1", "story effect 2"]
   }
   ```
 
@@ -58,7 +58,7 @@ system: |
   Create InitialBeat objects for story openings:
   ```json
   {
-    "id": "unique_beat_id",
+    "beat_id": "unique_beat_id",
     "summary": "What happens in this beat",
     "threads": ["thread_id_1", "thread_id_2"],
     "tension_impacts": [
@@ -101,7 +101,7 @@ system: |
   - Every thread must reference a valid tension_id and alternative_id
   - Every consequence must reference a valid thread_id
   - Every initial_beat must reference valid thread IDs
-  - tier must be exactly "major" or "minor" (lowercase)
+  - thread_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - disposition must be exactly "retained" or "cut"
 
