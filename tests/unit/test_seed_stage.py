@@ -95,21 +95,21 @@ async def test_execute_calls_all_three_phases() -> None:
         )
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = SeedOutput(
-            entities=[{"id": "kay", "disposition": "retained"}],
+            entities=[{"entity_id": "kay", "disposition": "retained"}],
             tensions=[{"tension_id": "trust", "explored": ["yes"], "implicit": ["no"]}],
             threads=[
                 {
-                    "id": "thread_trust",
+                    "thread_id": "thread_trust",
                     "name": "Trust Arc",
                     "tension_id": "trust",
                     "alternative_id": "yes",
-                    "tier": "major",
+                    "thread_importance": "major",
                     "description": "The trust thread",
                 }
             ],
             initial_beats=[
                 {
-                    "id": "beat1",
+                    "beat_id": "beat1",
                     "summary": "Opening beat",
                     "threads": ["thread_trust"],
                 }
@@ -278,21 +278,21 @@ async def test_execute_returns_artifact_as_dict() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(
-            entities=[{"id": "kay", "disposition": "retained"}],
+            entities=[{"entity_id": "kay", "disposition": "retained"}],
             tensions=[],
             threads=[
                 {
-                    "id": "thread1",
+                    "thread_id": "thread1",
                     "name": "Test",
                     "tension_id": "t1",
                     "alternative_id": "a1",
-                    "tier": "major",
+                    "thread_importance": "major",
                     "description": "Test thread",
                 }
             ],
             initial_beats=[
                 {
-                    "id": "beat1",
+                    "beat_id": "beat1",
                     "summary": "Test beat",
                     "threads": ["thread1"],
                 }
@@ -307,9 +307,9 @@ async def test_execute_returns_artifact_as_dict() -> None:
         )
 
         assert isinstance(artifact, dict)
-        assert artifact["entities"][0]["id"] == "kay"
-        assert artifact["threads"][0]["id"] == "thread1"
-        assert artifact["initial_beats"][0]["id"] == "beat1"
+        assert artifact["entities"][0]["entity_id"] == "kay"
+        assert artifact["threads"][0]["thread_id"] == "thread1"
+        assert artifact["initial_beats"][0]["beat_id"] == "beat1"
 
 
 # --- Brainstorm Context Formatting Tests ---
@@ -341,11 +341,13 @@ def test_format_brainstorm_context_includes_tensions() -> None:
         {
             "type": "tension",
             "question": "Can trust be earned?",
-            "involves": ["kay"],
+            "central_entity_ids": ["kay"],
             "why_it_matters": "Core theme",
         },
     )
-    graph.add_node("trust::yes", {"type": "alternative", "description": "Yes", "canonical": True})
+    graph.add_node(
+        "trust::yes", {"type": "alternative", "description": "Yes", "is_default_path": True}
+    )
     graph.add_edge("has_alternative", "trust", "trust::yes")
 
     result = _format_brainstorm_context(graph)
@@ -371,21 +373,21 @@ def test_format_brainstorm_context_handles_empty() -> None:
 def test_seed_output_model_validates() -> None:
     """SeedOutput model validates correctly."""
     output = SeedOutput(
-        entities=[{"id": "kay", "disposition": "retained"}],
+        entities=[{"entity_id": "kay", "disposition": "retained"}],
         tensions=[{"tension_id": "trust", "explored": ["yes"], "implicit": []}],
         threads=[
             {
-                "id": "thread_trust",
+                "thread_id": "thread_trust",
                 "name": "Trust Arc",
                 "tension_id": "trust",
                 "alternative_id": "yes",
-                "tier": "major",
+                "thread_importance": "major",
                 "description": "The trust thread",
             }
         ],
         initial_beats=[
             {
-                "id": "beat1",
+                "beat_id": "beat1",
                 "summary": "Opening scene",
                 "threads": ["thread_trust"],
             }
@@ -395,24 +397,24 @@ def test_seed_output_model_validates() -> None:
     assert len(output.entities) == 1
     assert len(output.threads) == 1
     assert len(output.initial_beats) == 1
-    assert output.entities[0].id == "kay"
+    assert output.entities[0].entity_id == "kay"
     assert output.threads[0].name == "Trust Arc"
 
 
 def test_thread_tier_types() -> None:
-    """Thread model accepts major and minor tiers."""
+    """Thread model accepts major and minor importance values."""
     from questfoundry.models.seed import Thread
 
-    for tier in ["major", "minor"]:
+    for importance in ["major", "minor"]:
         thread = Thread(
-            id="test",
+            thread_id="test",
             name="Test Thread",
             tension_id="test_tension",
             alternative_id="test_alt",
-            tier=tier,  # type: ignore[arg-type]
+            thread_importance=importance,  # type: ignore[arg-type]
             description="Test description",
         )
-        assert thread.tier == tier
+        assert thread.thread_importance == importance
 
 
 def test_tension_effect_types() -> None:
@@ -434,7 +436,7 @@ def test_entity_disposition_types() -> None:
 
     for disposition in ["retained", "cut"]:
         decision = EntityDecision(
-            id="test",
+            entity_id="test",
             disposition=disposition,  # type: ignore[arg-type]
         )
         assert decision.disposition == disposition

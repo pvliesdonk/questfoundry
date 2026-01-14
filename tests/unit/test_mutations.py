@@ -54,7 +54,9 @@ class TestApplyMutations:
         """Routes brainstorm stage to apply_brainstorm_mutations."""
         graph = Graph.empty()
         output = {
-            "entities": [{"id": "char_001", "type": "character", "concept": "Test"}],
+            "entities": [
+                {"entity_id": "char_001", "entity_category": "character", "concept": "Test"}
+            ],
             "tensions": [],
         }
 
@@ -69,7 +71,7 @@ class TestApplyMutations:
         graph.add_node("entity::char_001", {"type": "entity", "disposition": "proposed"})
 
         output = {
-            "entities": [{"id": "char_001", "disposition": "retained"}],
+            "entities": [{"entity_id": "char_001", "disposition": "retained"}],
             "threads": [],
             "beats": [],
         }
@@ -166,44 +168,50 @@ class TestBrainstormMutations:
     """Test BRAINSTORM stage mutations."""
 
     def test_entity_missing_id_raises(self) -> None:
-        """Raises MutationError when entity missing id."""
+        """Raises MutationError when entity missing entity_id."""
         graph = Graph.empty()
         output = {
-            "entities": [{"type": "character", "concept": "Test"}],  # Missing id
+            "entities": [{"entity_category": "character", "concept": "Test"}],  # Missing entity_id
             "tensions": [],
         }
 
-        with pytest.raises(MutationError, match="Entity at index 0 missing required 'id' field"):
+        with pytest.raises(
+            MutationError, match="Entity at index 0 missing required 'entity_id' field"
+        ):
             apply_brainstorm_mutations(graph, output)
 
     def test_tension_missing_id_raises(self) -> None:
-        """Raises MutationError when tension missing id."""
+        """Raises MutationError when tension missing tension_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
-            "tensions": [{"question": "Test?", "alternatives": []}],  # Missing id
+            "tensions": [{"question": "Test?", "alternatives": []}],  # Missing tension_id
         }
 
-        with pytest.raises(MutationError, match="Tension at index 0 missing required 'id' field"):
+        with pytest.raises(
+            MutationError, match="Tension at index 0 missing required 'tension_id' field"
+        ):
             apply_brainstorm_mutations(graph, output)
 
     def test_alternative_missing_id_raises(self) -> None:
-        """Raises MutationError when alternative missing id."""
+        """Raises MutationError when alternative missing alternative_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
             "tensions": [
                 {
-                    "id": "tension_001",
+                    "tension_id": "tension_001",
                     "question": "Test?",
-                    "alternatives": [{"description": "Option A", "canonical": True}],  # Missing id
+                    "alternatives": [
+                        {"description": "Option A", "is_default_path": True}
+                    ],  # Missing alternative_id
                 }
             ],
         }
 
         with pytest.raises(
             MutationError,
-            match="Alternative at index 0 in tension 'tension_001' missing required 'id' field",
+            match="Alternative at index 0 in tension 'tension_001' missing required 'alternative_id' field",
         ):
             apply_brainstorm_mutations(graph, output)
 
@@ -213,14 +221,14 @@ class TestBrainstormMutations:
         output = {
             "entities": [
                 {
-                    "id": "kay",
-                    "type": "character",
+                    "entity_id": "kay",
+                    "entity_category": "character",
                     "concept": "Young archivist",
                     "notes": "Curious and brave",
                 },
                 {
-                    "id": "archive",
-                    "type": "location",
+                    "entity_id": "archive",
+                    "entity_category": "location",
                     "concept": "Ancient repository",
                 },
             ],
@@ -250,20 +258,20 @@ class TestBrainstormMutations:
             "entities": [],
             "tensions": [
                 {
-                    "id": "mentor_trust",
+                    "tension_id": "mentor_trust",
                     "question": "Can the mentor be trusted?",
-                    "involves": ["kay", "mentor"],  # Raw IDs from LLM
+                    "central_entity_ids": ["kay", "mentor"],  # Raw IDs from LLM
                     "why_it_matters": "Trust is key",
                     "alternatives": [
                         {
-                            "id": "protector",
+                            "alternative_id": "protector",
                             "description": "Mentor protects Kay",
-                            "canonical": True,
+                            "is_default_path": True,
                         },
                         {
-                            "id": "manipulator",
+                            "alternative_id": "manipulator",
                             "description": "Mentor manipulates Kay",
-                            "canonical": False,
+                            "is_default_path": False,
                         },
                     ],
                 }
@@ -278,19 +286,19 @@ class TestBrainstormMutations:
         assert tension["type"] == "tension"
         assert tension["raw_id"] == "mentor_trust"
         assert tension["question"] == "Can the mentor be trusted?"
-        # Involves list is prefixed in storage
-        assert tension["involves"] == ["entity::kay", "entity::mentor"]
+        # central_entity_ids list is prefixed in storage
+        assert tension["central_entity_ids"] == ["entity::kay", "entity::mentor"]
 
         # Alternative IDs: tension::tension_id::alt::alt_id
         protector = graph.get_node("tension::mentor_trust::alt::protector")
         assert protector is not None
         assert protector["type"] == "alternative"
         assert protector["raw_id"] == "protector"
-        assert protector["canonical"] is True
+        assert protector["is_default_path"] is True
 
         manipulator = graph.get_node("tension::mentor_trust::alt::manipulator")
         assert manipulator is not None
-        assert manipulator["canonical"] is False
+        assert manipulator["is_default_path"] is False
 
         # Check edges
         edges = graph.get_edges(from_id="tension::mentor_trust", edge_type="has_alternative")
@@ -310,41 +318,43 @@ class TestSeedMutations:
     """Test SEED stage mutations."""
 
     def test_entity_decision_missing_id_raises(self) -> None:
-        """Raises MutationError when entity decision missing id."""
+        """Raises MutationError when entity decision missing entity_id."""
         graph = Graph.empty()
         output = {
-            "entities": [{"disposition": "retained"}],  # Missing id
+            "entities": [{"disposition": "retained"}],  # Missing entity_id
             "threads": [],
             "initial_beats": [],
         }
 
         with pytest.raises(
-            MutationError, match="Entity decision at index 0 missing required 'id' field"
+            MutationError, match="Entity decision at index 0 missing required 'entity_id' field"
         ):
             apply_seed_mutations(graph, output)
 
     def test_thread_missing_id_raises(self) -> None:
-        """Raises MutationError when thread missing id."""
+        """Raises MutationError when thread missing thread_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
-            "threads": [{"name": "Test Thread"}],  # Missing id
+            "threads": [{"name": "Test Thread"}],  # Missing thread_id
             "initial_beats": [],
         }
 
-        with pytest.raises(MutationError, match="Thread at index 0 missing required 'id' field"):
+        with pytest.raises(
+            MutationError, match="Thread at index 0 missing required 'thread_id' field"
+        ):
             apply_seed_mutations(graph, output)
 
     def test_beat_missing_id_raises(self) -> None:
-        """Raises MutationError when beat missing id."""
+        """Raises MutationError when beat missing beat_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
             "threads": [],
-            "initial_beats": [{"summary": "Test Beat"}],  # Missing id
+            "initial_beats": [{"summary": "Test Beat"}],  # Missing beat_id
         }
 
-        with pytest.raises(MutationError, match="Beat at index 0 missing required 'id' field"):
+        with pytest.raises(MutationError, match="Beat at index 0 missing required 'beat_id' field"):
             apply_seed_mutations(graph, output)
 
     def test_updates_entity_dispositions(self) -> None:
@@ -357,9 +367,9 @@ class TestSeedMutations:
 
         output = {
             "entities": [
-                {"id": "kay", "disposition": "retained"},  # Raw IDs from LLM
-                {"id": "mentor", "disposition": "retained"},
-                {"id": "extra", "disposition": "cut"},
+                {"entity_id": "kay", "disposition": "retained"},  # Raw IDs from LLM
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "extra", "disposition": "cut"},
             ],
             "threads": [],
             "initial_beats": [],
@@ -381,12 +391,12 @@ class TestSeedMutations:
             "entities": [],
             "threads": [
                 {
-                    "id": "thread_mentor_trust",
+                    "thread_id": "thread_mentor_trust",
                     "name": "Mentor Trust Arc",
                     "tension_id": "mentor_trust",  # Raw tension ID from LLM
                     "alternative_id": "protector",  # Local alt ID, not full path
                     "description": "Exploring mentor relationship",
-                    "consequences": ["consequence_trust"],
+                    "consequence_ids": ["consequence_trust"],
                 }
             ],
             "initial_beats": [],
@@ -417,7 +427,7 @@ class TestSeedMutations:
             "threads": [],
             "initial_beats": [
                 {
-                    "id": "opening_001",
+                    "beat_id": "opening_001",
                     "summary": "Kay meets the mentor for the first time",
                     "threads": ["thread_mentor_trust"],  # Raw thread IDs from LLM
                     "tension_impacts": [
@@ -454,8 +464,8 @@ class TestSeedMutations:
 
         output = {
             "entities": [
-                {"id": "kay", "disposition": "retained"},  # Raw ID from LLM
-                {"id": "missing", "disposition": "retained"},  # Doesn't exist
+                {"entity_id": "kay", "disposition": "retained"},  # Raw ID from LLM
+                {"entity_id": "missing", "disposition": "retained"},  # Doesn't exist
             ],
             "threads": [],
             "initial_beats": [],
@@ -496,25 +506,29 @@ class TestMutationIntegration:
         # BRAINSTORM stage
         brainstorm_output = {
             "entities": [
-                {"id": "kay", "type": "character", "concept": "Young archivist"},
-                {"id": "mentor", "type": "character", "concept": "Senior archivist"},
+                {"entity_id": "kay", "entity_category": "character", "concept": "Young archivist"},
+                {
+                    "entity_id": "mentor",
+                    "entity_category": "character",
+                    "concept": "Senior archivist",
+                },
             ],
             "tensions": [
                 {
-                    "id": "mentor_trust",
+                    "tension_id": "mentor_trust",
                     "question": "Can the mentor be trusted?",
-                    "involves": ["kay", "mentor"],  # Raw IDs from LLM
+                    "central_entity_ids": ["kay", "mentor"],  # Raw IDs from LLM
                     "why_it_matters": "Trust defines ally or foe",
                     "alternatives": [
                         {
-                            "id": "protector",
+                            "alternative_id": "protector",
                             "description": "Mentor protects",
-                            "canonical": True,
+                            "is_default_path": True,
                         },
                         {
-                            "id": "manipulator",
+                            "alternative_id": "manipulator",
                             "description": "Mentor manipulates",
-                            "canonical": False,
+                            "is_default_path": False,
                         },
                     ],
                 }
@@ -526,12 +540,12 @@ class TestMutationIntegration:
         # SEED stage - uses raw IDs as LLM would produce
         seed_output = {
             "entities": [
-                {"id": "kay", "disposition": "retained"},
-                {"id": "mentor", "disposition": "retained"},
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "mentor", "disposition": "retained"},
             ],
             "threads": [
                 {
-                    "id": "thread_mentor",
+                    "thread_id": "thread_mentor",
                     "name": "Mentor Arc",
                     "tension_id": "mentor_trust",  # Raw tension ID
                     "alternative_id": "protector",  # Local alt ID
@@ -540,7 +554,7 @@ class TestMutationIntegration:
             ],
             "initial_beats": [
                 {
-                    "id": "opening",
+                    "beat_id": "opening",
                     "summary": "Kay meets the mentor",
                     "threads": ["thread_mentor"],  # Raw thread IDs
                 }
