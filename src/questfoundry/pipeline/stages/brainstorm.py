@@ -31,6 +31,7 @@ from questfoundry.tools.langchain_tools import get_all_research_tools
 log = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.agents.discuss import (
@@ -152,6 +153,7 @@ class BrainstormStage:
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
         project_path: Path | None = None,
+        callbacks: list[BaseCallbackHandler] | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the BRAINSTORM stage using the 3-phase pattern.
 
@@ -165,6 +167,7 @@ class BrainstormStage:
             on_llm_start: Callback when LLM call starts.
             on_llm_end: Callback when LLM call ends.
             project_path: Override for project path (uses self.project_path if None).
+            callbacks: LangChain callback handlers for logging LLM calls.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -223,6 +226,7 @@ class BrainstormStage:
             on_llm_end=on_llm_end,
             system_prompt=discuss_prompt,
             stage_name="brainstorm",
+            callbacks=callbacks,
         )
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
@@ -235,6 +239,7 @@ class BrainstormStage:
             messages=messages,
             system_prompt=summarize_prompt,
             stage_name="brainstorm",
+            callbacks=callbacks,
         )
         total_llm_calls += 1
         total_tokens += summarize_tokens
@@ -248,6 +253,7 @@ class BrainstormStage:
             schema=BrainstormOutput,
             provider_name=provider_name,
             system_prompt=serialize_prompt,
+            callbacks=callbacks,
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens

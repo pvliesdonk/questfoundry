@@ -26,6 +26,7 @@ log = get_logger(__name__)
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.agents.discuss import (
@@ -65,6 +66,7 @@ class DreamStage:
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
         project_path: Path | None = None,  # noqa: ARG002 - API consistency
+        callbacks: list[BaseCallbackHandler] | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 
@@ -78,6 +80,7 @@ class DreamStage:
             on_llm_start: Callback when LLM call starts.
             on_llm_end: Callback when LLM call ends.
             project_path: Path to project directory (unused by DREAM, for API consistency).
+            callbacks: LangChain callback handlers for logging LLM calls.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -114,6 +117,7 @@ class DreamStage:
             on_assistant_message=on_assistant_message,
             on_llm_start=on_llm_start,
             on_llm_end=on_llm_end,
+            callbacks=callbacks,
         )
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
@@ -123,6 +127,7 @@ class DreamStage:
         brief, summarize_tokens = await summarize_discussion(
             model=model,
             messages=messages,
+            callbacks=callbacks,
         )
         total_llm_calls += 1  # Summarize is a single call
         total_tokens += summarize_tokens
@@ -134,6 +139,7 @@ class DreamStage:
             brief=brief,
             schema=DreamArtifact,
             provider_name=provider_name,
+            callbacks=callbacks,
         )
         total_llm_calls += 1  # Count as 1 even with retries (simplification)
         total_tokens += serialize_tokens

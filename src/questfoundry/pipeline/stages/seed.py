@@ -32,6 +32,7 @@ from questfoundry.tools.langchain_tools import get_all_research_tools
 log = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.agents.discuss import (
@@ -219,6 +220,7 @@ class SeedStage:
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
         project_path: Path | None = None,
+        callbacks: list[BaseCallbackHandler] | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the SEED stage using the 3-phase pattern.
 
@@ -232,6 +234,7 @@ class SeedStage:
             on_llm_start: Callback when LLM call starts.
             on_llm_end: Callback when LLM call ends.
             project_path: Override for project path (uses self.project_path if None).
+            callbacks: LangChain callback handlers for logging LLM calls.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -290,6 +293,7 @@ class SeedStage:
             on_llm_end=on_llm_end,
             system_prompt=discuss_prompt,
             stage_name="seed",
+            callbacks=callbacks,
         )
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
@@ -302,6 +306,7 @@ class SeedStage:
             messages=messages,
             system_prompt=summarize_prompt,
             stage_name="seed",
+            callbacks=callbacks,
         )
         total_llm_calls += 1
         total_tokens += summarize_tokens
@@ -312,6 +317,7 @@ class SeedStage:
             model=model,
             brief=brief,
             provider_name=provider_name,
+            callbacks=callbacks,
         )
         # Iterative serialization makes 6 calls (one per section)
         total_llm_calls += 6
