@@ -14,6 +14,8 @@ from questfoundry.cli import (
     DEFAULT_INTERACTIVE_SEED_PROMPT,
     DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
     DEFAULT_NONINTERACTIVE_SEED_PROMPT,
+    STAGE_ORDER,
+    STAGE_PROMPTS,
     _resolve_project_path,
     app,
 )
@@ -571,3 +573,291 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
         call_args = mock_orchestrator.run_stage.call_args
         context = call_args[0][1]  # Second positional arg is context
         assert context["user_prompt"] == DEFAULT_NONINTERACTIVE_SEED_PROMPT
+
+
+# --- STAGE_ORDER and STAGE_PROMPTS Constants Tests ---
+
+
+def test_stage_order_constant() -> None:
+    """Test STAGE_ORDER contains expected stages in order."""
+    assert STAGE_ORDER == ["dream", "brainstorm", "seed"]
+
+
+def test_stage_prompts_has_all_stages() -> None:
+    """Test STAGE_PROMPTS has entry for each stage in STAGE_ORDER."""
+    for stage in STAGE_ORDER:
+        assert stage in STAGE_PROMPTS
+
+
+def test_stage_prompts_dream_requires_prompt() -> None:
+    """Test DREAM stage has no default non-interactive prompt (requires explicit)."""
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["dream"]
+    assert interactive_prompt  # Has interactive prompt
+    assert noninteractive_prompt is None  # No non-interactive default
+
+
+def test_stage_prompts_brainstorm_has_defaults() -> None:
+    """Test BRAINSTORM stage has both interactive and non-interactive prompts."""
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["brainstorm"]
+    assert interactive_prompt
+    assert noninteractive_prompt
+
+
+def test_stage_prompts_seed_has_defaults() -> None:
+    """Test SEED stage has both interactive and non-interactive prompts."""
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["seed"]
+    assert interactive_prompt
+    assert noninteractive_prompt
+
+
+# --- Run Command Tests ---
+
+
+def test_run_command_no_project_fails() -> None:
+    """Test qf run fails without project.yaml."""
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["run", "--to", "dream", "--prompt", "test"])
+
+        assert result.exit_code == 1
+        assert "No project.yaml found" in result.stdout
+
+
+def test_run_command_unknown_to_stage_fails(tmp_path: Path) -> None:
+    """Test qf run fails with unknown --to stage."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    result = runner.invoke(
+        app,
+        ["run", "--to", "invalid", "--project", str(project_path)],
+    )
+
+    assert result.exit_code == 1
+    assert "Unknown stage" in result.stdout
+    assert "invalid" in result.stdout
+
+
+def test_run_command_unknown_from_stage_fails(tmp_path: Path) -> None:
+    """Test qf run fails with unknown --from stage."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    result = runner.invoke(
+        app,
+        ["run", "--to", "seed", "--from", "invalid", "--project", str(project_path)],
+    )
+
+    assert result.exit_code == 1
+    assert "Unknown stage" in result.stdout
+    assert "invalid" in result.stdout
+
+
+def test_run_command_from_after_to_fails(tmp_path: Path) -> None:
+    """Test qf run fails when --from comes after --to."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--to",
+            "dream",
+            "--from",
+            "seed",
+            "--project",
+            str(project_path),
+            "--prompt",
+            "test",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--from stage must come before --to stage" in result.stdout
+
+
+def test_run_command_dream_requires_prompt(tmp_path: Path) -> None:
+    """Test qf run requires prompt when DREAM stage will run."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_status = MagicMock()
+        mock_status.stages = {}  # No stages completed
+        mock_orchestrator.get_status.return_value = mock_status
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            ["run", "--to", "seed", "--project", str(project_path)],
+        )
+
+    assert result.exit_code == 1
+    assert "DREAM stage requires a prompt" in result.stdout
+
+
+def test_run_command_runs_stages(tmp_path: Path) -> None:
+    """Test qf run executes specified stages."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Mock successful results for each stage
+    def make_result(stage: str) -> StageResult:
+        return StageResult(
+            stage=stage,
+            status="completed",
+            artifact_path=project_path / "graph.json",
+            llm_calls=2,
+            tokens_used=300,
+        )
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_status = MagicMock()
+        mock_status.stages = {}  # No stages completed
+        mock_orchestrator.get_status.return_value = mock_status
+        mock_orchestrator.run_stage = AsyncMock(side_effect=lambda s, _: make_result(s))
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--to",
+                "brainstorm",
+                "--project",
+                str(project_path),
+                "--prompt",
+                "A mystery story",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Pipeline run complete" in result.stdout
+    # Should have run both dream and brainstorm
+    assert mock_orchestrator.run_stage.call_count == 2
+
+
+def test_run_command_skips_completed_stages(tmp_path: Path) -> None:
+    """Test qf run skips already completed stages."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    mock_result = StageResult(
+        stage="brainstorm",
+        status="completed",
+        artifact_path=project_path / "graph.json",
+        llm_calls=2,
+        tokens_used=300,
+    )
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+
+        # Mock status: dream is completed
+        mock_dream_info = MagicMock()
+        mock_dream_info.status = "completed"
+        mock_status = MagicMock()
+        mock_status.stages = {"dream": mock_dream_info}
+        mock_orchestrator.get_status.return_value = mock_status
+
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            ["run", "--to", "brainstorm", "--project", str(project_path)],
+        )
+
+    assert result.exit_code == 0
+    # Should only run brainstorm (dream is skipped)
+    assert mock_orchestrator.run_stage.call_count == 1
+    call_args = mock_orchestrator.run_stage.call_args
+    assert call_args[0][0] == "brainstorm"
+
+
+def test_run_command_force_reruns_completed(tmp_path: Path) -> None:
+    """Test qf run --force re-runs already completed stages."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    def make_result(stage: str) -> StageResult:
+        return StageResult(
+            stage=stage,
+            status="completed",
+            artifact_path=project_path / "graph.json",
+            llm_calls=2,
+            tokens_used=300,
+        )
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+
+        # Mock status: dream is completed
+        mock_dream_info = MagicMock()
+        mock_dream_info.status = "completed"
+        mock_status = MagicMock()
+        mock_status.stages = {"dream": mock_dream_info}
+        mock_orchestrator.get_status.return_value = mock_status
+
+        mock_orchestrator.run_stage = AsyncMock(side_effect=lambda s, _: make_result(s))
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--to",
+                "brainstorm",
+                "--project",
+                str(project_path),
+                "--prompt",
+                "A story",
+                "--force",
+            ],
+        )
+
+    assert result.exit_code == 0
+    # Should run both stages (force overrides completed status)
+    assert mock_orchestrator.run_stage.call_count == 2
+
+
+def test_run_command_all_completed_no_force(tmp_path: Path) -> None:
+    """Test qf run shows message when all stages already completed."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+
+        # Mock status: all stages completed
+        mock_dream_info = MagicMock()
+        mock_dream_info.status = "completed"
+        mock_brainstorm_info = MagicMock()
+        mock_brainstorm_info.status = "completed"
+        mock_status = MagicMock()
+        mock_status.stages = {"dream": mock_dream_info, "brainstorm": mock_brainstorm_info}
+        mock_orchestrator.get_status.return_value = mock_status
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            ["run", "--to", "brainstorm", "--project", str(project_path)],
+        )
+
+    assert result.exit_code == 0
+    assert "All stages already completed" in result.stdout
+    assert "--force" in result.stdout

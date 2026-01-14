@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import atexit
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from dotenv import load_dotenv
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 
     from questfoundry.pipeline import PipelineOrchestrator, StageResult
+
+# Type alias for artifact preview functions
+PreviewFn = Callable[[dict[str, Any]], None]
 
 app = typer.Typer(
     name="qf",
@@ -73,6 +77,29 @@ DEFAULT_NONINTERACTIVE_SEED_PROMPT = (
     "decide which tensions to explore as threads, create initial beats, "
     "and sketch convergence points."
 )
+
+# Pipeline stage order and configuration
+STAGE_ORDER = ["dream", "brainstorm", "seed"]  # GROW, FILL, SHIP added later
+
+# Stage prompt configuration for the run command
+# Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
+STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
+    "dream": (
+        DEFAULT_INTERACTIVE_DREAM_PROMPT,
+        None,  # DREAM requires explicit prompt
+    ),
+    "brainstorm": (
+        DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT,
+        DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
+    ),
+    "seed": (
+        DEFAULT_INTERACTIVE_SEED_PROMPT,
+        DEFAULT_NONINTERACTIVE_SEED_PROMPT,
+    ),
+}
+
+# Message shown after SEED stage completes
+THREAD_FREEZE_MESSAGE = "[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED."
 
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
@@ -195,6 +222,315 @@ def _get_orchestrator(
     )
 
 
+# =============================================================================
+# Stage Command Helpers
+# =============================================================================
+
+
+def _setup_interactive_context(console_: Console) -> dict[str, Any]:
+    """Set up interactive mode context with user input and callbacks.
+
+    Creates prompt_toolkit session, key bindings, and all the callbacks
+    needed for interactive conversation mode.
+
+    Args:
+        console_: Rich console for output.
+
+    Returns:
+        Context dict with user_input_fn, on_assistant_message,
+        on_llm_start, on_llm_end callbacks configured.
+    """
+    session: PromptSession[str] = PromptSession(multiline=True)
+    bindings = KeyBindings()
+
+    def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+        """Enter submits the current buffer."""
+        event.current_buffer.validate_and_handle()
+
+    bindings.add("enter")(_submit)
+
+    def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
+        """Ctrl+Enter (Ctrl+J) inserts a newline."""
+        event.current_buffer.insert_text("\n")
+
+    bindings.add("c-j")(_insert_newline)
+
+    async def _async_user_input() -> str | None:
+        """Get user input asynchronously with prompt_toolkit."""
+        console_.print()
+        try:
+            loop = asyncio.get_running_loop()
+
+            def _prompt() -> str:
+                with patch_stdout():
+                    prompt_text: str = session.prompt(
+                        HTML("<b><ansicyan>You</ansicyan></b>: "),
+                        multiline=True,
+                        key_bindings=bindings,
+                    )
+                    return prompt_text
+
+            user_input = await loop.run_in_executor(None, _prompt)
+            return user_input if user_input.strip() else None
+        except (EOFError, KeyboardInterrupt):
+            return None
+
+    def _display_assistant_message(content: str) -> None:
+        """Display assistant message with richer formatting."""
+        console_.print()
+        renderable = Markdown(content)
+        panel = Panel.fit(
+            renderable,
+            title="Assistant",
+            title_align="left",
+            border_style="green",
+        )
+        console_.print(panel)
+
+    thinking_indicator = "[dim]••• thinking •••[/dim]"
+
+    def _on_llm_start(_: str) -> None:
+        console_.print(thinking_indicator, end="\r")
+
+    def _on_llm_end(_: str) -> None:
+        console_.print(" " * len("••• thinking •••"), end="\r")
+
+    return {
+        "user_input_fn": _async_user_input,
+        "on_assistant_message": _display_assistant_message,
+        "on_llm_start": _on_llm_start,
+        "on_llm_end": _on_llm_end,
+    }
+
+
+async def _run_stage_async(
+    stage_name: str,
+    project_path: Path,
+    context: dict[str, Any],
+    provider: str | None,
+) -> StageResult:
+    """Run a stage asynchronously and close orchestrator.
+
+    Args:
+        stage_name: Name of the stage to run.
+        project_path: Path to the project directory.
+        context: Context dict for the stage.
+        provider: Optional provider override.
+
+    Returns:
+        StageResult from the stage execution.
+    """
+    log = get_logger(__name__)
+    orchestrator = _get_orchestrator(project_path, provider_override=provider)
+    log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
+    try:
+        return await orchestrator.run_stage(stage_name, context)
+    finally:
+        await orchestrator.close()
+
+
+def _run_stage_command(
+    stage_name: str,
+    project_path: Path,
+    prompt: str | None,
+    provider: str | None,
+    interactive: bool | None,
+    default_interactive_prompt: str,
+    default_noninteractive_prompt: str | None,
+    preview_fn: PreviewFn | None,
+    next_step_hint: str | None = None,
+) -> None:
+    """Common logic for running a stage command.
+
+    This is the main helper that consolidates the shared logic across
+    dream, brainstorm, and seed commands.
+
+    Args:
+        stage_name: Name of the stage (e.g., "dream", "brainstorm", "seed").
+        project_path: Path to the project directory.
+        prompt: User-provided prompt, or None to use defaults.
+        provider: Optional provider override string.
+        interactive: Explicit interactive mode flag, or None for auto-detect.
+        default_interactive_prompt: Default prompt for interactive mode.
+        default_noninteractive_prompt: Default prompt for non-interactive mode.
+            If None, non-interactive mode requires an explicit prompt.
+        preview_fn: Optional function to display artifact preview.
+        next_step_hint: Optional hint about next step (e.g., "qf brainstorm").
+    """
+    log = get_logger(__name__)
+
+    # Determine interactive mode: explicit flag > TTY detection
+    use_interactive = interactive if interactive is not None else _is_interactive_tty()
+
+    # Handle prompt: apply defaults based on mode
+    if prompt is None:
+        if use_interactive:
+            prompt = default_interactive_prompt
+        elif default_noninteractive_prompt is not None:
+            prompt = default_noninteractive_prompt
+        else:
+            # Non-interactive requires explicit prompt (e.g., DREAM stage)
+            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
+            console.print("Provide a prompt argument or use --interactive/-i flag.")
+            raise typer.Exit(1)
+
+    log.info("stage_start", stage=stage_name)
+    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
+
+    # Build context
+    context: dict[str, Any] = {"user_prompt": prompt, "interactive": use_interactive}
+
+    if use_interactive:
+        log.debug("interactive_mode", mode="enabled")
+        context.update(_setup_interactive_context(console))
+    else:
+        log.debug("interactive_mode", mode="disabled")
+
+    console.print()
+
+    if use_interactive:
+        # Interactive mode: no spinner, direct output
+        console.print(f"[dim]Starting interactive {stage_name.upper()} stage...[/dim]")
+        console.print("[dim]The AI will discuss with you.[/dim]")
+        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
+        console.print()
+        result = asyncio.run(_run_stage_async(stage_name, project_path, context, provider))
+    else:
+        # Non-interactive: use progress spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task(f"Running {stage_name.upper()} stage...", total=None)
+            result = asyncio.run(_run_stage_async(stage_name, project_path, context, provider))
+
+    if result.status == "failed":
+        log.error("stage_failed", stage=stage_name, errors=result.errors)
+        console.print()
+        console.print(f"[red]✗[/red] {stage_name.upper()} stage failed")
+        for error in result.errors:
+            console.print(f"  [red]•[/red] {error}")
+        raise typer.Exit(1)
+
+    log.info(
+        "stage_complete",
+        stage=stage_name,
+        tokens=result.tokens_used,
+        duration=result.duration_seconds,
+    )
+
+    # Display success
+    console.print()
+    console.print(f"[green]✓[/green] {stage_name.upper()} stage completed")
+    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
+    console.print(f"  Tokens: {result.tokens_used:,}")
+    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+
+    if _log_enabled:
+        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
+
+    # Show preview of artifact
+    if preview_fn and result.artifact_path and result.artifact_path.exists():
+        from ruamel.yaml import YAML
+
+        yaml_reader = YAML()
+        with result.artifact_path.open() as f:
+            artifact = yaml_reader.load(f)
+
+        console.print()
+        preview_fn(artifact)
+
+    console.print()
+    if next_step_hint:
+        console.print(f"Run: [cyan]{next_step_hint}[/cyan]")
+    else:
+        console.print("Run: [cyan]qf status[/cyan] to see pipeline state")
+
+
+# =============================================================================
+# Artifact Preview Functions
+# =============================================================================
+
+
+def _preview_dream_artifact(artifact: dict[str, Any]) -> None:
+    """Display preview of DREAM artifact."""
+    genre = artifact.get("genre", "unknown")
+    subgenre = artifact.get("subgenre")
+    genre_display = f"{genre} ({subgenre})" if subgenre else genre
+
+    console.print(f"  Genre: [bold]{genre_display}[/bold]")
+
+    if tones := artifact.get("tone"):
+        console.print(f"  Tone: {', '.join(tones)}")
+
+    if themes := artifact.get("themes"):
+        console.print(f"  Themes: {', '.join(themes)}")
+
+
+def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
+    """Display preview of BRAINSTORM artifact."""
+    entities = artifact.get("entities", [])
+    tensions = artifact.get("tensions", [])
+
+    console.print(f"  Entities: [bold]{len(entities)}[/bold]")
+
+    # Group entities by type
+    entity_types: dict[str, list[str]] = {}
+    for entity in entities:
+        etype = entity.get("type", "unknown")
+        entity_types.setdefault(etype, []).append(entity.get("id", "?"))
+
+    for etype, ids in entity_types.items():
+        ids_display = ", ".join(ids[:5])
+        if len(ids) > 5:
+            ids_display += f", +{len(ids) - 5} more"
+        console.print(f"    {etype}: {ids_display}")
+
+    console.print(f"  Tensions: [bold]{len(tensions)}[/bold]")
+    for tension in tensions[:3]:
+        console.print(f"    • {tension.get('question', '?')}")
+    if len(tensions) > 3:
+        console.print(f"    ... and {len(tensions) - 3} more")
+
+
+def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
+    """Display preview of SEED artifact."""
+    entities = artifact.get("entities", [])
+    threads = artifact.get("threads", [])
+    beats = artifact.get("initial_beats", [])
+
+    # Count retained vs cut entities
+    retained = sum(1 for e in entities if e.get("disposition") == "retained")
+    cut = sum(1 for e in entities if e.get("disposition") == "cut")
+
+    console.print(f"  Entities: [bold]{retained}[/bold] retained, [dim]{cut}[/dim] cut")
+
+    console.print(f"  Threads: [bold]{len(threads)}[/bold]")
+    for thread in threads[:3]:
+        tier = thread.get("tier", "?")
+        tier_style = "bold green" if tier == "major" else "dim"
+        console.print(f"    • [{tier_style}]{tier}[/{tier_style}] {thread.get('name', '?')}")
+    if len(threads) > 3:
+        console.print(f"    ... and {len(threads) - 3} more")
+
+    console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
+
+
+# Stage preview function mapping (defined after functions exist)
+STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
+    "dream": _preview_dream_artifact,
+    "brainstorm": _preview_brainstorm_artifact,
+    "seed": _preview_seed_artifact,
+}
+
+
+# =============================================================================
+# CLI Commands
+# =============================================================================
+
+
 @app.command()
 def version() -> None:
     """Show version information."""
@@ -305,171 +641,17 @@ def dream(
     _require_project(project_path)
     _configure_project_logging(project_path)
 
-    # Get logger after logging is fully configured
-    log = get_logger(__name__)
-
-    # Determine interactive mode: explicit flag > TTY detection
-    use_interactive = interactive if interactive is not None else _is_interactive_tty()
-
-    # Handle prompt: if not provided, interactive mode uses default, non-interactive fails
-    if prompt is None:
-        if use_interactive:
-            # In interactive mode, start with a guiding prompt that invites conversation
-            prompt = DEFAULT_INTERACTIVE_DREAM_PROMPT
-        else:
-            # Non-interactive requires explicit prompt (fail fast, don't hang in CI/CD)
-            console.print("[red]Error:[/red] Prompt required in non-interactive mode.")
-            console.print("Provide a prompt argument or use --interactive/-i flag.")
-            raise typer.Exit(1)
-
-    log.info("stage_start", stage="dream")
-    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
-
-    # Build context
-    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
-    if use_interactive:
-        log.debug("interactive_mode", mode="enabled")
-
-        session: PromptSession[str] = PromptSession(multiline=True)
-        bindings = KeyBindings()
-
-        def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
-            """Enter submits the current buffer."""
-            event.current_buffer.validate_and_handle()
-
-        bindings.add("enter")(_submit)
-
-        def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
-            """Ctrl+Enter (Ctrl+J) inserts a newline."""
-            event.current_buffer.insert_text("\n")
-
-        bindings.add("c-j")(_insert_newline)
-
-        async def _async_user_input() -> str | None:
-            """Get user input asynchronously with prompt_toolkit."""
-            console.print()
-            try:
-                loop = asyncio.get_running_loop()
-
-                def _prompt() -> str:
-                    with patch_stdout():
-                        prompt_text: str = session.prompt(
-                            HTML("<b><ansicyan>You</ansicyan></b>: "),
-                            multiline=True,
-                            key_bindings=bindings,
-                        )
-                        return prompt_text
-
-                user_input = await loop.run_in_executor(None, _prompt)
-                return user_input if user_input.strip() else None
-            except (EOFError, KeyboardInterrupt):
-                return None
-
-        def _display_assistant_message(content: str) -> None:
-            """Display assistant message with richer formatting."""
-            console.print()
-            renderable = Markdown(content)
-            panel = Panel.fit(
-                renderable,
-                title="Assistant",
-                title_align="left",
-                border_style="green",
-            )
-            console.print(panel)
-
-        context["user_input_fn"] = _async_user_input
-        context["on_assistant_message"] = _display_assistant_message
-
-        thinking_indicator = "[dim]••• thinking •••[/dim]"
-
-        def _on_llm_start(_: str) -> None:
-            console.print(thinking_indicator, end="\r")
-
-        def _on_llm_end(_: str) -> None:
-            console.print(" " * len("••• thinking •••"), end="\r")
-
-        context["on_llm_start"] = _on_llm_start
-        context["on_llm_end"] = _on_llm_end
-    else:
-        log.debug("interactive_mode", mode="disabled")
-
-    async def _run_dream() -> StageResult:
-        """Run DREAM stage and close orchestrator."""
-        orchestrator = _get_orchestrator(project_path, provider_override=provider)
-        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
-        try:
-            return await orchestrator.run_stage("dream", context)
-        finally:
-            await orchestrator.close()
-
-    console.print()
-
-    if use_interactive:
-        # Interactive mode: no spinner, direct output
-        console.print("[dim]Starting interactive DREAM stage...[/dim]")
-        console.print("[dim]The AI will discuss your story idea with you.[/dim]")
-        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
-        console.print()
-        result = asyncio.run(_run_dream())
-    else:
-        # Non-interactive: use progress spinner
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task("Running DREAM stage...", total=None)
-            result = asyncio.run(_run_dream())
-
-    if result.status == "failed":
-        log.error("stage_failed", stage="dream", errors=result.errors)
-        console.print()
-        console.print("[red]✗[/red] DREAM stage failed")
-        for error in result.errors:
-            console.print(f"  [red]•[/red] {error}")
-        raise typer.Exit(1)
-
-    log.info(
-        "stage_complete",
-        stage="dream",
-        tokens=result.tokens_used,
-        duration=result.duration_seconds,
+    _run_stage_command(
+        stage_name="dream",
+        project_path=project_path,
+        prompt=prompt,
+        provider=provider,
+        interactive=interactive,
+        default_interactive_prompt=DEFAULT_INTERACTIVE_DREAM_PROMPT,
+        default_noninteractive_prompt=None,  # DREAM requires explicit prompt
+        preview_fn=_preview_dream_artifact,
+        next_step_hint="qf brainstorm",
     )
-
-    # Display success
-    console.print()
-    console.print("[green]✓[/green] DREAM stage completed")
-    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
-    console.print(f"  Tokens: {result.tokens_used:,}")
-    console.print(f"  Duration: {result.duration_seconds:.1f}s")
-
-    if _log_enabled:
-        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
-
-    # Show preview of artifact
-    if result.artifact_path and result.artifact_path.exists():
-        from ruamel.yaml import YAML
-
-        yaml_reader = YAML()
-        with result.artifact_path.open() as f:
-            artifact = yaml_reader.load(f)
-
-        console.print()
-        genre = artifact.get("genre", "unknown")
-        subgenre = artifact.get("subgenre")
-        genre_display = f"{genre} ({subgenre})" if subgenre else genre
-
-        console.print(f"  Genre: [bold]{genre_display}[/bold]")
-
-        if tones := artifact.get("tone"):
-            console.print(f"  Tone: {', '.join(tones)}")
-
-        if themes := artifact.get("themes"):
-            console.print(f"  Themes: {', '.join(themes)}")
-
-    console.print()
-    console.print("Run: [cyan]qf status[/cyan] to see pipeline state")
 
 
 @app.command()
@@ -512,179 +694,17 @@ def brainstorm(
     _require_project(project_path)
     _configure_project_logging(project_path)
 
-    # Get logger after logging is fully configured
-    log = get_logger(__name__)
-
-    # Determine interactive mode: explicit flag > TTY detection
-    use_interactive = interactive if interactive is not None else _is_interactive_tty()
-
-    # Handle prompt: if not provided, use appropriate default for mode
-    if prompt is None:
-        if use_interactive:
-            prompt = DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT
-        else:
-            prompt = DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT
-
-    log.info("stage_start", stage="brainstorm")
-    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
-
-    # Build context
-    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
-    if use_interactive:
-        log.debug("interactive_mode", mode="enabled")
-
-        session: PromptSession[str] = PromptSession(multiline=True)
-        bindings = KeyBindings()
-
-        def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
-            """Enter submits the current buffer."""
-            event.current_buffer.validate_and_handle()
-
-        bindings.add("enter")(_submit)
-
-        def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
-            """Ctrl+Enter (Ctrl+J) inserts a newline."""
-            event.current_buffer.insert_text("\n")
-
-        bindings.add("c-j")(_insert_newline)
-
-        async def _async_user_input() -> str | None:
-            """Get user input asynchronously with prompt_toolkit."""
-            console.print()
-            try:
-                loop = asyncio.get_running_loop()
-
-                def _prompt() -> str:
-                    with patch_stdout():
-                        prompt_text: str = session.prompt(
-                            HTML("<b><ansicyan>You</ansicyan></b>: "),
-                            multiline=True,
-                            key_bindings=bindings,
-                        )
-                        return prompt_text
-
-                user_input = await loop.run_in_executor(None, _prompt)
-                return user_input if user_input.strip() else None
-            except (EOFError, KeyboardInterrupt):
-                return None
-
-        def _display_assistant_message(content: str) -> None:
-            """Display assistant message with richer formatting."""
-            console.print()
-            renderable = Markdown(content)
-            panel = Panel.fit(
-                renderable,
-                title="Assistant",
-                title_align="left",
-                border_style="green",
-            )
-            console.print(panel)
-
-        context["user_input_fn"] = _async_user_input
-        context["on_assistant_message"] = _display_assistant_message
-
-        thinking_indicator = "[dim]••• thinking •••[/dim]"
-
-        def _on_llm_start(_: str) -> None:
-            console.print(thinking_indicator, end="\r")
-
-        def _on_llm_end(_: str) -> None:
-            console.print(" " * len("••• thinking •••"), end="\r")
-
-        context["on_llm_start"] = _on_llm_start
-        context["on_llm_end"] = _on_llm_end
-    else:
-        log.debug("interactive_mode", mode="disabled")
-
-    async def _run_brainstorm() -> StageResult:
-        """Run BRAINSTORM stage and close orchestrator."""
-        orchestrator = _get_orchestrator(project_path, provider_override=provider)
-        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
-        try:
-            return await orchestrator.run_stage("brainstorm", context)
-        finally:
-            await orchestrator.close()
-
-    console.print()
-
-    if use_interactive:
-        # Interactive mode: no spinner, direct output
-        console.print("[dim]Starting interactive BRAINSTORM stage...[/dim]")
-        console.print("[dim]The AI will help brainstorm story elements with you.[/dim]")
-        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
-        console.print()
-        result = asyncio.run(_run_brainstorm())
-    else:
-        # Non-interactive: use progress spinner
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task("Running BRAINSTORM stage...", total=None)
-            result = asyncio.run(_run_brainstorm())
-
-    if result.status == "failed":
-        log.error("stage_failed", stage="brainstorm", errors=result.errors)
-        console.print()
-        console.print("[red]✗[/red] BRAINSTORM stage failed")
-        for error in result.errors:
-            console.print(f"  [red]•[/red] {error}")
-        raise typer.Exit(1)
-
-    log.info(
-        "stage_complete",
-        stage="brainstorm",
-        tokens=result.tokens_used,
-        duration=result.duration_seconds,
+    _run_stage_command(
+        stage_name="brainstorm",
+        project_path=project_path,
+        prompt=prompt,
+        provider=provider,
+        interactive=interactive,
+        default_interactive_prompt=DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT,
+        default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
+        preview_fn=_preview_brainstorm_artifact,
+        next_step_hint="qf seed",
     )
-
-    # Display success
-    console.print()
-    console.print("[green]✓[/green] BRAINSTORM stage completed")
-    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
-    console.print(f"  Tokens: {result.tokens_used:,}")
-    console.print(f"  Duration: {result.duration_seconds:.1f}s")
-
-    if _log_enabled:
-        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
-
-    # Show preview of artifact
-    if result.artifact_path and result.artifact_path.exists():
-        from ruamel.yaml import YAML
-
-        yaml_reader = YAML()
-        with result.artifact_path.open() as f:
-            artifact = yaml_reader.load(f)
-
-        console.print()
-
-        entities = artifact.get("entities", [])
-        tensions = artifact.get("tensions", [])
-
-        console.print(f"  Entities: [bold]{len(entities)}[/bold]")
-
-        # Group entities by type
-        entity_types: dict[str, list[str]] = {}
-        for entity in entities:
-            etype = entity.get("type", "unknown")
-            entity_types.setdefault(etype, []).append(entity.get("id", "?"))
-
-        for etype, ids in entity_types.items():
-            ids_display = ", ".join(ids[:5])
-            if len(ids) > 5:
-                ids_display += f", +{len(ids) - 5} more"
-            console.print(f"    {etype}: {ids_display}")
-
-        console.print(f"  Tensions: [bold]{len(tensions)}[/bold]")
-        for tension in tensions[:3]:
-            console.print(f"    • {tension.get('question', '?')}")
-        if len(tensions) > 3:
-            console.print(f"    ... and {len(tensions) - 3} more")
-
-    console.print()
-    console.print("Run: [cyan]qf seed[/cyan] to triage into story structure")
 
 
 @app.command()
@@ -729,177 +749,179 @@ def seed(
     _require_project(project_path)
     _configure_project_logging(project_path)
 
-    # Get logger after logging is fully configured
-    log = get_logger(__name__)
-
-    # Determine interactive mode: explicit flag > TTY detection
-    use_interactive = interactive if interactive is not None else _is_interactive_tty()
-
-    # Handle prompt: if not provided, use appropriate default for mode
-    if prompt is None:
-        if use_interactive:
-            prompt = DEFAULT_INTERACTIVE_SEED_PROMPT
-        else:
-            prompt = DEFAULT_NONINTERACTIVE_SEED_PROMPT
-
-    log.info("stage_start", stage="seed")
-    log.debug("user_prompt", prompt=prompt[:100] + "..." if len(prompt) > 100 else prompt)
-
-    # Build context
-    context: dict[str, object] = {"user_prompt": prompt, "interactive": use_interactive}
-    if use_interactive:
-        log.debug("interactive_mode", mode="enabled")
-
-        session: PromptSession[str] = PromptSession(multiline=True)
-        bindings = KeyBindings()
-
-        def _submit(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
-            """Enter submits the current buffer."""
-            event.current_buffer.validate_and_handle()
-
-        bindings.add("enter")(_submit)
-
-        def _insert_newline(event: KeyPressEvent) -> None:  # pragma: no cover - UI behavior
-            """Ctrl+Enter (Ctrl+J) inserts a newline."""
-            event.current_buffer.insert_text("\n")
-
-        bindings.add("c-j")(_insert_newline)
-
-        async def _async_user_input() -> str | None:
-            """Get user input asynchronously with prompt_toolkit."""
-            console.print()
-            try:
-                loop = asyncio.get_running_loop()
-
-                def _prompt() -> str:
-                    with patch_stdout():
-                        prompt_text: str = session.prompt(
-                            HTML("<b><ansicyan>You</ansicyan></b>: "),
-                            multiline=True,
-                            key_bindings=bindings,
-                        )
-                        return prompt_text
-
-                user_input = await loop.run_in_executor(None, _prompt)
-                return user_input if user_input.strip() else None
-            except (EOFError, KeyboardInterrupt):
-                return None
-
-        def _display_assistant_message(content: str) -> None:
-            """Display assistant message with richer formatting."""
-            console.print()
-            renderable = Markdown(content)
-            panel = Panel.fit(
-                renderable,
-                title="Assistant",
-                title_align="left",
-                border_style="green",
-            )
-            console.print(panel)
-
-        context["user_input_fn"] = _async_user_input
-        context["on_assistant_message"] = _display_assistant_message
-
-        thinking_indicator = "[dim]••• thinking •••[/dim]"
-
-        def _on_llm_start(_: str) -> None:
-            console.print(thinking_indicator, end="\r")
-
-        def _on_llm_end(_: str) -> None:
-            console.print(" " * len("••• thinking •••"), end="\r")
-
-        context["on_llm_start"] = _on_llm_start
-        context["on_llm_end"] = _on_llm_end
-    else:
-        log.debug("interactive_mode", mode="disabled")
-
-    async def _run_seed() -> StageResult:
-        """Run SEED stage and close orchestrator."""
-        orchestrator = _get_orchestrator(project_path, provider_override=provider)
-        log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
-        try:
-            return await orchestrator.run_stage("seed", context)
-        finally:
-            await orchestrator.close()
-
-    console.print()
-
-    if use_interactive:
-        # Interactive mode: no spinner, direct output
-        console.print("[dim]Starting interactive SEED stage...[/dim]")
-        console.print("[dim]The AI will help triage brainstorm into story structure.[/dim]")
-        console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
-        console.print()
-        result = asyncio.run(_run_seed())
-    else:
-        # Non-interactive: use progress spinner
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task("Running SEED stage...", total=None)
-            result = asyncio.run(_run_seed())
-
-    if result.status == "failed":
-        log.error("stage_failed", stage="seed", errors=result.errors)
-        console.print()
-        console.print("[red]✗[/red] SEED stage failed")
-        for error in result.errors:
-            console.print(f"  [red]•[/red] {error}")
-        raise typer.Exit(1)
-
-    log.info(
-        "stage_complete",
-        stage="seed",
-        tokens=result.tokens_used,
-        duration=result.duration_seconds,
+    _run_stage_command(
+        stage_name="seed",
+        project_path=project_path,
+        prompt=prompt,
+        provider=provider,
+        interactive=interactive,
+        default_interactive_prompt=DEFAULT_INTERACTIVE_SEED_PROMPT,
+        default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_SEED_PROMPT,
+        preview_fn=_preview_seed_artifact,
     )
 
-    # Display success
+    # SEED-specific message about thread freeze
+    console.print(THREAD_FREEZE_MESSAGE)
+
+
+@app.command()
+def run(
+    to_stage: Annotated[
+        str,
+        typer.Option(
+            "--to",
+            "-t",
+            help="Run stages up to and including this stage (dream, brainstorm, seed).",
+        ),
+    ],
+    from_stage: Annotated[
+        str | None,
+        typer.Option(
+            "--from",
+            "-f",
+            help="Start from this stage (default: first incomplete stage).",
+        ),
+    ] = None,
+    prompt: Annotated[
+        str | None,
+        typer.Option(
+            "--prompt",
+            help="Initial prompt for DREAM stage (required if DREAM will run).",
+        ),
+    ] = None,
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+    ] = None,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive mode. Defaults to non-interactive for batch execution.",
+        ),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Re-run already completed stages."),
+    ] = False,
+) -> None:
+    """Run multiple pipeline stages sequentially.
+
+    Runs all stages from the starting point up to and including the
+    target stage. By default, skips already-completed stages and uses
+    non-interactive mode for batch execution.
+
+    Examples:
+        qf run --to seed --prompt "A mystery story"
+        qf run --to brainstorm --from dream --force
+        qf run --to seed --prompt "A mystery" --interactive
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    log = get_logger(__name__)
+
+    # Validate stage names
+    if to_stage not in STAGE_ORDER:
+        console.print(f"[red]Error:[/red] Unknown stage '{to_stage}'")
+        console.print(f"Valid stages: {', '.join(STAGE_ORDER)}")
+        raise typer.Exit(1)
+
+    if from_stage is not None and from_stage not in STAGE_ORDER:
+        console.print(f"[red]Error:[/red] Unknown stage '{from_stage}'")
+        console.print(f"Valid stages: {', '.join(STAGE_ORDER)}")
+        raise typer.Exit(1)
+
+    to_idx = STAGE_ORDER.index(to_stage)
+    from_idx = STAGE_ORDER.index(from_stage) if from_stage else 0
+
+    if from_idx > to_idx:
+        console.print("[red]Error:[/red] --from stage must come before --to stage")
+        raise typer.Exit(1)
+
+    # Get current pipeline status
+    orchestrator = _get_orchestrator(project_path, provider_override=provider)
+    pipeline_status = orchestrator.get_status()
+
+    # Determine which stages to run
+    stages_to_run: list[str] = []
+    for idx in range(from_idx, to_idx + 1):
+        stage_name = STAGE_ORDER[idx]
+        stage_info = pipeline_status.stages.get(stage_name)
+
+        if force or stage_info is None or stage_info.status != "completed":
+            stages_to_run.append(stage_name)
+        else:
+            log.debug("stage_skipped", stage=stage_name, reason="already completed")
+
+    if not stages_to_run:
+        console.print("[green]✓[/green] All stages already completed!")
+        console.print("Use [cyan]--force[/cyan] to re-run completed stages.")
+        return
+
+    # Check if DREAM will run and prompt is required
+    if "dream" in stages_to_run and prompt is None:
+        console.print("[red]Error:[/red] DREAM stage requires a prompt.")
+        console.print("Use [cyan]--prompt[/cyan] to provide a story idea.")
+        raise typer.Exit(1)
+
+    # Determine interactive mode: explicit flag > default to non-interactive for batch execution
+    use_interactive = interactive if interactive is not None else False
+
     console.print()
-    console.print("[green]✓[/green] SEED stage completed")
-    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
-    console.print(f"  Tokens: {result.tokens_used:,}")
-    console.print(f"  Duration: {result.duration_seconds:.1f}s")
+    console.print(f"[bold]Running stages:[/bold] {' → '.join(s.upper() for s in stages_to_run)}")
+    console.print()
 
-    if _log_enabled:
-        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
+    # Run each stage
+    for stage_name in stages_to_run:
+        default_interactive_prompt, default_noninteractive_prompt = STAGE_PROMPTS[stage_name]
 
-    # Show preview of artifact
-    if result.artifact_path and result.artifact_path.exists():
-        from ruamel.yaml import YAML
+        # Use provided prompt only for DREAM, defaults for others
+        stage_prompt = prompt if stage_name == "dream" else None
 
-        yaml_reader = YAML()
-        with result.artifact_path.open() as f:
-            artifact = yaml_reader.load(f)
+        # Determine next step hint
+        stage_idx = STAGE_ORDER.index(stage_name)
+        if stage_idx < len(STAGE_ORDER) - 1:
+            next_stage = STAGE_ORDER[stage_idx + 1]
+            next_step_hint = f"qf {next_stage}"
+        else:
+            next_step_hint = None
 
-        console.print()
+        try:
+            _run_stage_command(
+                stage_name=stage_name,
+                project_path=project_path,
+                prompt=stage_prompt,
+                provider=provider,
+                interactive=use_interactive,
+                default_interactive_prompt=default_interactive_prompt,
+                default_noninteractive_prompt=default_noninteractive_prompt,
+                preview_fn=STAGE_PREVIEW_FNS.get(stage_name),
+                next_step_hint=next_step_hint,
+            )
 
-        entities = artifact.get("entities", [])
-        threads = artifact.get("threads", [])
-        beats = artifact.get("initial_beats", [])
+            # SEED-specific message
+            if stage_name == "seed":
+                console.print(THREAD_FREEZE_MESSAGE)
 
-        # Count retained vs cut entities
-        retained = sum(1 for e in entities if e.get("disposition") == "retained")
-        cut = sum(1 for e in entities if e.get("disposition") == "cut")
-
-        console.print(f"  Entities: [bold]{retained}[/bold] retained, [dim]{cut}[/dim] cut")
-
-        console.print(f"  Threads: [bold]{len(threads)}[/bold]")
-        for thread in threads[:3]:
-            tier = thread.get("tier", "?")
-            tier_style = "bold green" if tier == "major" else "dim"
-            console.print(f"    • [{tier_style}]{tier}[/{tier_style}] {thread.get('name', '?')}")
-        if len(threads) > 3:
-            console.print(f"    ... and {len(threads) - 3} more")
-
-        console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
+        except typer.Exit as e:
+            if e.exit_code != 0:
+                console.print()
+                console.print(f"[red]Pipeline stopped at {stage_name.upper()} stage.[/red]")
+                raise
 
     console.print()
-    console.print("[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED.")
-    console.print("Run: [cyan]qf status[/cyan] to see pipeline state")
+    console.print("[green]✓[/green] [bold]Pipeline run complete![/bold]")
 
 
 @app.command()
