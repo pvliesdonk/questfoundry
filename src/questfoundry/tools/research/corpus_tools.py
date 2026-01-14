@@ -22,7 +22,7 @@ import json
 import logging
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from questfoundry.tools.base import Tool, ToolDefinition
 
@@ -84,7 +84,7 @@ def _get_corpus() -> Corpus:
     """
     # Check if this thread already has a corpus instance
     if hasattr(_thread_local, "corpus"):
-        return _thread_local.corpus
+        return cast("Corpus", _thread_local.corpus)
 
     if not _corpus_available():
         raise CorpusNotAvailableError()
