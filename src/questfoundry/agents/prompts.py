@@ -190,15 +190,22 @@ def get_seed_discuss_prompt(
     )
 
 
-def get_seed_summarize_prompt() -> str:
+def get_seed_summarize_prompt(brainstorm_context: str = "") -> str:
     """Build the SEED summarize prompt.
+
+    Args:
+        brainstorm_context: YAML representation of brainstorm entities/tensions.
+            Required for the summarizer to know what IDs to reference.
 
     Returns:
         System prompt string for the SEED summarize call.
     """
-    loader = _get_loader()
-    template = loader.load("summarize_seed")
-    return template.system
+    raw_data = _load_raw_template("summarize_seed")
+
+    # Render the system template with brainstorm context
+    system_template = raw_data.get("system", "")
+    prompt = ChatPromptTemplate.from_template(system_template)
+    return prompt.format(brainstorm_context=brainstorm_context)
 
 
 def get_brainstorm_serialize_prompt() -> str:

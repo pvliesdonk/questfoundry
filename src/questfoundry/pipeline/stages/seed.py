@@ -298,7 +298,7 @@ class SeedStage:
 
         # Phase 2: Summarize
         log.debug("seed_phase", phase="summarize")
-        summarize_prompt = get_seed_summarize_prompt()
+        summarize_prompt = get_seed_summarize_prompt(brainstorm_context=brainstorm_context)
         brief, summarize_tokens = await summarize_discussion(
             model=model,
             messages=messages,
