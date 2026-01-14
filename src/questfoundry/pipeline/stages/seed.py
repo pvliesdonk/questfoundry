@@ -19,14 +19,12 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.agents import (
     get_seed_discuss_prompt,
-    get_seed_serialize_prompt,
     get_seed_summarize_prompt,
     run_discuss_phase,
-    serialize_to_artifact,
+    serialize_seed_iteratively,
     summarize_discussion,
 )
 from questfoundry.graph import Graph
-from questfoundry.models import SeedOutput
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import get_all_research_tools
@@ -308,17 +306,15 @@ class SeedStage:
         total_llm_calls += 1
         total_tokens += summarize_tokens
 
-        # Phase 3: Serialize
+        # Phase 3: Serialize (iteratively to avoid output truncation)
         log.debug("seed_phase", phase="serialize")
-        serialize_prompt = get_seed_serialize_prompt()
-        artifact, serialize_tokens = await serialize_to_artifact(
+        artifact, serialize_tokens = await serialize_seed_iteratively(
             model=model,
             brief=brief,
-            schema=SeedOutput,
             provider_name=provider_name,
-            system_prompt=serialize_prompt,
         )
-        total_llm_calls += 1
+        # Iterative serialization makes 6 calls (one per section)
+        total_llm_calls += 6
         total_tokens += serialize_tokens
 
         # Convert to dict for return

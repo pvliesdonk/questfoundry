@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
@@ -286,3 +286,152 @@ def _build_error_feedback(errors: list[str]) -> str:
         "Please fix these issues and try again. "
         "Ensure all required fields are present and have valid values."
     )
+
+
+# Section-specific prompts for iterative SEED serialization
+# Loaded from prompts/templates/serialize_seed_sections.yaml
+_SEED_SECTION_PROMPTS: dict[str, str] | None = None
+
+
+def _load_seed_section_prompts() -> dict[str, str]:
+    """Load section-specific prompts for SEED serialization.
+
+    Returns:
+        Dict mapping section names to their prompts.
+    """
+    global _SEED_SECTION_PROMPTS
+    if _SEED_SECTION_PROMPTS is not None:
+        return _SEED_SECTION_PROMPTS
+
+    from pathlib import Path
+
+    from ruamel.yaml import YAML
+
+    # Find prompts directory (same logic as agents/prompts.py)
+    pkg_path = Path(__file__).parent.parent.parent.parent / "prompts"
+    if not pkg_path.exists():
+        pkg_path = Path.cwd() / "prompts"
+
+    yaml_path = pkg_path / "templates" / "serialize_seed_sections.yaml"
+    yaml = YAML()
+    with yaml_path.open("r", encoding="utf-8") as f:
+        data = yaml.load(f)
+
+    _SEED_SECTION_PROMPTS = {
+        "entities": data.get("entities_prompt", ""),
+        "tensions": data.get("tensions_prompt", ""),
+        "threads": data.get("threads_prompt", ""),
+        "consequences": data.get("consequences_prompt", ""),
+        "beats": data.get("beats_prompt", ""),
+        "convergence": data.get("convergence_prompt", ""),
+    }
+    return _SEED_SECTION_PROMPTS
+
+
+@traceable(
+    name="Serialize SEED Iteratively", run_type="chain", tags=["phase:serialize", "stage:seed"]
+)
+async def serialize_seed_iteratively(
+    model: BaseChatModel,
+    brief: str,
+    provider_name: str | None = None,
+    max_retries: int = 3,
+) -> tuple[Any, int]:
+    """Serialize SEED brief in sections to avoid output truncation.
+
+    Instead of serializing the entire SeedOutput at once (which can cause
+    truncation with complex schemas on smaller models), this function
+    serializes each section independently and merges the results.
+
+    Sections are serialized in order:
+    1. entities (EntityDecision list)
+    2. tensions (TensionDecision list)
+    3. threads (Thread list)
+    4. consequences (Consequence list)
+    5. initial_beats (InitialBeat list)
+    6. convergence_sketch (ConvergenceSketch)
+
+    Args:
+        model: Chat model to use for generation.
+        brief: The summary brief from the Summarize phase.
+        provider_name: Provider name for strategy auto-detection.
+        max_retries: Maximum retries per section.
+
+    Returns:
+        Tuple of (SeedOutput, total_tokens_used).
+
+    Raises:
+        SerializationError: If any section fails validation after retries.
+    """
+    from questfoundry.models.seed import (
+        BeatsSection,
+        ConsequencesSection,
+        ConvergenceSection,
+        EntitiesSection,
+        SeedOutput,
+        TensionsSection,
+        ThreadsSection,
+    )
+
+    log.info("serialize_seed_iteratively_started")
+
+    prompts = _load_seed_section_prompts()
+    total_tokens = 0
+
+    # Section configuration: (section_name, schema, output_field)
+    sections: list[tuple[str, type[BaseModel], str]] = [
+        ("entities", EntitiesSection, "entities"),
+        ("tensions", TensionsSection, "tensions"),
+        ("threads", ThreadsSection, "threads"),
+        ("consequences", ConsequencesSection, "consequences"),
+        ("beats", BeatsSection, "initial_beats"),
+        ("convergence", ConvergenceSection, "convergence_sketch"),
+    ]
+
+    collected: dict[str, Any] = {}
+
+    for section_name, schema, output_field in sections:
+        log.debug("serialize_section_started", section=section_name)
+
+        section_prompt = prompts.get(section_name, "")
+        section_result, section_tokens = await serialize_to_artifact(
+            model=model,
+            brief=brief,
+            schema=schema,
+            provider_name=provider_name,
+            max_retries=max_retries,
+            system_prompt=section_prompt,
+        )
+        total_tokens += section_tokens
+
+        # Extract the field value from the section wrapper
+        section_data = section_result.model_dump()
+        if output_field in section_data:
+            collected[output_field] = section_data[output_field]
+        else:
+            # Fallback: use the first field in the schema
+            for _key, value in section_data.items():
+                collected[output_field] = value
+                break
+
+        log.debug(
+            "serialize_section_completed",
+            section=section_name,
+            items=len(collected[output_field]) if isinstance(collected[output_field], list) else 1,
+            tokens=section_tokens,
+        )
+
+    # Merge all sections into SeedOutput
+    seed_output = SeedOutput.model_validate(collected)
+
+    log.info(
+        "serialize_seed_iteratively_completed",
+        entities=len(seed_output.entities),
+        tensions=len(seed_output.tensions),
+        threads=len(seed_output.threads),
+        consequences=len(seed_output.consequences),
+        beats=len(seed_output.initial_beats),
+        tokens=total_tokens,
+    )
+
+    return seed_output, total_tokens

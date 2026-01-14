@@ -1,0 +1,184 @@
+name: serialize_seed_sections
+description: Section-specific prompts for iterative SEED serialization
+
+# Common preamble injected into all section prompts
+common_context: |
+  You are extracting ONE SECTION from a SEED stage brief into structured JSON.
+  Focus ONLY on the section requested. Extract ALL items for that section.
+  Use snake_case for all IDs. Do not invent details not in the brief.
+
+# Section 1: Entity Decisions
+entities_prompt: |
+  You are extracting ENTITY DECISIONS from a SEED stage brief.
+
+  ## Schema
+  Return a JSON object with an "entities" array. Each item is an EntityDecision:
+  ```json
+  {
+    "entities": [
+      {
+        "entity_id": "entity_id_from_brainstorm",
+        "disposition": "retained" or "cut"
+      }
+    ]
+  }
+  ```
+
+  ## Rules
+  - disposition must be exactly "retained" or "cut" (lowercase)
+  - entity_id must match the ID shown in the brief
+  - Include ALL entities mentioned in the Entity Decisions section
+  - Do NOT include entities not listed in Entity Decisions
+
+  ## Output
+  Return ONLY valid JSON with the "entities" array.
+
+# Section 2: Tension Decisions
+tensions_prompt: |
+  You are extracting TENSION DECISIONS from a SEED stage brief.
+
+  ## Schema
+  Return a JSON object with a "tensions" array. Each item is a TensionDecision:
+  ```json
+  {
+    "tensions": [
+      {
+        "tension_id": "tension_id_from_brainstorm",
+        "explored": ["alt_id_1", "alt_id_2"],
+        "implicit": ["alt_id_3"]
+      }
+    ]
+  }
+  ```
+
+  ## Rules
+  - tension_id must match the ID shown in the brief
+  - explored: Alternative IDs that become threads (MUST include the default path)
+  - implicit: Alternative IDs NOT explored (become shadows)
+  - Include ALL tensions mentioned in the Tension Decisions section
+
+  ## Output
+  Return ONLY valid JSON with the "tensions" array.
+
+# Section 3: Threads
+threads_prompt: |
+  You are extracting THREADS from a SEED stage brief.
+
+  ## Schema
+  Return a JSON object with a "threads" array. Each item is a Thread:
+  ```json
+  {
+    "threads": [
+      {
+        "thread_id": "unique_thread_id",
+        "name": "Human Readable Thread Name",
+        "tension_id": "which_tension",
+        "alternative_id": "which_alternative_this_explores",
+        "unexplored_alternative_ids": ["unexplored_alt_ids"],
+        "thread_importance": "major" or "minor",
+        "description": "What this thread is about",
+        "consequence_ids": ["consequence_id_1"]
+      }
+    ]
+  }
+  ```
+
+  ## Rules
+  - thread_importance must be exactly "major" or "minor" (lowercase)
+  - unexplored_alternative_ids: IDs of alternatives NOT explored (implicit ones)
+  - consequence_ids: References to consequences for this thread
+  - Include ALL threads mentioned in the Threads section
+
+  ## Output
+  Return ONLY valid JSON with the "threads" array.
+
+# Section 4: Consequences
+consequences_prompt: |
+  You are extracting CONSEQUENCES from a SEED stage brief.
+
+  ## Schema
+  Return a JSON object with a "consequences" array. Each item is a Consequence:
+  ```json
+  {
+    "consequences": [
+      {
+        "consequence_id": "unique_consequence_id",
+        "thread_id": "which_thread_this_belongs_to",
+        "description": "What happens narratively",
+        "narrative_effects": ["story effect 1", "story effect 2"]
+      }
+    ]
+  }
+  ```
+
+  ## Rules
+  - consequence_id must be unique
+  - thread_id must reference a valid thread
+  - narrative_effects: Array of story effects this consequence implies
+  - Include ALL consequences mentioned in the Consequences section
+
+  ## Output
+  Return ONLY valid JSON with the "consequences" array.
+
+# Section 5: Initial Beats
+beats_prompt: |
+  You are extracting INITIAL BEATS from a SEED stage brief.
+
+  ## Schema
+  Return a JSON object with an "initial_beats" array. Each item is an InitialBeat:
+  ```json
+  {
+    "initial_beats": [
+      {
+        "beat_id": "unique_beat_id",
+        "summary": "What happens in this beat",
+        "threads": ["thread_id_1", "thread_id_2"],
+        "tension_impacts": [
+          {
+            "tension_id": "which_tension",
+            "effect": "advances",
+            "note": "Explanation of the impact"
+          }
+        ],
+        "entities": ["entity_id_1", "entity_id_2"],
+        "location": "location_entity_id",
+        "location_alternatives": ["other_location_id"]
+      }
+    ]
+  }
+  ```
+
+  ## Rules
+  - effect must be exactly "advances", "reveals", "commits", or "complicates"
+  - threads: Array of thread IDs this beat serves
+  - location: Primary location entity ID (can be null)
+  - location_alternatives: Other valid locations (can be empty array)
+  - Include ALL initial beats mentioned in the Initial Beats section
+
+  ## Output
+  Return ONLY valid JSON with the "initial_beats" array.
+
+# Section 6: Convergence Sketch
+convergence_prompt: |
+  You are extracting the CONVERGENCE SKETCH from a SEED stage brief.
+
+  ## Schema
+  Return a JSON object with a "convergence_sketch" object:
+  ```json
+  {
+    "convergence_sketch": {
+      "convergence_points": ["where threads should merge"],
+      "residue_notes": ["differences that persist after convergence"]
+    }
+  }
+  ```
+
+  ## Rules
+  - convergence_points: Where threads should merge (e.g., "by act 2 climax")
+  - residue_notes: What differences persist after convergence
+  - Both can be empty arrays if not specified in brief
+
+  ## Output
+  Return ONLY valid JSON with the "convergence_sketch" object.
+
+components: []

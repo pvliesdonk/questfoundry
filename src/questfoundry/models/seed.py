@@ -248,3 +248,61 @@ class SeedOutput(BaseModel):
         default_factory=ConvergenceSketch,
         description="Guidance for GROW about thread convergence",
     )
+
+
+# Section wrapper models for iterative serialization
+# These allow serializing SEED output in chunks to avoid output truncation
+
+
+class EntitiesSection(BaseModel):
+    """Wrapper for serializing entity decisions separately."""
+
+    entities: list[EntityDecision] = Field(
+        default_factory=list,
+        description="Entity curation decisions",
+    )
+
+
+class TensionsSection(BaseModel):
+    """Wrapper for serializing tension decisions separately."""
+
+    tensions: list[TensionDecision] = Field(
+        default_factory=list,
+        description="Tension exploration decisions",
+    )
+
+
+class ThreadsSection(BaseModel):
+    """Wrapper for serializing threads separately."""
+
+    threads: list[Thread] = Field(
+        default_factory=list,
+        description="Created plot threads",
+    )
+
+
+class ConsequencesSection(BaseModel):
+    """Wrapper for serializing consequences separately."""
+
+    consequences: list[Consequence] = Field(
+        default_factory=list,
+        description="Narrative consequences for threads",
+    )
+
+
+class BeatsSection(BaseModel):
+    """Wrapper for serializing initial beats separately."""
+
+    initial_beats: list[InitialBeat] = Field(
+        default_factory=list,
+        description="Initial beats for each thread",
+    )
+
+
+class ConvergenceSection(BaseModel):
+    """Wrapper for serializing convergence sketch separately."""
+
+    convergence_sketch: ConvergenceSketch = Field(
+        default_factory=ConvergenceSketch,
+        description="Guidance for GROW about thread convergence",
+    )

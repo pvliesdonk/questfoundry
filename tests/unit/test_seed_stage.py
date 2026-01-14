@@ -83,7 +83,7 @@ async def test_execute_calls_all_three_phases() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -132,7 +132,7 @@ async def test_execute_calls_all_three_phases() -> None:
         assert len(artifact["entities"]) == 1
         assert len(artifact["threads"]) == 1
         assert len(artifact["initial_beats"]) == 1
-        assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
+        assert llm_calls == 9  # 2 discuss + 1 summarize + 6 serialize (iterative)
         assert tokens == 800  # 500 + 100 + 200
 
 
@@ -154,7 +154,7 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_discuss_prompt") as mock_prompt,
     ):
@@ -181,8 +181,8 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_passes_seed_output_schema() -> None:
-    """Execute passes SeedOutput schema to serialize."""
+async def test_execute_uses_iterative_serialization() -> None:
+    """Execute uses iterative serialization for SEED output."""
     stage = SeedStage()
 
     mock_model = MagicMock()
@@ -196,7 +196,7 @@ async def test_execute_passes_seed_output_schema() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -212,7 +212,9 @@ async def test_execute_passes_seed_output_schema() -> None:
             project_path=Path("/test/project"),
         )
 
-        assert mock_serialize.call_args.kwargs["schema"] is SeedOutput
+        # Verify iterative serialization is used with the brief
+        mock_serialize.assert_called_once()
+        assert mock_serialize.call_args.kwargs["brief"] == "Brief"
 
 
 @pytest.mark.asyncio
@@ -231,7 +233,7 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_summarize_prompt") as mock_prompt,
     ):
@@ -270,7 +272,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
