@@ -185,7 +185,7 @@ consequences:
       - "Mentor's knowledge becomes available resource"
 ```
 
-LLM also generates 3-5 initial beats per thread:
+LLM also generates 2-4 initial beats per thread:
 
 ```yaml
 initial_beats:
@@ -694,7 +694,7 @@ Before SEED is complete, verify:
 - [ ] All tensions have exploration decisions
 - [ ] All explored alternatives have thread definitions
 - [ ] All threads have consequences with ripples
-- [ ] All threads have initial beats (3-5 each)
+- [ ] All threads have initial beats (2-4 each)
 - [ ] Convergence sketch exists
 - [ ] Viability analysis reviewed
 - [ ] No orphan references

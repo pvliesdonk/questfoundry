@@ -54,7 +54,7 @@ system: |
   }
   ```
 
-  ### 5. initial_beats (Opening Beats - 2-4 per thread)
+  ### 5. initial_beats (Initial Beats - 2-4 per thread)
   Create 2-4 InitialBeat objects PER THREAD. With 3 threads, expect 6-12 beats total.
   ```json
   {

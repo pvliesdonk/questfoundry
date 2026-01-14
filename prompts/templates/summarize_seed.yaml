@@ -41,7 +41,7 @@ system: |
   - ripples: story effects this implies
 
   ### Initial Beats (2-4 per thread)
-  Create 2-4 opening beats PER THREAD (not 1 per thread total).
+  Create 2-4 initial beats PER THREAD (not just 1 total).
   With 3 threads, expect 6-12 beats. Each thread needs multiple entry points.
 
   For each opening beat:
