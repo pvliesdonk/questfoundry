@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from questfoundry.graph import Graph, MutationError
+from questfoundry.graph import Graph, MutationError, SeedMutationError
 from questfoundry.graph.mutations import (
     apply_brainstorm_mutations,
     apply_dream_mutations,
@@ -67,13 +67,16 @@ class TestApplyMutations:
     def test_routes_to_seed(self) -> None:
         """Routes seed stage to apply_seed_mutations."""
         graph = Graph.empty()
-        # Pre-populate with entity from brainstorm (using prefixed ID)
-        graph.add_node("entity::char_001", {"type": "entity", "disposition": "proposed"})
+        # Pre-populate with entity from brainstorm (using prefixed ID + raw_id for validation)
+        graph.add_node(
+            "entity::char_001",
+            {"type": "entity", "raw_id": "char_001", "disposition": "proposed"},
+        )
 
         output = {
             "entities": [{"entity_id": "char_001", "disposition": "retained"}],
             "threads": [],
-            "beats": [],
+            "initial_beats": [],
         }
 
         apply_mutations(graph, "seed", output)
@@ -360,10 +363,19 @@ class TestSeedMutations:
     def test_updates_entity_dispositions(self) -> None:
         """Updates entity dispositions from seed output."""
         graph = Graph.empty()
-        # Pre-populate entities from brainstorm (using prefixed IDs)
-        graph.add_node("entity::kay", {"type": "entity", "disposition": "proposed"})
-        graph.add_node("entity::mentor", {"type": "entity", "disposition": "proposed"})
-        graph.add_node("entity::extra", {"type": "entity", "disposition": "proposed"})
+        # Pre-populate entities from brainstorm (with raw_id for validation)
+        graph.add_node(
+            "entity::kay",
+            {"type": "entity", "raw_id": "kay", "disposition": "proposed"},
+        )
+        graph.add_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "disposition": "proposed"},
+        )
+        graph.add_node(
+            "entity::extra",
+            {"type": "entity", "raw_id": "extra", "disposition": "proposed"},
+        )
 
         output = {
             "entities": [
@@ -384,8 +396,19 @@ class TestSeedMutations:
     def test_creates_threads(self) -> None:
         """Creates thread nodes from seed output."""
         graph = Graph.empty()
-        # Pre-populate alternative from brainstorm (with full prefixed ID)
-        graph.add_node("tension::mentor_trust::alt::protector", {"type": "alternative"})
+        # Pre-populate tension and alternative from brainstorm (with raw_id for validation)
+        graph.add_node(
+            "tension::mentor_trust",
+            {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
+        )
+        graph.add_node(
+            "tension::mentor_trust::alt::protector",
+            {"type": "alternative", "raw_id": "protector", "description": "Mentor protects"},
+        )
+        # Link tension to alternative (add_edge takes edge_type, from_id, to_id)
+        graph.add_edge(
+            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::protector"
+        )
 
         output = {
             "entities": [],
@@ -419,12 +442,43 @@ class TestSeedMutations:
     def test_creates_beats(self) -> None:
         """Creates beat nodes from seed output."""
         graph = Graph.empty()
-        # Pre-populate thread (with prefixed ID)
-        graph.add_node("thread::thread_mentor_trust", {"type": "thread"})
+        # Pre-populate entities from brainstorm (with raw_id for validation)
+        graph.add_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Young archivist"}
+        )
+        graph.add_node(
+            "entity::mentor", {"type": "entity", "raw_id": "mentor", "concept": "Senior archivist"}
+        )
+        graph.add_node(
+            "entity::archive",
+            {"type": "entity", "raw_id": "archive", "concept": "Ancient repository"},
+        )
+        # Pre-populate tension and alternative from brainstorm (for thread validation)
+        graph.add_node(
+            "tension::mentor_trust",
+            {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
+        )
+        graph.add_node(
+            "tension::mentor_trust::alt::protector",
+            {"type": "alternative", "raw_id": "protector", "description": "Mentor protects"},
+        )
+        # Link tension to alternative (add_edge takes edge_type, from_id, to_id)
+        graph.add_edge(
+            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::protector"
+        )
 
         output = {
             "entities": [],
-            "threads": [],
+            # Thread must be in SEED output for beat thread references to validate
+            "threads": [
+                {
+                    "thread_id": "thread_mentor_trust",
+                    "name": "Mentor Trust Arc",
+                    "tension_id": "mentor_trust",
+                    "alternative_id": "protector",
+                    "description": "The mentor trust thread",
+                }
+            ],
             "initial_beats": [
                 {
                     "beat_id": "opening_001",
@@ -456,26 +510,33 @@ class TestSeedMutations:
         assert len(edges) == 1
         assert edges[0]["to"] == "thread::thread_mentor_trust"
 
-    def test_skips_missing_entities(self) -> None:
-        """Skips entity updates for entities not in graph."""
+    def test_validates_missing_entities(self) -> None:
+        """Raises SeedMutationError when referencing non-existent entities."""
         graph = Graph.empty()
-        # Only kay exists (with prefixed ID)
-        graph.add_node("entity::kay", {"type": "entity", "disposition": "proposed"})
+        # Only kay exists (with prefixed ID and raw_id for validation)
+        graph.add_node(
+            "entity::kay",
+            {"type": "entity", "raw_id": "kay", "disposition": "proposed"},
+        )
 
         output = {
             "entities": [
-                {"entity_id": "kay", "disposition": "retained"},  # Raw ID from LLM
+                {"entity_id": "kay", "disposition": "retained"},  # Valid
                 {"entity_id": "missing", "disposition": "retained"},  # Doesn't exist
             ],
             "threads": [],
             "initial_beats": [],
         }
 
-        # Should not raise, just skip missing
-        apply_seed_mutations(graph, output)
+        # Should raise SeedMutationError with validation feedback
+        with pytest.raises(SeedMutationError) as exc_info:
+            apply_seed_mutations(graph, output)
 
-        assert graph.get_node("entity::kay")["disposition"] == "retained"
-        assert not graph.has_node("entity::missing")
+        # Verify error contains helpful feedback
+        assert len(exc_info.value.errors) == 1
+        error = exc_info.value.errors[0]
+        assert "missing" in error.provided
+        assert "kay" in error.available  # Shows valid options
 
     def test_handles_empty_seed(self) -> None:
         """Handles empty seed output."""
