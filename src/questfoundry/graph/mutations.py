@@ -157,16 +157,16 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         output: BRAINSTORM stage output (entities, tensions).
 
     Raises:
-        MutationError: If entities or tensions are missing required 'id' fields.
+        MutationError: If entities or tensions are missing required id fields.
     """
     # Add entities
     for i, entity in enumerate(output.get("entities", [])):
-        raw_id = _require_field(entity, "id", f"Entity at index {i}")
+        raw_id = _require_field(entity, "entity_id", f"Entity at index {i}")
         entity_id = _prefix_id("entity", raw_id)
         node_data = {
             "type": "entity",
             "raw_id": raw_id,  # Store original ID for reference
-            "entity_type": entity.get("type"),  # character, location, object, faction
+            "entity_type": entity.get("entity_category"),  # character, location, object, faction
             "concept": entity.get("concept"),
             "notes": entity.get("notes"),
             "disposition": "proposed",  # All entities start as proposed
@@ -177,19 +177,19 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     # Add tensions with alternatives
     for i, tension in enumerate(output.get("tensions", [])):
-        raw_id = _require_field(tension, "id", f"Tension at index {i}")
+        raw_id = _require_field(tension, "tension_id", f"Tension at index {i}")
         tension_id = _prefix_id("tension", raw_id)
 
-        # Prefix entity references in involves list
-        raw_involves = tension.get("involves", [])
-        prefixed_involves = [_prefix_id("entity", eid) for eid in raw_involves]
+        # Prefix entity references in central_entity_ids list
+        raw_central_entities = tension.get("central_entity_ids", [])
+        prefixed_central_entities = [_prefix_id("entity", eid) for eid in raw_central_entities]
 
         # Create tension node
         tension_data = {
             "type": "tension",
             "raw_id": raw_id,  # Store original ID for reference
             "question": tension.get("question"),
-            "involves": prefixed_involves,
+            "central_entity_ids": prefixed_central_entities,
             "why_it_matters": tension.get("why_it_matters"),
         }
         tension_data = _clean_dict(tension_data)
@@ -198,7 +198,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Create alternative nodes and edges
         for j, alt in enumerate(tension.get("alternatives", [])):
             alt_local_id = _require_field(
-                alt, "id", f"Alternative at index {j} in tension '{raw_id}'"
+                alt, "alternative_id", f"Alternative at index {j} in tension '{raw_id}'"
             )
             # Alternative ID format: tension::tension_raw_id::alt::alt_local_id
             alt_id = f"{tension_id}::alt::{alt_local_id}"
@@ -206,7 +206,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "type": "alternative",
                 "raw_id": alt_local_id,
                 "description": alt.get("description"),
-                "canonical": alt.get("canonical", False),
+                "is_default_path": alt.get("is_default_path", False),
             }
             alt_data = _clean_dict(alt_data)
             graph.add_node(alt_id, alt_data)
@@ -231,11 +231,11 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         output: SEED stage output (SeedOutput fields).
 
     Raises:
-        MutationError: If required 'id' fields are missing.
+        MutationError: If required id fields are missing.
     """
     # Update entity dispositions
     for i, entity_decision in enumerate(output.get("entities", [])):
-        raw_id = _require_field(entity_decision, "id", f"Entity decision at index {i}")
+        raw_id = _require_field(entity_decision, "entity_id", f"Entity decision at index {i}")
         entity_id = _prefix_id("entity", raw_id)
         if graph.has_node(entity_id):
             graph.update_node(
@@ -258,21 +258,21 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     # Create threads from explored tensions (must be created before consequences)
     for i, thread in enumerate(output.get("threads", [])):
-        raw_id = _require_field(thread, "id", f"Thread at index {i}")
+        raw_id = _require_field(thread, "thread_id", f"Thread at index {i}")
         thread_id = _prefix_id("thread", raw_id)
 
         # Store prefixed tension reference
         raw_tension_id = thread.get("tension_id")
         prefixed_tension_id = _prefix_id("tension", raw_tension_id) if raw_tension_id else None
 
-        # Prefix shadows (unexplored alternatives from the same tension)
-        raw_shadows = thread.get("shadows", [])
-        prefixed_shadows = []
+        # Prefix unexplored alternatives from the same tension
+        raw_unexplored = thread.get("unexplored_alternative_ids", [])
+        prefixed_unexplored = []
         if prefixed_tension_id:
-            for shadow_alt_id in raw_shadows:
+            for unexplored_alt_id in raw_unexplored:
                 # Format: tension::tension_id::alt::alt_id
-                full_shadow_id = f"{prefixed_tension_id}::alt::{shadow_alt_id}"
-                prefixed_shadows.append(full_shadow_id)
+                full_unexplored_id = f"{prefixed_tension_id}::alt::{unexplored_alt_id}"
+                prefixed_unexplored.append(full_unexplored_id)
 
         thread_data = {
             "type": "thread",
@@ -280,10 +280,10 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "name": thread.get("name"),
             "tension_id": prefixed_tension_id,
             "alternative_id": thread.get("alternative_id"),  # Local alt ID, not prefixed
-            "shadows": prefixed_shadows,
-            "tier": thread.get("tier"),
+            "unexplored_alternative_ids": prefixed_unexplored,
+            "thread_importance": thread.get("thread_importance"),
             "description": thread.get("description"),
-            "consequences": thread.get("consequences", []),
+            "consequence_ids": thread.get("consequence_ids", []),
         }
         thread_data = _clean_dict(thread_data)
         graph.add_node(thread_id, thread_data)
@@ -297,7 +297,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     # Create consequences (after threads so edges can be created)
     for i, consequence in enumerate(output.get("consequences", [])):
-        raw_id = _require_field(consequence, "id", f"Consequence at index {i}")
+        raw_id = _require_field(consequence, "consequence_id", f"Consequence at index {i}")
         consequence_id = _prefix_id("consequence", raw_id)
 
         # Prefix thread reference
@@ -309,7 +309,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "raw_id": raw_id,
             "thread_id": prefixed_thread_id,
             "description": consequence.get("description"),
-            "ripples": consequence.get("ripples", []),
+            "narrative_effects": consequence.get("narrative_effects", []),
         }
         consequence_data = _clean_dict(consequence_data)
         graph.add_node(consequence_id, consequence_data)
@@ -320,7 +320,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     # Create initial beats
     for i, beat in enumerate(output.get("initial_beats", [])):
-        raw_id = _require_field(beat, "id", f"Beat at index {i}")
+        raw_id = _require_field(beat, "beat_id", f"Beat at index {i}")
         beat_id = _prefix_id("beat", raw_id)
 
         # Prefix entity references
