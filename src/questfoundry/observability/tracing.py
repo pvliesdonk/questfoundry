@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, Literal, ParamSpec, TypeVar
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
 
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.runnables import RunnableConfig
 
 # Type for run_type parameter
@@ -254,18 +255,20 @@ def build_runnable_config(
     run_name: str | None = None,
     tags: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
+    callbacks: list[BaseCallbackHandler] | None = None,
     recursion_limit: int | None = None,
 ) -> RunnableConfig:
     """Build a RunnableConfig dict for LangChain model invocations.
 
     Automatically includes the pipeline run ID in metadata if set.
     This config can be passed to model.ainvoke() to propagate tracing
-    metadata to child LLM calls.
+    metadata and callbacks to child LLM calls.
 
     Args:
         run_name: Name for this specific invocation (not inherited by sub-calls).
         tags: Tags that are inherited by all sub-calls.
         metadata: Metadata inherited by all sub-calls.
+        callbacks: LangChain callback handlers passed to all sub-calls.
         recursion_limit: Maximum recursion depth for agents.
 
     Returns:
@@ -276,6 +279,7 @@ def build_runnable_config(
             run_name="Discuss Phase",
             tags=["dream", "discuss"],
             metadata={"stage": "dream", "phase": "discuss"},
+            callbacks=logging_callbacks,
         )
         result = await agent.ainvoke({"messages": msgs}, config=config)
     """
@@ -293,6 +297,10 @@ def build_runnable_config(
     meta = _prepare_metadata(metadata)
     if meta:
         config["metadata"] = meta
+
+    # Pass callbacks through to all sub-calls
+    if callbacks:
+        config["callbacks"] = callbacks
 
     if recursion_limit is not None:
         config["recursion_limit"] = recursion_limit
