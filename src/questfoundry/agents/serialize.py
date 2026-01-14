@@ -23,6 +23,7 @@ from questfoundry.providers.structured_output import (
 )
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
 log = get_logger(__name__)
@@ -53,6 +54,7 @@ async def serialize_to_artifact(
     strategy: StructuredOutputStrategy | None = None,
     max_retries: int = 3,
     system_prompt: str | None = None,
+    callbacks: list[BaseCallbackHandler] | None = None,
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -68,6 +70,7 @@ async def serialize_to_artifact(
         strategy: Output strategy (auto-selected if None).
         max_retries: Maximum total attempts (default 3).
         system_prompt: Stage-specific serialize prompt. If None, uses generic prompt.
+        callbacks: LangChain callback handlers for logging LLM calls.
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -125,6 +128,7 @@ async def serialize_to_artifact(
                         "phase": "serialize",
                         "attempt": attempt,
                     },
+                    callbacks=callbacks,
                 )
 
                 # Invoke structured output
@@ -355,6 +359,7 @@ async def serialize_seed_iteratively(
     brief: str,
     provider_name: str | None = None,
     max_retries: int = 3,
+    callbacks: list[BaseCallbackHandler] | None = None,
 ) -> tuple[Any, int]:
     """Serialize SEED brief in sections to avoid output truncation.
 
@@ -375,6 +380,7 @@ async def serialize_seed_iteratively(
         brief: The summary brief from the Summarize phase.
         provider_name: Provider name for strategy auto-detection.
         max_retries: Maximum retries per section.
+        callbacks: LangChain callback handlers for logging LLM calls.
 
     Returns:
         Tuple of (SeedOutput, total_tokens_used).
@@ -420,6 +426,7 @@ async def serialize_seed_iteratively(
             provider_name=provider_name,
             max_retries=max_retries,
             system_prompt=section_prompt,
+            callbacks=callbacks,
         )
         total_tokens += section_tokens
 
