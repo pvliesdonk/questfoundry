@@ -72,9 +72,9 @@ def _format_alternative(alt: dict[str, Any]) -> str:
     Uses raw_id for display (what the LLM should reference).
     """
     # Use raw_id for display
-    display_id = alt.get("raw_id", alt.get("id", "unknown"))
-    canonical = " (canonical)" if alt.get("canonical") else ""
-    return f"  - {display_id}: {alt.get('description', '')}{canonical}"
+    display_id = alt.get("raw_id", "unknown")
+    default_marker = " (default path)" if alt.get("is_default_path") else ""
+    return f"  - {display_id}: {alt.get('description', '')}{default_marker}"
 
 
 def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph) -> str:
@@ -85,25 +85,23 @@ def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph)
     # Use raw_id for display
     display_id = tension_data.get("raw_id", tension_id)
     question = tension_data.get("question", "")
-    involves = tension_data.get("involves", [])
+    central_entities = tension_data.get("central_entity_ids", [])
     why_it_matters = tension_data.get("why_it_matters", "")
 
-    # Format involves list - extract raw IDs from prefixed references
-    involves_display = []
-    for ref in involves:
+    # Format central entities list - extract raw IDs from prefixed references
+    entities_display = []
+    for ref in central_entities:
         # References are prefixed like "entity::raw_id", extract raw_id part
         if ref.startswith("entity::"):
-            involves_display.append(ref[8:])  # Skip "entity::" prefix
+            entities_display.append(ref[8:])  # Skip "entity::" prefix
         elif "::" in ref:
             # Fallback for other prefixed formats
-            involves_display.append(ref.split("::")[-1])
+            entities_display.append(ref.split("::")[-1])
         else:
-            involves_display.append(ref)
+            entities_display.append(ref)
 
     result = f"- **{display_id}**: {question}\n"
-    result += (
-        f"  Involves: {', '.join(involves_display) if involves_display else 'none specified'}\n"
-    )
+    result += f"  Central entities: {', '.join(entities_display) if entities_display else 'none specified'}\n"
     result += f"  Stakes: {why_it_matters}\n"
     result += "  Alternatives:\n"
 
