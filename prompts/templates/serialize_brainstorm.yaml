@@ -30,7 +30,7 @@ system: |
     - `id`: Short identifier
     - `description`: Full description
     - `canonical`: true for ONE alternative (the default path), false for the other
-  - `involves`: List of entity IDs related to this tension
+  - `involves`: List of entity IDs related to this tension (use the same IDs you assigned to entities above)
   - `why_it_matters`: Thematic stakes
 
   ## Guidelines

@@ -92,7 +92,10 @@ def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph)
     involves_display = []
     for ref in involves:
         # References are prefixed like "entity::raw_id", extract raw_id part
-        if "::" in ref:
+        if ref.startswith("entity::"):
+            involves_display.append(ref[8:])  # Skip "entity::" prefix
+        elif "::" in ref:
+            # Fallback for other prefixed formats
             involves_display.append(ref.split("::")[-1])
         else:
             involves_display.append(ref)

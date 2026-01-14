@@ -265,13 +265,22 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_tension_id = thread.get("tension_id")
         prefixed_tension_id = _prefix_id("tension", raw_tension_id) if raw_tension_id else None
 
+        # Prefix shadows (unexplored alternatives from the same tension)
+        raw_shadows = thread.get("shadows", [])
+        prefixed_shadows = []
+        if prefixed_tension_id:
+            for shadow_alt_id in raw_shadows:
+                # Format: tension::tension_id::alt::alt_id
+                full_shadow_id = f"{prefixed_tension_id}::alt::{shadow_alt_id}"
+                prefixed_shadows.append(full_shadow_id)
+
         thread_data = {
             "type": "thread",
             "raw_id": raw_id,
             "name": thread.get("name"),
             "tension_id": prefixed_tension_id,
             "alternative_id": thread.get("alternative_id"),  # Local alt ID, not prefixed
-            "shadows": thread.get("shadows", []),
+            "shadows": prefixed_shadows,
             "tier": thread.get("tier"),
             "description": thread.get("description"),
             "consequences": thread.get("consequences", []),
@@ -322,14 +331,27 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_location = beat.get("location")
         prefixed_location = _prefix_id("entity", raw_location) if raw_location else None
 
+        # Prefix location_alternatives (also entity IDs)
+        raw_location_alts = beat.get("location_alternatives", [])
+        prefixed_location_alts = [_prefix_id("entity", eid) for eid in raw_location_alts]
+
+        # Prefix tension_id in tension_impacts
+        raw_impacts = beat.get("tension_impacts", [])
+        prefixed_impacts = []
+        for impact in raw_impacts:
+            prefixed_impact = dict(impact)
+            if "tension_id" in impact:
+                prefixed_impact["tension_id"] = _prefix_id("tension", impact["tension_id"])
+            prefixed_impacts.append(prefixed_impact)
+
         beat_data = {
             "type": "beat",
             "raw_id": raw_id,
             "summary": beat.get("summary"),
-            "tension_impacts": beat.get("tension_impacts", []),
+            "tension_impacts": prefixed_impacts,
             "entities": prefixed_entities,
             "location": prefixed_location,
-            "location_alternatives": beat.get("location_alternatives", []),
+            "location_alternatives": prefixed_location_alts,
         }
         beat_data = _clean_dict(beat_data)
         graph.add_node(beat_id, beat_data)

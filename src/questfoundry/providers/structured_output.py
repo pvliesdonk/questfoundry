@@ -53,8 +53,9 @@ def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
     if provider_lower in ("ollama", "openai", "anthropic"):
         return StructuredOutputStrategy.JSON_MODE
 
-    # Default to TOOL for unknown providers (safest fallback)
-    return StructuredOutputStrategy.TOOL
+    # Default to JSON_MODE for unknown providers
+    # (TOOL strategy can return None for complex nested schemas)
+    return StructuredOutputStrategy.JSON_MODE
 
 
 def with_structured_output(

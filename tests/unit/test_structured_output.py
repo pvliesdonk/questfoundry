@@ -36,9 +36,9 @@ class TestGetDefaultStrategy:
         assert get_default_strategy("anthropic") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_unknown(self) -> None:
-        """Should return TOOL (safe default) for unknown providers."""
-        assert get_default_strategy("unknown") == StructuredOutputStrategy.TOOL
-        assert get_default_strategy("custom-provider") == StructuredOutputStrategy.TOOL
+        """Should return JSON_MODE for unknown providers (TOOL can fail on complex schemas)."""
+        assert get_default_strategy("unknown") == StructuredOutputStrategy.JSON_MODE
+        assert get_default_strategy("custom-provider") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_case_insensitive(self) -> None:
         """Should handle uppercase provider names."""

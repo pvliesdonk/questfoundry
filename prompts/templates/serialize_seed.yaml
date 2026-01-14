@@ -97,7 +97,7 @@ system: |
 
   - Extract ALL information from the brief - do not invent new details
   - Use snake_case for all IDs
-  - Entity and tension IDs must match those from brainstorm
+  - Entity and tension IDs must match those shown in the brief (use the IDs as displayed)
   - Every thread must reference a valid tension_id and alternative_id
   - Every consequence must reference a valid thread_id
   - Every initial_beat must reference valid thread IDs
