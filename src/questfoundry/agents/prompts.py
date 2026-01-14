@@ -44,6 +44,7 @@ def _get_loader() -> PromptLoader:
 
 def get_discuss_prompt(
     research_tools_available: bool = True,
+    interactive: bool = True,
 ) -> str:
     """Build the Discuss phase prompt as a system message string.
 
@@ -54,7 +55,9 @@ def get_discuss_prompt(
     separately as the initial HumanMessage to avoid duplication.
 
     Args:
-        research_tools_available: Whether research tools are available
+        research_tools_available: Whether research tools are available.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         System prompt string for the Discuss agent
@@ -67,10 +70,15 @@ def get_discuss_prompt(
     if research_tools_available:
         research_section = raw_data.get("research_tools_section", "")
 
+    # Build mode section for non-interactive mode
+    mode_section = ""
+    if not interactive:
+        mode_section = raw_data.get("non_interactive_section", "")
+
     # Render the system template with ChatPromptTemplate
     system_template = raw_data.get("system", "")
     prompt = ChatPromptTemplate.from_template(system_template)
-    return prompt.format(research_tools_section=research_section)
+    return prompt.format(research_tools_section=research_section, mode_section=mode_section)
 
 
 def get_summarize_prompt() -> str:
@@ -118,6 +126,7 @@ def _load_raw_template(template_name: str) -> dict[str, Any]:
 def get_brainstorm_discuss_prompt(
     vision_context: str,
     research_tools_available: bool = True,
+    interactive: bool = True,
 ) -> str:
     """Build the BRAINSTORM discuss prompt with vision context.
 
@@ -128,6 +137,8 @@ def get_brainstorm_discuss_prompt(
     Args:
         vision_context: Formatted vision from DREAM stage.
         research_tools_available: Whether research tools are available.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         System prompt string for the BRAINSTORM discuss agent.
@@ -139,12 +150,18 @@ def get_brainstorm_discuss_prompt(
     if research_tools_available:
         research_section = raw_data.get("research_tools_section", "")
 
+    # Build mode section for non-interactive mode
+    mode_section = ""
+    if not interactive:
+        mode_section = raw_data.get("non_interactive_section", "")
+
     # Render the system template
     system_template = raw_data.get("system", "")
     prompt = ChatPromptTemplate.from_template(system_template)
     return prompt.format(
         vision_context=vision_context,
         research_tools_section=research_section,
+        mode_section=mode_section,
     )
 
 
@@ -162,6 +179,7 @@ def get_brainstorm_summarize_prompt() -> str:
 def get_seed_discuss_prompt(
     brainstorm_context: str,
     research_tools_available: bool = True,
+    interactive: bool = True,
 ) -> str:
     """Build the SEED discuss prompt with brainstorm context.
 
@@ -170,6 +188,8 @@ def get_seed_discuss_prompt(
     Args:
         brainstorm_context: Formatted brainstorm output from BRAINSTORM stage.
         research_tools_available: Whether research tools are available.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         System prompt string for the SEED discuss agent.
@@ -181,12 +201,18 @@ def get_seed_discuss_prompt(
     if research_tools_available:
         research_section = raw_data.get("research_tools_section", "")
 
+    # Build mode section for non-interactive mode
+    mode_section = ""
+    if not interactive:
+        mode_section = raw_data.get("non_interactive_section", "")
+
     # Render the system template
     system_template = raw_data.get("system", "")
     prompt = ChatPromptTemplate.from_template(system_template)
     return prompt.format(
         brainstorm_context=brainstorm_context,
         research_tools_section=research_section,
+        mode_section=mode_section,
     )
 
 

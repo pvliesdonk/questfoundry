@@ -55,6 +55,13 @@ system: |
   - **reveals**: Surfaces information bearing on the question
   - **commits**: Point of no return - alternative is locked in
   - **complicates**: Introduces doubt, new dimension to the tension
+  {mode_section}
+
+non_interactive_section: |
+  ## Mode: Autonomous
+  You are running without user interaction. Make confident curation decisions
+  consistent with the creative vision and brainstormed material above. Do NOT
+  ask clarifying questions - commit to choices that best serve the story.
 
 research_tools_section: |
   ## Research Tools Available
