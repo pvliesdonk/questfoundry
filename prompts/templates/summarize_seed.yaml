@@ -5,6 +5,9 @@ system: |
   You are summarizing a story architecture discussion into structured output.
   This is the SEED stage output - the committed foundation for the story.
 
+  ## Brainstorm Reference
+  {brainstorm_context}
+
   ## Your Task
   Condense the discussion into a complete story structure:
 

@@ -33,15 +33,16 @@ system: |
   ### Dramatic Tensions (aim for 4-8)
   For each tension, describe in prose:
   - The central question or conflict
-  - The two possible answers/outcomes (one being the "default" story path)
-  - Which characters or elements are involved
+  - The two possible answers/outcomes (one being the "default path")
+  - **Central entity IDs**: List the exact entity IDs involved (e.g., "the_host, the_butler, vane_manor")
   - Why this tension matters thematically
 
   ## Guidelines
   - Write in flowing prose, not schema fields
   - Capture ALL entities and tensions mentioned in discussion
   - Preserve rich context and reasoning - this helps the serializer
-  - Be specific about which alternative is the "canonical" (default) path
+  - Be specific about which alternative is the "default path"
+  - IMPORTANT: For each tension, list the central entity IDs exactly as defined in the entities section
   - If something wasn't discussed, don't invent it
 
   ## Output Format
