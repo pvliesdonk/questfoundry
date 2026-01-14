@@ -31,6 +31,7 @@ def create_discuss_agent(
     model: BaseChatModel,
     tools: list[BaseTool],
     system_prompt: str | None = None,
+    interactive: bool = True,
 ) -> Any:  # Returns CompiledStateGraph but avoid import issues
     """Create a Discuss phase agent.
 
@@ -42,6 +43,8 @@ def create_discuss_agent(
         tools: Research tools available to the agent
         system_prompt: Optional custom system prompt. If not provided,
             uses the default DREAM discuss prompt.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         Compiled agent graph ready for invocation
@@ -55,6 +58,7 @@ def create_discuss_agent(
     if system_prompt is None:
         system_prompt = get_discuss_prompt(
             research_tools_available=has_tools,
+            interactive=interactive,
         )
 
     log.info("discuss_agent_created", tool_count=len(tools) if tools else 0)
@@ -107,7 +111,7 @@ async def run_discuss_phase(
     Returns:
         Tuple of (messages, llm_call_count, total_tokens)
     """
-    agent = create_discuss_agent(model, tools, system_prompt)
+    agent = create_discuss_agent(model, tools, system_prompt, interactive=interactive)
 
     log.info(
         "discuss_phase_started",

@@ -44,6 +44,7 @@ def _get_loader() -> PromptLoader:
 
 def get_discuss_prompt(
     research_tools_available: bool = True,
+    interactive: bool = True,
 ) -> str:
     """Build the Discuss phase prompt as a system message string.
 
@@ -54,23 +55,18 @@ def get_discuss_prompt(
     separately as the initial HumanMessage to avoid duplication.
 
     Args:
-        research_tools_available: Whether research tools are available
+        research_tools_available: Whether research tools are available.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         System prompt string for the Discuss agent
     """
-    # Load raw data once to avoid double file read
-    raw_data = _load_raw_template("discuss")
-
-    # Build the research tools section if tools are available
-    research_section = ""
-    if research_tools_available:
-        research_section = raw_data.get("research_tools_section", "")
-
-    # Render the system template with ChatPromptTemplate
-    system_template = raw_data.get("system", "")
-    prompt = ChatPromptTemplate.from_template(system_template)
-    return prompt.format(research_tools_section=research_section)
+    return _render_discuss_template(
+        "discuss",
+        research_tools_available=research_tools_available,
+        interactive=interactive,
+    )
 
 
 def get_summarize_prompt() -> str:
@@ -115,36 +111,65 @@ def _load_raw_template(template_name: str) -> dict[str, Any]:
         return dict(yaml.load(f))
 
 
+def _render_discuss_template(
+    template_name: str,
+    research_tools_available: bool,
+    interactive: bool,
+    **kwargs: Any,
+) -> str:
+    """Render a discuss-style prompt template.
+
+    Common helper for discuss prompts that share the same pattern:
+    load template, build research/mode sections, format with kwargs.
+
+    Args:
+        template_name: Name of the template file (without .yaml).
+        research_tools_available: Whether to include research tools section.
+        interactive: Whether running interactively. When False, includes
+            autonomous decision-making instructions.
+        **kwargs: Additional format arguments for the template.
+
+    Returns:
+        Rendered system prompt string.
+    """
+    raw_data = _load_raw_template(template_name)
+
+    research_section = (
+        raw_data.get("research_tools_section", "") if research_tools_available else ""
+    )
+    mode_section = raw_data.get("non_interactive_section", "") if not interactive else ""
+
+    system_template = raw_data.get("system", "")
+    prompt = ChatPromptTemplate.from_template(system_template)
+
+    return prompt.format(
+        research_tools_section=research_section,
+        mode_section=mode_section,
+        **kwargs,
+    )
+
+
 def get_brainstorm_discuss_prompt(
     vision_context: str,
     research_tools_available: bool = True,
+    interactive: bool = True,
 ) -> str:
     """Build the BRAINSTORM discuss prompt with vision context.
-
-    Uses _load_raw_template() instead of _get_loader() because we need access
-    to the 'research_tools_section' field which isn't in the PromptTemplate
-    dataclass. Summarize prompts use _get_loader() since they only need system.
 
     Args:
         vision_context: Formatted vision from DREAM stage.
         research_tools_available: Whether research tools are available.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         System prompt string for the BRAINSTORM discuss agent.
     """
-    raw_data = _load_raw_template("discuss_brainstorm")
-
-    # Build research tools section
-    research_section = ""
-    if research_tools_available:
-        research_section = raw_data.get("research_tools_section", "")
-
-    # Render the system template
-    system_template = raw_data.get("system", "")
-    prompt = ChatPromptTemplate.from_template(system_template)
-    return prompt.format(
+    return _render_discuss_template(
+        "discuss_brainstorm",
+        research_tools_available=research_tools_available,
+        interactive=interactive,
         vision_context=vision_context,
-        research_tools_section=research_section,
     )
 
 
@@ -162,31 +187,24 @@ def get_brainstorm_summarize_prompt() -> str:
 def get_seed_discuss_prompt(
     brainstorm_context: str,
     research_tools_available: bool = True,
+    interactive: bool = True,
 ) -> str:
     """Build the SEED discuss prompt with brainstorm context.
-
-    Uses _load_raw_template() to access the 'research_tools_section' field.
 
     Args:
         brainstorm_context: Formatted brainstorm output from BRAINSTORM stage.
         research_tools_available: Whether research tools are available.
+        interactive: Whether running in interactive mode. When False,
+            includes instructions for autonomous decision-making.
 
     Returns:
         System prompt string for the SEED discuss agent.
     """
-    raw_data = _load_raw_template("discuss_seed")
-
-    # Build research tools section
-    research_section = ""
-    if research_tools_available:
-        research_section = raw_data.get("research_tools_section", "")
-
-    # Render the system template
-    system_template = raw_data.get("system", "")
-    prompt = ChatPromptTemplate.from_template(system_template)
-    return prompt.format(
+    return _render_discuss_template(
+        "discuss_seed",
+        research_tools_available=research_tools_available,
+        interactive=interactive,
         brainstorm_context=brainstorm_context,
-        research_tools_section=research_section,
     )
 
 

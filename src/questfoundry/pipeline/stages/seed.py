@@ -277,6 +277,7 @@ class SeedStage:
         discuss_prompt = get_seed_discuss_prompt(
             brainstorm_context=brainstorm_context,
             research_tools_available=bool(tools),
+            interactive=interactive,
         )
 
         # Phase 1: Discuss

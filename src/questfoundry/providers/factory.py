@@ -156,6 +156,7 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
         model=model,
         base_url=host,
         temperature=kwargs.get("temperature", 0.7),
+        num_ctx=kwargs.get("num_ctx", 32768),  # Default 32k to avoid truncation
     )
     return chat_model
 

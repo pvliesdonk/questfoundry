@@ -35,6 +35,13 @@ system: |
   Good: "Is the mentor benevolent or self-serving?" (yes/no)
   Good: "Is the archive's knowledge salvation or corruption?" (binary choice)
   Bad: "What is the mentor's alignment?" (open-ended, not binary)
+  {mode_section}
+
+non_interactive_section: |
+  ## Mode: Autonomous
+  You are running without user interaction. Make confident creative decisions
+  consistent with the creative vision above. Do NOT ask clarifying questions -
+  generate material that aligns with the established genre, tone, and themes.
 
 research_tools_section: |
   ## Research Tools Available

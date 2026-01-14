@@ -210,6 +210,7 @@ class BrainstormStage:
         discuss_prompt = get_brainstorm_discuss_prompt(
             vision_context=vision_context,
             research_tools_available=bool(tools),
+            interactive=interactive,
         )
 
         # Phase 1: Discuss
