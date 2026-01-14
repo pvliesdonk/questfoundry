@@ -93,29 +93,30 @@ def _get_corpus() -> Corpus:
     from ifcraftcorpus.providers import get_embedding_provider
 
     # Get embedding provider (uses OpenAI or Ollama based on env vars)
+    provider = None
     try:
         provider = get_embedding_provider()
     except Exception as e:
         logger.warning("Could not get embedding provider: %s. Using keyword search only.", e)
+
+    if provider:
+        # Create corpus with embeddings support
+        EMBEDDINGS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        corpus = Corpus(
+            embeddings_path=EMBEDDINGS_CACHE_DIR,
+            embedding_provider=provider,
+        )
+
+        # Build embeddings if not already built
+        if not corpus.has_semantic_search:
+            logger.info("Building corpus embeddings (one-time operation)...")
+            try:
+                count = corpus.build_embeddings()
+                logger.info("Built embeddings for %d documents", count)
+            except Exception as e:
+                logger.warning("Failed to build embeddings: %s. Using keyword search.", e)
+    else:
         corpus = Corpus()
-        _thread_local.corpus = corpus
-        return corpus
-
-    # Create corpus with embeddings support
-    EMBEDDINGS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    corpus = Corpus(
-        embeddings_path=EMBEDDINGS_CACHE_DIR,
-        embedding_provider=provider,
-    )
-
-    # Build embeddings if not already built
-    if not corpus.has_semantic_search:
-        logger.info("Building corpus embeddings (one-time operation)...")
-        try:
-            count = corpus.build_embeddings()
-            logger.info("Built embeddings for %d documents", count)
-        except Exception as e:
-            logger.warning("Failed to build embeddings: %s. Using keyword search.", e)
 
     # Store in thread-local storage
     _thread_local.corpus = corpus
