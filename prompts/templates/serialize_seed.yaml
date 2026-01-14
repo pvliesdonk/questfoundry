@@ -54,8 +54,8 @@ system: |
   }
   ```
 
-  ### 5. initial_beats (Opening Beats)
-  Create InitialBeat objects for story openings:
+  ### 5. initial_beats (Initial Beats - 2-4 per thread)
+  Create 2-4 InitialBeat objects PER THREAD. With 3 threads, expect 6-12 beats total.
   ```json
   {
     "beat_id": "unique_beat_id",
@@ -100,6 +100,7 @@ system: |
   - Entity and tension IDs must match those shown in the brief (use the IDs as displayed)
   - Every thread must reference a valid tension_id and alternative_id
   - Every consequence must reference a valid thread_id
+  - Create 2-4 initial_beats PER THREAD (not 1 per thread!)
   - Every initial_beat must reference valid thread IDs
   - thread_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
