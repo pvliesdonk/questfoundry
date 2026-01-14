@@ -21,7 +21,7 @@ system: |
      - Each tension has exactly TWO alternatives (not more, not less)
      - One alternative should be marked as the "default path" (the canonical story outcome)
      - For nuanced concepts, use MULTIPLE binary tensions rather than one multi-way choice
-     - Each tension must list its **central entities by ID** (e.g., "Central entities: host, butler")
+     - Each tension must list its **central entities by ID** (e.g., "Central entities: the_host, the_butler")
 
   ## Guidelines
   - Be expansive! Generate MORE material than needed (15-25 entities, 4-8 tensions is good)
