@@ -16,21 +16,21 @@ system: |
   | Factions       | "faction"        |
 
   Each entity needs:
-  - `id`: Short snake_case identifier (e.g., "lady_beatrice", "vane_manor")
-  - `type`: One of "character", "location", "object", "faction"
+  - `entity_id`: Short snake_case identifier (e.g., "lady_beatrice", "vane_manor")
+  - `entity_category`: One of "character", "location", "object", "faction"
   - `concept`: One-line essence from the brief
   - `notes`: Optional additional context from the brief
 
   ## Tension Structure
 
   Tensions represent binary dramatic questions with exactly TWO alternatives:
-  - `id`: Short snake_case identifier
+  - `tension_id`: Short snake_case identifier
   - `question`: The dramatic question (should end with "?")
   - `alternatives`: Exactly 2 items, each with:
-    - `id`: Short identifier
+    - `alternative_id`: Unique short identifier for THIS alternative (e.g., "guilty", "framed", "dagger", "poison")
     - `description`: Full description
-    - `canonical`: true for ONE alternative (the default path), false for the other
-  - `involves`: List of entity IDs related to this tension (use the same IDs you assigned to entities above)
+    - `is_default_path`: true for ONE alternative (the default path), false for the other
+  - `central_entity_ids`: List of entity_id values related to this tension
   - `why_it_matters`: Thematic stakes
 
   ## Guidelines
@@ -39,7 +39,8 @@ system: |
   - Extract ALL tensions/dramatic questions mentioned
   - Do NOT invent new details - only structure what's in the brief
   - Use snake_case for all IDs (lowercase with underscores)
-  - Each tension must have exactly ONE canonical alternative
+  - Each tension must have exactly ONE alternative with is_default_path=true
+  - CRITICAL: alternative_id must be UNIQUE identifiers (e.g., "guilty", "framed"), NOT entity references
 
   ## Output
 
