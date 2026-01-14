@@ -47,6 +47,7 @@ def test_create_chat_model_ollama_success() -> None:
         model="qwen3:8b",
         base_url="http://test:11434",
         temperature=0.7,
+        num_ctx=32768,
     )
 
 
@@ -61,6 +62,7 @@ def test_create_chat_model_ollama_with_custom_host() -> None:
         model="llama3:8b",
         base_url="http://custom:8080",
         temperature=0.7,
+        num_ctx=32768,
     )
 
 
@@ -208,6 +210,20 @@ def test_create_chat_model_custom_temperature() -> None:
 
     call_kwargs = mock_class.call_args[1]
     assert call_kwargs["temperature"] == 0.5
+
+
+def test_create_chat_model_ollama_custom_num_ctx() -> None:
+    """Factory passes custom num_ctx for context window."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("ollama", "model", num_ctx=131072)
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["num_ctx"] == 131072
 
 
 # --- Tests for create_model_for_structured_output ---
