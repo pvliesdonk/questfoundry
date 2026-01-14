@@ -476,17 +476,17 @@ def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
 
     console.print(f"  Entities: [bold]{len(entities)}[/bold]")
 
-    # Group entities by type
-    entity_types: dict[str, list[str]] = {}
+    # Group entities by category
+    entity_categories: dict[str, list[str]] = {}
     for entity in entities:
-        etype = entity.get("type", "unknown")
-        entity_types.setdefault(etype, []).append(entity.get("id", "?"))
+        category = entity.get("entity_category", "unknown")
+        entity_categories.setdefault(category, []).append(entity.get("entity_id", "?"))
 
-    for etype, ids in entity_types.items():
+    for category, ids in entity_categories.items():
         ids_display = ", ".join(ids[:5])
         if len(ids) > 5:
             ids_display += f", +{len(ids) - 5} more"
-        console.print(f"    {etype}: {ids_display}")
+        console.print(f"    {category}: {ids_display}")
 
     console.print(f"  Tensions: [bold]{len(tensions)}[/bold]")
     for tension in tensions[:3]:
@@ -509,9 +509,11 @@ def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
 
     console.print(f"  Threads: [bold]{len(threads)}[/bold]")
     for thread in threads[:3]:
-        tier = thread.get("tier", "?")
-        tier_style = "bold green" if tier == "major" else "dim"
-        console.print(f"    • [{tier_style}]{tier}[/{tier_style}] {thread.get('name', '?')}")
+        importance = thread.get("thread_importance", "?")
+        importance_style = "bold green" if importance == "major" else "dim"
+        console.print(
+            f"    • [{importance_style}]{importance}[/{importance_style}] {thread.get('name', '?')}"
+        )
     if len(threads) > 3:
         console.print(f"    ... and {len(threads) - 3} more")
 
