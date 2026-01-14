@@ -543,25 +543,26 @@ The `ConversationRunner` orchestrates all three phases and handles:
 
 ### Provider Strategies for Structured Output
 
-When serializing structured output (phase 3), strategy depends on provider:
+When serializing structured output (phase 3), all providers use the same strategy:
 
 ```python
-# Ollama: Use ToolStrategy (more reliable for qwen3:8b)
-model_with_tools = model.with_structured_output(
-    schema=DreamArtifact,
-    method="tool",  # Force tool-based schema
-)
-
-# OpenAI: Use ProviderStrategy (native JSON mode)
-model_with_json = model.with_structured_output(
-    schema=DreamArtifact,
-    method="json_mode",  # Use native JSON schema support
+# All providers use JSON_MODE (json_schema method)
+structured_model = model.with_structured_output(
+    schema=BrainstormOutput,
+    method="json_schema",  # Native JSON mode
 )
 ```
 
-**Why two strategies?**
-- Ollama's JSON mode is inconsistent; tool-based forcing is more reliable
-- OpenAI's JSON mode is native and faster; tool overhead is unnecessary
+**Why JSON_MODE for all providers?**
+- Works reliably with complex nested schemas (BrainstormOutput, SeedOutput)
+- The TOOL strategy (function_calling) was tried but returns None for complex schemas on Ollama
+- Native JSON mode is efficient and consistent across providers
+
+**The two available strategies (for reference):**
+- `method="json_schema"` (JSON_MODE): Uses provider's native JSON mode to constrain output
+- `method="function_calling"` (TOOL): Creates a fake tool with the schema, forces model to call it
+
+The strategy selection is handled by `with_structured_output()` in `providers/structured_output.py`.
 
 ### Prompt Management
 

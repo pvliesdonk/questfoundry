@@ -60,13 +60,13 @@ class TestApplyMutations:
 
         apply_mutations(graph, "brainstorm", output)
 
-        assert graph.has_node("char_001")
+        assert graph.has_node("entity::char_001")
 
     def test_routes_to_seed(self) -> None:
         """Routes seed stage to apply_seed_mutations."""
         graph = Graph.empty()
-        # Pre-populate with entity from brainstorm
-        graph.add_node("char_001", {"type": "entity", "disposition": "proposed"})
+        # Pre-populate with entity from brainstorm (using prefixed ID)
+        graph.add_node("entity::char_001", {"type": "entity", "disposition": "proposed"})
 
         output = {
             "entities": [{"id": "char_001", "disposition": "retained"}],
@@ -76,7 +76,7 @@ class TestApplyMutations:
 
         apply_mutations(graph, "seed", output)
 
-        assert graph.get_node("char_001")["disposition"] == "retained"
+        assert graph.get_node("entity::char_001")["disposition"] == "retained"
 
     def test_unknown_stage_raises(self) -> None:
         """Unknown stage raises ValueError."""
@@ -229,15 +229,17 @@ class TestBrainstormMutations:
 
         apply_brainstorm_mutations(graph, output)
 
-        kay = graph.get_node("kay")
+        # Entity IDs are prefixed with "entity::"
+        kay = graph.get_node("entity::kay")
         assert kay is not None
         assert kay["type"] == "entity"
+        assert kay["raw_id"] == "kay"  # Original ID preserved
         assert kay["entity_type"] == "character"
         assert kay["concept"] == "Young archivist"
         assert kay["notes"] == "Curious and brave"
         assert kay["disposition"] == "proposed"
 
-        archive = graph.get_node("archive")
+        archive = graph.get_node("entity::archive")
         assert archive is not None
         assert archive["entity_type"] == "location"
 
@@ -250,7 +252,7 @@ class TestBrainstormMutations:
                 {
                     "id": "mentor_trust",
                     "question": "Can the mentor be trusted?",
-                    "involves": ["kay", "mentor"],
+                    "involves": ["kay", "mentor"],  # Raw IDs from LLM
                     "why_it_matters": "Trust is key",
                     "alternatives": [
                         {
@@ -270,25 +272,28 @@ class TestBrainstormMutations:
 
         apply_brainstorm_mutations(graph, output)
 
-        # Check tension node
-        tension = graph.get_node("mentor_trust")
+        # Tension IDs are prefixed with "tension::"
+        tension = graph.get_node("tension::mentor_trust")
         assert tension is not None
         assert tension["type"] == "tension"
+        assert tension["raw_id"] == "mentor_trust"
         assert tension["question"] == "Can the mentor be trusted?"
-        assert tension["involves"] == ["kay", "mentor"]
+        # Involves list is prefixed in storage
+        assert tension["involves"] == ["entity::kay", "entity::mentor"]
 
-        # Check alternative nodes
-        protector = graph.get_node("mentor_trust::protector")
+        # Alternative IDs: tension::tension_id::alt::alt_id
+        protector = graph.get_node("tension::mentor_trust::alt::protector")
         assert protector is not None
         assert protector["type"] == "alternative"
+        assert protector["raw_id"] == "protector"
         assert protector["canonical"] is True
 
-        manipulator = graph.get_node("mentor_trust::manipulator")
+        manipulator = graph.get_node("tension::mentor_trust::alt::manipulator")
         assert manipulator is not None
         assert manipulator["canonical"] is False
 
         # Check edges
-        edges = graph.get_edges(from_id="mentor_trust", edge_type="has_alternative")
+        edges = graph.get_edges(from_id="tension::mentor_trust", edge_type="has_alternative")
         assert len(edges) == 2
 
     def test_handles_empty_brainstorm(self) -> None:
@@ -345,14 +350,14 @@ class TestSeedMutations:
     def test_updates_entity_dispositions(self) -> None:
         """Updates entity dispositions from seed output."""
         graph = Graph.empty()
-        # Pre-populate entities from brainstorm
-        graph.add_node("kay", {"type": "entity", "disposition": "proposed"})
-        graph.add_node("mentor", {"type": "entity", "disposition": "proposed"})
-        graph.add_node("extra", {"type": "entity", "disposition": "proposed"})
+        # Pre-populate entities from brainstorm (using prefixed IDs)
+        graph.add_node("entity::kay", {"type": "entity", "disposition": "proposed"})
+        graph.add_node("entity::mentor", {"type": "entity", "disposition": "proposed"})
+        graph.add_node("entity::extra", {"type": "entity", "disposition": "proposed"})
 
         output = {
             "entities": [
-                {"id": "kay", "disposition": "retained"},
+                {"id": "kay", "disposition": "retained"},  # Raw IDs from LLM
                 {"id": "mentor", "disposition": "retained"},
                 {"id": "extra", "disposition": "cut"},
             ],
@@ -362,15 +367,15 @@ class TestSeedMutations:
 
         apply_seed_mutations(graph, output)
 
-        assert graph.get_node("kay")["disposition"] == "retained"
-        assert graph.get_node("mentor")["disposition"] == "retained"
-        assert graph.get_node("extra")["disposition"] == "cut"
+        assert graph.get_node("entity::kay")["disposition"] == "retained"
+        assert graph.get_node("entity::mentor")["disposition"] == "retained"
+        assert graph.get_node("entity::extra")["disposition"] == "cut"
 
     def test_creates_threads(self) -> None:
         """Creates thread nodes from seed output."""
         graph = Graph.empty()
-        # Pre-populate alternative from brainstorm
-        graph.add_node("mentor_trust::protector", {"type": "alternative"})
+        # Pre-populate alternative from brainstorm (with full prefixed ID)
+        graph.add_node("tension::mentor_trust::alt::protector", {"type": "alternative"})
 
         output = {
             "entities": [],
@@ -378,8 +383,8 @@ class TestSeedMutations:
                 {
                     "id": "thread_mentor_trust",
                     "name": "Mentor Trust Arc",
-                    "tension_id": "mentor_trust",
-                    "alternative_id": "protector",  # Local ID, not full path
+                    "tension_id": "mentor_trust",  # Raw tension ID from LLM
+                    "alternative_id": "protector",  # Local alt ID, not full path
                     "description": "Exploring mentor relationship",
                     "consequences": ["consequence_trust"],
                 }
@@ -389,21 +394,23 @@ class TestSeedMutations:
 
         apply_seed_mutations(graph, output)
 
-        thread = graph.get_node("thread_mentor_trust")
+        # Thread ID is prefixed with "thread::"
+        thread = graph.get_node("thread::thread_mentor_trust")
         assert thread is not None
         assert thread["type"] == "thread"
+        assert thread["raw_id"] == "thread_mentor_trust"
         assert thread["name"] == "Mentor Trust Arc"
 
-        # Check explores edge - links to full alternative ID
-        edges = graph.get_edges(from_id="thread_mentor_trust", edge_type="explores")
+        # Check explores edge - links to full prefixed alternative ID
+        edges = graph.get_edges(from_id="thread::thread_mentor_trust", edge_type="explores")
         assert len(edges) == 1
-        assert edges[0]["to"] == "mentor_trust::protector"
+        assert edges[0]["to"] == "tension::mentor_trust::alt::protector"
 
     def test_creates_beats(self) -> None:
         """Creates beat nodes from seed output."""
         graph = Graph.empty()
-        # Pre-populate thread
-        graph.add_node("thread_mentor_trust", {"type": "thread"})
+        # Pre-populate thread (with prefixed ID)
+        graph.add_node("thread::thread_mentor_trust", {"type": "thread"})
 
         output = {
             "entities": [],
@@ -412,38 +419,42 @@ class TestSeedMutations:
                 {
                     "id": "opening_001",
                     "summary": "Kay meets the mentor for the first time",
-                    "threads": ["thread_mentor_trust"],
+                    "threads": ["thread_mentor_trust"],  # Raw thread IDs from LLM
                     "tension_impacts": [
                         {"tension_id": "mentor_trust", "effect": "advances", "note": "Trust begins"}
                     ],
-                    "entities": ["kay", "mentor"],
-                    "location": "archive",
+                    "entities": ["kay", "mentor"],  # Raw entity IDs from LLM
+                    "location": "archive",  # Raw location ID from LLM
                 }
             ],
         }
 
         apply_seed_mutations(graph, output)
 
-        beat = graph.get_node("opening_001")
+        # Beat ID is prefixed with "beat::"
+        beat = graph.get_node("beat::opening_001")
         assert beat is not None
         assert beat["type"] == "beat"
+        assert beat["raw_id"] == "opening_001"
         assert beat["summary"] == "Kay meets the mentor for the first time"
-        assert beat["location"] == "archive"
+        # Entities and location are prefixed in storage
+        assert beat["entities"] == ["entity::kay", "entity::mentor"]
+        assert beat["location"] == "entity::archive"
 
-        # Check belongs_to edge
-        edges = graph.get_edges(from_id="opening_001", edge_type="belongs_to")
+        # Check belongs_to edge - links to prefixed thread ID
+        edges = graph.get_edges(from_id="beat::opening_001", edge_type="belongs_to")
         assert len(edges) == 1
-        assert edges[0]["to"] == "thread_mentor_trust"
+        assert edges[0]["to"] == "thread::thread_mentor_trust"
 
     def test_skips_missing_entities(self) -> None:
         """Skips entity updates for entities not in graph."""
         graph = Graph.empty()
-        # Only kay exists
-        graph.add_node("kay", {"type": "entity", "disposition": "proposed"})
+        # Only kay exists (with prefixed ID)
+        graph.add_node("entity::kay", {"type": "entity", "disposition": "proposed"})
 
         output = {
             "entities": [
-                {"id": "kay", "disposition": "retained"},
+                {"id": "kay", "disposition": "retained"},  # Raw ID from LLM
                 {"id": "missing", "disposition": "retained"},  # Doesn't exist
             ],
             "threads": [],
@@ -453,8 +464,8 @@ class TestSeedMutations:
         # Should not raise, just skip missing
         apply_seed_mutations(graph, output)
 
-        assert graph.get_node("kay")["disposition"] == "retained"
-        assert not graph.has_node("missing")
+        assert graph.get_node("entity::kay")["disposition"] == "retained"
+        assert not graph.has_node("entity::missing")
 
     def test_handles_empty_seed(self) -> None:
         """Handles empty seed output."""
@@ -492,7 +503,7 @@ class TestMutationIntegration:
                 {
                     "id": "mentor_trust",
                     "question": "Can the mentor be trusted?",
-                    "involves": ["kay", "mentor"],
+                    "involves": ["kay", "mentor"],  # Raw IDs from LLM
                     "why_it_matters": "Trust defines ally or foe",
                     "alternatives": [
                         {
@@ -512,7 +523,7 @@ class TestMutationIntegration:
         apply_mutations(graph, "brainstorm", brainstorm_output)
         graph.set_last_stage("brainstorm")
 
-        # SEED stage
+        # SEED stage - uses raw IDs as LLM would produce
         seed_output = {
             "entities": [
                 {"id": "kay", "disposition": "retained"},
@@ -522,8 +533,8 @@ class TestMutationIntegration:
                 {
                     "id": "thread_mentor",
                     "name": "Mentor Arc",
-                    "tension_id": "mentor_trust",
-                    "alternative_id": "protector",  # Local ID
+                    "tension_id": "mentor_trust",  # Raw tension ID
+                    "alternative_id": "protector",  # Local alt ID
                     "description": "The mentor relationship thread",
                 }
             ],
@@ -531,25 +542,25 @@ class TestMutationIntegration:
                 {
                     "id": "opening",
                     "summary": "Kay meets the mentor",
-                    "threads": ["thread_mentor"],
+                    "threads": ["thread_mentor"],  # Raw thread IDs
                 }
             ],
         }
         apply_mutations(graph, "seed", seed_output)
         graph.set_last_stage("seed")
 
-        # Verify final state
+        # Verify final state - all IDs are prefixed by type
         assert graph.get_last_stage() == "seed"
         assert graph.has_node("vision")
-        assert graph.has_node("kay")
-        assert graph.has_node("mentor")
-        assert graph.has_node("mentor_trust")
-        assert graph.has_node("mentor_trust::protector")
-        assert graph.has_node("thread_mentor")
-        assert graph.has_node("opening")
+        assert graph.has_node("entity::kay")
+        assert graph.has_node("entity::mentor")
+        assert graph.has_node("tension::mentor_trust")
+        assert graph.has_node("tension::mentor_trust::alt::protector")
+        assert graph.has_node("thread::thread_mentor")
+        assert graph.has_node("beat::opening")
 
         # Check entity dispositions
-        assert graph.get_node("kay")["disposition"] == "retained"
+        assert graph.get_node("entity::kay")["disposition"] == "retained"
 
         # Check edges
         assert len(graph.get_edges(edge_type="has_alternative")) == 2

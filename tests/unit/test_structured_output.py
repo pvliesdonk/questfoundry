@@ -24,8 +24,8 @@ class TestGetDefaultStrategy:
     """Test get_default_strategy function."""
 
     def test_get_default_strategy_ollama(self) -> None:
-        """Should return TOOL strategy for Ollama."""
-        assert get_default_strategy("ollama") == StructuredOutputStrategy.TOOL
+        """Should return JSON_MODE strategy for Ollama (better for complex schemas)."""
+        assert get_default_strategy("ollama") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_openai(self) -> None:
         """Should return JSON_MODE strategy for OpenAI."""
@@ -36,13 +36,13 @@ class TestGetDefaultStrategy:
         assert get_default_strategy("anthropic") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_unknown(self) -> None:
-        """Should return TOOL (safe default) for unknown providers."""
-        assert get_default_strategy("unknown") == StructuredOutputStrategy.TOOL
-        assert get_default_strategy("custom-provider") == StructuredOutputStrategy.TOOL
+        """Should return JSON_MODE for unknown providers (TOOL can fail on complex schemas)."""
+        assert get_default_strategy("unknown") == StructuredOutputStrategy.JSON_MODE
+        assert get_default_strategy("custom-provider") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_case_insensitive(self) -> None:
         """Should handle uppercase provider names."""
-        assert get_default_strategy("OLLAMA") == StructuredOutputStrategy.TOOL
+        assert get_default_strategy("OLLAMA") == StructuredOutputStrategy.JSON_MODE
         assert get_default_strategy("OpenAI") == StructuredOutputStrategy.JSON_MODE
         assert get_default_strategy("ANTHROPIC") == StructuredOutputStrategy.JSON_MODE
 
@@ -105,7 +105,7 @@ class TestWithStructuredOutput:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
-        # Test Ollama (TOOL)
+        # Test Ollama (JSON_MODE - better for complex schemas)
         with_structured_output(
             mock_model,
             SampleSchema,
@@ -114,7 +114,7 @@ class TestWithStructuredOutput:
         )
         mock_model.with_structured_output.assert_called_with(
             SampleSchema,
-            method="function_calling",
+            method="json_schema",
         )
 
         # Test OpenAI (JSON_MODE)

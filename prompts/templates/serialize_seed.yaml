@@ -1,0 +1,112 @@
+name: serialize_seed
+description: Convert seed brief into SeedOutput artifact
+
+system: |
+  You are converting a SEED stage brief into a structured SeedOutput artifact.
+
+  ## Schema Overview
+
+  SeedOutput contains six main sections that must be populated from the brief:
+
+  ### 1. entities (Entity Decisions)
+  For each entity from brainstorm, create an EntityDecision:
+  ```json
+  {
+    "id": "entity_id_from_brainstorm",
+    "disposition": "retained" or "cut"
+  }
+  ```
+
+  ### 2. tensions (Tension Decisions)
+  For each tension from brainstorm, create a TensionDecision:
+  ```json
+  {
+    "tension_id": "tension_id_from_brainstorm",
+    "explored": ["alt_id_1", "alt_id_2"],  // Alternatives that become threads
+    "implicit": ["alt_id_3"]                // Alternatives NOT explored
+  }
+  ```
+  NOTE: The canonical alternative MUST be in "explored", never in "implicit".
+
+  ### 3. threads (Plot Threads)
+  For each explored alternative, create a Thread:
+  ```json
+  {
+    "id": "unique_thread_id",
+    "name": "Human Readable Thread Name",
+    "tension_id": "which_tension",
+    "alternative_id": "which_alternative_this_explores",
+    "shadows": ["unexplored_alt_ids"],  // Implicit alternatives
+    "tier": "major" or "minor",
+    "description": "What this thread is about",
+    "consequences": ["consequence_id_1", "consequence_id_2"]
+  }
+  ```
+
+  ### 4. consequences (Narrative Consequences)
+  For each thread, create its Consequences:
+  ```json
+  {
+    "id": "unique_consequence_id",
+    "thread_id": "which_thread_this_belongs_to",
+    "description": "What happens narratively",
+    "ripples": ["story effect 1", "story effect 2"]
+  }
+  ```
+
+  ### 5. initial_beats (Opening Beats)
+  Create InitialBeat objects for story openings:
+  ```json
+  {
+    "id": "unique_beat_id",
+    "summary": "What happens in this beat",
+    "threads": ["thread_id_1", "thread_id_2"],
+    "tension_impacts": [
+      {
+        "tension_id": "which_tension",
+        "effect": "advances" or "reveals" or "commits" or "complicates",
+        "note": "Explanation of the impact"
+      }
+    ],
+    "entities": ["entity_id_1", "entity_id_2"],
+    "location": "location_entity_id" or null,
+    "location_alternatives": ["other_location_id"]
+  }
+  ```
+
+  ### 6. convergence_sketch
+  ```json
+  {
+    "convergence_points": ["where threads should merge"],
+    "residue_notes": ["differences that persist after convergence"]
+  }
+  ```
+
+  ## Mapping Rules
+
+  | Brief Section      | SeedOutput Field    |
+  |--------------------|---------------------|
+  | Entity Decisions   | entities            |
+  | Tension Decisions  | tensions            |
+  | Threads            | threads             |
+  | Consequences       | consequences        |
+  | Initial Beats      | initial_beats       |
+  | Convergence Sketch | convergence_sketch  |
+
+  ## Guidelines
+
+  - Extract ALL information from the brief - do not invent new details
+  - Use snake_case for all IDs
+  - Entity and tension IDs must match those shown in the brief (use the IDs as displayed)
+  - Every thread must reference a valid tension_id and alternative_id
+  - Every consequence must reference a valid thread_id
+  - Every initial_beat must reference valid thread IDs
+  - tier must be exactly "major" or "minor" (lowercase)
+  - effect must be exactly "advances", "reveals", "commits", or "complicates"
+  - disposition must be exactly "retained" or "cut"
+
+  ## Output
+
+  Return ONLY valid JSON matching SeedOutput schema with all six sections.
+
+components: []

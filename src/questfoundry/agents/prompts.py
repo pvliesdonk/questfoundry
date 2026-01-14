@@ -199,3 +199,33 @@ def get_seed_summarize_prompt() -> str:
     loader = _get_loader()
     template = loader.load("summarize_seed")
     return template.system
+
+
+def get_brainstorm_serialize_prompt() -> str:
+    """Build the BRAINSTORM serialize prompt.
+
+    This prompt includes explicit instructions for mapping prose categories
+    (Characters, Locations, Objects, Factions) to Entity objects with the
+    correct type field.
+
+    Returns:
+        System prompt string for the BRAINSTORM serialize call.
+    """
+    loader = _get_loader()
+    template = loader.load("serialize_brainstorm")
+    return template.system
+
+
+def get_seed_serialize_prompt() -> str:
+    """Build the SEED serialize prompt.
+
+    This prompt includes explicit instructions for mapping the complex
+    SEED brief sections (Entity Decisions, Tension Decisions, Threads,
+    Consequences, Initial Beats, Convergence Sketch) to the SeedOutput schema.
+
+    Returns:
+        System prompt string for the SEED serialize call.
+    """
+    loader = _get_loader()
+    template = loader.load("serialize_seed")
+    return template.system

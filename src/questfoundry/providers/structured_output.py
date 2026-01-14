@@ -31,9 +31,12 @@ class StructuredOutputStrategy(str, Enum):
 def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
     """Get default structured output strategy for a provider.
 
-    Different providers have different native structured output capabilities:
-    - Ollama: Tool calling is more reliable with local models
-    - OpenAI/Anthropic: Native JSON mode is faster and more reliable
+    All known providers use JSON_MODE (json_schema method) for structured output.
+    This uses the provider's native JSON mode to constrain output to match the schema.
+
+    The alternative TOOL strategy (function_calling method) creates a fake tool
+    with the schema and forces the model to call it. This was tried for Ollama
+    but returned None for complex nested schemas like BrainstormOutput.
 
     Args:
         provider_name: Provider name (ollama, openai, anthropic).
@@ -43,15 +46,16 @@ def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
     """
     provider_lower = provider_name.lower()
 
-    # Ollama: ToolStrategy is more reliable with local models
-    # OpenAI: Native json_mode (gpt-4-turbo, gpt-4o support structured output)
-    # Anthropic: Native JSON mode via raw_mode parameter
-    if provider_lower == "ollama":
-        return StructuredOutputStrategy.TOOL
-    elif provider_lower in ("openai", "anthropic"):
+    # All known providers use JSON_MODE:
+    # - Ollama: JSON_MODE works for complex nested schemas (TOOL returns None)
+    # - OpenAI: Native json_mode (gpt-4-turbo, gpt-4o support structured output)
+    # - Anthropic: Native JSON mode
+    if provider_lower in ("ollama", "openai", "anthropic"):
         return StructuredOutputStrategy.JSON_MODE
-    # Default to TOOL for unknown providers (safest option)
-    return StructuredOutputStrategy.TOOL
+
+    # Default to JSON_MODE for unknown providers
+    # (TOOL strategy can return None for complex nested schemas)
+    return StructuredOutputStrategy.JSON_MODE
 
 
 def with_structured_output(

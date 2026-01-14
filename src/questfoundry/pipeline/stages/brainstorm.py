@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.agents import (
     get_brainstorm_discuss_prompt,
+    get_brainstorm_serialize_prompt,
     get_brainstorm_summarize_prompt,
     run_discuss_phase,
     serialize_to_artifact,
@@ -240,11 +241,13 @@ class BrainstormStage:
 
         # Phase 3: Serialize
         log.debug("brainstorm_phase", phase="serialize")
+        serialize_prompt = get_brainstorm_serialize_prompt()
         artifact, serialize_tokens = await serialize_to_artifact(
             model=model,
             brief=brief,
             schema=BrainstormOutput,
             provider_name=provider_name,
+            system_prompt=serialize_prompt,
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
