@@ -127,10 +127,11 @@ class PipelineOrchestrator:
         self._chat_model: BaseChatModel | None = None
         self._provider_name: str | None = None
 
-        # LLM logger (enabled via --log flag)
+        # LLM logger and callbacks (enabled via --log flag)
         from questfoundry.observability import LLMLogger
 
         self._llm_logger = LLMLogger(project_path, enabled=enable_llm_logging)
+        self._callbacks: list[Any] | None = None  # Set when model is created
 
     def _get_chat_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model.
@@ -176,7 +177,13 @@ class PipelineOrchestrator:
 
         chat_model = create_chat_model(provider_name, model)
 
-        # Add callbacks to the model if enabled
+        # Store callbacks for explicit passing to phases (agents, structured output)
+        # Note: with_config() binding doesn't propagate through create_agent() or
+        # with_structured_output() wrappers, so we pass callbacks explicitly via
+        # RunnableConfig to all ainvoke() calls in phases.
+        self._callbacks = callbacks
+
+        # Add callbacks to the model for direct model calls
         if callbacks:
             # with_config returns RunnableBinding which wraps the chat model.
             # It preserves all BaseChatModel functionality (invoke, ainvoke, etc.)
@@ -268,6 +275,7 @@ class PipelineOrchestrator:
                 on_llm_start=on_llm_start,
                 on_llm_end=on_llm_end,
                 project_path=self.project_path,
+                callbacks=self._callbacks,
             )
 
             # Validate artifact
