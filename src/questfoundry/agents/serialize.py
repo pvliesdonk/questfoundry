@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -288,21 +289,28 @@ def _build_error_feedback(errors: list[str]) -> str:
     )
 
 
-# Section-specific prompts for iterative SEED serialization
-# Loaded from prompts/templates/serialize_seed_sections.yaml
-_SEED_SECTION_PROMPTS: dict[str, str] | None = None
+# Required prompt keys for SEED section serialization
+_REQUIRED_SECTION_PROMPT_KEYS = [
+    "entities_prompt",
+    "tensions_prompt",
+    "threads_prompt",
+    "consequences_prompt",
+    "beats_prompt",
+    "convergence_prompt",
+]
 
 
+@lru_cache(maxsize=1)
 def _load_seed_section_prompts() -> dict[str, str]:
     """Load section-specific prompts for SEED serialization.
 
     Returns:
         Dict mapping section names to their prompts.
-    """
-    global _SEED_SECTION_PROMPTS
-    if _SEED_SECTION_PROMPTS is not None:
-        return _SEED_SECTION_PROMPTS
 
+    Raises:
+        FileNotFoundError: If the prompts file doesn't exist.
+        ValueError: If required prompt keys are missing.
+    """
     from pathlib import Path
 
     from ruamel.yaml import YAML
@@ -313,19 +321,30 @@ def _load_seed_section_prompts() -> dict[str, str]:
         pkg_path = Path.cwd() / "prompts"
 
     yaml_path = pkg_path / "templates" / "serialize_seed_sections.yaml"
+
+    if not yaml_path.exists():
+        raise FileNotFoundError(
+            f"SEED section prompts not found at {yaml_path}. "
+            "Expected prompts/templates/serialize_seed_sections.yaml"
+        )
+
     yaml = YAML()
     with yaml_path.open("r", encoding="utf-8") as f:
         data = yaml.load(f)
 
-    _SEED_SECTION_PROMPTS = {
-        "entities": data.get("entities_prompt", ""),
-        "tensions": data.get("tensions_prompt", ""),
-        "threads": data.get("threads_prompt", ""),
-        "consequences": data.get("consequences_prompt", ""),
-        "beats": data.get("beats_prompt", ""),
-        "convergence": data.get("convergence_prompt", ""),
+    # Validate all required keys are present
+    for key in _REQUIRED_SECTION_PROMPT_KEYS:
+        if key not in data:
+            raise ValueError(f"Missing required prompt key '{key}' in {yaml_path}")
+
+    return {
+        "entities": data["entities_prompt"],
+        "tensions": data["tensions_prompt"],
+        "threads": data["threads_prompt"],
+        "consequences": data["consequences_prompt"],
+        "beats": data["beats_prompt"],
+        "convergence": data["convergence_prompt"],
     }
-    return _SEED_SECTION_PROMPTS
 
 
 @traceable(
@@ -393,7 +412,7 @@ async def serialize_seed_iteratively(
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
-        section_prompt = prompts.get(section_name, "")
+        section_prompt = prompts[section_name]
         section_result, section_tokens = await serialize_to_artifact(
             model=model,
             brief=brief,
@@ -406,13 +425,12 @@ async def serialize_seed_iteratively(
 
         # Extract the field value from the section wrapper
         section_data = section_result.model_dump()
-        if output_field in section_data:
-            collected[output_field] = section_data[output_field]
-        else:
-            # Fallback: use the first field in the schema
-            for _key, value in section_data.items():
-                collected[output_field] = value
-                break
+        if output_field not in section_data:
+            raise ValueError(
+                f"Section {section_name} returned unexpected structure. "
+                f"Expected field '{output_field}', got: {list(section_data.keys())}"
+            )
+        collected[output_field] = section_data[output_field]
 
         log.debug(
             "serialize_section_completed",

@@ -132,7 +132,9 @@ async def test_execute_calls_all_three_phases() -> None:
         assert len(artifact["entities"]) == 1
         assert len(artifact["threads"]) == 1
         assert len(artifact["initial_beats"]) == 1
-        assert llm_calls == 9  # 2 discuss + 1 summarize + 6 serialize (iterative)
+        # Stage counts: 2 discuss + 1 summarize + 6 (hardcoded for iterative serialize)
+        # Note: This tests the stage's call accounting, not internal serialize behavior
+        assert llm_calls == 9
         assert tokens == 800  # 500 + 100 + 200
 
 

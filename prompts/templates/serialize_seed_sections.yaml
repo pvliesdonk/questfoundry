@@ -1,12 +1,6 @@
 name: serialize_seed_sections
 description: Section-specific prompts for iterative SEED serialization
 
-# Common preamble injected into all section prompts
-common_context: |
-  You are extracting ONE SECTION from a SEED stage brief into structured JSON.
-  Focus ONLY on the section requested. Extract ALL items for that section.
-  Use snake_case for all IDs. Do not invent details not in the brief.
-
 # Section 1: Entity Decisions
 entities_prompt: |
   You are extracting ENTITY DECISIONS from a SEED stage brief.
