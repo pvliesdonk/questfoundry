@@ -81,25 +81,25 @@ DEFAULT_NONINTERACTIVE_SEED_PROMPT = (
 # Pipeline stage order and configuration
 STAGE_ORDER = ["dream", "brainstorm", "seed"]  # GROW, FILL, SHIP added later
 
-# Stage configuration for the run command
-# Maps stage name to (default_interactive_prompt, default_noninteractive_prompt, preview_fn_name)
-STAGE_CONFIG: dict[str, tuple[str, str | None, str | None]] = {
+# Stage prompt configuration for the run command
+# Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
+STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
     "dream": (
         DEFAULT_INTERACTIVE_DREAM_PROMPT,
         None,  # DREAM requires explicit prompt
-        "_preview_dream_artifact",
     ),
     "brainstorm": (
         DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT,
         DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
-        "_preview_brainstorm_artifact",
     ),
     "seed": (
         DEFAULT_INTERACTIVE_SEED_PROMPT,
         DEFAULT_NONINTERACTIVE_SEED_PROMPT,
-        "_preview_seed_artifact",
     ),
 }
+
+# Message shown after SEED stage completes
+THREAD_FREEZE_MESSAGE = "[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED."
 
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
@@ -518,6 +518,14 @@ def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
     console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
 
 
+# Stage preview function mapping (defined after functions exist)
+STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
+    "dream": _preview_dream_artifact,
+    "brainstorm": _preview_brainstorm_artifact,
+    "seed": _preview_seed_artifact,
+}
+
+
 # =============================================================================
 # CLI Commands
 # =============================================================================
@@ -753,24 +761,7 @@ def seed(
     )
 
     # SEED-specific message about thread freeze
-    console.print("[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED.")
-
-
-def _get_preview_fn(stage_name: str) -> PreviewFn | None:
-    """Get the preview function for a stage.
-
-    Args:
-        stage_name: Name of the stage.
-
-    Returns:
-        The preview function, or None if not found.
-    """
-    preview_fns: dict[str, PreviewFn] = {
-        "dream": _preview_dream_artifact,
-        "brainstorm": _preview_brainstorm_artifact,
-        "seed": _preview_seed_artifact,
-    }
-    return preview_fns.get(stage_name)
+    console.print(THREAD_FREEZE_MESSAGE)
 
 
 @app.command()
@@ -810,6 +801,14 @@ def run(
         str | None,
         typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
     ] = None,
+    interactive: Annotated[
+        bool | None,
+        typer.Option(
+            "--interactive/--no-interactive",
+            "-i/-I",
+            help="Enable/disable interactive mode. Defaults to non-interactive for batch execution.",
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option("--force", help="Re-run already completed stages."),
@@ -818,11 +817,13 @@ def run(
     """Run multiple pipeline stages sequentially.
 
     Runs all stages from the starting point up to and including the
-    target stage. By default, skips already-completed stages.
+    target stage. By default, skips already-completed stages and uses
+    non-interactive mode for batch execution.
 
     Examples:
         qf run --to seed --prompt "A mystery story"
         qf run --to brainstorm --from dream --force
+        qf run --to seed --prompt "A mystery" --interactive
     """
     project_path = _resolve_project_path(project)
     _require_project(project_path)
@@ -874,14 +875,16 @@ def run(
         console.print("Use [cyan]--prompt[/cyan] to provide a story idea.")
         raise typer.Exit(1)
 
+    # Determine interactive mode: explicit flag > default to non-interactive for batch execution
+    use_interactive = interactive if interactive is not None else False
+
     console.print()
     console.print(f"[bold]Running stages:[/bold] {' → '.join(s.upper() for s in stages_to_run)}")
     console.print()
 
     # Run each stage
     for stage_name in stages_to_run:
-        config = STAGE_CONFIG[stage_name]
-        default_interactive_prompt, default_noninteractive_prompt, _ = config
+        default_interactive_prompt, default_noninteractive_prompt = STAGE_PROMPTS[stage_name]
 
         # Use provided prompt only for DREAM, defaults for others
         stage_prompt = prompt if stage_name == "dream" else None
@@ -900,18 +903,16 @@ def run(
                 project_path=project_path,
                 prompt=stage_prompt,
                 provider=provider,
-                interactive=False,  # run command always uses non-interactive mode
+                interactive=use_interactive,
                 default_interactive_prompt=default_interactive_prompt,
                 default_noninteractive_prompt=default_noninteractive_prompt,
-                preview_fn=_get_preview_fn(stage_name),
+                preview_fn=STAGE_PREVIEW_FNS.get(stage_name),
                 next_step_hint=next_step_hint,
             )
 
             # SEED-specific message
             if stage_name == "seed":
-                console.print(
-                    "[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED."
-                )
+                console.print(THREAD_FREEZE_MESSAGE)
 
         except typer.Exit as e:
             if e.exit_code != 0:

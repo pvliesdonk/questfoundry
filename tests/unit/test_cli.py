@@ -14,8 +14,8 @@ from questfoundry.cli import (
     DEFAULT_INTERACTIVE_SEED_PROMPT,
     DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
     DEFAULT_NONINTERACTIVE_SEED_PROMPT,
-    STAGE_CONFIG,
     STAGE_ORDER,
+    STAGE_PROMPTS,
     _resolve_project_path,
     app,
 )
@@ -575,7 +575,7 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
         assert context["user_prompt"] == DEFAULT_NONINTERACTIVE_SEED_PROMPT
 
 
-# --- STAGE_ORDER and STAGE_CONFIG Constants Tests ---
+# --- STAGE_ORDER and STAGE_PROMPTS Constants Tests ---
 
 
 def test_stage_order_constant() -> None:
@@ -583,29 +583,29 @@ def test_stage_order_constant() -> None:
     assert STAGE_ORDER == ["dream", "brainstorm", "seed"]
 
 
-def test_stage_config_has_all_stages() -> None:
-    """Test STAGE_CONFIG has entry for each stage in STAGE_ORDER."""
+def test_stage_prompts_has_all_stages() -> None:
+    """Test STAGE_PROMPTS has entry for each stage in STAGE_ORDER."""
     for stage in STAGE_ORDER:
-        assert stage in STAGE_CONFIG
+        assert stage in STAGE_PROMPTS
 
 
-def test_stage_config_dream_requires_prompt() -> None:
+def test_stage_prompts_dream_requires_prompt() -> None:
     """Test DREAM stage has no default non-interactive prompt (requires explicit)."""
-    interactive_prompt, noninteractive_prompt, _ = STAGE_CONFIG["dream"]
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["dream"]
     assert interactive_prompt  # Has interactive prompt
     assert noninteractive_prompt is None  # No non-interactive default
 
 
-def test_stage_config_brainstorm_has_defaults() -> None:
+def test_stage_prompts_brainstorm_has_defaults() -> None:
     """Test BRAINSTORM stage has both interactive and non-interactive prompts."""
-    interactive_prompt, noninteractive_prompt, _ = STAGE_CONFIG["brainstorm"]
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["brainstorm"]
     assert interactive_prompt
     assert noninteractive_prompt
 
 
-def test_stage_config_seed_has_defaults() -> None:
+def test_stage_prompts_seed_has_defaults() -> None:
     """Test SEED stage has both interactive and non-interactive prompts."""
-    interactive_prompt, noninteractive_prompt, _ = STAGE_CONFIG["seed"]
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["seed"]
     assert interactive_prompt
     assert noninteractive_prompt
 
