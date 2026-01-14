@@ -8,6 +8,7 @@ See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,6 +19,57 @@ class MutationError(ValueError):
     """Error during mutation application."""
 
     pass
+
+
+@dataclass
+class SeedValidationError:
+    """Semantic error with context for LLM feedback.
+
+    Attributes:
+        field_path: Path to the invalid field (e.g., "threads.0.tension_id").
+        issue: Description of what's wrong.
+        available: List of valid IDs that could be used instead.
+        provided: The value that was provided.
+    """
+
+    field_path: str
+    issue: str
+    available: list[str] = field(default_factory=list)
+    provided: str = ""
+
+
+class SeedMutationError(MutationError):
+    """SEED mutation failed due to semantic validation errors.
+
+    This error contains structured validation errors that can be formatted
+    as feedback for the LLM to retry with correct values.
+    """
+
+    def __init__(self, errors: list[SeedValidationError]) -> None:
+        self.errors = errors
+        super().__init__(self._format_message())
+
+    def _format_message(self) -> str:
+        """Format errors for exception message."""
+        lines = ["SEED has invalid cross-references:"]
+        for e in self.errors[:8]:  # Limit to 8 errors for readability
+            lines.append(f"  - {e.field_path}: {e.issue}")
+            if e.available:
+                avail = e.available[:5]
+                suffix = "..." if len(e.available) > 5 else ""
+                lines.append(f"    Available: {avail}{suffix}")
+        if len(self.errors) > 8:
+            lines.append(f"  ... and {len(self.errors) - 8} more errors")
+        lines.append("Use EXACT IDs from BRAINSTORM.")
+        return "\n".join(lines)
+
+    def to_feedback(self) -> str:
+        """Format for LLM retry feedback.
+
+        Returns:
+            Human-readable error message for LLM to fix.
+        """
+        return self._format_message()
 
 
 def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
@@ -213,8 +265,192 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             graph.add_edge("has_alternative", tension_id, alt_id)
 
 
+def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedValidationError]:
+    """Validate SEED output references against BRAINSTORM data in graph.
+
+    Checks semantic validity (not just structural):
+    1. Entity IDs in decisions exist in graph
+    2. Tension IDs in decisions exist in graph
+    3. Thread tension_ids reference valid tensions
+    4. Thread alternative_ids exist for their tension
+    5. Beat entity references exist
+    6. Beat thread references exist (within SEED output)
+    7. Consequence thread references exist (within SEED output)
+
+    Args:
+        graph: Graph containing BRAINSTORM data (entities, tensions, alternatives).
+        output: SEED stage output to validate.
+
+    Returns:
+        List of validation errors (empty if valid).
+    """
+    errors: list[SeedValidationError] = []
+
+    # Build lookup sets from graph (BRAINSTORM data)
+    entity_nodes = graph.get_nodes_by_type("entity")
+    tension_nodes = graph.get_nodes_by_type("tension")
+
+    # Raw IDs (unprefixed) for validation - what LLM uses
+    # Type annotation ensures mypy knows these are str sets (filter guarantees non-None)
+    valid_entity_ids: set[str] = {n["raw_id"] for n in entity_nodes.values() if n.get("raw_id")}
+    valid_tension_ids: set[str] = {n["raw_id"] for n in tension_nodes.values() if n.get("raw_id")}
+
+    # Build alternative lookup: tension_raw_id -> set of alt_raw_ids
+    alt_by_tension: dict[str, set[str]] = {}
+    for tension_id, tension_data in tension_nodes.items():
+        raw_tension_id = tension_data.get("raw_id")
+        if not raw_tension_id:
+            continue
+        alt_by_tension[raw_tension_id] = set()
+        # Find alternatives linked to this tension via edges
+        for edge in graph.get_edges():
+            if edge.get("type") == "has_alternative" and edge.get("from") == tension_id:
+                alt_node = graph.get_node(edge.get("to", ""))
+                if alt_node and alt_node.get("raw_id"):
+                    alt_by_tension[raw_tension_id].add(alt_node["raw_id"])
+
+    # Extract thread IDs from SEED output (for internal references)
+    seed_thread_ids: set[str] = {
+        t["thread_id"] for t in output.get("threads", []) if t.get("thread_id")
+    }
+
+    # 1. Validate entity decisions
+    for i, decision in enumerate(output.get("entities", [])):
+        entity_id = decision.get("entity_id")
+        if entity_id and entity_id not in valid_entity_ids:
+            errors.append(
+                SeedValidationError(
+                    field_path=f"entities.{i}.entity_id",
+                    issue=f"Entity '{entity_id}' not in BRAINSTORM",
+                    available=sorted(valid_entity_ids),
+                    provided=entity_id,
+                )
+            )
+
+    # 2. Validate tension decisions
+    for i, decision in enumerate(output.get("tensions", [])):
+        tension_id = decision.get("tension_id")
+        if tension_id and tension_id not in valid_tension_ids:
+            errors.append(
+                SeedValidationError(
+                    field_path=f"tensions.{i}.tension_id",
+                    issue=f"Tension '{tension_id}' not in BRAINSTORM",
+                    available=sorted(valid_tension_ids),
+                    provided=tension_id,
+                )
+            )
+
+    # 3-4. Validate threads
+    for i, thread in enumerate(output.get("threads", [])):
+        tension_id = thread.get("tension_id")
+        alt_id = thread.get("alternative_id")
+
+        if tension_id and tension_id not in valid_tension_ids:
+            errors.append(
+                SeedValidationError(
+                    field_path=f"threads.{i}.tension_id",
+                    issue=f"Tension '{tension_id}' not in BRAINSTORM",
+                    available=sorted(valid_tension_ids),
+                    provided=tension_id,
+                )
+            )
+        elif tension_id and alt_id:
+            # Only check alternative if tension is valid
+            valid_alts = alt_by_tension.get(tension_id, set())
+            if alt_id not in valid_alts:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"threads.{i}.alternative_id",
+                        issue=f"Alternative '{alt_id}' not in tension '{tension_id}'",
+                        available=sorted(valid_alts),
+                        provided=alt_id,
+                    )
+                )
+
+    # 5. Validate beat entity references
+    for i, beat in enumerate(output.get("initial_beats", [])):
+        for entity_id in beat.get("entities", []):
+            if entity_id and entity_id not in valid_entity_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.entities",
+                        issue=f"Entity '{entity_id}' not in BRAINSTORM",
+                        available=sorted(valid_entity_ids),
+                        provided=entity_id,
+                    )
+                )
+
+        # Location is also an entity
+        location = beat.get("location")
+        if location and location not in valid_entity_ids:
+            errors.append(
+                SeedValidationError(
+                    field_path=f"initial_beats.{i}.location",
+                    issue=f"Location '{location}' not in BRAINSTORM entities",
+                    available=sorted(valid_entity_ids),
+                    provided=location,
+                )
+            )
+
+        # Location alternatives are also entities
+        for loc_alt in beat.get("location_alternatives", []):
+            if loc_alt and loc_alt not in valid_entity_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.location_alternatives",
+                        issue=f"Location alternative '{loc_alt}' not in BRAINSTORM entities",
+                        available=sorted(valid_entity_ids),
+                        provided=loc_alt,
+                    )
+                )
+
+    # 6. Validate beat thread references (internal to SEED)
+    for i, beat in enumerate(output.get("initial_beats", [])):
+        for thread_id in beat.get("threads", []):
+            if thread_id and thread_id not in seed_thread_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.threads",
+                        issue=f"Thread '{thread_id}' not defined in SEED threads",
+                        available=sorted(seed_thread_ids),
+                        provided=thread_id,
+                    )
+                )
+
+    # 7. Validate consequence thread references (internal to SEED)
+    for i, consequence in enumerate(output.get("consequences", [])):
+        thread_id = consequence.get("thread_id")
+        if thread_id and thread_id not in seed_thread_ids:
+            errors.append(
+                SeedValidationError(
+                    field_path=f"consequences.{i}.thread_id",
+                    issue=f"Thread '{thread_id}' not defined in SEED threads",
+                    available=sorted(seed_thread_ids),
+                    provided=thread_id,
+                )
+            )
+
+    # 8. Validate tension_impacts in beats
+    for i, beat in enumerate(output.get("initial_beats", [])):
+        for j, impact in enumerate(beat.get("tension_impacts", [])):
+            tension_id = impact.get("tension_id")
+            if tension_id and tension_id not in valid_tension_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.tension_impacts.{j}.tension_id",
+                        issue=f"Tension '{tension_id}' not in BRAINSTORM",
+                        available=sorted(valid_tension_ids),
+                        provided=tension_id,
+                    )
+                )
+
+    return errors
+
+
 def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     """Apply SEED stage output to graph.
+
+    First validates all cross-references, then applies mutations.
 
     Updates entity dispositions, creates threads from explored tensions,
     creates consequences, and creates initial beats.
@@ -231,8 +467,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         output: SEED stage output (SeedOutput fields).
 
     Raises:
+        SeedMutationError: If semantic validation fails (with feedback for retry).
         MutationError: If required id fields are missing.
     """
+    # Validate cross-references first
+    errors = validate_seed_mutations(graph, output)
+    if errors:
+        raise SeedMutationError(errors)
+
     # Update entity dispositions
     for i, entity_decision in enumerate(output.get("entities", [])):
         raw_id = _require_field(entity_decision, "entity_id", f"Entity decision at index {i}")
