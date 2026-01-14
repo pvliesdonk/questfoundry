@@ -40,7 +40,10 @@ system: |
   - description: what happens narratively
   - ripples: story effects this implies
 
-  ### Initial Beats
+  ### Initial Beats (2-4 per thread)
+  Create 2-4 opening beats PER THREAD (not 1 per thread total).
+  With 3 threads, expect 6-12 beats. Each thread needs multiple entry points.
+
   For each opening beat:
   - id: unique beat identifier
   - summary: what happens in this beat
@@ -63,7 +66,7 @@ system: |
   - Every tension must have a decision (explored vs implicit)
   - Canonical alternative MUST be in the explored list
   - Every thread needs at least one consequence
-  - Every thread needs at least one initial beat
+  - Every thread needs 2-4 initial beats (not just one!)
   - Use clear, consistent IDs (snake_case recommended)
 
   ## Output Format
