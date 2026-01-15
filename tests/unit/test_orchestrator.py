@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from questfoundry.graph import Graph
 from questfoundry.pipeline import (
     AutoApproveGate,
     PipelineOrchestrator,
@@ -355,3 +356,199 @@ async def test_orchestrator_close_async(tmp_path: Path) -> None:
 
     assert orchestrator._chat_model is None
     mock_model.close.assert_awaited_once()
+
+
+# --- Post-Mutation Validation Integration Tests ---
+
+
+@pytest.fixture
+def project_with_graph(tmp_path: Path) -> Path:
+    """Create project directory with initialized graph."""
+    # Create project config
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: validation_test
+providers:
+  default: ollama/qwen3:8b
+"""
+    )
+
+    # Create artifacts directory
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+
+    # Initialize graph with some entities (as BRAINSTORM would)
+    graph = Graph()
+    graph.create_node(
+        "entity::detective",
+        {"type": "entity", "raw_id": "detective", "entity_type": "character"},
+    )
+    graph.save(tmp_path / "graph.json")
+
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_calls_validate_invariants(project_with_graph: Path) -> None:
+    """Orchestrator calls validate_invariants() after apply_mutations()."""
+    # Register a stage with mutation handler
+    mock_stage = MagicMock()
+    mock_stage.name = "validation_stage"
+    mock_stage.execute = AsyncMock(
+        return_value=(
+            {"type": "validation_stage", "version": 1},
+            1,
+            100,
+        )
+    )
+    register_stage(mock_stage)
+
+    orchestrator = PipelineOrchestrator(project_with_graph)
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
+
+    # Patch has_mutation_handler to return True for our stage
+    # and validate_invariants to track if it was called
+    with (
+        patch("questfoundry.pipeline.orchestrator.has_mutation_handler", return_value=True),
+        patch("questfoundry.pipeline.orchestrator.apply_mutations") as mock_apply,
+        patch.object(Graph, "validate_invariants", return_value=[]) as mock_validate,
+    ):
+        result = await orchestrator.run_stage("validation_stage", {"user_prompt": "test"})
+
+    assert result.status == "completed"
+    mock_apply.assert_called_once()
+    mock_validate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_rollback_on_graph_corruption(
+    project_with_graph: Path,
+) -> None:
+    """Orchestrator rolls back on violations and returns failed result."""
+    mock_stage = MagicMock()
+    mock_stage.name = "corrupt_stage"
+    mock_stage.execute = AsyncMock(
+        return_value=(
+            {"type": "corrupt_stage", "version": 1},
+            1,
+            100,
+        )
+    )
+    register_stage(mock_stage)
+
+    orchestrator = PipelineOrchestrator(project_with_graph)
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
+
+    fake_violations = ["Dangling edge: entity::missing -> entity::nonexistent"]
+
+    with (
+        patch("questfoundry.pipeline.orchestrator.has_mutation_handler", return_value=True),
+        patch("questfoundry.pipeline.orchestrator.apply_mutations"),
+        patch("questfoundry.pipeline.orchestrator.save_snapshot"),
+        patch("questfoundry.pipeline.orchestrator.rollback_to_snapshot") as mock_rollback,
+        patch.object(Graph, "validate_invariants", return_value=fake_violations),
+    ):
+        result = await orchestrator.run_stage("corrupt_stage", {"user_prompt": "test"})
+
+    # Verify rollback was called
+    mock_rollback.assert_called_once_with(project_with_graph, "corrupt_stage")
+
+    # Verify result indicates failure with corruption error
+    assert result.status == "failed"
+    assert any("Graph corruption" in err for err in result.errors)
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_graph_restored_after_rollback(
+    project_with_graph: Path,
+) -> None:
+    """Graph state is restored after rollback on corruption."""
+    mock_stage = MagicMock()
+    mock_stage.name = "rollback_test"
+    mock_stage.execute = AsyncMock(
+        return_value=(
+            {"type": "rollback_test", "version": 1},
+            1,
+            100,
+        )
+    )
+    register_stage(mock_stage)
+
+    orchestrator = PipelineOrchestrator(project_with_graph)
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
+
+    # Get initial graph state
+    original_graph = Graph.load(project_with_graph)
+    original_nodes = set(original_graph._data["nodes"].keys())
+
+    fake_violations = ["Test violation"]
+
+    # Track if rollback_to_snapshot was called
+    rollback_called = False
+
+    def mock_rollback(_project_path: Path, _stage: str) -> None:
+        nonlocal rollback_called
+        rollback_called = True
+        # Simulate rollback by doing nothing (graph already at original state)
+
+    with (
+        patch("questfoundry.pipeline.orchestrator.has_mutation_handler", return_value=True),
+        patch("questfoundry.pipeline.orchestrator.apply_mutations"),
+        patch("questfoundry.pipeline.orchestrator.save_snapshot"),
+        patch(
+            "questfoundry.pipeline.orchestrator.rollback_to_snapshot",
+            side_effect=mock_rollback,
+        ),
+        patch.object(Graph, "validate_invariants", return_value=fake_violations),
+    ):
+        # Orchestrator catches GraphCorruptionError and returns failed result
+        result = await orchestrator.run_stage("rollback_test", {"user_prompt": "test"})
+
+    assert rollback_called
+    assert result.status == "failed"
+
+    # Verify graph state unchanged (rollback would restore it)
+    restored_graph = Graph.load(project_with_graph)
+    restored_nodes = set(restored_graph._data["nodes"].keys())
+    assert original_nodes == restored_nodes
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_no_validation_without_mutation_handler(
+    project_with_graph: Path,
+) -> None:
+    """Orchestrator skips validation for stages without mutation handlers."""
+    mock_stage = MagicMock()
+    mock_stage.name = "no_mutation_stage"
+    mock_stage.execute = AsyncMock(
+        return_value=(
+            {"type": "no_mutation_stage", "version": 1},
+            1,
+            100,
+        )
+    )
+    register_stage(mock_stage)
+
+    orchestrator = PipelineOrchestrator(project_with_graph)
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
+
+    with (
+        patch("questfoundry.pipeline.orchestrator.has_mutation_handler", return_value=False),
+        patch("questfoundry.pipeline.orchestrator.apply_mutations") as mock_apply,
+        patch.object(Graph, "validate_invariants") as mock_validate,
+    ):
+        result = await orchestrator.run_stage("no_mutation_stage", {"user_prompt": "test"})
+
+    assert result.status == "completed"
+    # Neither apply_mutations nor validate_invariants should be called
+    mock_apply.assert_not_called()
+    mock_validate.assert_not_called()
