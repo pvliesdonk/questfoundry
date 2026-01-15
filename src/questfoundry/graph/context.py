@@ -50,11 +50,11 @@ def _format_seed_valid_ids(graph: Graph) -> str:
         "",
     ]
 
-    # Group entities by category
+    # Group entities by type (character, location, object, faction)
     entities = graph.get_nodes_by_type("entity")
     by_category: dict[str, list[str]] = {}
     for node in entities.values():
-        cat = node.get("entity_category", "unknown")
+        cat = node.get("entity_type", "unknown")
         raw_id = node.get("raw_id", "")
         if raw_id:  # Only include entities with valid raw_id
             by_category.setdefault(cat, []).append(raw_id)
