@@ -7,6 +7,7 @@ mutations through the runtime.
 See docs/architecture/graph-storage.md for architecture details.
 """
 
+from questfoundry.graph.context import format_valid_ids_context
 from questfoundry.graph.errors import (
     EdgeEndpointError,
     GraphIntegrityError,
@@ -51,6 +52,7 @@ __all__ = [
     "apply_dream_mutations",
     "apply_mutations",
     "apply_seed_mutations",
+    "format_valid_ids_context",
     "has_mutation_handler",
     "list_snapshots",
     "rollback_to_snapshot",
