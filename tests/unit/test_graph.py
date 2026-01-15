@@ -803,3 +803,148 @@ class TestGraphIntegrityErrors:
         for error in errors:
             assert isinstance(error, GraphIntegrityError)
             assert isinstance(error, Exception)
+
+
+class TestGraphCorruptionError:
+    """Tests for GraphCorruptionError."""
+
+    def test_basic_attributes(self) -> None:
+        """GraphCorruptionError stores violations and stage."""
+        from questfoundry.graph.errors import GraphCorruptionError
+
+        error = GraphCorruptionError(
+            violations=["Edge 0 missing 'to' field", "Edge 1 source does not exist"],
+            stage="brainstorm",
+        )
+
+        assert error.violations == [
+            "Edge 0 missing 'to' field",
+            "Edge 1 source does not exist",
+        ]
+        assert error.stage == "brainstorm"
+        assert "brainstorm" in str(error)
+        # Both violations should appear in string representation
+        assert "Edge 0" in str(error)
+        assert "Edge 1" in str(error)
+
+    def test_str_shows_violations(self) -> None:
+        """String representation shows violations."""
+        from questfoundry.graph.errors import GraphCorruptionError
+
+        error = GraphCorruptionError(
+            violations=["Dangling edge to missing node"],
+            stage="seed",
+        )
+
+        s = str(error)
+        assert "seed" in s
+        assert "Dangling edge" in s
+
+    def test_str_truncates_many_violations(self) -> None:
+        """String truncates when there are many violations."""
+        from questfoundry.graph.errors import GraphCorruptionError
+
+        violations = [f"Violation {i}" for i in range(10)]
+        error = GraphCorruptionError(violations=violations, stage="grow")
+
+        s = str(error)
+        # Should show first 5 (matches log limit in orchestrator)
+        assert "Violation 0" in s
+        assert "Violation 4" in s
+        # Violation 5+ should not be shown directly
+        assert "Violation 5" not in s or "5 more" in s
+        # Should indicate more
+        assert "5 more" in s
+
+
+class TestGraphValidateInvariants:
+    """Tests for Graph.validate_invariants()."""
+
+    def test_valid_graph_returns_empty(self) -> None:
+        """Valid graph with correct edges returns no violations."""
+        graph = Graph.empty()
+        graph.create_node("entity::alice", {"type": "entity"})
+        graph.create_node("entity::bob", {"type": "entity"})
+        graph.add_edge("relates_to", "entity::alice", "entity::bob")
+
+        violations = graph.validate_invariants()
+        assert violations == []
+
+    def test_empty_graph_returns_empty(self) -> None:
+        """Empty graph has no violations."""
+        graph = Graph.empty()
+        violations = graph.validate_invariants()
+        assert violations == []
+
+    def test_detects_missing_edge_source(self) -> None:
+        """Detects edge with non-existent source."""
+        graph = Graph.empty()
+        graph.create_node("entity::bob", {"type": "entity"})
+        # Add edge with validation disabled (simulating data corruption)
+        graph.add_edge("relates_to", "entity::missing", "entity::bob", validate=False)
+
+        violations = graph.validate_invariants()
+        assert len(violations) == 1
+        assert "entity::missing" in violations[0]
+        assert "source" in violations[0]
+
+    def test_detects_missing_edge_target(self) -> None:
+        """Detects edge with non-existent target."""
+        graph = Graph.empty()
+        graph.create_node("entity::alice", {"type": "entity"})
+        # Add edge with validation disabled (simulating data corruption)
+        graph.add_edge("relates_to", "entity::alice", "entity::missing", validate=False)
+
+        violations = graph.validate_invariants()
+        assert len(violations) == 1
+        assert "entity::missing" in violations[0]
+        assert "target" in violations[0]
+
+    def test_detects_edge_missing_type(self) -> None:
+        """Detects edge missing type field."""
+        graph = Graph.empty()
+        graph.create_node("a", {"type": "test"})
+        graph.create_node("b", {"type": "test"})
+        # Manually add malformed edge
+        graph._data["edges"].append({"from": "a", "to": "b"})
+
+        violations = graph.validate_invariants()
+        assert len(violations) == 1
+        assert "missing 'type'" in violations[0]
+
+    def test_detects_edge_missing_from(self) -> None:
+        """Detects edge missing from field and target not existing."""
+        graph = Graph.empty()
+        graph._data["edges"].append({"type": "test", "to": "b"})
+
+        violations = graph.validate_invariants()
+        assert len(violations) == 2
+        expected_violations = {
+            "Edge 0 missing 'from' field",
+            "Edge 0 (test): target 'b' does not exist",
+        }
+        assert set(violations) == expected_violations
+
+    def test_detects_edge_missing_to(self) -> None:
+        """Detects edge missing to field and source not existing."""
+        graph = Graph.empty()
+        graph._data["edges"].append({"type": "test", "from": "a"})
+
+        violations = graph.validate_invariants()
+        assert len(violations) == 2
+        expected_violations = {
+            "Edge 0 missing 'to' field",
+            "Edge 0 (test): source 'a' does not exist",
+        }
+        assert set(violations) == expected_violations
+
+    def test_returns_multiple_violations(self) -> None:
+        """Returns all violations found."""
+        graph = Graph.empty()
+        # Add two bad edges
+        graph._data["edges"].append({"type": "test", "from": "x", "to": "y"})
+        graph._data["edges"].append({"type": "test", "from": "a", "to": "b"})
+
+        violations = graph.validate_invariants()
+        # Each edge has 2 violations (source and target don't exist)
+        assert len(violations) == 4

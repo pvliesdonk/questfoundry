@@ -453,6 +453,47 @@ class Graph:
         return edges
 
     # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def validate_invariants(self) -> list[str]:
+        """Check graph invariants and return any violations.
+
+        Invariants checked:
+        1. All edge endpoints exist (referential integrity)
+        2. All edges have required fields (type, from, to)
+
+        This is for detecting code bugs/data corruption, not LLM validation.
+        Call after mutations to ensure graph is in a valid state.
+
+        Returns:
+            List of violation messages (empty if valid).
+        """
+        violations: list[str] = []
+        nodes = self._data["nodes"]
+
+        for i, edge in enumerate(self._data["edges"]):
+            # Check edge has required fields
+            edge_type = edge.get("type")
+            from_id = edge.get("from")
+            to_id = edge.get("to")
+
+            if not edge_type:
+                violations.append(f"Edge {i} missing 'type' field")
+            if not from_id:
+                violations.append(f"Edge {i} missing 'from' field")
+            if not to_id:
+                violations.append(f"Edge {i} missing 'to' field")
+
+            # Check endpoints exist
+            if from_id and from_id not in nodes:
+                violations.append(f"Edge {i} ({edge_type}): source '{from_id}' does not exist")
+            if to_id and to_id not in nodes:
+                violations.append(f"Edge {i} ({edge_type}): target '{to_id}' does not exist")
+
+        return violations
+
+    # -------------------------------------------------------------------------
     # Metadata Operations
     # -------------------------------------------------------------------------
 

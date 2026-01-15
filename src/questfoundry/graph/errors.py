@@ -265,3 +265,34 @@ class EdgeEndpointError(GraphIntegrityError):
         )
 
         return "\n".join(lines)
+
+
+@dataclass
+class GraphCorruptionError(Exception):
+    """Raised when post-mutation invariant checks detect graph corruption.
+
+    Unlike GraphIntegrityError, this indicates a code bug rather than
+    invalid LLM output. The graph should be rolled back to the last
+    known good state.
+
+    Attributes:
+        violations: List of invariant violations found.
+        stage: Stage during which corruption was detected.
+    """
+
+    violations: list[str]
+    stage: str = ""
+
+    def __post_init__(self) -> None:
+        msg = f"Graph corruption detected after {self.stage or 'unknown'} stage"
+        if self.violations:
+            msg += f": {len(self.violations)} violation(s)"
+        super().__init__(msg)
+
+    def __str__(self) -> str:
+        lines = [f"Graph corruption detected after {self.stage or 'unknown'} stage:"]
+        for v in self.violations[:5]:
+            lines.append(f"  - {v}")
+        if len(self.violations) > 5:
+            lines.append(f"  - ... and {len(self.violations) - 5} more")
+        return "\n".join(lines)
