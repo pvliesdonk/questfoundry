@@ -300,6 +300,17 @@ class PipelineOrchestrator:
             # Only write artifact if validation passed
             artifact_path: Path | None = None
             if not validation_errors:
+                # Enrich artifact with context from previous stages (SEED only for now)
+                if stage_name == "seed":
+                    try:
+                        from questfoundry.artifacts.enrichment import enrich_seed_artifact
+
+                        graph = Graph.load(self.project_path)
+                        artifact_data = enrich_seed_artifact(graph, artifact_data)
+                    except Exception as e:
+                        # Enrichment failure is non-critical - artifact still valid
+                        log.warning("artifact_enrichment_failed", stage=stage_name, error=str(e))
+
                 # Write to legacy artifact file (for human review)
                 artifact_path = self._writer.write(artifact_data, stage_name)
                 log.debug("artifact_written", stage=stage_name, path=str(artifact_path))
