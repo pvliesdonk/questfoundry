@@ -519,6 +519,11 @@ async def serialize_seed_iteratively(
                 total_tokens += section_tokens
 
                 section_data = section_result.model_dump()
+                if output_field not in section_data:
+                    raise ValueError(
+                        f"Section {section_name} returned unexpected structure on retry. "
+                        f"Expected field '{output_field}', got: {list(section_data.keys())}"
+                    )
                 collected[output_field] = section_data[output_field]
 
             # Re-merge with updated sections
