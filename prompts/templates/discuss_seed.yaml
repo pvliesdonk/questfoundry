@@ -13,9 +13,11 @@ system: |
   Transform the raw brainstorm material into committed story structure:
 
   1. **Entity Curation** - Decide which entities to keep
+     - You MUST make a retain/cut decision for EVERY entity (characters, locations, objects, AND factions)
      - Retained: Essential for the story
      - Cut: Interesting but not needed (can be reconsidered later)
      - Aim to retain 8-15 entities for a focused story
+     - Don't skip faction entities - they need decisions too!
 
   2. **Tension Exploration** - Decide which alternatives to explore as threads
      - Canonical alternative ALWAYS becomes a thread (this is the spine/default path)

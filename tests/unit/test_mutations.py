@@ -821,10 +821,17 @@ class TestSeedCompletenessValidation:
     def test_missing_entity_decision_detected(self) -> None:
         """Detects when entity from BRAINSTORM has no decision in SEED."""
         graph = Graph.empty()
-        # Add entities from BRAINSTORM
-        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
-        graph.add_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
-        graph.add_node("entity::archive", {"type": "entity", "raw_id": "archive"})
+        # Add entities from BRAINSTORM with categories
+        graph.add_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_category": "character"}
+        )
+        graph.add_node(
+            "entity::mentor", {"type": "entity", "raw_id": "mentor", "entity_category": "character"}
+        )
+        graph.add_node(
+            "entity::archive",
+            {"type": "entity", "raw_id": "archive", "entity_category": "location"},
+        )
 
         output = {
             "entities": [
@@ -838,11 +845,16 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        # Should find 2 missing entity decisions
-        entity_errors = [e for e in errors if "Missing decision for entity" in e.issue]
+        # Should find 2 missing entity decisions with category-specific messages
+        entity_errors = [
+            e for e in errors if "Missing decision for" in e.issue and "tension" not in e.issue
+        ]
         assert len(entity_errors) == 2
         missing_ids = {e.issue.split("'")[1] for e in entity_errors}
         assert missing_ids == {"mentor", "archive"}
+        # Verify category is included in error message
+        assert any("character" in e.issue for e in entity_errors)
+        assert any("location" in e.issue for e in entity_errors)
 
     def test_missing_tension_decision_detected(self) -> None:
         """Detects when tension from BRAINSTORM has no decision in SEED."""
@@ -872,7 +884,9 @@ class TestSeedCompletenessValidation:
         """Detects missing decisions for both entities and tensions."""
         graph = Graph.empty()
         # Add entity and tension from BRAINSTORM
-        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+        graph.add_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_category": "character"}
+        )
         graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
 
         output = {
@@ -885,10 +899,42 @@ class TestSeedCompletenessValidation:
         errors = validate_seed_mutations(graph, output)
 
         # Should find both missing entity and missing tension
-        entity_errors = [e for e in errors if "Missing decision for entity" in e.issue]
+        # Entity errors use category-specific messages (e.g., "Missing decision for character")
+        entity_errors = [
+            e for e in errors if "Missing decision for" in e.issue and "tension" not in e.issue
+        ]
         tension_errors = [e for e in errors if "Missing decision for tension" in e.issue]
         assert len(entity_errors) == 1
         assert len(tension_errors) == 1
+
+    def test_missing_faction_entity_shows_category(self) -> None:
+        """Missing faction entity decision shows 'faction' in error message."""
+        graph = Graph.empty()
+        # Add a faction entity from BRAINSTORM
+        graph.add_node(
+            "entity::the_family",
+            {"type": "entity", "raw_id": "the_family", "entity_category": "faction"},
+        )
+        graph.add_node(
+            "entity::the_detective",
+            {"type": "entity", "raw_id": "the_detective", "entity_category": "character"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "the_detective", "disposition": "retained"},
+                # Missing: the_family (faction)
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should find 1 missing entity decision with "faction" in message
+        assert len(errors) == 1
+        assert "Missing decision for faction 'the_family'" in errors[0].issue
 
     def test_empty_brainstorm_valid(self) -> None:
         """Empty BRAINSTORM data (no entities/tensions) is valid."""
