@@ -22,33 +22,44 @@ class ModelInfo:
     max_output_tokens: int | None = None
 
 
-# Known context windows by provider and model.
-# Used as fallback when API doesn't provide this information.
-KNOWN_CONTEXT_WINDOWS: dict[str, dict[str, int]] = {
+@dataclass(frozen=True)
+class ModelProperties:
+    """Known properties for a specific model.
+
+    Used in KNOWN_MODELS registry to consolidate model metadata.
+    """
+
+    context_window: int
+    supports_vision: bool = False
+
+
+# Known model properties by provider and model name.
+# Consolidates context window and capability information.
+KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
     "ollama": {
-        "qwen3:8b": 32_768,
-        "qwen2.5:7b": 32_768,
-        "llama3:8b": 8_192,
-        "llama3.1:8b": 128_000,
-        "mistral:7b": 32_768,
-        "deepseek-coder:6.7b": 16_384,
+        "qwen3:8b": ModelProperties(context_window=32_768),
+        "qwen2.5:7b": ModelProperties(context_window=32_768),
+        "llama3:8b": ModelProperties(context_window=8_192),
+        "llama3.1:8b": ModelProperties(context_window=128_000),
+        "mistral:7b": ModelProperties(context_window=32_768),
+        "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
     },
     "openai": {
-        "gpt-4o": 128_000,
-        "gpt-4o-mini": 128_000,
-        "gpt-4-turbo": 128_000,
-        "gpt-4": 8_192,
-        "gpt-3.5-turbo": 16_385,
-        "o1": 200_000,
-        "o1-mini": 128_000,
+        "gpt-4o": ModelProperties(context_window=128_000, supports_vision=True),
+        "gpt-4o-mini": ModelProperties(context_window=128_000, supports_vision=True),
+        "gpt-4-turbo": ModelProperties(context_window=128_000, supports_vision=True),
+        "gpt-4": ModelProperties(context_window=8_192),
+        "gpt-3.5-turbo": ModelProperties(context_window=16_385),
+        "o1": ModelProperties(context_window=200_000),
+        "o1-mini": ModelProperties(context_window=128_000),
     },
     "anthropic": {
-        "claude-sonnet-4-20250514": 200_000,
-        "claude-opus-4-20250514": 200_000,
-        "claude-3-5-sonnet-latest": 200_000,
-        "claude-3-5-sonnet-20241022": 200_000,
-        "claude-3-opus-20240229": 200_000,
-        "claude-3-haiku-20240307": 200_000,
+        "claude-sonnet-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-opus-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-3-5-sonnet-latest": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-3-5-sonnet-20241022": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-3-opus-20240229": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-3-haiku-20240307": ModelProperties(context_window=200_000, supports_vision=True),
     },
 }
 
@@ -68,21 +79,15 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
         ModelInfo with context window and capabilities.
     """
     provider_lower = provider.lower()
-    provider_models = KNOWN_CONTEXT_WINDOWS.get(provider_lower, {})
-    context_window = provider_models.get(model, DEFAULT_CONTEXT_WINDOW)
+    provider_models = KNOWN_MODELS.get(provider_lower, {})
+    props = provider_models.get(model)
 
-    # Vision support for known multimodal models
-    supports_vision = model in {
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4-turbo",
-        "claude-sonnet-4-20250514",
-        "claude-opus-4-20250514",
-        "claude-3-5-sonnet-latest",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-opus-20240229",
-        "claude-3-haiku-20240307",
-    }
+    if props is not None:
+        context_window = props.context_window
+        supports_vision = props.supports_vision
+    else:
+        context_window = DEFAULT_CONTEXT_WINDOW
+        supports_vision = False
 
     return ModelInfo(
         context_window=context_window,
