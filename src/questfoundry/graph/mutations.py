@@ -14,11 +14,66 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+# Display limits for error messages
+_MAX_ERRORS_DISPLAY = 8
+_MAX_AVAILABLE_DISPLAY = 5
+
 
 class MutationError(ValueError):
     """Error during mutation application."""
 
     pass
+
+
+@dataclass
+class BrainstormValidationError:
+    """Semantic error for BRAINSTORM internal consistency.
+
+    Attributes:
+        field_path: Path to the invalid field (e.g., "tensions.0.central_entity_ids").
+        issue: Description of what's wrong.
+        available: List of valid IDs that could be used instead.
+        provided: The value that was provided.
+    """
+
+    field_path: str
+    issue: str
+    available: list[str] = field(default_factory=list)
+    provided: str = ""
+
+
+class BrainstormMutationError(MutationError):
+    """BRAINSTORM output failed internal consistency validation.
+
+    This error contains structured validation errors that can be formatted
+    as feedback for the LLM to retry with correct values.
+    """
+
+    def __init__(self, errors: list[BrainstormValidationError]) -> None:
+        self.errors = errors
+        super().__init__(self._format_message())
+
+    def _format_message(self) -> str:
+        """Format errors for exception message."""
+        lines = ["BRAINSTORM has invalid internal references:"]
+        for e in self.errors[:_MAX_ERRORS_DISPLAY]:
+            lines.append(f"  - {e.field_path}: {e.issue}")
+            if e.available:
+                avail = e.available[:_MAX_AVAILABLE_DISPLAY]
+                suffix = "..." if len(e.available) > _MAX_AVAILABLE_DISPLAY else ""
+                lines.append(f"    Available: {avail}{suffix}")
+        if len(self.errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
+        lines.append("Use entity_id values from the entities list.")
+        return "\n".join(lines)
+
+    def to_feedback(self) -> str:
+        """Format for LLM retry feedback.
+
+        Returns:
+            Human-readable error message for LLM to fix.
+        """
+        return self._format_message()
 
 
 @dataclass
@@ -52,14 +107,14 @@ class SeedMutationError(MutationError):
     def _format_message(self) -> str:
         """Format errors for exception message."""
         lines = ["SEED has invalid cross-references:"]
-        for e in self.errors[:8]:  # Limit to 8 errors for readability
+        for e in self.errors[:_MAX_ERRORS_DISPLAY]:
             lines.append(f"  - {e.field_path}: {e.issue}")
             if e.available:
-                avail = e.available[:5]
-                suffix = "..." if len(e.available) > 5 else ""
+                avail = e.available[:_MAX_AVAILABLE_DISPLAY]
+                suffix = "..." if len(e.available) > _MAX_AVAILABLE_DISPLAY else ""
                 lines.append(f"    Available: {avail}{suffix}")
-        if len(self.errors) > 8:
-            lines.append(f"  ... and {len(self.errors) - 8} more errors")
+        if len(self.errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
         lines.append("Use EXACT IDs from BRAINSTORM.")
         return "\n".join(lines)
 
@@ -175,6 +230,82 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
     vision_data = _clean_dict(vision_data)
 
     graph.set_node("vision", vision_data)
+
+
+def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormValidationError]:
+    """Validate BRAINSTORM output internal consistency.
+
+    Checks that the output is self-consistent (no graph needed):
+    1. All central_entity_ids in tensions exist in entities list
+    2. All alternative IDs within a tension are unique
+    3. Each tension has exactly one is_default_path=true alternative
+
+    Args:
+        output: BRAINSTORM stage output (entities, tensions).
+
+    Returns:
+        List of validation errors (empty if valid).
+    """
+    errors: list[BrainstormValidationError] = []
+
+    # Build entity ID set from entities list
+    entity_ids: set[str] = {
+        e.get("entity_id") for e in output.get("entities", []) if e.get("entity_id")
+    }
+    sorted_entity_ids = sorted(entity_ids)
+
+    # Validate each tension
+    for i, tension in enumerate(output.get("tensions", [])):
+        tension_id = tension.get("tension_id", f"<index {i}>")
+
+        # 1. Check central_entity_ids reference valid entities
+        for eid in tension.get("central_entity_ids", []):
+            if eid not in entity_ids:
+                errors.append(
+                    BrainstormValidationError(
+                        field_path=f"tensions.{i}.central_entity_ids",
+                        issue=f"Entity '{eid}' not in entities list",
+                        available=sorted_entity_ids,
+                        provided=eid,
+                    )
+                )
+
+        # 2. Check alternative IDs are unique within this tension
+        alts = tension.get("alternatives", [])
+        alt_ids = [a.get("alternative_id") for a in alts if a.get("alternative_id")]
+        seen_alt_ids: set[str] = set()
+        for alt_id in alt_ids:
+            if alt_id in seen_alt_ids:
+                errors.append(
+                    BrainstormValidationError(
+                        field_path=f"tensions.{i}.alternatives",
+                        issue=f"Duplicate alternative_id '{alt_id}' in tension '{tension_id}'",
+                        available=[],
+                        provided=alt_id,
+                    )
+                )
+            seen_alt_ids.add(alt_id)
+
+        # 3. Check exactly one alternative has is_default_path=True
+        # (missing or False both count as non-default - Pydantic validation ensures
+        # the field exists for valid BrainstormOutput, this handles edge cases)
+        default_count = sum(1 for a in alts if a.get("is_default_path"))
+        if default_count != 1:
+            issue = (
+                f"No alternative has is_default_path=true in tension '{tension_id}'"
+                if default_count == 0
+                else f"Multiple alternatives have is_default_path=true in tension '{tension_id}'"
+            )
+            errors.append(
+                BrainstormValidationError(
+                    field_path=f"tensions.{i}.alternatives",
+                    issue=issue,
+                    available=[],
+                    provided=f"found {default_count} defaults",
+                )
+            )
+
+    return errors
 
 
 def _prefix_id(node_type: str, raw_id: str) -> str:

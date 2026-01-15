@@ -9,6 +9,8 @@ See docs/architecture/graph-storage.md for architecture details.
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import (
+    BrainstormMutationError,
+    BrainstormValidationError,
     MutationError,
     SeedMutationError,
     SeedValidationError,
@@ -17,6 +19,7 @@ from questfoundry.graph.mutations import (
     apply_mutations,
     apply_seed_mutations,
     has_mutation_handler,
+    validate_brainstorm_mutations,
     validate_seed_mutations,
 )
 from questfoundry.graph.snapshots import (
@@ -26,6 +29,8 @@ from questfoundry.graph.snapshots import (
 )
 
 __all__ = [
+    "BrainstormMutationError",
+    "BrainstormValidationError",
     "Graph",
     "MutationError",
     "SeedMutationError",
@@ -38,5 +43,6 @@ __all__ = [
     "list_snapshots",
     "rollback_to_snapshot",
     "save_snapshot",
+    "validate_brainstorm_mutations",
     "validate_seed_mutations",
 ]

@@ -23,6 +23,10 @@ from questfoundry.agents import (
     summarize_discussion,
 )
 from questfoundry.graph import Graph
+from questfoundry.graph.mutations import (
+    BrainstormMutationError,
+    validate_brainstorm_mutations,
+)
 from questfoundry.models import BrainstormOutput
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
@@ -245,7 +249,7 @@ class BrainstormStage:
         total_llm_calls += 1
         total_tokens += summarize_tokens
 
-        # Phase 3: Serialize
+        # Phase 3: Serialize (with semantic validation for internal consistency)
         log.debug("brainstorm_phase", phase="serialize")
         serialize_prompt = get_brainstorm_serialize_prompt()
         artifact, serialize_tokens = await serialize_to_artifact(
@@ -255,6 +259,8 @@ class BrainstormStage:
             provider_name=provider_name,
             system_prompt=serialize_prompt,
             callbacks=callbacks,
+            semantic_validator=validate_brainstorm_mutations,
+            semantic_error_class=BrainstormMutationError,
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
