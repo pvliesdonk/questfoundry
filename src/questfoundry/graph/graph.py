@@ -3,6 +3,12 @@
 The graph is the single source of truth for story state. All stages read from
 and write to the graph through structured mutations.
 
+The graph enforces referential integrity similar to foreign keys in databases:
+- Node creation is explicit (create_node fails if exists)
+- Node updates require the node to exist (update_node fails if not found)
+- Edges validate that both endpoints exist
+- Errors provide semantic, actionable feedback for LLM retry loops
+
 See docs/architecture/graph-storage.md for design details.
 """
 
@@ -11,8 +17,16 @@ from __future__ import annotations
 import copy
 import json
 import os
+import warnings
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
+
+from questfoundry.graph.errors import (
+    EdgeEndpointError,
+    NodeExistsError,
+    NodeNotFoundError,
+    NodeReferencedError,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -142,42 +156,131 @@ class Graph:
         result = self._data["nodes"].get(node_id)
         return cast("dict[str, Any] | None", result)
 
+    def create_node(self, node_id: str, data: dict[str, Any]) -> None:
+        """Create a new node. Fails if node already exists.
+
+        Use this when adding new data (e.g., BRAINSTORM creating entities).
+        For modifying existing nodes, use update_node().
+
+        Args:
+            node_id: Unique node identifier.
+            data: Node data dict.
+
+        Raises:
+            NodeExistsError: If node already exists.
+        """
+        if node_id in self._data["nodes"]:
+            raise NodeExistsError(node_id)
+        self._data["nodes"][node_id] = data
+
+    def update_node(self, node_id: str, **updates: Any) -> None:
+        """Update an existing node. Fails if node doesn't exist.
+
+        Use this when modifying existing data (e.g., SEED updating entity disposition).
+        For creating new nodes, use create_node().
+
+        Args:
+            node_id: Unique node identifier.
+            **updates: Fields to update (keyword arguments).
+
+        Raises:
+            NodeNotFoundError: If node doesn't exist.
+        """
+        if node_id not in self._data["nodes"]:
+            # Provide helpful context based on node ID prefix
+            node_type = self._infer_type_from_id(node_id)
+            available = self._get_node_ids_by_type(node_type) if node_type else []
+            raise NodeNotFoundError(
+                node_id,
+                available=available,
+                context="update_node - node must exist before updating",
+            )
+        self._data["nodes"][node_id].update(updates)
+
+    def upsert_node(self, node_id: str, data: dict[str, Any]) -> bool:
+        """Create or update a node. Use sparingly - prefer explicit create/update.
+
+        Returns True if created, False if updated. This is useful for idempotent
+        operations but hides intent. Prefer create_node() or update_node() for clarity.
+
+        Args:
+            node_id: Unique node identifier.
+            data: Node data dict.
+
+        Returns:
+            True if node was created, False if updated.
+        """
+        created = node_id not in self._data["nodes"]
+        self._data["nodes"][node_id] = data
+        return created
+
+    def delete_node(self, node_id: str, *, cascade: bool = False) -> None:
+        """Delete a node. Fails if node is referenced by edges.
+
+        Args:
+            node_id: Node to delete.
+            cascade: If True, also delete edges referencing this node.
+
+        Raises:
+            NodeNotFoundError: If node doesn't exist.
+            NodeReferencedError: If node is referenced by edges and cascade=False.
+        """
+        if node_id not in self._data["nodes"]:
+            raise NodeNotFoundError(node_id, context="delete_node")
+
+        # Find edges referencing this node
+        refs = self._find_edges_referencing(node_id)
+        if refs and not cascade:
+            raise NodeReferencedError(node_id, referenced_by=refs)
+
+        # Delete referencing edges if cascade
+        if cascade and refs:
+            self._data["edges"] = [
+                e
+                for e in self._data["edges"]
+                if e.get("from") != node_id and e.get("to") != node_id
+            ]
+
+        del self._data["nodes"][node_id]
+
     def set_node(self, node_id: str, data: dict[str, Any]) -> None:
         """Set a node, creating or replacing it.
 
+        .. deprecated:: 5.1
+            Use create_node() for new nodes or update_node() for existing nodes.
+            set_node() hides intent and bypasses referential integrity checks.
+
         Args:
             node_id: Unique node identifier.
             data: Node data dict.
         """
+        warnings.warn(
+            "set_node() is deprecated. Use create_node() for new nodes or "
+            "update_node() for existing nodes.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._data["nodes"][node_id] = data
 
     def add_node(self, node_id: str, data: dict[str, Any]) -> None:
-        """Add a new node.
+        """Add a new node (alias for create_node).
+
+        .. deprecated:: 5.1
+            Use create_node() instead for consistency with update_node().
 
         Args:
             node_id: Unique node identifier.
             data: Node data dict.
 
         Raises:
-            ValueError: If node already exists.
+            NodeExistsError: If node already exists.
         """
-        if node_id in self._data["nodes"]:
-            raise ValueError(f"Node '{node_id}' already exists")
-        self._data["nodes"][node_id] = data
-
-    def update_node(self, node_id: str, updates: dict[str, Any]) -> None:
-        """Update an existing node with new data.
-
-        Args:
-            node_id: Unique node identifier.
-            updates: Dict of fields to update.
-
-        Raises:
-            ValueError: If node doesn't exist.
-        """
-        if node_id not in self._data["nodes"]:
-            raise ValueError(f"Node '{node_id}' does not exist")
-        self._data["nodes"][node_id].update(updates)
+        warnings.warn(
+            "add_node() is deprecated. Use create_node() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.create_node(node_id, data)
 
     def has_node(self, node_id: str) -> bool:
         """Check if a node exists.
@@ -189,6 +292,36 @@ class Graph:
             True if node exists, False otherwise.
         """
         return node_id in self._data["nodes"]
+
+    def ref(self, node_type: str, raw_id: str) -> str:
+        """Get a validated node reference. Raises if node doesn't exist.
+
+        Use this to get node IDs for edge creation - it validates the node
+        exists and returns the properly prefixed ID.
+
+        Args:
+            node_type: Type prefix (e.g., "entity", "thread", "tension").
+            raw_id: The raw ID without prefix.
+
+        Returns:
+            Full node ID (e.g., "entity::kay").
+
+        Raises:
+            NodeNotFoundError: If node doesn't exist.
+
+        Example:
+            >>> thread_ref = graph.ref("thread", "trust_thread")
+            >>> graph.add_edge("belongs_to", beat_ref, thread_ref)
+        """
+        node_id = f"{node_type}::{raw_id}"
+        if node_id not in self._data["nodes"]:
+            available = self._get_node_ids_by_type(node_type)
+            raise NodeNotFoundError(
+                node_id,
+                available=available,
+                context=f"reference to {node_type}",
+            )
+        return node_id
 
     def get_nodes_by_type(self, node_type: str) -> dict[str, dict[str, Any]]:
         """Get all nodes of a specific type.
@@ -205,6 +338,25 @@ class Graph:
             if node_data.get("type") == node_type
         }
 
+    def _infer_type_from_id(self, node_id: str) -> str | None:
+        """Infer node type from ID prefix (e.g., 'entity::kay' -> 'entity')."""
+        if "::" in node_id:
+            return node_id.split("::")[0]
+        return None
+
+    def _get_node_ids_by_type(self, node_type: str | None) -> list[str]:
+        """Get all node IDs matching a type prefix."""
+        if node_type is None:
+            return list(self._data["nodes"].keys())
+        prefix = f"{node_type}::"
+        return [nid for nid in self._data["nodes"] if nid.startswith(prefix)]
+
+    def _find_edges_referencing(self, node_id: str) -> list[dict[str, Any]]:
+        """Find all edges that reference a node (as from or to)."""
+        return [
+            e for e in self._data["edges"] if e.get("from") == node_id or e.get("to") == node_id
+        ]
+
     # -------------------------------------------------------------------------
     # Edge Operations
     # -------------------------------------------------------------------------
@@ -214,16 +366,49 @@ class Graph:
         edge_type: str,
         from_id: str,
         to_id: str,
+        *,
+        validate: bool = True,
         **props: Any,
     ) -> None:
-        """Add an edge between two nodes.
+        """Add an edge between two nodes. Validates endpoints exist by default.
 
         Args:
             edge_type: Type of edge (e.g., "choice", "has_alternative").
             from_id: Source node ID.
             to_id: Target node ID.
+            validate: If True (default), validates both endpoints exist.
+                Set to False only for special cases like building test fixtures.
             **props: Additional edge properties.
+
+        Raises:
+            EdgeEndpointError: If validate=True and either endpoint doesn't exist.
         """
+        if validate:
+            from_exists = from_id in self._data["nodes"]
+            to_exists = to_id in self._data["nodes"]
+
+            if not from_exists or not to_exists:
+                # Determine what's missing
+                if not from_exists and not to_exists:
+                    missing = "both"
+                elif not from_exists:
+                    missing = "from"
+                else:
+                    missing = "to"
+
+                # Get available IDs for helpful feedback
+                from_type = self._infer_type_from_id(from_id)
+                to_type = self._infer_type_from_id(to_id)
+
+                raise EdgeEndpointError(
+                    edge_type=edge_type,
+                    from_id=from_id,
+                    to_id=to_id,
+                    missing=missing,
+                    available_from=self._get_node_ids_by_type(from_type),
+                    available_to=self._get_node_ids_by_type(to_type),
+                )
+
         edge = {
             "type": edge_type,
             "from": from_id,
