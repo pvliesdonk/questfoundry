@@ -846,7 +846,9 @@ class TestSeedCompletenessValidation:
         errors = validate_seed_mutations(graph, output)
 
         # Should find 2 missing entity decisions with category-specific messages
-        entity_errors = [e for e in errors if "Missing decision for" in e.issue]
+        entity_errors = [
+            e for e in errors if "Missing decision for" in e.issue and "tension" not in e.issue
+        ]
         assert len(entity_errors) == 2
         missing_ids = {e.issue.split("'")[1] for e in entity_errors}
         assert missing_ids == {"mentor", "archive"}
