@@ -57,6 +57,59 @@ class SerializationError(Exception):
 SemanticValidator = Callable[[dict[str, Any]], list[Any]]
 
 
+def _run_semantic_validation(
+    validator: SemanticValidator,
+    error_class: type[Exception] | None,
+    data: dict[str, Any],
+    attempt: int,
+    max_retries: int,
+    messages: list[BaseMessage],
+) -> tuple[bool, list[str]]:
+    """Run semantic validation and append feedback if failed.
+
+    Args:
+        validator: Semantic validator function.
+        error_class: Exception class with to_feedback() method.
+        data: Data to validate.
+        attempt: Current attempt number.
+        max_retries: Maximum retries.
+        messages: Message list to append feedback to.
+
+    Returns:
+        Tuple of (passed, last_errors).
+        If passed is False, caller should continue to next iteration.
+
+    Raises:
+        Exception: The error_class if validation fails on last attempt.
+    """
+    semantic_errors = validator(data)
+    if not semantic_errors:
+        return True, []
+
+    # Create feedback
+    if error_class is not None:
+        error_obj = error_class(semantic_errors)
+        feedback = error_obj.to_feedback()  # type: ignore[attr-defined]
+    else:
+        feedback = f"Semantic validation errors: {semantic_errors}"
+
+    log.debug(
+        "semantic_validation_failed",
+        attempt=attempt,
+        error_count=len(semantic_errors),
+    )
+
+    if attempt < max_retries:
+        messages.append(HumanMessage(content=feedback))
+        return False, [feedback]
+
+    # Last attempt - raise the error
+    if error_class is not None:
+        raise error_obj
+    # Fallback: return errors for SerializationError
+    return False, [feedback]
+
+
 @traceable(name="Serialize Phase", run_type="chain", tags=["phase:serialize"])
 async def serialize_to_artifact(
     model: BaseChatModel,
@@ -162,22 +215,16 @@ async def serialize_to_artifact(
                     # Run semantic validation if provided
                     if semantic_validator is not None:
                         artifact_dict = result.model_dump()
-                        semantic_errors = semantic_validator(artifact_dict)
-                        if semantic_errors:
-                            # Create feedback and retry
-                            if semantic_error_class is not None:
-                                error_obj = semantic_error_class(semantic_errors)
-                                feedback = error_obj.to_feedback()  # type: ignore[attr-defined]
-                            else:
-                                feedback = f"Semantic validation errors: {semantic_errors}"
-                            last_errors = [feedback]
-                            log.debug(
-                                "semantic_validation_failed",
-                                attempt=attempt,
-                                error_count=len(semantic_errors),
-                            )
-                            if attempt < max_retries:
-                                messages.append(HumanMessage(content=feedback))
+                        passed, errors = _run_semantic_validation(
+                            semantic_validator,
+                            semantic_error_class,
+                            artifact_dict,
+                            attempt,
+                            max_retries,
+                            messages,
+                        )
+                        if not passed:
+                            last_errors = errors
                             continue
 
                     log.info(
@@ -195,22 +242,16 @@ async def serialize_to_artifact(
 
                     # Run semantic validation if provided
                     if semantic_validator is not None:
-                        semantic_errors = semantic_validator(cleaned)
-                        if semantic_errors:
-                            # Create feedback and retry
-                            if semantic_error_class is not None:
-                                error_obj = semantic_error_class(semantic_errors)
-                                feedback = error_obj.to_feedback()  # type: ignore[attr-defined]
-                            else:
-                                feedback = f"Semantic validation errors: {semantic_errors}"
-                            last_errors = [feedback]
-                            log.debug(
-                                "semantic_validation_failed",
-                                attempt=attempt,
-                                error_count=len(semantic_errors),
-                            )
-                            if attempt < max_retries:
-                                messages.append(HumanMessage(content=feedback))
+                        passed, errors = _run_semantic_validation(
+                            semantic_validator,
+                            semantic_error_class,
+                            cleaned,
+                            attempt,
+                            max_retries,
+                            messages,
+                        )
+                        if not passed:
+                            last_errors = errors
                             continue
 
                     log.info(

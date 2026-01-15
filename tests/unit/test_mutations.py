@@ -7,6 +7,7 @@ import pytest
 from questfoundry.graph import Graph, MutationError, SeedMutationError
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
+    BrainstormValidationError,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
@@ -395,7 +396,7 @@ class TestValidateBrainstormMutations:
 
         errors = validate_brainstorm_mutations(output)
 
-        # Should find: duplicate ID + more than one default
+        # Should find: duplicate ID (not default path issue since one is True, one is False)
         duplicate_errors = [e for e in errors if "Duplicate" in e.issue]
         assert len(duplicate_errors) == 1
 
@@ -505,8 +506,6 @@ class TestBrainstormMutationError:
 
     def test_to_feedback_includes_all_error_info(self) -> None:
         """to_feedback() includes error details for LLM retry."""
-        from questfoundry.graph.mutations import BrainstormValidationError
-
         errors = [
             BrainstormValidationError(
                 field_path="tensions.0.central_entity_ids",
@@ -527,8 +526,6 @@ class TestBrainstormMutationError:
 
     def test_error_limit_applied(self) -> None:
         """Only shows first 8 errors plus count of remaining."""
-        from questfoundry.graph.mutations import BrainstormValidationError
-
         errors = [
             BrainstormValidationError(
                 field_path=f"tensions.{i}.central_entity_ids",
