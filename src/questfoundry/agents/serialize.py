@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -52,6 +53,10 @@ class SerializationError(Exception):
         super().__init__(message)
 
 
+# Type alias for semantic validator functions
+SemanticValidator = Callable[[dict[str, Any]], list[Any]]
+
+
 @traceable(name="Serialize Phase", run_type="chain", tags=["phase:serialize"])
 async def serialize_to_artifact(
     model: BaseChatModel,
@@ -62,6 +67,8 @@ async def serialize_to_artifact(
     max_retries: int = 3,
     system_prompt: str | None = None,
     callbacks: list[BaseCallbackHandler] | None = None,
+    semantic_validator: SemanticValidator | None = None,
+    semantic_error_class: type[Exception] | None = None,
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -78,6 +85,11 @@ async def serialize_to_artifact(
         max_retries: Maximum total attempts (default 3).
         system_prompt: Stage-specific serialize prompt. If None, uses generic prompt.
         callbacks: LangChain callback handlers for logging LLM calls.
+        semantic_validator: Optional function that validates semantic correctness.
+            Takes a dict and returns a list of validation errors (empty if valid).
+        semantic_error_class: Exception class with to_feedback() method for
+            formatting semantic validation errors. Required if semantic_validator
+            is provided.
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -147,6 +159,27 @@ async def serialize_to_artifact(
 
                 # If result is already a Pydantic model, validate succeeded
                 if isinstance(result, schema):
+                    # Run semantic validation if provided
+                    if semantic_validator is not None:
+                        artifact_dict = result.model_dump()
+                        semantic_errors = semantic_validator(artifact_dict)
+                        if semantic_errors:
+                            # Create feedback and retry
+                            if semantic_error_class is not None:
+                                error_obj = semantic_error_class(semantic_errors)
+                                feedback = error_obj.to_feedback()  # type: ignore[attr-defined]
+                            else:
+                                feedback = f"Semantic validation errors: {semantic_errors}"
+                            last_errors = [feedback]
+                            log.debug(
+                                "semantic_validation_failed",
+                                attempt=attempt,
+                                error_count=len(semantic_errors),
+                            )
+                            if attempt < max_retries:
+                                messages.append(HumanMessage(content=feedback))
+                            continue
+
                     log.info(
                         "serialize_completed",
                         attempt=attempt,
@@ -159,6 +192,27 @@ async def serialize_to_artifact(
                     # Strip null values (LLMs often send null for optional fields)
                     cleaned = strip_null_values(result)
                     artifact = schema.model_validate(cleaned)
+
+                    # Run semantic validation if provided
+                    if semantic_validator is not None:
+                        semantic_errors = semantic_validator(cleaned)
+                        if semantic_errors:
+                            # Create feedback and retry
+                            if semantic_error_class is not None:
+                                error_obj = semantic_error_class(semantic_errors)
+                                feedback = error_obj.to_feedback()  # type: ignore[attr-defined]
+                            else:
+                                feedback = f"Semantic validation errors: {semantic_errors}"
+                            last_errors = [feedback]
+                            log.debug(
+                                "semantic_validation_failed",
+                                attempt=attempt,
+                                error_count=len(semantic_errors),
+                            )
+                            if attempt < max_retries:
+                                messages.append(HumanMessage(content=feedback))
+                            continue
+
                     log.info(
                         "serialize_completed",
                         attempt=attempt,

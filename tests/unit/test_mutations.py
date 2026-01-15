@@ -6,11 +6,13 @@ import pytest
 
 from questfoundry.graph import Graph, MutationError, SeedMutationError
 from questfoundry.graph.mutations import (
+    BrainstormMutationError,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
     apply_seed_mutations,
     has_mutation_handler,
+    validate_brainstorm_mutations,
 )
 
 
@@ -315,6 +317,235 @@ class TestBrainstormMutations:
         apply_brainstorm_mutations(graph, output)
 
         assert len(graph.to_dict()["nodes"]) == 0
+
+
+class TestValidateBrainstormMutations:
+    """Test BRAINSTORM semantic validation."""
+
+    def test_valid_output_returns_empty(self) -> None:
+        """Valid output with matching entity references returns no errors."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+                {"entity_id": "mentor", "entity_category": "character", "concept": "Mentor"},
+            ],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": ["kay", "mentor"],
+                    "alternatives": [
+                        {"alternative_id": "yes", "description": "Yes", "is_default_path": True},
+                        {"alternative_id": "no", "description": "No", "is_default_path": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert errors == []
+
+    def test_phantom_entity_reference_detected(self) -> None:
+        """Detects when central_entity_ids references non-existent entity."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+            ],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": ["kay", "phantom_entity"],  # phantom_entity doesn't exist
+                    "alternatives": [
+                        {"alternative_id": "yes", "description": "Yes", "is_default_path": True},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        error = errors[0]
+        assert "phantom_entity" in error.provided
+        assert "kay" in error.available
+        assert "central_entity_ids" in error.field_path
+
+    def test_duplicate_alternative_ids_detected(self) -> None:
+        """Detects duplicate alternative IDs within a tension."""
+        output = {
+            "entities": [],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": [],
+                    "alternatives": [
+                        {"alternative_id": "option_a", "description": "A", "is_default_path": True},
+                        {
+                            "alternative_id": "option_a",
+                            "description": "B",
+                            "is_default_path": False,
+                        },
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        # Should find: duplicate ID + more than one default
+        duplicate_errors = [e for e in errors if "Duplicate" in e.issue]
+        assert len(duplicate_errors) == 1
+
+    def test_no_default_path_detected(self) -> None:
+        """Detects when no alternative has is_default_path=True."""
+        output = {
+            "entities": [],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": [],
+                    "alternatives": [
+                        {"alternative_id": "yes", "description": "Yes", "is_default_path": False},
+                        {"alternative_id": "no", "description": "No", "is_default_path": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "No alternative has is_default_path=true" in errors[0].issue
+
+    def test_multiple_default_paths_detected(self) -> None:
+        """Detects when multiple alternatives have is_default_path=True."""
+        output = {
+            "entities": [],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": [],
+                    "alternatives": [
+                        {"alternative_id": "yes", "description": "Yes", "is_default_path": True},
+                        {"alternative_id": "no", "description": "No", "is_default_path": True},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "Multiple alternatives have is_default_path=true" in errors[0].issue
+
+    def test_multiple_errors_collected(self) -> None:
+        """Multiple errors across different validations are all collected."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+            ],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": ["phantom1", "phantom2"],  # Both invalid
+                    "alternatives": [
+                        {"alternative_id": "yes", "description": "Yes", "is_default_path": False},
+                        {"alternative_id": "no", "description": "No", "is_default_path": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        # Should find: 2 phantom entity errors + 1 no default error
+        assert len(errors) == 3
+
+    def test_empty_tensions_valid(self) -> None:
+        """Empty tensions list is valid."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+            ],
+            "tensions": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert errors == []
+
+    def test_empty_alternatives_detected(self) -> None:
+        """Tension with no alternatives fails default path validation."""
+        output = {
+            "entities": [],
+            "tensions": [
+                {
+                    "tension_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": [],
+                    "alternatives": [],  # No alternatives at all
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "No alternative has is_default_path=true" in errors[0].issue
+
+
+class TestBrainstormMutationError:
+    """Test BrainstormMutationError formatting."""
+
+    def test_to_feedback_includes_all_error_info(self) -> None:
+        """to_feedback() includes error details for LLM retry."""
+        from questfoundry.graph.mutations import BrainstormValidationError
+
+        errors = [
+            BrainstormValidationError(
+                field_path="tensions.0.central_entity_ids",
+                issue="Entity 'phantom' not in entities list",
+                available=["kay", "mentor"],
+                provided="phantom",
+            )
+        ]
+        error = BrainstormMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        assert "BRAINSTORM has invalid internal references" in feedback
+        assert "tensions.0.central_entity_ids" in feedback
+        assert "Entity 'phantom' not in entities list" in feedback
+        assert "kay" in feedback
+        assert "mentor" in feedback
+
+    def test_error_limit_applied(self) -> None:
+        """Only shows first 8 errors plus count of remaining."""
+        from questfoundry.graph.mutations import BrainstormValidationError
+
+        errors = [
+            BrainstormValidationError(
+                field_path=f"tensions.{i}.central_entity_ids",
+                issue=f"Entity 'phantom{i}' not in entities list",
+                available=[],
+                provided=f"phantom{i}",
+            )
+            for i in range(12)
+        ]
+        error = BrainstormMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        # Should show first 8 plus "... and 4 more errors"
+        assert "phantom7" in feedback  # 8th error (0-indexed)
+        assert "phantom8" not in feedback  # 9th error hidden
+        assert "... and 4 more errors" in feedback
 
 
 class TestSeedMutations:
