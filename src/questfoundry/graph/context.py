@@ -6,7 +6,7 @@ giving the model authoritative lists of valid IDs to reference.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -78,13 +78,20 @@ def _format_seed_valid_ids(graph: Graph) -> str:
         lines.append("Format: tension_id → [alternative_ids]")
         lines.append("")
 
+        # Pre-build alt edges map to avoid O(T*E) lookups
+        alt_edges_by_tension: dict[str, list[dict[str, Any]]] = {}
+        for edge in graph.get_edges(edge_type="has_alternative"):
+            from_id = edge.get("from")
+            if from_id:
+                alt_edges_by_tension.setdefault(from_id, []).append(edge)
+
         for tid, tdata in sorted(tensions.items()):
             raw_id = tdata.get("raw_id")
             if not raw_id:
                 continue
 
             alts = []
-            for edge in graph.get_edges(from_id=tid, edge_type="has_alternative"):
+            for edge in alt_edges_by_tension.get(tid, []):
                 alt_node = graph.get_node(edge.get("to", ""))
                 if alt_node:
                     alt_id = alt_node.get("raw_id")
@@ -93,6 +100,8 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                         alts.append(f"`{alt_id}`{default}")
 
             if alts:
+                # Sort alternatives for deterministic output
+                alts.sort()
                 lines.append(f"- `{raw_id}` → [{', '.join(alts)}]")
 
         lines.append("")
