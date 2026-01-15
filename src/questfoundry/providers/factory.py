@@ -19,6 +19,27 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Provider default models - None means model must be explicitly specified
+PROVIDER_DEFAULTS: dict[str, str | None] = {
+    "ollama": None,  # Require explicit model due to distribution issues
+    "openai": "gpt-4o",
+    "anthropic": "claude-sonnet-4-20250514",
+}
+
+
+def get_default_model(provider_name: str) -> str | None:
+    """Get default model for a provider.
+
+    Returns None for providers that require explicit model specification.
+
+    Args:
+        provider_name: Provider identifier (ollama, openai, anthropic).
+
+    Returns:
+        Default model name, or None if provider requires explicit model.
+    """
+    return PROVIDER_DEFAULTS.get(provider_name.lower())
+
 
 def create_chat_model(
     provider_name: str,
@@ -103,13 +124,24 @@ def create_model_for_structured_output(
     """
     provider_name_lower = provider_name.lower()
 
+    # Resolve model name: use provided, then provider default, then convenience fallback
+    resolved_model = model_name or get_default_model(provider_name_lower)
+    # Fallback for providers where get_default_model returns None (e.g., ollama)
+    if resolved_model is None:
+        fallback_models = {"ollama": "qwen3:8b"}
+        resolved_model = fallback_models.get(provider_name_lower)
+        if resolved_model is None:
+            raise ProviderError(
+                provider_name_lower, f"No default model for provider: {provider_name_lower}"
+            )
+
     # Get base model based on provider
     if provider_name_lower == "ollama":
-        base_model = _create_ollama_base_model(model_name or "qwen3:8b", **kwargs)
+        base_model = _create_ollama_base_model(resolved_model, **kwargs)
     elif provider_name_lower == "openai":
-        base_model = _create_openai_base_model(model_name or "gpt-4o-mini", **kwargs)
+        base_model = _create_openai_base_model(resolved_model, **kwargs)
     elif provider_name_lower == "anthropic":
-        base_model = _create_anthropic_base_model(model_name or "claude-3-5-sonnet", **kwargs)
+        base_model = _create_anthropic_base_model(resolved_model, **kwargs)
     else:
         log.error("provider_unknown", provider=provider_name_lower)
         raise ProviderError(provider_name_lower, f"Unknown provider: {provider_name_lower}")
