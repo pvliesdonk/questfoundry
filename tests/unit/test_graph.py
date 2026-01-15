@@ -911,20 +911,30 @@ class TestGraphValidateInvariants:
         assert "missing 'type'" in violations[0]
 
     def test_detects_edge_missing_from(self) -> None:
-        """Detects edge missing from field."""
+        """Detects edge missing from field and target not existing."""
         graph = Graph.empty()
         graph._data["edges"].append({"type": "test", "to": "b"})
 
         violations = graph.validate_invariants()
-        assert any("missing 'from'" in v for v in violations)
+        assert len(violations) == 2
+        expected_violations = {
+            "Edge 0 missing 'from' field",
+            "Edge 0 (test): target 'b' does not exist",
+        }
+        assert set(violations) == expected_violations
 
     def test_detects_edge_missing_to(self) -> None:
-        """Detects edge missing to field."""
+        """Detects edge missing to field and source not existing."""
         graph = Graph.empty()
         graph._data["edges"].append({"type": "test", "from": "a"})
 
         violations = graph.validate_invariants()
-        assert any("missing 'to'" in v for v in violations)
+        assert len(violations) == 2
+        expected_violations = {
+            "Edge 0 missing 'to' field",
+            "Edge 0 (test): source 'a' does not exist",
+        }
+        assert set(violations) == expected_violations
 
     def test_returns_multiple_violations(self) -> None:
         """Returns all violations found."""
