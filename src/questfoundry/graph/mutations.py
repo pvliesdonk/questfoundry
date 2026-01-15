@@ -429,6 +429,13 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     valid_entity_ids: set[str] = {n["raw_id"] for n in entity_nodes.values() if n.get("raw_id")}
     valid_tension_ids: set[str] = {n["raw_id"] for n in tension_nodes.values() if n.get("raw_id")}
 
+    # Entity category lookup for informative error messages
+    entity_categories: dict[str, str] = {
+        n["raw_id"]: n.get("entity_category", "entity")
+        for n in entity_nodes.values()
+        if n.get("raw_id")
+    }
+
     # Build alternative lookup: tension_raw_id -> set of alt_raw_ids
     # Use O(edges) algorithm instead of O(tensions * edges)
     alt_by_tension: dict[str, set[str]] = {}
@@ -596,10 +603,16 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         }
         missing_ids = valid_ids - decided_ids
         for item_id in sorted(missing_ids):
+            # For entities, include category (character/location/object/faction) for clarity
+            if item_type == "entity":
+                category = entity_categories.get(item_id, "entity")
+                issue_msg = f"Missing decision for {category} '{item_id}'"
+            else:
+                issue_msg = f"Missing decision for {item_type} '{item_id}'"
             errors.append(
                 SeedValidationError(
                     field_path=field_path,
-                    issue=f"Missing decision for {item_type} '{item_id}'",
+                    issue=issue_msg,
                     available=[],
                     provided="",
                 )
