@@ -40,9 +40,11 @@ system: |
   - description: what happens narratively
   - ripples: story effects this implies
 
-  ### Initial Beats (2-4 per thread)
+  ### Initial Beats (2-4 per thread) - CRITICAL
   Create 2-4 initial beats PER THREAD (not just 1 total).
   With 3 threads, expect 6-12 beats. Each thread needs multiple entry points.
+
+  **This is non-negotiable**: If you have 3 threads, you need at least 6 beats.
 
   For each opening beat:
   - id: unique beat identifier
@@ -53,8 +55,11 @@ system: |
     - effect: "advances", "reveals", "commits", or "complicates"
     - note: explanation of the impact
   - entities: entity IDs present in this beat
-  - location: primary location entity ID (or null)
+  - location: primary location entity ID (must be a retained location)
   - location_alternatives: other valid location IDs for knot flexibility
+
+  **Location Diversity Requirement**: Use DIFFERENT locations across beats.
+  Don't place all beats in the same location. Vary settings for scene contrast.
 
   ### Convergence Sketch
   - convergence_points: where threads should merge
@@ -66,8 +71,12 @@ system: |
   - Every tension must have a decision (explored vs implicit)
   - Canonical alternative MUST be in the explored list
   - Every thread needs at least one consequence
-  - Every thread needs 2-4 initial beats (not just one!)
   - Use clear, consistent IDs (snake_case recommended)
+
+  ## FINAL CHECK (verify before submitting)
+  ✓ Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
+  ✓ Location diversity: Are beats spread across different locations?
+  ✓ Entity coverage: Does every entity have a retain/cut decision?
 
   ## Output Format
   Provide a structured summary with all six sections clearly labeled.
