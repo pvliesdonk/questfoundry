@@ -57,6 +57,26 @@ system: |
   - **reveals**: Surfaces information bearing on the question
   - **commits**: Point of no return - alternative is locked in
   - **complicates**: Introduces doubt, new dimension to the tension
+
+  ## CRITICAL REQUIREMENTS (repeated for emphasis)
+
+  These requirements MUST be followed. Failure to meet them will require revision.
+
+  1. **Beat Count per Thread**: Create 2-4 opening beats PER THREAD.
+     - With 3 threads, you need 6-12 beats total
+     - With 5 threads, you need 10-20 beats total
+     - Fewer than 2 beats per thread is NOT acceptable
+     - Each beat should serve a distinct narrative purpose
+
+  2. **Location Diversity**: Vary locations across beats.
+     - Don't place all beats in the same location
+     - Each thread should span at least 2 different retained locations
+     - Vary settings to create scene contrast and pacing variety
+     - Use location changes to mark narrative transitions
+
+  3. **Entity Coverage**: Every entity needs a retain/cut decision.
+     - Characters, locations, objects, AND factions
+     - No entity should be left undecided
   {mode_section}
 
 non_interactive_section: |
