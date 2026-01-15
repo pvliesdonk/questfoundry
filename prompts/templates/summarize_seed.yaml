@@ -58,8 +58,8 @@ system: |
   - location: primary location entity ID (must be a retained location)
   - location_alternatives: other valid location IDs for knot flexibility
 
-  **Location Diversity Requirement**: Use DIFFERENT locations across beats.
-  Don't place all beats in the same location. Vary settings for scene contrast.
+  **Location Diversity Requirement**: Use at least 2 different locations per thread.
+  Don't place all beats in the same location. Vary settings for scene contrast and pacing.
 
   ### Convergence Sketch
   - convergence_points: where threads should merge
@@ -75,7 +75,7 @@ system: |
 
   ## FINAL CHECK (verify before submitting)
   ✓ Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
-  ✓ Location diversity: Are beats spread across different locations?
+  ✓ Location diversity: Does each thread use at least 2 different locations?
   ✓ Entity coverage: Does every entity have a retain/cut decision?
 
   ## Output Format
