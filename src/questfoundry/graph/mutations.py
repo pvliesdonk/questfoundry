@@ -229,7 +229,8 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
     # Remove None values for cleaner storage
     vision_data = _clean_dict(vision_data)
 
-    graph.set_node("vision", vision_data)
+    # Use upsert to allow re-running DREAM stage (replaces existing vision)
+    graph.upsert_node("vision", vision_data)
 
 
 def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormValidationError]:
@@ -356,7 +357,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         }
         # Remove None values
         node_data = _clean_dict(node_data)
-        graph.add_node(entity_id, node_data)
+        graph.create_node(entity_id, node_data)
 
     # Add tensions with alternatives
     for i, tension in enumerate(output.get("tensions", [])):
@@ -376,7 +377,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "why_it_matters": tension.get("why_it_matters"),
         }
         tension_data = _clean_dict(tension_data)
-        graph.add_node(tension_id, tension_data)
+        graph.create_node(tension_id, tension_data)
 
         # Create alternative nodes and edges
         for j, alt in enumerate(tension.get("alternatives", [])):
@@ -392,7 +393,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "is_default_path": alt.get("is_default_path", False),
             }
             alt_data = _clean_dict(alt_data)
-            graph.add_node(alt_id, alt_data)
+            graph.create_node(alt_id, alt_data)
             graph.add_edge("has_alternative", tension_id, alt_id)
 
 
@@ -700,7 +701,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "consequence_ids": thread.get("consequence_ids", []),
         }
         thread_data = _clean_dict(thread_data)
-        graph.add_node(thread_id, thread_data)
+        graph.create_node(thread_id, thread_data)
 
         # Link thread to the alternative it explores
         if "alternative_id" in thread and prefixed_tension_id:
@@ -726,7 +727,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "narrative_effects": consequence.get("narrative_effects", []),
         }
         consequence_data = _clean_dict(consequence_data)
-        graph.add_node(consequence_id, consequence_data)
+        graph.create_node(consequence_id, consequence_data)
 
         # Link consequence to its thread (thread must exist)
         if prefixed_thread_id and graph.has_node(prefixed_thread_id):
@@ -768,17 +769,17 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "location_alternatives": prefixed_location_alts,
         }
         beat_data = _clean_dict(beat_data)
-        graph.add_node(beat_id, beat_data)
+        graph.create_node(beat_id, beat_data)
 
         # Link beat to threads it belongs to
         for raw_thread_id in beat.get("threads", []):
             prefixed_thread_id = _prefix_id("thread", raw_thread_id)
             graph.add_edge("belongs_to", beat_id, prefixed_thread_id)
 
-    # Store convergence sketch as metadata
+    # Store convergence sketch as metadata (upsert allows re-running SEED)
     if "convergence_sketch" in output:
         sketch = output["convergence_sketch"]
-        graph.set_node(
+        graph.upsert_node(
             "convergence_sketch",
             {
                 "type": "convergence_sketch",
