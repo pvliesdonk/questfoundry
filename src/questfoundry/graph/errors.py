@@ -291,8 +291,8 @@ class GraphCorruptionError(Exception):
 
     def __str__(self) -> str:
         lines = [f"Graph corruption detected after {self.stage or 'unknown'} stage:"]
-        for v in self.violations[:10]:
+        for v in self.violations[:5]:
             lines.append(f"  - {v}")
-        if len(self.violations) > 10:
-            lines.append(f"  - ... and {len(self.violations) - 10} more")
+        if len(self.violations) > 5:
+            lines.append(f"  - ... and {len(self.violations) - 5} more")
         return "\n".join(lines)

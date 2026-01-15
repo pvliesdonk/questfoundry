@@ -844,13 +844,15 @@ class TestGraphCorruptionError:
         """String truncates when there are many violations."""
         from questfoundry.graph.errors import GraphCorruptionError
 
-        violations = [f"Violation {i}" for i in range(15)]
+        violations = [f"Violation {i}" for i in range(10)]
         error = GraphCorruptionError(violations=violations, stage="grow")
 
         s = str(error)
-        # Should show first 10
+        # Should show first 5 (matches log limit in orchestrator)
         assert "Violation 0" in s
-        assert "Violation 9" in s
+        assert "Violation 4" in s
+        # Violation 5+ should not be shown directly
+        assert "Violation 5" not in s or "5 more" in s
         # Should indicate more
         assert "5 more" in s
 
