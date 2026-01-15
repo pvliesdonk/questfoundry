@@ -189,7 +189,7 @@ class Graph:
         if node_id not in self._data["nodes"]:
             # Provide helpful context based on node ID prefix
             node_type = self._infer_type_from_id(node_id)
-            available = self._get_node_ids_by_type(node_type) if node_type else []
+            available = self._get_node_ids_by_type(node_type)
             raise NodeNotFoundError(
                 node_id,
                 available=available,
@@ -236,9 +236,7 @@ class Graph:
         # Delete referencing edges if cascade
         if cascade and refs:
             self._data["edges"] = [
-                e
-                for e in self._data["edges"]
-                if e.get("from") != node_id and e.get("to") != node_id
+                e for e in self._data["edges"] if node_id not in (e.get("from"), e.get("to"))
             ]
 
         del self._data["nodes"][node_id]
@@ -307,12 +305,18 @@ class Graph:
             Full node ID (e.g., "entity::kay").
 
         Raises:
+            ValueError: If raw_id contains '::' separator.
             NodeNotFoundError: If node doesn't exist.
 
         Example:
             >>> thread_ref = graph.ref("thread", "trust_thread")
             >>> graph.add_edge("belongs_to", beat_ref, thread_ref)
         """
+        if "::" in raw_id:
+            raise ValueError(
+                f"raw_id should not contain '::' separator. "
+                f"Got '{raw_id}', expected just the ID part (e.g., 'kay' not 'entity::kay')"
+            )
         node_id = f"{node_type}::{raw_id}"
         if node_id not in self._data["nodes"]:
             available = self._get_node_ids_by_type(node_type)
@@ -345,17 +349,19 @@ class Graph:
         return None
 
     def _get_node_ids_by_type(self, node_type: str | None) -> list[str]:
-        """Get all node IDs matching a type prefix."""
+        """Get all node IDs matching a type prefix.
+
+        When node_type is None (for non-prefixed IDs), returns only non-prefixed
+        IDs to provide relevant suggestions.
+        """
         if node_type is None:
-            return list(self._data["nodes"].keys())
+            return [nid for nid in self._data["nodes"] if "::" not in nid]
         prefix = f"{node_type}::"
         return [nid for nid in self._data["nodes"] if nid.startswith(prefix)]
 
     def _find_edges_referencing(self, node_id: str) -> list[dict[str, Any]]:
         """Find all edges that reference a node (as from or to)."""
-        return [
-            e for e in self._data["edges"] if e.get("from") == node_id or e.get("to") == node_id
-        ]
+        return [e for e in self._data["edges"] if node_id in (e.get("from"), e.get("to"))]
 
     # -------------------------------------------------------------------------
     # Edge Operations

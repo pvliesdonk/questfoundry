@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from difflib import get_close_matches
+from typing import Any
 
 
 class GraphIntegrityError(Exception):
@@ -150,7 +151,7 @@ class NodeReferencedError(GraphIntegrityError):
     """
 
     node_id: str
-    referenced_by: list[dict[str, str]] = field(default_factory=list)
+    referenced_by: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         super().__init__(

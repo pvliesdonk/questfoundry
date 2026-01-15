@@ -273,6 +273,17 @@ class TestNodeReference:
         assert "entity::bob" in error.available
         assert "thread::main" not in error.available
 
+    def test_ref_rejects_double_prefixed_id(self) -> None:
+        """ref() raises ValueError if raw_id already contains prefix."""
+        graph = Graph.empty()
+        graph.create_node("entity::kay", {"type": "entity"})
+
+        with pytest.raises(ValueError) as exc_info:
+            graph.ref("entity", "entity::kay")
+
+        assert "::" in str(exc_info.value)
+        assert "kay" in str(exc_info.value)
+
 
 class TestEdgeOperations:
     """Test edge operations."""
