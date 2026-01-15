@@ -387,7 +387,7 @@ def test_create_model_structured_default_model_openai() -> None:
         create_model_for_structured_output("openai")
 
     call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "gpt-4o-mini"
+    assert call_kwargs["model"] == "gpt-4o"  # Uses PROVIDER_DEFAULTS
 
 
 def test_create_model_structured_default_model_anthropic() -> None:
@@ -401,7 +401,7 @@ def test_create_model_structured_default_model_anthropic() -> None:
         create_model_for_structured_output("anthropic")
 
     call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "claude-3-5-sonnet"
+    assert call_kwargs["model"] == "claude-sonnet-4-20250514"  # Uses PROVIDER_DEFAULTS
 
 
 def test_create_model_structured_unknown_provider() -> None:

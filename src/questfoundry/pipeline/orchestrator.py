@@ -22,6 +22,8 @@ from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
+from questfoundry.providers.base import ProviderError
+from questfoundry.providers.factory import create_chat_model, get_default_model
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -163,10 +165,6 @@ class PipelineOrchestrator:
             or os.environ.get("QF_PROVIDER")
             or f"{self.config.provider.name}/{self.config.provider.model}"
         )
-
-        # Use LangChain factory
-        from questfoundry.providers.base import ProviderError
-        from questfoundry.providers.factory import create_chat_model, get_default_model
 
         if "/" in provider_string:
             provider_name, model = provider_string.split("/", 1)
