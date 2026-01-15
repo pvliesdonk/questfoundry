@@ -14,6 +14,7 @@ from questfoundry.graph.mutations import (
     apply_seed_mutations,
     has_mutation_handler,
     validate_brainstorm_mutations,
+    validate_seed_mutations,
 )
 
 
@@ -640,6 +641,9 @@ class TestSeedMutations:
 
         output = {
             "entities": [],
+            "tensions": [
+                {"tension_id": "mentor_trust", "explored": ["protector"], "implicit": []},
+            ],
             "threads": [
                 {
                     "thread_id": "thread_mentor_trust",
@@ -696,7 +700,16 @@ class TestSeedMutations:
         )
 
         output = {
-            "entities": [],
+            # Completeness: decisions for all entities
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+            ],
+            # Completeness: decisions for all tensions
+            "tensions": [
+                {"tension_id": "mentor_trust", "explored": ["protector"], "implicit": []},
+            ],
             # Thread must be in SEED output for beat thread references to validate
             "threads": [
                 {
@@ -775,6 +788,148 @@ class TestSeedMutations:
         # No errors, no changes
 
 
+class TestSeedCompletenessValidation:
+    """Test SEED completeness validation (all entities/tensions have decisions)."""
+
+    def test_complete_decisions_valid(self) -> None:
+        """All entities and tensions have decisions passes validation."""
+        graph = Graph.empty()
+        # Add entities from BRAINSTORM
+        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+        graph.add_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+        # Add tension from BRAINSTORM
+        graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.add_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "mentor", "disposition": "cut"},
+            ],
+            "tensions": [
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
+            ],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_missing_entity_decision_detected(self) -> None:
+        """Detects when entity from BRAINSTORM has no decision in SEED."""
+        graph = Graph.empty()
+        # Add entities from BRAINSTORM
+        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+        graph.add_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+        graph.add_node("entity::archive", {"type": "entity", "raw_id": "archive"})
+
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                # Missing: mentor, archive
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should find 2 missing entity decisions
+        entity_errors = [e for e in errors if "Missing decision for entity" in e.issue]
+        assert len(entity_errors) == 2
+        missing_ids = {e.issue.split("'")[1] for e in entity_errors}
+        assert missing_ids == {"mentor", "archive"}
+
+    def test_missing_tension_decision_detected(self) -> None:
+        """Detects when tension from BRAINSTORM has no decision in SEED."""
+        graph = Graph.empty()
+        # Add tensions from BRAINSTORM
+        graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.add_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "trust", "explored": [], "implicit": []},
+                # Missing: loyalty
+            ],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should find 1 missing tension decision
+        tension_errors = [e for e in errors if "Missing decision for tension" in e.issue]
+        assert len(tension_errors) == 1
+        assert "loyalty" in tension_errors[0].issue
+
+    def test_both_entity_and_tension_missing_detected(self) -> None:
+        """Detects missing decisions for both entities and tensions."""
+        graph = Graph.empty()
+        # Add entity and tension from BRAINSTORM
+        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+        graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+
+        output = {
+            "entities": [],  # Missing kay
+            "tensions": [],  # Missing trust
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should find both missing entity and missing tension
+        entity_errors = [e for e in errors if "Missing decision for entity" in e.issue]
+        tension_errors = [e for e in errors if "Missing decision for tension" in e.issue]
+        assert len(entity_errors) == 1
+        assert len(tension_errors) == 1
+
+    def test_empty_brainstorm_valid(self) -> None:
+        """Empty BRAINSTORM data (no entities/tensions) is valid."""
+        graph = Graph.empty()
+        # No entities or tensions in graph
+
+        output = {
+            "entities": [],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_extra_decisions_invalid(self) -> None:
+        """Extra decisions for non-existent entities/tensions are caught."""
+        graph = Graph.empty()
+        # Only kay exists
+        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "nonexistent", "disposition": "retained"},  # Doesn't exist
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should find invalid entity reference (existing check 1)
+        invalid_errors = [e for e in errors if "not in BRAINSTORM" in e.issue]
+        assert len(invalid_errors) == 1
+        assert "nonexistent" in invalid_errors[0].provided
+
+
 class TestMutationIntegration:
     """Integration tests for multi-stage mutation flow."""
 
@@ -831,6 +986,10 @@ class TestMutationIntegration:
             "entities": [
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "retained"},
+            ],
+            # Completeness: decisions for all tensions
+            "tensions": [
+                {"tension_id": "mentor_trust", "explored": ["protector"], "implicit": []},
             ],
             "threads": [
                 {

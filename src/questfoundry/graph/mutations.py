@@ -408,6 +408,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     6. Beat thread references exist (within SEED output)
     7. Consequence thread references exist (within SEED output)
     8. Tension impacts reference valid tensions
+    9. All BRAINSTORM entities have decisions (completeness)
+    10. All BRAINSTORM tensions have decisions (completeness)
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, tensions, alternatives).
@@ -581,6 +583,27 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                         provided=tension_id,
                     )
                 )
+
+    # 9 & 10. Check completeness: all BRAINSTORM entities and tensions should have decisions
+    completeness_checks = [
+        ("entities", "entity", valid_entity_ids),
+        ("tensions", "tension", valid_tension_ids),
+    ]
+    for field_path, item_type, valid_ids in completeness_checks:
+        id_field = f"{item_type}_id"
+        decided_ids: set[str] = {
+            item_id for item_id in (d.get(id_field) for d in output.get(field_path, [])) if item_id
+        }
+        missing_ids = valid_ids - decided_ids
+        for item_id in sorted(missing_ids):
+            errors.append(
+                SeedValidationError(
+                    field_path=field_path,
+                    issue=f"Missing decision for {item_type} '{item_id}'",
+                    available=[],
+                    provided="",
+                )
+            )
 
     return errors
 
