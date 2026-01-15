@@ -8,6 +8,7 @@ See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -249,10 +250,22 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     """
     errors: list[BrainstormValidationError] = []
 
-    # Build entity ID set from entities list
-    entity_ids: set[str] = {
-        e.get("entity_id") for e in output.get("entities", []) if e.get("entity_id")
-    }
+    # Validate entities have non-empty IDs
+    entities = output.get("entities", [])
+    for i, entity in enumerate(entities):
+        entity_id = entity.get("entity_id")
+        if not entity_id:  # None or empty string
+            errors.append(
+                BrainstormValidationError(
+                    field_path=f"entities.{i}.entity_id",
+                    issue="Entity has missing or empty entity_id",
+                    available=[],
+                    provided=repr(entity_id),
+                )
+            )
+
+    # Build entity ID set from entities list (only valid IDs)
+    entity_ids: set[str] = {e.get("entity_id") for e in entities if e.get("entity_id")}
     sorted_entity_ids = sorted(entity_ids)
 
     # Validate each tension
@@ -274,18 +287,17 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
         # 2. Check alternative IDs are unique within this tension
         alts = tension.get("alternatives", [])
         alt_ids = [a.get("alternative_id") for a in alts if a.get("alternative_id")]
-        seen_alt_ids: set[str] = set()
-        for alt_id in alt_ids:
-            if alt_id in seen_alt_ids:
+        alt_id_counts = Counter(alt_ids)
+        for alt_id, count in alt_id_counts.items():
+            if count > 1:
                 errors.append(
                     BrainstormValidationError(
                         field_path=f"tensions.{i}.alternatives",
-                        issue=f"Duplicate alternative_id '{alt_id}' in tension '{tension_id}'",
+                        issue=f"Duplicate alternative_id '{alt_id}' appears {count} times in tension '{tension_id}'",
                         available=[],
                         provided=alt_id,
                     )
                 )
-            seen_alt_ids.add(alt_id)
 
         # 3. Check exactly one alternative has is_default_path=True
         # (missing or False both count as non-default - Pydantic validation ensures

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
@@ -58,9 +58,30 @@ class SerializationError(Exception):
 SemanticValidator = Callable[[dict[str, Any]], list[Any]]
 
 
+class SemanticErrorFormatter(Protocol):
+    """Protocol for error classes that format validation errors as LLM feedback.
+
+    Semantic error classes must implement this protocol to be used with
+    serialize_to_artifact()'s semantic_error_class parameter.
+
+    Note: Classes implementing this protocol must also inherit from Exception
+    to be raisable. This is enforced at runtime but not statically checkable.
+    """
+
+    errors: list[Any]
+
+    def __init__(self, errors: list[Any]) -> None:
+        """Initialize with list of validation errors."""
+        ...
+
+    def to_feedback(self) -> str:
+        """Format errors as human-readable feedback for LLM retry."""
+        ...
+
+
 def _run_semantic_validation(
     validator: SemanticValidator,
-    error_class: type[Exception] | None,
+    error_class: type[SemanticErrorFormatter] | None,
     data: dict[str, Any],
     attempt: int,
     max_retries: int,
@@ -90,7 +111,7 @@ def _run_semantic_validation(
     # Create feedback
     if error_class is not None:
         error_obj = error_class(semantic_errors)
-        feedback = error_obj.to_feedback()  # type: ignore[attr-defined]
+        feedback = error_obj.to_feedback()
     else:
         feedback = f"Semantic validation errors: {semantic_errors}"
 
@@ -106,7 +127,8 @@ def _run_semantic_validation(
 
     # Last attempt - raise the error
     if error_class is not None:
-        raise error_obj
+        # Protocol can't inherit from BaseException, but implementations must be Exceptions
+        raise error_obj  # type: ignore[misc]
     # Fallback: return errors for SerializationError
     return False, [feedback]
 
@@ -122,7 +144,7 @@ async def serialize_to_artifact(
     system_prompt: str | None = None,
     callbacks: list[BaseCallbackHandler] | None = None,
     semantic_validator: SemanticValidator | None = None,
-    semantic_error_class: type[Exception] | None = None,
+    semantic_error_class: type[SemanticErrorFormatter] | None = None,
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -141,8 +163,8 @@ async def serialize_to_artifact(
         callbacks: LangChain callback handlers for logging LLM calls.
         semantic_validator: Optional function that validates semantic correctness.
             Takes a dict and returns a list of validation errors (empty if valid).
-        semantic_error_class: Exception class with to_feedback() method for
-            formatting semantic validation errors. Required if semantic_validator
+        semantic_error_class: Error class implementing SemanticErrorFormatter protocol
+            for formatting semantic validation errors. Required if semantic_validator
             is provided.
 
     Returns:
