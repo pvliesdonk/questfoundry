@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
 from questfoundry.graph import Graph, apply_mutations, has_mutation_handler, save_snapshot
+from questfoundry.graph.mutations import SeedMutationError
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
@@ -306,8 +307,17 @@ class PipelineOrchestrator:
                         graph.set_last_stage(stage_name)
                         graph.save(self.project_path / "graph.json")
                         log.debug("graph_updated", stage=stage_name)
+                    except SeedMutationError:
+                        # SeedMutationError at this point indicates a bug - validation
+                        # should have occurred during serialization. Re-raise to fail loudly.
+                        log.error(
+                            "seed_validation_bypassed",
+                            stage=stage_name,
+                            msg="SeedMutationError reached orchestrator - validation should happen during serialize",
+                        )
+                        raise
                     except Exception as e:
-                        # Graph operations are non-critical - artifact was written successfully
+                        # Other graph operations are non-critical - artifact was written successfully
                         log.warning("graph_update_failed", stage=stage_name, error=str(e))
 
             # Calculate duration

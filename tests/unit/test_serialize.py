@@ -379,3 +379,290 @@ class TestSerializationError:
         assert error.attempts == 3
         assert error.last_errors == ["error1", "error2"]
         assert "Failed to serialize" in str(error)
+
+
+class TestGetSectionsToRetry:
+    """Test _get_sections_to_retry helper function."""
+
+    def test_maps_entities_field_to_entities_section(self) -> None:
+        """Should map entities.* errors to entities section."""
+        from questfoundry.agents.serialize import _get_sections_to_retry
+        from questfoundry.graph.mutations import SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity not found",
+                available=["a", "b"],
+                provided="x",
+            )
+        ]
+
+        sections = _get_sections_to_retry(errors)
+        assert sections == {"entities"}
+
+    def test_maps_threads_field_to_threads_section(self) -> None:
+        """Should map threads.* errors to threads section."""
+        from questfoundry.agents.serialize import _get_sections_to_retry
+        from questfoundry.graph.mutations import SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=[],
+                provided="x",
+            )
+        ]
+
+        sections = _get_sections_to_retry(errors)
+        assert sections == {"threads"}
+
+    def test_maps_initial_beats_to_beats_section(self) -> None:
+        """Should map initial_beats.* errors to beats section."""
+        from questfoundry.agents.serialize import _get_sections_to_retry
+        from questfoundry.graph.mutations import SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.0.entities",
+                issue="Entity not found",
+                available=[],
+                provided="x",
+            )
+        ]
+
+        sections = _get_sections_to_retry(errors)
+        assert sections == {"beats"}
+
+    def test_multiple_errors_from_different_sections(self) -> None:
+        """Should return all affected sections."""
+        from questfoundry.agents.serialize import _get_sections_to_retry
+        from questfoundry.graph.mutations import SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=[],
+                provided="x",
+            ),
+            SeedValidationError(
+                field_path="initial_beats.0.entities",
+                issue="Entity not found",
+                available=[],
+                provided="y",
+            ),
+        ]
+
+        sections = _get_sections_to_retry(errors)
+        assert sections == {"threads", "beats"}
+
+
+class TestSerializeSeedIterativelySemanticValidation:
+    """Test semantic validation in serialize_seed_iteratively."""
+
+    @pytest.mark.asyncio
+    async def test_skips_semantic_validation_when_graph_is_none(self) -> None:
+        """Should skip semantic validation when graph is not provided."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_seed_iteratively
+
+        # Create mock model that returns valid section data
+        mock_model = MagicMock()
+
+        # We need to mock serialize_to_artifact since serialize_seed_iteratively calls it
+        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+            # Set up mock returns for each section
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
+                (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                ),
+            ]
+
+            with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
+                _result, _tokens = await serialize_seed_iteratively(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=None,  # No graph - should skip semantic validation
+                )
+
+                # Validate should NOT be called when graph is None
+                mock_validate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_semantic_validation_passes_on_first_try(self) -> None:
+        """Should not retry when semantic validation passes."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_seed_iteratively
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
+                (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                ),
+            ]
+
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                _result, _tokens = await serialize_seed_iteratively(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                )
+
+                # Should only call serialize 6 times (once per section)
+                assert mock_serialize.call_count == 6
+
+    @pytest.mark.asyncio
+    async def test_semantic_validation_retries_on_error(self) -> None:
+        """Should retry sections with semantic errors."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_seed_iteratively
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        call_count = [0]
+
+        def mock_serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            # Map call number to section
+            section_map = {
+                1: "entities",
+                2: "tensions",
+                3: "threads",
+                4: "consequences",
+                5: "initial_beats",
+                6: "convergence_sketch",
+                # Retry calls
+                7: "threads",  # Retry threads section
+            }
+            call_num = call_count[0]
+            section = section_map.get(call_num, "unknown")
+
+            if section == "convergence_sketch":
+                return (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                )
+            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+
+        validation_call_count = [0]
+
+        def mock_validate_side_effect(_graph, _output):
+            validation_call_count[0] += 1
+            if validation_call_count[0] == 1:
+                # First validation: return errors for threads section
+                return [
+                    SeedValidationError(
+                        field_path="threads.0.tension_id",
+                        issue="Tension not found",
+                        available=["valid_tension"],
+                        provided="invalid_tension",
+                    )
+                ]
+            # Second validation: pass
+            return []
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_to_artifact",
+                side_effect=mock_serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                side_effect=mock_validate_side_effect,
+            ),
+        ):
+            _result, _tokens = await serialize_seed_iteratively(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+            )
+
+            # Should have called serialize 7 times (6 initial + 1 retry for threads)
+            assert call_count[0] == 7
+            # Should have validated twice
+            assert validation_call_count[0] == 2
+
+    @pytest.mark.asyncio
+    async def test_semantic_validation_raises_after_max_retries(self) -> None:
+        """Should raise SeedMutationError after max_semantic_retries."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_seed_iteratively
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # Always return errors
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid_tension"],
+                provided="invalid_tension",
+            )
+        ]
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
+        ):
+            # Set up returns for initial sections + retries
+            mock_serialize.return_value = (
+                MagicMock(
+                    model_dump=lambda: {
+                        "entities": [],
+                        "tensions": [],
+                        "threads": [],
+                        "consequences": [],
+                        "initial_beats": [],
+                        "convergence_sketch": {"convergence_points": [], "residue_notes": []},
+                    }
+                ),
+                10,
+            )
+
+            with pytest.raises(SeedMutationError) as exc_info:
+                await serialize_seed_iteratively(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                    max_semantic_retries=2,
+                )
+
+            assert len(exc_info.value.errors) == 1
+            assert "threads.0.tension_id" in exc_info.value.errors[0].field_path
