@@ -9,7 +9,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
-from questfoundry.graph import Graph, apply_mutations, has_mutation_handler, save_snapshot
+from questfoundry.graph import (
+    Graph,
+    GraphCorruptionError,
+    apply_mutations,
+    has_mutation_handler,
+    rollback_to_snapshot,
+    save_snapshot,
+)
 from questfoundry.graph.mutations import SeedMutationError
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
@@ -304,6 +311,18 @@ class PipelineOrchestrator:
                         # Pre-stage snapshot enables rollback if mutations fail or stage is rejected
                         save_snapshot(graph, self.project_path, stage_name)
                         apply_mutations(graph, stage_name, artifact_data)
+
+                        # Post-mutation invariant check - catches code bugs, not LLM errors
+                        violations = graph.validate_invariants()
+                        if violations:
+                            log.error(
+                                "graph_corruption_detected",
+                                stage=stage_name,
+                                violations=violations[:5],
+                            )
+                            rollback_to_snapshot(self.project_path, stage_name)
+                            raise GraphCorruptionError(violations, stage=stage_name)
+
                         graph.set_last_stage(stage_name)
                         graph.save(self.project_path / "graph.json")
                         log.debug("graph_updated", stage=stage_name)
@@ -315,6 +334,9 @@ class PipelineOrchestrator:
                             stage=stage_name,
                             msg="SeedMutationError reached orchestrator - validation should happen during serialize",
                         )
+                        raise
+                    except GraphCorruptionError:
+                        # Re-raise corruption errors - already logged and rolled back above
                         raise
                     except Exception as e:
                         # Other graph operations are non-critical - artifact was written successfully

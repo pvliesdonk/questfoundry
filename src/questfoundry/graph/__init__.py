@@ -10,6 +10,7 @@ See docs/architecture/graph-storage.md for architecture details.
 from questfoundry.graph.context import format_valid_ids_context
 from questfoundry.graph.errors import (
     EdgeEndpointError,
+    GraphCorruptionError,
     GraphIntegrityError,
     NodeExistsError,
     NodeNotFoundError,
@@ -41,6 +42,7 @@ __all__ = [
     "BrainstormValidationError",
     "EdgeEndpointError",
     "Graph",
+    "GraphCorruptionError",
     "GraphIntegrityError",
     "MutationError",
     "NodeExistsError",
