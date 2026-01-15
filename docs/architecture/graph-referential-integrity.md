@@ -1,7 +1,7 @@
 # Graph Referential Integrity - Implementation Plan
 
 **Issue**: #147
-**Status**: Draft
+**Status**: Implemented (PR #149, #150)
 **Author**: Claude + Peter
 
 ## Overview
@@ -177,11 +177,19 @@ class NodeNotFoundError(GraphIntegrityError):
 
     def _get_suggestions(self) -> list[str]:
         """Find similar IDs that might be typos."""
+        # Extract raw_id from prefixed ID (e.g., "entity::kay" -> "kay")
         raw_id = self.node_id.split("::")[-1] if "::" in self.node_id else self.node_id
         raw_available = [a.split("::")[-1] for a in self.available]
-        return get_close_matches(raw_id, raw_available, n=3, cutoff=0.6)
+        matches = get_close_matches(raw_id, raw_available, n=3, cutoff=0.6)
+
+        # Reconstruct full IDs with prefix
+        prefix = self.node_id.split("::")[0] if "::" in self.node_id else ""
+        if prefix:
+            return [f"{prefix}::{m}" for m in matches]
+        return matches
 
     def to_llm_feedback(self) -> str:
+        """Format as actionable LLM feedback."""
         suggestions = self._get_suggestions()
 
         lines = [
@@ -202,17 +210,16 @@ class NodeNotFoundError(GraphIntegrityError):
         if suggestions:
             lines.append("**Did you mean one of these?**")
             for s in suggestions:
-                prefix = self.node_id.split("::")[0] if "::" in self.node_id else ""
-                full_id = f"{prefix}::{s}" if prefix else s
-                lines.append(f"  - `{full_id}`")
+                lines.append(f"  - `{s}`")
             lines.append("")
 
         if self.available:
             lines.append("**Valid IDs** (use exactly one of these):")
-            for a in sorted(self.available)[:15]:
+            # Show up to 20 IDs, sorted for consistency
+            for a in sorted(self.available)[:20]:
                 lines.append(f"  - `{a}`")
-            if len(self.available) > 15:
-                lines.append(f"  - ... and {len(self.available) - 15} more")
+            if len(self.available) > 20:
+                lines.append(f"  - ... and {len(self.available) - 20} more")
 
         return "\n".join(lines)
 
@@ -359,10 +366,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             # ...
         })
 
-        # Reference validation happens automatically
-        tension_ref = graph.ref("tension", thread["tension_id"])
+        # Edge endpoint validation happens automatically in add_edge()
         alt_ref = f"tension::{thread['tension_id']}::alt::{thread['alternative_id']}"
-
         graph.add_edge("explores", thread_id, alt_ref)  # Validates alt exists
 ```
 
@@ -405,12 +410,14 @@ def _format_seed_valid_ids(graph: Graph) -> str:
     lines.append("### Entity IDs (for entity_id, entities, location fields)")
     for category in ["character", "location", "object", "faction"]:
         if category in by_category:
-            lines.append(f"\n**{category.title()}s:**")
+            lines.append("")
+            lines.append(f"**{category.title()}s:**")
             for raw_id in sorted(by_category[category]):
                 lines.append(f"  - `{raw_id}`")
 
     # Tensions with alternatives
-    lines.append("\n### Tension IDs with their Alternative IDs")
+    lines.append("")
+    lines.append("### Tension IDs with their Alternative IDs")
     lines.append("Format: tension_id → [alternative_ids]")
     lines.append("")
 
@@ -492,7 +499,7 @@ async def run_stage(self, ...):
     # Post-mutation check - catches code bugs, not LLM errors
     invariant_violations = validate_graph_invariants(graph)
     if invariant_violations:
-        graph.rollback_to_snapshot(snapshot_id)
+        graph.rollback_to_snapshot(stage_name)  # Use stage_name as snapshot ID
         raise GraphCorruptionError(invariant_violations)
 
     graph.save(...)
@@ -551,8 +558,41 @@ uv run qf run --to seed projects/test-fk "A mystery story"
 grep -i "integrity\|not found\|not exist" projects/test-fk/logs/debug.jsonl
 ```
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. **Cascade behavior**: Should `delete_node()` default to `cascade=True` or `False`?
-2. **Soft references**: Should there be a way to reference nodes that might not exist yet (for forward references)?
-3. **Transaction semantics**: Should mutations be all-or-nothing? (Currently partial application possible)
+1. **Cascade behavior**: `delete_node()` defaults to `cascade=False` (safer - requires explicit opt-in for destructive operations). Implemented in PR #149.
+
+2. **Soft references**: Not implemented in initial version. Forward references will be addressed if needed for GROW phase. For now, strict integrity is enforced.
+
+3. **Transaction semantics**: Mutations are NOT all-or-nothing in current implementation. Partial application is possible. The snapshot system can provide manual rollback if needed. Full transaction support deferred to future work if required.
+
+---
+
+## Implementation Notes
+
+### PR #149 (Graph API + Error Types)
+
+Implemented Phase 1 and Phase 2:
+- Added `create_node()`, `update_node(**kwargs)`, `upsert_node()`, `delete_node(cascade=)`
+- Added `ref()` helper with validation for double-prefixed IDs
+- Added `add_edge()` endpoint validation with `EdgeEndpointError`
+- Created error types in `src/questfoundry/graph/errors.py`
+- Deprecated `add_node()` and `set_node()` with warnings
+
+### PR #150 (Mutation Handlers)
+
+Updated mutation handlers to use new API:
+- DREAM: `set_node()` → `upsert_node()` (allows re-running stage)
+- BRAINSTORM: `add_node()` → `create_node()` (entities, tensions, alternatives)
+- SEED: `add_node()` → `create_node()` (threads, consequences, beats)
+- SEED: `set_node()` → `upsert_node()` (convergence_sketch)
+
+### Design Decisions Made During Implementation
+
+1. **Valid IDs context** (Phase 4): Will be injected as a separate section in the prompt template rather than prepending to the user's creative brief. This keeps the brief focused on creativity.
+
+2. **Retry logic**: Semantic validation occurs in the serialize phase before mutations. If `GraphIntegrityError` is raised during mutation, it indicates a bug in validation (not LLM fault) and is logged as error.
+
+3. **Helper methods**: Implemented `_infer_type_from_id()`, `_get_node_ids_by_type()`, and `_find_edges_referencing()` as private methods in `Graph` class.
+
+4. **Method naming**: Kept `add_node()` as deprecated alias pointing to `create_node()`. New code should use explicit `create_node()` or `update_node()`.
