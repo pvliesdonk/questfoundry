@@ -30,7 +30,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "hero",
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
         graph.create_node(
@@ -38,7 +38,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "tavern",
-                "entity_category": "location",
+                "entity_type": "location",
             },
         )
         graph.create_node(
@@ -46,7 +46,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "sword",
-                "entity_category": "object",
+                "entity_type": "object",
             },
         )
 
@@ -114,7 +114,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "zara",
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
         graph.create_node(
@@ -122,7 +122,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "bob",
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
         graph.create_node(
@@ -130,7 +130,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "alice",
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
 
@@ -151,7 +151,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "valid",
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
         graph.create_node(
@@ -159,7 +159,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 # Missing raw_id
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
 
@@ -176,7 +176,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "something",
-                "entity_category": "custom_type",  # Not a standard category
+                "entity_type": "custom_type",  # Not a standard category
             },
         )
 
@@ -194,7 +194,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "hero",
-                "entity_category": "character",
+                "entity_type": "character",
             },
         )
         graph.create_node(
@@ -202,7 +202,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "entity",
                 "raw_id": "castle",
-                "entity_category": "location",
+                "entity_type": "location",
             },
         )
 
