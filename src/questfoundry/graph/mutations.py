@@ -584,35 +584,26 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-    # 9. Check completeness: all BRAINSTORM entities should have decisions
-    decided_entity_ids: set[str] = {
-        d.get("entity_id") for d in output.get("entities", []) if d.get("entity_id")
-    }
-    missing_entities = valid_entity_ids - decided_entity_ids
-    for entity_id in sorted(missing_entities):
-        errors.append(
-            SeedValidationError(
-                field_path="entities",
-                issue=f"Missing decision for entity '{entity_id}'",
-                available=[],
-                provided="",
+    # 9 & 10. Check completeness: all BRAINSTORM entities and tensions should have decisions
+    completeness_checks = [
+        ("entities", "entity", valid_entity_ids),
+        ("tensions", "tension", valid_tension_ids),
+    ]
+    for field_path, item_type, valid_ids in completeness_checks:
+        id_field = f"{item_type}_id"
+        decided_ids: set[str] = {
+            item_id for item_id in (d.get(id_field) for d in output.get(field_path, [])) if item_id
+        }
+        missing_ids = valid_ids - decided_ids
+        for item_id in sorted(missing_ids):
+            errors.append(
+                SeedValidationError(
+                    field_path=field_path,
+                    issue=f"Missing decision for {item_type} '{item_id}'",
+                    available=[],
+                    provided="",
+                )
             )
-        )
-
-    # 10. Check completeness: all BRAINSTORM tensions should have decisions
-    decided_tension_ids: set[str] = {
-        d.get("tension_id") for d in output.get("tensions", []) if d.get("tension_id")
-    }
-    missing_tensions = valid_tension_ids - decided_tension_ids
-    for tension_id in sorted(missing_tensions):
-        errors.append(
-            SeedValidationError(
-                field_path="tensions",
-                issue=f"Missing decision for tension '{tension_id}'",
-                available=[],
-                provided="",
-            )
-        )
 
     return errors
 
