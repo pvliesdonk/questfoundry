@@ -164,16 +164,24 @@ class PipelineOrchestrator:
             or f"{self.config.provider.name}/{self.config.provider.model}"
         )
 
+        # Use LangChain factory
+        from questfoundry.providers.base import ProviderError
+        from questfoundry.providers.factory import create_chat_model, get_default_model
+
         if "/" in provider_string:
             provider_name, model = provider_string.split("/", 1)
         else:
             provider_name = provider_string
-            model = self.config.provider.model
+            default_model = get_default_model(provider_name)
+            if default_model is None:
+                raise ProviderError(
+                    provider_name,
+                    f"Provider '{provider_name}' requires explicit model. "
+                    f"Use --provider {provider_name}/<model-name>",
+                )
+            model = default_model
 
         self._provider_name = provider_name
-
-        # Use LangChain factory
-        from questfoundry.providers.factory import create_chat_model
 
         # If logging enabled, configure LangChain callbacks
         callbacks = None

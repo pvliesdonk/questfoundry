@@ -19,6 +19,27 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Provider default models - None means model must be explicitly specified
+PROVIDER_DEFAULTS: dict[str, str | None] = {
+    "ollama": None,  # Require explicit model due to distribution issues
+    "openai": "gpt-4o",
+    "anthropic": "claude-sonnet-4-20250514",
+}
+
+
+def get_default_model(provider_name: str) -> str | None:
+    """Get default model for a provider.
+
+    Returns None for providers that require explicit model specification.
+
+    Args:
+        provider_name: Provider identifier (ollama, openai, anthropic).
+
+    Returns:
+        Default model name, or None if provider requires explicit model.
+    """
+    return PROVIDER_DEFAULTS.get(provider_name.lower())
+
 
 def create_chat_model(
     provider_name: str,

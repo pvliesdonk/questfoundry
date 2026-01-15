@@ -8,8 +8,46 @@ import pytest
 from pydantic import BaseModel
 
 from questfoundry.providers.base import ProviderError
-from questfoundry.providers.factory import create_chat_model, create_model_for_structured_output
+from questfoundry.providers.factory import (
+    PROVIDER_DEFAULTS,
+    create_chat_model,
+    create_model_for_structured_output,
+    get_default_model,
+)
 from questfoundry.providers.structured_output import StructuredOutputStrategy
+
+# --- Tests for get_default_model ---
+
+
+def test_get_default_model_openai() -> None:
+    """OpenAI has a default model."""
+    assert get_default_model("openai") == "gpt-4o"
+    assert get_default_model("OpenAI") == "gpt-4o"  # Case insensitive
+
+
+def test_get_default_model_anthropic() -> None:
+    """Anthropic has a default model."""
+    assert get_default_model("anthropic") == "claude-sonnet-4-20250514"
+
+
+def test_get_default_model_ollama_returns_none() -> None:
+    """Ollama requires explicit model - returns None."""
+    assert get_default_model("ollama") is None
+
+
+def test_get_default_model_unknown_provider() -> None:
+    """Unknown providers return None."""
+    assert get_default_model("unknown") is None
+
+
+def test_provider_defaults_dict_structure() -> None:
+    """Provider defaults dict has expected structure."""
+    assert "ollama" in PROVIDER_DEFAULTS
+    assert "openai" in PROVIDER_DEFAULTS
+    assert "anthropic" in PROVIDER_DEFAULTS
+    # Ollama should require explicit model
+    assert PROVIDER_DEFAULTS["ollama"] is None
+
 
 # --- Tests for create_chat_model ---
 
