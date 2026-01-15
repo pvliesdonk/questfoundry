@@ -162,6 +162,6 @@ class TestEnrichSeedArtifact:
 
         entity = result["entities"][0]
         keys = list(entity.keys())
-        # entity_id should be first, disposition should be last
-        assert keys[0] == "entity_id"
-        assert keys[-1] == "disposition"
+        # Full expected order: entity_id, entity_type, concept, notes, disposition
+        expected_order = ["entity_id", "entity_type", "concept", "notes", "disposition"]
+        assert keys == expected_order

@@ -49,11 +49,9 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
     """
     # Build lookup: raw_id -> node data for entities
     entity_nodes = graph.get_nodes_by_type("entity")
-    entity_data: dict[str, dict[str, Any]] = {}
-    for _node_id, node in entity_nodes.items():
-        raw_id = node.get("raw_id")
-        if raw_id:
-            entity_data[raw_id] = node
+    entity_data: dict[str, dict[str, Any]] = {
+        node["raw_id"]: node for node in entity_nodes.values() if node.get("raw_id")
+    }
 
     # Enrich entity decisions
     enriched_entities = []
@@ -67,12 +65,9 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
         }
 
         # Add BRAINSTORM fields if available
-        if entity_type := node.get("entity_type"):
-            enriched["entity_type"] = entity_type
-        if concept := node.get("concept"):
-            enriched["concept"] = concept
-        if notes := node.get("notes"):
-            enriched["notes"] = notes
+        for field in ("entity_type", "concept", "notes"):
+            if value := node.get(field):
+                enriched[field] = value
 
         # Add SEED disposition
         enriched["disposition"] = decision.get("disposition")

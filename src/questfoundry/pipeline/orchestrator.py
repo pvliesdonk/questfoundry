@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
+from questfoundry.artifacts.enrichment import enrich_seed_artifact
 from questfoundry.graph import (
     Graph,
     GraphCorruptionError,
@@ -303,8 +304,6 @@ class PipelineOrchestrator:
                 # Enrich artifact with context from previous stages (SEED only for now)
                 if stage_name == "seed":
                     try:
-                        from questfoundry.artifacts.enrichment import enrich_seed_artifact
-
                         graph = Graph.load(self.project_path)
                         artifact_data = enrich_seed_artifact(graph, artifact_data)
                     except Exception as e:
