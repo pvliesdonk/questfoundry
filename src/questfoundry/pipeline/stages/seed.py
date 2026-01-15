@@ -313,14 +313,17 @@ class SeedStage:
         total_tokens += summarize_tokens
 
         # Phase 3: Serialize (iteratively to avoid output truncation)
+        # Load graph for semantic validation against BRAINSTORM data
         log.debug("seed_phase", phase="serialize")
+        graph = Graph.load(resolved_path)
         artifact, serialize_tokens = await serialize_seed_iteratively(
             model=model,
             brief=brief,
             provider_name=provider_name,
             callbacks=callbacks,
+            graph=graph,  # Enables semantic validation
         )
-        # Iterative serialization makes 6 calls (one per section)
+        # Iterative serialization makes 6 calls (one per section) + potential retries
         total_llm_calls += 6
         total_tokens += serialize_tokens
 

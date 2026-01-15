@@ -11,6 +11,11 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
+from questfoundry.graph.mutations import (
+    SeedMutationError,
+    SeedValidationError,
+    validate_seed_mutations,
+)
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import (
     build_runnable_config,
@@ -25,6 +30,8 @@ from questfoundry.providers.structured_output import (
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
+
+    from questfoundry.graph.graph import Graph
 
 log = get_logger(__name__)
 
@@ -360,6 +367,8 @@ async def serialize_seed_iteratively(
     provider_name: str | None = None,
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
+    graph: Graph | None = None,
+    max_semantic_retries: int = 2,
 ) -> tuple[Any, int]:
     """Serialize SEED brief in sections to avoid output truncation.
 
@@ -375,18 +384,26 @@ async def serialize_seed_iteratively(
     5. initial_beats (InitialBeat list)
     6. convergence_sketch (ConvergenceSketch)
 
+    After all sections are merged, if a graph is provided, semantic validation
+    runs to check cross-references against BRAINSTORM data. If validation fails,
+    the problematic sections are re-serialized with feedback.
+
     Args:
         model: Chat model to use for generation.
         brief: The summary brief from the Summarize phase.
         provider_name: Provider name for strategy auto-detection.
-        max_retries: Maximum retries per section.
+        max_retries: Maximum retries per section (Pydantic validation).
         callbacks: LangChain callback handlers for logging LLM calls.
+        graph: Graph containing BRAINSTORM data for semantic validation.
+            If None, semantic validation is skipped.
+        max_semantic_retries: Maximum retries for semantic validation failures.
 
     Returns:
         Tuple of (SeedOutput, total_tokens_used).
 
     Raises:
         SerializationError: If any section fails validation after retries.
+        SeedMutationError: If semantic validation fails after all retries.
     """
     from questfoundry.models.seed import (
         BeatsSection,
@@ -449,6 +466,64 @@ async def serialize_seed_iteratively(
     # Merge all sections into SeedOutput
     seed_output = SeedOutput.model_validate(collected)
 
+    # Semantic validation (if graph provided)
+    if graph is not None:
+        for semantic_attempt in range(1, max_semantic_retries + 1):
+            errors = validate_seed_mutations(graph, seed_output.model_dump())
+            if not errors:
+                break
+
+            log.warning(
+                "semantic_validation_failed",
+                attempt=semantic_attempt,
+                max_attempts=max_semantic_retries,
+                error_count=len(errors),
+            )
+
+            if semantic_attempt >= max_semantic_retries:
+                log.error(
+                    "semantic_validation_exhausted",
+                    error_count=len(errors),
+                )
+                raise SeedMutationError(errors)
+
+            # Determine which sections need re-serialization based on error field paths
+            sections_to_retry = _get_sections_to_retry(errors)
+            feedback = SeedMutationError(errors).to_feedback()
+
+            log.debug(
+                "semantic_retry_sections",
+                sections=list(sections_to_retry),
+                feedback_length=len(feedback),
+            )
+
+            # Re-serialize problematic sections with feedback appended to brief
+            brief_with_feedback = f"{brief}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
+
+            for section_name, schema, output_field in sections:
+                if section_name not in sections_to_retry:
+                    continue
+
+                log.debug("semantic_retry_section", section=section_name)
+
+                section_prompt = prompts[section_name]
+                section_result, section_tokens = await serialize_to_artifact(
+                    model=model,
+                    brief=brief_with_feedback,
+                    schema=schema,
+                    provider_name=provider_name,
+                    max_retries=max_retries,
+                    system_prompt=section_prompt,
+                    callbacks=callbacks,
+                )
+                total_tokens += section_tokens
+
+                section_data = section_result.model_dump()
+                collected[output_field] = section_data[output_field]
+
+            # Re-merge with updated sections
+            seed_output = SeedOutput.model_validate(collected)
+
     log.info(
         "serialize_seed_iteratively_completed",
         entities=len(seed_output.entities),
@@ -460,3 +535,33 @@ async def serialize_seed_iteratively(
     )
 
     return seed_output, total_tokens
+
+
+def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
+    """Determine which sections need re-serialization based on error field paths.
+
+    Args:
+        errors: List of SeedValidationError objects.
+
+    Returns:
+        Set of section names that have errors.
+    """
+    # Map field path prefixes to section names
+    field_to_section = {
+        "entities": "entities",
+        "tensions": "tensions",
+        "threads": "threads",
+        "consequences": "consequences",
+        "initial_beats": "beats",
+        "convergence_sketch": "convergence",
+    }
+
+    sections = set()
+    for error in errors:
+        field_path = error.field_path
+        # Extract the top-level field (e.g., "threads.0.tension_id" -> "threads")
+        top_level = field_path.split(".")[0] if field_path else ""
+        if top_level in field_to_section:
+            sections.add(field_to_section[top_level])
+
+    return sections
