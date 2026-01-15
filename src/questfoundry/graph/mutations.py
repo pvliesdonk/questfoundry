@@ -14,6 +14,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+# Display limits for error messages
+_MAX_ERRORS_DISPLAY = 8
+_MAX_AVAILABLE_DISPLAY = 5
+
 
 class MutationError(ValueError):
     """Error during mutation application."""
@@ -52,14 +56,14 @@ class BrainstormMutationError(MutationError):
     def _format_message(self) -> str:
         """Format errors for exception message."""
         lines = ["BRAINSTORM has invalid internal references:"]
-        for e in self.errors[:8]:  # Limit to 8 errors for readability
+        for e in self.errors[:_MAX_ERRORS_DISPLAY]:
             lines.append(f"  - {e.field_path}: {e.issue}")
             if e.available:
-                avail = e.available[:5]
-                suffix = "..." if len(e.available) > 5 else ""
+                avail = e.available[:_MAX_AVAILABLE_DISPLAY]
+                suffix = "..." if len(e.available) > _MAX_AVAILABLE_DISPLAY else ""
                 lines.append(f"    Available: {avail}{suffix}")
-        if len(self.errors) > 8:
-            lines.append(f"  ... and {len(self.errors) - 8} more errors")
+        if len(self.errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
         lines.append("Use entity_id values from the entities list.")
         return "\n".join(lines)
 
@@ -103,14 +107,14 @@ class SeedMutationError(MutationError):
     def _format_message(self) -> str:
         """Format errors for exception message."""
         lines = ["SEED has invalid cross-references:"]
-        for e in self.errors[:8]:  # Limit to 8 errors for readability
+        for e in self.errors[:_MAX_ERRORS_DISPLAY]:
             lines.append(f"  - {e.field_path}: {e.issue}")
             if e.available:
-                avail = e.available[:5]
-                suffix = "..." if len(e.available) > 5 else ""
+                avail = e.available[:_MAX_AVAILABLE_DISPLAY]
+                suffix = "..." if len(e.available) > _MAX_AVAILABLE_DISPLAY else ""
                 lines.append(f"    Available: {avail}{suffix}")
-        if len(self.errors) > 8:
-            lines.append(f"  ... and {len(self.errors) - 8} more errors")
+        if len(self.errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
         lines.append("Use EXACT IDs from BRAINSTORM.")
         return "\n".join(lines)
 
@@ -283,21 +287,19 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
             seen_alt_ids.add(alt_id)
 
         # 3. Check exactly one alternative has is_default_path=True
+        # (missing or False both count as non-default - Pydantic validation ensures
+        # the field exists for valid BrainstormOutput, this handles edge cases)
         default_count = sum(1 for a in alts if a.get("is_default_path"))
-        if default_count == 0:
-            errors.append(
-                BrainstormValidationError(
-                    field_path=f"tensions.{i}.alternatives",
-                    issue=f"No alternative has is_default_path=true in tension '{tension_id}'",
-                    available=[],
-                    provided=f"found {default_count} defaults",
-                )
+        if default_count != 1:
+            issue = (
+                f"No alternative has is_default_path=true in tension '{tension_id}'"
+                if default_count == 0
+                else f"Multiple alternatives have is_default_path=true in tension '{tension_id}'"
             )
-        elif default_count > 1:
             errors.append(
                 BrainstormValidationError(
                     field_path=f"tensions.{i}.alternatives",
-                    issue=f"Multiple alternatives have is_default_path=true in tension '{tension_id}'",
+                    issue=issue,
                     available=[],
                     provided=f"found {default_count} defaults",
                 )
