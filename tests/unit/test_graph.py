@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,6 +12,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from questfoundry.graph import Graph
+from questfoundry.graph.errors import (
+    EdgeEndpointError,
+    GraphIntegrityError,
+    NodeExistsError,
+    NodeNotFoundError,
+    NodeReferencedError,
+)
 from questfoundry.graph.snapshots import (
     cleanup_old_snapshots,
     delete_snapshot,
@@ -40,7 +48,7 @@ class TestGraphBasics:
         assert "edges=0" in repr(graph)
         assert "last_stage=none" in repr(graph)
 
-        graph.add_node("test", {"type": "test"})
+        graph.create_node("test", {"type": "test"})
         graph.set_last_stage("dream")
         assert "nodes=1" in repr(graph)
         assert "last_stage=dream" in repr(graph)
@@ -49,10 +57,10 @@ class TestGraphBasics:
 class TestNodeOperations:
     """Test node CRUD operations."""
 
-    def test_add_node(self) -> None:
-        """Can add a new node."""
+    def test_create_node(self) -> None:
+        """Can create a new node."""
         graph = Graph.empty()
-        graph.add_node("char_001", {"type": "entity", "name": "Alice"})
+        graph.create_node("char_001", {"type": "entity", "name": "Alice"})
 
         assert graph.has_node("char_001")
         node = graph.get_node("char_001")
@@ -60,44 +68,109 @@ class TestNodeOperations:
         assert node["type"] == "entity"
         assert node["name"] == "Alice"
 
-    def test_add_duplicate_node_raises(self) -> None:
-        """Adding duplicate node raises ValueError."""
+    def test_create_duplicate_node_raises_node_exists_error(self) -> None:
+        """Creating duplicate node raises NodeExistsError."""
         graph = Graph.empty()
-        graph.add_node("char_001", {"type": "entity"})
+        graph.create_node("char_001", {"type": "entity"})
 
-        with pytest.raises(ValueError, match="already exists"):
-            graph.add_node("char_001", {"type": "entity"})
+        with pytest.raises(NodeExistsError) as exc_info:
+            graph.create_node("char_001", {"type": "entity"})
 
-    def test_set_node_creates_or_replaces(self) -> None:
-        """set_node creates if missing, replaces if exists."""
+        assert exc_info.value.node_id == "char_001"
+
+    def test_update_node_with_kwargs(self) -> None:
+        """Can update existing node fields using kwargs."""
         graph = Graph.empty()
+        graph.create_node("char_001", {"type": "entity", "name": "Alice"})
 
-        # Create new
-        graph.set_node("vision", {"type": "vision", "genre": "fantasy"})
-        assert graph.get_node("vision")["genre"] == "fantasy"
-
-        # Replace existing
-        graph.set_node("vision", {"type": "vision", "genre": "noir"})
-        assert graph.get_node("vision")["genre"] == "noir"
-
-    def test_update_node(self) -> None:
-        """Can update existing node fields."""
-        graph = Graph.empty()
-        graph.add_node("char_001", {"type": "entity", "name": "Alice"})
-
-        graph.update_node("char_001", {"disposition": "retained"})
+        graph.update_node("char_001", disposition="retained", status="active")
 
         node = graph.get_node("char_001")
         assert node is not None
         assert node["name"] == "Alice"  # Original preserved
         assert node["disposition"] == "retained"  # New field added
+        assert node["status"] == "active"  # Another new field
 
-    def test_update_nonexistent_node_raises(self) -> None:
-        """Updating nonexistent node raises ValueError."""
+    def test_update_nonexistent_node_raises_node_not_found_error(self) -> None:
+        """Updating nonexistent node raises NodeNotFoundError with context."""
+        graph = Graph.empty()
+        graph.create_node("entity::alice", {"type": "entity"})
+        graph.create_node("entity::bob", {"type": "entity"})
+
+        with pytest.raises(NodeNotFoundError) as exc_info:
+            graph.update_node("entity::charlie", disposition="cut")
+
+        error = exc_info.value
+        assert error.node_id == "entity::charlie"
+        assert "entity::alice" in error.available
+        assert "entity::bob" in error.available
+        assert "update_node" in error.context
+
+    def test_upsert_node_creates(self) -> None:
+        """upsert_node creates new node and returns True."""
+        graph = Graph.empty()
+        created = graph.upsert_node("char_001", {"type": "entity"})
+
+        assert created is True
+        assert graph.has_node("char_001")
+
+    def test_upsert_node_updates(self) -> None:
+        """upsert_node updates existing node and returns False."""
+        graph = Graph.empty()
+        graph.create_node("char_001", {"type": "entity", "name": "Alice"})
+
+        created = graph.upsert_node("char_001", {"type": "entity", "name": "Bob"})
+
+        assert created is False
+        assert graph.get_node("char_001")["name"] == "Bob"
+
+    def test_delete_node(self) -> None:
+        """Can delete an unreferenced node."""
+        graph = Graph.empty()
+        graph.create_node("char_001", {"type": "entity"})
+        assert graph.has_node("char_001")
+
+        graph.delete_node("char_001")
+        assert not graph.has_node("char_001")
+
+    def test_delete_nonexistent_node_raises(self) -> None:
+        """Deleting nonexistent node raises NodeNotFoundError."""
         graph = Graph.empty()
 
-        with pytest.raises(ValueError, match="does not exist"):
-            graph.update_node("missing", {"foo": "bar"})
+        with pytest.raises(NodeNotFoundError) as exc_info:
+            graph.delete_node("missing")
+
+        assert exc_info.value.node_id == "missing"
+
+    def test_delete_referenced_node_raises(self) -> None:
+        """Deleting node referenced by edge raises NodeReferencedError."""
+        graph = Graph.empty()
+        graph.create_node("thread::main", {"type": "thread"})
+        graph.create_node("beat::intro", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::intro", "thread::main")
+
+        with pytest.raises(NodeReferencedError) as exc_info:
+            graph.delete_node("thread::main")
+
+        error = exc_info.value
+        assert error.node_id == "thread::main"
+        assert len(error.referenced_by) == 1
+
+    def test_delete_node_cascade(self) -> None:
+        """Can delete referenced node with cascade=True."""
+        graph = Graph.empty()
+        graph.create_node("thread::main", {"type": "thread"})
+        graph.create_node("beat::intro", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::intro", "thread::main")
+
+        # Verify edge exists
+        assert len(graph.get_edges(to_id="thread::main")) == 1
+
+        # Delete with cascade
+        graph.delete_node("thread::main", cascade=True)
+
+        assert not graph.has_node("thread::main")
+        assert len(graph.get_edges(to_id="thread::main")) == 0
 
     def test_get_node_returns_none_for_missing(self) -> None:
         """get_node returns None for missing node."""
@@ -109,16 +182,16 @@ class TestNodeOperations:
         graph = Graph.empty()
         assert not graph.has_node("char_001")
 
-        graph.add_node("char_001", {"type": "entity"})
+        graph.create_node("char_001", {"type": "entity"})
         assert graph.has_node("char_001")
 
     def test_get_nodes_by_type(self) -> None:
         """Can filter nodes by type."""
         graph = Graph.empty()
-        graph.add_node("char_001", {"type": "entity", "entity_type": "character"})
-        graph.add_node("char_002", {"type": "entity", "entity_type": "character"})
-        graph.add_node("tension_001", {"type": "tension", "question": "?"})
-        graph.set_node("vision", {"type": "vision", "genre": "noir"})
+        graph.create_node("char_001", {"type": "entity", "entity_type": "character"})
+        graph.create_node("char_002", {"type": "entity", "entity_type": "character"})
+        graph.create_node("tension_001", {"type": "tension", "question": "?"})
+        graph.create_node("vision", {"type": "vision", "genre": "noir"})
 
         entities = graph.get_nodes_by_type("entity")
         assert len(entities) == 2
@@ -133,14 +206,93 @@ class TestNodeOperations:
         assert len(visions) == 1
 
 
+class TestDeprecatedNodeMethods:
+    """Test deprecated node methods emit warnings."""
+
+    def test_add_node_deprecated(self) -> None:
+        """add_node() emits deprecation warning."""
+        graph = Graph.empty()
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            graph.add_node("test", {"type": "test"})
+
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert "create_node" in str(w[0].message)
+
+    def test_set_node_deprecated(self) -> None:
+        """set_node() emits deprecation warning."""
+        graph = Graph.empty()
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            graph.set_node("test", {"type": "test"})
+
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert "create_node" in str(w[0].message) or "update_node" in str(w[0].message)
+
+
+class TestNodeReference:
+    """Test ref() validated reference helper."""
+
+    def test_ref_returns_full_id(self) -> None:
+        """ref() returns full node ID for existing node."""
+        graph = Graph.empty()
+        graph.create_node("entity::kay", {"type": "entity"})
+
+        ref_id = graph.ref("entity", "kay")
+        assert ref_id == "entity::kay"
+
+    def test_ref_raises_for_missing_node(self) -> None:
+        """ref() raises NodeNotFoundError for missing node."""
+        graph = Graph.empty()
+        graph.create_node("entity::alice", {"type": "entity"})
+
+        with pytest.raises(NodeNotFoundError) as exc_info:
+            graph.ref("entity", "bob")
+
+        error = exc_info.value
+        assert error.node_id == "entity::bob"
+        assert "entity::alice" in error.available
+
+    def test_ref_provides_available_ids_by_type(self) -> None:
+        """ref() error includes available IDs of the same type."""
+        graph = Graph.empty()
+        graph.create_node("entity::alice", {"type": "entity"})
+        graph.create_node("entity::bob", {"type": "entity"})
+        graph.create_node("thread::main", {"type": "thread"})  # Different type
+
+        with pytest.raises(NodeNotFoundError) as exc_info:
+            graph.ref("entity", "charlie")
+
+        error = exc_info.value
+        # Should include entity IDs but not thread IDs
+        assert "entity::alice" in error.available
+        assert "entity::bob" in error.available
+        assert "thread::main" not in error.available
+
+    def test_ref_rejects_double_prefixed_id(self) -> None:
+        """ref() raises ValueError if raw_id already contains prefix."""
+        graph = Graph.empty()
+        graph.create_node("entity::kay", {"type": "entity"})
+
+        with pytest.raises(ValueError) as exc_info:
+            graph.ref("entity", "entity::kay")
+
+        assert "::" in str(exc_info.value)
+        assert "kay" in str(exc_info.value)
+
+
 class TestEdgeOperations:
     """Test edge operations."""
 
     def test_add_edge(self) -> None:
-        """Can add edges between nodes."""
+        """Can add edges between existing nodes."""
         graph = Graph.empty()
-        graph.add_node("tension_001", {"type": "tension"})
-        graph.add_node("alt_001", {"type": "alternative"})
+        graph.create_node("tension_001", {"type": "tension"})
+        graph.create_node("alt_001", {"type": "alternative"})
 
         graph.add_edge("has_alternative", "tension_001", "alt_001")
 
@@ -153,6 +305,8 @@ class TestEdgeOperations:
     def test_add_edge_with_props(self) -> None:
         """Can add edges with additional properties."""
         graph = Graph.empty()
+        graph.create_node("scene_001", {"type": "scene"})
+        graph.create_node("scene_002", {"type": "scene"})
         graph.add_edge(
             "choice",
             "scene_001",
@@ -165,9 +319,79 @@ class TestEdgeOperations:
         assert edges[0]["label"] == "Go north"
         assert edges[0]["requires"] == ["has_key"]
 
+    def test_add_edge_validates_from_endpoint(self) -> None:
+        """add_edge raises EdgeEndpointError if source doesn't exist."""
+        graph = Graph.empty()
+        graph.create_node("entity::bob", {"type": "entity"})
+
+        with pytest.raises(EdgeEndpointError) as exc_info:
+            graph.add_edge("relates_to", "entity::alice", "entity::bob")
+
+        error = exc_info.value
+        assert error.edge_type == "relates_to"
+        assert error.from_id == "entity::alice"
+        assert error.missing == "from"
+        # available_from shows all entity IDs that could be used as source
+        assert "entity::bob" in error.available_from
+
+    def test_add_edge_validates_to_endpoint(self) -> None:
+        """add_edge raises EdgeEndpointError if target doesn't exist."""
+        graph = Graph.empty()
+        graph.create_node("entity::alice", {"type": "entity"})
+
+        with pytest.raises(EdgeEndpointError) as exc_info:
+            graph.add_edge("relates_to", "entity::alice", "entity::bob")
+
+        error = exc_info.value
+        assert error.edge_type == "relates_to"
+        assert error.to_id == "entity::bob"
+        assert error.missing == "to"
+
+    def test_add_edge_validates_both_endpoints(self) -> None:
+        """add_edge raises EdgeEndpointError if both endpoints missing."""
+        graph = Graph.empty()
+
+        with pytest.raises(EdgeEndpointError) as exc_info:
+            graph.add_edge("relates_to", "entity::alice", "entity::bob")
+
+        error = exc_info.value
+        assert error.missing == "both"
+
+    def test_add_edge_skip_validation(self) -> None:
+        """add_edge with validate=False allows missing endpoints."""
+        graph = Graph.empty()
+
+        # Should not raise
+        graph.add_edge("relates_to", "missing_a", "missing_b", validate=False)
+
+        edges = graph.get_edges()
+        assert len(edges) == 1
+        assert edges[0]["from"] == "missing_a"
+        assert edges[0]["to"] == "missing_b"
+
+    def test_add_edge_provides_available_ids(self) -> None:
+        """EdgeEndpointError includes available IDs of matching type."""
+        graph = Graph.empty()
+        graph.create_node("thread::main", {"type": "thread"})
+        graph.create_node("thread::side", {"type": "thread"})
+        graph.create_node("beat::intro", {"type": "beat"})
+
+        with pytest.raises(EdgeEndpointError) as exc_info:
+            graph.add_edge("belongs_to", "beat::intro", "thread::missing")
+
+        error = exc_info.value
+        # Should suggest thread IDs for the target
+        assert "thread::main" in error.available_to
+        assert "thread::side" in error.available_to
+
     def test_get_edges_filter_by_from(self) -> None:
         """Can filter edges by source node."""
         graph = Graph.empty()
+        graph.create_node("t1", {"type": "tension"})
+        graph.create_node("t2", {"type": "tension"})
+        graph.create_node("a1", {"type": "alternative"})
+        graph.create_node("a2", {"type": "alternative"})
+        graph.create_node("a3", {"type": "alternative"})
         graph.add_edge("has_alt", "t1", "a1")
         graph.add_edge("has_alt", "t1", "a2")
         graph.add_edge("has_alt", "t2", "a3")
@@ -178,6 +402,11 @@ class TestEdgeOperations:
     def test_get_edges_filter_by_to(self) -> None:
         """Can filter edges by target node."""
         graph = Graph.empty()
+        graph.create_node("beat_1", {"type": "beat"})
+        graph.create_node("beat_2", {"type": "beat"})
+        graph.create_node("beat_3", {"type": "beat"})
+        graph.create_node("thread_1", {"type": "thread"})
+        graph.create_node("thread_2", {"type": "thread"})
         graph.add_edge("belongs_to", "beat_1", "thread_1")
         graph.add_edge("belongs_to", "beat_2", "thread_1")
         graph.add_edge("belongs_to", "beat_3", "thread_2")
@@ -188,6 +417,11 @@ class TestEdgeOperations:
     def test_get_edges_filter_by_type(self) -> None:
         """Can filter edges by type."""
         graph = Graph.empty()
+        graph.create_node("t1", {"type": "tension"})
+        graph.create_node("t2", {"type": "tension"})
+        graph.create_node("a1", {"type": "alternative"})
+        graph.create_node("a2", {"type": "alternative"})
+        graph.create_node("thread_1", {"type": "thread"})
         graph.add_edge("has_alternative", "t1", "a1")
         graph.add_edge("explores", "thread_1", "a1")
         graph.add_edge("has_alternative", "t2", "a2")
@@ -198,6 +432,10 @@ class TestEdgeOperations:
     def test_get_edges_multiple_filters(self) -> None:
         """Can combine multiple filters."""
         graph = Graph.empty()
+        graph.create_node("t1", {"type": "tension"})
+        graph.create_node("a1", {"type": "alternative"})
+        graph.create_node("a2", {"type": "alternative"})
+        graph.create_node("th1", {"type": "thread"})
         graph.add_edge("has_alt", "t1", "a1")
         graph.add_edge("has_alt", "t1", "a2")
         graph.add_edge("explores", "th1", "a1")
@@ -248,7 +486,7 @@ class TestPersistence:
         """Can save and load graph."""
         graph = Graph.empty()
         graph.set_project_name("test_project")
-        graph.add_node("char_001", {"type": "entity", "name": "Alice"})
+        graph.create_node("char_001", {"type": "entity", "name": "Alice"})
         graph.set_last_stage("dream")
 
         # Save
@@ -265,7 +503,7 @@ class TestPersistence:
     def test_load_from_project_path(self, tmp_path: Path) -> None:
         """Can load graph from project directory."""
         graph = Graph.empty()
-        graph.add_node("test", {"type": "test"})
+        graph.create_node("test", {"type": "test"})
         graph.save(tmp_path / "graph.json")
 
         loaded = Graph.load(tmp_path)
@@ -311,7 +549,8 @@ class TestSerialization:
         """Data survives round trip through dict."""
         graph = Graph.empty()
         graph.set_project_name("test")
-        graph.add_node("n1", {"type": "entity", "data": [1, 2, 3]})
+        graph.create_node("n1", {"type": "entity", "data": [1, 2, 3]})
+        graph.create_node("n2", {"type": "entity"})
         graph.add_edge("link", "n1", "n2", prop="value")
 
         data = graph.to_dict()
@@ -328,7 +567,7 @@ class TestSnapshots:
     def test_save_snapshot(self, tmp_path: Path) -> None:
         """Can save pre-stage snapshot."""
         graph = Graph.empty()
-        graph.add_node("before", {"type": "test"})
+        graph.create_node("before", {"type": "test"})
 
         snapshot_path = save_snapshot(graph, tmp_path, "dream")
 
@@ -343,11 +582,11 @@ class TestSnapshots:
         """Can rollback to pre-stage snapshot."""
         # Create initial state and snapshot
         graph = Graph.empty()
-        graph.add_node("original", {"type": "test"})
+        graph.create_node("original", {"type": "test"})
         save_snapshot(graph, tmp_path, "dream")
 
         # Modify graph (simulating stage execution)
-        graph.add_node("added_by_dream", {"type": "test"})
+        graph.create_node("added_by_dream", {"type": "test"})
         graph.save(tmp_path / "graph.json")
 
         # Verify current state has new node
@@ -417,3 +656,150 @@ class TestSnapshots:
         # Most recent should remain
         assert "grow" in remaining
         assert "seed" in remaining
+
+
+class TestGraphIntegrityErrors:
+    """Test error types and their LLM feedback formatting."""
+
+    def test_node_not_found_error_basic(self) -> None:
+        """NodeNotFoundError has correct attributes."""
+        error = NodeNotFoundError(
+            node_id="entity::missing",
+            available=["entity::alice", "entity::bob"],
+            context="update_node",
+        )
+
+        assert error.node_id == "entity::missing"
+        assert "entity::alice" in error.available
+        assert "update_node" in error.context
+        assert "entity::missing" in str(error)
+
+    def test_node_not_found_error_llm_feedback(self) -> None:
+        """NodeNotFoundError produces actionable LLM feedback."""
+        error = NodeNotFoundError(
+            node_id="entity::charlei",  # Typo
+            available=["entity::alice", "entity::bob", "entity::charlie"],
+            context="edge creation",
+        )
+
+        feedback = error.to_llm_feedback()
+
+        # Contains the problematic ID
+        assert "entity::charlei" in feedback
+        # Contains available IDs
+        assert "entity::alice" in feedback
+        # Suggests similar IDs (typo correction)
+        assert "entity::charlie" in feedback
+        # Includes context
+        assert "edge creation" in feedback
+
+    def test_node_not_found_error_suggestions(self) -> None:
+        """NodeNotFoundError suggests similar IDs for typos."""
+        error = NodeNotFoundError(
+            node_id="tension::strom_aftermath",  # Typo: strom -> storm
+            available=[
+                "tension::storm_aftermath",
+                "tension::family_secret",
+                "tension::power_struggle",
+            ],
+        )
+
+        feedback = error.to_llm_feedback()
+
+        # Should suggest storm_aftermath as close match
+        assert "storm_aftermath" in feedback
+
+    def test_node_exists_error(self) -> None:
+        """NodeExistsError has correct attributes and feedback."""
+        error = NodeExistsError(node_id="entity::alice")
+
+        assert error.node_id == "entity::alice"
+        assert "entity::alice" in str(error)
+        assert "already exists" in str(error)
+
+        feedback = error.to_llm_feedback()
+        assert "entity::alice" in feedback
+        assert "already exists" in feedback
+
+    def test_node_referenced_error(self) -> None:
+        """NodeReferencedError shows referencing edges."""
+        error = NodeReferencedError(
+            node_id="thread::main",
+            referenced_by=[
+                {"type": "belongs_to", "from": "beat::intro", "to": "thread::main"},
+                {"type": "belongs_to", "from": "beat::climax", "to": "thread::main"},
+            ],
+        )
+
+        assert error.node_id == "thread::main"
+        assert len(error.referenced_by) == 2
+
+        feedback = error.to_llm_feedback()
+        assert "thread::main" in feedback
+        assert "belongs_to" in feedback
+        assert "beat::intro" in feedback
+
+    def test_edge_endpoint_error_from_missing(self) -> None:
+        """EdgeEndpointError for missing source."""
+        error = EdgeEndpointError(
+            edge_type="relates_to",
+            from_id="entity::missing",
+            to_id="entity::alice",
+            missing="from",
+            available_from=["entity::bob", "entity::charlie"],
+            available_to=["entity::alice"],
+        )
+
+        assert error.missing == "from"
+        feedback = error.to_llm_feedback()
+
+        assert "entity::missing" in feedback
+        assert "entity::bob" in feedback or "entity::charlie" in feedback
+        assert "Source node" in feedback or "source" in feedback.lower()
+
+    def test_edge_endpoint_error_to_missing(self) -> None:
+        """EdgeEndpointError for missing target."""
+        error = EdgeEndpointError(
+            edge_type="belongs_to",
+            from_id="beat::intro",
+            to_id="thread::missing",
+            missing="to",
+            available_from=["beat::intro"],
+            available_to=["thread::main", "thread::side"],
+        )
+
+        assert error.missing == "to"
+        feedback = error.to_llm_feedback()
+
+        assert "thread::missing" in feedback
+        assert "thread::main" in feedback
+
+    def test_edge_endpoint_error_both_missing(self) -> None:
+        """EdgeEndpointError for both endpoints missing."""
+        error = EdgeEndpointError(
+            edge_type="relates_to",
+            from_id="entity::a",
+            to_id="entity::b",
+            missing="both",
+            available_from=[],
+            available_to=[],
+        )
+
+        assert error.missing == "both"
+        feedback = error.to_llm_feedback()
+
+        assert "entity::a" in feedback
+        assert "entity::b" in feedback
+
+    def test_graph_integrity_error_is_exception(self) -> None:
+        """All error types inherit from GraphIntegrityError and Exception."""
+        errors = [
+            NodeNotFoundError("test"),
+            NodeExistsError("test"),
+            NodeReferencedError("test"),
+            EdgeEndpointError("type", "from", "to", "from"),
+        ]
+
+        for error in errors:
+            assert isinstance(error, GraphIntegrityError)
+            assert isinstance(error, Exception)

@@ -656,7 +656,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         if graph.has_node(entity_id):
             graph.update_node(
                 entity_id,
-                {"disposition": entity_decision.get("disposition", "retained")},
+                disposition=entity_decision.get("disposition", "retained"),
             )
 
     # Update tension exploration decisions
@@ -666,10 +666,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         if graph.has_node(tension_id):
             graph.update_node(
                 tension_id,
-                {
-                    "explored": tension_decision.get("explored", []),
-                    "implicit": tension_decision.get("implicit", []),
-                },
+                explored=tension_decision.get("explored", []),
+                implicit=tension_decision.get("implicit", []),
             )
 
     # Create threads from explored tensions (must be created before consequences)

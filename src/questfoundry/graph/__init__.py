@@ -7,6 +7,13 @@ mutations through the runtime.
 See docs/architecture/graph-storage.md for architecture details.
 """
 
+from questfoundry.graph.errors import (
+    EdgeEndpointError,
+    GraphIntegrityError,
+    NodeExistsError,
+    NodeNotFoundError,
+    NodeReferencedError,
+)
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
@@ -31,8 +38,13 @@ from questfoundry.graph.snapshots import (
 __all__ = [
     "BrainstormMutationError",
     "BrainstormValidationError",
+    "EdgeEndpointError",
     "Graph",
+    "GraphIntegrityError",
     "MutationError",
+    "NodeExistsError",
+    "NodeNotFoundError",
+    "NodeReferencedError",
     "SeedMutationError",
     "SeedValidationError",
     "apply_brainstorm_mutations",
