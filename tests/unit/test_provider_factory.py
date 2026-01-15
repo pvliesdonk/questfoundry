@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,11 @@ from questfoundry.providers.factory import (
     create_chat_model,
     create_model_for_structured_output,
     get_default_model,
+)
+from questfoundry.providers.model_info import (
+    DEFAULT_CONTEXT_WINDOW,
+    ModelInfo,
+    get_model_info,
 )
 from questfoundry.providers.structured_output import StructuredOutputStrategy
 
@@ -418,3 +424,53 @@ def test_create_model_structured_missing_config() -> None:
         create_model_for_structured_output("ollama", model_name="model")
 
     assert "OLLAMA_HOST not configured" in str(exc_info.value)
+
+
+# --- Tests for get_model_info ---
+
+
+def test_get_model_info_known_model() -> None:
+    """get_model_info returns known context window for known models."""
+    info = get_model_info("openai", "gpt-4o")
+
+    assert info.context_window == 128_000
+    assert info.supports_tools is True
+    assert info.supports_vision is True
+
+
+def test_get_model_info_unknown_model() -> None:
+    """get_model_info returns default for unknown models."""
+    info = get_model_info("openai", "unknown-model-xyz")
+
+    assert info.context_window == DEFAULT_CONTEXT_WINDOW
+    assert info.supports_tools is True
+
+
+def test_get_model_info_ollama() -> None:
+    """get_model_info works for Ollama models."""
+    info = get_model_info("ollama", "qwen3:8b")
+
+    assert info.context_window == 32_768
+
+
+def test_get_model_info_anthropic() -> None:
+    """get_model_info works for Anthropic models."""
+    info = get_model_info("anthropic", "claude-sonnet-4-20250514")
+
+    assert info.context_window == 200_000
+    assert info.supports_vision is True
+
+
+def test_get_model_info_case_insensitive_provider() -> None:
+    """get_model_info is case insensitive for provider name."""
+    info = get_model_info("OPENAI", "gpt-4o")
+
+    assert info.context_window == 128_000
+
+
+def test_model_info_is_frozen() -> None:
+    """ModelInfo is immutable."""
+    info = ModelInfo(context_window=1000)
+
+    with pytest.raises(FrozenInstanceError):
+        info.context_window = 2000  # type: ignore[misc]
