@@ -12,6 +12,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import ToolMessage
 
 from questfoundry.observability.logging import get_logger
 
@@ -43,6 +44,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
         super().__init__()
         self._llm_logger = llm_logger
         self._pending_calls: dict[UUID, dict[str, Any]] = {}
+        self._run_metadata: dict[UUID, dict[str, Any]] = {}
 
     def on_chat_model_start(
         self,
@@ -89,6 +91,9 @@ class LLMLoggingCallback(BaseCallbackHandler):
             "start_time": perf_counter(),
         }
 
+        # Store metadata for stage extraction in on_llm_end
+        self._run_metadata[run_id] = metadata or {}
+
         log.debug(
             "llm_call_start",
             run_id=str(run_id),
@@ -114,8 +119,10 @@ class LLMLoggingCallback(BaseCallbackHandler):
             tags: Optional tags.
             **kwargs: Additional arguments.
         """
-        # Get pending call info
+        # Get pending call info and metadata
         call_info = self._pending_calls.pop(run_id, {})
+        run_metadata = self._run_metadata.pop(run_id, {})
+        stage = run_metadata.get("stage", "")
 
         # Calculate duration if start_time was recorded
         duration_seconds = 0.0
@@ -177,7 +184,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
 
         # Write to logger
         entry = self._llm_logger.create_entry(
-            stage="",  # Stage not available in callback context (would require tags)
+            stage=stage,  # Extracted from metadata passed via RunnableConfig
             model=call_info.get("model", "unknown"),
             messages=call_info.get("messages", []),
             content=content,
@@ -213,8 +220,9 @@ class LLMLoggingCallback(BaseCallbackHandler):
             tags: Optional tags.
             **kwargs: Additional arguments.
         """
-        # Clean up pending call
+        # Clean up pending call and metadata
         call_info = self._pending_calls.pop(run_id, {})
+        self._run_metadata.pop(run_id, None)
 
         log.warning(
             "llm_call_error",
@@ -252,7 +260,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
 
     def on_tool_end(
         self,
-        output: str,
+        output: Any,
         *,
         run_id: UUID,
         parent_run_id: UUID | None = None,
@@ -262,13 +270,23 @@ class LLMLoggingCallback(BaseCallbackHandler):
         """Called when a tool completes.
 
         Args:
-            output: Tool output.
+            output: Tool output (can be str, ToolMessage, or other types).
             run_id: Unique run identifier.
             parent_run_id: Parent run ID.
             tags: Optional tags.
             **kwargs: Additional arguments.
         """
-        log.debug("tool_end", run_id=str(run_id), output_length=len(output))
+        # Handle different output types - output may be ToolMessage, str, or other
+        if isinstance(output, ToolMessage):
+            content = output.content
+            output_len = len(content) if isinstance(content, str) else None
+        elif isinstance(output, str):
+            output_len = len(output)
+        else:
+            # Fallback for other types
+            output_len = None
+
+        log.debug("tool_end", run_id=str(run_id), output_length=output_len)
 
     def on_agent_action(
         self,

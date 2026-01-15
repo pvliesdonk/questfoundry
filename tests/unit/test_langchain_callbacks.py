@@ -38,6 +38,7 @@ class TestLLMLoggingCallback:
         callback = LLMLoggingCallback(llm_logger)
         assert callback._llm_logger is llm_logger
         assert callback._pending_calls == {}
+        assert callback._run_metadata == {}
 
     def test_on_chat_model_start_stores_pending_call(self, callback: LLMLoggingCallback) -> None:
         """on_chat_model_start stores call info."""
@@ -71,6 +72,35 @@ class TestLLMLoggingCallback:
         )
 
         assert callback._pending_calls[run_id]["model"] == "unknown"
+
+    def test_on_chat_model_start_stores_metadata(self, callback: LLMLoggingCallback) -> None:
+        """on_chat_model_start stores metadata for stage extraction."""
+        run_id = uuid4()
+
+        callback.on_chat_model_start(
+            serialized={"kwargs": {"model": "gpt-4"}},
+            messages=[],
+            run_id=run_id,
+            metadata={"stage": "brainstorm", "phase": "discuss"},
+        )
+
+        assert run_id in callback._run_metadata
+        assert callback._run_metadata[run_id]["stage"] == "brainstorm"
+        assert callback._run_metadata[run_id]["phase"] == "discuss"
+
+    def test_on_chat_model_start_handles_no_metadata(self, callback: LLMLoggingCallback) -> None:
+        """on_chat_model_start handles None metadata gracefully."""
+        run_id = uuid4()
+
+        callback.on_chat_model_start(
+            serialized={},
+            messages=[],
+            run_id=run_id,
+            metadata=None,
+        )
+
+        assert run_id in callback._run_metadata
+        assert callback._run_metadata[run_id] == {}
 
     def test_on_llm_end_logs_entry(self, callback: LLMLoggingCallback, tmp_path: Path) -> None:
         """on_llm_end creates log entry."""
@@ -236,6 +266,40 @@ class TestLLMLoggingCallback:
         entry = json.loads(content.strip())
         assert entry["duration_seconds"] >= 0.0
 
+    def test_on_llm_end_extracts_stage_from_metadata(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end extracts stage from stored metadata."""
+        import json
+
+        run_id = uuid4()
+
+        # Simulate on_chat_model_start storing metadata
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4",
+            "messages": [],
+            "start_time": 0.0,
+        }
+        callback._run_metadata[run_id] = {"stage": "seed", "phase": "serialize"}
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        # Verify stage was extracted and logged
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        content = log_file.read_text()
+        entry = json.loads(content.strip())
+        assert entry["stage"] == "seed"
+
+        # Verify metadata was cleaned up
+        assert run_id not in callback._run_metadata
+
     def test_on_llm_error_cleans_pending_call(self, callback: LLMLoggingCallback) -> None:
         """on_llm_error removes pending call."""
         run_id = uuid4()
@@ -251,6 +315,24 @@ class TestLLMLoggingCallback:
         )
 
         assert run_id not in callback._pending_calls
+
+    def test_on_llm_error_cleans_run_metadata(self, callback: LLMLoggingCallback) -> None:
+        """on_llm_error also removes run_metadata."""
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4",
+            "messages": [],
+            "start_time": 0.0,
+        }
+        callback._run_metadata[run_id] = {"stage": "dream"}
+
+        callback.on_llm_error(
+            error=RuntimeError("Test error"),
+            run_id=run_id,
+        )
+
+        assert run_id not in callback._pending_calls
+        assert run_id not in callback._run_metadata
 
     def test_on_tool_start(self, callback: LLMLoggingCallback) -> None:
         """on_tool_start logs tool info."""
@@ -272,6 +354,31 @@ class TestLLMLoggingCallback:
             output="search results here",
             run_id=run_id,
         )
+
+    def test_on_tool_end_handles_tool_message(self, callback: LLMLoggingCallback) -> None:
+        """on_tool_end handles ToolMessage objects without TypeError."""
+        from langchain_core.messages import ToolMessage
+
+        run_id = uuid4()
+
+        # Create actual ToolMessage
+        tool_msg = ToolMessage(content="Tool result content", tool_call_id="call_123")
+
+        # Should not raise TypeError
+        callback.on_tool_end(output=tool_msg, run_id=run_id)
+
+    def test_on_tool_end_handles_non_string_types(self, callback: LLMLoggingCallback) -> None:
+        """on_tool_end handles various non-string output types."""
+        run_id = uuid4()
+
+        # Test with dict
+        callback.on_tool_end(output={"result": "data"}, run_id=run_id)
+
+        # Test with list
+        callback.on_tool_end(output=["item1", "item2"], run_id=run_id)
+
+        # Test with None
+        callback.on_tool_end(output=None, run_id=run_id)
 
     def test_on_agent_action(self, callback: LLMLoggingCallback) -> None:
         """on_agent_action logs action."""
