@@ -823,14 +823,14 @@ class TestSeedCompletenessValidation:
         graph = Graph.empty()
         # Add entities from BRAINSTORM with categories
         graph.create_node(
-            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_category": "character"}
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_type": "character"}
         )
         graph.create_node(
-            "entity::mentor", {"type": "entity", "raw_id": "mentor", "entity_category": "character"}
+            "entity::mentor", {"type": "entity", "raw_id": "mentor", "entity_type": "character"}
         )
         graph.create_node(
             "entity::archive",
-            {"type": "entity", "raw_id": "archive", "entity_category": "location"},
+            {"type": "entity", "raw_id": "archive", "entity_type": "location"},
         )
 
         output = {
@@ -885,7 +885,7 @@ class TestSeedCompletenessValidation:
         graph = Graph.empty()
         # Add entity and tension from BRAINSTORM
         graph.create_node(
-            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_category": "character"}
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_type": "character"}
         )
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
 
@@ -913,11 +913,11 @@ class TestSeedCompletenessValidation:
         # Add a faction entity from BRAINSTORM
         graph.create_node(
             "entity::the_family",
-            {"type": "entity", "raw_id": "the_family", "entity_category": "faction"},
+            {"type": "entity", "raw_id": "the_family", "entity_type": "faction"},
         )
         graph.create_node(
             "entity::the_detective",
-            {"type": "entity", "raw_id": "the_detective", "entity_category": "character"},
+            {"type": "entity", "raw_id": "the_detective", "entity_type": "character"},
         )
 
         output = {
