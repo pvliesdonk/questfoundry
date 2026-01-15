@@ -72,7 +72,7 @@ class TestApplyMutations:
         """Routes seed stage to apply_seed_mutations."""
         graph = Graph.empty()
         # Pre-populate with entity from brainstorm (using prefixed ID + raw_id for validation)
-        graph.add_node(
+        graph.create_node(
             "entity::char_001",
             {"type": "entity", "raw_id": "char_001", "disposition": "proposed"},
         )
@@ -125,7 +125,7 @@ class TestDreamMutations:
     def test_replaces_existing_vision(self) -> None:
         """Replaces existing vision node."""
         graph = Graph.empty()
-        graph.set_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.create_node("vision", {"type": "vision", "genre": "fantasy"})
 
         apply_dream_mutations(graph, {"genre": "noir", "themes": [], "tone": []})
 
@@ -593,15 +593,15 @@ class TestSeedMutations:
         """Updates entity dispositions from seed output."""
         graph = Graph.empty()
         # Pre-populate entities from brainstorm (with raw_id for validation)
-        graph.add_node(
+        graph.create_node(
             "entity::kay",
             {"type": "entity", "raw_id": "kay", "disposition": "proposed"},
         )
-        graph.add_node(
+        graph.create_node(
             "entity::mentor",
             {"type": "entity", "raw_id": "mentor", "disposition": "proposed"},
         )
-        graph.add_node(
+        graph.create_node(
             "entity::extra",
             {"type": "entity", "raw_id": "extra", "disposition": "proposed"},
         )
@@ -626,11 +626,11 @@ class TestSeedMutations:
         """Creates thread nodes from seed output."""
         graph = Graph.empty()
         # Pre-populate tension and alternative from brainstorm (with raw_id for validation)
-        graph.add_node(
+        graph.create_node(
             "tension::mentor_trust",
             {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
         )
-        graph.add_node(
+        graph.create_node(
             "tension::mentor_trust::alt::protector",
             {"type": "alternative", "raw_id": "protector", "description": "Mentor protects"},
         )
@@ -675,22 +675,22 @@ class TestSeedMutations:
         """Creates beat nodes from seed output."""
         graph = Graph.empty()
         # Pre-populate entities from brainstorm (with raw_id for validation)
-        graph.add_node(
+        graph.create_node(
             "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Young archivist"}
         )
-        graph.add_node(
+        graph.create_node(
             "entity::mentor", {"type": "entity", "raw_id": "mentor", "concept": "Senior archivist"}
         )
-        graph.add_node(
+        graph.create_node(
             "entity::archive",
             {"type": "entity", "raw_id": "archive", "concept": "Ancient repository"},
         )
         # Pre-populate tension and alternative from brainstorm (for thread validation)
-        graph.add_node(
+        graph.create_node(
             "tension::mentor_trust",
             {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
         )
-        graph.add_node(
+        graph.create_node(
             "tension::mentor_trust::alt::protector",
             {"type": "alternative", "raw_id": "protector", "description": "Mentor protects"},
         )
@@ -755,7 +755,7 @@ class TestSeedMutations:
         """Raises SeedMutationError when referencing non-existent entities."""
         graph = Graph.empty()
         # Only kay exists (with prefixed ID and raw_id for validation)
-        graph.add_node(
+        graph.create_node(
             "entity::kay",
             {"type": "entity", "raw_id": "kay", "disposition": "proposed"},
         )
@@ -795,11 +795,11 @@ class TestSeedCompletenessValidation:
         """All entities and tensions have decisions passes validation."""
         graph = Graph.empty()
         # Add entities from BRAINSTORM
-        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
-        graph.add_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+        graph.create_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+        graph.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
         # Add tension from BRAINSTORM
-        graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.add_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
         graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
 
         output = {
@@ -822,13 +822,13 @@ class TestSeedCompletenessValidation:
         """Detects when entity from BRAINSTORM has no decision in SEED."""
         graph = Graph.empty()
         # Add entities from BRAINSTORM with categories
-        graph.add_node(
+        graph.create_node(
             "entity::kay", {"type": "entity", "raw_id": "kay", "entity_category": "character"}
         )
-        graph.add_node(
+        graph.create_node(
             "entity::mentor", {"type": "entity", "raw_id": "mentor", "entity_category": "character"}
         )
-        graph.add_node(
+        graph.create_node(
             "entity::archive",
             {"type": "entity", "raw_id": "archive", "entity_category": "location"},
         )
@@ -860,8 +860,8 @@ class TestSeedCompletenessValidation:
         """Detects when tension from BRAINSTORM has no decision in SEED."""
         graph = Graph.empty()
         # Add tensions from BRAINSTORM
-        graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.add_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
 
         output = {
             "entities": [],
@@ -884,10 +884,10 @@ class TestSeedCompletenessValidation:
         """Detects missing decisions for both entities and tensions."""
         graph = Graph.empty()
         # Add entity and tension from BRAINSTORM
-        graph.add_node(
+        graph.create_node(
             "entity::kay", {"type": "entity", "raw_id": "kay", "entity_category": "character"}
         )
-        graph.add_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
 
         output = {
             "entities": [],  # Missing kay
@@ -911,11 +911,11 @@ class TestSeedCompletenessValidation:
         """Missing faction entity decision shows 'faction' in error message."""
         graph = Graph.empty()
         # Add a faction entity from BRAINSTORM
-        graph.add_node(
+        graph.create_node(
             "entity::the_family",
             {"type": "entity", "raw_id": "the_family", "entity_category": "faction"},
         )
-        graph.add_node(
+        graph.create_node(
             "entity::the_detective",
             {"type": "entity", "raw_id": "the_detective", "entity_category": "character"},
         )
@@ -956,7 +956,7 @@ class TestSeedCompletenessValidation:
         """Extra decisions for non-existent entities/tensions are caught."""
         graph = Graph.empty()
         # Only kay exists
-        graph.add_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+        graph.create_node("entity::kay", {"type": "entity", "raw_id": "kay"})
 
         output = {
             "entities": [

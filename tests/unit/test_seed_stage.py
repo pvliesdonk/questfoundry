@@ -325,7 +325,7 @@ def test_format_brainstorm_context_includes_entities() -> None:
     from questfoundry.pipeline.stages.seed import _format_brainstorm_context
 
     graph = Graph.empty()
-    graph.add_node("kay", {"type": "entity", "entity_type": "character", "concept": "Hero"})
+    graph.create_node("kay", {"type": "entity", "entity_type": "character", "concept": "Hero"})
 
     result = _format_brainstorm_context(graph)
 
@@ -340,7 +340,7 @@ def test_format_brainstorm_context_includes_tensions() -> None:
     from questfoundry.pipeline.stages.seed import _format_brainstorm_context
 
     graph = Graph.empty()
-    graph.add_node(
+    graph.create_node(
         "trust",
         {
             "type": "tension",
@@ -349,7 +349,7 @@ def test_format_brainstorm_context_includes_tensions() -> None:
             "why_it_matters": "Core theme",
         },
     )
-    graph.add_node(
+    graph.create_node(
         "trust::yes", {"type": "alternative", "description": "Yes", "is_default_path": True}
     )
     graph.add_edge("has_alternative", "trust", "trust::yes")
