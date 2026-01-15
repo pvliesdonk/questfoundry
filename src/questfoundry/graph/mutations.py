@@ -430,9 +430,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     valid_entity_ids: set[str] = {n["raw_id"] for n in entity_nodes.values() if n.get("raw_id")}
     valid_tension_ids: set[str] = {n["raw_id"] for n in tension_nodes.values() if n.get("raw_id")}
 
-    # Entity category lookup for informative error messages
-    entity_categories: dict[str, str] = {
-        n["raw_id"]: n.get("entity_category", "entity")
+    # Entity type lookup for informative error messages
+    entity_types: dict[str, str] = {
+        n["raw_id"]: n.get("entity_type", "entity")
         for n in entity_nodes.values()
         if n.get("raw_id")
     }
@@ -604,10 +604,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         }
         missing_ids = valid_ids - decided_ids
         for item_id in sorted(missing_ids):
-            # For entities, include category (character/location/object/faction) for clarity
+            # For entities, include type (character/location/object/faction) for clarity
             if item_type == "entity":
-                category = entity_categories.get(item_id, "entity")
-                issue_msg = f"Missing decision for {category} '{item_id}'"
+                entity_type_name = entity_types.get(item_id, "entity")
+                issue_msg = f"Missing decision for {entity_type_name} '{item_id}'"
             else:
                 issue_msg = f"Missing decision for {item_type} '{item_id}'"
             errors.append(
