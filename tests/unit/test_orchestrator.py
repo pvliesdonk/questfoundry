@@ -204,6 +204,32 @@ providers:
     assert orchestrator.config.name == "test_project"
 
 
+def test_orchestrator_model_info_before_run(tmp_path: Path) -> None:
+    """Orchestrator model_info is None before first stage run."""
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    assert orchestrator.model_info is None
+
+
+def test_orchestrator_model_info_after_model_creation(tmp_path: Path) -> None:
+    """Orchestrator model_info is populated after model creation."""
+    orchestrator = PipelineOrchestrator(tmp_path)
+    # Inject mock chat model and model info directly
+    mock_model = MagicMock()
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "openai"
+    orchestrator._model_name = "gpt-4o"
+
+    # Manually populate model_info as _get_chat_model would
+    from questfoundry.providers.model_info import get_model_info
+
+    orchestrator._model_info = get_model_info("openai", "gpt-4o")
+
+    assert orchestrator.model_info is not None
+    assert orchestrator.model_info.context_window == 128_000
+    assert orchestrator.model_info.supports_vision is True
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_run_stage_not_found(tmp_path: Path) -> None:
     """Orchestrator raises error for unknown stage."""

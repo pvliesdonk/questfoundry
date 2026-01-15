@@ -10,6 +10,10 @@ from questfoundry.providers.factory import (
     create_chat_model,
     create_model_for_structured_output,
 )
+from questfoundry.providers.model_info import (
+    ModelInfo,
+    get_model_info,
+)
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     get_default_strategy,
@@ -17,6 +21,7 @@ from questfoundry.providers.structured_output import (
 )
 
 __all__ = [
+    "ModelInfo",
     "ProviderConnectionError",
     "ProviderError",
     "ProviderModelError",
@@ -25,5 +30,6 @@ __all__ = [
     "create_chat_model",
     "create_model_for_structured_output",
     "get_default_strategy",
+    "get_model_info",
     "with_structured_output",
 ]

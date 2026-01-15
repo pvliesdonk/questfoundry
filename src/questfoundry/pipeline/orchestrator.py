@@ -25,12 +25,15 @@ from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.factory import create_chat_model, get_default_model
+from questfoundry.providers.model_info import get_model_info
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
+
+    from questfoundry.providers.model_info import ModelInfo
 
 log = get_logger(__name__)
 
@@ -138,6 +141,11 @@ class PipelineOrchestrator:
         # Chat model will be lazily initialized
         self._chat_model: BaseChatModel | None = None
         self._provider_name: str | None = None
+        self._model_name: str | None = None
+
+        # Model info (set when model is created)
+
+        self._model_info: ModelInfo | None = None
 
         # LLM logger and callbacks (enabled via --log flag)
         from questfoundry.observability import LLMLogger
@@ -181,6 +189,7 @@ class PipelineOrchestrator:
             model = default_model
 
         self._provider_name = provider_name
+        self._model_name = model
 
         # If logging enabled, configure LangChain callbacks
         callbacks = None
@@ -192,6 +201,9 @@ class PipelineOrchestrator:
             callbacks = create_logging_callbacks(self._llm_logger)
 
         chat_model = create_chat_model(provider_name, model)
+
+        # Store model info for context budget awareness
+        self._model_info = get_model_info(provider_name, model)
 
         # Store callbacks for explicit passing to phases (agents, structured output)
         # Note: with_config() binding doesn't propagate through create_agent() or
@@ -208,6 +220,16 @@ class PipelineOrchestrator:
 
         self._chat_model = chat_model
         return self._chat_model
+
+    @property
+    def model_info(self) -> ModelInfo | None:
+        """Model capabilities and limits.
+
+        Returns ModelInfo with context_window, supports_tools, supports_vision.
+        Available after first model creation (first stage run).
+        Returns None if model not yet created.
+        """
+        return self._model_info
 
     def _get_stage_implementation(self, stage_name: str) -> Any:
         """Get the stage implementation.
