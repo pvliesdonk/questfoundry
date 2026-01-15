@@ -606,8 +606,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         for item_id in sorted(missing_ids):
             # For entities, include type (character/location/object/faction) for clarity
             if item_type == "entity":
-                category = entity_types.get(item_id, "entity")
-                issue_msg = f"Missing decision for {category} '{item_id}'"
+                entity_type_name = entity_types.get(item_id, "entity")
+                issue_msg = f"Missing decision for {entity_type_name} '{item_id}'"
             else:
                 issue_msg = f"Missing decision for {item_type} '{item_id}'"
             errors.append(
