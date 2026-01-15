@@ -501,6 +501,29 @@ class TestValidateBrainstormMutations:
         assert len(errors) == 1
         assert "No alternative has is_default_path=true" in errors[0].issue
 
+    def test_empty_entity_id_detected(self) -> None:
+        """Detects empty or missing entity_id values."""
+        output = {
+            "entities": [
+                {"entity_id": "valid_id", "entity_category": "character", "concept": "Test"},
+                {"entity_id": "", "entity_category": "character", "concept": "Empty ID"},
+                {"entity_id": None, "entity_category": "location", "concept": "None ID"},
+                {"entity_category": "object", "concept": "Missing ID"},  # No entity_id key
+            ],
+            "tensions": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        # Should find 3 errors for empty/missing entity_ids
+        entity_errors = [e for e in errors if "entity_id" in e.field_path]
+        assert len(entity_errors) == 3
+        # Verify each problematic entity index is reported
+        error_paths = {e.field_path for e in entity_errors}
+        assert "entities.1.entity_id" in error_paths  # Empty string
+        assert "entities.2.entity_id" in error_paths  # None
+        assert "entities.3.entity_id" in error_paths  # Missing key
+
 
 class TestBrainstormMutationError:
     """Test BrainstormMutationError formatting."""

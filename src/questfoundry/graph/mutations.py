@@ -250,8 +250,9 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     """
     errors: list[BrainstormValidationError] = []
 
-    # Validate entities have non-empty IDs
+    # Validate entities and build ID set in single pass
     entities = output.get("entities", [])
+    entity_ids: set[str] = set()
     for i, entity in enumerate(entities):
         entity_id = entity.get("entity_id")
         if not entity_id:  # None or empty string
@@ -263,9 +264,8 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                     provided=repr(entity_id),
                 )
             )
-
-    # Build entity ID set from entities list (only valid IDs)
-    entity_ids: set[str] = {e.get("entity_id") for e in entities if e.get("entity_id")}
+        else:
+            entity_ids.add(entity_id)
     sorted_entity_ids = sorted(entity_ids)
 
     # Validate each tension
