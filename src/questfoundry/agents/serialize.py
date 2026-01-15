@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
+from questfoundry.graph.context import format_valid_ids_context
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
@@ -514,6 +515,14 @@ async def serialize_seed_iteratively(
 
     prompts = _load_seed_section_prompts()
     total_tokens = 0
+
+    # Inject valid IDs context if graph is provided
+    # This gives the LLM authoritative ID list upfront to prevent phantom references
+    if graph is not None:
+        valid_ids_context = format_valid_ids_context(graph, stage="seed")
+        if valid_ids_context:
+            brief = f"{valid_ids_context}\n\n---\n\n{brief}"
+            log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
 
     # Section configuration: (section_name, schema, output_field)
     sections: list[tuple[str, type[BaseModel], str]] = [
