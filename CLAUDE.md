@@ -440,6 +440,8 @@ qf status                     # Show pipeline state
 
 ## Configuration
 
+### General Provider Precedence
+
 Configuration follows a strict precedence order (highest to lowest):
 
 1. **CLI flags** - `--provider ollama/qwen3:8b`
@@ -447,13 +449,53 @@ Configuration follows a strict precedence order (highest to lowest):
 3. **Project config** - `project.yaml` providers.default
 4. **Defaults** - `ollama/qwen3:8b`
 
+### Hybrid Provider Configuration (Phase-Specific)
+
+Different providers can be used for each pipeline phase (discuss, summarize, serialize). This allows using creative models for discussion and reasoning models for serialization.
+
+**6-level precedence chain** (per phase):
+1. Phase-specific CLI flag (`--provider-discuss`, `--provider-summarize`, `--provider-serialize`)
+2. General CLI flag (`--provider`)
+3. Phase-specific env var (`QF_PROVIDER_DISCUSS`, `QF_PROVIDER_SUMMARIZE`, `QF_PROVIDER_SERIALIZE`)
+4. General env var (`QF_PROVIDER`)
+5. Phase-specific config (`providers.discuss`, `providers.summarize`, `providers.serialize`)
+6. Default config (`providers.default`)
+
+**Example project.yaml with hybrid providers:**
+```yaml
+name: my-adventure
+providers:
+  default: ollama/qwen3:8b        # Fallback for all phases
+  discuss: ollama/qwen3:8b        # Tool-enabled model for exploration
+  summarize: openai/gpt-4o        # Creative model for narrative
+  serialize: openai/o1-mini       # Reasoning model for JSON output
+```
+
+**Example CLI usage:**
+```bash
+# Override serialize phase to use o1-mini
+qf seed --provider-serialize openai/o1-mini
+
+# Full hybrid setup from CLI
+qf seed --provider-discuss ollama/qwen3:8b \
+        --provider-summarize openai/gpt-4o \
+        --provider-serialize openai/o1-mini
+```
+
+**Note**: o1/o1-mini models don't support tools, so they can only be used for serialize phase.
+
 ### Environment Variables
 
 ```bash
 # Provider configuration
-QF_PROVIDER=ollama/qwen3:8b    # Override default provider
+QF_PROVIDER=ollama/qwen3:8b              # Override default provider
+QF_PROVIDER_DISCUSS=ollama/qwen3:8b      # Override discuss phase
+QF_PROVIDER_SUMMARIZE=openai/gpt-4o      # Override summarize phase
+QF_PROVIDER_SERIALIZE=openai/o1-mini     # Override serialize phase
+
+# Required for providers
 OLLAMA_HOST=http://athena.int.liesdonk.nl:11434  # Required for Ollama
-OPENAI_API_KEY=sk-...          # Required for OpenAI
+OPENAI_API_KEY=sk-...                             # Required for OpenAI
 
 # Optional observability
 LANGSMITH_TRACING=true
